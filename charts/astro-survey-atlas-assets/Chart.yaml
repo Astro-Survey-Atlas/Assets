@@ -1,0 +1,7 @@
+apiVersion: v2
+name: astro-survey-atlas-assets
+description: Independent public download site for verified Astro Survey Atlas coverage assets
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+

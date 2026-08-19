@@ -1,0 +1,34 @@
+image:
+  repository: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets
+  tag: "0.1.0-20260819151937"
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: aliyun-registry
+
+service:
+  type: NodePort
+  port: 80
+  nodePort: 32083
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "480"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "480"
+  hosts:
+    - host: astro.assets.dev.72602.space
+      paths:
+        - path: /
+          pathType: Prefix
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: nfs-data
+  accessModes: [ReadWriteOnce]
+  size: 256Mi
+
+nodeSelector:
+  kubernetes.io/hostname: eva7028

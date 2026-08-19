@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "astro-survey-atlas-assets.fullname" . }}
+  labels:
+    {{- include "astro-survey-atlas-assets.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "astro-survey-atlas-assets.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "astro-survey-atlas-assets.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: {{ toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: publish-assets
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["node", "dist/server/sync-release.js"]
+          env:
+            - name: ASSET_SOURCE_ROOT
+              value: /app/release
+            - name: ASSET_TARGET_ROOT
+              value: /data
+          resources: {{ toYaml .Values.syncResources | nindent 12 }}
+          securityContext: {{ toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: assets
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: site
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 4180
+          env:
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: "4180"
+            - name: ASSET_RELEASE_ROOT
+              value: /data/current
+            - name: PUBLIC_SITE_ROOT
+              value: /app/site
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 3
+            timeoutSeconds: 2
+            failureThreshold: 20
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          securityContext: {{ toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: assets
+              mountPath: /data
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: assets
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-assets" (include "astro-survey-atlas-assets.fullname" .)) .Values.persistence.existingClaim }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+

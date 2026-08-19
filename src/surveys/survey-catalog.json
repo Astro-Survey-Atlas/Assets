@@ -1,0 +1,1564 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-18",
+  "surveys": [
+    {
+      "id": "euclid",
+      "name": "Euclid",
+      "mission": "ESA Euclid",
+      "color": "#a7d9ff",
+      "description": "ESA visible and near-infrared space survey releases, represented by their actual release families rather than a fabricated radial shell.",
+      "modalities": [
+        "imaging",
+        "spectroscopy",
+        "photometry",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "euclid-ero",
+          "label": "ERO",
+          "kind": "early_release",
+          "releasedYear": 2024,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Early Release Observations",
+              "modality": "imaging",
+              "description": "Selected Euclid commissioning and early science fields.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+              "geometrySourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-fields",
+              "reason": "The official ERO release and field definitions are public, but their exact field geometry has not been converted to an acquired product MOC.",
+              "manualStep": "Extract every field boundary listed by the official ERO fields page, convert each boundary to ICRS polygons, and union the polygons into the Early Release Observations MOC."
+            }
+          ]
+        },
+        {
+          "id": "euclid-q1",
+          "label": "Q1",
+          "kind": "quick_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Euclid Q1 deep fields",
+              "modality": "imaging",
+              "description": "Three deep fields, 63.1 deg2 in the first quick release.",
+              "status": "acquired",
+              "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid/Euclid_opens_data_treasure_trove_offers_glimpse_of_deep_fields",
+              "geometrySourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip"
+            }
+          ]
+        },
+        {
+          "id": "euclid-q2",
+          "label": "Q2",
+          "kind": "quick_release",
+          "releasedYear": 2026,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Galactic Bulge Survey",
+              "modality": "imaging",
+              "description": "Nine VIS fields in the Euclid Galactic Bulge Survey.",
+              "status": "overview_only",
+              "sourceUrl": "https://www.cosmos.esa.int/web/euclid/q2-contents",
+              "geometrySourceUrl": "https://www.cosmos.esa.int/web/euclid/q2-contents",
+              "reason": "The official nine-field, 4.8 deg2 summary supports an overview, but exact field geometry has not been converted to a product MOC.",
+              "manualStep": "Extract all nine Galactic Bulge Survey field boundaries from the official Q2 contents, convert them to ICRS polygons, and union the nine polygons into the product MOC."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "desi",
+      "name": "DESI",
+      "mission": "Dark Energy Spectroscopic Instrument",
+      "color": "#f3b55d",
+      "description": "Public DESI spectroscopic release families. Local COSMOS-derived volume data remains a separate registered artifact, not a proxy for this footprint.",
+      "modalities": [
+        "spectroscopy",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "desi-edr",
+          "label": "EDR",
+          "kind": "early_release",
+          "releasedYear": 2023,
+          "modalities": [
+            "spectroscopy",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Early Data Release spectra",
+              "modality": "spectroscopy",
+              "description": "DESI public early-release spectra and catalogs.",
+              "status": "acquired",
+              "sourceUrl": "https://data.desi.lbl.gov/doc/releases/edr/",
+              "geometrySourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits"
+            }
+          ]
+        },
+        {
+          "id": "desi-dr1",
+          "label": "DR1",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "spectroscopy",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "DR1 spectra and redshifts",
+              "modality": "spectroscopy",
+              "description": "Main-survey spectra observed from May 2021 through June 2022.",
+              "status": "acquired",
+              "sourceUrl": "https://data.desi.lbl.gov/doc/releases/dr1/",
+              "geometrySourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sdss",
+      "name": "SDSS",
+      "mission": "Sloan Digital Sky Survey I-V",
+      "color": "#95dc9b",
+      "description": "Nineteen public data releases grouped under one survey card. A release may contain several products with different sky footprints.",
+      "modalities": [
+        "imaging",
+        "spectroscopy",
+        "photometry",
+        "infrared",
+        "integral-field",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "sdss-dr01",
+          "label": "DR1",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-I/II release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr1/",
+              "reason": "The official DR1 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR1 catalogs, convert all DR1 imaging run/camcol/field corners and all DR1 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr02",
+          "label": "DR2",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-I/II release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr2/",
+              "reason": "The official DR2 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR2 catalogs, convert all DR2 imaging run/camcol/field corners and all DR2 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr03",
+          "label": "DR3",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-I/II release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr3/",
+              "reason": "The official DR3 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR3 catalogs, convert all DR3 imaging run/camcol/field corners and all DR3 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr04",
+          "label": "DR4",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-I/II release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr4/",
+              "reason": "The official DR4 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR4 catalogs, convert all DR4 imaging run/camcol/field corners and all DR4 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr05",
+          "label": "DR5",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-I/II release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr5/",
+              "reason": "The official DR5 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR5 catalogs, convert all DR5 imaging run/camcol/field corners and all DR5 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr06",
+          "label": "DR6",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-I/II release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr6/",
+              "reason": "The official DR6 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR6 catalogs, convert all DR6 imaging run/camcol/field corners and all DR6 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr07",
+          "label": "DR7",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-I/II release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "overview_only",
+              "sourceUrl": "https://www.sdss.org/dr7/",
+              "geometrySourceUrl": "https://classic.sdss.org/dr7/coverage/",
+              "reason": "Official DR7 imaging and spectroscopy coverage is documented, but the distinct field and plate geometries have not been acquired as an exact release-catalog MOC.",
+              "manualStep": "Using the official DR7 coverage resources, convert all DR7 imaging run/camcol/field boundaries and all DR7 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr08",
+          "label": "DR8",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "infrared",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-III release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr8/",
+              "reason": "The official DR8 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR8 catalogs, convert all DR8 imaging run/camcol/field corners and all DR8 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr09",
+          "label": "DR9",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "infrared",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-III release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "overview_only",
+              "sourceUrl": "https://www.sdss.org/dr9/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=smoc&order=4&fmt=json",
+              "reason": "The exact DR9 color-imaging MOC covers only imaging and is therefore an overview for the broader release catalog; DR9 spectroscopy plate geometry is not included.",
+              "manualStep": "From the official DR9 catalogs, convert all DR9 imaging run/camcol/field corners and all DR9 spectroscopy plate footprints to separate MOCs, then union them to replace the imaging-only overview."
+            },
+            {
+              "name": "DR9 color imaging",
+              "modality": "catalog",
+              "description": "Public survey product tracked by the coverage ledger.",
+              "status": "acquired",
+              "sourceUrl": "https://www.sdss.org/dr9/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=smoc&order=4&fmt=json"
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr10",
+          "label": "DR10",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "infrared",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-III release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr10/",
+              "reason": "The official DR10 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR10 catalogs, convert all DR10 imaging run/camcol/field corners and all DR10 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr11",
+          "label": "DR11",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "infrared",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-III release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr11/",
+              "reason": "The official DR11 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR11 catalogs, convert all DR11 imaging run/camcol/field corners and all DR11 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr12",
+          "label": "DR12",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "infrared",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-III release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr12/",
+              "reason": "The official DR12 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR12 catalogs, convert all DR12 imaging run/camcol/field corners and all DR12 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr13",
+          "label": "DR13",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "infrared",
+            "integral-field",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-IV release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr13/",
+              "reason": "The official DR13 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR13 catalogs, convert all DR13 imaging run/camcol/field corners and all DR13 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr14",
+          "label": "DR14",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "infrared",
+            "integral-field",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-IV release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr14/",
+              "reason": "The official DR14 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR14 catalogs, convert all DR14 imaging run/camcol/field corners and all DR14 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr15",
+          "label": "DR15",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "infrared",
+            "integral-field",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-IV release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr15/",
+              "reason": "The official DR15 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR15 catalogs, convert all DR15 imaging run/camcol/field corners and all DR15 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr16",
+          "label": "DR16",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "infrared",
+            "integral-field",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-IV release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr16/",
+              "reason": "The official DR16 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR16 catalogs, convert all DR16 imaging run/camcol/field corners and all DR16 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr17",
+          "label": "DR17",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "infrared",
+            "integral-field",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-IV release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "overview_only",
+              "sourceUrl": "https://www.sdss.org/dr17/",
+              "reason": "The official final-release overview covers imaging and spectroscopy products with distinct footprints; no exact combined release-catalog MOC is acquired.",
+              "manualStep": "From the official DR17 catalogs, convert all DR17 imaging run/camcol/field corners and all DR17 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr18",
+          "label": "DR18",
+          "kind": "public_release",
+          "modalities": [
+            "spectroscopy",
+            "integral-field",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-V release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr18/",
+              "reason": "The official DR18 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR18 catalogs, convert all DR18 imaging run/camcol/field corners and all DR18 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        },
+        {
+          "id": "sdss-dr19",
+          "label": "DR19",
+          "kind": "public_release",
+          "modalities": [
+            "spectroscopy",
+            "integral-field",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "SDSS-V release catalog",
+              "modality": "catalog",
+              "description": "Release-specific tables and documented data products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.sdss.org/dr19/",
+              "reason": "The official DR19 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+              "manualStep": "From the official DR19 catalogs, convert all DR19 imaging run/camcol/field corners and all DR19 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "galex",
+      "name": "GALEX",
+      "mission": "Galaxy Evolution Explorer",
+      "color": "#cf96ed",
+      "description": "Ultraviolet imaging, grism spectroscopy and time-domain survey archive releases.",
+      "modalities": [
+        "ultraviolet",
+        "imaging",
+        "spectroscopy",
+        "time-domain",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "galex-gr1",
+          "label": "GR1",
+          "kind": "public_release",
+          "modalities": [
+            "ultraviolet",
+            "imaging",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "GALEX GR1",
+              "modality": "catalog",
+              "description": "Initial GALEX release.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://galex.stsci.edu/GR6/",
+              "geometrySourceUrl": "https://galex.stsci.edu/GR6/?page=tilelist&survey=allsurveys&showall=Y",
+              "reason": "The official all-surveys tile list is available, but GR1 membership and tile footprints have not been filtered and converted to an acquired MOC.",
+              "manualStep": "Export the official tile list, retain tiles published in GR1, convert each retained tile center and its listed field of view to an ICRS footprint, and union the footprints into the GR1 MOC."
+            }
+          ]
+        },
+        {
+          "id": "galex-gr2-gr3",
+          "label": "GR2/GR3",
+          "kind": "public_release",
+          "modalities": [
+            "ultraviolet",
+            "imaging",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "GALEX GR2/GR3",
+              "modality": "catalog",
+              "description": "Combined public release family.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://galex.stsci.edu/GR6/",
+              "geometrySourceUrl": "https://galex.stsci.edu/GR6/?page=tilelist&survey=allsurveys&showall=Y",
+              "reason": "The official all-surveys tile list is available, but GR2/GR3 membership and tile footprints have not been filtered and converted to an acquired MOC.",
+              "manualStep": "Export the official tile list, retain tiles published through GR2/GR3, convert each retained tile center and its listed field of view to an ICRS footprint, and union the footprints into the GR2/GR3 MOC."
+            }
+          ]
+        },
+        {
+          "id": "galex-gr4-gr5",
+          "label": "GR4/GR5",
+          "kind": "public_release",
+          "modalities": [
+            "ultraviolet",
+            "imaging",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "GALEX GR4/GR5",
+              "modality": "catalog",
+              "description": "Combined public release family.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://galex.stsci.edu/GR6/",
+              "geometrySourceUrl": "https://galex.stsci.edu/GR6/?page=tilelist&survey=allsurveys&showall=Y",
+              "reason": "The official all-surveys tile list is available, but GR4/GR5 membership and tile footprints have not been filtered and converted to an acquired MOC.",
+              "manualStep": "Export the official tile list, retain tiles published through GR4/GR5, convert each retained tile center and its listed field of view to an ICRS footprint, and union the footprints into the GR4/GR5 MOC."
+            }
+          ]
+        },
+        {
+          "id": "galex-gr6-gr7",
+          "label": "GR6/GR7",
+          "kind": "public_release",
+          "modalities": [
+            "ultraviolet",
+            "imaging",
+            "spectroscopy",
+            "time-domain",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "GALEX GR6/GR7",
+              "modality": "catalog",
+              "description": "45,195 tiles across AIS, MIS, DIS and related surveys.",
+              "status": "overview_only",
+              "sourceUrl": "https://galex.stsci.edu/GR6/",
+              "geometrySourceUrl": "https://galex.stsci.edu/GR6/?page=tilelist&survey=allsurveys&showall=Y",
+              "reason": "The exact ultraviolet-image MOC and official sky summary are only an overview for the broader release product; the official tile inventory has not been converted to its identity-exact MOC.",
+              "manualStep": "Export the official tile list, retain tiles published through GR6/GR7, convert each retained tile center and its listed field of view to an ICRS footprint, and union the footprints to replace the release overview."
+            },
+            {
+              "name": "ultraviolet image coverage",
+              "modality": "ultraviolet",
+              "description": "Public survey product tracked by the coverage ledger.",
+              "status": "acquired",
+              "sourceUrl": "https://galex.stsci.edu/GR6/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2Fcolor&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "FUV imaging",
+              "modality": "ultraviolet",
+              "description": "GR6/GR7 far-ultraviolet HiPS image product.",
+              "status": "acquired",
+              "sourceUrl": "https://galex.stsci.edu/GR6/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2FFUV&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "NUV imaging",
+              "modality": "ultraviolet",
+              "description": "GR6/GR7 near-ultraviolet HiPS image product.",
+              "status": "acquired",
+              "sourceUrl": "https://galex.stsci.edu/GR6/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2FNUV&get=smoc&order=4&fmt=json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "legacy-surveys",
+      "name": "DESI Legacy Surveys",
+      "mission": "DECaLS, BASS and MzLS",
+      "color": "#fd8ea1",
+      "description": "DESI Legacy Surveys optical imaging and Tractor catalogs. These DR1-DR10 releases are imaging products, not DESI spectroscopic data releases.",
+      "modalities": [
+        "imaging",
+        "photometry",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "legacy-dr1",
+          "label": "DR1",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Coadded imaging",
+              "modality": "imaging",
+              "description": "DECaLS, BASS and MzLS imaging products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr1/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/survey-bricks.fits.gz",
+              "reason": "The official DR1 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
+              "manualStep": "Use the DR1 survey-bricks catalog and official DR1 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+            },
+            {
+              "name": "Tractor catalog",
+              "modality": "catalog",
+              "description": "Forced photometry catalog derived from the imaging releases.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr1/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/survey-bricks.fits.gz",
+              "reason": "The official DR1 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
+              "manualStep": "From the DR1 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+            }
+          ]
+        },
+        {
+          "id": "legacy-dr2",
+          "label": "DR2",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Coadded imaging",
+              "modality": "imaging",
+              "description": "DECaLS, BASS and MzLS imaging products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr2/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr2/survey-bricks.fits.gz",
+              "reason": "The official DR2 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
+              "manualStep": "Use the DR2 survey-bricks catalog and official DR2 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+            },
+            {
+              "name": "Tractor catalog",
+              "modality": "catalog",
+              "description": "Forced photometry catalog derived from the imaging releases.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr2/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr2/survey-bricks.fits.gz",
+              "reason": "The official DR2 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
+              "manualStep": "From the DR2 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+            }
+          ]
+        },
+        {
+          "id": "legacy-dr3",
+          "label": "DR3",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Coadded imaging",
+              "modality": "imaging",
+              "description": "DECaLS, BASS and MzLS imaging products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr3/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr3/survey-bricks.fits.gz",
+              "reason": "The official DR3 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
+              "manualStep": "Use the DR3 survey-bricks catalog and official DR3 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+            },
+            {
+              "name": "Tractor catalog",
+              "modality": "catalog",
+              "description": "Forced photometry catalog derived from the imaging releases.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr3/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr3/survey-bricks.fits.gz",
+              "reason": "The official DR3 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
+              "manualStep": "From the DR3 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+            }
+          ]
+        },
+        {
+          "id": "legacy-dr4",
+          "label": "DR4",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Coadded imaging",
+              "modality": "imaging",
+              "description": "DECaLS, BASS and MzLS imaging products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr4/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr4/survey-bricks.fits.gz",
+              "reason": "The official DR4 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
+              "manualStep": "Use the DR4 survey-bricks catalog and official DR4 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+            },
+            {
+              "name": "Tractor catalog",
+              "modality": "catalog",
+              "description": "Forced photometry catalog derived from the imaging releases.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr4/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr4/survey-bricks.fits.gz",
+              "reason": "The official DR4 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
+              "manualStep": "From the DR4 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+            }
+          ]
+        },
+        {
+          "id": "legacy-dr5",
+          "label": "DR5",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Coadded imaging",
+              "modality": "imaging",
+              "description": "DECaLS, BASS and MzLS imaging products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr5/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr5/survey-bricks.fits.gz",
+              "reason": "The official DR5 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
+              "manualStep": "Use the DR5 survey-bricks catalog and official DR5 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+            },
+            {
+              "name": "Tractor catalog",
+              "modality": "catalog",
+              "description": "Forced photometry catalog derived from the imaging releases.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr5/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr5/survey-bricks.fits.gz",
+              "reason": "The official DR5 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
+              "manualStep": "From the DR5 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+            }
+          ]
+        },
+        {
+          "id": "legacy-dr6",
+          "label": "DR6",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Coadded imaging",
+              "modality": "imaging",
+              "description": "DECaLS, BASS and MzLS imaging products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr6/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr6/survey-bricks.fits.gz",
+              "reason": "The official DR6 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
+              "manualStep": "Use the DR6 survey-bricks catalog and official DR6 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+            },
+            {
+              "name": "Tractor catalog",
+              "modality": "catalog",
+              "description": "Forced photometry catalog derived from the imaging releases.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr6/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr6/survey-bricks.fits.gz",
+              "reason": "The official DR6 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
+              "manualStep": "From the DR6 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+            }
+          ]
+        },
+        {
+          "id": "legacy-dr7",
+          "label": "DR7",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Coadded imaging",
+              "modality": "imaging",
+              "description": "DECaLS, BASS and MzLS imaging products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr7/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr7/survey-bricks.fits.gz",
+              "reason": "The official DR7 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
+              "manualStep": "Use the DR7 survey-bricks catalog and official DR7 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+            },
+            {
+              "name": "Tractor catalog",
+              "modality": "catalog",
+              "description": "Forced photometry catalog derived from the imaging releases.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr7/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr7/survey-bricks.fits.gz",
+              "reason": "The official DR7 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
+              "manualStep": "From the DR7 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+            }
+          ]
+        },
+        {
+          "id": "legacy-dr8",
+          "label": "DR8",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Coadded imaging",
+              "modality": "imaging",
+              "description": "DECaLS, BASS and MzLS imaging products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr8/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr8/survey-bricks.fits.gz",
+              "reason": "The official DR8 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
+              "manualStep": "Use the DR8 survey-bricks catalog and official DR8 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+            },
+            {
+              "name": "Tractor catalog",
+              "modality": "catalog",
+              "description": "Forced photometry catalog derived from the imaging releases.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr8/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr8/survey-bricks.fits.gz",
+              "reason": "The official DR8 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
+              "manualStep": "From the DR8 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+            }
+          ]
+        },
+        {
+          "id": "legacy-dr9",
+          "label": "DR9",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Coadded imaging",
+              "modality": "imaging",
+              "description": "DECaLS, BASS and MzLS imaging products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr9/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/survey-bricks.fits.gz",
+              "reason": "The official DR9 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
+              "manualStep": "Use the DR9 survey-bricks catalog and official DR9 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+            },
+            {
+              "name": "Tractor catalog",
+              "modality": "catalog",
+              "description": "Forced photometry catalog derived from the imaging releases.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr9/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/survey-bricks.fits.gz",
+              "reason": "The official DR9 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
+              "manualStep": "From the DR9 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+            }
+          ]
+        },
+        {
+          "id": "legacy-dr10",
+          "label": "DR10",
+          "kind": "public_release",
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Coadded imaging",
+              "modality": "imaging",
+              "description": "DECaLS, BASS and MzLS imaging products.",
+              "status": "overview_only",
+              "sourceUrl": "https://www.legacysurvey.org/dr10/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/survey-bricks.fits.gz",
+              "reason": "The exact DR10 color-imaging MOC is an overview, while accepted-CCD coadded-imaging geometry has not been converted to the identity-exact product MOC.",
+              "manualStep": "Use the DR10 survey-bricks catalog and official DR10 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them to replace the coadded-imaging overview."
+            },
+            {
+              "name": "Tractor catalog",
+              "modality": "catalog",
+              "description": "Forced photometry catalog derived from the imaging releases.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://www.legacysurvey.org/dr10/",
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/survey-bricks.fits.gz",
+              "reason": "The acquired DR10 color-imaging MOC does not establish survey_primary observed Tractor brick coverage, which has not been converted to an exact catalog MOC.",
+              "manualStep": "From the DR10 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+            },
+            {
+              "name": "DR10 color imaging",
+              "modality": "catalog",
+              "description": "Public survey product tracked by the coverage ledger.",
+              "status": "acquired",
+              "sourceUrl": "https://www.legacysurvey.org/dr10/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDESI-Legacy-Surveys%2FDR10%2Fcolor&get=smoc&order=4&fmt=json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hsc-ssp",
+      "name": "HSC-SSP",
+      "mission": "Subaru Hyper Suprime-Cam",
+      "color": "#63d5c7",
+      "description": "Subaru Strategic Program public releases, with Wide, Deep and UltraDeep layers recorded as product families rather than radial distances.",
+      "modalities": [
+        "imaging",
+        "photometry",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "hsc-pdr1",
+          "label": "PDR1",
+          "kind": "public_release",
+          "releasedYear": 2017,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "HSC-SSP PDR1",
+              "modality": "catalog",
+              "description": "Initial public HSC-SSP imaging release.",
+              "status": "overview_only",
+              "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/top-page-3/",
+              "geometrySourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/top-page-3/",
+              "reason": "The official area summary supports an overview, but release tract/patch geometry has not been converted to an exact product MOC.",
+              "manualStep": "Read the official PDR1 Wide, Deep, and UltraDeep tract/patch lists, convert every listed patch boundary through the HSC sky map to ICRS polygons, and union all release-layer polygons into the product MOC."
+            }
+          ]
+        },
+        {
+          "id": "hsc-pdr2",
+          "label": "PDR2",
+          "kind": "public_release",
+          "releasedYear": 2019,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "HSC-SSP PDR2",
+              "modality": "catalog",
+              "description": "Second public HSC-SSP imaging release.",
+              "status": "overview_only",
+              "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+              "geometrySourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+              "reason": "The official area summary and Wide + Deep image MOC are an overview for the broader PDR2 product; release tract/patch geometry has not been converted to an exact all-layer MOC.",
+              "manualStep": "Read the official PDR2 Wide, Deep, and UltraDeep tract/patch lists, convert every listed patch boundary through the HSC sky map to ICRS polygons, and union all release-layer polygons into the PDR2 product MOC."
+            },
+            {
+              "name": "PDR2 Wide + Deep image coverage",
+              "modality": "imaging",
+              "description": "Public survey product tracked by the coverage ledger.",
+              "status": "acquired",
+              "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fcolor-i-r-g%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fcolor-i-r-g&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "PDR2 g-band imaging",
+              "modality": "imaging",
+              "description": "Wide and Deep g-band image coverage.",
+              "status": "acquired",
+              "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fg%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fg&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "PDR2 r-band imaging",
+              "modality": "imaging",
+              "description": "Wide and Deep r-band image coverage.",
+              "status": "acquired",
+              "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fr%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fr&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "PDR2 i-band imaging",
+              "modality": "imaging",
+              "description": "Wide and Deep i-band image coverage.",
+              "status": "acquired",
+              "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fi%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fi&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "PDR2 z-band imaging",
+              "modality": "imaging",
+              "description": "Wide and Deep z-band image coverage.",
+              "status": "acquired",
+              "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fz%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fz&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "PDR2 y-band imaging",
+              "modality": "imaging",
+              "description": "Wide and Deep y-band image coverage.",
+              "status": "acquired",
+              "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fy%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fy&get=smoc&order=4&fmt=json"
+            }
+          ]
+        },
+        {
+          "id": "hsc-pdr3",
+          "label": "PDR3",
+          "kind": "public_release",
+          "releasedYear": 2021,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "HSC-SSP Wide/Deep/UltraDeep",
+              "modality": "imaging",
+              "description": "grizy imaging, with narrow-band data in the deeper layers.",
+              "status": "overview_only",
+              "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/survey__pdr3/",
+              "geometrySourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/survey__pdr3/",
+              "reason": "The official layer and area summary supports an overview, but release tract/patch geometry has not been converted to an exact product MOC.",
+              "manualStep": "Read the official PDR3 Wide, Deep, and UltraDeep tract/patch lists, convert every listed patch boundary through the HSC sky map to ICRS polygons, and union all release-layer polygons into the product MOC."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hst",
+      "name": "HST",
+      "mission": "Hubble Space Telescope / MAST",
+      "color": "#79a9ff",
+      "description": "A heterogeneous pointed-observation archive. It is recorded as dated archive snapshots and products, not as a fictitious uniform DR sequence.",
+      "modalities": [
+        "imaging",
+        "spectroscopy",
+        "ultraviolet",
+        "infrared",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "hst-mast-snapshot-2026",
+          "label": "MAST archive snapshot 2026",
+          "kind": "archive_snapshot",
+          "releasedYear": 2026,
+          "modalities": [
+            "imaging",
+            "spectroscopy",
+            "ultraviolet",
+            "infrared",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "Instrument archive",
+              "modality": "imaging",
+              "description": "Pointed imaging from instruments including ACS and WFC3.",
+              "status": "overview_only",
+              "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=smoc&order=4&fmt=json",
+              "reason": "The aggregate published-pointings MOC is a discovery overview; exact instrument observation footprints for the audited snapshot have not been converted to an archive MOC.",
+              "manualStep": "Query MAST for all public HST instrument observations available on 2026-08-12, parse each observation s_region footprint in ICRS, and union the footprints into the Instrument archive snapshot MOC."
+            },
+            {
+              "name": "Hubble Source Catalog",
+              "modality": "catalog",
+              "description": "Cross-visit source catalog product.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
+              "reason": "Published HiPS pointings do not establish exact Hubble Source Catalog coverage, and source-detection footprints for the audited snapshot have not been acquired.",
+              "manualStep": "Query the Hubble Source Catalog available on 2026-08-12, collect the unique contributing HST observation identifiers, resolve each observation s_region footprint from MAST, and union those ICRS footprints into the catalog MOC."
+            },
+            {
+              "name": "Hubble Advanced Products",
+              "modality": "imaging",
+              "description": "Processed science-ready archive products.",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
+              "reason": "Published HiPS pointings do not establish exact Hubble Advanced Products coverage, and product footprints for the audited snapshot have not been acquired.",
+              "manualStep": "Query MAST for all public Hubble Advanced Products available on 2026-08-12, parse each product s_region footprint in ICRS, and union the footprints into the product MOC."
+            },
+            {
+              "name": "published HST HiPS pointings",
+              "modality": "catalog",
+              "description": "Public survey product tracked by the coverage ledger.",
+              "status": "acquired",
+              "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=smoc&order=4&fmt=json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "panstarrs",
+      "name": "Pan-STARRS1",
+      "mission": "Panoramic Survey Telescope and Rapid Response System",
+      "color": "#f2c66d",
+      "description": "Wide-field optical imaging and time-domain products. The bundled footprint is limited to the DR1 stacked color image product.",
+      "modalities": [
+        "imaging",
+        "photometry",
+        "time-domain",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "panstarrs-dr1",
+          "label": "DR1",
+          "kind": "public_release",
+          "releasedYear": 2016,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "DR1 stacked color imaging",
+              "modality": "imaging",
+              "description": "Stacked i/r/g image product represented by the CDS HiPS coverage.",
+              "status": "overview_only",
+              "sourceUrl": "https://outerspace.stsci.edu/display/PANSTARRS/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fcolor-i-r-g&get=smoc&order=4&fmt=json",
+              "reason": "The exact CDS DR1 color-imaging MOC is an overview for this differently named registered product; official DR1 stack-image footprints have not been converted to an identity-exact MOC.",
+              "manualStep": "Query the official Pan-STARRS DR1 image metadata for all stack products in the color bands, convert each stack skycell boundary to an ICRS polygon, and union the polygons into the DR1 stacked color imaging MOC."
+            },
+            {
+              "name": "DR1 color imaging",
+              "modality": "catalog",
+              "description": "Public survey product tracked by the coverage ledger.",
+              "status": "acquired",
+              "sourceUrl": "https://outerspace.stsci.edu/display/PANSTARRS/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fcolor-i-r-g&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "DR1 g-band imaging",
+              "modality": "imaging",
+              "description": "DR1 g-band HiPS image product.",
+              "status": "acquired",
+              "sourceUrl": "https://outerspace.stsci.edu/display/PANSTARRS/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fg&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "DR1 r-band imaging",
+              "modality": "imaging",
+              "description": "DR1 r-band HiPS image product.",
+              "status": "acquired",
+              "sourceUrl": "https://outerspace.stsci.edu/display/PANSTARRS/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fr&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "DR1 i-band imaging",
+              "modality": "imaging",
+              "description": "DR1 i-band HiPS image product.",
+              "status": "acquired",
+              "sourceUrl": "https://outerspace.stsci.edu/display/PANSTARRS/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fi&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "DR1 z-band imaging",
+              "modality": "imaging",
+              "description": "DR1 z-band HiPS image product.",
+              "status": "acquired",
+              "sourceUrl": "https://outerspace.stsci.edu/display/PANSTARRS/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fz&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "DR1 y-band imaging",
+              "modality": "imaging",
+              "description": "DR1 y-band HiPS image product.",
+              "status": "acquired",
+              "sourceUrl": "https://outerspace.stsci.edu/display/PANSTARRS/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fy&get=smoc&order=4&fmt=json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "des",
+      "name": "DES",
+      "mission": "Dark Energy Survey",
+      "color": "#ef7f79",
+      "description": "Southern-sky optical imaging, catalogs and time-domain supernova fields. The bundled footprint represents the DR2 color image product.",
+      "modalities": [
+        "imaging",
+        "photometry",
+        "time-domain",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "des-dr2",
+          "label": "DR2",
+          "kind": "public_release",
+          "releasedYear": 2021,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "DR2 color imaging",
+              "modality": "imaging",
+              "description": "DR2 coadded color image coverage; masks and single epochs have separate validity.",
+              "status": "acquired",
+              "sourceUrl": "https://des.ncsa.illinois.edu/releases/dr2",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2FColorIRG&get=smoc&order=4&fmt=json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "2mass",
+      "name": "2MASS",
+      "mission": "Two Micron All Sky Survey",
+      "color": "#ffb36b",
+      "description": "Near-infrared all-sky imaging and source catalogs. The bundled artifact is specifically the All-Sky J-band image coverage.",
+      "modalities": [
+        "imaging",
+        "photometry",
+        "infrared",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "2mass-all-sky",
+          "label": "All-Sky Release",
+          "kind": "public_release",
+          "releasedYear": 2003,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "infrared",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "J-band imaging",
+              "modality": "infrared",
+              "description": "All-Sky J-band atlas image coverage represented by the CDS/IRSA HiPS MOC.",
+              "status": "acquired",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FJ&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "H-band imaging",
+              "modality": "infrared",
+              "description": "All-Sky H-band atlas image coverage represented by the CDS/IRSA HiPS MOC.",
+              "status": "acquired",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FH&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "K-band imaging",
+              "modality": "infrared",
+              "description": "All-Sky K-band atlas image coverage represented by the CDS/IRSA HiPS MOC.",
+              "status": "acquired",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FK&get=smoc&order=4&fmt=json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "allwise",
+      "name": "AllWISE",
+      "mission": "WISE / NASA IPAC Infrared Science Archive",
+      "color": "#d89dff",
+      "description": "Mid-infrared all-sky images and catalogs. The static footprint does not encode NEOWISE cadence or temporal completeness.",
+      "modalities": [
+        "imaging",
+        "photometry",
+        "time-domain",
+        "infrared",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "allwise",
+          "label": "AllWISE",
+          "kind": "public_release",
+          "releasedYear": 2013,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "infrared",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "W1 imaging",
+              "modality": "infrared",
+              "description": "AllWISE W1 image coverage represented by the CDS/IRSA HiPS MOC.",
+              "status": "acquired",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW1&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "W2 imaging",
+              "modality": "infrared",
+              "description": "AllWISE W2 image coverage represented by the CDS/IRSA HiPS MOC.",
+              "status": "acquired",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW2&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "W3 imaging",
+              "modality": "infrared",
+              "description": "AllWISE W3 image coverage represented by the CDS/IRSA HiPS MOC.",
+              "status": "acquired",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW3&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "W4 imaging",
+              "modality": "infrared",
+              "description": "AllWISE W4 image coverage represented by the CDS/IRSA HiPS MOC.",
+              "status": "acquired",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW4&get=smoc&order=4&fmt=json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kids",
+      "name": "KiDS",
+      "mission": "Kilo-Degree Survey / ESO VST",
+      "color": "#65d79b",
+      "description": "ESO optical imaging and weak-lensing survey products. The bundled footprint represents the DR5 gri color image product.",
+      "modalities": [
+        "imaging",
+        "photometry",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "kids-dr5",
+          "label": "DR5",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "DR5 gri imaging",
+              "modality": "imaging",
+              "description": "Survey-endorsed CDS-hosted gri HiPS coverage; per-band masks remain distinct.",
+              "status": "acquired",
+              "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=4&fmt=json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nvss",
+      "name": "NVSS",
+      "mission": "NRAO VLA Sky Survey",
+      "color": "#60bce8",
+      "description": "1.4 GHz radio continuum image and source catalog survey. Product-specific sensitivity and Stokes validity are not encoded by the overview footprint.",
+      "modalities": [
+        "imaging",
+        "catalog"
+      ],
+      "releases": [
+        {
+          "id": "nvss-final",
+          "label": "Final survey",
+          "kind": "public_release",
+          "releasedYear": 1998,
+          "modalities": [
+            "imaging",
+            "catalog"
+          ],
+          "products": [
+            {
+              "name": "1.4 GHz radio imaging",
+              "modality": "imaging",
+              "description": "NVSS image-grid coverage represented by the CDS HiPS MOC.",
+              "status": "acquired",
+              "sourceUrl": "https://www.cv.nrao.edu/nvss/",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FNVSS&get=smoc&order=4&fmt=json"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

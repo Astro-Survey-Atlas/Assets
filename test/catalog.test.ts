@@ -1,0 +1,43 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { loadCatalog, publicManifest } from "../server/catalog.js";
+import { projectRoot } from "../server/paths.js";
+
+test("release catalog verifies every public file and bundle digest", async () => {
+  const catalog = await loadCatalog(projectRoot);
+  assert.equal(catalog.manifest.schemaVersion, 1);
+  assert.equal(catalog.manifest.statistics.packages, 15);
+  assert.equal(catalog.manifest.statistics.rawMocFiles, 34);
+  assert.equal(catalog.manifest.statistics.acquired, 31);
+  assert.equal(catalog.files.size, catalog.manifest.files.length);
+  assert.ok(catalog.manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)));
+});
+
+test("public API projection hides filesystem paths and exposes stable downloads", async () => {
+  const response = publicManifest(await loadCatalog(projectRoot, false));
+  assert.ok(response.files.length > 50);
+  assert.ok(response.files.every((entry) => !("path" in entry)));
+  assert.ok(response.files.every((entry) => entry.downloadUrl === `/api/v1/assets/${entry.id}/download`));
+});
+
+test("current package catalog publishes only referenced release versions", async () => {
+  const catalog = await loadCatalog(projectRoot, false);
+  const packages = catalog.manifest.files.filter((entry) => entry.kind === "package");
+  assert.equal(packages.length, 15);
+  assert.equal(packages.filter((entry) => entry.version === "2.0.3").length, 12);
+  assert.equal(packages.filter((entry) => entry.version === "2.0.4").length, 1);
+  assert.equal(packages.filter((entry) => entry.version === "1.0.0").length, 2);
+  assert.equal(packages.some((entry) => entry.version === "2.0.0" || entry.version === "2.0.1"), false);
+});
+
+test("DESI official tile tables and resource package are downloadable release assets", async () => {
+  const catalog = await loadCatalog(projectRoot, false);
+  const files = catalog.manifest.files.filter((entry) => entry.surveyId === "desi");
+  assert.deepEqual(files.map((entry) => entry.downloadName).sort(), [
+    "desi-dr1-tiles-iron.fits",
+    "desi-edr-tiles-fuji.fits",
+    "public-desi-footprints-2.0.3.zip",
+  ]);
+  assert.ok(files.filter((entry) => entry.kind === "geometry").every((entry) => entry.mediaType === "application/fits"));
+});

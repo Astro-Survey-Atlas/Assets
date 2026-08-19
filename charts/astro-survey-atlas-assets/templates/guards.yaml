@@ -1,0 +1,5 @@
+{{- if and (eq .Values.service.type "ClusterIP") .Values.service.nodePort }}{{ fail "service.nodePort is only valid with service.type=NodePort" }}{{- end }}
+{{- if and (eq .Values.service.type "NodePort") (not .Values.service.nodePort) }}{{ fail "service.nodePort is required with service.type=NodePort" }}{{- end }}
+{{- if and (not .Values.persistence.enabled) (not .Values.persistence.existingClaim) }}{{ fail "verified public assets require persistence.enabled or persistence.existingClaim" }}{{- end }}
+{{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}{{ fail "persistence.enabled and persistence.existingClaim cannot both provision storage" }}{{- end }}
+

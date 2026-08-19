@@ -1,0 +1,78 @@
+export type PublicAssetKind = "package" | "moc" | "geometry" | "manifest" | "ledger" | "documentation" | "provenance" | "metadata";
+
+export interface PublicAssetRecord {
+  id: string;
+  kind: PublicAssetKind;
+  label: string;
+  description: string;
+  path: string;
+  downloadName: string;
+  mediaType: string;
+  sizeBytes: number;
+  sha256: string;
+  surveyId?: string;
+  releaseId?: string;
+  product?: string;
+  version?: string;
+  sourceUrl?: string;
+}
+
+export interface PublicAssetManifest {
+  schemaVersion: 1;
+  generatedAt: string;
+  bundle: {
+    id: string;
+    sha256: string;
+  };
+  statistics: {
+    releases: number;
+    products: number;
+    acquired: number;
+    overviewOnly: number;
+    awaitingGeometry: number;
+    footprints: number;
+    packages: number;
+    rawMocFiles: number;
+    totalBytes: number;
+  };
+  files: PublicAssetRecord[];
+}
+
+export type PublicSurveyModality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog";
+export type PublicProductStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
+
+export interface PublicSurveyProduct {
+  name: string;
+  modality: PublicSurveyModality;
+  description: string;
+  status: PublicProductStatus;
+  sourceUrl: string;
+  geometrySourceUrl?: string;
+  reason?: string;
+  manualStep?: string;
+}
+
+export interface PublicSurveyRelease {
+  id: string;
+  label: string;
+  kind: string;
+  releasedYear?: number;
+  modalities: PublicSurveyModality[];
+  products: PublicSurveyProduct[];
+}
+
+export interface PublicSurveyRecord {
+  id: string;
+  name: string;
+  mission: string;
+  color: string;
+  description: string;
+  modalities: PublicSurveyModality[];
+  releases: PublicSurveyRelease[];
+}
+
+export interface PublicSurveyCatalog {
+  schemaVersion: 1;
+  generatedAt: string;
+  surveys: PublicSurveyRecord[];
+}

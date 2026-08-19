@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#090d10" />
+    <meta name="description" content="Astro Survey Atlas 公共天空覆盖制品与可验证下载目录" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Astro Survey Atlas · Public Assets</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Astro Survey Atlas Public Assets">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span><strong>ASTRO SURVEY ATLAS</strong><small>PUBLIC ASSET ARCHIVE</small></span>
+      </a>
+      <div class="release-state"><span aria-hidden="true"></span><output id="header-release">VERIFYING RELEASE</output></div>
+    </header>
+
+    <main>
+      <section class="coverage-hero" aria-labelledby="page-title">
+        <div id="coverage-scene" class="coverage-scene" aria-label="公开巡天覆盖交互天球">
+          <canvas id="coverage-canvas"></canvas>
+          <img id="coverage-fallback" src="/coverage-overview.png" alt="根据本次公开 NSIDE 16 manifest 绘制的真实巡天空域覆盖预览" />
+          <div id="coverage-tooltip" class="coverage-tooltip" hidden></div>
+        </div>
+        <div class="coverage-grid" aria-hidden="true"></div>
+        <div class="hero-copy">
+          <p>ICRS · HEALPIX NSIDE 16 · VERIFIED PUBLIC RELEASE</p>
+          <h1 id="page-title">Public Survey Footprints</h1>
+          <span>原生 FITS MOC、Euclid 几何边界、资源包与可复核的计算证据。</span>
+        </div>
+        <div class="hero-coverage-state"><span></span><output id="coverage-state">LOADING COVERAGE SPHERE</output></div>
+        <dl class="hero-stats" aria-label="发布统计">
+          <div><dt>RELEASES</dt><dd id="stat-releases">--</dd></div>
+          <div><dt>EXACT MOC</dt><dd id="stat-acquired">--</dd></div>
+          <div><dt>RAW FITS</dt><dd id="stat-moc">--</dd></div>
+          <div><dt>PACKAGES</dt><dd id="stat-packages">--</dd></div>
+          <div><dt>ARCHIVE SIZE</dt><dd id="stat-size">--</dd></div>
+        </dl>
+      </section>
+
+      <section class="project-notes" aria-labelledby="project-notes-title">
+        <div>
+          <p>PROJECT NOTEBOOK</p>
+          <h2 id="project-notes-title">把公开巡天覆盖变成可复核的空间资产</h2>
+        </div>
+        <div class="project-notes-copy">
+          <p>Astro Survey Atlas 用 ICRS 坐标和 NESTED HEALPix 统一表达不同巡天、Release 与产品的天空覆盖。官网发布原始 MOC、几何来源、规范化 manifest、资源包和 provenance；每个文件都带有大小与 SHA-256，下载后可以独立复核。</p>
+          <p>数据工作区负责查询、组合和分析这些覆盖。后续可在同一项目体系中接入 data-warehouse 爬虫等扩展，但公开资源归档、项目说明和覆盖球保持独立发布。</p>
+        </div>
+      </section>
+
+      <section class="catalog-shell" aria-labelledby="catalog-title">
+        <div class="catalog-heading">
+          <div><p>PUBLIC SURVEY ARCHIVE / 2026.08</p><h2 id="catalog-title">按巡天浏览公开资产</h2></div>
+          <label class="search-field">
+            <i data-lucide="search"></i>
+            <span class="sr-only">搜索巡天</span>
+            <input id="survey-search" type="search" autocomplete="off" placeholder="搜索巡天、任务、模态或产品" />
+          </label>
+        </div>
+        <div class="survey-result-row"><output id="survey-count">--</output><span>多模态巡天使用多个并列标签展示</span></div>
+        <div id="survey-list" class="survey-grid" aria-live="polite">
+          <div class="loading-row"><span></span><strong>正在验证巡天目录</strong></div>
+        </div>
+      </section>
+
+      <section class="integrity-band" aria-labelledby="integrity-title">
+        <div>
+          <p>REPRODUCIBLE EVIDENCE</p>
+          <h2 id="integrity-title">每一个下载都有来源和哈希</h2>
+        </div>
+        <dl>
+          <div><dt>BUNDLE SHA-256</dt><dd><code id="bundle-hash">--</code><button id="copy-bundle-hash" class="icon-button" type="button" title="复制 bundle SHA-256" aria-label="复制 bundle SHA-256"><i data-lucide="copy"></i></button></dd></div>
+          <div><dt>GENERATED AT</dt><dd id="generated-at">--</dd></div>
+        </dl>
+        <a id="provenance-download" class="command-button" href="#"><i data-lucide="file-check-2"></i><span>下载 provenance</span></a>
+      </section>
+    </main>
+
+    <footer>
+      <span>ASTRO SURVEY ATLAS · PUBLIC ASSET ARCHIVE</span>
+      <span>ICRS / NESTED HEALPIX / SHA-256</span>
+    </footer>
+
+    <dialog id="survey-dialog" class="survey-dialog">
+      <div class="dialog-bar"><span id="dialog-kind">SURVEY</span><button id="dialog-close" class="icon-button" type="button" aria-label="关闭详情" title="关闭"><i data-lucide="x"></i></button></div>
+      <div id="dialog-content" class="survey-dialog-content"></div>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
