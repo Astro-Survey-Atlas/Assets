@@ -1,0 +1,31 @@
+{
+  "layerId": "desi-dr1-spectra-footprint",
+  "surveyId": "desi",
+  "releaseId": "desi-dr1",
+  "product": "DR1 spectra and redshifts",
+  "modality": "spectroscopy",
+  "mode": "tile-table",
+  "input": "artifacts/public-survey-footprints/raw/geometry/desi-dr1-tiles-iron.fits",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "official_inventory_derived",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+  "recipe": {
+    "hdu": "TILE_COMPLETENESS",
+    "raColumn": "TILERA",
+    "decColumn": "TILEDEC",
+    "nexpColumn": "NEXP",
+    "nexpMin": 1,
+    "radiusDeg": 1.6280324520485583,
+    "radiusAuthority": "desimodel 0.20.0 focalplane radius 413.4839307227412 mm"
+  },
+  "snapshot": {
+    "sha256": "99320a3a8940cb1c98d36526233e14bafcd1e137d6e2a0c0563e7b9c4f83d71a",
+    "sizeBytes": 1339200
+  }
+}

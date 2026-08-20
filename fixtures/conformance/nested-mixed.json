@@ -1,0 +1,12 @@
+{
+  "cells": [
+    { "order": 8, "ipix": 0 },
+    { "order": 8, "ipix": 1 },
+    { "order": 8, "ipix": 2 },
+    { "order": 8, "ipix": 3 },
+    { "order": 8, "ipix": 4 },
+    { "order": 8, "ipix": 4 },
+    { "order": 7, "ipix": 2 },
+    { "order": 6, "ipix": 3 }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "layerId": "euclid-q1-deep-fields-image-extent",
+  "surveyId": "euclid",
+  "releaseId": "euclid-q1",
+  "product": "Euclid Q1 deep fields",
+  "modality": "imaging",
+  "mode": "regions",
+  "input": "artifacts/public-survey-footprints/raw/geometry/euclid-q1-region-files.zip",
+  "coverageRole": "image_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "official_geometry",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+  "recipe": {
+    "format": "ds9",
+    "members": ["q1_edff.reg", "q1_edfn.reg", "q1_edfs.reg"]
+  },
+  "snapshot": {
+    "sha256": "1cf306fab4995179219fbefd32b9648ce0455b65c48cab9246138cc72eff20ef",
+    "sizeBytes": 5272
+  }
+}

@@ -13,7 +13,9 @@ COPY test ./test
 COPY artifacts ./artifacts
 COPY src/footprints ./src/footprints
 COPY src/surveys ./src/surveys
-COPY docs/public-footprint-moc-method.md ./docs/public-footprint-moc-method.md
+COPY src/layers ./src/layers
+COPY requirements ./requirements
+COPY docs ./docs
 RUN npm run build
 
 FROM node:22.22.1-bookworm-slim AS runtime
@@ -34,6 +36,8 @@ COPY --from=build --chown=atlas:atlas /app/dist/site ./site
 COPY --from=build --chown=atlas:atlas /app/artifacts ./release/artifacts
 COPY --from=build --chown=atlas:atlas /app/src/footprints ./release/src/footprints
 COPY --from=build --chown=atlas:atlas /app/src/surveys ./release/src/surveys
+COPY --from=build --chown=atlas:atlas /app/src/layers ./release/src/layers
+COPY --from=build --chown=atlas:atlas /app/requirements ./release/requirements
 COPY --from=build --chown=atlas:atlas /app/docs ./release/docs
 
 USER 10001:10001

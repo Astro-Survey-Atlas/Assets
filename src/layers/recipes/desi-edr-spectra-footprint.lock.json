@@ -1,0 +1,31 @@
+{
+  "layerId": "desi-edr-spectra-footprint",
+  "surveyId": "desi",
+  "releaseId": "desi-edr",
+  "product": "Early Data Release spectra",
+  "modality": "spectroscopy",
+  "mode": "tile-table",
+  "input": "artifacts/public-survey-footprints/raw/geometry/desi-edr-tiles-fuji.fits",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "official_inventory_derived",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+  "recipe": {
+    "hdu": "TILE_COMPLETENESS",
+    "raColumn": "TILERA",
+    "decColumn": "TILEDEC",
+    "nexpColumn": "NEXP",
+    "nexpMin": 1,
+    "radiusDeg": 1.6280324520485583,
+    "radiusAuthority": "desimodel 0.20.0 focalplane radius 413.4839307227412 mm"
+  },
+  "snapshot": {
+    "sha256": "7ddf26cdda548d1cc133d078db73862856c8e1c4912de85d52fd650a1b8f5a0d",
+    "sizeBytes": 169920
+  }
+}

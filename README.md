@@ -11,13 +11,40 @@ The authoritative inputs are:
 
 - `src/footprints/survey-footprints.json`
 - `artifacts/public-survey-footprints/provenance.json`
+- `src/layers/layer-registry.json`
 
 The release includes native FITS MOCs and source records, the Euclid Q1 DS9
 geometry archive, official DESI EDR/DR1 observed-tile FITS tables, current resource-package ZIP files, the product status
 ledger, calculation notes, normalized manifests and SHA-256 provenance.
+The Assets-owned Core build plan in `src/layers/public-build-plan.json` also
+publishes locked Euclid Q1, DESI EDR and DESI DR1 authoritative layers with
+their order-8 query indexes, order-4 previews, statistics and provenance.
+The layer registry reserves stable IDs for the next Euclid ERO/Q2 and Legacy
+DR1–DR10 layers as `awaiting_snapshot`; those entries are metadata only until
+official inputs are acquired, locked and added to the build plan.
 Only files referenced by `release-manifest.json` are exposed by the anonymous
 download API. Historical package archives that are not in the current catalog
 remain unavailable through HTTP.
+
+## Offline MOC Core
+
+This repository also owns the `astro-survey-atlas-assets` distribution, whose
+Python import package is explicitly named `astro_survey_moc_core`, and the
+`astro-survey-assets` CLI. The Core writes deterministic IVOA FITS MOCs,
+derives order-8 query indexes and order-4 previews, merges stable shard output,
+and builds or validates Resource Package v3 archives. `refresh` is its only
+networked command; `rebuild` (or `build --rebuild`) requires a SHA-256 locked
+local snapshot.
+
+The scientific and package contract is documented in
+[`docs/moc-core-contract.md`](docs/moc-core-contract.md). The reviewed CSST
+artifact is frozen and is validated in place rather than regenerated.
+
+```bash
+python3 -m pip wheel --no-deps --no-build-isolation . -w wheelhouse
+python3 -m astro_survey_moc_core.cli --version
+python3 -m unittest discover -s python-tests -v
+```
 
 ## Local development
 

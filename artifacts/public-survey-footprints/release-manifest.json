@@ -3,7 +3,7 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "ec7619c1d1d22f7ad59c6c4f791864a1bee50b89b964470e509eae9b18be9885"
+    "sha256": "460427a06f78a8898f12a29cb3d0ff4115dddfe77f7387e5abdd412a28e89979"
   },
   "statistics": {
     "releases": 49,
@@ -13,10 +13,21 @@
     "awaitingGeometry": 41,
     "footprints": 41,
     "packages": 16,
-    "rawMocFiles": 35,
-    "totalBytes": 223822601
+    "rawMocFiles": 38,
+    "totalBytes": 227172313
   },
   "files": [
+    {
+      "id": "documentation-moc-core-contract",
+      "kind": "documentation",
+      "label": "Assets MOC Core contract",
+      "description": "Scientific enums, deterministic build lifecycle, CLI boundary and Resource Package v3 contract.",
+      "downloadName": "moc-core-contract.md",
+      "mediaType": "text/markdown; charset=utf-8",
+      "path": "docs/moc-core-contract.md",
+      "sizeBytes": 3567,
+      "sha256": "50d16b571a3d3088306f253bbb39a351caf3c0ee8a31016a330bdd9750ee4320"
+    },
     {
       "id": "documentation-moc-method",
       "kind": "documentation",
@@ -25,8 +36,8 @@
       "downloadName": "public-footprint-moc-method.md",
       "mediaType": "text/markdown; charset=utf-8",
       "path": "docs/public-footprint-moc-method.md",
-      "sizeBytes": 7122,
-      "sha256": "0aaa264dcb2b67a9e6b8023fd635fe670c33e3bdc6b98429e10ffa2f322b6bb3"
+      "sizeBytes": 7294,
+      "sha256": "7ff7237cfe6629e62014294fc4f7c2bb6f9c56dc4e02b9c248823e4b803ed892"
     },
     {
       "id": "csst-w1-healpix-order8",
@@ -57,6 +68,36 @@
       "sha256": "afad98385bbab785512dfb5730ae8d68d429d4f21466a74ce3a05e32c1e57dbc"
     },
     {
+      "id": "layer-desi-dr1-spectra-footprint-preview-order4",
+      "kind": "geometry",
+      "label": "DESI · DR1 spectra and redshifts order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "desi-dr1-spectra-footprint-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "desi",
+      "releaseId": "desi-dr1",
+      "product": "DR1 spectra and redshifts",
+      "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "path": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/preview-order4.json",
+      "sizeBytes": 6263,
+      "sha256": "93afbb3d8672e5a4149382079cf9466d2044d6abc619ca996f87c4b821505a5e"
+    },
+    {
+      "id": "layer-desi-dr1-spectra-footprint-query-order8",
+      "kind": "geometry",
+      "label": "DESI · DR1 spectra and redshifts order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "desi-dr1-spectra-footprint-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "desi",
+      "releaseId": "desi-dr1",
+      "product": "DR1 spectra and redshifts",
+      "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "path": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/query-order8.json",
+      "sizeBytes": 1850408,
+      "sha256": "e6999c0f1a3646c4206c03093813589a2c40da139ef91e7ebc3f726447becf36"
+    },
+    {
       "id": "geometry-desi-desi-dr1-dr1-spectra-and-redshifts",
       "kind": "geometry",
       "label": "DESI · DR1 spectra and redshifts source geometry",
@@ -72,6 +113,36 @@
       "sha256": "99320a3a8940cb1c98d36526233e14bafcd1e137d6e2a0c0563e7b9c4f83d71a"
     },
     {
+      "id": "layer-desi-edr-spectra-footprint-preview-order4",
+      "kind": "geometry",
+      "label": "DESI · Early Data Release spectra order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "desi-edr-spectra-footprint-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "desi",
+      "releaseId": "desi-edr",
+      "product": "Early Data Release spectra",
+      "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "path": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint/preview-order4.json",
+      "sizeBytes": 1827,
+      "sha256": "ec883082ec22e78a4900746fbbaf2df3028ef9310396e88348f520f526ee5f6e"
+    },
+    {
+      "id": "layer-desi-edr-spectra-footprint-query-order8",
+      "kind": "geometry",
+      "label": "DESI · Early Data Release spectra order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "desi-edr-spectra-footprint-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "desi",
+      "releaseId": "desi-edr",
+      "product": "Early Data Release spectra",
+      "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "path": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint/query-order8.json",
+      "sizeBytes": 209295,
+      "sha256": "83c6a7b7d539c46e1efd2ef85b5c030b3962eeaae1b6e4459edcb1e74f46388c"
+    },
+    {
       "id": "geometry-desi-desi-edr-early-data-release-spectra",
       "kind": "geometry",
       "label": "DESI · Early Data Release spectra source geometry",
@@ -85,6 +156,36 @@
       "path": "artifacts/public-survey-footprints/raw/geometry/desi-edr-tiles-fuji.fits",
       "sizeBytes": 169920,
       "sha256": "7ddf26cdda548d1cc133d078db73862856c8e1c4912de85d52fd650a1b8f5a0d"
+    },
+    {
+      "id": "layer-euclid-q1-deep-fields-image-extent-preview-order4",
+      "kind": "geometry",
+      "label": "EUCLID · Euclid Q1 deep fields order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "euclid-q1-deep-fields-image-extent-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 deep fields",
+      "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/preview-order4.json",
+      "sizeBytes": 142,
+      "sha256": "1206ea5785a4e038b0642822d330285e926271b9dfee8c75037bd1c8994514b4"
+    },
+    {
+      "id": "layer-euclid-q1-deep-fields-image-extent-query-order8",
+      "kind": "geometry",
+      "label": "EUCLID · Euclid Q1 deep fields order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "euclid-q1-deep-fields-image-extent-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 deep fields",
+      "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/query-order8.json",
+      "sizeBytes": 10029,
+      "sha256": "9dbdccfb119c9c65a6864c74fd6379ca6f4fad531357fdf6bda0fce224d4d30a"
     },
     {
       "id": "geometry-euclid-euclid-q1-euclid-q1-deep-fields",
@@ -334,6 +435,96 @@
       "path": "artifacts/public-survey-footprints/raw/moc/des-des-dr2-dr2-color-imaging.record.json",
       "sizeBytes": 3247,
       "sha256": "170a6bc6f67f750d93dd26db82a92febb6d2644a8d639ba888c88f5911605179"
+    },
+    {
+      "id": "layer-desi-dr1-spectra-footprint-lock",
+      "kind": "metadata",
+      "label": "DESI · DR1 spectra and redshifts locked recipe",
+      "description": "Offline recipe and input snapshot lock used to build this public layer.",
+      "downloadName": "desi-dr1-spectra-footprint.lock.json",
+      "mediaType": "application/json",
+      "surveyId": "desi",
+      "releaseId": "desi-dr1",
+      "product": "DR1 spectra and redshifts",
+      "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "path": "src/layers/recipes/desi-dr1-spectra-footprint.lock.json",
+      "sizeBytes": 986,
+      "sha256": "10115967e29878feba107eb03a2ecba57727f93c7f4c6bcbebeb5001fff0e0f0"
+    },
+    {
+      "id": "layer-desi-dr1-spectra-footprint-statistics",
+      "kind": "metadata",
+      "label": "DESI · DR1 spectra and redshifts statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "desi-dr1-spectra-footprint-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "desi",
+      "releaseId": "desi-dr1",
+      "product": "DR1 spectra and redshifts",
+      "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "path": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/statistics.json",
+      "sizeBytes": 212,
+      "sha256": "e4e92e864bd98e1edb70e0dec32cb5d4595899c34b730a5b9bd1911ace3bf555"
+    },
+    {
+      "id": "layer-desi-edr-spectra-footprint-lock",
+      "kind": "metadata",
+      "label": "DESI · Early Data Release spectra locked recipe",
+      "description": "Offline recipe and input snapshot lock used to build this public layer.",
+      "downloadName": "desi-edr-spectra-footprint.lock.json",
+      "mediaType": "application/json",
+      "surveyId": "desi",
+      "releaseId": "desi-edr",
+      "product": "Early Data Release spectra",
+      "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "path": "src/layers/recipes/desi-edr-spectra-footprint.lock.json",
+      "sizeBytes": 986,
+      "sha256": "ef4bbbf1af7680cd2859c0aeee20f1edb72440750f277ae4c6e799ef5881c778"
+    },
+    {
+      "id": "layer-desi-edr-spectra-footprint-statistics",
+      "kind": "metadata",
+      "label": "DESI · Early Data Release spectra statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "desi-edr-spectra-footprint-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "desi",
+      "releaseId": "desi-edr",
+      "product": "Early Data Release spectra",
+      "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "path": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint/statistics.json",
+      "sizeBytes": 209,
+      "sha256": "f6b04cdb47dc3a4773434892ccf2a277201379921c6b4f2733c26c07840f61d6"
+    },
+    {
+      "id": "layer-euclid-q1-deep-fields-image-extent-lock",
+      "kind": "metadata",
+      "label": "EUCLID · Euclid Q1 deep fields locked recipe",
+      "description": "Offline recipe and input snapshot lock used to build this public layer.",
+      "downloadName": "euclid-q1-deep-fields-image-extent.lock.json",
+      "mediaType": "application/json",
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 deep fields",
+      "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "path": "src/layers/recipes/euclid-q1-deep-fields-image-extent.lock.json",
+      "sizeBytes": 798,
+      "sha256": "3e1ac17f261556460ba65a8a4d3ce6bd9aaf292675e7850783ffad8ed65582f1"
+    },
+    {
+      "id": "layer-euclid-q1-deep-fields-image-extent-statistics",
+      "kind": "metadata",
+      "label": "EUCLID · Euclid Q1 deep fields statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "euclid-q1-deep-fields-image-extent-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 deep fields",
+      "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/statistics.json",
+      "sizeBytes": 205,
+      "sha256": "bf7f1457ce9d21129f7329a64475e50a0f904232fe7facda2c5c4edb45f2b15f"
     },
     {
       "id": "moc-galex-galex-gr6-gr7-fuv-imaging-cds-p-galexgr6-7-fuv-record",
@@ -606,6 +797,17 @@
       "sha256": "9d5281fbc60721da542a460ddc79464bc07c6d8a2ce5a3c8ae8fff11e61a3b4b"
     },
     {
+      "id": "metadata-public-build-plan",
+      "kind": "metadata",
+      "label": "Locked public Core build plan",
+      "description": "Offline public-layer build order, source-date epoch and authoritative MOC hashes.",
+      "downloadName": "public-build-plan.json",
+      "mediaType": "application/json",
+      "path": "src/layers/public-build-plan.json",
+      "sizeBytes": 887,
+      "sha256": "a28ad6d019872c0aba0491c78df8f2391eff640a3cdcc11a56b45e4bfacffd2f"
+    },
+    {
       "id": "metadata-moc-index",
       "kind": "metadata",
       "label": "Native MOC source index",
@@ -759,6 +961,17 @@
       "sha256": "fbbcbb0da5eecf0047d1b71e6950f630288e5305256a2f82a473dff132241316"
     },
     {
+      "id": "metadata-layer-registry",
+      "kind": "metadata",
+      "label": "Stable coverage layer registry",
+      "description": "Assets-owned stable layer IDs and scientific classifications for reviewed Core layers.",
+      "downloadName": "layer-registry.json",
+      "mediaType": "application/json",
+      "path": "src/layers/layer-registry.json",
+      "sizeBytes": 17998,
+      "sha256": "c74d537dabeb72eddcc476fd3b1d357964a376d7df308695a1c3dd411ce124ca"
+    },
+    {
       "id": "moc-2mass-2mass-all-sky-h-band-imaging-cds-p-2mass-h",
       "kind": "moc",
       "label": "2MASS · H-band imaging",
@@ -891,6 +1104,51 @@
       "path": "artifacts/public-survey-footprints/raw/moc/des-des-dr2-dr2-color-imaging.fits",
       "sizeBytes": 126720,
       "sha256": "59bfe8e901d19e1fdd6fcb9793e97e21558423973b7ef841906aaf2fe6a8e335"
+    },
+    {
+      "id": "layer-desi-dr1-spectra-footprint-moc",
+      "kind": "moc",
+      "label": "DESI · DR1 spectra and redshifts authoritative MOC",
+      "description": "footprint_extent (observed, official_inventory_derived) generated by Assets MOC Core 0.1.0.",
+      "downloadName": "desi-dr1-spectra-footprint.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "desi",
+      "releaseId": "desi-dr1",
+      "product": "DR1 spectra and redshifts",
+      "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "path": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/desi-dr1-spectra-footprint.moc.fits",
+      "sizeBytes": 944640,
+      "sha256": "e3fb86b871d2e24e3fd40724ea241d222988d8fd7262fa6b3855f59b3aae9c40"
+    },
+    {
+      "id": "layer-desi-edr-spectra-footprint-moc",
+      "kind": "moc",
+      "label": "DESI · Early Data Release spectra authoritative MOC",
+      "description": "footprint_extent (observed, official_inventory_derived) generated by Assets MOC Core 0.1.0.",
+      "downloadName": "desi-edr-spectra-footprint.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "desi",
+      "releaseId": "desi-edr",
+      "product": "Early Data Release spectra",
+      "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "path": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint/desi-edr-spectra-footprint.moc.fits",
+      "sizeBytes": 259200,
+      "sha256": "c1ef0b3ee9b18ca1d9dd1d10c08630850823c3f3ac4f3a0f22e86a58c177833f"
+    },
+    {
+      "id": "layer-euclid-q1-deep-fields-image-extent-moc",
+      "kind": "moc",
+      "label": "EUCLID · Euclid Q1 deep fields authoritative MOC",
+      "description": "image_extent (observed, official_geometry) generated by Assets MOC Core 0.1.0.",
+      "downloadName": "euclid-q1-deep-fields-image-extent.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 deep fields",
+      "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/euclid-q1-deep-fields-image-extent.moc.fits",
+      "sizeBytes": 17280,
+      "sha256": "e1c38cd2abe21035deae79efdf13f003fb0421f14a780d3061dbc8a52d2da75e"
     },
     {
       "id": "moc-galex-galex-gr6-gr7-fuv-imaging-cds-p-galexgr6-7-fuv",
@@ -1531,6 +1789,51 @@
       "sha256": "30840f55f45743744b434e94c9145cbd8f6e31e2d8f06da6203c7e48d988437b"
     },
     {
+      "id": "layer-desi-dr1-spectra-footprint-provenance",
+      "kind": "provenance",
+      "label": "DESI · DR1 spectra and redshifts provenance",
+      "description": "Locked input, Core version, scientific classification and output hashes for this public layer.",
+      "downloadName": "desi-dr1-spectra-footprint-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "desi",
+      "releaseId": "desi-dr1",
+      "product": "DR1 spectra and redshifts",
+      "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "path": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/provenance.json",
+      "sizeBytes": 1355,
+      "sha256": "128ad185889ea814cb0d30533de9e447cc2c2bad7629d02056b58d2d7e31c2f5"
+    },
+    {
+      "id": "layer-desi-edr-spectra-footprint-provenance",
+      "kind": "provenance",
+      "label": "DESI · Early Data Release spectra provenance",
+      "description": "Locked input, Core version, scientific classification and output hashes for this public layer.",
+      "downloadName": "desi-edr-spectra-footprint-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "desi",
+      "releaseId": "desi-edr",
+      "product": "Early Data Release spectra",
+      "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "path": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint/provenance.json",
+      "sizeBytes": 1353,
+      "sha256": "090c3d11166f629e97aa8702375fb4fda9e817d12f55bd8a5fd84155e52b13e8"
+    },
+    {
+      "id": "layer-euclid-q1-deep-fields-image-extent-provenance",
+      "kind": "provenance",
+      "label": "EUCLID · Euclid Q1 deep fields provenance",
+      "description": "Locked input, Core version, scientific classification and output hashes for this public layer.",
+      "downloadName": "euclid-q1-deep-fields-image-extent-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 deep fields",
+      "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/provenance.json",
+      "sizeBytes": 1208,
+      "sha256": "0b6177347ae57d4400a79a23c1ab69a837954fa9c5e519b3449f3efe2b3d390a"
+    },
+    {
       "id": "provenance-release",
       "kind": "provenance",
       "label": "Release provenance and hashes",
@@ -1540,6 +1843,30 @@
       "path": "artifacts/public-survey-footprints/provenance.json",
       "sizeBytes": 5732,
       "sha256": "c79ed9fcc93792462a10247719ed6718a2a1834d54db605f26b810be7ab8e8f5"
+    },
+    {
+      "id": "sdk-moc-core-wheel-0-1-0",
+      "kind": "sdk",
+      "label": "Assets MOC Core Python wheel",
+      "description": "Pinned offline Astro Survey MOC Core SDK wheel for scanner image and Atlas finalizer integration.",
+      "downloadName": "astro_survey_atlas_assets-0.1.0-py3-none-any.whl",
+      "mediaType": "application/zip",
+      "version": "0.1.0",
+      "path": "artifacts/public-survey-footprints/moc-core/astro_survey_atlas_assets-0.1.0-py3-none-any.whl",
+      "sizeBytes": 20468,
+      "sha256": "79ab6babbed2ea4559e4e5f444bf1ead79e87e8a954cde55f0258f7067af6df8"
+    },
+    {
+      "id": "sdk-moc-core-lock",
+      "kind": "sdk",
+      "label": "MOC Core dependency lock",
+      "description": "Pinned scientific dependencies used when building scanner and Assets MOC Core environments.",
+      "downloadName": "moc-core.lock",
+      "mediaType": "text/plain; charset=utf-8",
+      "version": "0.1.0",
+      "path": "requirements/moc-core.lock",
+      "sizeBytes": 224,
+      "sha256": "2985f7ce248d7427501e710fee57db7953ce6cd80888ae334262c9191b3dc222"
     }
   ]
 }

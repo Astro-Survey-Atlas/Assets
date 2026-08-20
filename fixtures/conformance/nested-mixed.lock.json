@@ -1,0 +1,17 @@
+{
+  "layerId": "conformance-nested-mixed",
+  "mode": "nested-healpix",
+  "input": "nested-mixed.json",
+  "coverageRole": "image_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "best_effort_derived",
+  "maxOrder": 8,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "recipe": {},
+  "snapshot": {
+    "sha256": "973079036a18f5a12049b1081acf442e2baf1c286e0d58ad92b35fe36b07fe23"
+  }
+}

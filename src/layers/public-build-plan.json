@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "sourceDateEpoch": 1787184000,
+  "builds": [
+    {
+      "spec": "src/layers/recipes/desi-dr1-spectra-footprint.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint",
+      "expectedSha256": "e3fb86b871d2e24e3fd40724ea241d222988d8fd7262fa6b3855f59b3aae9c40"
+    },
+    {
+      "spec": "src/layers/recipes/desi-edr-spectra-footprint.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint",
+      "expectedSha256": "c1ef0b3ee9b18ca1d9dd1d10c08630850823c3f3ac4f3a0f22e86a58c177833f"
+    },
+    {
+      "spec": "src/layers/recipes/euclid-q1-deep-fields-image-extent.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent",
+      "expectedSha256": "e1c38cd2abe21035deae79efdf13f003fb0421f14a780d3061dbc8a52d2da75e"
+    }
+  ]
+}

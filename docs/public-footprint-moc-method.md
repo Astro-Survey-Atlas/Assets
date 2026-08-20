@@ -80,4 +80,4 @@ npm run validate
 
 ## 未完成产品
 
-SDSS 各版本的完整 release catalog、DESI DR2 science-result tables、Legacy Surveys Tractor/CCD 精确几何、HSC PDR1/PDR3、HST Source Catalog/Advanced Products、GALEX 早期 release 和 Euclid ERO/Q2 等仍没有被本次 MOC 代填。它们继续在台账中明确写出缺少的官方几何和下一步提取方式。
+SDSS 各版本的完整 release catalog、DESI DR2 science-result tables、Legacy Surveys Tractor/CCD 精确几何、HSC PDR1/PDR3、HST Source Catalog/Advanced Products、GALEX 早期 release 和 Euclid ERO/Q2 等仍没有被本次 MOC 代填。它们继续在台账中明确写出缺少的官方几何和下一步提取方式；Assets layer registry 已为 Euclid ERO/Q2 与 Legacy DR1–DR10 预留稳定 ID，但在官方输入快照锁定前保持 `awaiting_snapshot`，不会发布伪精确层。

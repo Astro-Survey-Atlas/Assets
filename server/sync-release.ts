@@ -25,7 +25,11 @@ try {
 if (!installed) {
   await rm(stagingPath, { recursive: true, force: true });
   await mkdir(stagingPath, { recursive: true });
-  for (const directory of ["artifacts", "docs", "src"]) await cp(path.join(sourceRoot, directory), path.join(stagingPath, directory), { recursive: true, force: false });
+  // Keep the published release self-contained for catalog verification. The
+  // lock file under requirements is part of the public SDK release metadata.
+  for (const directory of ["artifacts", "docs", "requirements", "src"]) {
+    await cp(path.join(sourceRoot, directory), path.join(stagingPath, directory), { recursive: true, force: false });
+  }
   await loadCatalog(stagingPath);
   await rename(stagingPath, finalPath);
 }
@@ -43,4 +47,3 @@ await rename(nextPath, currentPath).catch(async (error: NodeJS.ErrnoException) =
 });
 const installedTarget = await readlink(currentPath);
 console.log(`Published ${source.manifest.bundle.id} at ${installedTarget}`);
-

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-20T04:48:22.554910Z",
+  "coordinateFrame": "ICRS",
+  "nside": 16,
+  "footprints": [
+    {
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "product": "W1 simulated wide-field images",
+      "label": "CSST W1 simulated WIDE-image WCS coverage",
+      "nside": 16,
+      "pixels": [267, 268, 288, 629, 630, 631, 635, 636, 637, 638, 639, 721, 723, 724, 725, 726, 727, 729, 731, 732, 733, 734, 735, 756, 757, 951, 953, 954, 955, 956, 957, 958, 959, 994, 995, 998, 999, 1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1399],
+      "quality": "moc"
+    }
+  ]
+}

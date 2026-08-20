@@ -1,0 +1,20 @@
+{
+  "id": "public-csst-footprints",
+  "version": "3.0.0",
+  "surveyId": "csst",
+  "footprintPath": "fixtures/conformance/csst-footprint.json",
+  "provenancePath": "artifacts/public-survey-footprints/csst/provenance.json",
+  "readmePath": "artifacts/public-survey-footprints/csst/README.md",
+  "layers": [
+    {
+      "layerId": "csst-sim-w1-image-extent",
+      "surveyId": "csst",
+      "coverageRole": "image_extent",
+      "dataOrigin": "simulated",
+      "sourceTier": "user_file_derived",
+      "modality": "imaging",
+      "releaseId": "csst-sim-w1-20250731",
+      "sourcePath": "artifacts/public-survey-footprints/csst/csst-w1-image-extent-order8.fits"
+    }
+  ]
+}

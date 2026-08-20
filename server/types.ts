@@ -1,4 +1,4 @@
-export type PublicAssetKind = "package" | "moc" | "geometry" | "manifest" | "ledger" | "documentation" | "provenance" | "metadata";
+export type PublicAssetKind = "package" | "moc" | "geometry" | "manifest" | "ledger" | "documentation" | "provenance" | "metadata" | "sdk";
 
 export interface PublicAssetRecord {
   id: string;

@@ -8,7 +8,7 @@ test("release catalog verifies every public file and bundle digest", async () =>
   const catalog = await loadCatalog(projectRoot);
   assert.equal(catalog.manifest.schemaVersion, 1);
   assert.equal(catalog.manifest.statistics.packages, 16);
-  assert.equal(catalog.manifest.statistics.rawMocFiles, 35);
+  assert.equal(catalog.manifest.statistics.rawMocFiles, 38);
   assert.equal(catalog.manifest.statistics.acquired, 32);
   assert.equal(catalog.files.size, catalog.manifest.files.length);
   assert.ok(catalog.manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)));
@@ -47,10 +47,18 @@ test("current package catalog publishes only referenced release versions", async
 test("DESI official tile tables and resource package are downloadable release assets", async () => {
   const catalog = await loadCatalog(projectRoot, false);
   const files = catalog.manifest.files.filter((entry) => entry.surveyId === "desi");
-  assert.deepEqual(files.map((entry) => entry.downloadName).sort(), [
+  const downloads = new Set(files.map((entry) => entry.downloadName));
+  for (const downloadName of [
     "desi-dr1-tiles-iron.fits",
     "desi-edr-tiles-fuji.fits",
     "public-desi-footprints-2.0.3.zip",
-  ]);
-  assert.ok(files.filter((entry) => entry.kind === "geometry").every((entry) => entry.mediaType === "application/fits"));
+    "desi-dr1-spectra-footprint.moc.fits",
+    "desi-dr1-spectra-footprint-query-order8.json",
+    "desi-dr1-spectra-footprint-preview-order4.json",
+    "desi-edr-spectra-footprint.moc.fits",
+    "desi-edr-spectra-footprint-query-order8.json",
+    "desi-edr-spectra-footprint-preview-order4.json",
+  ]) assert.ok(downloads.has(downloadName), `missing DESI release asset: ${downloadName}`);
+  assert.ok(files.some((entry) => entry.kind === "geometry" && entry.downloadName === "desi-dr1-tiles-iron.fits" && entry.mediaType === "application/fits"));
+  assert.ok(files.some((entry) => entry.kind === "geometry" && entry.downloadName === "desi-edr-tiles-fuji.fits" && entry.mediaType === "application/fits"));
 });
