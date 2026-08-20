@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "status": "approved",
+  "surveyId": "csst",
+  "releaseId": "csst-sim-w1-20250731",
+  "product": "W1 simulated wide-field images",
+  "assetId": "user-a04202c3-f8a1-4e0f-8f02-41fc8adf9c1e",
+  "connectorId": "connector-fd599c33-b7c8-4bbd-9377-a7b87133f069",
+  "connectorConfigHash": "bd9b8149b5d515908bc32609ca69bb320298b04434e409df3b2757bb8d49a4b3",
+  "sourcePrefix": "s3://data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W1_Phot/",
+  "path": "",
+  "fileNamePattern": "^CSST_MSC_MS_WIDE_.*\\.fits$",
+  "allowedSuffixes": [".fits"],
+  "coverage": {
+    "mode": "fits-wcs",
+    "coordinateFrame": "ICRS",
+    "evidenceRole": "image_extent",
+    "healpixOrder": 8,
+    "ordering": "NESTED",
+    "centerRaAliases": ["RA_OBJ", "RA_PNT0", "RA_PNT1"],
+    "centerDecAliases": ["DEC_OBJ", "DEC_PNT0", "DEC_PNT1"],
+    "centerUnits": "deg",
+    "centerFrame": "ICRS"
+  },
+  "algorithmVersion": "fits-wcs-image-extent-v2",
+  "scannerImage": "crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-metadata-scan:astro-20260820-csst-wcs-sharded-v2",
+  "workspaceRunId": "ingest-2789ca60-c9db-46b9-9314-e581c91ab836",
+  "scannerRunId": "workspace-coverage-04a0be5dc49c",
+  "kubernetesJob": "csst-w1-full-04a0be5dc49c",
+  "scanShards": 64,
+  "startedAt": "2026-08-20T04:23:33Z",
+  "completedAt": "2026-08-20T04:46:14Z",
+  "runStatus": "Succeeded",
+  "review": {
+    "decision": "approved_actual_simulation_wcs_extent",
+    "nominalAreaGateDeg2": [700, 1300],
+    "nominalAreaGatePassed": false,
+    "measuredAreaDeg2": 354.7589326601951,
+    "reason": "Publish the measured W1_Phot WIDE-image WCS union as simulation coverage. The 1000 deg2 project label is not presented as measured footprint area."
+  }
+}

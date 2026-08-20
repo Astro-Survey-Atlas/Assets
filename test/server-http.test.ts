@@ -37,9 +37,10 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
 
   const catalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/assets`);
   assert.equal(catalogResponse.status, 200);
-  const catalog = await catalogResponse.json() as { files: Array<{ id: string; sizeBytes: number; sha256: string; downloadUrl: string }> };
+  const catalog = await catalogResponse.json() as { files: Array<{ id: string; mediaType: string; sizeBytes: number; sha256: string; downloadUrl: string; previewUrl?: string; previewMode?: "text" | "image" }> };
   const provenance = catalog.files.find((entry) => entry.id === "provenance-release");
   assert.ok(provenance);
+  assert.ok(provenance.previewUrl?.endsWith("/preview"));
 
   const range = await fetch(`http://127.0.0.1:${port}${provenance.downloadUrl}`, { headers: { Range: "bytes=0-31" } });
   assert.equal(range.status, 206);
@@ -48,13 +49,42 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.match(range.headers.get("content-disposition") ?? "", /provenance\.json/);
   assert.equal((await range.arrayBuffer()).byteLength, 32);
 
+  const preview = await fetch(`http://127.0.0.1:${port}${provenance.previewUrl}`);
+  assert.equal(preview.status, 200);
+  assert.equal(preview.headers.get("content-disposition"), "inline");
+  assert.match(await preview.text(), /generatedAt/);
+  assert.equal(preview.headers.get("x-content-sha256"), provenance.sha256);
+
+  const zip = catalog.files.find((entry) => entry.id.startsWith("package-"));
+  assert.ok(zip);
+  assert.ok(zip.previewUrl?.endsWith("/preview"));
+  assert.equal(zip.previewMode, "text");
+  const zipPreview = await fetch(`http://127.0.0.1:${port}/api/v1/assets/${zip.id}/preview`);
+  assert.equal(zipPreview.status, 200);
+  assert.equal(zipPreview.headers.get("content-disposition"), "inline");
+  assert.match(zipPreview.headers.get("content-type") ?? "", /^text\/plain/);
+  assert.match(await zipPreview.text(), /ZIP archive preview/);
+  assert.equal(zipPreview.headers.get("x-content-sha256"), zip.sha256);
+
+  const fits = catalog.files.find((entry) => entry.mediaType === "application/fits");
+  assert.ok(fits);
+  assert.ok(fits.previewUrl?.endsWith("/preview"));
+  assert.equal(fits.previewMode, "text");
+  const fitsPreview = await fetch(`http://127.0.0.1:${port}${fits.previewUrl}`);
+  assert.equal(fitsPreview.status, 200);
+  assert.match(fitsPreview.headers.get("content-type") ?? "", /^text\/plain/);
+  assert.match(await fitsPreview.text(), /\[HDU 0: PRIMARY\][\s\S]*SIMPLE/);
+  assert.equal(fitsPreview.headers.get("x-content-sha256"), fits.sha256);
+  assert.ok(catalog.files.every((entry) => entry.previewUrl));
+
   const coverageResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage`);
   assert.equal(coverageResponse.status, 200);
-  const coverage = await coverageResponse.json() as { coordinateFrame: string; nside: number; footprints: Array<{ pixels: number[] }> };
+  const coverage = await coverageResponse.json() as { coordinateFrame: string; nside: number; footprints: Array<{ surveyId: string; pixels: number[] }> };
   assert.equal(coverage.coordinateFrame, "ICRS");
   assert.equal(coverage.nside, 16);
   assert.ok(coverage.footprints.length > 20);
   assert.ok(coverage.footprints.every((footprint) => footprint.pixels.length > 0));
+  assert.equal(coverage.footprints.find((footprint) => footprint.surveyId === "csst")?.pixels.length, 46);
 
   const surveysResponse = await fetch(`http://127.0.0.1:${port}/api/v1/surveys`);
   assert.equal(surveysResponse.status, 200);
@@ -62,7 +92,12 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
     surveys: Array<{ id: string; modalities: string[]; statistics: { publicProducts: number; acquired: number }; releases: Array<{ products: Array<{ status: string; reason?: string }> }>; assets: Array<{ surveyId?: string; downloadUrl: string }> }>;
     sharedAssets: Array<{ surveyId?: string; downloadUrl: string }>;
   };
-  assert.equal(surveys.surveys.length, 13);
+  assert.equal(surveys.surveys.length, 14);
+  const csst = surveys.surveys.find((survey) => survey.id === "csst");
+  assert.ok(csst);
+  assert.deepEqual(csst.modalities.sort(), ["catalog", "imaging", "photometry", "simulation"]);
+  assert.equal(csst.releases[0]?.products[0]?.status, "acquired");
+  assert.ok(csst.assets.some((asset) => asset.downloadUrl.includes("csst-coverage-job-snapshot")));
   assert.ok(surveys.surveys.every((survey) => survey.modalities.length > 0 && survey.statistics.publicProducts > 0));
   assert.ok(surveys.surveys.every((survey) => survey.assets.every((asset) => asset.surveyId === survey.id && asset.downloadUrl.startsWith("/api/v1/assets/"))));
   assert.ok(surveys.sharedAssets.every((asset) => !asset.surveyId));

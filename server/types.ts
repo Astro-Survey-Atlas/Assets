@@ -17,6 +17,14 @@ export interface PublicAssetRecord {
   sourceUrl?: string;
 }
 
+export type PublicAssetPreviewMode = "text" | "image";
+
+export type PublicAssetProjection = Omit<PublicAssetRecord, "path"> & {
+  downloadUrl: string;
+  previewUrl?: string;
+  previewMode?: PublicAssetPreviewMode;
+};
+
 export interface PublicAssetManifest {
   schemaVersion: 1;
   generatedAt: string;
@@ -38,7 +46,7 @@ export interface PublicAssetManifest {
   files: PublicAssetRecord[];
 }
 
-export type PublicSurveyModality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog";
+export type PublicSurveyModality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog" | "simulation";
 export type PublicProductStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
 
 export interface PublicSurveyProduct {

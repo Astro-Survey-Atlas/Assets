@@ -1,27 +1,27 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-19T08:11:25.589Z",
+  "generatedAt": "2026-08-20T05:11:37.055Z",
   "generator": {
     "name": "scripts/public_footprint_artifacts.ts"
   },
   "statistics": {
-    "releases": 48,
-    "products": 83,
-    "acquired": 31,
+    "releases": 49,
+    "products": 84,
+    "acquired": 32,
     "overview_only": 11,
     "awaiting_geometry": 41,
     "not_applicable": 0,
-    "manifestFootprints": 40,
-    "packages": 15
+    "manifestFootprints": 41,
+    "packages": 16
   },
   "inputs": {
     "canonicalManifest": {
       "path": "../../src/footprints/survey-footprints.json",
-      "sha256": "a738881a0364155b09285eb57bb0ff645c3ab5e86dc87f654ff026a924080b59"
+      "sha256": "bd1393a25e3192a7df692931b85f2f78ed09f84ef509ae47d1b3f7a976506e49"
     },
     "sources": {
       "path": "sources.json",
-      "sha256": "29d88149a946ba64ac73a7a5e5f1beb63e8c3a3a8d5bf32a5ddd22eb8b9c96ef"
+      "sha256": "b87ad4055a2cc0b9ba821c61c1e29d6cfa0220561a4aec6cf3be2bf42fa2e6d8"
     },
     "manual": {
       "path": "manual/footprints.json",
@@ -39,13 +39,20 @@
   "files": {
     "manifest": {
       "path": "normalized/survey-footprints.json",
-      "sha256": "a738881a0364155b09285eb57bb0ff645c3ab5e86dc87f654ff026a924080b59"
+      "sha256": "bd1393a25e3192a7df692931b85f2f78ed09f84ef509ae47d1b3f7a976506e49"
     },
     "catalog": {
       "path": "packages/catalog.json",
-      "sha256": "7285938aa9efaed6aad7c8459d3291d381295c6c2230fbba04eda0469f813a90"
+      "sha256": "07899a4a41d9d425337159628708872164a8034b3e981ba316634366d45245e2"
     },
     "packages": [
+      {
+        "id": "public-csst-footprints",
+        "version": "1.0.0",
+        "archive": "packages/public-csst-footprints-1.0.0.zip",
+        "sizeBytes": 1584,
+        "sha256": "edae1c166c7b34486de5ac34d31c3ef94aec71923d180518c1df6e053cf39ee5"
+      },
       {
         "id": "public-euclid-footprints",
         "version": "2.0.3",

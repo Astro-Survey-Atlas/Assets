@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-20T04:48:22.554910Z",
+  "status": "Succeeded",
+  "workspaceRunId": "ingest-2789ca60-c9db-46b9-9314-e581c91ab836",
+  "scannerRunId": "workspace-coverage-04a0be5dc49c",
+  "discoveredFiles": 178056,
+  "processedHdus": 356112,
+  "coverageDocuments": 1047202,
+  "publishedCoverageDocuments": 1046654,
+  "objectDocuments": 0,
+  "unknownOrFailedWcs": 0,
+  "excludedFiles": 1,
+  "totalInputBytes": 33477718763520,
+  "uniquePublishedPixels": 6763,
+  "areaDeg2": 354.7589326601951
+}

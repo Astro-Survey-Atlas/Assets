@@ -179,6 +179,40 @@ async function build(): Promise<PublicAssetManifest> {
     expectedSha256: provenance.files.catalog.sha256,
   });
 
+  const csstEvidence = [
+    ["csst-coverage-job-snapshot", "metadata", "CSST W1 coverage job snapshot", "coverage-job-snapshot.json", "Workspace coverage request, scanner configuration and review decision for CSST W1 simulated wide-field images."],
+    ["csst-input-manifest", "manifest", "CSST W1 input manifest", "input-manifest.json", "Complete 178,056-file W1_Phot manifest with WCS summaries, ETags and the reviewed exclusion."],
+    ["csst-wcs-geometry-summary", "metadata", "CSST W1 WCS geometry summary", "wcs-geometry-summary.json", "Measured WCS bounds, HEALPix order, area, nominal-area comparison and anomaly decision."],
+    ["csst-run-statistics", "metadata", "CSST W1 full-run statistics", "run-statistics.json", "Summed 64-shard Workspace and Elasticsearch coverage statistics."],
+    ["csst-sample-report", "metadata", "CSST W1 sample and smoke report", "sample-report.json", "Restricted-directory samples, smoke result and full-run anomaly audit."],
+    ["csst-provenance", "provenance", "CSST W1 provenance", "provenance.json", "CSST W1 source prefix, run IDs, connector configuration hash, static output hashes and release decision."],
+  ] as const;
+  for (const [id, kind, label, fileName, description] of csstEvidence) {
+    await push({
+      id, kind, label, description,
+      filePath: path.join(artifactRoot, "csst", fileName), downloadName: `csst-w1-${fileName}`, mediaType: "application/json",
+      surveyId: "csst", releaseId: "csst-sim-w1-20250731", product: "W1 simulated wide-field images",
+    });
+  }
+  await push({
+    id: "csst-w1-image-extent-moc-order8", kind: "moc", label: "CSST W1 simulated image WCS MOC",
+    description: "Reviewed ICRS NUNIQ FITS MOC at maximum order 8 for the current W1_Phot WIDE images (354.759 deg2).",
+    filePath: path.join(artifactRoot, "csst", "csst-w1-image-extent-order8.fits"), downloadName: "csst-w1-image-extent-order8.fits", mediaType: "application/fits",
+    surveyId: "csst", releaseId: "csst-sim-w1-20250731", product: "W1 simulated wide-field images",
+  });
+  await push({
+    id: "csst-w1-healpix-order8", kind: "geometry", label: "CSST W1 order-8 HEALPix image extent",
+    description: "6,763 unique ICRS NESTED NSIDE 256 pixels used to build the reviewed FITS MOC.",
+    filePath: path.join(artifactRoot, "csst", "healpix-order8.json"), downloadName: "csst-w1-healpix-order8.json", mediaType: "application/json",
+    surveyId: "csst", releaseId: "csst-sim-w1-20250731", product: "W1 simulated wide-field images",
+  });
+  await push({
+    id: "csst-w1-display-footprint-nside16", kind: "geometry", label: "CSST W1 website display footprint",
+    description: "46 NESTED NSIDE 16 parent pixels derived from the reviewed order-8 WCS union for website display.",
+    filePath: path.join(artifactRoot, "csst", "display-footprint-nside16.json"), downloadName: "csst-w1-display-footprint-nside16.json", mediaType: "application/json",
+    surveyId: "csst", releaseId: "csst-sim-w1-20250731", product: "W1 simulated wide-field images",
+  });
+
   for (const record of mocIndex.artifacts) {
     const baseId = `moc-${slug(`${record.surveyId}-${record.releaseId}-${record.product}-${record.sourceId}`)}`;
     await push({
@@ -236,7 +270,7 @@ async function build(): Promise<PublicAssetManifest> {
       awaitingGeometry: provenance.statistics.awaiting_geometry,
       footprints: provenance.statistics.manifestFootprints,
       packages: packageCatalog.packages.length,
-      rawMocFiles: mocIndex.artifacts.length,
+      rawMocFiles: mocIndex.artifacts.length + 1,
       totalBytes,
     },
     files,

@@ -60,7 +60,7 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; }
   border: 1px solid var(--cyan);
   border-radius: 50%;
   background: conic-gradient(from 0deg, var(--cyan) 0deg, transparent 60deg, transparent 300deg, var(--cyan) 360deg);
-  animation: brandRotate 4s linear infinite;
+  animation: brandRotate 18s linear infinite;
 }
 .brand-mark::before, .brand-mark::after { content: ""; position: absolute; border: 1px solid rgba(242, 207, 98, 0.7); border-radius: 50%; }
 .brand-mark::before { inset: 6px; }
@@ -79,33 +79,17 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; }
   min-height: 430px;
   overflow: hidden;
   border-bottom: 1px solid var(--line);
-  background: #0b1013;
+  background: #030303;
 }
-.coverage-scene { position: absolute; inset: 0; overflow: hidden; background: transparent; }
-.coverage-scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
-.coverage-scene canvas:active { cursor: grabbing; }
-.coverage-scene canvas:not([data-ready="true"]) { visibility: hidden; }
-.coverage-scene > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.64; filter: saturate(0.95) contrast(1.15); }
-.coverage-scene > img[hidden] { display: none; }
-.coverage-hero::after { content: ""; position: absolute; inset: 0; background: rgba(4, 8, 10, 0.3); pointer-events: none; }
-.coverage-grid {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  background-image: linear-gradient(rgba(95, 132, 139, 0.13) 1px, transparent 1px), linear-gradient(90deg, rgba(95, 132, 139, 0.13) 1px, transparent 1px);
-  background-size: 80px 80px;
-  mask-image: linear-gradient(to bottom, black, transparent 75%);
-}
+.coverage-scene { position: absolute; inset: 0; overflow: hidden; background: #030303; }
+.coverage-scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.coverage-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(3, 3, 3, 0.54) 0%, rgba(3, 3, 3, 0.08) 58%, transparent 100%); pointer-events: none; }
 .hero-copy { position: absolute; z-index: 2; left: max(32px, calc((100vw - 1320px) / 2)); bottom: 126px; max-width: 760px; }
 .hero-copy p, .catalog-heading p, .integrity-band > div > p { margin: 0 0 12px; color: var(--cyan); font: 700 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .hero-copy h1 { margin: 0; font-size: clamp(42px, 6vw, 78px); line-height: 0.98; font-weight: 700; letter-spacing: 0; }
 .hero-copy > span { display: block; margin-top: 18px; max-width: 620px; color: #cedbd8; font-size: 16px; line-height: 1.7; }
 .hero-coverage-state { position: absolute; z-index: 3; top: 24px; right: max(32px, calc((100vw - 1320px) / 2)); display: flex; align-items: center; gap: 8px; color: #b7cfcb; font: 700 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .hero-coverage-state > span { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 12px rgba(85, 236, 208, 0.9); }
-.coverage-tooltip { position: absolute; z-index: 5; width: min(270px, calc(100% - 24px)); display: grid; gap: 6px; padding: 12px; border: 1px solid rgba(85, 236, 208, 0.7); background: rgba(8, 16, 19, 0.94); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38); pointer-events: none; }
-.coverage-tooltip strong { color: #f4fbf8; font-size: 12px; line-height: 1.35; }
-.coverage-tooltip span, .coverage-tooltip small { color: #a9c1be; font-size: 10px; line-height: 1.45; }
-.coverage-tooltip a { width: max-content; color: var(--cyan); font-size: 10px; pointer-events: auto; }
 .hero-stats {
   position: absolute;
   z-index: 3;
@@ -238,7 +222,6 @@ footer { min-height: 76px; display: flex; align-items: center; justify-content: 
   .brand-mark { width: 26px; height: 26px; }
   .release-state { display: none; }
   .coverage-hero { min-height: 470px; height: calc(100svh - 108px); max-height: 600px; }
-  .coverage-hero > img { object-position: 50% 50%; }
   .hero-coverage-state { top: 18px; right: 18px; font-size: 8px; }
   .hero-copy { bottom: 205px; }
   .hero-copy p { max-width: 290px; line-height: 1.5; }
@@ -270,6 +253,8 @@ footer { min-height: 76px; display: flex; align-items: center; justify-content: 
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  /* The rotating mark is an intentional product signal, not decorative page motion. */
+  .brand-mark { animation: brandRotate 18s linear infinite !important; }
 }
 
 /* Survey-first public archive. */
@@ -331,6 +316,13 @@ footer { min-height: 76px; display: flex; align-items: center; justify-content: 
 .asset-download-row p { margin: 6px 0; color: #9db2b0; font-size: 11px; line-height: 1.55; }
 .asset-download-row code { display: block; overflow: hidden; color: var(--yellow); font: 9px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 .asset-download-actions { display: flex; flex: 0 0 auto; gap: 7px; }
+.preview-dialog { width: min(980px, calc(100vw - 32px)); }
+.preview-content { display: grid; gap: 20px; }
+.preview-hash { display: block; margin-top: 10px; overflow-wrap: anywhere; color: var(--yellow); font: 9px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.preview-body { min-height: 260px; max-height: min(68vh, 760px); overflow: auto; border: 1px solid var(--line); background: #0a1013; color: #cbd8d6; }
+.preview-text { min-width: max-content; margin: 0; padding: 20px; white-space: pre; tab-size: 2; font: 11px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.preview-image { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+.preview-error { display: grid; place-items: center; padding: 24px; color: var(--coral); }
 
 @media (max-width: 1000px) { .survey-grid { grid-template-columns: 1fr; } }
 @media (max-width: 700px) {

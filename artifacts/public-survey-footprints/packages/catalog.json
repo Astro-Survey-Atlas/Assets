@@ -1,7 +1,52 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-19T01:00:38.290Z",
+  "generatedAt": "2026-08-20T04:48:22.554910Z",
   "packages": [
+    {
+      "surveyId": "csst",
+      "name": "CSST W1 Simulation",
+      "description": "CSST W1_Phot WIDE 仿真图像经审核的 ICRS FITS-WCS 覆盖；实测 354.759 平方度，不代表正式公开巡天 footprint。",
+      "modalities": [
+        "imaging",
+        "photometry",
+        "simulation"
+      ],
+      "wavelengths": [
+        "optical-simulation"
+      ],
+      "productTypes": [
+        "FITS-WCS-image-extent-MOC"
+      ],
+      "facilities": [
+        "CSST simulation"
+      ],
+      "coverageAuthorities": [
+        "workspace-reviewed-wcs"
+      ],
+      "accessModes": [
+        "registered OSS Connector"
+      ],
+      "version": "1.0.0",
+      "sources": [
+        {
+          "releaseId": "csst-sim-w1-20250731",
+          "label": "CSST W1 simulated WIDE-image WCS coverage",
+          "url": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W1_Phot",
+          "authority": "Astro Data Workspace reviewed simulation run"
+        }
+      ],
+      "id": "public-csst-footprints",
+      "releases": [
+        "csst-sim-w1-20250731"
+      ],
+      "releaseLabels": {
+        "csst-sim-w1-20250731": "CSST W1 Simulation 2025-07-31"
+      },
+      "archiveUrl": "public-csst-footprints-1.0.0.zip",
+      "sizeBytes": 1584,
+      "sha256": "edae1c166c7b34486de5ac34d31c3ef94aec71923d180518c1df6e053cf39ee5",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
     {
       "surveyId": "euclid",
       "name": "Euclid",

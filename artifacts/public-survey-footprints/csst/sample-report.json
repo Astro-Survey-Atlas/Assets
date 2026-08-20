@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "status": "approved",
+  "fileNamePattern": "^CSST_MSC_MS_WIDE_.*\\.fits$",
+  "samples": [
+    {
+      "directory": "10600000012/",
+      "name": "CSST_MSC_MS_WIDE_20220706125114_20220706125344_10600000012_15_L0_V01.fits",
+      "sizeBytes": 188017920,
+      "etag": "\"6411DDDDBF5800BF3F1EE063EE98A62D-74\"",
+      "hduTypes": ["primary", "image"],
+      "wcsBoundsDeg": {"raMin": 246.61152897862976, "raMax": 247.51262102012555, "decMin": 63.24675234036524, "decMax": 63.53780609161714},
+      "coveragePixelCount": 6
+    },
+    {
+      "directory": "10600000013/",
+      "name": "CSST_MSC_MS_WIDE_20220706125432_20220706125702_10600000013_06_L0_V01.fits",
+      "sizeBytes": 188017920,
+      "etag": "\"11499F836652A4E290B33A7C88695552-74\"",
+      "hduTypes": ["primary", "image"],
+      "wcsBoundsDeg": {"raMin": 247.3881872108063, "raMax": 248.257913740951, "decMin": 62.26500581996924, "decMax": 62.55796862210152},
+      "coveragePixelCount": 6
+    },
+    {
+      "directory": "10600000030/",
+      "name": "CSST_MSC_MS_WIDE_20220706142603_20220706142833_10600000030_15_L0_V01.fits",
+      "sizeBytes": 188017920,
+      "etag": "\"73D3282E9C1353C2DCB29F819182C45A-74\"",
+      "hduTypes": ["primary", "image"],
+      "wcsBoundsDeg": {"raMin": 246.9837713694748, "raMax": 247.88763948141394, "decMin": 63.3101482711419, "decMax": 63.60032264450227},
+      "coveragePixelCount": 4
+    }
+  ],
+  "smoke": {
+    "workspaceRunId": "ingest-0bb27323-7c05-4600-a887-ab6a3e2bc158",
+    "path": "10600000012/",
+    "status": "Succeeded",
+    "discoveredFiles": 18,
+    "processedHdus": 36,
+    "coverageDocuments": 98,
+    "unknownOrFailedWcs": 0,
+    "excludedNonWideObjects": true
+  },
+  "fullRun": {
+    "workspaceRunId": "ingest-2789ca60-c9db-46b9-9314-e581c91ab836",
+    "status": "Succeeded",
+    "discoveredFiles": 178056,
+    "processedHdus": 356112,
+    "coverageDocuments": 1047202,
+    "unknownOrFailedWcs": 0,
+    "reviewedExclusions": 1
+  },
+  "etagSemantics": "Sample ETags ending in -74 are multipart object ETags and are not content SHA-256 values."
+}

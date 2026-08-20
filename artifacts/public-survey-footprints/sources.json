@@ -1,8 +1,22 @@
 {
   "schemaVersion": 2,
-  "auditedAt": "2026-08-18",
+  "auditedAt": "2026-08-20",
   "auditPolicy": "Acquired denotes an exact product MOC; overview_only denotes an official or artifact-backed overview; awaiting_geometry denotes a product requiring exact geometry.",
   "releases": [
+    {
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "products": [
+        {
+          "product": "W1 simulated wide-field images",
+          "status": "acquired",
+          "sourceUrl": "https://nadc.china-vo.org/data/",
+          "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W1_Phot",
+          "coverageRole": "image_extent",
+          "notes": "Reviewed ICRS FITS-WCS union of 178,055 included WIDE images: 354.759 deg2. The 1000 deg2 simulation label is not the measured footprint of the current files."
+        }
+      ]
+    },
     {
       "surveyId": "euclid",
       "releaseId": "euclid-ero",

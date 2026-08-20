@@ -32,17 +32,11 @@ The site listens on `http://127.0.0.1:4180` by default. For split development,
 run `npm run dev` and `npm run dev:site`; Vite proxies API requests to port
 `4180`.
 
-Public interfaces:
-
-- `GET /healthz`
-- `GET /api/v1/assets`
-- `GET /api/v1/surveys`
-- `GET /api/v1/coverage`
-- `GET|HEAD /api/v1/assets/:id/download`
-
-Downloads support byte ranges, immutable SHA-based ETags, explicit media types
-and `X-Content-SHA256`. Arbitrary filesystem paths and directory browsing are
-not accepted.
+The maintained public API contract is in
+[`docs/api-reference.md`](docs/api-reference.md). Update it together with the
+route implementation and HTTP tests whenever an API changes. It covers the
+catalog, survey and coverage indexes, downloads, online previews, byte ranges,
+checksums and security boundaries.
 
 ## Release validation
 

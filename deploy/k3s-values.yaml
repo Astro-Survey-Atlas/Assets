@@ -1,6 +1,6 @@
 image:
   repository: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets
-  tag: "0.1.0-20260819151937"
+  tag: "0.1.0-20260820-csst-zip-preview"
   pullPolicy: Always
 
 imagePullSecrets:

@@ -1,11 +1,11 @@
-import { BadgeCheck, Box, Copy, Database, Download, ExternalLink, FileArchive, FileCheck2, FileCode2, FileJson2, Image, Layers3, ListChecks, Search, Telescope, X, createIcons } from "lucide";
-import { CoverageSphere, type CoverageManifest } from "./coverage-sphere";
+import { BadgeCheck, Box, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, Image, Layers3, ListChecks, Search, Telescope, X, createIcons } from "lucide";
+import { CoverageDots, type CoverageManifest } from "./coverage-dots";
 
 import "./styles.css";
 
 type AssetKind = "package" | "moc" | "geometry" | "manifest" | "ledger" | "documentation" | "provenance" | "metadata";
 type ProductStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
-type Modality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog";
+type Modality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog" | "simulation";
 
 interface AssetRecord {
   id: string;
@@ -22,6 +22,8 @@ interface AssetRecord {
   version?: string;
   sourceUrl?: string;
   downloadUrl: string;
+  previewUrl?: string;
+  previewMode?: "text" | "image";
 }
 
 interface ReleaseManifest {
@@ -87,6 +89,7 @@ const modalityLabels: Record<Modality, string> = {
   ultraviolet: "紫外",
   infrared: "红外",
   catalog: "目录",
+  simulation: "仿真",
 };
 
 const statusLabels: Record<ProductStatus, string> = {
@@ -106,7 +109,7 @@ const assetGroupDefinitions: Array<{ id: "moc" | "geometry" | "package" | "evide
 let manifest: ReleaseManifest | null = null;
 let surveyIndex: SurveyIndex | null = null;
 let search = "";
-let coverageSphere: CoverageSphere | null = null;
+let coverageDots: CoverageDots | null = null;
 
 function byId<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -134,7 +137,7 @@ async function copy(value: string): Promise<void> {
 
 function renderIcons(): void {
   createIcons({
-    icons: { BadgeCheck, Box, Copy, Database, Download, ExternalLink, FileArchive, FileCheck2, FileCode2, FileJson2, Image, Layers3, ListChecks, Search, Telescope, X },
+    icons: { BadgeCheck, Box, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, Image, Layers3, ListChecks, Search, Telescope, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -241,13 +244,48 @@ function showAssetGroup(survey: SurveyRecord, label: string, records: AssetRecor
     const actions = document.createElement("div"); actions.className = "asset-download-actions";
     const copyHash = document.createElement("button"); copyHash.className = "icon-button"; copyHash.type = "button"; copyHash.title = "复制 SHA-256"; copyHash.setAttribute("aria-label", `复制 ${record.label} 的 SHA-256`); copyHash.append(icon("copy")); copyHash.addEventListener("click", () => void copy(record.sha256));
     const download = document.createElement("a"); download.className = "download-button"; download.href = record.downloadUrl; download.title = `下载 ${record.downloadName}`; download.setAttribute("aria-label", `下载 ${record.label}`); download.append(icon("download"));
-    actions.append(copyHash, download);
+    actions.append(copyHash);
+    if (record.previewUrl && record.previewMode) {
+      const preview = document.createElement("button"); preview.className = "icon-button"; preview.type = "button"; preview.title = `预览 ${record.downloadName}`; preview.setAttribute("aria-label", `预览 ${record.label}`); preview.append(icon("eye")); preview.addEventListener("click", () => void showAssetPreview(record));
+      actions.append(preview);
+    }
+    actions.append(download);
     row.append(assetCopy, actions);
     list.append(row);
   }
   content.append(list);
   byId<HTMLDialogElement>("survey-dialog").showModal();
   renderIcons();
+}
+
+async function showAssetPreview(record: AssetRecord): Promise<void> {
+  if (!record.previewUrl || !record.previewMode) return;
+  const dialog = byId<HTMLDialogElement>("preview-dialog");
+  byId("preview-kind").textContent = record.previewMode === "image" ? "IMAGE PREVIEW" : "TEXT PREVIEW";
+  const content = byId("preview-content");
+  const header = document.createElement("header"); header.className = "survey-dialog-header";
+  const overline = document.createElement("p"); overline.textContent = `${record.mediaType} · ${bytes(record.sizeBytes)}`;
+  const heading = document.createElement("h2"); heading.textContent = record.downloadName;
+  const hash = document.createElement("code"); hash.className = "preview-hash"; hash.textContent = `SHA-256 ${record.sha256}`;
+  header.append(overline, heading, hash);
+  const body = document.createElement("div"); body.className = "preview-body"; body.textContent = "正在载入预览…";
+  content.replaceChildren(header, body);
+  dialog.showModal();
+  renderIcons();
+  try {
+    if (record.previewMode === "image") {
+      const image = document.createElement("img"); image.className = "preview-image"; image.src = record.previewUrl; image.alt = `${record.label} 预览`;
+      body.replaceChildren(image);
+      return;
+    }
+    const response = await fetch(record.previewUrl, { headers: { Accept: "text/plain, application/json" } });
+    if (!response.ok) throw new Error(`预览请求失败（${response.status}）`);
+    const pre = document.createElement("pre"); pre.className = "preview-text"; pre.textContent = await response.text();
+    body.replaceChildren(pre);
+  } catch (error) {
+    body.className = "preview-body preview-error";
+    body.textContent = error instanceof Error ? error.message : "无法载入文件预览";
+  }
 }
 
 function renderSurveys(): void {
@@ -262,6 +300,12 @@ function renderSurveys(): void {
     const card = document.createElement("article");
     card.className = "survey-card";
     card.style.setProperty("--survey-color", survey.color);
+    card.addEventListener("mouseenter", () => coverageDots?.setHighlightedSurvey(survey.id));
+    card.addEventListener("mouseleave", () => coverageDots?.setHighlightedSurvey(null));
+    card.addEventListener("focusin", () => coverageDots?.setHighlightedSurvey(survey.id));
+    card.addEventListener("focusout", (event) => {
+      if (!card.contains(event.relatedTarget as Node | null)) coverageDots?.setHighlightedSurvey(null);
+    });
     const visual = document.createElement("div"); visual.className = "survey-card-visual";
     const image = document.createElement("img"); image.src = survey.imageUrl; image.alt = `${survey.name} 已收录 HEALPix 覆盖预览`; image.loading = "lazy";
     const visualLabel = document.createElement("span"); visualLabel.textContent = survey.statistics.footprintCells ? `${survey.statistics.footprintCells.toLocaleString("en-US")} HEALPIX CELLS` : "NO GEOMETRY YET";
@@ -304,10 +348,10 @@ function renderSurveys(): void {
 
 async function initialize(): Promise<void> {
   try {
-    coverageSphere = new CoverageSphere(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"), byId("coverage-tooltip"), byId<HTMLImageElement>("coverage-fallback"));
+    coverageDots = new CoverageDots(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"));
   } catch (error) {
-    console.warn("Coverage sphere unavailable; using static preview", error);
-    byId("coverage-state").textContent = "STATIC COVERAGE PREVIEW";
+    console.warn("Coverage dot matrix unavailable", error);
+    byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
   }
   const [assetsResponse, coverageResponse, surveysResponse] = await Promise.all([
     fetch("/api/v1/assets", { headers: { Accept: "application/json" } }),
@@ -317,12 +361,12 @@ async function initialize(): Promise<void> {
   if (!assetsResponse.ok || !surveysResponse.ok) throw new Error("Public catalog request failed");
   manifest = await assetsResponse.json() as ReleaseManifest;
   surveyIndex = await surveysResponse.json() as SurveyIndex;
-  if (coverageResponse.ok && coverageSphere) {
-    coverageSphere.load(await coverageResponse.json() as CoverageManifest);
-    byId("coverage-state").textContent = "INTERACTIVE HEALPIX SPHERE";
+  if (coverageResponse.ok && coverageDots) {
+    const coverage = await coverageResponse.json() as CoverageManifest;
+    coverageDots.load(coverage, new Map(surveyIndex.surveys.map((survey) => [survey.id, survey.color])));
+    byId("coverage-state").textContent = "PUBLIC HEALPIX DOT MATRIX";
   } else {
-    coverageSphere?.showError();
-    byId("coverage-state").textContent = "STATIC COVERAGE PREVIEW";
+    byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
   }
   byId("header-release").textContent = `${manifest.bundle.id.toUpperCase()} · VERIFIED`;
   byId("stat-releases").textContent = String(manifest.statistics.releases);
@@ -344,6 +388,8 @@ byId<HTMLInputElement>("survey-search").addEventListener("input", (event) => {
 byId("copy-bundle-hash").addEventListener("click", () => { if (manifest) void copy(manifest.bundle.sha256); });
 byId("dialog-close").addEventListener("click", () => byId<HTMLDialogElement>("survey-dialog").close());
 byId<HTMLDialogElement>("survey-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("survey-dialog").close(); });
+byId("preview-close").addEventListener("click", () => byId<HTMLDialogElement>("preview-dialog").close());
+byId<HTMLDialogElement>("preview-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("preview-dialog").close(); });
 
 renderIcons();
 void initialize().catch((error) => {

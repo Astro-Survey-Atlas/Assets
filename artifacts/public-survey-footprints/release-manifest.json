@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-19T08:11:25.589Z",
+  "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
-    "id": "public-survey-footprints-2026-08-19",
-    "sha256": "66e702631c369d3213b1b66b5b3b8d13c9dbc68e748604f2bd1f49b96c097a3a"
+    "id": "public-survey-footprints-2026-08-20",
+    "sha256": "ec7619c1d1d22f7ad59c6c4f791864a1bee50b89b964470e509eae9b18be9885"
   },
   "statistics": {
-    "releases": 48,
-    "products": 83,
-    "acquired": 31,
+    "releases": 49,
+    "products": 84,
+    "acquired": 32,
     "overviewOnly": 11,
     "awaitingGeometry": 41,
-    "footprints": 40,
-    "packages": 15,
-    "rawMocFiles": 34,
-    "totalBytes": 18394995
+    "footprints": 41,
+    "packages": 16,
+    "rawMocFiles": 35,
+    "totalBytes": 223822601
   },
   "files": [
     {
@@ -25,8 +25,36 @@
       "downloadName": "public-footprint-moc-method.md",
       "mediaType": "text/markdown; charset=utf-8",
       "path": "docs/public-footprint-moc-method.md",
-      "sizeBytes": 5424,
-      "sha256": "742139b027d7cf166c8877e824214f27729fc3ea8889ee57ddaa3d8efcb99d24"
+      "sizeBytes": 7122,
+      "sha256": "0aaa264dcb2b67a9e6b8023fd635fe670c33e3bdc6b98429e10ffa2f322b6bb3"
+    },
+    {
+      "id": "csst-w1-healpix-order8",
+      "kind": "geometry",
+      "label": "CSST W1 order-8 HEALPix image extent",
+      "description": "6,763 unique ICRS NESTED NSIDE 256 pixels used to build the reviewed FITS MOC.",
+      "downloadName": "csst-w1-healpix-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "product": "W1 simulated wide-field images",
+      "path": "artifacts/public-survey-footprints/csst/healpix-order8.json",
+      "sizeBytes": 81542,
+      "sha256": "6fa692751862f8d0f487d5869913e571f47470adf5aaa97e9d5a793b54597cbc"
+    },
+    {
+      "id": "csst-w1-display-footprint-nside16",
+      "kind": "geometry",
+      "label": "CSST W1 website display footprint",
+      "description": "46 NESTED NSIDE 16 parent pixels derived from the reviewed order-8 WCS union for website display.",
+      "downloadName": "csst-w1-display-footprint-nside16.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "product": "W1 simulated wide-field images",
+      "path": "artifacts/public-survey-footprints/csst/display-footprint-nside16.json",
+      "sizeBytes": 839,
+      "sha256": "afad98385bbab785512dfb5730ae8d68d429d4f21466a74ce3a05e32c1e57dbc"
     },
     {
       "id": "geometry-desi-desi-dr1-dr1-spectra-and-redshifts",
@@ -81,8 +109,8 @@
       "downloadName": "public-footprint-product-status.json",
       "mediaType": "application/json",
       "path": "artifacts/public-survey-footprints/sources.json",
-      "sizeBytes": 47238,
-      "sha256": "29d88149a946ba64ac73a7a5e5f1beb63e8c3a3a8d5bf32a5ddd22eb8b9c96ef"
+      "sizeBytes": 47931,
+      "sha256": "b87ad4055a2cc0b9ba821c61c1e29d6cfa0220561a4aec6cf3be2bf42fa2e6d8"
     },
     {
       "id": "manifest-canonical",
@@ -92,8 +120,22 @@
       "downloadName": "survey-footprints.json",
       "mediaType": "application/json",
       "path": "src/footprints/survey-footprints.json",
-      "sizeBytes": 916424,
-      "sha256": "a738881a0364155b09285eb57bb0ff645c3ab5e86dc87f654ff026a924080b59"
+      "sizeBytes": 917904,
+      "sha256": "bd1393a25e3192a7df692931b85f2f78ed09f84ef509ae47d1b3f7a976506e49"
+    },
+    {
+      "id": "csst-input-manifest",
+      "kind": "manifest",
+      "label": "CSST W1 input manifest",
+      "description": "Complete 178,056-file W1_Phot manifest with WCS summaries, ETags and the reviewed exclusion.",
+      "downloadName": "csst-w1-input-manifest.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "product": "W1 simulated wide-field images",
+      "path": "artifacts/public-survey-footprints/csst/input-manifest.json",
+      "sizeBytes": 205265415,
+      "sha256": "dda4306e2ee89afd7ce30d4ee31ee8b3dcca65cb2a693145180c9c6baa2ebb1f"
     },
     {
       "id": "manifest-normalized",
@@ -103,8 +145,8 @@
       "downloadName": "survey-footprints-normalized.json",
       "mediaType": "application/json",
       "path": "artifacts/public-survey-footprints/normalized/survey-footprints.json",
-      "sizeBytes": 916424,
-      "sha256": "a738881a0364155b09285eb57bb0ff645c3ab5e86dc87f654ff026a924080b59"
+      "sizeBytes": 917904,
+      "sha256": "bd1393a25e3192a7df692931b85f2f78ed09f84ef509ae47d1b3f7a976506e49"
     },
     {
       "id": "manifest-survey-catalog",
@@ -114,8 +156,8 @@
       "downloadName": "survey-catalog.json",
       "mediaType": "application/json",
       "path": "src/surveys/survey-catalog.json",
-      "sizeBytes": 73427,
-      "sha256": "16e91c203acdd284f57038e524d752c12092bfa0ac0083efe4971bb20ebba63b"
+      "sizeBytes": 74896,
+      "sha256": "44e88cf5ccd0a3f23ed83f87a14610e9dc89b2451eaf9d78b854b6b6a9c710d3"
     },
     {
       "id": "moc-2mass-2mass-all-sky-h-band-imaging-cds-p-2mass-h-record",
@@ -221,6 +263,62 @@
       "path": "artifacts/public-survey-footprints/raw/moc/allwise-allwise-w4-imaging.record.json",
       "sizeBytes": 3608,
       "sha256": "a5d28c6a95d3092b888a60d9e97bf403b74c314fc0b1874aea56e8d6fb2428a6"
+    },
+    {
+      "id": "csst-coverage-job-snapshot",
+      "kind": "metadata",
+      "label": "CSST W1 coverage job snapshot",
+      "description": "Workspace coverage request, scanner configuration and review decision for CSST W1 simulated wide-field images.",
+      "downloadName": "csst-w1-coverage-job-snapshot.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "product": "W1 simulated wide-field images",
+      "path": "artifacts/public-survey-footprints/csst/coverage-job-snapshot.json",
+      "sizeBytes": 1781,
+      "sha256": "baf0245421205442a686dff3a03ebf2f0f3b64435234a74132687c63ba4bec13"
+    },
+    {
+      "id": "csst-run-statistics",
+      "kind": "metadata",
+      "label": "CSST W1 full-run statistics",
+      "description": "Summed 64-shard Workspace and Elasticsearch coverage statistics.",
+      "downloadName": "csst-w1-run-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "product": "W1 simulated wide-field images",
+      "path": "artifacts/public-survey-footprints/csst/run-statistics.json",
+      "sizeBytes": 523,
+      "sha256": "72a5d45ef537d6a9f3afcd9108bfa4a4c0db76cc0bfe3c2bba2aae662af48fda"
+    },
+    {
+      "id": "csst-sample-report",
+      "kind": "metadata",
+      "label": "CSST W1 sample and smoke report",
+      "description": "Restricted-directory samples, smoke result and full-run anomaly audit.",
+      "downloadName": "csst-w1-sample-report.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "product": "W1 simulated wide-field images",
+      "path": "artifacts/public-survey-footprints/csst/sample-report.json",
+      "sizeBytes": 2090,
+      "sha256": "764e85df2658745456ebad85379f0ea5c86769e4206d94548e70cce171912cde"
+    },
+    {
+      "id": "csst-wcs-geometry-summary",
+      "kind": "metadata",
+      "label": "CSST W1 WCS geometry summary",
+      "description": "Measured WCS bounds, HEALPix order, area, nominal-area comparison and anomaly decision.",
+      "downloadName": "csst-w1-wcs-geometry-summary.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "product": "W1 simulated wide-field images",
+      "path": "artifacts/public-survey-footprints/csst/wcs-geometry-summary.json",
+      "sizeBytes": 2482,
+      "sha256": "cc2a9cd408cf793a93b0c962e9853d84bb0f17cd9de4edfd3c5005d9ab894cd1"
     },
     {
       "id": "moc-des-des-dr2-dr2-color-imaging-cds-p-des-dr2-colorirg-record",
@@ -642,8 +740,8 @@
       "downloadName": "resource-package-catalog.json",
       "mediaType": "application/json",
       "path": "artifacts/public-survey-footprints/packages/catalog.json",
-      "sizeBytes": 21203,
-      "sha256": "7285938aa9efaed6aad7c8459d3291d381295c6c2230fbba04eda0469f813a90"
+      "sizeBytes": 22706,
+      "sha256": "07899a4a41d9d425337159628708872164a8034b3e981ba316634366d45245e2"
     },
     {
       "id": "moc-sdss-sdss-dr09-dr9-color-imaging-cds-p-sdss9-color-record",
@@ -764,6 +862,20 @@
       "path": "artifacts/public-survey-footprints/raw/moc/allwise-allwise-w4-imaging.fits",
       "sizeBytes": 8640,
       "sha256": "05e43bb7a0cd9e01a00e156e632aeeb17812098a67e9896e24365c970afa646e"
+    },
+    {
+      "id": "csst-w1-image-extent-moc-order8",
+      "kind": "moc",
+      "label": "CSST W1 simulated image WCS MOC",
+      "description": "Reviewed ICRS NUNIQ FITS MOC at maximum order 8 for the current W1_Phot WIDE images (354.759 deg2).",
+      "downloadName": "csst-w1-image-extent-order8.fits",
+      "mediaType": "application/fits",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "product": "W1 simulated wide-field images",
+      "path": "artifacts/public-survey-footprints/csst/csst-w1-image-extent-order8.fits",
+      "sizeBytes": 60480,
+      "sha256": "caa6a5287efa0ba9abc406261d4e653730b062e49282ffc82549f7d2735dbf3c"
     },
     {
       "id": "moc-des-des-dr2-dr2-color-imaging-cds-p-des-dr2-colorirg",
@@ -1201,6 +1313,21 @@
       "sha256": "54458feb2ee8f82671d826018dafd27f24777aa83f6dc9c9327fb4ece959d710"
     },
     {
+      "id": "package-public-csst-footprints-1-0-0",
+      "kind": "package",
+      "label": "CSST W1 Simulation",
+      "description": "CSST W1_Phot WIDE 仿真图像经审核的 ICRS FITS-WCS 覆盖；实测 354.759 平方度，不代表正式公开巡天 footprint。",
+      "downloadName": "public-csst-footprints-1.0.0.zip",
+      "mediaType": "application/zip",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "version": "1.0.0",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W1_Phot",
+      "path": "artifacts/public-survey-footprints/packages/public-csst-footprints-1.0.0.zip",
+      "sizeBytes": 1584,
+      "sha256": "edae1c166c7b34486de5ac34d31c3ef94aec71923d180518c1df6e053cf39ee5"
+    },
+    {
       "id": "package-public-des-footprints-2-0-3",
       "kind": "package",
       "label": "DES",
@@ -1390,6 +1517,20 @@
       "sha256": "c9d3d9c35297e206abcd12fc7c12041ac91d2cf0f95b4878a5808edea1d0fdf0"
     },
     {
+      "id": "csst-provenance",
+      "kind": "provenance",
+      "label": "CSST W1 provenance",
+      "description": "CSST W1 source prefix, run IDs, connector configuration hash, static output hashes and release decision.",
+      "downloadName": "csst-w1-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w1-20250731",
+      "product": "W1 simulated wide-field images",
+      "path": "artifacts/public-survey-footprints/csst/provenance.json",
+      "sizeBytes": 2286,
+      "sha256": "30840f55f45743744b434e94c9145cbd8f6e31e2d8f06da6203c7e48d988437b"
+    },
+    {
       "id": "provenance-release",
       "kind": "provenance",
       "label": "Release provenance and hashes",
@@ -1397,8 +1538,8 @@
       "downloadName": "provenance.json",
       "mediaType": "application/json",
       "path": "artifacts/public-survey-footprints/provenance.json",
-      "sizeBytes": 5471,
-      "sha256": "55c73d198dced6116fefaf5bee8d7082888ff8b2a5963ce5abcc873c700c858a"
+      "sizeBytes": 5732,
+      "sha256": "c79ed9fcc93792462a10247719ed6718a2a1834d54db605f26b810be7ab8e8f5"
     }
   ]
 }

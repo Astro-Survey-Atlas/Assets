@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import type { PublicAssetManifest, PublicAssetRecord } from "./types.js";
+import type { PublicAssetManifest, PublicAssetPreviewMode, PublicAssetProjection, PublicAssetRecord } from "./types.js";
 
 export interface LoadedCatalog {
   root: string;
@@ -47,13 +47,23 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
   return { root: normalizedRoot, manifest, files };
 }
 
-export function publicManifest(catalog: LoadedCatalog): Omit<PublicAssetManifest, "files"> & { files: Array<Omit<PublicAssetRecord, "path"> & { downloadUrl: string }> } {
-  return {
-    ...catalog.manifest,
-    files: catalog.manifest.files.map(({ path: _path, ...record }) => ({
-      ...record,
-      downloadUrl: `/api/v1/assets/${encodeURIComponent(record.id)}/download`,
-    })),
-  };
+export function assetPreviewMode(mediaType: string): PublicAssetPreviewMode | undefined {
+  const type = mediaType.split(";", 1)[0]!.trim().toLowerCase();
+  if (type === "application/json" || type === "application/fits" || type === "application/zip" || type.startsWith("text/")) return "text";
+  if (["image/png", "image/svg+xml", "image/webp"].includes(type)) return "image";
+  return undefined;
 }
 
+export function publicManifest(catalog: LoadedCatalog): Omit<PublicAssetManifest, "files"> & { files: PublicAssetProjection[] } {
+  return {
+    ...catalog.manifest,
+    files: catalog.manifest.files.map(({ path: _path, ...record }) => {
+      const previewMode = assetPreviewMode(record.mediaType);
+      return {
+        ...record,
+        downloadUrl: `/api/v1/assets/${encodeURIComponent(record.id)}/download`,
+        ...(previewMode ? { previewUrl: `/api/v1/assets/${encodeURIComponent(record.id)}/preview`, previewMode } : {}),
+      };
+    }),
+  };
+}

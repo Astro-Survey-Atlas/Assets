@@ -2,9 +2,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { publicManifest, type LoadedCatalog } from "./catalog.js";
-import type { PublicAssetRecord, PublicSurveyCatalog, PublicSurveyRecord } from "./types.js";
+import type { PublicAssetProjection, PublicSurveyCatalog, PublicSurveyRecord } from "./types.js";
 
-type DownloadableAsset = Omit<PublicAssetRecord, "path"> & { downloadUrl: string };
+type DownloadableAsset = PublicAssetProjection;
 
 export interface PublicSurveyIndex {
   schemaVersion: 1;

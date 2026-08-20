@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-20T04:48:22.554910Z",
+  "status": "approved",
+  "surveyId": "csst",
+  "releaseId": "csst-sim-w1-20250731",
+  "product": "W1 simulated wide-field images",
+  "coverageMethod": "fits_wcs",
+  "coverageRole": "image_extent",
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "nside": 256,
+  "healpixOrder": 8,
+  "displayNside": 16,
+  "matchedFiles": 178056,
+  "includedFiles": 178055,
+  "excludedFiles": 1,
+  "publishedPixelCount": 6763,
+  "rawPixelCountBeforeExclusion": 7127,
+  "areaDeg2": 354.7589326601951,
+  "rawAreaDeg2BeforeExclusion": 373.85286308874913,
+  "nominalSimulationAreaDeg2": 1000,
+  "nominalAreaGateDeg2": [
+    700,
+    1300
+  ],
+  "nominalAreaGatePassed": false,
+  "publicationDecision": "Publish the measured W1_Phot WIDE-image WCS union as simulation coverage, following the user review direction; do not describe 1000 deg2 as the measured footprint.",
+  "wcsBoundsDeg": {
+    "raMin": 117.38563612943449,
+    "raMax": 296.78082916192557,
+    "decMin": 11.155854076577421,
+    "decMax": 77.10105655189457
+  },
+  "perFilePixelCount": {
+    "min": 1,
+    "max": 548,
+    "median": 6.0,
+    "p99": 8.0
+  },
+  "centerAliases": {
+    "ra": [
+      "RA_OBJ",
+      "RA_PNT0",
+      "RA_PNT1"
+    ],
+    "dec": [
+      "DEC_OBJ",
+      "DEC_PNT0",
+      "DEC_PNT1"
+    ],
+    "units": "deg",
+    "frame": "ICRS",
+    "auditNote": "Aliases are audit-only and never replace standard WCS. This scanner image did not merge primary-HDU aliases into the IMAGE-HDU record; sampled primary headers confirmed the fields and the scanner source has been corrected for future runs."
+  },
+  "anomalies": [
+    {
+      "name": "CSST_MSC_MS_WIDE_20221012092919_20221012093150_10600024867_09_L0_V01.fits",
+      "sourceFileId": "d517373df7d93e5939e0517f768a51cce73a3d99c43c19207d06ff0d1e4cecb5",
+      "wcsSummary": {
+        "ra_min_deg": 84.88456453665083,
+        "ra_max_deg": 84.88230911917714,
+        "dec_min_deg": 56.871905435532184,
+        "dec_max_deg": 89.9828734681033
+      },
+      "coveragePixelCount": 548,
+      "headerEvidence": {
+        "NAXIS1": 20000,
+        "NAXIS2": 4700,
+        "CRVAL1": 264.8837909023716,
+        "CRVAL2": 73.19635220808276,
+        "CD2_1": 0.003676972383887528
+      },
+      "decision": "excluded_from_published_moc",
+      "reason": "The input CD2_1 scale makes the image span about 73 degrees and approach the north pole; peer WIDE images cover 2-9 order-8 pixels."
+    }
+  ]
+}

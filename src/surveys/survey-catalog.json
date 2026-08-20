@@ -1,7 +1,34 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-18",
+  "generatedAt": "2026-08-20",
   "surveys": [
+    {
+      "id": "csst",
+      "name": "CSST",
+      "mission": "中国空间站望远镜",
+      "color": "#ef8354",
+      "description": "CSST 1000 平方度 W1 仿真项目。当前展示的是 178,055 张 W1_Phot _WIDE_*.fits 图像经审核后的 ICRS WCS 并集，实测 354.759 平方度；不代表正式公开巡天的完整观测 footprint，也不是目录对象分布覆盖。",
+      "modalities": ["imaging", "photometry", "catalog", "simulation"],
+      "releases": [
+        {
+          "id": "csst-sim-w1-20250731",
+          "label": "CSST W1 Simulation 2025-07-31",
+          "kind": "early_release",
+          "releasedYear": 2025,
+          "modalities": ["imaging", "photometry", "catalog", "simulation"],
+          "products": [
+            {
+              "name": "W1 simulated wide-field images",
+              "modality": "imaging",
+              "description": "CSST W1 仿真宽场图像。覆盖仅匹配 W1_Phot 下 ^CSST_MSC_MS_WIDE_.*\\.fits$，由 178,055 张有效图像的 ICRS WCS 并集得到 354.759 平方度；名义 1000 平方度不是当前文件集合的实测 footprint。",
+              "status": "acquired",
+              "sourceUrl": "https://nadc.china-vo.org/data/",
+              "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W1_Phot"
+            }
+          ]
+        }
+      ]
+    },
     {
       "id": "euclid",
       "name": "Euclid",
