@@ -16,8 +16,8 @@ not call an Assets computation service at runtime.
 - `dataOrigin` is one of `observed`, `simulated`, or `catalog`.
 - `sourceTier` is one of `official_geometry`, `official_inventory_derived`,
   `third_party_moc`, `best_effort_derived`, or `user_file_derived`.
-- Readers map legacy `evidenceRole` to `coverageRole`. New output never writes
-  `evidenceRole`.
+- `coverageRole` is the only accepted field. `evidenceRole` was removed in Core
+  1.0.0 and is rejected at the input boundary.
 
 The reviewed CSST layer remains order 8 and retains its existing FITS bytes,
 pixels, measured area, and SHA-256. Its classification is `image_extent`,
@@ -42,11 +42,11 @@ fixed `SOURCE_DATE_EPOCH`, and rejects any output whose authoritative MOC hash
 differs from the lock.
 
 ```bash
-astro-survey-assets refresh --spec recipe.json --snapshot-dir snapshots --lock recipe.lock.json
-SOURCE_DATE_EPOCH=1787184000 astro-survey-assets build --spec recipe.lock.json --base-dir snapshots --output build --rebuild
-SOURCE_DATE_EPOCH=1787184000 astro-survey-assets rebuild --spec recipe.lock.json --base-dir snapshots --output build
-astro-survey-assets merge --input shard-001.fits --input shard-000.fits --output merged.fits
-astro-survey-assets project --moc merged.fits --order 8 --output query-order8.json
+astro-survey-moc-core refresh --spec recipe.json --snapshot-dir snapshots --lock recipe.lock.json
+SOURCE_DATE_EPOCH=1787184000 astro-survey-moc-core build --spec recipe.lock.json --base-dir snapshots --output build --rebuild
+SOURCE_DATE_EPOCH=1787184000 astro-survey-moc-core rebuild --spec recipe.lock.json --base-dir snapshots --output build
+astro-survey-moc-core merge --input shard-001.fits --input shard-000.fits --output merged.fits
+astro-survey-moc-core project --moc merged.fits --order 8 --output query-order8.json
 ```
 
 Supported input modes are `fits-wcs`, `catalog-radec`, `nested-healpix`,
@@ -70,3 +70,5 @@ duplicates, directory entries, undeclared or extra files, oversized entries,
 invalid FITS MOCs, and size/SHA-256 mismatches. Public installation additionally
 requires the complete archive hash to be present in the Assets package catalog.
 Validation without that public trust gate is suitable only for user assets.
+The normative manifest shape is published as
+[`contracts/resource-package-v3.schema.json`](../contracts/resource-package-v3.schema.json).

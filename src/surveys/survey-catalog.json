@@ -8,14 +8,24 @@
       "mission": "中国空间站望远镜",
       "color": "#ef8354",
       "description": "CSST 1000 平方度 W1 仿真项目。当前展示的是 178,055 张 W1_Phot _WIDE_*.fits 图像经审核后的 ICRS WCS 并集，实测 354.759 平方度；不代表正式公开巡天的完整观测 footprint，也不是目录对象分布覆盖。",
-      "modalities": ["imaging", "photometry", "catalog", "simulation"],
+      "modalities": [
+        "imaging",
+        "photometry",
+        "catalog",
+        "simulation"
+      ],
       "releases": [
         {
           "id": "csst-sim-w1-20250731",
           "label": "CSST W1 Simulation 2025-07-31",
           "kind": "early_release",
           "releasedYear": 2025,
-          "modalities": ["imaging", "photometry", "catalog", "simulation"],
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog",
+            "simulation"
+          ],
           "products": [
             {
               "name": "W1 simulated wide-field images",
@@ -24,6 +34,75 @@
               "status": "acquired",
               "sourceUrl": "https://nadc.china-vo.org/data/",
               "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W1_Phot"
+            }
+          ]
+        },
+        {
+          "id": "csst-sim-w2-20250731",
+          "label": "CSST W2 Simulation 2025-07-31",
+          "kind": "early_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "simulation"
+          ],
+          "products": [
+            {
+              "name": "W2 simulated wide-field images",
+              "modality": "imaging",
+              "description": "CSST W2_Phot 仿真宽场 FITS 图像；覆盖待通过独立 coverage job 扫描并由 Assets MOC Core 锁定。",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://nadc.china-vo.org/data/",
+              "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
+              "reason": "W2/W3/W4 FITS-WCS scan has not been completed and locked by Assets.",
+              "manualStep": "Run the W2_Phot FITS-WCS coverage job with the existing CSST Connector, then import the locked Core result."
+            }
+          ]
+        },
+        {
+          "id": "csst-sim-w3-20250731",
+          "label": "CSST W3 Simulation 2025-07-31",
+          "kind": "early_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "simulation"
+          ],
+          "products": [
+            {
+              "name": "W3 simulated wide-field images",
+              "modality": "imaging",
+              "description": "CSST W3_Phot 仿真宽场 FITS 图像；覆盖待通过独立 coverage job 扫描并由 Assets MOC Core 锁定。",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://nadc.china-vo.org/data/",
+              "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
+              "reason": "W2/W3/W4 FITS-WCS scan has not been completed and locked by Assets.",
+              "manualStep": "Run the W3_Phot FITS-WCS coverage job with the existing CSST Connector, then import the locked Core result."
+            }
+          ]
+        },
+        {
+          "id": "csst-sim-w4-20250731",
+          "label": "CSST W4 Simulation 2025-07-31",
+          "kind": "early_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging",
+            "photometry",
+            "simulation"
+          ],
+          "products": [
+            {
+              "name": "W4 simulated wide-field images",
+              "modality": "imaging",
+              "description": "CSST W4_Phot 仿真宽场 FITS 图像；覆盖待通过独立 coverage job 扫描并由 Assets MOC Core 锁定。",
+              "status": "awaiting_geometry",
+              "sourceUrl": "https://nadc.china-vo.org/data/",
+              "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
+              "reason": "W2/W3/W4 FITS-WCS scan has not been completed and locked by Assets.",
+              "manualStep": "Run the W4_Phot FITS-WCS coverage job with the existing CSST Connector, then import the locked Core result."
             }
           ]
         }

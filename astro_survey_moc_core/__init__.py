@@ -12,6 +12,7 @@ from .contract import (
     normalize_spec,
 )
 from .core import BuildResult, build_layer, canonical_cells, read_moc_fits, validate_moc_fits, write_moc_fits
+from .task_contract import TASK_CONTRACT_VERSION, PublicCoverageTask, TaskContractError, normalize_task
 
 __all__ = [
     "CORE_VERSION",
@@ -29,4 +30,8 @@ __all__ = [
     "read_moc_fits",
     "validate_moc_fits",
     "write_moc_fits",
+    "TASK_CONTRACT_VERSION",
+    "PublicCoverageTask",
+    "TaskContractError",
+    "normalize_task",
 ]

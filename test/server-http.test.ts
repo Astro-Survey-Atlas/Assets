@@ -55,6 +55,18 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.match(await preview.text(), /generatedAt/);
   assert.equal(preview.headers.get("x-content-sha256"), provenance.sha256);
 
+  const packageCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/resource-packages/catalog.json`);
+  assert.equal(packageCatalogResponse.status, 200);
+  const packageCatalog = await packageCatalogResponse.json() as { schemaVersion: number; version: string; packages: Array<{ id: string; archiveUrl: string; sizeBytes: number; sha256: string }> };
+  assert.equal(packageCatalog.schemaVersion, 3);
+  assert.equal(packageCatalog.version, "3.0.0");
+  assert.ok(packageCatalog.packages.length > 0);
+  assert.ok(packageCatalog.packages.every((entry) => entry.archiveUrl.startsWith("/api/v1/assets/")));
+  const packageArchive = await fetch(`http://127.0.0.1:${port}${packageCatalog.packages[0]!.archiveUrl}`, { headers: { Range: "bytes=0-7" } });
+  assert.equal(packageArchive.status, 206);
+  assert.equal(packageArchive.headers.get("x-content-sha256"), packageCatalog.packages[0]!.sha256);
+  assert.equal((await packageArchive.arrayBuffer()).byteLength, 8);
+
   const zip = catalog.files.find((entry) => entry.id.startsWith("package-"));
   assert.ok(zip);
   assert.ok(zip.previewUrl?.endsWith("/preview"));

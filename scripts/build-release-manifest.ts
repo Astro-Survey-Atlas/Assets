@@ -201,6 +201,21 @@ async function build(): Promise<PublicAssetManifest> {
     filePath: path.join(root, "docs", "moc-core-contract.md"), downloadName: "moc-core-contract.md", mediaType: "text/markdown; charset=utf-8",
   });
   await push({
+    id: "documentation-architecture-boundary", kind: "documentation", label: "Assets and Atlas architecture boundary",
+    description: "Responsibilities, one-shot data-warehouse handoff and the stable Resource Package intersection.",
+    filePath: path.join(root, "docs", "architecture-boundary.md"), downloadName: "architecture-boundary.md", mediaType: "text/markdown; charset=utf-8",
+  });
+  await push({
+    id: "metadata-resource-package-v3-schema", kind: "metadata", label: "Resource Package v3 JSON Schema",
+    description: "Machine-readable manifest shape used by public package installers and conformance tooling.",
+    filePath: path.join(root, "contracts", "resource-package-v3.schema.json"), downloadName: "resource-package-v3.schema.json", mediaType: "application/json",
+  });
+  await push({
+    id: "metadata-coverage-task-schema", kind: "metadata", label: "Public coverage task handoff schema",
+    description: "Internal Assets to data-warehouse one-shot task envelope; contains no credentials or user asset state.",
+    filePath: path.join(root, "contracts", "coverage-task-v1.schema.json"), downloadName: "coverage-task-v1.schema.json", mediaType: "application/json",
+  });
+  await push({
     id: "metadata-layer-registry", kind: "metadata", label: "Stable coverage layer registry",
     description: "Assets-owned stable layer IDs and scientific classifications for reviewed Core layers.",
     filePath: path.join(root, "src", "layers", "layer-registry.json"), downloadName: "layer-registry.json", mediaType: "application/json",
@@ -208,14 +223,14 @@ async function build(): Promise<PublicAssetManifest> {
   await push({
     id: "sdk-moc-core-lock", kind: "sdk", label: "MOC Core dependency lock",
     description: "Pinned scientific dependencies used when building scanner and Assets MOC Core environments.",
-    filePath: path.join(root, "requirements", "moc-core.lock"), downloadName: "moc-core.lock", mediaType: "text/plain; charset=utf-8", version: "0.1.0",
+    filePath: path.join(root, "requirements", "moc-core.lock"), downloadName: "moc-core.lock", mediaType: "text/plain; charset=utf-8", version: "1.0.0",
   });
   await push({
-    id: "sdk-moc-core-wheel-0-1-0", kind: "sdk", label: "Assets MOC Core Python wheel",
+    id: "sdk-moc-core-wheel-1-0-0", kind: "sdk", label: "Assets MOC Core Python wheel",
     description: "Pinned offline Astro Survey MOC Core SDK wheel for scanner image and Atlas finalizer integration.",
-    filePath: path.join(artifactRoot, "moc-core", "astro_survey_atlas_assets-0.1.0-py3-none-any.whl"),
-    downloadName: "astro_survey_atlas_assets-0.1.0-py3-none-any.whl", mediaType: "application/zip", version: "0.1.0",
-    expectedSha256: "79ab6babbed2ea4559e4e5f444bf1ead79e87e8a954cde55f0258f7067af6df8",
+    filePath: path.join(artifactRoot, "moc-core", "astro_survey_moc_core-1.0.0-py3-none-any.whl"),
+    downloadName: "astro_survey_moc_core-1.0.0-py3-none-any.whl", mediaType: "application/zip", version: "1.0.0",
+    expectedSha256: "dd8a3a538cc3b9501a3207a427c97372d2118f9b0cdc4e41e1b2f4fe5fe1dc9a",
   });
   await push({
     id: "metadata-public-build-plan", kind: "metadata", label: "Locked public Core build plan",
@@ -331,6 +346,57 @@ async function build(): Promise<PublicAssetManifest> {
     filePath: path.join(artifactRoot, "csst", "display-footprint-nside16.json"), downloadName: "csst-w1-display-footprint-nside16.json", mediaType: "application/json",
     surveyId: "csst", releaseId: "csst-sim-w1-20250731", product: "W1 simulated wide-field images",
   });
+
+  for (const band of ["w2", "w3", "w4"] as const) {
+    const upper = band.toUpperCase();
+    const releaseId = `csst-sim-${band}-20250731`;
+    const product = `${upper} simulated wide-field images`;
+    const layerId = `csst-sim-${band}-image-extent`;
+    const outputRoot = path.join(artifactRoot, "layers", layerId);
+    const evidence: Array<[string, PublicAssetKind, string, string, string]> = [
+      [`csst-${band}-coverage-job-snapshot`, "metadata", `CSST ${upper} coverage job snapshot`, `${band}-coverage-job-snapshot.json`, `Connector-driven Warehouse coverage job snapshot for CSST ${upper}.`],
+      [`csst-${band}-normalized-scan`, "manifest", `CSST ${upper} normalized scan input`, `${band}-normalized-scan.json`, `Normalized FITS-WCS scan cells returned by data-warehouse for CSST ${upper}.`],
+      [`csst-${band}-run-statistics`, "metadata", `CSST ${upper} run statistics`, `${band}-run-statistics.json`, `File, WCS and cell statistics for the CSST ${upper} coverage run.`],
+      [`csst-${band}-sample-report`, "metadata", `CSST ${upper} sample report`, `${band}-sample-report.json`, `Audited samples and exclusions from the CSST ${upper} scan.`],
+      [`csst-${band}-provenance`, "provenance", `CSST ${upper} provenance`, `${band}-provenance.json`, `Locked scanner input, MOC Core output hashes and run provenance for CSST ${upper}.`],
+    ];
+    for (const [id, kind, label, fileName, description] of evidence) {
+      await push({
+        id, kind, label, description, filePath: path.join(artifactRoot, "csst", fileName), downloadName: `csst-${band}-${fileName}`, mediaType: "application/json",
+        surveyId: "csst", releaseId, product,
+      });
+    }
+    await push({
+      id: `csst-${band}-moc`, kind: "moc", label: `CSST ${upper} simulated image WCS MOC`,
+      description: `Authoritative ICRS/NUNIQ FITS MOC generated by Assets MOC Core from the Connector-driven ${upper} FITS-WCS scan.`,
+      filePath: path.join(outputRoot, `${layerId}.moc.fits`), downloadName: `${layerId}.moc.fits`, mediaType: "application/fits",
+      surveyId: "csst", releaseId, product,
+    });
+    await push({
+      id: `csst-${band}-query-order8`, kind: "geometry", label: `CSST ${upper} order-8 query projection`,
+      description: "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      filePath: path.join(outputRoot, "query-order8.json"), downloadName: `${layerId}-query-order8.json`, mediaType: "application/json",
+      surveyId: "csst", releaseId, product,
+    });
+    await push({
+      id: `csst-${band}-preview-order4`, kind: "geometry", label: `CSST ${upper} order-4 preview projection`,
+      description: "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      filePath: path.join(outputRoot, "preview-order4.json"), downloadName: `${layerId}-preview-order4.json`, mediaType: "application/json",
+      surveyId: "csst", releaseId, product,
+    });
+    await push({
+      id: `csst-${band}-statistics`, kind: "metadata", label: `CSST ${upper} MOC statistics`,
+      description: "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      filePath: path.join(outputRoot, "statistics.json"), downloadName: `${layerId}-statistics.json`, mediaType: "application/json",
+      surveyId: "csst", releaseId, product,
+    });
+    await push({
+      id: `csst-${band}-layer-provenance`, kind: "provenance", label: `CSST ${upper} MOC Core provenance`,
+      description: "Assets MOC Core recipe, input snapshot and output hashes for the public layer.",
+      filePath: path.join(outputRoot, "provenance.json"), downloadName: `${layerId}-provenance.json`, mediaType: "application/json",
+      surveyId: "csst", releaseId, product,
+    });
+  }
 
   for (const record of mocIndex.artifacts) {
     const baseId = `moc-${slug(`${record.surveyId}-${record.releaseId}-${record.product}-${record.sourceId}`)}`;

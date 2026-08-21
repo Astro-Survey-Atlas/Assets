@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from astro_survey_moc_core.contract import ContractError, normalize_spec
+from astro_survey_moc_core.task_contract import TaskContractError, normalize_task
 from astro_survey_moc_core.core import (
     build_layer,
     canonical_cells,
@@ -41,18 +42,41 @@ class ContractTests(unittest.TestCase):
                 self.assertIn("plannedMode", layer)
                 self.assertIn("pendingReason", layer)
 
-    def test_legacy_evidence_role_is_read_but_not_written(self) -> None:
-        spec = normalize_spec({
-            "layerId": "legacy-record",
-            "mode": "nested-healpix",
-            "evidenceRole": "image_extent",
-            "dataOrigin": "simulated",
-            "sourceTier": "user_file_derived",
-            "maxOrder": 8,
-        })
-        self.assertEqual(spec.coverage_role, "image_extent")
-        self.assertNotIn("evidenceRole", spec.as_dict())
-        self.assertEqual(spec.as_dict()["coverageRole"], "image_extent")
+    def test_removed_evidence_role_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ContractError, "evidenceRole is removed"):
+            normalize_spec({
+                "layerId": "legacy-record",
+                "mode": "nested-healpix",
+                "evidenceRole": "image_extent",
+                "dataOrigin": "simulated",
+                "sourceTier": "user_file_derived",
+                "maxOrder": 8,
+            })
+
+    def test_public_task_handoff_excludes_credentials_and_targets_data_warehouse(self) -> None:
+        task = {
+            "schemaVersion": 1,
+            "taskId": "csst-sim-w2-coverage",
+            "layer": {
+                "layerId": "csst-sim-w2-image-extent",
+                "surveyId": "csst",
+                "releaseId": "csst-sim-w2-20250731",
+                "product": "W2 simulated wide-field images",
+                "mode": "fits-wcs",
+                "coverageRole": "image_extent",
+                "dataOrigin": "simulated",
+                "sourceTier": "user_file_derived",
+            },
+            "connector": {"connectorId": "connector-csst-public", "kind": "oss", "configSha256": "a" * 64},
+            "recipe": {"mode": "fits-wcs", "coordinateFrame": "ICRS", "ordering": "NESTED", "maxOrder": 10, "queryOrder": 8, "previewOrder": 4},
+            "execution": {"executor": "data-warehouse", "timeoutSeconds": 3600, "maxBytes": 1024},
+            "output": {"resultKind": "normalized-scan", "contractVersion": "1.0.0"},
+        }
+        self.assertEqual(normalize_task(task).task_id, "csst-sim-w2-coverage")
+        with self.assertRaises(TaskContractError):
+            normalize_task({**task, "connector": {**task["connector"], "password": "secret"}})
+        with self.assertRaises(TaskContractError):
+            normalize_task({**task, "execution": {**task["execution"], "executor": "atlas"}})
 
     def test_contract_rejects_wrong_frame_and_unjustified_precision(self) -> None:
         base = {

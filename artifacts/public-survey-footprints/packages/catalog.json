@@ -1,5 +1,6 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
+  "version": "3.0.0",
   "generatedAt": "2026-08-20T04:48:22.554910Z",
   "packages": [
     {
@@ -26,7 +27,7 @@
       "accessModes": [
         "registered OSS Connector"
       ],
-      "version": "1.0.0",
+      "version": "3.0.0",
       "sources": [
         {
           "releaseId": "csst-sim-w1-20250731",
@@ -42,9 +43,9 @@
       "releaseLabels": {
         "csst-sim-w1-20250731": "CSST W1 Simulation 2025-07-31"
       },
-      "archiveUrl": "public-csst-footprints-1.0.0.zip",
-      "sizeBytes": 1584,
-      "sha256": "edae1c166c7b34486de5ac34d31c3ef94aec71923d180518c1df6e053cf39ee5",
+      "archiveUrl": "public-csst-footprints-3.0.0.zip",
+      "sizeBytes": 3012,
+      "sha256": "32010442df7a555aa1780fdff3bf0d725670961cd94b9314ddc8bd427ca712fd",
       "updatedAt": "2026-08-20T04:48:22.554910Z"
     },
     {
@@ -86,10 +87,10 @@
       "releaseLabels": {
         "euclid-q1": "Q1"
       },
-      "version": "2.0.3",
-      "archiveUrl": "public-euclid-footprints-2.0.3.zip",
-      "sizeBytes": 1132,
-      "sha256": "9bbed4c2a0bf383cb043ec2da47da3aba2607f80d87f2a0376d062ecfa20773e",
+      "version": "3.0.0",
+      "archiveUrl": "public-euclid-footprints-3.0.0.zip",
+      "sizeBytes": 2488,
+      "sha256": "08fb40f850fd8972fe32d9b518cbc8b0ae796895caf181fcfa548e9dd7bedc7f",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -134,10 +135,10 @@
       "releaseLabels": {
         "galex-gr6-gr7": "GR6/GR7"
       },
-      "version": "2.0.3",
-      "archiveUrl": "public-galex-footprints-2.0.3.zip",
-      "sizeBytes": 22583,
-      "sha256": "919352c943484c69f4b7e3eb21f628cb99df7bc2b207484ae69debe732a42a17",
+      "version": "3.0.0",
+      "archiveUrl": "public-galex-footprints-3.0.0.zip",
+      "sizeBytes": 12978,
+      "sha256": "ef58ea7d32143e9135a7a1447f3f3678459e5ead0a75e277568fd64f100ff1dd",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -164,7 +165,7 @@
       "accessModes": [
         "DESI Data Release"
       ],
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sources": [
         {
           "releaseId": "desi-edr",
@@ -188,9 +189,9 @@
         "desi-edr": "EDR",
         "desi-dr1": "DR1"
       },
-      "archiveUrl": "public-desi-footprints-2.0.3.zip",
-      "sizeBytes": 5492,
-      "sha256": "6f4f9499d9e980088f05a589dbf04a64c1fadb5218be760452ac859f65fde43e",
+      "archiveUrl": "public-desi-footprints-3.0.0.zip",
+      "sizeBytes": 8410,
+      "sha256": "f49fd738150b820fe35745a61dd8f813abb768b46bdba4a890d0bdcdd3bb447c",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -220,7 +221,7 @@
         "Legacy Survey viewer",
         "CDS HiPS"
       ],
-      "version": "2.0.4",
+      "version": "3.0.0",
       "sources": [
         {
           "releaseId": "legacy-dr1",
@@ -318,9 +319,9 @@
         "legacy-dr8": "DR8",
         "legacy-dr9": "DR9"
       },
-      "archiveUrl": "public-legacy-surveys-footprints-2.0.4.zip",
-      "sizeBytes": 13275,
-      "sha256": "56dbdc6b4e06bf64de82f32bc0c3e3c7d48fdd11a9f0af925e9fb98e8a3a31f3",
+      "archiveUrl": "public-legacy-surveys-footprints-3.0.0.zip",
+      "sizeBytes": 21903,
+      "sha256": "c50ef2ae3956dec250733336d1698c24acf17a9afa28dbbd79f8439a7f13c9c4",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -363,10 +364,10 @@
       "releaseLabels": {
         "sdss-dr09": "DR9"
       },
-      "version": "2.0.3",
-      "archiveUrl": "public-sdss-footprints-2.0.3.zip",
-      "sizeBytes": 5308,
-      "sha256": "21e1c94ae5dbbe5a022d9e014161b30814911e3753450a7f8b5fc3d80cc2e4e2",
+      "version": "3.0.0",
+      "archiveUrl": "public-sdss-footprints-3.0.0.zip",
+      "sizeBytes": 7292,
+      "sha256": "15640a9f7786bae150a64d8ad5a821f91020912923d79807b3342ac271c6a22b",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -409,10 +410,10 @@
       "releaseLabels": {
         "hsc-pdr2": "PDR2"
       },
-      "version": "2.0.3",
-      "archiveUrl": "public-hsc-ssp-footprints-2.0.3.zip",
-      "sizeBytes": 2121,
-      "sha256": "1bcdedae1558ba0a73702c8c299be50892ab3b9cc9ab40632d1457080b537eb6",
+      "version": "3.0.0",
+      "archiveUrl": "public-hsc-ssp-footprints-3.0.0.zip",
+      "sizeBytes": 8251,
+      "sha256": "678dc507722d69687fc359712afd975b84477d444f6b3e521896ef3857f04704",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -457,10 +458,10 @@
       "releaseLabels": {
         "hst-mast-snapshot-2026": "MAST archive snapshot 2026"
       },
-      "version": "2.0.3",
-      "archiveUrl": "public-hst-footprints-2.0.3.zip",
-      "sizeBytes": 8545,
-      "sha256": "9062432b79c41e1b4292aed1dc369993196945a3f592faef700ce153633fc1f2",
+      "version": "3.0.0",
+      "archiveUrl": "public-hst-footprints-3.0.0.zip",
+      "sizeBytes": 10736,
+      "sha256": "9fc806f5e246111b6d6b0c9b6fe1316cf502eaaad6a1faae5c7c671c3ac9bcbd",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -503,10 +504,10 @@
       "releaseLabels": {
         "panstarrs-dr1": "DR1"
       },
-      "version": "2.0.3",
-      "archiveUrl": "public-panstarrs-footprints-2.0.3.zip",
-      "sizeBytes": 36964,
-      "sha256": "2a70f147edbf36535735528517b699594e0d6f558d1073ca768c1ee2d3f9f63f",
+      "version": "3.0.0",
+      "archiveUrl": "public-panstarrs-footprints-3.0.0.zip",
+      "sizeBytes": 13616,
+      "sha256": "2d4db6eb978bae76e765d3fabde52aaf20d75f33810c40c00503ab9165b33af0",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -549,10 +550,10 @@
       "releaseLabels": {
         "des-dr2": "DR2"
       },
-      "version": "2.0.3",
-      "archiveUrl": "public-des-footprints-2.0.3.zip",
-      "sizeBytes": 2275,
-      "sha256": "5511f7cfc07ededa2ab3899185cc041f934d413b8b36a3f1d567d5e8cfe351c2",
+      "version": "3.0.0",
+      "archiveUrl": "public-des-footprints-3.0.0.zip",
+      "sizeBytes": 3670,
+      "sha256": "824da6e75d4756540e9ed4182cae6f4a36fe29006bdf0bb23fc652d96a1e117e",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -596,10 +597,10 @@
       "releaseLabels": {
         "2mass-all-sky": "All-Sky Release"
       },
-      "version": "2.0.3",
-      "archiveUrl": "public-2mass-footprints-2.0.3.zip",
-      "sizeBytes": 23077,
-      "sha256": "4adb195aecdde33043d278cb80003dc665be374a187cf083666bc15ce2cdd57e",
+      "version": "3.0.0",
+      "archiveUrl": "public-2mass-footprints-3.0.0.zip",
+      "sizeBytes": 10994,
+      "sha256": "e565b90b1f6cc5cc75da5440a53ce77f95c87d9d91120f125ec9d421c36551c5",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -644,10 +645,10 @@
       "releaseLabels": {
         "allwise": "AllWISE"
       },
-      "version": "2.0.3",
-      "archiveUrl": "public-allwise-footprints-2.0.3.zip",
-      "sizeBytes": 30302,
-      "sha256": "54458feb2ee8f82671d826018dafd27f24777aa83f6dc9c9327fb4ece959d710",
+      "version": "3.0.0",
+      "archiveUrl": "public-allwise-footprints-3.0.0.zip",
+      "sizeBytes": 11767,
+      "sha256": "3b3697edba5e163a80628977c9b6b571965910397eb1524c9a1e9e77fe4832e0",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -690,10 +691,10 @@
       "releaseLabels": {
         "kids-dr5": "DR5"
       },
-      "version": "2.0.3",
-      "archiveUrl": "public-kids-footprints-2.0.3.zip",
-      "sizeBytes": 1516,
-      "sha256": "6a532fda524bce275539fd72a8475d157ce4f2a539c1c101df63f38d8ce6b0d3",
+      "version": "3.0.0",
+      "archiveUrl": "public-kids-footprints-3.0.0.zip",
+      "sizeBytes": 3017,
+      "sha256": "723c1e15e9518c1e7e68ef9305d1c3a7c5578c97c4b1271618effee320da706f",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -735,57 +736,11 @@
       "releaseLabels": {
         "nvss-final": "Final survey"
       },
-      "version": "2.0.3",
-      "archiveUrl": "public-nvss-footprints-2.0.3.zip",
-      "sizeBytes": 7712,
-      "sha256": "5495fe8633217542290817a0880533e59395a14d3a870a29cff67b6dadb0dbcc",
+      "version": "3.0.0",
+      "archiveUrl": "public-nvss-footprints-3.0.0.zip",
+      "sizeBytes": 8620,
+      "sha256": "ee74ffa811c75501ef80850d22d02ba7b21f6f4f28ed10ef41974b2f2893bdf7",
       "updatedAt": "2026-08-19T01:00:38.290Z"
-    },
-    {
-      "id": "public-imaging-footprints",
-      "name": "公开成像巡天覆盖",
-      "description": "Euclid、Legacy Surveys、SDSS、HSC-SSP 与 HST 的公开覆盖范围，用于 3D 天球底图。",
-      "modality": "imaging",
-      "surveys": [
-        "euclid",
-        "legacy-surveys",
-        "sdss",
-        "hsc-ssp",
-        "hst"
-      ],
-      "version": "1.0.0",
-      "archiveUrl": "public-imaging-footprints-1.0.0.zip",
-      "sizeBytes": 14059,
-      "sha256": "147055d5f40e36e8b33629f26192dbbbbba8860069f558f151ba4917c1f851d5",
-      "updatedAt": "2026-07-23T10:21:49.205Z",
-      "hidden": true,
-      "deprecated": true,
-      "replacedBy": [
-        "public-euclid-footprints",
-        "public-legacy-surveys-footprints",
-        "public-sdss-footprints",
-        "public-hsc-ssp-footprints",
-        "public-hst-footprints"
-      ]
-    },
-    {
-      "id": "public-ultraviolet-footprints",
-      "name": "公开紫外巡天覆盖",
-      "description": "GALEX GR6/GR7 紫外巡天的公开 MOC 覆盖范围，用于 3D 天球底图。",
-      "modality": "ultraviolet",
-      "surveys": [
-        "galex"
-      ],
-      "version": "1.0.0",
-      "archiveUrl": "public-ultraviolet-footprints-1.0.0.zip",
-      "sizeBytes": 8704,
-      "sha256": "c9d3d9c35297e206abcd12fc7c12041ac91d2cf0f95b4878a5808edea1d0fdf0",
-      "updatedAt": "2026-07-23T10:21:49.205Z",
-      "hidden": true,
-      "deprecated": true,
-      "replacedBy": [
-        "public-galex-footprints"
-      ]
     }
   ]
 }

@@ -28,9 +28,9 @@ remain unavailable through HTTP.
 
 ## Offline MOC Core
 
-This repository also owns the `astro-survey-atlas-assets` distribution, whose
+This repository also owns the `astro-survey-moc-core` distribution, whose
 Python import package is explicitly named `astro_survey_moc_core`, and the
-`astro-survey-assets` CLI. The Core writes deterministic IVOA FITS MOCs,
+`astro-survey-moc-core` CLI. The Core writes deterministic IVOA FITS MOCs,
 derives order-8 query indexes and order-4 previews, merges stable shard output,
 and builds or validates Resource Package v3 archives. `refresh` is its only
 networked command; `rebuild` (or `build --rebuild`) requires a SHA-256 locked
@@ -39,6 +39,9 @@ local snapshot.
 The scientific and package contract is documented in
 [`docs/moc-core-contract.md`](docs/moc-core-contract.md). The reviewed CSST
 artifact is frozen and is validated in place rather than regenerated.
+The Assets/data-warehouse/Atlas boundary and one-shot task handoff are documented
+in [`docs/architecture-boundary.md`](docs/architecture-boundary.md); machine
+readable contracts live under [`contracts/`](contracts/).
 
 ```bash
 python3 -m pip wheel --no-deps --no-build-isolation . -w wheelhouse
@@ -81,7 +84,7 @@ the `current` symlink only after the copied data passes the same checks.
 ```bash
 podman build \
   --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
-  -t crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:0.1.0-20260818123137 .
+  -t crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:1.0.0-dev .
 
 helm lint charts/astro-survey-atlas-assets
 helm upgrade --install astro-survey-atlas-assets \

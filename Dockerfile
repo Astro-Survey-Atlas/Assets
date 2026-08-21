@@ -11,6 +11,7 @@ COPY scripts ./scripts
 COPY site ./site
 COPY test ./test
 COPY artifacts ./artifacts
+COPY contracts ./contracts
 COPY src/footprints ./src/footprints
 COPY src/surveys ./src/surveys
 COPY src/layers ./src/layers
@@ -39,6 +40,7 @@ COPY --from=build --chown=atlas:atlas /app/src/surveys ./release/src/surveys
 COPY --from=build --chown=atlas:atlas /app/src/layers ./release/src/layers
 COPY --from=build --chown=atlas:atlas /app/requirements ./release/requirements
 COPY --from=build --chown=atlas:atlas /app/docs ./release/docs
+COPY --from=build --chown=atlas:atlas /app/contracts ./release/contracts
 
 USER 10001:10001
 EXPOSE 4180

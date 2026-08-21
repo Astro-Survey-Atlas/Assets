@@ -3,20 +3,31 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "460427a06f78a8898f12a29cb3d0ff4115dddfe77f7387e5abdd412a28e89979"
+    "sha256": "e7c756ab77214516dd721b357dd3df77a6c521a8e7d711f6c25f9d93cbfe3a11"
   },
   "statistics": {
-    "releases": 49,
-    "products": 84,
+    "releases": 52,
+    "products": 87,
     "acquired": 32,
     "overviewOnly": 11,
-    "awaitingGeometry": 41,
+    "awaitingGeometry": 44,
     "footprints": 41,
-    "packages": 16,
+    "packages": 14,
     "rawMocFiles": 38,
-    "totalBytes": 227172313
+    "totalBytes": 227131351
   },
   "files": [
+    {
+      "id": "documentation-architecture-boundary",
+      "kind": "documentation",
+      "label": "Assets and Atlas architecture boundary",
+      "description": "Responsibilities, one-shot data-warehouse handoff and the stable Resource Package intersection.",
+      "downloadName": "architecture-boundary.md",
+      "mediaType": "text/markdown; charset=utf-8",
+      "path": "docs/architecture-boundary.md",
+      "sizeBytes": 3023,
+      "sha256": "6a9c25da7a41071663f78468f53574d5591de589fb56f0ef5944761f73c3efe5"
+    },
     {
       "id": "documentation-moc-core-contract",
       "kind": "documentation",
@@ -25,8 +36,8 @@
       "downloadName": "moc-core-contract.md",
       "mediaType": "text/markdown; charset=utf-8",
       "path": "docs/moc-core-contract.md",
-      "sizeBytes": 3567,
-      "sha256": "50d16b571a3d3088306f253bbb39a351caf3c0ee8a31016a330bdd9750ee4320"
+      "sizeBytes": 3745,
+      "sha256": "06a5ef7ae3474ed565b2533c098e66dbb7064a02bdad5f7b45831bdc2a1b7ebf"
     },
     {
       "id": "documentation-moc-method",
@@ -210,8 +221,8 @@
       "downloadName": "public-footprint-product-status.json",
       "mediaType": "application/json",
       "path": "artifacts/public-survey-footprints/sources.json",
-      "sizeBytes": 47931,
-      "sha256": "b87ad4055a2cc0b9ba821c61c1e29d6cfa0220561a4aec6cf3be2bf42fa2e6d8"
+      "sizeBytes": 50172,
+      "sha256": "b62d6505f5d9bf53b569778dd5f0c7ac38021732a433773ba77c17bf13f52463"
     },
     {
       "id": "manifest-canonical",
@@ -257,8 +268,8 @@
       "downloadName": "survey-catalog.json",
       "mediaType": "application/json",
       "path": "src/surveys/survey-catalog.json",
-      "sizeBytes": 74896,
-      "sha256": "44e88cf5ccd0a3f23ed83f87a14610e9dc89b2451eaf9d78b854b6b6a9c710d3"
+      "sizeBytes": 78404,
+      "sha256": "dffd97f48352fc29c9fa9b5165e984254c59c4afc67b5907934d16fac32e8ac7"
     },
     {
       "id": "moc-2mass-2mass-all-sky-h-band-imaging-cds-p-2mass-h-record",
@@ -376,8 +387,8 @@
       "releaseId": "csst-sim-w1-20250731",
       "product": "W1 simulated wide-field images",
       "path": "artifacts/public-survey-footprints/csst/coverage-job-snapshot.json",
-      "sizeBytes": 1781,
-      "sha256": "baf0245421205442a686dff3a03ebf2f0f3b64435234a74132687c63ba4bec13"
+      "sizeBytes": 1593,
+      "sha256": "6dadfd8959a71a16dedcfc9ac111c4c31967cd4a1d7726ec30db895a29a7c6af"
     },
     {
       "id": "csst-run-statistics",
@@ -924,6 +935,17 @@
       "sha256": "a32a7491d75d01a1335ac872c57e3cbe48ddd5c6ae237b2130a46078f25b549e"
     },
     {
+      "id": "metadata-coverage-task-schema",
+      "kind": "metadata",
+      "label": "Public coverage task handoff schema",
+      "description": "Internal Assets to data-warehouse one-shot task envelope; contains no credentials or user asset state.",
+      "downloadName": "coverage-task-v1.schema.json",
+      "mediaType": "application/json",
+      "path": "contracts/coverage-task-v1.schema.json",
+      "sizeBytes": 3406,
+      "sha256": "05bf694f3d2e8e1c665018ef9a156a2bae0c9e97a24b568a7ff34649a307739f"
+    },
+    {
       "id": "metadata-geometry-index",
       "kind": "metadata",
       "label": "Raw geometry source index",
@@ -942,8 +964,19 @@
       "downloadName": "resource-package-catalog.json",
       "mediaType": "application/json",
       "path": "artifacts/public-survey-footprints/packages/catalog.json",
-      "sizeBytes": 22706,
-      "sha256": "07899a4a41d9d425337159628708872164a8034b3e981ba316634366d45245e2"
+      "sizeBytes": 21218,
+      "sha256": "5cac52a35fc1fccb30646fa9e132c2f21f77a4f8f2b4ecda1cf3a02f90e2341e"
+    },
+    {
+      "id": "metadata-resource-package-v3-schema",
+      "kind": "metadata",
+      "label": "Resource Package v3 JSON Schema",
+      "description": "Machine-readable manifest shape used by public package installers and conformance tooling.",
+      "downloadName": "resource-package-v3.schema.json",
+      "mediaType": "application/json",
+      "path": "contracts/resource-package-v3.schema.json",
+      "sizeBytes": 2591,
+      "sha256": "dbf666d8959aa31d5b41ff2003c947b0388af6a9333b2a882debb5c4f039009f"
     },
     {
       "id": "moc-sdss-sdss-dr09-dr9-color-imaging-cds-p-sdss9-color-record",
@@ -968,8 +1001,8 @@
       "downloadName": "layer-registry.json",
       "mediaType": "application/json",
       "path": "src/layers/layer-registry.json",
-      "sizeBytes": 17998,
-      "sha256": "c74d537dabeb72eddcc476fd3b1d357964a376d7df308695a1c3dd411ce124ca"
+      "sizeBytes": 20344,
+      "sha256": "184c9a4a6fe888d615a7ef5df3633307766507b2b4b1684fcbea9343e105f38f"
     },
     {
       "id": "moc-2mass-2mass-all-sky-h-band-imaging-cds-p-2mass-h",
@@ -1109,7 +1142,7 @@
       "id": "layer-desi-dr1-spectra-footprint-moc",
       "kind": "moc",
       "label": "DESI · DR1 spectra and redshifts authoritative MOC",
-      "description": "footprint_extent (observed, official_inventory_derived) generated by Assets MOC Core 0.1.0.",
+      "description": "footprint_extent (observed, official_inventory_derived) generated by Assets MOC Core 1.0.0.",
       "downloadName": "desi-dr1-spectra-footprint.moc.fits",
       "mediaType": "application/fits",
       "surveyId": "desi",
@@ -1124,7 +1157,7 @@
       "id": "layer-desi-edr-spectra-footprint-moc",
       "kind": "moc",
       "label": "DESI · Early Data Release spectra authoritative MOC",
-      "description": "footprint_extent (observed, official_inventory_derived) generated by Assets MOC Core 0.1.0.",
+      "description": "footprint_extent (observed, official_inventory_derived) generated by Assets MOC Core 1.0.0.",
       "downloadName": "desi-edr-spectra-footprint.moc.fits",
       "mediaType": "application/fits",
       "surveyId": "desi",
@@ -1139,7 +1172,7 @@
       "id": "layer-euclid-q1-deep-fields-image-extent-moc",
       "kind": "moc",
       "label": "EUCLID · Euclid Q1 deep fields authoritative MOC",
-      "description": "image_extent (observed, official_geometry) generated by Assets MOC Core 0.1.0.",
+      "description": "image_extent (observed, official_geometry) generated by Assets MOC Core 1.0.0.",
       "downloadName": "euclid-q1-deep-fields-image-extent.moc.fits",
       "mediaType": "application/fits",
       "surveyId": "euclid",
@@ -1541,238 +1574,214 @@
       "sha256": "33eeaeb394e3049c3109358c56d9a3ac2e1d0e6e7fdde76d695c707176a695c3"
     },
     {
-      "id": "package-public-2mass-footprints-2-0-3",
+      "id": "package-public-2mass-footprints-3-0-0",
       "kind": "package",
       "label": "2MASS",
       "description": "2MASS All-Sky J、H、K 波段图像覆盖。",
-      "downloadName": "public-2mass-footprints-2.0.3.zip",
+      "downloadName": "public-2mass-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "2mass",
       "releaseId": "2mass-all-sky",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FJ&get=record&fmt=json",
-      "path": "artifacts/public-survey-footprints/packages/public-2mass-footprints-2.0.3.zip",
-      "sizeBytes": 23077,
-      "sha256": "4adb195aecdde33043d278cb80003dc665be374a187cf083666bc15ce2cdd57e"
+      "path": "artifacts/public-survey-footprints/packages/public-2mass-footprints-3.0.0.zip",
+      "sizeBytes": 10994,
+      "sha256": "e565b90b1f6cc5cc75da5440a53ce77f95c87d9d91120f125ec9d421c36551c5"
     },
     {
-      "id": "package-public-allwise-footprints-2-0-3",
+      "id": "package-public-allwise-footprints-3-0-0",
       "kind": "package",
       "label": "AllWISE",
       "description": "AllWISE W1-W4 静态图像覆盖，不表达 NEOWISE 时间完整性。",
-      "downloadName": "public-allwise-footprints-2.0.3.zip",
+      "downloadName": "public-allwise-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "allwise",
       "releaseId": "allwise",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW1&get=record&fmt=json",
-      "path": "artifacts/public-survey-footprints/packages/public-allwise-footprints-2.0.3.zip",
-      "sizeBytes": 30302,
-      "sha256": "54458feb2ee8f82671d826018dafd27f24777aa83f6dc9c9327fb4ece959d710"
+      "path": "artifacts/public-survey-footprints/packages/public-allwise-footprints-3.0.0.zip",
+      "sizeBytes": 11767,
+      "sha256": "3b3697edba5e163a80628977c9b6b571965910397eb1524c9a1e9e77fe4832e0"
     },
     {
-      "id": "package-public-csst-footprints-1-0-0",
+      "id": "package-public-csst-footprints-3-0-0",
       "kind": "package",
       "label": "CSST W1 Simulation",
       "description": "CSST W1_Phot WIDE 仿真图像经审核的 ICRS FITS-WCS 覆盖；实测 354.759 平方度，不代表正式公开巡天 footprint。",
-      "downloadName": "public-csst-footprints-1.0.0.zip",
+      "downloadName": "public-csst-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "csst",
       "releaseId": "csst-sim-w1-20250731",
-      "version": "1.0.0",
+      "version": "3.0.0",
       "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W1_Phot",
-      "path": "artifacts/public-survey-footprints/packages/public-csst-footprints-1.0.0.zip",
-      "sizeBytes": 1584,
-      "sha256": "edae1c166c7b34486de5ac34d31c3ef94aec71923d180518c1df6e053cf39ee5"
+      "path": "artifacts/public-survey-footprints/packages/public-csst-footprints-3.0.0.zip",
+      "sizeBytes": 3012,
+      "sha256": "32010442df7a555aa1780fdff3bf0d725670961cd94b9314ddc8bd427ca712fd"
     },
     {
-      "id": "package-public-des-footprints-2-0-3",
+      "id": "package-public-des-footprints-3-0-0",
       "kind": "package",
       "label": "DES",
       "description": "Dark Energy Survey DR2 彩色成像覆盖。",
-      "downloadName": "public-des-footprints-2.0.3.zip",
+      "downloadName": "public-des-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "des",
       "releaseId": "des-dr2",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2FColorIRG&get=record&fmt=json",
-      "path": "artifacts/public-survey-footprints/packages/public-des-footprints-2.0.3.zip",
-      "sizeBytes": 2275,
-      "sha256": "5511f7cfc07ededa2ab3899185cc041f934d413b8b36a3f1d567d5e8cfe351c2"
+      "path": "artifacts/public-survey-footprints/packages/public-des-footprints-3.0.0.zip",
+      "sizeBytes": 3670,
+      "sha256": "824da6e75d4756540e9ed4182cae6f4a36fe29006bdf0bb23fc652d96a1e117e"
     },
     {
-      "id": "package-public-legacy-surveys-footprints-2-0-4",
+      "id": "package-public-legacy-surveys-footprints-3-0-0",
       "kind": "package",
       "label": "DESI Legacy Surveys",
       "description": "DESI Legacy Surveys DR1-DR10 coadded-imaging coverage overviews and the exact DR10 color HiPS MOC; this is imaging coverage, not DESI spectroscopy.",
-      "downloadName": "public-legacy-surveys-footprints-2.0.4.zip",
+      "downloadName": "public-legacy-surveys-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "legacy-surveys",
       "releaseId": "legacy-dr1",
-      "version": "2.0.4",
+      "version": "3.0.0",
       "sourceUrl": "https://www.legacysurvey.org/dr1/",
-      "path": "artifacts/public-survey-footprints/packages/public-legacy-surveys-footprints-2.0.4.zip",
-      "sizeBytes": 13275,
-      "sha256": "56dbdc6b4e06bf64de82f32bc0c3e3c7d48fdd11a9f0af925e9fb98e8a3a31f3"
+      "path": "artifacts/public-survey-footprints/packages/public-legacy-surveys-footprints-3.0.0.zip",
+      "sizeBytes": 21903,
+      "sha256": "c50ef2ae3956dec250733336d1698c24acf17a9afa28dbbd79f8439a7f13c9c4"
     },
     {
-      "id": "package-public-desi-footprints-2-0-3",
+      "id": "package-public-desi-footprints-3-0-0",
       "kind": "package",
       "label": "DESI Spectroscopy",
       "description": "DESI EDR and DR1 observed spectroscopic tile coverage derived from the official Fuji and Iron TILE_COMPLETENESS tables; this is separate from Legacy Surveys imaging.",
-      "downloadName": "public-desi-footprints-2.0.3.zip",
+      "downloadName": "public-desi-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "desi",
       "releaseId": "desi-edr",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
-      "path": "artifacts/public-survey-footprints/packages/public-desi-footprints-2.0.3.zip",
-      "sizeBytes": 5492,
-      "sha256": "6f4f9499d9e980088f05a589dbf04a64c1fadb5218be760452ac859f65fde43e"
+      "path": "artifacts/public-survey-footprints/packages/public-desi-footprints-3.0.0.zip",
+      "sizeBytes": 8410,
+      "sha256": "f49fd738150b820fe35745a61dd8f813abb768b46bdba4a890d0bdcdd3bb447c"
     },
     {
-      "id": "package-public-euclid-footprints-2-0-3",
+      "id": "package-public-euclid-footprints-3-0-0",
       "kind": "package",
       "label": "Euclid",
       "description": "Euclid Q1 三个深场的官方 DS9 ICRS 边界导出 MOC。",
-      "downloadName": "public-euclid-footprints-2.0.3.zip",
+      "downloadName": "public-euclid-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "euclid",
       "releaseId": "euclid-q1",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
-      "path": "artifacts/public-survey-footprints/packages/public-euclid-footprints-2.0.3.zip",
-      "sizeBytes": 1132,
-      "sha256": "9bbed4c2a0bf383cb043ec2da47da3aba2607f80d87f2a0376d062ecfa20773e"
+      "path": "artifacts/public-survey-footprints/packages/public-euclid-footprints-3.0.0.zip",
+      "sizeBytes": 2488,
+      "sha256": "08fb40f850fd8972fe32d9b518cbc8b0ae796895caf181fcfa548e9dd7bedc7f"
     },
     {
-      "id": "package-public-galex-footprints-2-0-3",
+      "id": "package-public-galex-footprints-3-0-0",
       "kind": "package",
       "label": "GALEX",
       "description": "GALEX GR6/GR7 FUV、NUV 与彩色 HiPS 图像的公开覆盖。",
-      "downloadName": "public-galex-footprints-2.0.3.zip",
+      "downloadName": "public-galex-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "galex",
       "releaseId": "galex-gr6-gr7",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2Fcolor&get=record&fmt=json",
-      "path": "artifacts/public-survey-footprints/packages/public-galex-footprints-2.0.3.zip",
-      "sizeBytes": 22583,
-      "sha256": "919352c943484c69f4b7e3eb21f628cb99df7bc2b207484ae69debe732a42a17"
+      "path": "artifacts/public-survey-footprints/packages/public-galex-footprints-3.0.0.zip",
+      "sizeBytes": 12978,
+      "sha256": "ef58ea7d32143e9135a7a1447f3f3678459e5ead0a75e277568fd64f100ff1dd"
     },
     {
-      "id": "package-public-hsc-ssp-footprints-2-0-3",
+      "id": "package-public-hsc-ssp-footprints-3-0-0",
       "kind": "package",
       "label": "HSC-SSP",
       "description": "HSC-SSP PDR2 Wide 与 Deep 的彩色及 grizy 图像 MOC 并集。",
-      "downloadName": "public-hsc-ssp-footprints-2.0.3.zip",
+      "downloadName": "public-hsc-ssp-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "hsc-ssp",
       "releaseId": "hsc-pdr2",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fcolor-i-r-g%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fcolor-i-r-g&get=record&fmt=json",
-      "path": "artifacts/public-survey-footprints/packages/public-hsc-ssp-footprints-2.0.3.zip",
-      "sizeBytes": 2121,
-      "sha256": "1bcdedae1558ba0a73702c8c299be50892ab3b9cc9ab40632d1457080b537eb6"
+      "path": "artifacts/public-survey-footprints/packages/public-hsc-ssp-footprints-3.0.0.zip",
+      "sizeBytes": 8251,
+      "sha256": "678dc507722d69687fc359712afd975b84477d444f6b3e521896ef3857f04704"
     },
     {
-      "id": "package-public-hst-footprints-2-0-3",
+      "id": "package-public-hst-footprints-3-0-0",
       "kind": "package",
       "label": "HST",
       "description": "CDS 已发布 HST HiPS 产品的档案快照覆盖，不等同于完整 MAST 产品并集。",
-      "downloadName": "public-hst-footprints-2.0.3.zip",
+      "downloadName": "public-hst-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "hst",
       "releaseId": "hst-mast-snapshot-2026",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=record&fmt=json",
-      "path": "artifacts/public-survey-footprints/packages/public-hst-footprints-2.0.3.zip",
-      "sizeBytes": 8545,
-      "sha256": "9062432b79c41e1b4292aed1dc369993196945a3f592faef700ce153633fc1f2"
+      "path": "artifacts/public-survey-footprints/packages/public-hst-footprints-3.0.0.zip",
+      "sizeBytes": 10736,
+      "sha256": "9fc806f5e246111b6d6b0c9b6fe1316cf502eaaad6a1faae5c7c671c3ac9bcbd"
     },
     {
-      "id": "package-public-kids-footprints-2-0-3",
+      "id": "package-public-kids-footprints-3-0-0",
       "kind": "package",
       "label": "KiDS",
       "description": "KiDS DR5 gri 彩色成像覆盖。",
-      "downloadName": "public-kids-footprints-2.0.3.zip",
+      "downloadName": "public-kids-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "kids",
       "releaseId": "kids-dr5",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=record&fmt=json",
-      "path": "artifacts/public-survey-footprints/packages/public-kids-footprints-2.0.3.zip",
-      "sizeBytes": 1516,
-      "sha256": "6a532fda524bce275539fd72a8475d157ce4f2a539c1c101df63f38d8ce6b0d3"
+      "path": "artifacts/public-survey-footprints/packages/public-kids-footprints-3.0.0.zip",
+      "sizeBytes": 3017,
+      "sha256": "723c1e15e9518c1e7e68ef9305d1c3a7c5578c97c4b1271618effee320da706f"
     },
     {
-      "id": "package-public-nvss-footprints-2-0-3",
+      "id": "package-public-nvss-footprints-3-0-0",
       "kind": "package",
       "label": "NVSS",
       "description": "NVSS 1.4 GHz 图像网格覆盖。",
-      "downloadName": "public-nvss-footprints-2.0.3.zip",
+      "downloadName": "public-nvss-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "nvss",
       "releaseId": "nvss-final",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FNVSS&get=record&fmt=json",
-      "path": "artifacts/public-survey-footprints/packages/public-nvss-footprints-2.0.3.zip",
-      "sizeBytes": 7712,
-      "sha256": "5495fe8633217542290817a0880533e59395a14d3a870a29cff67b6dadb0dbcc"
+      "path": "artifacts/public-survey-footprints/packages/public-nvss-footprints-3.0.0.zip",
+      "sizeBytes": 8620,
+      "sha256": "ee74ffa811c75501ef80850d22d02ba7b21f6f4f28ed10ef41974b2f2893bdf7"
     },
     {
-      "id": "package-public-panstarrs-footprints-2-0-3",
+      "id": "package-public-panstarrs-footprints-3-0-0",
       "kind": "package",
       "label": "Pan-STARRS1",
       "description": "Pan-STARRS1 DR1 彩色及 grizy HiPS 图像覆盖。",
-      "downloadName": "public-panstarrs-footprints-2.0.3.zip",
+      "downloadName": "public-panstarrs-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "panstarrs",
       "releaseId": "panstarrs-dr1",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fcolor-i-r-g&get=record&fmt=json",
-      "path": "artifacts/public-survey-footprints/packages/public-panstarrs-footprints-2.0.3.zip",
-      "sizeBytes": 36964,
-      "sha256": "2a70f147edbf36535735528517b699594e0d6f558d1073ca768c1ee2d3f9f63f"
+      "path": "artifacts/public-survey-footprints/packages/public-panstarrs-footprints-3.0.0.zip",
+      "sizeBytes": 13616,
+      "sha256": "2d4db6eb978bae76e765d3fabde52aaf20d75f33810c40c00503ab9165b33af0"
     },
     {
-      "id": "package-public-sdss-footprints-2-0-3",
+      "id": "package-public-sdss-footprints-3-0-0",
       "kind": "package",
       "label": "SDSS",
       "description": "SDSS DR9 彩色成像覆盖；光谱和后续数据发布需独立覆盖制品。",
-      "downloadName": "public-sdss-footprints-2.0.3.zip",
+      "downloadName": "public-sdss-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "sdss",
       "releaseId": "sdss-dr09",
-      "version": "2.0.3",
+      "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=record&fmt=json",
-      "path": "artifacts/public-survey-footprints/packages/public-sdss-footprints-2.0.3.zip",
-      "sizeBytes": 5308,
-      "sha256": "21e1c94ae5dbbe5a022d9e014161b30814911e3753450a7f8b5fc3d80cc2e4e2"
-    },
-    {
-      "id": "package-public-imaging-footprints-1-0-0",
-      "kind": "package",
-      "label": "公开成像巡天覆盖",
-      "description": "Euclid、Legacy Surveys、SDSS、HSC-SSP 与 HST 的公开覆盖范围，用于 3D 天球底图。",
-      "downloadName": "public-imaging-footprints-1.0.0.zip",
-      "mediaType": "application/zip",
-      "version": "1.0.0",
-      "path": "artifacts/public-survey-footprints/packages/public-imaging-footprints-1.0.0.zip",
-      "sizeBytes": 14059,
-      "sha256": "147055d5f40e36e8b33629f26192dbbbbba8860069f558f151ba4917c1f851d5"
-    },
-    {
-      "id": "package-public-ultraviolet-footprints-1-0-0",
-      "kind": "package",
-      "label": "公开紫外巡天覆盖",
-      "description": "GALEX GR6/GR7 紫外巡天的公开 MOC 覆盖范围，用于 3D 天球底图。",
-      "downloadName": "public-ultraviolet-footprints-1.0.0.zip",
-      "mediaType": "application/zip",
-      "version": "1.0.0",
-      "path": "artifacts/public-survey-footprints/packages/public-ultraviolet-footprints-1.0.0.zip",
-      "sizeBytes": 8704,
-      "sha256": "c9d3d9c35297e206abcd12fc7c12041ac91d2cf0f95b4878a5808edea1d0fdf0"
+      "path": "artifacts/public-survey-footprints/packages/public-sdss-footprints-3.0.0.zip",
+      "sizeBytes": 7292,
+      "sha256": "15640a9f7786bae150a64d8ad5a821f91020912923d79807b3342ac271c6a22b"
     },
     {
       "id": "csst-provenance",
@@ -1785,8 +1794,8 @@
       "releaseId": "csst-sim-w1-20250731",
       "product": "W1 simulated wide-field images",
       "path": "artifacts/public-survey-footprints/csst/provenance.json",
-      "sizeBytes": 2286,
-      "sha256": "30840f55f45743744b434e94c9145cbd8f6e31e2d8f06da6203c7e48d988437b"
+      "sizeBytes": 2128,
+      "sha256": "d93130c371578d40ff521b7d92203b57a56534ba1bb1f28fbcb3748645070933"
     },
     {
       "id": "layer-desi-dr1-spectra-footprint-provenance",
@@ -1801,7 +1810,7 @@
       "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
       "path": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/provenance.json",
       "sizeBytes": 1355,
-      "sha256": "128ad185889ea814cb0d30533de9e447cc2c2bad7629d02056b58d2d7e31c2f5"
+      "sha256": "28a54c9606864bd401f7ba2e86a323607e93e790aef63a1fcb6a588256789c95"
     },
     {
       "id": "layer-desi-edr-spectra-footprint-provenance",
@@ -1816,7 +1825,7 @@
       "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
       "path": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint/provenance.json",
       "sizeBytes": 1353,
-      "sha256": "090c3d11166f629e97aa8702375fb4fda9e817d12f55bd8a5fd84155e52b13e8"
+      "sha256": "ce71db127dc50ca2a4c62bd2eeefd6a2275bd6570304c0250e8a08ad8989db26"
     },
     {
       "id": "layer-euclid-q1-deep-fields-image-extent-provenance",
@@ -1831,7 +1840,7 @@
       "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
       "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/provenance.json",
       "sizeBytes": 1208,
-      "sha256": "0b6177347ae57d4400a79a23c1ab69a837954fa9c5e519b3449f3efe2b3d390a"
+      "sha256": "d49db62d46eee15e6d52da289ef9bd7eb5a7b31e712ca5cf91c563d85dee00d9"
     },
     {
       "id": "provenance-release",
@@ -1841,20 +1850,20 @@
       "downloadName": "provenance.json",
       "mediaType": "application/json",
       "path": "artifacts/public-survey-footprints/provenance.json",
-      "sizeBytes": 5732,
-      "sha256": "c79ed9fcc93792462a10247719ed6718a2a1834d54db605f26b810be7ab8e8f5"
+      "sizeBytes": 5064,
+      "sha256": "4c6dc6eff6e32c61f5125edccb1d42c69d18c7e7d1b16f5322c2fd571974365c"
     },
     {
-      "id": "sdk-moc-core-wheel-0-1-0",
+      "id": "sdk-moc-core-wheel-1-0-0",
       "kind": "sdk",
       "label": "Assets MOC Core Python wheel",
       "description": "Pinned offline Astro Survey MOC Core SDK wheel for scanner image and Atlas finalizer integration.",
-      "downloadName": "astro_survey_atlas_assets-0.1.0-py3-none-any.whl",
+      "downloadName": "astro_survey_moc_core-1.0.0-py3-none-any.whl",
       "mediaType": "application/zip",
-      "version": "0.1.0",
-      "path": "artifacts/public-survey-footprints/moc-core/astro_survey_atlas_assets-0.1.0-py3-none-any.whl",
-      "sizeBytes": 20468,
-      "sha256": "79ab6babbed2ea4559e4e5f444bf1ead79e87e8a954cde55f0258f7067af6df8"
+      "version": "1.0.0",
+      "path": "artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.0.0-py3-none-any.whl",
+      "sizeBytes": 22610,
+      "sha256": "dd8a3a538cc3b9501a3207a427c97372d2118f9b0cdc4e41e1b2f4fe5fe1dc9a"
     },
     {
       "id": "sdk-moc-core-lock",
@@ -1863,7 +1872,7 @@
       "description": "Pinned scientific dependencies used when building scanner and Assets MOC Core environments.",
       "downloadName": "moc-core.lock",
       "mediaType": "text/plain; charset=utf-8",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "path": "requirements/moc-core.lock",
       "sizeBytes": 224,
       "sha256": "2985f7ce248d7427501e710fee57db7953ce6cd80888ae334262c9191b3dc222"

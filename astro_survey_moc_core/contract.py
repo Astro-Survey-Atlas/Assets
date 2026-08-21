@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping
 
-CORE_VERSION = "0.1.0"
+CORE_VERSION = "1.0.0"
 DEFAULT_MAX_ORDER = 10
 QUERY_ORDER = 8
 PREVIEW_ORDER = 4
@@ -121,9 +121,11 @@ def _valid_id(value: str) -> bool:
 
 
 def normalize_spec(raw: Mapping[str, Any]) -> CoverageSpec:
-    """Normalize camelCase JSON and map legacy evidenceRole on read only."""
+    """Normalize the current camelCase contract without legacy aliases."""
 
-    coverage_role = raw.get("coverageRole", raw.get("evidenceRole"))
+    if "evidenceRole" in raw:
+        raise ContractError("evidenceRole is removed; use coverageRole")
+    coverage_role = raw.get("coverageRole")
     if coverage_role is None:
         raise ContractError("coverageRole is required")
     spec = CoverageSpec(

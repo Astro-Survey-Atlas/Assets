@@ -53,6 +53,33 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.end(encoded);
 }
 
+async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<string, unknown>> {
+  const catalogFile = [...catalog.files.values()].find(({ record }) => record.path.endsWith("/packages/catalog.json"));
+  if (!catalogFile) throw new Error("Resource package catalog is not present in the Assets release");
+  const document = JSON.parse(await readFile(catalogFile.absolutePath, "utf8")) as Record<string, unknown>;
+  if (document.schemaVersion !== 3 || document.version !== "3.0.0" || !Array.isArray(document.packages)) {
+    throw new Error("Resource package catalog is not v3");
+  }
+  const packageAssets = [...catalog.files.values()]
+    .map(({ record }) => record)
+    .filter((record) => record.kind === "package");
+  const packages = document.packages.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Resource package catalog contains an invalid entry");
+    const entry = value as Record<string, unknown>;
+    const surveyId = typeof entry.surveyId === "string" ? entry.surveyId : undefined;
+    const version = typeof entry.version === "string" ? entry.version : undefined;
+    const releases = Array.isArray(entry.releases) ? entry.releases.filter((release): release is string => typeof release === "string") : [];
+    const asset = packageAssets.find((candidate) => candidate.surveyId === surveyId
+      && candidate.version === version
+      && (!candidate.releaseId || releases.includes(candidate.releaseId)));
+    return {
+      ...entry,
+      ...(asset ? { archiveUrl: `/api/v1/assets/${encodeURIComponent(asset.id)}/download` } : {}),
+    };
+  });
+  return { ...document, packages };
+}
+
 function requestPath(request: IncomingMessage): string {
   return new URL(request.url ?? "/", "http://localhost").pathname;
 }
@@ -324,11 +351,12 @@ const server = http.createServer((request, response) => {
     if (pathname === "/healthz") return json(response, 200, {
       status: "ok",
       service: "astro-survey-atlas-assets",
-      version: "0.1.0",
+      version: "1.0.0",
       bundle: catalog.manifest.bundle,
       files: catalog.files.size,
     });
     if (pathname === "/api/v1/assets") return json(response, 200, publicManifest(catalog));
+    if (pathname === "/api/v1/resource-packages/catalog.json") return json(response, 200, await resourcePackageCatalog(catalog));
     if (pathname === "/api/v1/coverage") return json(response, 200, coverageManifest);
     if (pathname === "/api/v1/surveys") return json(response, 200, surveyIndex);
     const download = /^\/api\/v1\/assets\/([a-z0-9-]+)\/download$/.exec(pathname);

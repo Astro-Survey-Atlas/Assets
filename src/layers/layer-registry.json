@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractVersion": "1.0.0",
-  "coreVersion": "0.1.0",
+  "coreVersion": "1.0.0",
   "coordinateFrame": "ICRS",
   "ordering": "NESTED",
   "defaultMaxOrder": 10,
@@ -418,6 +418,54 @@
       "sourceUrl": "https://www.legacysurvey.org/dr10/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/survey-bricks.fits.gz",
       "pendingReason": "DR10 survey_primary Tractor selection and its snapshot lock are not yet available in Assets."
+    },
+    {
+      "layerId": "csst-sim-w2-image-extent",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "modality": "imaging",
+      "coverageRole": "image_extent",
+      "dataOrigin": "simulated",
+      "sourceTier": "user_file_derived",
+      "maxOrder": 10,
+      "status": "awaiting_snapshot",
+      "plannedMode": "fits-wcs",
+      "sourceUrl": "https://nadc.china-vo.org/data/",
+      "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
+      "pendingReason": "W2_Phot FITS-WCS scan is pending; .cat files are intentionally excluded from image_extent coverage."
+    },
+    {
+      "layerId": "csst-sim-w3-image-extent",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "modality": "imaging",
+      "coverageRole": "image_extent",
+      "dataOrigin": "simulated",
+      "sourceTier": "user_file_derived",
+      "maxOrder": 10,
+      "status": "awaiting_snapshot",
+      "plannedMode": "fits-wcs",
+      "sourceUrl": "https://nadc.china-vo.org/data/",
+      "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
+      "pendingReason": "W3_Phot FITS-WCS scan is pending; .cat files are intentionally excluded from image_extent coverage."
+    },
+    {
+      "layerId": "csst-sim-w4-image-extent",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "modality": "imaging",
+      "coverageRole": "image_extent",
+      "dataOrigin": "simulated",
+      "sourceTier": "user_file_derived",
+      "maxOrder": 10,
+      "status": "awaiting_snapshot",
+      "plannedMode": "fits-wcs",
+      "sourceUrl": "https://nadc.china-vo.org/data/",
+      "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
+      "pendingReason": "W4_Phot FITS-WCS scan is pending; .cat files are intentionally excluded from image_extent coverage."
     }
   ]
 }

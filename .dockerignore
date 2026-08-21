@@ -6,3 +6,6 @@ coverage
 .env
 .env.*
 
+artifacts/public-survey-footprints/packages/*.zip
+!artifacts/public-survey-footprints/packages/*-3.0.0.zip
+artifacts/public-survey-footprints/moc-core/astro_survey_atlas_assets-*.whl

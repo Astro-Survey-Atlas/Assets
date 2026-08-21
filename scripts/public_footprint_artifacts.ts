@@ -129,10 +129,26 @@ export async function validate(): Promise<PublicFootprintStatistics> {
     try { await verifyRecord(record, `provenance output ${name}`); } catch (error) { errors.push(String(error)); }
   }
 
-  const packageCatalog = await json<{ schemaVersion: number; packages: Array<{ id: string; version: string; archiveUrl: string; sizeBytes: number; sha256: string }> }>(path.join(artifactRoot, "packages", "catalog.json"));
-  if (packageCatalog.schemaVersion !== 2) errors.push("Active historical package catalog must remain schema 2 until Atlas supports v3");
+  const packageCatalog = await json<{
+    schemaVersion: number;
+    version: string;
+    packages: Array<{
+      id: string;
+      version: string;
+      archiveUrl: string;
+      sizeBytes: number;
+      sha256: string;
+      releases?: unknown;
+      releaseLabels?: unknown;
+      sources?: unknown;
+    }>;
+  }>(path.join(artifactRoot, "packages", "catalog.json"));
+  if (packageCatalog.schemaVersion !== 3 || packageCatalog.version !== "3.0.0") errors.push("Active package catalog must be Resource Package v3 (3.0.0)");
   const provenancePackages = new Map((provenance.files?.packages ?? []).map((entry) => [`${entry.id}@${entry.version}`, entry]));
   for (const entry of packageCatalog.packages ?? []) {
+    if (!Array.isArray(entry.releases) || entry.releases.length === 0 || !entry.releases.every((release) => typeof release === "string" && release.length > 0)) errors.push(`Package catalog releases are invalid: ${entry.id}`);
+    if (!Array.isArray(entry.sources) || entry.sources.length === 0) errors.push(`Package catalog sources are invalid: ${entry.id}`);
+    if (!entry.releaseLabels || typeof entry.releaseLabels !== "object" || Array.isArray(entry.releaseLabels)) errors.push(`Package catalog release labels are invalid: ${entry.id}`);
     const record = provenancePackages.get(`${entry.id}@${entry.version}`);
     if (!record || record.sizeBytes !== entry.sizeBytes || record.sha256 !== entry.sha256) errors.push(`Package provenance mismatch: ${entry.id}@${entry.version}`);
     try { await verifyRecord({ path: entry.archiveUrl, sizeBytes: entry.sizeBytes, sha256: entry.sha256 }, `package ${entry.id}`, path.join(artifactRoot, "packages")); } catch (error) { errors.push(String(error)); }

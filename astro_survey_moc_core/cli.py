@@ -54,7 +54,7 @@ def _refresh(args: argparse.Namespace) -> dict[str, Any]:
     target = snapshot_dir / f"{spec['layerId']}{suffix or '.source'}"
     digest = hashlib.sha256()
     size = 0
-    request = urllib.request.Request(source_url, headers={"User-Agent": f"astro-survey-assets/{CORE_VERSION}"})
+    request = urllib.request.Request(source_url, headers={"User-Agent": f"astro-survey-moc-core/{CORE_VERSION}"})
     temporary: str | None = None
     try:
         with tempfile.NamedTemporaryFile(dir=snapshot_dir, prefix=f".{spec['layerId']}.", delete=False) as output:
@@ -78,7 +78,7 @@ def _refresh(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="astro-survey-assets")
+    parser = argparse.ArgumentParser(prog="astro-survey-moc-core")
     parser.add_argument("--version", action="version", version=CORE_VERSION)
     sub = parser.add_subparsers(dest="command", required=True)
 

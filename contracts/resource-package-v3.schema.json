@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-survey-atlas.example/contracts/resource-package-v3.schema.json",
+  "title": "Astro Survey Atlas Resource Package v3 manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "version", "layers", "files"],
+  "properties": {
+    "schemaVersion": {"const": 3},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "version": {"const": "3.0.0"},
+    "surveyId": {"type": "string", "minLength": 1},
+    "layers": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/layer"}},
+    "files": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/supportFile"},
+      "contains": {"type": "object", "properties": {"path": {"const": "README.md"}}, "required": ["path"]},
+      "allOf": [
+        {"contains": {"type": "object", "properties": {"path": {"const": "footprints/survey-footprints.json"}}, "required": ["path"]}},
+        {"contains": {"type": "object", "properties": {"path": {"const": "provenance.json"}}, "required": ["path"]}}
+      ]
+    }
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "supportFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sizeBytes", "sha256"],
+      "properties": {
+        "path": {"enum": ["README.md", "footprints/survey-footprints.json", "provenance.json"]},
+        "sizeBytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layerId", "surveyId", "releaseId", "modality", "coverageRole", "dataOrigin", "sourceTier", "path", "sizeBytes", "sha256"],
+      "properties": {
+        "layerId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "surveyId": {"type": "string", "minLength": 1},
+        "releaseId": {"type": "string", "minLength": 1},
+        "modality": {"type": "string", "minLength": 1},
+        "coverageRole": {"enum": ["image_extent", "object_presence", "footprint_extent"]},
+        "dataOrigin": {"enum": ["observed", "simulated", "catalog"]},
+        "sourceTier": {"enum": ["official_geometry", "official_inventory_derived", "third_party_moc", "best_effort_derived", "user_file_derived"]},
+        "path": {"type": "string", "pattern": "^mocs/[a-z0-9][a-z0-9-]*\\.moc\\.fits$"},
+        "sizeBytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/hash"}
+      }
+    }
+  }
+}

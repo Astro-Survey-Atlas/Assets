@@ -61,8 +61,10 @@ def _validate_layer(layer: Mapping[str, Any], names: set[str]) -> None:
     missing = [key for key in required if key not in layer]
     if missing:
         raise PackageValidationError(f"Layer is missing fields: {', '.join(missing)}")
+    if "evidenceRole" in layer:
+        raise PackageValidationError("evidenceRole is removed; use coverageRole")
     layer_id = layer["layerId"]
-    if not isinstance(layer_id, str) or not layer_id or any(not (char.islower() or char.isdigit() or char == "-") for char in layer_id):
+    if not isinstance(layer_id, str) or re.fullmatch(r"[a-z0-9][a-z0-9-]*", layer_id) is None:
         raise PackageValidationError(f"Invalid layerId: {layer_id}")
     expected_path = f"mocs/{layer_id}.moc.fits"
     if layer["path"] != expected_path or expected_path not in names:
@@ -73,6 +75,10 @@ def _validate_layer(layer: Mapping[str, Any], names: set[str]) -> None:
         raise PackageValidationError(f"Invalid dataOrigin for {layer_id}")
     if layer["sourceTier"] not in SOURCE_TIERS:
         raise PackageValidationError(f"Invalid sourceTier for {layer_id}")
+    if "coordinateFrame" in layer and layer["coordinateFrame"] != "ICRS":
+        raise PackageValidationError(f"Only ICRS is supported for {layer_id}")
+    if "ordering" in layer and layer["ordering"] != "NESTED":
+        raise PackageValidationError(f"Only NESTED ordering is supported for {layer_id}")
     for key in ("surveyId", "modality", "releaseId"):
         if not isinstance(layer[key], str) or not layer[key].strip():
             raise PackageValidationError(f"Invalid {key} for {layer_id}")
@@ -123,6 +129,12 @@ def validate_resource_package(archive: str | Path, *, require_public_catalog: Ma
         manifest = json.loads(source.read("resource-package.json"))
         if manifest.get("schemaVersion") != 3 or manifest.get("version") != PACKAGE_VERSION:
             raise PackageValidationError("Only Resource Package 3.0.0 is accepted")
+        if "evidenceRole" in manifest:
+            raise PackageValidationError("evidenceRole is removed; use coverageRole")
+        if "coordinateFrame" in manifest and manifest["coordinateFrame"] != "ICRS":
+            raise PackageValidationError("Only ICRS is supported by Resource Package v3")
+        if "ordering" in manifest and manifest["ordering"] != "NESTED":
+            raise PackageValidationError("Only NESTED ordering is supported by Resource Package v3")
         package_id = manifest.get("id")
         if not isinstance(package_id, str) or re.fullmatch(r"[a-z0-9][a-z0-9-]*", package_id) is None:
             raise PackageValidationError("Resource Package v3 requires a stable package id")

@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets
-  tag: "0.1.0"
+  tag: "1.0.0"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

@@ -28,6 +28,10 @@ GET /api/v1/assets
 
 返回当前 release manifest 的公开投影。每个 `files[]` 条目包含稳定 `id`、标签、媒体类型、下载名、大小、SHA-256、巡天/发布/产品关联和来源说明；服务器内部 `path` 不会返回。
 
+当前 release 也包含架构边界和 Resource Package v3 JSON Schema，作为普通
+allowlisted metadata/documentation 制品下载。data-warehouse task schema 是
+交接约束的公开定义，但不会由该 API 创建或执行任务。
+
 可在线预览的制品额外包含：
 
 ```json
