@@ -17,8 +17,3 @@ status_line = ["model-with-reasoning", "context-used", "context-window-size", "s
 "gpt-5.5" = 4
 "gpt-5.6-sol" = 4
 
-[projects."/home/aaron/Repo/astro-data-workspace"]
-trust_level = "trusted"
-
-[projects."/home/aaron/Repo/astro-code"]
-trust_level = "trusted"
