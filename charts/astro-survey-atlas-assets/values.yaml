@@ -9,6 +9,14 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+admin:
+  enabled: false
+  warehouseNamespace: warehouse
+  localPathRoot: /data
+  adminTokenSecret:
+    name: ""
+    key: token
+
 service:
   type: ClusterIP
   port: 80
@@ -31,6 +39,13 @@ persistence:
   storageClass: ""
   accessModes: [ReadWriteOnce]
   size: 256Mi
+
+contentPersistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes: [ReadWriteOnce]
+  size: 64Mi
 
 nodeSelector: {}
 tolerations: []

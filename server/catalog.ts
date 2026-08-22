@@ -55,9 +55,21 @@ export function assetPreviewMode(mediaType: string): PublicAssetPreviewMode | un
 }
 
 export function publicManifest(catalog: LoadedCatalog): Omit<PublicAssetManifest, "files"> & { files: PublicAssetProjection[] } {
+  const classify = (record: PublicAssetRecord): "runtime" | "evidence" => {
+    // Runtime contains only the catalog, projections, previews and lightweight
+    // metadata needed by the public page. Raw inputs and audit snapshots stay
+    // addressable, but are deliberately marked as evidence.
+    if (record.path.includes("/csst/") || record.path.includes("/raw/") || record.kind === "provenance" || record.kind === "ledger") return "evidence";
+    if (record.kind === "moc") return "evidence";
+    return "runtime";
+  };
+  const files = catalog.manifest.files.map((record) => ({ ...record, deliveryClass: record.deliveryClass ?? classify(record) }));
+  const runtimeBytes = files.filter((record) => record.deliveryClass === "runtime").reduce((sum, record) => sum + record.sizeBytes, 0);
+  const evidenceBytes = files.filter((record) => record.deliveryClass === "evidence").reduce((sum, record) => sum + record.sizeBytes, 0);
   return {
     ...catalog.manifest,
-    files: catalog.manifest.files.map(({ path: _path, ...record }) => {
+    statistics: { ...catalog.manifest.statistics, runtimeBytes, evidenceBytes },
+    files: files.map(({ path: _path, ...record }) => {
       const previewMode = assetPreviewMode(record.mediaType);
       return {
         ...record,

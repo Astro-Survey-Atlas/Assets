@@ -1,0 +1,52 @@
+{
+  "scannerRunId": "workspace-coverage-ec9448e73ced-retry4",
+  "fileNamePattern": "^CSST_MSC_MS_WIDE_.*\\.fits$",
+  "samples": [
+    {
+      "name": "CSST_MSC_MS_WIDE_20220706174830_20220706175100_10600000062_07_L0_V01.fits",
+      "wcsSummary": {
+        "ra_min_deg": 88.43005350439736,
+        "ra_max_deg": 89.4780453922349,
+        "dec_min_deg": -66.86297244370836,
+        "dec_max_deg": -66.75949193682354
+      }
+    },
+    {
+      "name": "CSST_MSC_MS_WIDE_20220706174830_20220706175100_10600000062_14_L0_V01.fits",
+      "wcsSummary": {
+        "ra_min_deg": 88.95756052263955,
+        "ra_max_deg": 89.98632834602972,
+        "dec_min_deg": -66.44738484678014,
+        "dec_max_deg": -66.34731791060236
+      }
+    },
+    {
+      "name": "CSST_MSC_MS_WIDE_20220706174830_20220706175100_10600000062_18_L0_V01.fits",
+      "wcsSummary": {
+        "ra_min_deg": 89.45447345514539,
+        "ra_max_deg": 90.49192275946756,
+        "dec_min_deg": -66.65561103496546,
+        "dec_max_deg": -66.55806214691131
+      }
+    },
+    {
+      "name": "CSST_MSC_MS_WIDE_20220706174830_20220706175100_10600000062_25_L0_V01.fits",
+      "wcsSummary": {
+        "ra_min_deg": 89.96091298968254,
+        "ra_max_deg": 90.981097827372,
+        "dec_min_deg": -66.23915314472502,
+        "dec_max_deg": -66.13947106050746
+      }
+    },
+    {
+      "name": "CSST_MSC_MS_WIDE_20220706175148_20220706175418_10600000063_06_L0_V01.fits",
+      "wcsSummary": {
+        "ra_min_deg": 87.96208135256659,
+        "ra_max_deg": 89.02055372579261,
+        "dec_min_deg": -67.06900991955162,
+        "dec_max_deg": -66.96246417626192
+      }
+    }
+  ],
+  "excludedSamples": []
+}

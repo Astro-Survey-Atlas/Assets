@@ -1,0 +1,29 @@
+{
+  "layerId": "csst-sim-w3-image-extent",
+  "surveyId": "csst",
+  "releaseId": "csst-sim-w3-20250731",
+  "product": "W3 simulated wide-field images",
+  "modality": "imaging",
+  "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
+  "mode": "nested-healpix",
+  "coverageRole": "image_extent",
+  "dataOrigin": "simulated",
+  "sourceTier": "user_file_derived",
+  "input": "artifacts/public-survey-footprints/csst/w3-normalized-scan.json",
+  "maxOrder": 8,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "recipe": {
+    "values": "ipix",
+    "order": 8,
+    "scannerMode": "fits-wcs",
+    "fileNamePattern": "^CSST_MSC_MS_WIDE_.*\\.fits$",
+    "scannerRunId": "workspace-coverage-ee904e0f11af-retry3"
+  },
+  "snapshot": {
+    "sha256": "db1890db4e5d374b97d5feedb2d51fce3ce2c532f3e301a5a0f4ef11688890cf",
+    "sizeBytes": 394093
+  }
+}

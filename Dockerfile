@@ -1,6 +1,7 @@
 FROM node:22.22.1-bookworm-slim AS build
 
 ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG FRONTEND_ONLY=false
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --registry=${NPM_REGISTRY}
@@ -17,7 +18,11 @@ COPY src/surveys ./src/surveys
 COPY src/layers ./src/layers
 COPY requirements ./requirements
 COPY docs ./docs
-RUN npm run build
+RUN if [ "$FRONTEND_ONLY" = "true" ]; then \
+      npm run build:server && npm run build:site; \
+    else \
+      npm run build; \
+    fi
 
 FROM node:22.22.1-bookworm-slim AS runtime
 

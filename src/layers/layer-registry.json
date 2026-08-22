@@ -428,12 +428,13 @@
       "coverageRole": "image_extent",
       "dataOrigin": "simulated",
       "sourceTier": "user_file_derived",
-      "maxOrder": 10,
-      "status": "awaiting_snapshot",
-      "plannedMode": "fits-wcs",
+      "maxOrder": 8,
+      "status": "acquired",
       "sourceUrl": "https://nadc.china-vo.org/data/",
       "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
-      "pendingReason": "W2_Phot FITS-WCS scan is pending; .cat files are intentionally excluded from image_extent coverage."
+      "recipePath": "src/layers/recipes/csst-sim-w2-image-extent.lock.json",
+      "artifactPath": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/csst-sim-w2-image-extent.moc.fits",
+      "expectedSha256": "909ec26a41a54d2ad41444366a340e71fd5c7bc3da7a36cfc44a18ce5c21225b"
     },
     {
       "layerId": "csst-sim-w3-image-extent",
@@ -444,12 +445,13 @@
       "coverageRole": "image_extent",
       "dataOrigin": "simulated",
       "sourceTier": "user_file_derived",
-      "maxOrder": 10,
-      "status": "awaiting_snapshot",
-      "plannedMode": "fits-wcs",
+      "maxOrder": 8,
+      "status": "acquired",
       "sourceUrl": "https://nadc.china-vo.org/data/",
       "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
-      "pendingReason": "W3_Phot FITS-WCS scan is pending; .cat files are intentionally excluded from image_extent coverage."
+      "recipePath": "src/layers/recipes/csst-sim-w3-image-extent.lock.json",
+      "artifactPath": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/csst-sim-w3-image-extent.moc.fits",
+      "expectedSha256": "6bc369f232f1f1523f578e1a79f2828aa78ff2d1e243c9c8ad16a39928f0d698"
     },
     {
       "layerId": "csst-sim-w4-image-extent",
@@ -460,12 +462,13 @@
       "coverageRole": "image_extent",
       "dataOrigin": "simulated",
       "sourceTier": "user_file_derived",
-      "maxOrder": 10,
-      "status": "awaiting_snapshot",
-      "plannedMode": "fits-wcs",
+      "maxOrder": 8,
+      "status": "acquired",
       "sourceUrl": "https://nadc.china-vo.org/data/",
       "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
-      "pendingReason": "W4_Phot FITS-WCS scan is pending; .cat files are intentionally excluded from image_extent coverage."
+      "recipePath": "src/layers/recipes/csst-sim-w4-image-extent.lock.json",
+      "artifactPath": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/csst-sim-w4-image-extent.moc.fits",
+      "expectedSha256": "f7796308322935b1f304b33e4d8429680290e15744c7a95246259f70ff4046db"
     }
   ]
 }

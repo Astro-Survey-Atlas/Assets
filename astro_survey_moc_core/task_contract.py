@@ -41,11 +41,13 @@ class PublicCoverageTask:
 
 
 def normalize_task(raw: Mapping[str, Any]) -> PublicCoverageTask:
-    """Validate and normalize an internal one-shot warehouse handoff.
+    """Validate Assets-side input used to render standard warehouse CRDs.
 
-    Connector credentials, arbitrary endpoints, user paths and Atlas-specific
-    fields are deliberately rejected. The warehouse resolves credentials from
-    ``connectorId`` and returns only a hashed normalized result.
+    The serialized input carries identifiers and configuration digests rather
+    than raw credential values. This is a wire-format safety property, not a
+    rule about where Assets or data-warehouse stores or resolves credentials.
+    User asset history, sink implementation and other project-specific fields
+    remain outside this input.
     """
 
     if raw.get("schemaVersion") != TASK_SCHEMA_VERSION:
@@ -61,7 +63,7 @@ def normalize_task(raw: Mapping[str, Any]) -> PublicCoverageTask:
     if not all(isinstance(value, Mapping) for value in (layer, connector, recipe, execution, output)):
         raise TaskContractError("coverage task layer, connector, recipe, execution and output are required objects")
     if any(key in raw for key in ("credentials", "userAsset", "atlasTask", "callbackUrl", "database")):
-        raise TaskContractError("coverage task contains a forbidden runtime or user field")
+        raise TaskContractError("coverage task contains a runtime or project-specific field outside this input")
 
     layer_input = dict(layer)
     layer_input["input"] = layer_input.get("input", "warehouse-result.json")
@@ -78,7 +80,7 @@ def normalize_task(raw: Mapping[str, Any]) -> PublicCoverageTask:
     if not isinstance(config_hash, str) or _HASH.fullmatch(config_hash) is None:
         raise TaskContractError("connector.configSha256 must be a SHA-256 digest")
     if any(key in connector for key in ("secret", "password", "accessKey", "accessSecret", "token", "uri")):
-        raise TaskContractError("Connector credentials and endpoints do not belong in the task")
+        raise TaskContractError("Raw connector credentials and endpoint values are not serialized in this input")
 
     if recipe.get("coordinateFrame") != "ICRS" or recipe.get("ordering") != "NESTED":
         raise TaskContractError("Coverage recipes must use ICRS/NESTED")
@@ -88,7 +90,7 @@ def normalize_task(raw: Mapping[str, Any]) -> PublicCoverageTask:
         raise TaskContractError("Coverage recipes must provide order-8 query and order-4 preview projections")
 
     if execution.get("executor") != "data-warehouse":
-        raise TaskContractError("Public coverage tasks must execute in data-warehouse")
+        raise TaskContractError("This Assets task input targets the data-warehouse operator")
     for key in ("timeoutSeconds", "maxBytes"):
         if not isinstance(execution.get(key), int) or execution[key] < 1:
             raise TaskContractError(f"execution.{key} must be a positive integer")

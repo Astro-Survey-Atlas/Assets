@@ -15,6 +15,7 @@ export interface PublicAssetRecord {
   product?: string;
   version?: string;
   sourceUrl?: string;
+  deliveryClass?: "runtime" | "evidence";
 }
 
 export type PublicAssetPreviewMode = "text" | "image";
@@ -42,6 +43,8 @@ export interface PublicAssetManifest {
     packages: number;
     rawMocFiles: number;
     totalBytes: number;
+    runtimeBytes?: number;
+    evidenceBytes?: number;
   };
   files: PublicAssetRecord[];
 }
@@ -50,6 +53,7 @@ export type PublicSurveyModality = "imaging" | "spectroscopy" | "photometry" | "
 export type PublicProductStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
 
 export interface PublicSurveyProduct {
+  productId?: string;
   name: string;
   modality: PublicSurveyModality;
   description: string;

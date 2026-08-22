@@ -27,7 +27,7 @@ if (!installed) {
   await mkdir(stagingPath, { recursive: true });
   // Keep the published release self-contained for catalog verification. The
   // lock file under requirements is part of the public SDK release metadata.
-  for (const directory of ["artifacts", "docs", "requirements", "src"]) {
+  for (const directory of ["artifacts", "contracts", "docs", "requirements", "src"]) {
     await cp(path.join(sourceRoot, directory), path.join(stagingPath, directory), { recursive: true, force: false });
   }
   await loadCatalog(stagingPath);

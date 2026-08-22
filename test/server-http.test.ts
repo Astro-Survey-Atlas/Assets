@@ -125,3 +125,31 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   const denied = await fetch(`http://127.0.0.1:${port}/api/v1/assets/not-in-release/download`);
   assert.equal(denied.status, 404);
 });
+
+test("admin endpoints require a token and expose the configured control-plane boundary", async (context) => {
+  const port = await freePort();
+  const child = spawn(process.execPath, [path.resolve("node_modules/tsx/dist/cli.mjs"), "server/server.ts"], {
+    cwd: process.cwd(),
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), PUBLIC_SITE_ROOT: path.resolve("site"), ASSETS_ADMIN_ENABLED: "true", ASSETS_ADMIN_TOKEN: "test-admin-token", ASSETS_KUBE_API_URL: "http://127.0.0.1:9" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  context.after(() => { child.kill("SIGTERM"); });
+  await waitFor(`http://127.0.0.1:${port}/healthz`, child);
+
+  const config = await fetch(`http://127.0.0.1:${port}/api/v1/admin/config`);
+  assert.equal(config.status, 200);
+  const configBody = await config.json() as { enabled: boolean; authRequired: boolean; capabilities: { coverageModes: string[] } };
+  assert.equal(configBody.enabled, true);
+  assert.equal(configBody.authRequired, true);
+  assert.deepEqual(configBody.capabilities.coverageModes, ["fits-wcs", "catalog-radec", "nested-healpix"]);
+
+  const denied = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tasks`);
+  assert.equal(denied.status, 401);
+  const malformed = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tasks`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(malformed.status, 503);
+
+  const products = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(products.status, 200);
+  const productBody = await products.json() as { products: Array<{ productId: string }> };
+  assert.ok(productBody.products.length > 0);
+});

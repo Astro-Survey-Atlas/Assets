@@ -1,7 +1,8 @@
 """Register CSST W2/W3/W4 as pending Assets inputs.
 
-No geometry is fabricated here.  The records become publishable only after the
-Atlas coverage jobs lock real FITS-WCS scan manifests and Core outputs.
+No geometry is fabricated here. The records become publishable only after an
+Assets-submitted data-warehouse coverage task locks real FITS-WCS scan manifests
+and Assets MOC Core outputs.
 """
 
 from __future__ import annotations
@@ -32,12 +33,12 @@ def main() -> None:
             "products": [{
                 "name": product,
                 "modality": "imaging",
-                "description": f"CSST {band}_Phot 仿真宽场 FITS 图像；覆盖待通过独立 coverage job 扫描并由 Assets MOC Core 锁定。",
+                "description": f"CSST {band}_Phot 仿真宽场 FITS 图像；覆盖待通过 Assets 提交的 data-warehouse coverage task 扫描并由 Assets MOC Core 锁定。",
                 "status": "awaiting_geometry",
                 "sourceUrl": source_url,
                 "geometrySourceUrl": prefix,
                 "reason": "W2/W3/W4 FITS-WCS scan has not been completed and locked by Assets.",
-                "manualStep": f"Run the {band}_Phot FITS-WCS coverage job with the existing CSST Connector, then import the locked Core result.",
+                "manualStep": f"Submit the {band}_Phot FITS-WCS coverage task to data-warehouse, then import the locked Core result.",
             }],
         })
 

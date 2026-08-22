@@ -1,5 +1,5 @@
-import { BadgeCheck, Box, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, Image, Layers3, ListChecks, Search, Telescope, X, createIcons } from "lucide";
-import { CoverageDots, type CoverageManifest } from "./coverage-dots";
+import { BadgeCheck, Box, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, Image, Layers3, ListChecks, RotateCcw, Search, ShieldCheck, Telescope, X, createIcons } from "lucide";
+import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 
 import "./styles.css";
 
@@ -29,7 +29,7 @@ interface AssetRecord {
 interface ReleaseManifest {
   generatedAt: string;
   bundle: { id: string; sha256: string };
-  statistics: { releases: number; acquired: number; rawMocFiles: number; packages: number; totalBytes: number };
+  statistics: { releases: number; acquired: number; rawMocFiles: number; packages: number; totalBytes: number; runtimeBytes?: number; evidenceBytes?: number };
   files: AssetRecord[];
 }
 
@@ -109,7 +109,95 @@ const assetGroupDefinitions: Array<{ id: "moc" | "geometry" | "package" | "evide
 let manifest: ReleaseManifest | null = null;
 let surveyIndex: SurveyIndex | null = null;
 let search = "";
-let coverageDots: CoverageDots | null = null;
+let coverageDots: AtlasCoverageGlobe | null = null;
+let activeSurveyId: string | null = null;
+let coverageCatalog: CoverageCatalog | null = null;
+const coverageBlockCache = new Map<string, number[]>();
+const coverageRequests = new Map<string, AbortController>();
+const COVERAGE_CACHE_LIMIT = 128;
+let coverageLoadGeneration = 0;
+
+async function fetchCoverageOverview(layer: CoverageCatalog["layers"][number]): Promise<number[]> {
+  const order = layer.overviewOrder;
+  const tile = 0;
+  const key = `${layer.layerId}:${order}:${tile}`;
+  const cached = coverageBlockCache.get(key);
+  if (cached) return cached;
+  const controller = new AbortController();
+  coverageRequests.get(key)?.abort();
+  coverageRequests.set(key, controller);
+  try {
+    const response = await fetch(`/api/v1/coverage/blocks/${encodeURIComponent(layer.layerId)}?order=${order}&tile=${tile}`, { signal: controller.signal });
+    if (!response.ok) return [];
+    const block = await response.json() as { cells?: number[] };
+    const cells = Array.isArray(block.cells) ? [...new Set(block.cells)].sort((a, b) => a - b) : [];
+    coverageBlockCache.set(key, cells);
+    while (coverageBlockCache.size > COVERAGE_CACHE_LIMIT) coverageBlockCache.delete(coverageBlockCache.keys().next().value!);
+    return cells;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return [];
+    throw error;
+  } finally {
+    if (coverageRequests.get(key) === controller) coverageRequests.delete(key);
+  }
+}
+
+function updateCoverageReadout(surveyId: string | null, product?: string): void {
+  activeSurveyId = surveyId;
+  const scene = byId("coverage-scene");
+  const title = byId("coverage-selection-title");
+  const meta = byId("coverage-selection-meta");
+  const state = byId("coverage-state");
+  const survey = surveyId ? surveyIndex?.surveys.find((entry) => entry.id === surveyId) : undefined;
+  if (!survey) {
+    scene.style.removeProperty("--coverage-color");
+    title.textContent = "ALL PUBLIC SURVEYS";
+    meta.textContent = "NESTED HEALPIX · NSIDE 16";
+    state.textContent = coverageDots ? "PUBLIC HEALPIX CELL COVERAGE" : "COVERAGE PREVIEW UNAVAILABLE";
+    document.querySelectorAll<HTMLElement>(".survey-row").forEach((row) => { row.dataset.selected = "false"; });
+    return;
+  }
+  scene.style.setProperty("--coverage-color", survey.color);
+  title.textContent = product ? `${survey.name.toUpperCase()} · ${product.toUpperCase()}` : survey.name.toUpperCase();
+  meta.textContent = `${survey.mission} · ${survey.statistics.footprintCells.toLocaleString("en-US")} HEALPIX CELLS`;
+  state.textContent = `${survey.statistics.acquired}/${survey.statistics.publicProducts} PRODUCTS · SELECTED`;
+  document.querySelectorAll<HTMLElement>(".survey-row").forEach((row) => { row.dataset.selected = row.dataset.surveyId === survey.id ? "true" : "false"; });
+}
+
+function renderCoverageLayers(): void {
+  const host = byId("coverage-layers");
+  host.replaceChildren();
+  if (!coverageCatalog) return;
+  const grouped = new Map<string, CoverageCatalog["layers"]>();
+  for (const layer of coverageCatalog.layers) grouped.set(layer.surveyId, [...(grouped.get(layer.surveyId) ?? []), layer]);
+  for (const [surveyId, layers] of grouped) {
+    const label = document.createElement("label");
+    label.className = "coverage-layer-toggle";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = true;
+    input.dataset.surveyId = surveyId;
+    const name = document.createElement("span");
+    const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
+    name.textContent = survey?.name ?? surveyId.toUpperCase();
+    const count = document.createElement("small");
+    count.textContent = `${layers.length} products`;
+    input.addEventListener("change", () => {
+      const generation = ++coverageLoadGeneration;
+      const enabled = new Set([...host.querySelectorAll<HTMLInputElement>("input:checked")].map((entry) => entry.dataset.surveyId));
+      const selected = coverageCatalog?.layers.filter((entry) => enabled.has(entry.surveyId)) ?? [];
+      const blocks = new Map<string, number[]>();
+      void Promise.all(selected.map(async (entry) => {
+        const cells = await fetchCoverageOverview(entry);
+        if (cells.length) blocks.set(`${entry.layerId}:${entry.overviewOrder}`, cells);
+      })).then(() => {
+        if (generation === coverageLoadGeneration) coverageDots?.loadCatalog({ ...coverageCatalog!, layers: selected }, blocks, surveyIndex?.surveys ?? []);
+      });
+    });
+    label.append(input, name, count);
+    host.append(label);
+  }
+}
 
 function byId<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -136,8 +224,8 @@ async function copy(value: string): Promise<void> {
 }
 
 function renderIcons(): void {
-  createIcons({
-    icons: { BadgeCheck, Box, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, Image, Layers3, ListChecks, Search, Telescope, X },
+    createIcons({
+    icons: { BadgeCheck, Box, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, Image, Layers3, ListChecks, RotateCcw, Search, ShieldCheck, Telescope, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -297,88 +385,121 @@ function renderSurveys(): void {
     return;
   }
   list.replaceChildren(...surveys.map((survey) => {
-    const card = document.createElement("article");
-    card.className = "survey-card";
-    card.style.setProperty("--survey-color", survey.color);
-    card.addEventListener("mouseenter", () => coverageDots?.setHighlightedSurvey(survey.id));
-    card.addEventListener("mouseleave", () => coverageDots?.setHighlightedSurvey(null));
-    card.addEventListener("focusin", () => coverageDots?.setHighlightedSurvey(survey.id));
-    card.addEventListener("focusout", (event) => {
-      if (!card.contains(event.relatedTarget as Node | null)) coverageDots?.setHighlightedSurvey(null);
-    });
-    const visual = document.createElement("div"); visual.className = "survey-card-visual";
-    const image = document.createElement("img"); image.src = survey.imageUrl; image.alt = `${survey.name} 已收录 HEALPix 覆盖预览`; image.loading = "lazy";
-    const visualLabel = document.createElement("span"); visualLabel.textContent = survey.statistics.footprintCells ? `${survey.statistics.footprintCells.toLocaleString("en-US")} HEALPIX CELLS` : "NO GEOMETRY YET";
-    visual.append(image, visualLabel);
+    const row = document.createElement("article");
+    row.className = "survey-row";
+    row.dataset.surveyId = survey.id;
+    row.dataset.selected = activeSurveyId === survey.id ? "true" : "false";
+    row.tabIndex = 0;
+    row.style.setProperty("--survey-color", survey.color);
+    row.setAttribute("aria-label", `${survey.name}，${survey.mission}，${survey.statistics.acquired} 个已收录产品`);
 
-    const body = document.createElement("div"); body.className = "survey-card-body";
-    const title = document.createElement("div"); title.className = "survey-card-title";
-    const mission = document.createElement("span"); mission.textContent = survey.mission;
+    const focusSurvey = (): void => coverageDots?.setHighlightedSurvey(survey.id);
+    const clearSurvey = (): void => { /* Keep the last active survey after leaving a record. */ };
+    row.addEventListener("pointerenter", focusSurvey);
+    row.addEventListener("pointerleave", clearSurvey);
+    row.addEventListener("focus", focusSurvey);
+    row.addEventListener("focusin", focusSurvey);
+    row.addEventListener("focusout", (event) => {
+      if (!row.contains(event.relatedTarget as Node | null)) clearSurvey();
+    });
+    row.addEventListener("click", (event) => {
+      if ((event.target as HTMLElement).closest("button, a")) return;
+      coverageDots?.setSelectedSurvey(survey.id);
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        coverageDots?.setSelectedSurvey(survey.id);
+      }
+    });
+
+    const marker = document.createElement("span"); marker.className = "survey-marker"; marker.setAttribute("aria-hidden", "true");
+    const visual = document.createElement("div"); visual.className = "survey-thumb";
+    const image = document.createElement("img"); image.src = survey.imageUrl; image.alt = ""; image.loading = "lazy";
+    visual.append(image);
+
+    const identity = document.createElement("div"); identity.className = "survey-identity";
+    const overline = document.createElement("span"); overline.className = "survey-overline"; overline.textContent = survey.mission;
     const heading = document.createElement("h3"); heading.textContent = survey.name;
-    title.append(mission, heading);
-    const description = document.createElement("p"); description.className = "survey-card-description"; description.textContent = survey.description;
+    const description = document.createElement("p"); description.textContent = survey.description;
     const tags = document.createElement("div"); tags.className = "modality-tags";
     survey.modalities.forEach((modality) => { const tag = document.createElement("span"); tag.className = "modality-tag"; tag.textContent = modalityLabels[modality]; tags.append(tag); });
-    const progress = document.createElement("div"); progress.className = "survey-progress";
-    const progressCopy = document.createElement("div");
-    const progressLabel = document.createElement("span"); progressLabel.textContent = "PUBLIC PRODUCTS";
-    const progressValue = document.createElement("strong"); progressValue.textContent = `${survey.statistics.acquired} 个已收录 / ${survey.statistics.publicProducts} 个公开`;
-    progressCopy.append(progressLabel, progressValue);
-    const detail = document.createElement("button"); detail.type = "button"; detail.className = "survey-detail-button"; detail.textContent = "查看产品"; detail.addEventListener("click", () => showSurveyProducts(survey));
-    progress.append(progressCopy, detail);
+    identity.append(overline, heading, description, tags);
+
+    const metrics = document.createElement("dl"); metrics.className = "survey-metrics";
+    const addMetric = (label: string, value: string, emphasis = false): void => {
+      const cell = document.createElement("div");
+      const dt = document.createElement("dt"); dt.textContent = label;
+      const dd = document.createElement("dd"); dd.textContent = value; if (emphasis) dd.className = "metric-emphasis";
+      cell.append(dt, dd); metrics.append(cell);
+    };
+    addMetric("PUBLIC PRODUCTS", `${survey.statistics.acquired} / ${survey.statistics.publicProducts}`, true);
+    addMetric("HEALPIX CELLS", survey.statistics.footprintCells ? survey.statistics.footprintCells.toLocaleString("en-US") : "--");
+    addMetric("LATEST RELEASE", survey.releases.at(-1)?.label ?? "PUBLIC");
 
     const actions = document.createElement("div"); actions.className = "survey-actions";
+    const detail = document.createElement("button"); detail.type = "button"; detail.className = "text-action"; detail.title = `查看 ${survey.name} 产品`; detail.append(icon("list-checks")); const detailLabel = document.createElement("span"); detailLabel.textContent = "产品详情"; detail.append(detailLabel); detail.addEventListener("click", () => showSurveyProducts(survey));
+    actions.append(detail);
     assetGroups(survey).forEach((group) => {
       const action = document.createElement("button"); action.type = "button"; action.className = "asset-action";
       action.disabled = !group.records.length;
       action.title = group.records.length ? `查看 ${survey.name} 的${group.label}` : `${survey.name} 暂无已发布${group.label}`;
       action.append(icon(group.icon));
       const label = document.createElement("span"); label.textContent = group.label;
-      const count = document.createElement("small"); count.textContent = String(group.records.length);
+      const count = document.createElement("small"); count.textContent = group.records.length ? String(group.records.length) : "--";
       action.append(label, count);
       if (group.records.length) action.addEventListener("click", () => showAssetGroup(survey, group.label, group.records));
       actions.append(action);
     });
-    body.append(title, description, tags, progress, actions);
-    card.append(visual, body);
-    return card;
+
+    row.append(marker, visual, identity, metrics, actions);
+    return row;
   }));
   renderIcons();
 }
 
 async function initialize(): Promise<void> {
   try {
-    coverageDots = new CoverageDots(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"));
+    coverageDots = new AtlasCoverageGlobe(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"), updateCoverageReadout);
   } catch (error) {
-    console.warn("Coverage dot matrix unavailable", error);
+    console.warn("HEALPix globe unavailable", error);
     byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
   }
-  const [assetsResponse, coverageResponse, surveysResponse] = await Promise.all([
-    fetch("/api/v1/assets", { headers: { Accept: "application/json" } }),
-    fetch("/api/v1/coverage", { headers: { Accept: "application/json" } }),
+  const assetsPromise = fetch("/api/v1/assets", { headers: { Accept: "application/json" } });
+  const [surveysResponse, coverageCatalogResponse] = await Promise.all([
     fetch("/api/v1/surveys", { headers: { Accept: "application/json" } }),
+    fetch("/api/v1/coverage/catalog", { headers: { Accept: "application/json" } }),
   ]);
-  if (!assetsResponse.ok || !surveysResponse.ok) throw new Error("Public catalog request failed");
-  manifest = await assetsResponse.json() as ReleaseManifest;
+  if (!surveysResponse.ok) throw new Error("Public survey catalog request failed");
   surveyIndex = await surveysResponse.json() as SurveyIndex;
-  if (coverageResponse.ok && coverageDots) {
-    const coverage = await coverageResponse.json() as CoverageManifest;
-    coverageDots.load(coverage, new Map(surveyIndex.surveys.map((survey) => [survey.id, survey.color])));
-    byId("coverage-state").textContent = "PUBLIC HEALPIX DOT MATRIX";
+  if (coverageCatalogResponse.ok && coverageDots) {
+    coverageCatalog = await coverageCatalogResponse.json() as CoverageCatalog;
+    const blocks = new Map<string, number[]>();
+    await Promise.all(coverageCatalog.layers.map(async (layer) => {
+      const cells = await fetchCoverageOverview(layer);
+      if (cells.length) blocks.set(`${layer.layerId}:${layer.overviewOrder}`, cells);
+    }));
+    coverageDots.loadCatalog(coverageCatalog, blocks, surveyIndex.surveys);
+    renderCoverageLayers();
+    updateCoverageReadout(null);
+  } else if (coverageDots) {
+    byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
   } else {
     byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
   }
+  const assetsResponse = await assetsPromise;
+  if (!assetsResponse.ok) throw new Error("Public asset catalog request failed");
+  manifest = await assetsResponse.json() as ReleaseManifest;
   byId("header-release").textContent = `${manifest.bundle.id.toUpperCase()} · VERIFIED`;
   byId("stat-releases").textContent = String(manifest.statistics.releases);
   byId("stat-acquired").textContent = String(manifest.statistics.acquired);
   byId("stat-moc").textContent = String(manifest.statistics.rawMocFiles);
   byId("stat-packages").textContent = String(manifest.statistics.packages);
-  byId("stat-size").textContent = bytes(manifest.statistics.totalBytes);
+  byId("stat-size").textContent = bytes(manifest.statistics.runtimeBytes ?? manifest.statistics.totalBytes);
   byId("bundle-hash").textContent = manifest.bundle.sha256;
   byId("generated-at").textContent = new Date(manifest.generatedAt).toLocaleString("zh-CN", { hour12: false, timeZone: "UTC" }) + " UTC";
   const provenance = manifest.files.find((record) => record.kind === "provenance");
   if (provenance) byId<HTMLAnchorElement>("provenance-download").href = provenance.downloadUrl;
-  renderSurveys();
 }
 
 byId<HTMLInputElement>("survey-search").addEventListener("input", (event) => {
@@ -390,6 +511,11 @@ byId("dialog-close").addEventListener("click", () => byId<HTMLDialogElement>("su
 byId<HTMLDialogElement>("survey-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("survey-dialog").close(); });
 byId("preview-close").addEventListener("click", () => byId<HTMLDialogElement>("preview-dialog").close());
 byId<HTMLDialogElement>("preview-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("preview-dialog").close(); });
+byId("coverage-reset").addEventListener("click", () => coverageDots?.resetView());
+byId("coverage-layers-toggle").addEventListener("click", () => {
+  const layers = byId("coverage-layers");
+  layers.hidden = !layers.hidden;
+});
 
 renderIcons();
 void initialize().catch((error) => {

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-survey-atlas.example/contracts/coverage-task-v1.schema.json",
-  "title": "Assets public coverage task handoff",
-  "description": "One-off Assets to data-warehouse handoff. Credentials and user assets are intentionally out of contract.",
+  "title": "Assets coverage task input for standard data-warehouse CRDs",
+  "description": "Assets-side input used to render a standard AstroDataSource and AstroMetadataScanTask. It carries task references and constraints; credential storage or resolution, sink implementation and project task history are outside this envelope.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "taskId", "layer", "connector", "recipe", "execution", "output"],
@@ -28,6 +28,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["connectorId", "kind", "configSha256"],
+      "description": "Assets-managed connector or DataSource reference. The identifier and configuration digest are part of this input; storage and resolution of credentials are owned by the submitting and executing components.",
       "properties": {
         "connectorId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
         "kind": {"enum": ["s3", "oss", "jdbc", "filesystem"]},
@@ -52,6 +53,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["executor", "timeoutSeconds", "maxBytes"],
+      "description": "Execution constraints for this Assets submission to the data-warehouse operator.",
       "properties": {
         "executor": {"const": "data-warehouse"},
         "timeoutSeconds": {"type": "integer", "minimum": 1},
@@ -63,6 +65,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["resultKind", "contractVersion"],
+      "description": "Assets finalizer input reference. The selected sink and its storage semantics are defined by the rendered ScanTask.",
       "properties": {
         "resultKind": {"enum": ["normalized-scan", "locked-build-input"]},
         "contractVersion": {"const": "1.0.0"},

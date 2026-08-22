@@ -2,10 +2,14 @@ import { createReadStream } from "node:fs";
 import { open, readFile, stat } from "node:fs/promises";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
+import { brotliCompressSync, gzipSync } from "node:zlib";
 
+import { AdminHttpError, AssetsAdmin, KubernetesApiError, adminFromRequest, type ConnectorInput, type CoverageTaskInput } from "./admin.js";
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
+import { coverageBlock, loadCoverageCatalog } from "./coverage.js";
+import { ProductStore } from "./products.js";
 
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
@@ -17,9 +21,13 @@ const coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src",
   generatedAt: string;
   coordinateFrame: string;
   nside: number;
-  footprints: Array<Record<string, unknown> & { surveyId: string; pixels: number[] }>;
+  footprints: Array<Record<string, unknown> & { surveyId: string; releaseId: string; product: string; nside: number; pixels: number[] }>;
 };
 const surveyIndex = await loadSurveyIndex(releaseRoot, catalog, coverageManifest);
+const coverageCatalog = await loadCoverageCatalog(releaseRoot, coverageManifest);
+const admin = new AssetsAdmin();
+const products = new ProductStore();
+await products.initialize(releaseRoot);
 const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
 const MAX_FITS_HEADER_BYTES = 256 * 1024;
 const MAX_ZIP_DIRECTORY_BYTES = 8 * 1024 * 1024;
@@ -53,6 +61,17 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.end(encoded);
 }
 
+function compressedJson(request: IncomingMessage, response: ServerResponse, status: number, body: unknown, cacheControl = "no-cache", etag?: string): void {
+  const raw = Buffer.from(`${JSON.stringify(body)}\n`);
+  const accept = String(request.headers["accept-encoding"] ?? "");
+  const encoded = /\bbr\b/i.test(accept) ? brotliCompressSync(raw) : /\bgzip\b/i.test(accept) ? gzipSync(raw) : raw;
+  const headers: Record<string, string> = { "Content-Type": "application/json; charset=utf-8", "Content-Length": String(encoded.length), "Cache-Control": cacheControl, Vary: "Accept-Encoding" };
+  if (encoded !== raw) headers["Content-Encoding"] = /\bbr\b/i.test(accept) ? "br" : "gzip";
+  if (etag) headers.ETag = etag;
+  response.writeHead(status, headers);
+  if (request.method === "HEAD") response.end(); else response.end(encoded);
+}
+
 async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<string, unknown>> {
   const catalogFile = [...catalog.files.values()].find(({ record }) => record.path.endsWith("/packages/catalog.json"));
   if (!catalogFile) throw new Error("Resource package catalog is not present in the Assets release");
@@ -82,6 +101,10 @@ async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<st
 
 function requestPath(request: IncomingMessage): string {
   return new URL(request.url ?? "/", "http://localhost").pathname;
+}
+
+function requestQuery(request: IncomingMessage): URLSearchParams {
+  return new URL(request.url ?? "/", "http://localhost").searchParams;
 }
 
 function rangeFrom(header: string | undefined, size: number): { start: number; end: number } | undefined {
@@ -325,7 +348,7 @@ async function sendPreview(request: IncomingMessage, response: ServerResponse, l
 
 async function sendStatic(response: ServerResponse, pathname: string): Promise<void> {
   const requested = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
-  const resolved = path.resolve(siteRoot, requested);
+  const resolved = path.resolve(siteRoot, requested.endsWith("/") ? path.join(requested, "index.html") : requested);
   const relative = path.relative(siteRoot, resolved);
   const candidate = relative.startsWith("..") || path.isAbsolute(relative) ? path.join(siteRoot, "index.html") : resolved;
   let filePath = candidate;
@@ -343,10 +366,106 @@ async function sendStatic(response: ServerResponse, pathname: string): Promise<v
   response.end(body);
 }
 
+async function requestJsonBody(request: IncomingMessage, maxBytes = 128 * 1024): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of request) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += bytes.length;
+    if (total > maxBytes) throw new AdminHttpError(413, "Request body is too large");
+    chunks.push(bytes);
+  }
+  if (!chunks.length) throw new AdminHttpError(400, "JSON request body is required");
+  let parsed: unknown;
+  try { parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
+  catch { throw new AdminHttpError(400, "Request body must be valid JSON"); }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new AdminHttpError(400, "Request body must be a JSON object");
+  return parsed as Record<string, unknown>;
+}
+
+function expectedRevision(request: IncomingMessage, body: Record<string, unknown>): number | undefined {
+  const header = request.headers["if-match"];
+  const value = typeof header === "string" ? Number(header.replace(/^\"|\"$/g, "")) : body.revision;
+  return value === undefined || value === "" ? undefined : Number.isSafeInteger(Number(value)) ? Number(value) : undefined;
+}
+
+async function sendAdmin(request: IncomingMessage, response: ServerResponse, pathname: string): Promise<void> {
+  if (pathname === "/api/v1/admin/config" && request.method === "GET") {
+    return json(response, 200, admin.publicConfig());
+  }
+  if (!admin.config.enabled) return json(response, 404, { error: "Assets administration is disabled" });
+  try {
+    admin.authorize(adminFromRequest(request));
+    if (pathname === "/api/v1/admin/connectors" && request.method === "GET") return json(response, 200, { connectors: await admin.listConnectors() });
+    if (pathname === "/api/v1/admin/connectors" && request.method === "POST") {
+      const input = await requestJsonBody(request) as unknown as ConnectorInput;
+      return json(response, 201, { connector: await admin.createConnector(input) });
+    }
+    if (pathname === "/api/v1/admin/tasks" && request.method === "GET") return json(response, 200, { tasks: await admin.listTasks() });
+    if (pathname === "/api/v1/admin/tasks" && request.method === "POST") {
+      const input = await requestJsonBody(request) as unknown as CoverageTaskInput & { productId?: string };
+      if (input.productId) {
+        const product = products.get(input.productId).draft;
+        const immutable: Array<[keyof CoverageTaskInput, string | undefined]> = [["layerId", product.layerId], ["surveyId", product.surveyId], ["releaseId", product.releaseId], ["product", product.name], ["mode", product.mode], ["coverageRole", product.coverageRole], ["dataOrigin", product.dataOrigin], ["sourceTier", product.sourceTier]];
+        for (const [key, expected] of immutable) if (input[key] !== undefined && input[key] !== expected) return json(response, 400, { error: `${String(key)} is defined by the selected product` });
+        const derived = {
+          ...input,
+          layerId: product.layerId ?? input.layerId,
+          surveyId: product.surveyId,
+          releaseId: product.releaseId,
+          product: product.name,
+          mode: product.mode ?? input.mode,
+          coverageRole: product.coverageRole ?? input.coverageRole,
+          dataOrigin: product.dataOrigin ?? input.dataOrigin,
+          sourceTier: product.sourceTier ?? input.sourceTier,
+        };
+        if (!derived.layerId || !derived.mode || !derived.coverageRole || !derived.dataOrigin || !derived.sourceTier) return json(response, 400, { error: "Selected product is not executable by the configured recipe" });
+        return json(response, 201, { task: await admin.createTask(derived) });
+      }
+      return json(response, 201, { task: await admin.createTask(input) });
+    }
+    if (pathname === "/api/v1/admin/products" && request.method === "GET") return json(response, 200, { products: products.list() });
+    const productMatch = /^\/api\/v1\/admin\/products\/([^/]+)$/.exec(pathname);
+    const draftMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/draft$/.exec(pathname);
+    if (productMatch?.[1] && request.method === "GET") return json(response, 200, { product: products.get(decodeURIComponent(productMatch[1])) });
+    if ((productMatch?.[1] || draftMatch?.[1]) && request.method === "PUT") {
+      const body = await requestJsonBody(request);
+      const productId = productMatch?.[1] ?? draftMatch?.[1]!;
+      return json(response, 200, { product: await products.updateDraft(decodeURIComponent(productId), body.content ?? body, expectedRevision(request, body)) });
+    }
+    const publishMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/publish$/.exec(pathname);
+    if (publishMatch?.[1] && request.method === "POST") {
+      const body = await requestJsonBody(request).catch(() => ({}));
+      return json(response, 200, { product: await products.publish(decodeURIComponent(publishMatch[1]), expectedRevision(request, body)) });
+    }
+    const historyMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/history$/.exec(pathname);
+    if (historyMatch?.[1] && request.method === "GET") return json(response, 200, { history: await products.history(decodeURIComponent(historyMatch[1])) });
+    return json(response, 404, { error: "Admin endpoint not found" });
+  } catch (error) {
+    if (error instanceof AdminHttpError || error instanceof KubernetesApiError) return json(response, error.statusCode, { error: error.message });
+    throw error;
+  }
+}
+
+function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, pathname: string): void {
+  const match = /^\/api\/v1\/coverage\/blocks\/([a-z0-9-]+)$/.exec(pathname);
+  if (!match) return json(response, 404, { error: "Coverage block not found" });
+  const record = coverageCatalog.records.get(match[1]!);
+  if (!record) return json(response, 404, { error: "Coverage layer not found" });
+  const query = requestQuery(request);
+  const order = Number(query.get("order"));
+  const tile = Number(query.get("tile"));
+  if (!Number.isSafeInteger(order) || !Number.isSafeInteger(tile) || order < 0 || order > 29 || tile < 0) return json(response, 400, { error: "order and tile are required integers" });
+  const block = coverageBlock(record, order, tile);
+  if (!block) return json(response, 404, { error: "Coverage block is unavailable" });
+  compressedJson(request, response, 200, block, "public, max-age=31536000, immutable", `"sha256-${block.sha256}"`);
+}
+
 const server = http.createServer((request, response) => {
   void (async () => {
     securityHeaders(response);
     const pathname = requestPath(request);
+    if (pathname.startsWith("/api/v1/admin/")) return sendAdmin(request, response, pathname);
     if (request.method !== "GET" && request.method !== "HEAD") return json(response, 405, { error: "Method not allowed" });
     if (pathname === "/healthz") return json(response, 200, {
       status: "ok",
@@ -357,8 +476,14 @@ const server = http.createServer((request, response) => {
     });
     if (pathname === "/api/v1/assets") return json(response, 200, publicManifest(catalog));
     if (pathname === "/api/v1/resource-packages/catalog.json") return json(response, 200, await resourcePackageCatalog(catalog));
+    if (pathname === "/api/v1/coverage/catalog") {
+      const { records: _records, ...publicCoverageCatalog } = coverageCatalog;
+      return compressedJson(request, response, 200, publicCoverageCatalog, "public, max-age=300, stale-while-revalidate=60");
+    }
+    if (pathname.startsWith("/api/v1/coverage/blocks/")) return sendCoverageBlock(request, response, pathname);
     if (pathname === "/api/v1/coverage") return json(response, 200, coverageManifest);
     if (pathname === "/api/v1/surveys") return json(response, 200, surveyIndex);
+    if (pathname === "/api/v1/products") return json(response, 200, { products: products.list().filter((record) => record.published).map((record) => record.published) });
     const download = /^\/api\/v1\/assets\/([a-z0-9-]+)\/download$/.exec(pathname);
     if (download?.[1]) return sendDownload(request, response, catalog, download[1]);
     const preview = /^\/api\/v1\/assets\/([a-z0-9-]+)\/preview$/.exec(pathname);

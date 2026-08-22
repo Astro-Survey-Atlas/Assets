@@ -3,30 +3,45 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "e7c756ab77214516dd721b357dd3df77a6c521a8e7d711f6c25f9d93cbfe3a11"
+    "sha256": "7cb7570687a8c012cea5724c73684d5e170254e0ee8951f964384a97bbefc581"
   },
   "statistics": {
     "releases": 52,
     "products": 87,
-    "acquired": 32,
+    "acquired": 35,
     "overviewOnly": 11,
-    "awaitingGeometry": 44,
+    "awaitingGeometry": 41,
     "footprints": 41,
     "packages": 14,
-    "rawMocFiles": 38,
-    "totalBytes": 227131351
+    "rawMocFiles": 41,
+    "totalBytes": 238566438,
+    "runtimeBytes": 6664626,
+    "evidenceBytes": 231901812
   },
   "files": [
     {
       "id": "documentation-architecture-boundary",
       "kind": "documentation",
       "label": "Assets and Atlas architecture boundary",
-      "description": "Responsibilities, one-shot data-warehouse handoff and the stable Resource Package intersection.",
+      "description": "Assets responsibilities, independent project boundaries and the one-shot data-warehouse handoff.",
       "downloadName": "architecture-boundary.md",
       "mediaType": "text/markdown; charset=utf-8",
+      "deliveryClass": "runtime",
       "path": "docs/architecture-boundary.md",
-      "sizeBytes": 3023,
-      "sha256": "6a9c25da7a41071663f78468f53574d5591de589fb56f0ef5944761f73c3efe5"
+      "sizeBytes": 3031,
+      "sha256": "2917d87651cf9d58fdc964b41d3c77e43daf8074143683abf252322513877b4d"
+    },
+    {
+      "id": "documentation-data-warehouse-requirements",
+      "kind": "documentation",
+      "label": "Assets data-warehouse requirements",
+      "description": "Assets-owned CRD handoff, status, sink and coverage scanner requirements for data-warehouse.",
+      "downloadName": "data-warehouse-requirements.md",
+      "mediaType": "text/markdown; charset=utf-8",
+      "deliveryClass": "runtime",
+      "path": "docs/data-warehouse-requirements.md",
+      "sizeBytes": 5719,
+      "sha256": "4f2ba481b6fac3f455d3d8d1cac26e419e6beced47ac994fcbee166ca6417cbd"
     },
     {
       "id": "documentation-moc-core-contract",
@@ -35,9 +50,10 @@
       "description": "Scientific enums, deterministic build lifecycle, CLI boundary and Resource Package v3 contract.",
       "downloadName": "moc-core-contract.md",
       "mediaType": "text/markdown; charset=utf-8",
+      "deliveryClass": "runtime",
       "path": "docs/moc-core-contract.md",
-      "sizeBytes": 3745,
-      "sha256": "06a5ef7ae3474ed565b2533c098e66dbb7064a02bdad5f7b45831bdc2a1b7ebf"
+      "sizeBytes": 4015,
+      "sha256": "aded7b654362489d428206bf11dad09b8f02dd07368ba915655f3609de108114"
     },
     {
       "id": "documentation-moc-method",
@@ -46,9 +62,106 @@
       "description": "Calculation notes for native MOC ingestion, Euclid Q1 polygons and DESI observed-tile rasterization.",
       "downloadName": "public-footprint-moc-method.md",
       "mediaType": "text/markdown; charset=utf-8",
+      "deliveryClass": "runtime",
       "path": "docs/public-footprint-moc-method.md",
-      "sizeBytes": 7294,
-      "sha256": "7ff7237cfe6629e62014294fc4f7c2bb6f9c56dc4e02b9c248823e4b803ed892"
+      "sizeBytes": 7438,
+      "sha256": "71106a35d7fb3796d70fc818b1b703f6e9651c6170c24f86ee752d354fe72143"
+    },
+    {
+      "id": "layer-csst-sim-w2-image-extent-preview-order4",
+      "kind": "geometry",
+      "label": "CSST · W2 simulated wide-field images order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w2-image-extent-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/preview-order4.json",
+      "sizeBytes": 3446,
+      "sha256": "d25b186718e14641e6cc91e5ff335976488fa431db7b63dc774de427e90ba8f3"
+    },
+    {
+      "id": "layer-csst-sim-w2-image-extent-query-order8",
+      "kind": "geometry",
+      "label": "CSST · W2 simulated wide-field images order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w2-image-extent-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/query-order8.json",
+      "sizeBytes": 1078445,
+      "sha256": "b254a810951ec46e35357aa721b1d5190c41a79f510edf7ac27614a46f9e34b4"
+    },
+    {
+      "id": "layer-csst-sim-w3-image-extent-preview-order4",
+      "kind": "geometry",
+      "label": "CSST · W3 simulated wide-field images order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w3-image-extent-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/preview-order4.json",
+      "sizeBytes": 286,
+      "sha256": "653fa0f95763c385c264bf229419d1d774c6b321c7586e98a689f8ddbd6481e4"
+    },
+    {
+      "id": "layer-csst-sim-w3-image-extent-query-order8",
+      "kind": "geometry",
+      "label": "CSST · W3 simulated wide-field images order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w3-image-extent-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/query-order8.json",
+      "sizeBytes": 53044,
+      "sha256": "7b991ac4a568d0bf6de876483046e735caa9855dee1204e7ed0032f63c56ef7d"
+    },
+    {
+      "id": "layer-csst-sim-w4-image-extent-preview-order4",
+      "kind": "geometry",
+      "label": "CSST · W4 simulated wide-field images order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w4-image-extent-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/preview-order4.json",
+      "sizeBytes": 326,
+      "sha256": "3c950781b582a9adfbb6f7fca993a941707d1092dfa77f65c07cb5b493df72c5"
+    },
+    {
+      "id": "layer-csst-sim-w4-image-extent-query-order8",
+      "kind": "geometry",
+      "label": "CSST · W4 simulated wide-field images order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w4-image-extent-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/query-order8.json",
+      "sizeBytes": 59792,
+      "sha256": "217b57dcf3eafa22927437422981d60f0348629f1c3549365205b67c3593bd54"
     },
     {
       "id": "csst-w1-healpix-order8",
@@ -60,6 +173,7 @@
       "surveyId": "csst",
       "releaseId": "csst-sim-w1-20250731",
       "product": "W1 simulated wide-field images",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/csst/healpix-order8.json",
       "sizeBytes": 81542,
       "sha256": "6fa692751862f8d0f487d5869913e571f47470adf5aaa97e9d5a793b54597cbc"
@@ -74,9 +188,100 @@
       "surveyId": "csst",
       "releaseId": "csst-sim-w1-20250731",
       "product": "W1 simulated wide-field images",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/csst/display-footprint-nside16.json",
       "sizeBytes": 839,
       "sha256": "afad98385bbab785512dfb5730ae8d68d429d4f21466a74ce3a05e32c1e57dbc"
+    },
+    {
+      "id": "csst-w2-preview-order4",
+      "kind": "geometry",
+      "label": "CSST W2 order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w2-image-extent-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/preview-order4.json",
+      "sizeBytes": 3446,
+      "sha256": "d25b186718e14641e6cc91e5ff335976488fa431db7b63dc774de427e90ba8f3"
+    },
+    {
+      "id": "csst-w2-query-order8",
+      "kind": "geometry",
+      "label": "CSST W2 order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w2-image-extent-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/query-order8.json",
+      "sizeBytes": 1078445,
+      "sha256": "b254a810951ec46e35357aa721b1d5190c41a79f510edf7ac27614a46f9e34b4"
+    },
+    {
+      "id": "csst-w3-preview-order4",
+      "kind": "geometry",
+      "label": "CSST W3 order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w3-image-extent-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/preview-order4.json",
+      "sizeBytes": 286,
+      "sha256": "653fa0f95763c385c264bf229419d1d774c6b321c7586e98a689f8ddbd6481e4"
+    },
+    {
+      "id": "csst-w3-query-order8",
+      "kind": "geometry",
+      "label": "CSST W3 order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w3-image-extent-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/query-order8.json",
+      "sizeBytes": 53044,
+      "sha256": "7b991ac4a568d0bf6de876483046e735caa9855dee1204e7ed0032f63c56ef7d"
+    },
+    {
+      "id": "csst-w4-preview-order4",
+      "kind": "geometry",
+      "label": "CSST W4 order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w4-image-extent-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/preview-order4.json",
+      "sizeBytes": 326,
+      "sha256": "3c950781b582a9adfbb6f7fca993a941707d1092dfa77f65c07cb5b493df72c5"
+    },
+    {
+      "id": "csst-w4-query-order8",
+      "kind": "geometry",
+      "label": "CSST W4 order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "csst-sim-w4-image-extent-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/query-order8.json",
+      "sizeBytes": 59792,
+      "sha256": "217b57dcf3eafa22927437422981d60f0348629f1c3549365205b67c3593bd54"
     },
     {
       "id": "layer-desi-dr1-spectra-footprint-preview-order4",
@@ -89,6 +294,7 @@
       "releaseId": "desi-dr1",
       "product": "DR1 spectra and redshifts",
       "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/preview-order4.json",
       "sizeBytes": 6263,
       "sha256": "93afbb3d8672e5a4149382079cf9466d2044d6abc619ca996f87c4b821505a5e"
@@ -104,6 +310,7 @@
       "releaseId": "desi-dr1",
       "product": "DR1 spectra and redshifts",
       "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/query-order8.json",
       "sizeBytes": 1850408,
       "sha256": "e6999c0f1a3646c4206c03093813589a2c40da139ef91e7ebc3f726447becf36"
@@ -119,6 +326,7 @@
       "releaseId": "desi-dr1",
       "product": "DR1 spectra and redshifts",
       "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/geometry/desi-dr1-tiles-iron.fits",
       "sizeBytes": 1339200,
       "sha256": "99320a3a8940cb1c98d36526233e14bafcd1e137d6e2a0c0563e7b9c4f83d71a"
@@ -134,6 +342,7 @@
       "releaseId": "desi-edr",
       "product": "Early Data Release spectra",
       "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint/preview-order4.json",
       "sizeBytes": 1827,
       "sha256": "ec883082ec22e78a4900746fbbaf2df3028ef9310396e88348f520f526ee5f6e"
@@ -149,6 +358,7 @@
       "releaseId": "desi-edr",
       "product": "Early Data Release spectra",
       "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint/query-order8.json",
       "sizeBytes": 209295,
       "sha256": "83c6a7b7d539c46e1efd2ef85b5c030b3962eeaae1b6e4459edcb1e74f46388c"
@@ -164,6 +374,7 @@
       "releaseId": "desi-edr",
       "product": "Early Data Release spectra",
       "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/geometry/desi-edr-tiles-fuji.fits",
       "sizeBytes": 169920,
       "sha256": "7ddf26cdda548d1cc133d078db73862856c8e1c4912de85d52fd650a1b8f5a0d"
@@ -179,6 +390,7 @@
       "releaseId": "euclid-q1",
       "product": "Euclid Q1 deep fields",
       "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/preview-order4.json",
       "sizeBytes": 142,
       "sha256": "1206ea5785a4e038b0642822d330285e926271b9dfee8c75037bd1c8994514b4"
@@ -194,6 +406,7 @@
       "releaseId": "euclid-q1",
       "product": "Euclid Q1 deep fields",
       "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/query-order8.json",
       "sizeBytes": 10029,
       "sha256": "9dbdccfb119c9c65a6864c74fd6379ca6f4fad531357fdf6bda0fce224d4d30a"
@@ -209,6 +422,7 @@
       "releaseId": "euclid-q1",
       "product": "Euclid Q1 deep fields",
       "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/geometry/euclid-q1-region-files.zip",
       "sizeBytes": 5272,
       "sha256": "1cf306fab4995179219fbefd32b9648ce0455b65c48cab9246138cc72eff20ef"
@@ -220,9 +434,10 @@
       "description": "Product-level acquisition status, geometry source and outstanding calculation work.",
       "downloadName": "public-footprint-product-status.json",
       "mediaType": "application/json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/sources.json",
-      "sizeBytes": 50172,
-      "sha256": "b62d6505f5d9bf53b569778dd5f0c7ac38021732a433773ba77c17bf13f52463"
+      "sizeBytes": 49987,
+      "sha256": "f4473f94f7fb4d2ab9be9dbfc96d5c4a848b01768c8acc7db0382bd2b2e4d685"
     },
     {
       "id": "manifest-canonical",
@@ -231,9 +446,10 @@
       "description": "The canonical ICRS HEALPix footprint manifest used by Astro Survey Atlas.",
       "downloadName": "survey-footprints.json",
       "mediaType": "application/json",
+      "deliveryClass": "runtime",
       "path": "src/footprints/survey-footprints.json",
-      "sizeBytes": 917904,
-      "sha256": "bd1393a25e3192a7df692931b85f2f78ed09f84ef509ae47d1b3f7a976506e49"
+      "sizeBytes": 930773,
+      "sha256": "e214787d981e71505b6f46661aa39baf209333b90ec3b2dde3e674707889fc1b"
     },
     {
       "id": "csst-input-manifest",
@@ -245,9 +461,55 @@
       "surveyId": "csst",
       "releaseId": "csst-sim-w1-20250731",
       "product": "W1 simulated wide-field images",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/csst/input-manifest.json",
       "sizeBytes": 205265415,
       "sha256": "dda4306e2ee89afd7ce30d4ee31ee8b3dcca65cb2a693145180c9c6baa2ebb1f"
+    },
+    {
+      "id": "csst-w2-normalized-scan",
+      "kind": "manifest",
+      "label": "CSST W2 normalized scan input",
+      "description": "Normalized FITS-WCS scan cells returned by data-warehouse for CSST W2.",
+      "downloadName": "csst-w2-w2-normalized-scan.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w2-normalized-scan.json",
+      "sizeBytes": 8020409,
+      "sha256": "5e11a3cb14973bfe0a0d5e4a406f33630c35455c8c4995003d6f28d808709ab2"
+    },
+    {
+      "id": "csst-w3-normalized-scan",
+      "kind": "manifest",
+      "label": "CSST W3 normalized scan input",
+      "description": "Normalized FITS-WCS scan cells returned by data-warehouse for CSST W3.",
+      "downloadName": "csst-w3-w3-normalized-scan.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w3-normalized-scan.json",
+      "sizeBytes": 394093,
+      "sha256": "db1890db4e5d374b97d5feedb2d51fce3ce2c532f3e301a5a0f4ef11688890cf"
+    },
+    {
+      "id": "csst-w4-normalized-scan",
+      "kind": "manifest",
+      "label": "CSST W4 normalized scan input",
+      "description": "Normalized FITS-WCS scan cells returned by data-warehouse for CSST W4.",
+      "downloadName": "csst-w4-w4-normalized-scan.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w4-normalized-scan.json",
+      "sizeBytes": 444221,
+      "sha256": "9efd8d43cd5349458f5681907c8958d378514770b9a5389ad7e370f77f5b8be8"
     },
     {
       "id": "manifest-normalized",
@@ -256,9 +518,10 @@
       "description": "Normalized copy of the canonical footprint manifest included in the release bundle.",
       "downloadName": "survey-footprints-normalized.json",
       "mediaType": "application/json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/normalized/survey-footprints.json",
-      "sizeBytes": 917904,
-      "sha256": "bd1393a25e3192a7df692931b85f2f78ed09f84ef509ae47d1b3f7a976506e49"
+      "sizeBytes": 930773,
+      "sha256": "e214787d981e71505b6f46661aa39baf209333b90ec3b2dde3e674707889fc1b"
     },
     {
       "id": "manifest-survey-catalog",
@@ -267,9 +530,10 @@
       "description": "Survey metadata, modalities, public products, acquisition states and outstanding geometry work.",
       "downloadName": "survey-catalog.json",
       "mediaType": "application/json",
+      "deliveryClass": "runtime",
       "path": "src/surveys/survey-catalog.json",
-      "sizeBytes": 78404,
-      "sha256": "dffd97f48352fc29c9fa9b5165e984254c59c4afc67b5907934d16fac32e8ac7"
+      "sizeBytes": 77763,
+      "sha256": "28ca8f6725692555b6f3e83a68a0805bffd1a92335fd9ce2a81fc3ce9dddd820"
     },
     {
       "id": "moc-2mass-2mass-all-sky-h-band-imaging-cds-p-2mass-h-record",
@@ -282,6 +546,7 @@
       "releaseId": "2mass-all-sky",
       "product": "H-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FH&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/2mass-2mass-all-sky-h-band-imaging.record.json",
       "sizeBytes": 3994,
       "sha256": "aa8dbc93b79f19f1402f15a56b445126f59654f85d177a80574dca028c582a98"
@@ -297,6 +562,7 @@
       "releaseId": "2mass-all-sky",
       "product": "J-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FJ&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/2mass-2mass-all-sky-j-band-imaging.record.json",
       "sizeBytes": 4072,
       "sha256": "9d6e78623986f40c99bde511af8f394b2fc9a8f64cfa7c7b0c013a96a0c73661"
@@ -312,6 +578,7 @@
       "releaseId": "2mass-all-sky",
       "product": "K-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FK&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/2mass-2mass-all-sky-k-band-imaging.record.json",
       "sizeBytes": 4015,
       "sha256": "64e6089514597e2a946f1cefc833f1f176086603f54609f055b0afedd596aedd"
@@ -327,6 +594,7 @@
       "releaseId": "allwise",
       "product": "W1 imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW1&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/allwise-allwise-w1-imaging.record.json",
       "sizeBytes": 3585,
       "sha256": "57f4f117c76d759affa86afeabd5cfc933d39b08c7091cb89cf4e56592c46c67"
@@ -342,6 +610,7 @@
       "releaseId": "allwise",
       "product": "W2 imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW2&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/allwise-allwise-w2-imaging.record.json",
       "sizeBytes": 3607,
       "sha256": "f4630dbc190c8e4a7d161bdc524d0f85406a0a5d4487970a7cc6a2bad1b75749"
@@ -357,6 +626,7 @@
       "releaseId": "allwise",
       "product": "W3 imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW3&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/allwise-allwise-w3-imaging.record.json",
       "sizeBytes": 3613,
       "sha256": "92e544c48982af04476982b449f01eb498253ebfb7b3c45f29b8019fcb721dc7"
@@ -372,20 +642,118 @@
       "releaseId": "allwise",
       "product": "W4 imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW4&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/allwise-allwise-w4-imaging.record.json",
       "sizeBytes": 3608,
       "sha256": "a5d28c6a95d3092b888a60d9e97bf403b74c314fc0b1874aea56e8d6fb2428a6"
     },
     {
+      "id": "layer-csst-sim-w2-image-extent-lock",
+      "kind": "metadata",
+      "label": "CSST · W2 simulated wide-field images locked recipe",
+      "description": "Offline recipe and input snapshot lock used to build this public layer.",
+      "downloadName": "csst-sim-w2-image-extent.lock.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
+      "deliveryClass": "runtime",
+      "path": "src/layers/recipes/csst-sim-w2-image-extent.lock.json",
+      "sizeBytes": 1005,
+      "sha256": "a395d51d31edc603197bc066ef147119fb493f2a329f43c3f2d5836711618f3b"
+    },
+    {
+      "id": "layer-csst-sim-w2-image-extent-statistics",
+      "kind": "metadata",
+      "label": "CSST · W2 simulated wide-field images statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "csst-sim-w2-image-extent-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/statistics.json",
+      "sizeBytes": 207,
+      "sha256": "cb156442b5d4953547805dfedf8ae5021c2fa4e9de91dec0d3c79f3bc6f79794"
+    },
+    {
+      "id": "layer-csst-sim-w3-image-extent-lock",
+      "kind": "metadata",
+      "label": "CSST · W3 simulated wide-field images locked recipe",
+      "description": "Offline recipe and input snapshot lock used to build this public layer.",
+      "downloadName": "csst-sim-w3-image-extent.lock.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
+      "deliveryClass": "runtime",
+      "path": "src/layers/recipes/csst-sim-w3-image-extent.lock.json",
+      "sizeBytes": 1004,
+      "sha256": "0c70043df67550aecc8b3f9396ffbd0eb171f214fb3190cc75439f22ca6d937b"
+    },
+    {
+      "id": "layer-csst-sim-w3-image-extent-statistics",
+      "kind": "metadata",
+      "label": "CSST · W3 simulated wide-field images statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "csst-sim-w3-image-extent-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/statistics.json",
+      "sizeBytes": 203,
+      "sha256": "59c11927fa87eae8a98ccded8ec99c3b9793f55cc37987fbe35bc67b08339ebe"
+    },
+    {
+      "id": "layer-csst-sim-w4-image-extent-lock",
+      "kind": "metadata",
+      "label": "CSST · W4 simulated wide-field images locked recipe",
+      "description": "Offline recipe and input snapshot lock used to build this public layer.",
+      "downloadName": "csst-sim-w4-image-extent.lock.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
+      "deliveryClass": "runtime",
+      "path": "src/layers/recipes/csst-sim-w4-image-extent.lock.json",
+      "sizeBytes": 1004,
+      "sha256": "649ed4163e20147a9dde04e62856eef3c2afabd5a36800f802634aa8f88d5247"
+    },
+    {
+      "id": "layer-csst-sim-w4-image-extent-statistics",
+      "kind": "metadata",
+      "label": "CSST · W4 simulated wide-field images statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "csst-sim-w4-image-extent-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/statistics.json",
+      "sizeBytes": 204,
+      "sha256": "418abf362864bd6e19056fab6b8e5f62b9279748b3a1a1e6116b59c14ebab3fd"
+    },
+    {
       "id": "csst-coverage-job-snapshot",
       "kind": "metadata",
       "label": "CSST W1 coverage job snapshot",
-      "description": "Workspace coverage request, scanner configuration and review decision for CSST W1 simulated wide-field images.",
+      "description": "Data-warehouse coverage request, scanner configuration and review decision for CSST W1 simulated wide-field images.",
       "downloadName": "csst-w1-coverage-job-snapshot.json",
       "mediaType": "application/json",
       "surveyId": "csst",
       "releaseId": "csst-sim-w1-20250731",
       "product": "W1 simulated wide-field images",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/csst/coverage-job-snapshot.json",
       "sizeBytes": 1593,
       "sha256": "6dadfd8959a71a16dedcfc9ac111c4c31967cd4a1d7726ec30db895a29a7c6af"
@@ -394,12 +762,13 @@
       "id": "csst-run-statistics",
       "kind": "metadata",
       "label": "CSST W1 full-run statistics",
-      "description": "Summed 64-shard Workspace and Elasticsearch coverage statistics.",
+      "description": "Summed 64-shard data-warehouse and selected sink coverage statistics.",
       "downloadName": "csst-w1-run-statistics.json",
       "mediaType": "application/json",
       "surveyId": "csst",
       "releaseId": "csst-sim-w1-20250731",
       "product": "W1 simulated wide-field images",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/csst/run-statistics.json",
       "sizeBytes": 523,
       "sha256": "72a5d45ef537d6a9f3afcd9108bfa4a4c0db76cc0bfe3c2bba2aae662af48fda"
@@ -414,6 +783,7 @@
       "surveyId": "csst",
       "releaseId": "csst-sim-w1-20250731",
       "product": "W1 simulated wide-field images",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/csst/sample-report.json",
       "sizeBytes": 2090,
       "sha256": "764e85df2658745456ebad85379f0ea5c86769e4206d94548e70cce171912cde"
@@ -428,9 +798,190 @@
       "surveyId": "csst",
       "releaseId": "csst-sim-w1-20250731",
       "product": "W1 simulated wide-field images",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/csst/wcs-geometry-summary.json",
       "sizeBytes": 2482,
       "sha256": "cc2a9cd408cf793a93b0c962e9853d84bb0f17cd9de4edfd3c5005d9ab894cd1"
+    },
+    {
+      "id": "csst-w2-coverage-job-snapshot",
+      "kind": "metadata",
+      "label": "CSST W2 coverage job snapshot",
+      "description": "Data-warehouse coverage task snapshot for CSST W2.",
+      "downloadName": "csst-w2-w2-coverage-job-snapshot.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w2-coverage-job-snapshot.json",
+      "sizeBytes": 819,
+      "sha256": "e6243116529bd17cdf590dcc6a48420c98d71e3df32942b587e5134da757fbfb"
+    },
+    {
+      "id": "csst-w2-statistics",
+      "kind": "metadata",
+      "label": "CSST W2 MOC statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "csst-sim-w2-image-extent-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/statistics.json",
+      "sizeBytes": 207,
+      "sha256": "cb156442b5d4953547805dfedf8ae5021c2fa4e9de91dec0d3c79f3bc6f79794"
+    },
+    {
+      "id": "csst-w2-run-statistics",
+      "kind": "metadata",
+      "label": "CSST W2 run statistics",
+      "description": "File, WCS and cell statistics for the CSST W2 coverage run.",
+      "downloadName": "csst-w2-w2-run-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w2-run-statistics.json",
+      "sizeBytes": 403,
+      "sha256": "122698c2838d931608f46604ecbaa79e26cf9d3becf29beec3aae76c9c03c107"
+    },
+    {
+      "id": "csst-w2-sample-report",
+      "kind": "metadata",
+      "label": "CSST W2 sample report",
+      "description": "Audited samples and exclusions from the CSST W2 scan.",
+      "downloadName": "csst-w2-w2-sample-report.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w2-sample-report.json",
+      "sizeBytes": 1662,
+      "sha256": "3e290f4e6ab517f52eb8351863ab401e9befeefc886cfb2a9f595946975964c0"
+    },
+    {
+      "id": "csst-w3-coverage-job-snapshot",
+      "kind": "metadata",
+      "label": "CSST W3 coverage job snapshot",
+      "description": "Data-warehouse coverage task snapshot for CSST W3.",
+      "downloadName": "csst-w3-w3-coverage-job-snapshot.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w3-coverage-job-snapshot.json",
+      "sizeBytes": 817,
+      "sha256": "e171890b6186abc1645a50b4623c67a1b3c5205edcb746b8928f5341f1c32547"
+    },
+    {
+      "id": "csst-w3-statistics",
+      "kind": "metadata",
+      "label": "CSST W3 MOC statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "csst-sim-w3-image-extent-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/statistics.json",
+      "sizeBytes": 203,
+      "sha256": "59c11927fa87eae8a98ccded8ec99c3b9793f55cc37987fbe35bc67b08339ebe"
+    },
+    {
+      "id": "csst-w3-run-statistics",
+      "kind": "metadata",
+      "label": "CSST W3 run statistics",
+      "description": "File, WCS and cell statistics for the CSST W3 coverage run.",
+      "downloadName": "csst-w3-w3-run-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w3-run-statistics.json",
+      "sizeBytes": 397,
+      "sha256": "a9e3daf15df7c6085a79d5f53598b0bae2d9614adcd6525df893bbc436ae78ef"
+    },
+    {
+      "id": "csst-w3-sample-report",
+      "kind": "metadata",
+      "label": "CSST W3 sample report",
+      "description": "Audited samples and exclusions from the CSST W3 scan.",
+      "downloadName": "csst-w3-w3-sample-report.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w3-sample-report.json",
+      "sizeBytes": 1677,
+      "sha256": "b21f2d37f3b6741a26673d1a6093a718fa121787413ec8169cd3f5471a17af0c"
+    },
+    {
+      "id": "csst-w4-coverage-job-snapshot",
+      "kind": "metadata",
+      "label": "CSST W4 coverage job snapshot",
+      "description": "Data-warehouse coverage task snapshot for CSST W4.",
+      "downloadName": "csst-w4-w4-coverage-job-snapshot.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w4-coverage-job-snapshot.json",
+      "sizeBytes": 817,
+      "sha256": "7e5af042957e1dc5ca427ddc2c6aaa72264a39efa4aa63daf2464f9285407d0f"
+    },
+    {
+      "id": "csst-w4-statistics",
+      "kind": "metadata",
+      "label": "CSST W4 MOC statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "csst-sim-w4-image-extent-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/statistics.json",
+      "sizeBytes": 204,
+      "sha256": "418abf362864bd6e19056fab6b8e5f62b9279748b3a1a1e6116b59c14ebab3fd"
+    },
+    {
+      "id": "csst-w4-run-statistics",
+      "kind": "metadata",
+      "label": "CSST W4 run statistics",
+      "description": "File, WCS and cell statistics for the CSST W4 coverage run.",
+      "downloadName": "csst-w4-w4-run-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w4-run-statistics.json",
+      "sizeBytes": 398,
+      "sha256": "39385b4cad6fad490627ebca3d37f793e08c22fad434d9ed6509f244c81ac2f2"
+    },
+    {
+      "id": "csst-w4-sample-report",
+      "kind": "metadata",
+      "label": "CSST W4 sample report",
+      "description": "Audited samples and exclusions from the CSST W4 scan.",
+      "downloadName": "csst-w4-w4-sample-report.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w4-sample-report.json",
+      "sizeBytes": 1670,
+      "sha256": "902b7239b27b5a9ec32ded282a8fa292bcb24aefa5b0cea44a35180cdbcfe860"
     },
     {
       "id": "moc-des-des-dr2-dr2-color-imaging-cds-p-des-dr2-colorirg-record",
@@ -443,6 +994,7 @@
       "releaseId": "des-dr2",
       "product": "DR2 color imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2FColorIRG&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/des-des-dr2-dr2-color-imaging.record.json",
       "sizeBytes": 3247,
       "sha256": "170a6bc6f67f750d93dd26db82a92febb6d2644a8d639ba888c88f5911605179"
@@ -458,6 +1010,7 @@
       "releaseId": "desi-dr1",
       "product": "DR1 spectra and redshifts",
       "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "deliveryClass": "runtime",
       "path": "src/layers/recipes/desi-dr1-spectra-footprint.lock.json",
       "sizeBytes": 986,
       "sha256": "10115967e29878feba107eb03a2ecba57727f93c7f4c6bcbebeb5001fff0e0f0"
@@ -473,6 +1026,7 @@
       "releaseId": "desi-dr1",
       "product": "DR1 spectra and redshifts",
       "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/statistics.json",
       "sizeBytes": 212,
       "sha256": "e4e92e864bd98e1edb70e0dec32cb5d4595899c34b730a5b9bd1911ace3bf555"
@@ -488,6 +1042,7 @@
       "releaseId": "desi-edr",
       "product": "Early Data Release spectra",
       "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "deliveryClass": "runtime",
       "path": "src/layers/recipes/desi-edr-spectra-footprint.lock.json",
       "sizeBytes": 986,
       "sha256": "ef4bbbf1af7680cd2859c0aeee20f1edb72440750f277ae4c6e799ef5881c778"
@@ -503,6 +1058,7 @@
       "releaseId": "desi-edr",
       "product": "Early Data Release spectra",
       "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint/statistics.json",
       "sizeBytes": 209,
       "sha256": "f6b04cdb47dc3a4773434892ccf2a277201379921c6b4f2733c26c07840f61d6"
@@ -518,6 +1074,7 @@
       "releaseId": "euclid-q1",
       "product": "Euclid Q1 deep fields",
       "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "deliveryClass": "runtime",
       "path": "src/layers/recipes/euclid-q1-deep-fields-image-extent.lock.json",
       "sizeBytes": 798,
       "sha256": "3e1ac17f261556460ba65a8a4d3ce6bd9aaf292675e7850783ffad8ed65582f1"
@@ -533,6 +1090,7 @@
       "releaseId": "euclid-q1",
       "product": "Euclid Q1 deep fields",
       "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/statistics.json",
       "sizeBytes": 205,
       "sha256": "bf7f1457ce9d21129f7329a64475e50a0f904232fe7facda2c5c4edb45f2b15f"
@@ -548,6 +1106,7 @@
       "releaseId": "galex-gr6-gr7",
       "product": "FUV imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2FFUV&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/galex-galex-gr6-gr7-fuv-imaging.record.json",
       "sizeBytes": 4348,
       "sha256": "df34333385e2fff9d00e26c2687e34adeedd8c9376aac90117b5349935e2fe7c"
@@ -563,6 +1122,7 @@
       "releaseId": "galex-gr6-gr7",
       "product": "NUV imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2FNUV&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/galex-galex-gr6-gr7-nuv-imaging.record.json",
       "sizeBytes": 4184,
       "sha256": "3d9d1e96a4b9025f552fe5589c91fefc1af389f496f6c78b03dd121fd580742d"
@@ -578,6 +1138,7 @@
       "releaseId": "galex-gr6-gr7",
       "product": "ultraviolet image coverage",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2Fcolor&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/galex-galex-gr6-gr7-ultraviolet-image-coverage.record.json",
       "sizeBytes": 5498,
       "sha256": "da2f1938d01678c626aab27a4c58269bffa241b958798e5227548e8cfa6c6965"
@@ -593,6 +1154,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 g-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fg&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-g-band-imaging-deep.record.json",
       "sizeBytes": 4601,
       "sha256": "ce0a9058e8c0fbf54b3b520a9df69d9bdb258716214a8e0826024a7974e3238d"
@@ -608,6 +1170,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 g-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fg&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-g-band-imaging-wide.record.json",
       "sizeBytes": 3959,
       "sha256": "7938e1b2eca2439b4cc08f4329db06c7671a5f3e57c65a85314fe3af2a54c3aa"
@@ -623,6 +1186,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 i-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fi&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-i-band-imaging-deep.record.json",
       "sizeBytes": 3707,
       "sha256": "e66ee7310a5af937be47dba23c817cb2ef22903143d5f07dae50d5059ff0f5ea"
@@ -638,6 +1202,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 i-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fi&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-i-band-imaging-wide.record.json",
       "sizeBytes": 3905,
       "sha256": "882065d0c95ca173fd3ef58753dfef3ae3519d6b5bb7e00419d57b93aca5afa3"
@@ -653,6 +1218,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 r-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fr&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-r-band-imaging-deep.record.json",
       "sizeBytes": 3708,
       "sha256": "b783220b0203174bf9878b0a13a2fc1fea33b7b3f04b0f143cdc6f20d2b88016"
@@ -668,6 +1234,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 r-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fr&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-r-band-imaging-wide.record.json",
       "sizeBytes": 3899,
       "sha256": "eb805d0a52fa30d2b926303e5017de7db9c182c5d65584c838e6c0a3d14e84ec"
@@ -683,6 +1250,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 Wide + Deep image coverage",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fcolor-i-r-g&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-wide-deep-image-coverage-deep.record.json",
       "sizeBytes": 3892,
       "sha256": "6764b62273e3897c2509c90576ff48dafb193b5fad57e3326ba3573dab144629"
@@ -698,6 +1266,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 Wide + Deep image coverage",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fcolor-i-r-g&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-wide-deep-image-coverage-wide.record.json",
       "sizeBytes": 3872,
       "sha256": "f775b4bb48bcb17507c0bcdafee379bc63142deff8a677847251a2b1eaeb59ff"
@@ -713,6 +1282,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 y-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fy&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-y-band-imaging-deep.record.json",
       "sizeBytes": 3721,
       "sha256": "205ee78cad09e0172c844cf1c2eb7f5a08add274239b9812decf4cd6495aa0fb"
@@ -728,6 +1298,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 y-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fy&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-y-band-imaging-wide.record.json",
       "sizeBytes": 3992,
       "sha256": "ea3a944b92c944801594a3b1ba63668b9312ae8b0fbf3670ae34555a7ca27de2"
@@ -743,6 +1314,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 z-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fz&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-z-band-imaging-deep.record.json",
       "sizeBytes": 3792,
       "sha256": "647da62376252be8d2f760ac00f6d9a5253c0a17a39595640370e86726ed226d"
@@ -758,6 +1330,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 z-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fz&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-z-band-imaging-wide.record.json",
       "sizeBytes": 3834,
       "sha256": "5e776de082638c926e9db298dedfb305a013d8550d18128b2ed8f5e74ebf53cb"
@@ -773,6 +1346,7 @@
       "releaseId": "hst-mast-snapshot-2026",
       "product": "published HST HiPS pointings",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hst-hst-mast-snapshot-2026-published-hst-hips-pointings.record.json",
       "sizeBytes": 167838,
       "sha256": "f9908c61d85a42735eac642f9ceecbc4a7f92230db526c2833b2e08d9fd3fd1b"
@@ -788,6 +1362,7 @@
       "releaseId": "kids-dr5",
       "product": "DR5 gri imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/kids-kids-dr5-dr5-gri-imaging.record.json",
       "sizeBytes": 3078,
       "sha256": "95e3531a8dfbc63a09e12b251380032a857273d8381b4af223a4648958a8eb04"
@@ -803,6 +1378,7 @@
       "releaseId": "legacy-dr10",
       "product": "DR10 color imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDESI-Legacy-Surveys%2FDR10%2Fcolor&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/legacy-surveys-legacy-dr10-dr10-color-imaging.record.json",
       "sizeBytes": 4676,
       "sha256": "9d5281fbc60721da542a460ddc79464bc07c6d8a2ce5a3c8ae8fff11e61a3b4b"
@@ -814,9 +1390,10 @@
       "description": "Offline public-layer build order, source-date epoch and authoritative MOC hashes.",
       "downloadName": "public-build-plan.json",
       "mediaType": "application/json",
+      "deliveryClass": "runtime",
       "path": "src/layers/public-build-plan.json",
-      "sizeBytes": 887,
-      "sha256": "a28ad6d019872c0aba0491c78df8f2391eff640a3cdcc11a56b45e4bfacffd2f"
+      "sizeBytes": 1670,
+      "sha256": "7a89fde5833232b48c152717cce4beb657e62f89f099dc87d2973958e5c2adfd"
     },
     {
       "id": "metadata-moc-index",
@@ -825,6 +1402,7 @@
       "description": "Source URLs, retrieval metadata, byte lengths and hashes for native FITS MOCs.",
       "downloadName": "moc-index.json",
       "mediaType": "application/json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/index.json",
       "sizeBytes": 25160,
       "sha256": "054d61542a27136df8bc6e35499192cf4b33db298ff07406ef1d96e1f951207c"
@@ -840,6 +1418,7 @@
       "releaseId": "nvss-final",
       "product": "1.4 GHz radio imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FNVSS&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/nvss-nvss-final-1-4-ghz-radio-imaging.record.json",
       "sizeBytes": 3034,
       "sha256": "9dfba8bb6e64cb3f84d06067c58410be76a807ca1d048d74690334905ed61d8a"
@@ -855,6 +1434,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 color imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fcolor-i-r-g&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-color-imaging.record.json",
       "sizeBytes": 4745,
       "sha256": "48a337195b7b682f087b9998902d4f0766d1ebb6f74515e912d2a83073f1222f"
@@ -870,6 +1450,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 g-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fg&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-g-band-imaging.record.json",
       "sizeBytes": 4953,
       "sha256": "a3bac457843e140a3db0350067876ba5423846f350527fce9bdeb285ac74533c"
@@ -885,6 +1466,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 i-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fi&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-i-band-imaging.record.json",
       "sizeBytes": 6435,
       "sha256": "8029b3c2c9eb72f772d48b2176eb6de369da1776e8cddf272049976cb25d2eda"
@@ -900,6 +1482,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 r-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fr&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-r-band-imaging.record.json",
       "sizeBytes": 3874,
       "sha256": "ed609703fee1b3f14d2ccb78923dbf7b02341fa0eec7148a9f872e6ab3ba87a6"
@@ -915,6 +1498,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 y-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fy&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-y-band-imaging.record.json",
       "sizeBytes": 4074,
       "sha256": "a8ec8b6fc6a8a0bff800784e4988b0d9f37deb10b4ff4a7ca73a304ec6048922"
@@ -930,6 +1514,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 z-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fz&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-z-band-imaging.record.json",
       "sizeBytes": 5044,
       "sha256": "a32a7491d75d01a1335ac872c57e3cbe48ddd5c6ae237b2130a46078f25b549e"
@@ -938,12 +1523,13 @@
       "id": "metadata-coverage-task-schema",
       "kind": "metadata",
       "label": "Public coverage task handoff schema",
-      "description": "Internal Assets to data-warehouse one-shot task envelope; contains no credentials or user asset state.",
+      "description": "Assets-side input used to render standard data-warehouse CRDs; credential storage, sink semantics and task history remain outside this schema.",
       "downloadName": "coverage-task-v1.schema.json",
       "mediaType": "application/json",
+      "deliveryClass": "runtime",
       "path": "contracts/coverage-task-v1.schema.json",
-      "sizeBytes": 3406,
-      "sha256": "05bf694f3d2e8e1c665018ef9a156a2bae0c9e97a24b568a7ff34649a307739f"
+      "sizeBytes": 4037,
+      "sha256": "f4d3a8bb9677543a5a1c4e6fb964c0b845ea7e357d6095c2d6413d98cdec16db"
     },
     {
       "id": "metadata-geometry-index",
@@ -952,6 +1538,7 @@
       "description": "Raw Euclid and DESI geometry metadata, parser parameters, byte lengths and hashes.",
       "downloadName": "geometry-index.json",
       "mediaType": "application/json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/geometry/index.json",
       "sizeBytes": 2617,
       "sha256": "fcd5c680a5025ae03ae9dbffefa49d48e202a3cacac79a270c210a0a1e7bb1dd"
@@ -963,9 +1550,10 @@
       "description": "Current downloadable resource-package versions, sizes and SHA-256 values.",
       "downloadName": "resource-package-catalog.json",
       "mediaType": "application/json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/catalog.json",
-      "sizeBytes": 21218,
-      "sha256": "5cac52a35fc1fccb30646fa9e132c2f21f77a4f8f2b4ecda1cf3a02f90e2341e"
+      "sizeBytes": 22241,
+      "sha256": "43a808ab8b9f25bdb88d776604dc06ea142829d09b66adf95b730ac664b15e24"
     },
     {
       "id": "metadata-resource-package-v3-schema",
@@ -974,6 +1562,7 @@
       "description": "Machine-readable manifest shape used by public package installers and conformance tooling.",
       "downloadName": "resource-package-v3.schema.json",
       "mediaType": "application/json",
+      "deliveryClass": "runtime",
       "path": "contracts/resource-package-v3.schema.json",
       "sizeBytes": 2591,
       "sha256": "dbf666d8959aa31d5b41ff2003c947b0388af6a9333b2a882debb5c4f039009f"
@@ -989,6 +1578,7 @@
       "releaseId": "sdss-dr09",
       "product": "DR9 color imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=record&fmt=json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/sdss-sdss-dr09-dr9-color-imaging.record.json",
       "sizeBytes": 3026,
       "sha256": "fbbcbb0da5eecf0047d1b71e6950f630288e5305256a2f82a473dff132241316"
@@ -1000,9 +1590,10 @@
       "description": "Assets-owned stable layer IDs and scientific classifications for reviewed Core layers.",
       "downloadName": "layer-registry.json",
       "mediaType": "application/json",
+      "deliveryClass": "runtime",
       "path": "src/layers/layer-registry.json",
-      "sizeBytes": 20344,
-      "sha256": "184c9a4a6fe888d615a7ef5df3633307766507b2b4b1684fcbea9343e105f38f"
+      "sizeBytes": 20722,
+      "sha256": "65c2a8357e4dc9256bf0f6d1dde7a8087d8a19e29e855ce890576672af125434"
     },
     {
       "id": "moc-2mass-2mass-all-sky-h-band-imaging-cds-p-2mass-h",
@@ -1015,6 +1606,7 @@
       "releaseId": "2mass-all-sky",
       "product": "H-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FH&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/2mass-2mass-all-sky-h-band-imaging.fits",
       "sizeBytes": 8640,
       "sha256": "50aa8351b1153c4967f1b3f04f2c992518bf0a4e104e7789c76f6017a7722542"
@@ -1030,6 +1622,7 @@
       "releaseId": "2mass-all-sky",
       "product": "J-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FJ&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/2mass-2mass-all-sky-j-band-imaging.fits",
       "sizeBytes": 8640,
       "sha256": "1f13dbb8123587118a4ad1ccbc17a6f7e32127139162cb583bd07f4935dd7fbc"
@@ -1045,6 +1638,7 @@
       "releaseId": "2mass-all-sky",
       "product": "K-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FK&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/2mass-2mass-all-sky-k-band-imaging.fits",
       "sizeBytes": 8640,
       "sha256": "1f13dbb8123587118a4ad1ccbc17a6f7e32127139162cb583bd07f4935dd7fbc"
@@ -1060,6 +1654,7 @@
       "releaseId": "allwise",
       "product": "W1 imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW1&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/allwise-allwise-w1-imaging.fits",
       "sizeBytes": 8640,
       "sha256": "1f13dbb8123587118a4ad1ccbc17a6f7e32127139162cb583bd07f4935dd7fbc"
@@ -1075,6 +1670,7 @@
       "releaseId": "allwise",
       "product": "W2 imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW2&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/allwise-allwise-w2-imaging.fits",
       "sizeBytes": 8640,
       "sha256": "1f13dbb8123587118a4ad1ccbc17a6f7e32127139162cb583bd07f4935dd7fbc"
@@ -1090,6 +1686,7 @@
       "releaseId": "allwise",
       "product": "W3 imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW3&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/allwise-allwise-w3-imaging.fits",
       "sizeBytes": 8640,
       "sha256": "fc02f6efb262a33d10863c1e189e7d2008856ea4ec68f42d2d2393c34f18b449"
@@ -1105,9 +1702,58 @@
       "releaseId": "allwise",
       "product": "W4 imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW4&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/allwise-allwise-w4-imaging.fits",
       "sizeBytes": 8640,
       "sha256": "05e43bb7a0cd9e01a00e156e632aeeb17812098a67e9896e24365c970afa646e"
+    },
+    {
+      "id": "layer-csst-sim-w2-image-extent-moc",
+      "kind": "moc",
+      "label": "CSST · W2 simulated wide-field images authoritative MOC",
+      "description": "image_extent (simulated, user_file_derived) generated by Assets MOC Core 1.0.0.",
+      "downloadName": "csst-sim-w2-image-extent.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/csst-sim-w2-image-extent.moc.fits",
+      "sizeBytes": 25920,
+      "sha256": "909ec26a41a54d2ad41444366a340e71fd5c7bc3da7a36cfc44a18ce5c21225b"
+    },
+    {
+      "id": "layer-csst-sim-w3-image-extent-moc",
+      "kind": "moc",
+      "label": "CSST · W3 simulated wide-field images authoritative MOC",
+      "description": "image_extent (simulated, user_file_derived) generated by Assets MOC Core 1.0.0.",
+      "downloadName": "csst-sim-w3-image-extent.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/csst-sim-w3-image-extent.moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "6bc369f232f1f1523f578e1a79f2828aa78ff2d1e243c9c8ad16a39928f0d698"
+    },
+    {
+      "id": "layer-csst-sim-w4-image-extent-moc",
+      "kind": "moc",
+      "label": "CSST · W4 simulated wide-field images authoritative MOC",
+      "description": "image_extent (simulated, user_file_derived) generated by Assets MOC Core 1.0.0.",
+      "downloadName": "csst-sim-w4-image-extent.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/csst-sim-w4-image-extent.moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "f7796308322935b1f304b33e4d8429680290e15744c7a95246259f70ff4046db"
     },
     {
       "id": "csst-w1-image-extent-moc-order8",
@@ -1119,9 +1765,55 @@
       "surveyId": "csst",
       "releaseId": "csst-sim-w1-20250731",
       "product": "W1 simulated wide-field images",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/csst/csst-w1-image-extent-order8.fits",
       "sizeBytes": 60480,
       "sha256": "caa6a5287efa0ba9abc406261d4e653730b062e49282ffc82549f7d2735dbf3c"
+    },
+    {
+      "id": "csst-w2-moc",
+      "kind": "moc",
+      "label": "CSST W2 simulated image WCS MOC",
+      "description": "Authoritative ICRS/NUNIQ FITS MOC generated by Assets MOC Core from the data-warehouse W2 FITS-WCS result.",
+      "downloadName": "csst-sim-w2-image-extent.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/csst-sim-w2-image-extent.moc.fits",
+      "sizeBytes": 25920,
+      "sha256": "909ec26a41a54d2ad41444366a340e71fd5c7bc3da7a36cfc44a18ce5c21225b"
+    },
+    {
+      "id": "csst-w3-moc",
+      "kind": "moc",
+      "label": "CSST W3 simulated image WCS MOC",
+      "description": "Authoritative ICRS/NUNIQ FITS MOC generated by Assets MOC Core from the data-warehouse W3 FITS-WCS result.",
+      "downloadName": "csst-sim-w3-image-extent.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/csst-sim-w3-image-extent.moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "6bc369f232f1f1523f578e1a79f2828aa78ff2d1e243c9c8ad16a39928f0d698"
+    },
+    {
+      "id": "csst-w4-moc",
+      "kind": "moc",
+      "label": "CSST W4 simulated image WCS MOC",
+      "description": "Authoritative ICRS/NUNIQ FITS MOC generated by Assets MOC Core from the data-warehouse W4 FITS-WCS result.",
+      "downloadName": "csst-sim-w4-image-extent.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/csst-sim-w4-image-extent.moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "f7796308322935b1f304b33e4d8429680290e15744c7a95246259f70ff4046db"
     },
     {
       "id": "moc-des-des-dr2-dr2-color-imaging-cds-p-des-dr2-colorirg",
@@ -1134,6 +1826,7 @@
       "releaseId": "des-dr2",
       "product": "DR2 color imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2FColorIRG&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/des-des-dr2-dr2-color-imaging.fits",
       "sizeBytes": 126720,
       "sha256": "59bfe8e901d19e1fdd6fcb9793e97e21558423973b7ef841906aaf2fe6a8e335"
@@ -1149,6 +1842,7 @@
       "releaseId": "desi-dr1",
       "product": "DR1 spectra and redshifts",
       "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/desi-dr1-spectra-footprint.moc.fits",
       "sizeBytes": 944640,
       "sha256": "e3fb86b871d2e24e3fd40724ea241d222988d8fd7262fa6b3855f59b3aae9c40"
@@ -1164,6 +1858,7 @@
       "releaseId": "desi-edr",
       "product": "Early Data Release spectra",
       "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint/desi-edr-spectra-footprint.moc.fits",
       "sizeBytes": 259200,
       "sha256": "c1ef0b3ee9b18ca1d9dd1d10c08630850823c3f3ac4f3a0f22e86a58c177833f"
@@ -1179,6 +1874,7 @@
       "releaseId": "euclid-q1",
       "product": "Euclid Q1 deep fields",
       "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/euclid-q1-deep-fields-image-extent.moc.fits",
       "sizeBytes": 17280,
       "sha256": "e1c38cd2abe21035deae79efdf13f003fb0421f14a780d3061dbc8a52d2da75e"
@@ -1194,6 +1890,7 @@
       "releaseId": "galex-gr6-gr7",
       "product": "FUV imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2FFUV&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/galex-galex-gr6-gr7-fuv-imaging.fits",
       "sizeBytes": 630720,
       "sha256": "4f2df9c3baade74206707acdd80ad4e71e734a25098dcaf59bc326644562b1a1"
@@ -1209,6 +1906,7 @@
       "releaseId": "galex-gr6-gr7",
       "product": "NUV imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2FNUV&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/galex-galex-gr6-gr7-nuv-imaging.fits",
       "sizeBytes": 619200,
       "sha256": "8a6c5bd77318ebb99c430412e7ba4634d443b462892d4c62fbbe2d400b18760b"
@@ -1224,6 +1922,7 @@
       "releaseId": "galex-gr6-gr7",
       "product": "ultraviolet image coverage",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2Fcolor&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/galex-galex-gr6-gr7-ultraviolet-image-coverage.fits",
       "sizeBytes": 619200,
       "sha256": "f4b4a512b363e100cc20c4afeed96514f3d1adf1b2bd3399522132cb67d6be81"
@@ -1239,6 +1938,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 g-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fg&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-g-band-imaging-deep.fits",
       "sizeBytes": 25920,
       "sha256": "8bb56469279dcd98f105ec4019899e8f282c01bfa801da9a6a10ee43afb79ba6"
@@ -1254,6 +1954,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 g-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fg&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-g-band-imaging-wide.fits",
       "sizeBytes": 250560,
       "sha256": "26cc4320e331485c464e01a323701063c7683c9226fda3ec1c431a871ac18ce6"
@@ -1269,6 +1970,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 i-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fi&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-i-band-imaging-deep.fits",
       "sizeBytes": 25920,
       "sha256": "ff8496d941bcaccb134daf94eda6c0aab4f2e76bb43edc2159dfb947c0dc7d1b"
@@ -1284,6 +1986,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 i-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fi&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-i-band-imaging-wide.fits",
       "sizeBytes": 233280,
       "sha256": "6807d0f6280e65592ace029c4ac0ac2d95095881df9b9b9e7393ac6650ed73ee"
@@ -1299,6 +2002,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 r-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fr&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-r-band-imaging-deep.fits",
       "sizeBytes": 25920,
       "sha256": "f1019b171eafcefaa5f568c367be39a9aac2dd1fdfb47b32a5bb956183182fad"
@@ -1314,6 +2018,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 r-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fr&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-r-band-imaging-wide.fits",
       "sizeBytes": 270720,
       "sha256": "d444e0ac65426762543916ab3e1fc5b6f7f876448a50f8d499fd3a4129bc67d3"
@@ -1329,6 +2034,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 Wide + Deep image coverage",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fcolor-i-r-g&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-wide-deep-image-coverage-deep.fits",
       "sizeBytes": 25920,
       "sha256": "64ff449acaf269f4ccc56c4af2f28a43b066733711dbabf0bc9bd131fbe202c5"
@@ -1344,6 +2050,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 Wide + Deep image coverage",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fcolor-i-r-g&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-wide-deep-image-coverage-wide.fits",
       "sizeBytes": 233280,
       "sha256": "af30626b0856c10217cbb903700a70edfab2b41df87e5408d7eb2c0701fbe6a3"
@@ -1359,6 +2066,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 y-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fy&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-y-band-imaging-deep.fits",
       "sizeBytes": 25920,
       "sha256": "8c7c6db0b5d93f8121359838ed5afd220be5d9be5e5a2684351fed6d8acfbde6"
@@ -1374,6 +2082,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 y-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fy&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-y-band-imaging-wide.fits",
       "sizeBytes": 239040,
       "sha256": "52456d46f4b6f65177408a42837b993a90161a71d9ba20fff500ffcf43a85729"
@@ -1389,6 +2098,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 z-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fdeep%2Fz&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-z-band-imaging-deep.fits",
       "sizeBytes": 25920,
       "sha256": "055faaf24194f662bc96d4ec6e1e3c51259248e64da449414ba25a7c6b4203a0"
@@ -1404,6 +2114,7 @@
       "releaseId": "hsc-pdr2",
       "product": "PDR2 z-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fz&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hsc-ssp-hsc-pdr2-pdr2-z-band-imaging-wide.fits",
       "sizeBytes": 210240,
       "sha256": "cd215e5a501edd55b8bff81c6406ee5c265e82e43f914332827a70813f728554"
@@ -1419,6 +2130,7 @@
       "releaseId": "hst-mast-snapshot-2026",
       "product": "published HST HiPS pointings",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/hst-hst-mast-snapshot-2026-published-hst-hips-pointings.fits",
       "sizeBytes": 6897600,
       "sha256": "297748486ef7a1632339dae3c22f4bef88bfa13b5ca316181cc9207f3423d33e"
@@ -1434,6 +2146,7 @@
       "releaseId": "kids-dr5",
       "product": "DR5 gri imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/kids-kids-dr5-dr5-gri-imaging.fits",
       "sizeBytes": 97920,
       "sha256": "fc92888b974f743c8357af12cfb4a65637182adc5b8b65bbc2d528ce74d63b90"
@@ -1449,6 +2162,7 @@
       "releaseId": "legacy-dr10",
       "product": "DR10 color imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDESI-Legacy-Surveys%2FDR10%2Fcolor&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/legacy-surveys-legacy-dr10-dr10-color-imaging.fits",
       "sizeBytes": 290880,
       "sha256": "3c6347e296511f5c6a3f39fd6fa482a50e40000a31ce5e8c94e08e72545d914c"
@@ -1464,6 +2178,7 @@
       "releaseId": "nvss-final",
       "product": "1.4 GHz radio imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FNVSS&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/nvss-nvss-final-1-4-ghz-radio-imaging.fits",
       "sizeBytes": 14400,
       "sha256": "aca99dfcbcf13d6717060a48efd192389a244dee6261aa3f53583d1bd6144e13"
@@ -1479,6 +2194,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 color imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fcolor-i-r-g&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-color-imaging.fits",
       "sizeBytes": 95040,
       "sha256": "edcd8642b18a693f4d729589b030f736b6dfa9cae9caf43816f2a56693381e6c"
@@ -1494,6 +2210,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 g-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fg&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-g-band-imaging.fits",
       "sizeBytes": 95040,
       "sha256": "4f047e30a31bf1d2527978f96388d3d9e140ee4f76b939cbe3505cf2b6cb9edd"
@@ -1509,6 +2226,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 i-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fi&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-i-band-imaging.fits",
       "sizeBytes": 106560,
       "sha256": "df84ea37a5a015f6d63378c9bdfab2148db6c7be0a095c40f8578524b42f2646"
@@ -1524,6 +2242,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 r-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fr&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-r-band-imaging.fits",
       "sizeBytes": 115200,
       "sha256": "1c8ec31dffd3aa770b65703e60999fd56bb51fcda5d4c33bc42fe92d2068f620"
@@ -1539,6 +2258,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 y-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fy&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-y-band-imaging.fits",
       "sizeBytes": 11520,
       "sha256": "ff4abe1c62deb575fe35fad6f63be1ff33df6309a63188b7a68b3cc0ab88d96f"
@@ -1554,6 +2274,7 @@
       "releaseId": "panstarrs-dr1",
       "product": "DR1 z-band imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fz&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/panstarrs-panstarrs-dr1-dr1-z-band-imaging.fits",
       "sizeBytes": 11520,
       "sha256": "cfc7b7100277ddef102e32fe46bc24ab8df1873b30950398c440a46f79248606"
@@ -1569,6 +2290,7 @@
       "releaseId": "sdss-dr09",
       "product": "DR9 color imaging",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=smoc&fmt=fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/sdss-sdss-dr09-dr9-color-imaging.fits",
       "sizeBytes": 2998080,
       "sha256": "33eeaeb394e3049c3109358c56d9a3ac2e1d0e6e7fdde76d695c707176a695c3"
@@ -1584,6 +2306,7 @@
       "releaseId": "2mass-all-sky",
       "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FJ&get=record&fmt=json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-2mass-footprints-3.0.0.zip",
       "sizeBytes": 10994,
       "sha256": "e565b90b1f6cc5cc75da5440a53ce77f95c87d9d91120f125ec9d421c36551c5"
@@ -1599,6 +2322,7 @@
       "releaseId": "allwise",
       "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW1&get=record&fmt=json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-allwise-footprints-3.0.0.zip",
       "sizeBytes": 11767,
       "sha256": "3b3697edba5e163a80628977c9b6b571965910397eb1524c9a1e9e77fe4832e0"
@@ -1606,17 +2330,18 @@
     {
       "id": "package-public-csst-footprints-3-0-0",
       "kind": "package",
-      "label": "CSST W1 Simulation",
-      "description": "CSST W1_Phot WIDE 仿真图像经审核的 ICRS FITS-WCS 覆盖；实测 354.759 平方度，不代表正式公开巡天 footprint。",
+      "label": "CSST W1-W4 Simulation",
+      "description": "CSST W1/W2/W3/W4 simulated wide-field image-extent MOCs generated from data-warehouse FITS-WCS coverage tasks and finalized by Assets MOC Core.",
       "downloadName": "public-csst-footprints-3.0.0.zip",
       "mediaType": "application/zip",
       "surveyId": "csst",
-      "releaseId": "csst-sim-w1-20250731",
+      "releaseId": "csst-sim-w2-20250731",
       "version": "3.0.0",
-      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W1_Phot",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-csst-footprints-3.0.0.zip",
-      "sizeBytes": 3012,
-      "sha256": "32010442df7a555aa1780fdff3bf0d725670961cd94b9314ddc8bd427ca712fd"
+      "sizeBytes": 30998,
+      "sha256": "b584f6ac303b12223f770cd886488fe8edae21cff1bb0a9142723c9fa3a2bcea"
     },
     {
       "id": "package-public-des-footprints-3-0-0",
@@ -1629,6 +2354,7 @@
       "releaseId": "des-dr2",
       "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2FColorIRG&get=record&fmt=json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-des-footprints-3.0.0.zip",
       "sizeBytes": 3670,
       "sha256": "824da6e75d4756540e9ed4182cae6f4a36fe29006bdf0bb23fc652d96a1e117e"
@@ -1644,6 +2370,7 @@
       "releaseId": "legacy-dr1",
       "version": "3.0.0",
       "sourceUrl": "https://www.legacysurvey.org/dr1/",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-legacy-surveys-footprints-3.0.0.zip",
       "sizeBytes": 21903,
       "sha256": "c50ef2ae3956dec250733336d1698c24acf17a9afa28dbbd79f8439a7f13c9c4"
@@ -1659,6 +2386,7 @@
       "releaseId": "desi-edr",
       "version": "3.0.0",
       "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-desi-footprints-3.0.0.zip",
       "sizeBytes": 8410,
       "sha256": "f49fd738150b820fe35745a61dd8f813abb768b46bdba4a890d0bdcdd3bb447c"
@@ -1674,6 +2402,7 @@
       "releaseId": "euclid-q1",
       "version": "3.0.0",
       "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-euclid-footprints-3.0.0.zip",
       "sizeBytes": 2488,
       "sha256": "08fb40f850fd8972fe32d9b518cbc8b0ae796895caf181fcfa548e9dd7bedc7f"
@@ -1689,6 +2418,7 @@
       "releaseId": "galex-gr6-gr7",
       "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2Fcolor&get=record&fmt=json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-galex-footprints-3.0.0.zip",
       "sizeBytes": 12978,
       "sha256": "ef58ea7d32143e9135a7a1447f3f3678459e5ead0a75e277568fd64f100ff1dd"
@@ -1704,6 +2434,7 @@
       "releaseId": "hsc-pdr2",
       "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fcolor-i-r-g%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fcolor-i-r-g&get=record&fmt=json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-hsc-ssp-footprints-3.0.0.zip",
       "sizeBytes": 8251,
       "sha256": "678dc507722d69687fc359712afd975b84477d444f6b3e521896ef3857f04704"
@@ -1719,6 +2450,7 @@
       "releaseId": "hst-mast-snapshot-2026",
       "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=record&fmt=json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-hst-footprints-3.0.0.zip",
       "sizeBytes": 10736,
       "sha256": "9fc806f5e246111b6d6b0c9b6fe1316cf502eaaad6a1faae5c7c671c3ac9bcbd"
@@ -1734,6 +2466,7 @@
       "releaseId": "kids-dr5",
       "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=record&fmt=json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-kids-footprints-3.0.0.zip",
       "sizeBytes": 3017,
       "sha256": "723c1e15e9518c1e7e68ef9305d1c3a7c5578c97c4b1271618effee320da706f"
@@ -1749,6 +2482,7 @@
       "releaseId": "nvss-final",
       "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FNVSS&get=record&fmt=json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-nvss-footprints-3.0.0.zip",
       "sizeBytes": 8620,
       "sha256": "ee74ffa811c75501ef80850d22d02ba7b21f6f4f28ed10ef41974b2f2893bdf7"
@@ -1764,6 +2498,7 @@
       "releaseId": "panstarrs-dr1",
       "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fcolor-i-r-g&get=record&fmt=json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-panstarrs-footprints-3.0.0.zip",
       "sizeBytes": 13616,
       "sha256": "2d4db6eb978bae76e765d3fabde52aaf20d75f33810c40c00503ab9165b33af0"
@@ -1779,9 +2514,58 @@
       "releaseId": "sdss-dr09",
       "version": "3.0.0",
       "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=record&fmt=json",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-sdss-footprints-3.0.0.zip",
       "sizeBytes": 7292,
       "sha256": "15640a9f7786bae150a64d8ad5a821f91020912923d79807b3342ac271c6a22b"
+    },
+    {
+      "id": "layer-csst-sim-w2-image-extent-provenance",
+      "kind": "provenance",
+      "label": "CSST · W2 simulated wide-field images provenance",
+      "description": "Locked input, Core version, scientific classification and output hashes for this public layer.",
+      "downloadName": "csst-sim-w2-image-extent-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/provenance.json",
+      "sizeBytes": 1383,
+      "sha256": "07bec245e138a611827bd11b5236753a8c67d3898df4aee9a33200064d9b889b"
+    },
+    {
+      "id": "layer-csst-sim-w3-image-extent-provenance",
+      "kind": "provenance",
+      "label": "CSST · W3 simulated wide-field images provenance",
+      "description": "Locked input, Core version, scientific classification and output hashes for this public layer.",
+      "downloadName": "csst-sim-w3-image-extent-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/provenance.json",
+      "sizeBytes": 1379,
+      "sha256": "ae6567a62a7b12e3c7cd66d0bcceb62a7365c57d7deadaae0f7cd6706943c30c"
+    },
+    {
+      "id": "layer-csst-sim-w4-image-extent-provenance",
+      "kind": "provenance",
+      "label": "CSST · W4 simulated wide-field images provenance",
+      "description": "Locked input, Core version, scientific classification and output hashes for this public layer.",
+      "downloadName": "csst-sim-w4-image-extent-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/provenance.json",
+      "sizeBytes": 1379,
+      "sha256": "e6efc76641c4a33b6187b6d541de80ba100894e381b086a160c7cbc3aa2cfde6"
     },
     {
       "id": "csst-provenance",
@@ -1793,9 +2577,100 @@
       "surveyId": "csst",
       "releaseId": "csst-sim-w1-20250731",
       "product": "W1 simulated wide-field images",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/csst/provenance.json",
-      "sizeBytes": 2128,
-      "sha256": "d93130c371578d40ff521b7d92203b57a56534ba1bb1f28fbcb3748645070933"
+      "sizeBytes": 2253,
+      "sha256": "7894e9c1489d4e3915123517dae994059a11536b81669f39dc44a9c24bd214b4"
+    },
+    {
+      "id": "csst-w2-layer-provenance",
+      "kind": "provenance",
+      "label": "CSST W2 MOC Core provenance",
+      "description": "Assets MOC Core recipe, input snapshot and output hashes for the public layer.",
+      "downloadName": "csst-sim-w2-image-extent-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/provenance.json",
+      "sizeBytes": 1383,
+      "sha256": "07bec245e138a611827bd11b5236753a8c67d3898df4aee9a33200064d9b889b"
+    },
+    {
+      "id": "csst-w2-provenance",
+      "kind": "provenance",
+      "label": "CSST W2 provenance",
+      "description": "Locked scanner input, MOC Core output hashes and run provenance for CSST W2.",
+      "downloadName": "csst-w2-w2-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "product": "W2 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w2-provenance.json",
+      "sizeBytes": 1326,
+      "sha256": "e49c5e41768302a1fc1b9a1794197068a62179a4c92af6690e931d85071ab94b"
+    },
+    {
+      "id": "csst-w3-layer-provenance",
+      "kind": "provenance",
+      "label": "CSST W3 MOC Core provenance",
+      "description": "Assets MOC Core recipe, input snapshot and output hashes for the public layer.",
+      "downloadName": "csst-sim-w3-image-extent-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/provenance.json",
+      "sizeBytes": 1379,
+      "sha256": "ae6567a62a7b12e3c7cd66d0bcceb62a7365c57d7deadaae0f7cd6706943c30c"
+    },
+    {
+      "id": "csst-w3-provenance",
+      "kind": "provenance",
+      "label": "CSST W3 provenance",
+      "description": "Locked scanner input, MOC Core output hashes and run provenance for CSST W3.",
+      "downloadName": "csst-w3-w3-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "product": "W3 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w3-provenance.json",
+      "sizeBytes": 1325,
+      "sha256": "a1bdfe82364ff07bbb31e21ac31014c58ff26bd13a4952bdff2030827e9a259b"
+    },
+    {
+      "id": "csst-w4-layer-provenance",
+      "kind": "provenance",
+      "label": "CSST W4 MOC Core provenance",
+      "description": "Assets MOC Core recipe, input snapshot and output hashes for the public layer.",
+      "downloadName": "csst-sim-w4-image-extent-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/provenance.json",
+      "sizeBytes": 1379,
+      "sha256": "e6efc76641c4a33b6187b6d541de80ba100894e381b086a160c7cbc3aa2cfde6"
+    },
+    {
+      "id": "csst-w4-provenance",
+      "kind": "provenance",
+      "label": "CSST W4 provenance",
+      "description": "Locked scanner input, MOC Core output hashes and run provenance for CSST W4.",
+      "downloadName": "csst-w4-w4-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "product": "W4 simulated wide-field images",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/csst/w4-provenance.json",
+      "sizeBytes": 1325,
+      "sha256": "2f2b30b1f19a1299923917e79023fa551d7985d5edc351c0bf83d544db113260"
     },
     {
       "id": "layer-desi-dr1-spectra-footprint-provenance",
@@ -1808,6 +2683,7 @@
       "releaseId": "desi-dr1",
       "product": "DR1 spectra and redshifts",
       "sourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/provenance.json",
       "sizeBytes": 1355,
       "sha256": "28a54c9606864bd401f7ba2e86a323607e93e790aef63a1fcb6a588256789c95"
@@ -1823,6 +2699,7 @@
       "releaseId": "desi-edr",
       "product": "Early Data Release spectra",
       "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/desi-edr-spectra-footprint/provenance.json",
       "sizeBytes": 1353,
       "sha256": "ce71db127dc50ca2a4c62bd2eeefd6a2275bd6570304c0250e8a08ad8989db26"
@@ -1838,6 +2715,7 @@
       "releaseId": "euclid-q1",
       "product": "Euclid Q1 deep fields",
       "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/provenance.json",
       "sizeBytes": 1208,
       "sha256": "d49db62d46eee15e6d52da289ef9bd7eb5a7b31e712ca5cf91c563d85dee00d9"
@@ -1849,18 +2727,20 @@
       "description": "Authoritative input, output and package SHA-256 provenance for this release.",
       "downloadName": "provenance.json",
       "mediaType": "application/json",
+      "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/provenance.json",
-      "sizeBytes": 5064,
-      "sha256": "4c6dc6eff6e32c61f5125edccb1d42c69d18c7e7d1b16f5322c2fd571974365c"
+      "sizeBytes": 5692,
+      "sha256": "f1652d9f7643872c98dd048c98014a5f7a9d28e90b38f37d272aab44970ceaaa"
     },
     {
       "id": "sdk-moc-core-wheel-1-0-0",
       "kind": "sdk",
       "label": "Assets MOC Core Python wheel",
-      "description": "Pinned offline Astro Survey MOC Core SDK wheel for scanner image and Atlas finalizer integration.",
+      "description": "Pinned offline Astro Survey MOC Core SDK wheel for deterministic Assets layer builds and validation.",
       "downloadName": "astro_survey_moc_core-1.0.0-py3-none-any.whl",
       "mediaType": "application/zip",
       "version": "1.0.0",
+      "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.0.0-py3-none-any.whl",
       "sizeBytes": 22610,
       "sha256": "dd8a3a538cc3b9501a3207a427c97372d2118f9b0cdc4e41e1b2f4fe5fe1dc9a"
@@ -1869,10 +2749,11 @@
       "id": "sdk-moc-core-lock",
       "kind": "sdk",
       "label": "MOC Core dependency lock",
-      "description": "Pinned scientific dependencies used when building scanner and Assets MOC Core environments.",
+      "description": "Pinned scientific dependencies for the Assets MOC Core build environment.",
       "downloadName": "moc-core.lock",
       "mediaType": "text/plain; charset=utf-8",
       "version": "1.0.0",
+      "deliveryClass": "runtime",
       "path": "requirements/moc-core.lock",
       "sizeBytes": 224,
       "sha256": "2985f7ce248d7427501e710fee57db7953ce6cd80888ae334262c9191b3dc222"

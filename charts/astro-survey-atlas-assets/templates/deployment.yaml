@@ -17,7 +17,12 @@ spec:
       labels:
         {{- include "astro-survey-atlas-assets.labels" . | nindent 8 }}
     spec:
+      {{- if .Values.admin.enabled }}
+      serviceAccountName: {{ include "astro-survey-atlas-assets.fullname" . }}-admin
+      automountServiceAccountToken: true
+      {{- else }}
       automountServiceAccountToken: false
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets: {{ toYaml . | nindent 8 }}
       {{- end }}
@@ -55,6 +60,21 @@ spec:
               value: /data/current
             - name: PUBLIC_SITE_ROOT
               value: /app/site
+            - name: ASSETS_CONTENT_ROOT
+              value: /var/lib/assets-content
+            - name: ASSETS_ADMIN_ENABLED
+              value: {{ .Values.admin.enabled | quote }}
+            - name: ASSETS_WAREHOUSE_NAMESPACE
+              value: {{ .Values.admin.warehouseNamespace | quote }}
+            - name: ASSETS_LOCAL_PATH_ROOT
+              value: {{ .Values.admin.localPathRoot | quote }}
+            {{- if .Values.admin.enabled }}
+            - name: ASSETS_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "admin.adminTokenSecret.name is required when admin.enabled is true" .Values.admin.adminTokenSecret.name }}
+                  key: {{ .Values.admin.adminTokenSecret.key | quote }}
+            {{- end }}
           startupProbe:
             httpGet: { path: /healthz, port: http }
             periodSeconds: 3
@@ -77,12 +97,22 @@ spec:
             - name: assets
               mountPath: /data
               readOnly: true
+            - name: content
+              mountPath: /var/lib/assets-content
+              readOnly: false
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: assets
           persistentVolumeClaim:
             claimName: {{ default (printf "%s-assets" (include "astro-survey-atlas-assets.fullname" .)) .Values.persistence.existingClaim }}
+        - name: content
+          {{- if .Values.contentPersistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-content" (include "astro-survey-atlas-assets.fullname" .)) .Values.contentPersistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
         - name: tmp
           emptyDir: {}
       {{- with .Values.nodeSelector }}
@@ -94,4 +124,3 @@ spec:
       {{- with .Values.tolerations }}
       tolerations: {{ toYaml . | nindent 8 }}
       {{- end }}
-

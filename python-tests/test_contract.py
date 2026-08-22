@@ -53,7 +53,7 @@ class ContractTests(unittest.TestCase):
                 "maxOrder": 8,
             })
 
-    def test_public_task_handoff_excludes_credentials_and_targets_data_warehouse(self) -> None:
+    def test_assets_task_input_uses_references_and_targets_data_warehouse(self) -> None:
         task = {
             "schemaVersion": 1,
             "taskId": "csst-sim-w2-coverage",

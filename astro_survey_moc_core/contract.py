@@ -1,7 +1,9 @@
 """The cross-repository scientific contract owned by Assets.
 
-This module is deliberately dependency-light. Atlas and scanner integrations can
-validate a normalized spec without importing any FITS or HEALPix implementation.
+This module is deliberately dependency-light. Assets-side tools and compatible
+task integrations can validate a normalized spec without importing any FITS or
+HEALPix implementation. Public package consumers are not required to import
+this module.
 """
 
 from __future__ import annotations

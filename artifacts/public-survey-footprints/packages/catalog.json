@@ -5,8 +5,8 @@
   "packages": [
     {
       "surveyId": "csst",
-      "name": "CSST W1 Simulation",
-      "description": "CSST W1_Phot WIDE 仿真图像经审核的 ICRS FITS-WCS 覆盖；实测 354.759 平方度，不代表正式公开巡天 footprint。",
+      "name": "CSST W1-W4 Simulation",
+      "description": "CSST W1/W2/W3/W4 simulated wide-field image-extent MOCs generated from data-warehouse FITS-WCS coverage tasks and finalized by Assets MOC Core.",
       "modalities": [
         "imaging",
         "photometry",
@@ -22,31 +22,48 @@
         "CSST simulation"
       ],
       "coverageAuthorities": [
-        "workspace-reviewed-wcs"
+        "data-warehouse-reviewed-wcs"
       ],
       "accessModes": [
-        "registered OSS Connector"
+        "task-configured source"
       ],
       "version": "3.0.0",
       "sources": [
         {
-          "releaseId": "csst-sim-w1-20250731",
-          "label": "CSST W1 simulated WIDE-image WCS coverage",
-          "url": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W1_Phot",
-          "authority": "Astro Data Workspace reviewed simulation run"
+          "releaseId": "csst-sim-w2-20250731",
+          "label": "CSST W2 simulated WIDE-image WCS coverage",
+          "url": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
+          "authority": "data-warehouse coverage task and Assets MOC Core"
+        },
+        {
+          "releaseId": "csst-sim-w3-20250731",
+          "label": "CSST W3 simulated WIDE-image WCS coverage",
+          "url": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
+          "authority": "data-warehouse coverage task and Assets MOC Core"
+        },
+        {
+          "releaseId": "csst-sim-w4-20250731",
+          "label": "CSST W4 simulated WIDE-image WCS coverage",
+          "url": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
+          "authority": "data-warehouse coverage task and Assets MOC Core"
         }
       ],
       "id": "public-csst-footprints",
       "releases": [
-        "csst-sim-w1-20250731"
+        "csst-sim-w1-20250731",
+        "csst-sim-w2-20250731",
+        "csst-sim-w3-20250731",
+        "csst-sim-w4-20250731"
       ],
       "releaseLabels": {
-        "csst-sim-w1-20250731": "CSST W1 Simulation 2025-07-31"
+        "csst-sim-w2-20250731": "CSST W2 Simulation 2025-07-31",
+        "csst-sim-w3-20250731": "CSST W3 Simulation 2025-07-31",
+        "csst-sim-w4-20250731": "CSST W4 Simulation 2025-07-31"
       },
       "archiveUrl": "public-csst-footprints-3.0.0.zip",
-      "sizeBytes": 3012,
-      "sha256": "32010442df7a555aa1780fdff3bf0d725670961cd94b9314ddc8bd427ca712fd",
-      "updatedAt": "2026-08-20T04:48:22.554910Z"
+      "sizeBytes": 30998,
+      "sha256": "b584f6ac303b12223f770cd886488fe8edae21cff1bb0a9142723c9fa3a2bcea",
+      "updatedAt": "2026-08-21T22:57:05.370160Z"
     },
     {
       "surveyId": "euclid",

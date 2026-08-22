@@ -7,9 +7,9 @@
   "statistics": {
     "releases": 52,
     "products": 87,
-    "acquired": 32,
+    "acquired": 35,
     "overview_only": 11,
-    "awaiting_geometry": 44,
+    "awaiting_geometry": 41,
     "not_applicable": 0,
     "manifestFootprints": 41,
     "packages": 16
@@ -17,11 +17,11 @@
   "inputs": {
     "canonicalManifest": {
       "path": "../../src/footprints/survey-footprints.json",
-      "sha256": "bd1393a25e3192a7df692931b85f2f78ed09f84ef509ae47d1b3f7a976506e49"
+      "sha256": "e214787d981e71505b6f46661aa39baf209333b90ec3b2dde3e674707889fc1b"
     },
     "sources": {
       "path": "sources.json",
-      "sha256": "b62d6505f5d9bf53b569778dd5f0c7ac38021732a433773ba77c17bf13f52463"
+      "sha256": "f4473f94f7fb4d2ab9be9dbfc96d5c4a848b01768c8acc7db0382bd2b2e4d685"
     },
     "manual": {
       "path": "manual/footprints.json",
@@ -34,24 +34,41 @@
     "rawGeometryIndex": {
       "path": "raw/geometry/index.json",
       "sha256": "fcd5c680a5025ae03ae9dbffefa49d48e202a3cacac79a270c210a0a1e7bb1dd"
+    },
+    "w2-normalized-scan": {
+      "path": "csst/w2-normalized-scan.json",
+      "sha256": "5e11a3cb14973bfe0a0d5e4a406f33630c35455c8c4995003d6f28d808709ab2",
+      "sizeBytes": 8020409
+    },
+    "w3-normalized-scan": {
+      "path": "csst/w3-normalized-scan.json",
+      "sha256": "db1890db4e5d374b97d5feedb2d51fce3ce2c532f3e301a5a0f4ef11688890cf",
+      "sizeBytes": 394093
+    },
+    "w4-normalized-scan": {
+      "path": "csst/w4-normalized-scan.json",
+      "sha256": "9efd8d43cd5349458f5681907c8958d378514770b9a5389ad7e370f77f5b8be8",
+      "sizeBytes": 444221
     }
   },
   "files": {
     "manifest": {
       "path": "normalized/survey-footprints.json",
-      "sha256": "bd1393a25e3192a7df692931b85f2f78ed09f84ef509ae47d1b3f7a976506e49"
+      "sha256": "e214787d981e71505b6f46661aa39baf209333b90ec3b2dde3e674707889fc1b",
+      "sizeBytes": 930773
     },
     "catalog": {
       "path": "packages/catalog.json",
-      "sha256": "5cac52a35fc1fccb30646fa9e132c2f21f77a4f8f2b4ecda1cf3a02f90e2341e"
+      "sha256": "43a808ab8b9f25bdb88d776604dc06ea142829d09b66adf95b730ac664b15e24",
+      "sizeBytes": 22241
     },
     "packages": [
       {
         "id": "public-csst-footprints",
         "version": "3.0.0",
         "archive": "public-csst-footprints-3.0.0.zip",
-        "sizeBytes": 3012,
-        "sha256": "32010442df7a555aa1780fdff3bf0d725670961cd94b9314ddc8bd427ca712fd"
+        "sizeBytes": 30998,
+        "sha256": "b584f6ac303b12223f770cd886488fe8edae21cff1bb0a9142723c9fa3a2bcea"
       },
       {
         "id": "public-euclid-footprints",

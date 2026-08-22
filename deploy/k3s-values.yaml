@@ -6,6 +6,13 @@ image:
 imagePullSecrets:
   - name: aliyun-registry
 
+admin:
+  enabled: true
+  warehouseNamespace: warehouse
+  adminTokenSecret:
+    name: astro-survey-atlas-assets-admin
+    key: token
+
 service:
   type: NodePort
   port: 80

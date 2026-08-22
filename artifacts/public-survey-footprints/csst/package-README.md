@@ -1,0 +1,1 @@
+CSST W1/W2/W3/W4 simulation image-extent Resource Package v3. Coverage is produced by data-warehouse coverage tasks using the task's configured source and sink, then finalized by Assets MOC Core as ICRS/NESTED MOCs. It is not a formal CSST survey footprint or catalog-object distribution.

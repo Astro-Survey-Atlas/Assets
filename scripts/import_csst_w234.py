@@ -1,8 +1,7 @@
-"""Import completed CSST W2/W3/W4 Warehouse coverage runs into Assets.
+"""Import completed CSST W2/W3/W4 data-warehouse coverage results into Assets.
 
-The Warehouse scanner is the only component that reads OSS. This importer only
-reads its normalized Elasticsearch documents, locks the input snapshot, and
-lets Assets MOC Core produce the public artifacts.
+This importer reads the selected task sink's normalized documents, locks the
+input snapshot, and lets Assets MOC Core produce the public artifacts.
 """
 
 from __future__ import annotations
@@ -138,6 +137,16 @@ def import_band(es_url: str, band: str, run_id: str) -> dict[str, Any]:
     output = ARTIFACT_ROOT / "layers" / f"csst-sim-{lower}-image-extent"
     built = build_layer(spec, output, base_dir=ROOT)
     stats = json.loads((output / "statistics.json").read_text(encoding="utf-8"))
+    # Keep scanner counts with the scientific MOC statistics for catalog
+    # provenance and downstream release manifests.
+    stats = {
+        **stats,
+        "matchedFiles": len(docs),
+        "processedFiles": len(included),
+        "excludedFiles": len(excluded),
+        "coverageDocuments": len(cells),
+        "scannerRunId": run_id,
+    }
     snapshot_record = {
         "schemaVersion": 1,
         "surveyId": "csst", "releaseId": release_id, "product": product,
@@ -151,7 +160,7 @@ def import_band(es_url: str, band: str, run_id: str) -> dict[str, Any]:
         "mocSha256": built.sha256,
     }
     write_json(CSST_ROOT / f"{lower}-coverage-job-snapshot.json", snapshot_record)
-    write_json(CSST_ROOT / f"{lower}-run-statistics.json", {**stats, "matchedFiles": len(docs), "processedFiles": len(included), "excludedFiles": len(excluded), "coverageDocuments": len(cells), "scannerRunId": run_id})
+    write_json(CSST_ROOT / f"{lower}-run-statistics.json", stats)
     write_json(CSST_ROOT / f"{lower}-sample-report.json", {"scannerRunId": run_id, "fileNamePattern": PATTERN.pattern, "samples": [{"name": doc.get("name"), "wcsSummary": doc.get("wcs_summary")} for doc in included[:5]], "excludedSamples": [{"name": doc.get("name"), "error": doc.get("spatial_error")} for doc in excluded[:5]]})
     write_json(CSST_ROOT / f"{lower}-provenance.json", {"schemaVersion": 1, "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "scannerRunId": run_id, "sourcePrefix": snapshot_record["sourcePrefix"], "fileNamePattern": PATTERN.pattern, "matchedFiles": len(docs), "includedFiles": len(included), "excludedFiles": len(excluded), "wcsErrors": snapshot_record["wcsErrors"], "coordinateFrame": "ICRS", "ordering": "NESTED", "coverageRole": "image_extent", "dataOrigin": "simulated", "sourceTier": "user_file_derived", "input": {"path": normalized_path.name, **snapshot}, "outputs": {"moc": {"path": built.moc_path.name, "sha256": sha(built.moc_path)}, "query": {"path": built.query_path.name, "sha256": sha(built.query_path)}, "preview": {"path": built.preview_path.name, "sha256": sha(built.preview_path)}, "statistics": {"path": built.statistics_path.name, "sha256": sha(built.statistics_path)}}})
     return {"band": band, "releaseId": release_id, "product": product, "runId": run_id, "spec": spec, "specPath": str(spec_path.relative_to(ROOT)).replace("\\", "/"), "output": str(output.relative_to(ROOT)).replace("\\", "/"), "mocSha256": built.sha256, "preview": json.loads(built.preview_path.read_text(encoding="utf-8"))["pixels"], "stats": stats}
@@ -166,7 +175,7 @@ def update_catalogs(results: list[dict[str, Any]]) -> None:
         product["status"] = "acquired"
         product.pop("reason", None)
         product.pop("manualStep", None)
-        product["description"] = f"{result['band']}_Phot FITS-WCS 图像范围由 Connector coverage job 扫描并由 Assets MOC Core 锁定；实际覆盖面积 {result['stats']['areaDeg2']:.6f} 平方度。"
+        product["description"] = f"{result['band']}_Phot FITS-WCS 图像范围由 data-warehouse coverage task 扫描并由 Assets MOC Core 锁定；实际覆盖面积 {result['stats']['areaDeg2']:.6f} 平方度。"
     write_json(survey_path, survey)
 
     sources_path = ARTIFACT_ROOT / "sources.json"
@@ -177,7 +186,7 @@ def update_catalogs(results: list[dict[str, Any]]) -> None:
         product["status"] = "acquired"
         product.pop("reason", None)
         product.pop("manualStep", None)
-        product["notes"] = f"Warehouse run {result['runId']} matched {result['stats']['matchedFiles']} files and processed {result['stats']['processedFiles']} FITS-WCS documents; Core MOC area {result['stats']['areaDeg2']:.6f} deg2."
+        product["notes"] = f"data-warehouse run {result['runId']} matched {result['stats']['matchedFiles']} files and processed {result['stats']['processedFiles']} FITS-WCS documents; Core MOC area {result['stats']['areaDeg2']:.6f} deg2."
     write_json(sources_path, sources)
 
     footprint_path = ROOT / "src/footprints/survey-footprints.json"
@@ -186,7 +195,7 @@ def update_catalogs(results: list[dict[str, Any]]) -> None:
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     for result in results:
         key = ("csst", result["releaseId"], result["product"])
-        record = {"surveyId": "csst", "releaseId": result["releaseId"], "product": result["product"], "label": f"CSST {result['band']} simulated WIDE-image WCS coverage", "nside": 16, "pixels": result["preview"], "quality": "moc", "sourceUrl": f"{OSS_ROOT}/{result['band']}_Phot", "retrievedAt": now, "notes": f"Connector-driven FITS-WCS coverage from Warehouse run {result['runId']}; Core authoritative MOC at order 8, projected to NSIDE 16 for display."}
+        record = {"surveyId": "csst", "releaseId": result["releaseId"], "product": result["product"], "label": f"CSST {result['band']} simulated WIDE-image WCS coverage", "nside": 16, "pixels": result["preview"], "quality": "moc", "sourceUrl": f"{OSS_ROOT}/{result['band']}_Phot", "retrievedAt": now, "notes": f"FITS-WCS coverage from data-warehouse run {result['runId']}; Core authoritative MOC at order 8, projected to NSIDE 16 for display."}
         footprint["footprints"] = [item for item in footprint["footprints"] if (item["surveyId"], item["releaseId"], item["product"]) != key] + [record]
     footprint["footprints"].sort(key=lambda item: (item["surveyId"], item["releaseId"], item["product"]))
     write_json(footprint_path, footprint)
@@ -215,7 +224,7 @@ def update_catalogs(results: list[dict[str, Any]]) -> None:
     package_prov_path = CSST_ROOT / "package-provenance.json"
     write_json(package_prov_path, package_provenance)
     readme_path = CSST_ROOT / "package-README.md"
-    readme_path.write_text("CSST W1/W2/W3/W4 simulation image-extent Resource Package v3. Coverage is Connector-driven FITS-WCS evidence from data-warehouse, expressed in ICRS/NESTED MOCs. It is not a formal CSST survey footprint or catalog-object distribution.\n", encoding="utf-8")
+    readme_path.write_text("CSST W1/W2/W3/W4 simulation image-extent Resource Package v3. Coverage is produced by data-warehouse coverage tasks using the task's configured source and sink, then finalized by Assets MOC Core as ICRS/NESTED MOCs. It is not a formal CSST survey footprint or catalog-object distribution.\n", encoding="utf-8")
     package_spec = {"id": "public-csst-footprints", "version": "3.0.0", "surveyId": "csst", "footprintPath": str(package_fp_path.relative_to(ROOT)), "provenancePath": str(package_prov_path.relative_to(ROOT)), "readmePath": str(readme_path.relative_to(ROOT)), "layers": []}
     for result in results:
         package_spec["layers"].append({"layerId": result["spec"]["layerId"], "surveyId": "csst", "coverageRole": "image_extent", "dataOrigin": "simulated", "sourceTier": "user_file_derived", "modality": "imaging", "releaseId": result["releaseId"], "sourcePath": f"{result['output']}/{result['spec']['layerId']}.moc.fits"})
@@ -226,7 +235,7 @@ def update_catalogs(results: list[dict[str, Any]]) -> None:
     catalog_path = ARTIFACT_ROOT / "packages/catalog.json"
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     entry = next(item for item in catalog["packages"] if item["id"] == "public-csst-footprints")
-    entry.update({"name": "CSST W1-W4 Simulation", "description": "CSST W1/W2/W3/W4 simulated wide-field image-extent MOCs generated from Connector-driven FITS-WCS coverage jobs.", "releases": ["csst-sim-w1-20250731", *[result["releaseId"] for result in results]], "releaseLabels": {f"csst-sim-{band.lower()}-20250731": f"CSST {band} Simulation 2025-07-31" for band in BANDS}, "sources": [{"releaseId": f"csst-sim-{band.lower()}-20250731", "label": f"CSST {band} simulated WIDE-image WCS coverage", "url": f"{OSS_ROOT}/{band}_Phot", "authority": "Astro Data Workspace coverage job and Assets MOC Core"} for band in BANDS], "sizeBytes": package_archive.stat().st_size, "sha256": built_package.archive_sha256, "updatedAt": now})
+    entry.update({"name": "CSST W1-W4 Simulation", "description": "CSST W1/W2/W3/W4 simulated wide-field image-extent MOCs generated from data-warehouse FITS-WCS coverage tasks and finalized by Assets MOC Core.", "coverageAuthorities": ["data-warehouse-reviewed-wcs"], "accessModes": ["task-configured source"], "releases": ["csst-sim-w1-20250731", *[result["releaseId"] for result in results]], "releaseLabels": {f"csst-sim-{band.lower()}-20250731": f"CSST {band} Simulation 2025-07-31" for band in BANDS}, "sources": [{"releaseId": f"csst-sim-{band.lower()}-20250731", "label": f"CSST {band} simulated WIDE-image WCS coverage", "url": f"{OSS_ROOT}/{band}_Phot", "authority": "data-warehouse coverage task and Assets MOC Core"} for band in BANDS], "sizeBytes": package_archive.stat().st_size, "sha256": built_package.archive_sha256, "updatedAt": now})
     write_json(catalog_path, catalog)
     print(json.dumps({"results": results, "package": {"archive": str(package_archive), "sha256": built_package.archive_sha256, "sizeBytes": package_archive.stat().st_size}}, ensure_ascii=True))
 

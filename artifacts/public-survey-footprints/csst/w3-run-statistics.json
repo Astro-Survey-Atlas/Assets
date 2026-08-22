@@ -1,0 +1,14 @@
+{
+  "areaDeg2": 397.0383500377076,
+  "cellCount": 474,
+  "maxOrder": 8,
+  "mocSha256": "6bc369f232f1f1523f578e1a79f2828aa78ff2d1e243c9c8ad16a39928f0d698",
+  "previewPixelCount": 45,
+  "queryPixelCount": 7569,
+  "schemaVersion": 1,
+  "matchedFiles": 188136,
+  "processedFiles": 188136,
+  "excludedFiles": 0,
+  "coverageDocuments": 7569,
+  "scannerRunId": "workspace-coverage-ee904e0f11af-retry3"
+}

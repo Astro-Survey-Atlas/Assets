@@ -140,7 +140,9 @@ async function asset(input: Omit<PublicAssetRecord, "path" | "sizeBytes" | "sha2
   if (input.expectedBytes !== undefined && details.size !== input.expectedBytes) throw new Error(`Size mismatch: ${relative(input.filePath)}`);
   if (input.expectedSha256 !== undefined && sha256 !== input.expectedSha256) throw new Error(`SHA-256 mismatch: ${relative(input.filePath)}`);
   const { filePath, expectedBytes: _expectedBytes, expectedSha256: _expectedSha256, ...record } = input;
-  return { ...record, path: relative(filePath), sizeBytes: details.size, sha256 };
+  const relativePath = relative(filePath);
+  const deliveryClass: "runtime" | "evidence" = relativePath.includes("/csst/") || relativePath.includes("/raw/") || record.kind === "provenance" || record.kind === "ledger" || record.kind === "moc" ? "evidence" : "runtime";
+  return { ...record, deliveryClass, path: relative(filePath), sizeBytes: details.size, sha256 };
 }
 
 async function verifiedProvenanceFiles(provenance: ProvenanceDocument): Promise<void> {
@@ -202,8 +204,13 @@ async function build(): Promise<PublicAssetManifest> {
   });
   await push({
     id: "documentation-architecture-boundary", kind: "documentation", label: "Assets and Atlas architecture boundary",
-    description: "Responsibilities, one-shot data-warehouse handoff and the stable Resource Package intersection.",
+    description: "Assets responsibilities, independent project boundaries and the one-shot data-warehouse handoff.",
     filePath: path.join(root, "docs", "architecture-boundary.md"), downloadName: "architecture-boundary.md", mediaType: "text/markdown; charset=utf-8",
+  });
+  await push({
+    id: "documentation-data-warehouse-requirements", kind: "documentation", label: "Assets data-warehouse requirements",
+    description: "Assets-owned CRD handoff, status, sink and coverage scanner requirements for data-warehouse.",
+    filePath: path.join(root, "docs", "data-warehouse-requirements.md"), downloadName: "data-warehouse-requirements.md", mediaType: "text/markdown; charset=utf-8",
   });
   await push({
     id: "metadata-resource-package-v3-schema", kind: "metadata", label: "Resource Package v3 JSON Schema",
@@ -212,7 +219,7 @@ async function build(): Promise<PublicAssetManifest> {
   });
   await push({
     id: "metadata-coverage-task-schema", kind: "metadata", label: "Public coverage task handoff schema",
-    description: "Internal Assets to data-warehouse one-shot task envelope; contains no credentials or user asset state.",
+    description: "Assets-side input used to render standard data-warehouse CRDs; credential storage, sink semantics and task history remain outside this schema.",
     filePath: path.join(root, "contracts", "coverage-task-v1.schema.json"), downloadName: "coverage-task-v1.schema.json", mediaType: "application/json",
   });
   await push({
@@ -222,12 +229,12 @@ async function build(): Promise<PublicAssetManifest> {
   });
   await push({
     id: "sdk-moc-core-lock", kind: "sdk", label: "MOC Core dependency lock",
-    description: "Pinned scientific dependencies used when building scanner and Assets MOC Core environments.",
+    description: "Pinned scientific dependencies for the Assets MOC Core build environment.",
     filePath: path.join(root, "requirements", "moc-core.lock"), downloadName: "moc-core.lock", mediaType: "text/plain; charset=utf-8", version: "1.0.0",
   });
   await push({
     id: "sdk-moc-core-wheel-1-0-0", kind: "sdk", label: "Assets MOC Core Python wheel",
-    description: "Pinned offline Astro Survey MOC Core SDK wheel for scanner image and Atlas finalizer integration.",
+    description: "Pinned offline Astro Survey MOC Core SDK wheel for deterministic Assets layer builds and validation.",
     filePath: path.join(artifactRoot, "moc-core", "astro_survey_moc_core-1.0.0-py3-none-any.whl"),
     downloadName: "astro_survey_moc_core-1.0.0-py3-none-any.whl", mediaType: "application/zip", version: "1.0.0",
     expectedSha256: "dd8a3a538cc3b9501a3207a427c97372d2118f9b0cdc4e41e1b2f4fe5fe1dc9a",
@@ -314,10 +321,10 @@ async function build(): Promise<PublicAssetManifest> {
   });
 
   const csstEvidence = [
-    ["csst-coverage-job-snapshot", "metadata", "CSST W1 coverage job snapshot", "coverage-job-snapshot.json", "Workspace coverage request, scanner configuration and review decision for CSST W1 simulated wide-field images."],
+    ["csst-coverage-job-snapshot", "metadata", "CSST W1 coverage job snapshot", "coverage-job-snapshot.json", "Data-warehouse coverage request, scanner configuration and review decision for CSST W1 simulated wide-field images."],
     ["csst-input-manifest", "manifest", "CSST W1 input manifest", "input-manifest.json", "Complete 178,056-file W1_Phot manifest with WCS summaries, ETags and the reviewed exclusion."],
     ["csst-wcs-geometry-summary", "metadata", "CSST W1 WCS geometry summary", "wcs-geometry-summary.json", "Measured WCS bounds, HEALPix order, area, nominal-area comparison and anomaly decision."],
-    ["csst-run-statistics", "metadata", "CSST W1 full-run statistics", "run-statistics.json", "Summed 64-shard Workspace and Elasticsearch coverage statistics."],
+    ["csst-run-statistics", "metadata", "CSST W1 full-run statistics", "run-statistics.json", "Summed 64-shard data-warehouse and selected sink coverage statistics."],
     ["csst-sample-report", "metadata", "CSST W1 sample and smoke report", "sample-report.json", "Restricted-directory samples, smoke result and full-run anomaly audit."],
     ["csst-provenance", "provenance", "CSST W1 provenance", "provenance.json", "CSST W1 source prefix, run IDs, connector configuration hash, static output hashes and release decision."],
   ] as const;
@@ -354,7 +361,7 @@ async function build(): Promise<PublicAssetManifest> {
     const layerId = `csst-sim-${band}-image-extent`;
     const outputRoot = path.join(artifactRoot, "layers", layerId);
     const evidence: Array<[string, PublicAssetKind, string, string, string]> = [
-      [`csst-${band}-coverage-job-snapshot`, "metadata", `CSST ${upper} coverage job snapshot`, `${band}-coverage-job-snapshot.json`, `Connector-driven Warehouse coverage job snapshot for CSST ${upper}.`],
+      [`csst-${band}-coverage-job-snapshot`, "metadata", `CSST ${upper} coverage job snapshot`, `${band}-coverage-job-snapshot.json`, `Data-warehouse coverage task snapshot for CSST ${upper}.`],
       [`csst-${band}-normalized-scan`, "manifest", `CSST ${upper} normalized scan input`, `${band}-normalized-scan.json`, `Normalized FITS-WCS scan cells returned by data-warehouse for CSST ${upper}.`],
       [`csst-${band}-run-statistics`, "metadata", `CSST ${upper} run statistics`, `${band}-run-statistics.json`, `File, WCS and cell statistics for the CSST ${upper} coverage run.`],
       [`csst-${band}-sample-report`, "metadata", `CSST ${upper} sample report`, `${band}-sample-report.json`, `Audited samples and exclusions from the CSST ${upper} scan.`],
@@ -368,7 +375,7 @@ async function build(): Promise<PublicAssetManifest> {
     }
     await push({
       id: `csst-${band}-moc`, kind: "moc", label: `CSST ${upper} simulated image WCS MOC`,
-      description: `Authoritative ICRS/NUNIQ FITS MOC generated by Assets MOC Core from the Connector-driven ${upper} FITS-WCS scan.`,
+      description: `Authoritative ICRS/NUNIQ FITS MOC generated by Assets MOC Core from the data-warehouse ${upper} FITS-WCS result.`,
       filePath: path.join(outputRoot, `${layerId}.moc.fits`), downloadName: `${layerId}.moc.fits`, mediaType: "application/fits",
       surveyId: "csst", releaseId, product,
     });
@@ -443,6 +450,8 @@ async function build(): Promise<PublicAssetManifest> {
   if (new Set(files.map((entry) => entry.id)).size !== files.length) throw new Error("Release manifest contains duplicate asset IDs");
   const bundleSha256 = createHash("sha256").update(JSON.stringify(files.map(({ id, path: filePath, sizeBytes, sha256 }) => ({ id, path: filePath, sizeBytes, sha256 })))).digest("hex");
   const totalBytes = files.reduce((sum, entry) => sum + entry.sizeBytes, 0);
+  const runtimeBytes = files.filter((entry) => entry.deliveryClass === "runtime").reduce((sum, entry) => sum + entry.sizeBytes, 0);
+  const evidenceBytes = files.filter((entry) => entry.deliveryClass === "evidence").reduce((sum, entry) => sum + entry.sizeBytes, 0);
   return {
     schemaVersion: 1,
     generatedAt: provenance.generatedAt,
@@ -457,6 +466,8 @@ async function build(): Promise<PublicAssetManifest> {
       packages: packageCatalog.packages.length,
       rawMocFiles: mocIndex.artifacts.length + 1 + layerPlan.builds.length,
       totalBytes,
+      runtimeBytes,
+      evidenceBytes,
     },
     files,
   };

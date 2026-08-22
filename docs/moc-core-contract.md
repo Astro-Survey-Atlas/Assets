@@ -1,16 +1,19 @@
 # Assets MOC Core contract
 
 Assets owns the scientific coverage contract and the offline implementation.
-Atlas and scanner images consume a wheel pinned by version and SHA-256; they do
-not call an Assets computation service at runtime.
+Other projects consume the published Resource Package contract; they do not
+depend on an Assets computation service at runtime. A task runner may use the
+MOC Core wheel when building a compatible environment, but that is an
+implementation choice rather than a cross-project runtime dependency.
 
 ## Scientific representation
 
 - The authoritative artifact is an IVOA FITS MOC in ICRS using NESTED/NUNIQ.
 - The default maximum order is 10. A recipe may lower it. Raising it requires a
   written `precisionJustification` and scientific review.
-- Order 8 is the Atlas query projection. Order 4 is the website preview. Both
-  are derived from the authoritative FITS MOC.
+- Order 8 is the public query projection used by Assets and package consumers.
+  Order 4 is the website preview. Both are derived from the authoritative FITS
+  MOC.
 - `coverageRole` is one of `image_extent`, `object_presence`, or
   `footprint_extent`.
 - `dataOrigin` is one of `observed`, `simulated`, or `catalog`.
@@ -50,8 +53,9 @@ astro-survey-moc-core project --moc merged.fits --order 8 --output query-order8.
 ```
 
 Supported input modes are `fits-wcs`, `catalog-radec`, `nested-healpix`,
-`regions`, and `tile-table`. Connector credentials and byte-range reads stay in
-the scanner. Core accepts local files or already parsed normalized inputs.
+`regions`, and `tile-table`. Remote connector authentication and byte-range
+reads are outside Core and are owned by the task's source/connector
+implementation. Core accepts local files or already parsed normalized inputs.
 
 ## Resource Package v3
 

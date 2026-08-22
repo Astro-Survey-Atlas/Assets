@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#090d10" />
+    <meta name="theme-color" content="#f3efe6" />
     <meta name="description" content="Astro Survey Atlas 公共天空覆盖制品与可验证下载目录" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Astro Survey Atlas · Public Assets</title>
@@ -15,58 +15,65 @@
         <span><strong>ASTRO SURVEY ATLAS</strong><small>PUBLIC ASSET ARCHIVE</small></span>
       </a>
       <div class="release-state"><span aria-hidden="true"></span><output id="header-release">VERIFYING RELEASE</output></div>
+      <a class="admin-entry" href="/admin/" title="打开 Assets 管理台"><i data-lucide="shield-check"></i><span>管理台</span></a>
     </header>
 
     <main>
-      <section class="coverage-hero" aria-labelledby="page-title">
-        <div id="coverage-scene" class="coverage-scene" aria-label="公开巡天 HEALPix 点阵覆盖">
-          <canvas id="coverage-canvas" role="img" aria-label="根据公开覆盖 manifest 绘制的 HEALPix 点阵"></canvas>
+      <div id="coverage-scene" class="coverage-scene" aria-label="公开巡天 HEALPix 天球覆盖">
+        <canvas id="coverage-canvas" role="img" aria-label="根据公开覆盖块绘制的 HEALPix 单元"></canvas>
+        <div class="coverage-tools">
+          <button id="coverage-reset" class="icon-button" type="button" title="重置天球视角" aria-label="重置天球视角"><i data-lucide="rotate-ccw"></i></button>
+          <button id="coverage-layers-toggle" class="icon-button" type="button" title="打开图层" aria-label="打开图层"><i data-lucide="layers-3"></i></button>
         </div>
-        <div class="hero-copy">
-          <p>ICRS · HEALPIX NSIDE 16 · VERIFIED PUBLIC RELEASE</p>
+        <div id="coverage-layers" class="coverage-layers" hidden aria-label="覆盖图层"></div>
+        <div class="coverage-readout" aria-live="polite">
+          <span class="coverage-readout-kicker">SKY COVERAGE / ICRS</span>
+          <strong id="coverage-selection-title">ALL PUBLIC SURVEYS</strong>
+          <span id="coverage-selection-meta">NESTED HEALPIX · NSIDE 16</span>
+          <span class="coverage-readout-status"><span aria-hidden="true"></span><output id="coverage-state">LOADING HEALPIX CELLS</output></span>
+        </div>
+      </div>
+
+      <section class="directory-intro" aria-labelledby="page-title" hidden>
+        <div class="intro-copy">
+          <p class="eyebrow">PUBLIC SKY COVERAGE CATALOG / 2026.08</p>
           <h1 id="page-title">Public Survey Footprints</h1>
-          <span>原生 FITS MOC、Euclid 几何边界、资源包与可复核的计算证据。</span>
-        </div>
-        <div class="hero-coverage-state"><span></span><output id="coverage-state">LOADING HEALPIX DOTS</output></div>
-        <dl class="hero-stats" aria-label="发布统计">
-          <div><dt>RELEASES</dt><dd id="stat-releases">--</dd></div>
-          <div><dt>EXACT MOC</dt><dd id="stat-acquired">--</dd></div>
-          <div><dt>RAW FITS</dt><dd id="stat-moc">--</dd></div>
-          <div><dt>PACKAGES</dt><dd id="stat-packages">--</dd></div>
-          <div><dt>ARCHIVE SIZE</dt><dd id="stat-size">--</dd></div>
-        </dl>
-      </section>
-
-      <section class="project-notes" aria-labelledby="project-notes-title">
-        <div>
-          <p>PROJECT NOTEBOOK</p>
-          <h2 id="project-notes-title">把公开巡天覆盖变成可复核的空间资产</h2>
-        </div>
-        <div class="project-notes-copy">
-          <p>Astro Survey Atlas 用 ICRS 坐标和 NESTED HEALPix 统一表达不同巡天、Release 与产品的天空覆盖。官网发布原始 MOC、几何来源、规范化 manifest、资源包和 provenance；每个文件都带有大小与 SHA-256，下载后可以独立复核。</p>
-          <p>数据工作区负责查询、组合和分析这些覆盖。后续可在同一项目体系中接入 data-warehouse 爬虫等扩展，但公开资源归档、项目说明和覆盖球保持独立发布。</p>
+          <p class="intro-lead">把不同巡天的天空覆盖整理成可读、可比较、可下载的空间资产。每一条记录都链接到原生 FITS MOC、几何来源、资源包与可复核证据。</p>
+          <div class="intro-rule" aria-hidden="true"></div>
+          <p class="intro-note"><strong>目录说明</strong> 使用 ICRS 坐标和 NESTED HEALPix 统一表达公开 Release。巡天自身色彩对应天球覆盖；将鼠标移入、用键盘聚焦或点击记录即可定位覆盖区域。</p>
+          <dl class="headline-stats" aria-label="发布统计">
+            <div><dt>RELEASES</dt><dd id="stat-releases">--</dd></div>
+            <div><dt>EXACT MOC</dt><dd id="stat-acquired">--</dd></div>
+            <div><dt>RAW FITS</dt><dd id="stat-moc">--</dd></div>
+            <div><dt>PACKAGES</dt><dd id="stat-packages">--</dd></div>
+            <div><dt>ARCHIVE SIZE</dt><dd id="stat-size">--</dd></div>
+          </dl>
         </div>
       </section>
 
-      <section class="catalog-shell" aria-labelledby="catalog-title">
+      <section class="catalog-shell" aria-labelledby="catalog-title" hidden>
         <div class="catalog-heading">
-          <div><p>PUBLIC SURVEY ARCHIVE / 2026.08</p><h2 id="catalog-title">按巡天浏览公开资产</h2></div>
+          <div>
+            <p class="eyebrow">SURVEY REGISTER / SORTED BY SOURCE</p>
+            <h2 id="catalog-title">按巡天浏览公开资产</h2>
+          </div>
           <label class="search-field">
             <i data-lucide="search"></i>
             <span class="sr-only">搜索巡天</span>
             <input id="survey-search" type="search" autocomplete="off" placeholder="搜索巡天、任务、模态或产品" />
           </label>
         </div>
-        <div class="survey-result-row"><output id="survey-count">--</output><span>多模态巡天使用多个并列标签展示</span></div>
-        <div id="survey-list" class="survey-grid" aria-live="polite">
+        <div class="survey-result-row"><output id="survey-count">--</output><span>每条记录显示已收录产品、覆盖像元与下载入口</span></div>
+        <div id="survey-list" class="survey-list" aria-live="polite">
           <div class="loading-row"><span></span><strong>正在验证巡天目录</strong></div>
         </div>
       </section>
 
-      <section class="integrity-band" aria-labelledby="integrity-title">
+      <section class="integrity-band" aria-labelledby="integrity-title" hidden>
         <div>
-          <p>REPRODUCIBLE EVIDENCE</p>
+          <p class="eyebrow">REPRODUCIBLE EVIDENCE</p>
           <h2 id="integrity-title">每一个下载都有来源和哈希</h2>
+          <p class="integrity-copy">发布 manifest、原始文件和 provenance 同步保存。下载后可用以下 SHA-256 独立复核。</p>
         </div>
         <dl>
           <div><dt>BUNDLE SHA-256</dt><dd><code id="bundle-hash">--</code><button id="copy-bundle-hash" class="icon-button" type="button" title="复制 bundle SHA-256" aria-label="复制 bundle SHA-256"><i data-lucide="copy"></i></button></dd></div>

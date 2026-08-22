@@ -1,43 +1,39 @@
 # Assets / data-warehouse / Atlas 边界
 
-这份文档是本仓库的架构决策记录。Assets 是公共覆盖制品发布者，不是
-Atlas 用户数据服务，也不是远程扫描执行器。
+这份文档只定义 Assets 自己的职责，以及 Assets 调用 data-warehouse 时
+需要遵守的边界。Assets、data-warehouse 和 Atlas 是三个独立项目；任何一个
+项目都可以独立提交自己的任务，不能把另一个项目的内部 API、数据库或任务
+历史当作依赖。
 
 ## 职责
 
 | 组件 | 负责 | 不负责 |
 | --- | --- | --- |
-| Assets | 公共 survey/release/product 注册；Connector 引用、recipe 和一次性公共 coverage task；MOC Core 的生成、合并、锁定；Resource Package、manifest、provenance、catalog 和只读下载 API | Atlas 用户资产、用户任务、权限、查询索引、扫描历史；保存远程凭据；常驻扫描服务 |
-| data-warehouse | 执行 S3/OSS/JDBC 等扫描；凭据、Range、分页、分片、重试和临时数据；返回规范化扫描结果或锁定构建输入 | 公共 catalog 激活、Resource Package 发布权限 |
-| Atlas | 本地文件/PVC scanner；可选远程 scanner 插件；用户资产、任务历史、查询索引和前端；安装并验证 Assets 公共资源包 | Assets 的 Connector、Job、数据库、worker 或计算接口 |
+| Assets | 公共 survey/release/product/layer 注册；Connector、DataSource、Secret 和一次性 coverage task；任务状态读取；MOC Core 的生成、合并、锁定；Resource Package、manifest、provenance、catalog 和只读下载 API | Atlas 用户资产、Atlas 任务历史和 Atlas API；data-warehouse 的内部实现 |
+| data-warehouse | 接收标准 Kubernetes CRD；按任务指定的 source、handlers 和 sink 执行扫描；维护 operator status；提供 scanner 的执行合同 | Assets 的 catalog 激活、MOC Core、Resource Package 发布；不规定所有任务的统一 sink |
+| Atlas | 独立的用户资产、任务历史、查询索引和前端；可独立向 data-warehouse 提交自己的任务；安装并验证 Assets 公共资源包 | Assets 的 Connector、任务状态、数据库、worker 或计算实现 |
 
-Assets 到 data-warehouse 的一次性交接使用
-[`coverage-task-v1.schema.json`](../contracts/coverage-task-v1.schema.json)。这个
-schema 只传 `connectorId`、配置哈希、recipe 和输出约束，不传凭据。任务完成
-后，Assets 将结果交给 MOC Core，生成不可变的锁定 manifest、MOC、投影、
-provenance 和 v3 package；任务运行时状态不会成为 Atlas 的依赖。
+Assets 到 data-warehouse 的 coverage task 配置使用
+[`coverage-task-v1.schema.json`](../contracts/coverage-task-v1.schema.json)。它
+是 Assets 侧的输入契约，用于生成标准 `AstroDataSource` 和
+`AstroMetadataScanTask`，不是 data-warehouse 的内部数据库模型，也不是
+Atlas 的共享业务 API。凭据如何保存由 Assets 自己决定；CRD 只引用任务需要
+的 DataSource/Secret。
 
-## 唯一稳定交集
+Assets 管理页只读取自己提交的 CRD status。status 是 data-warehouse operator
+对单个 CRD 的运行观测，不是三方共享的任务历史或业务状态。
 
-Atlas 只需要安装并验证 Resource Package v3：
-
-- `resource-package.json`、`layerId`、survey/release/product；
-- `coverageRole`、`dataOrigin`、`sourceTier`；
-- IVOA FITS MOC、ICRS、NESTED；
-- order 8 查询投影和 order 4 预览；
-- 文件大小、SHA-256、provenance 和公共 catalog 信任校验；
-- conformance fixtures 和安装验证规则。
-
-Atlas 不调用 Assets 的计算接口，也不需要知道任务由哪个 Connector、Job、
-数据库或 k3s worker 执行。公开 API 只暴露当前 release allowlist、survey/
-coverage 索引、包 catalog 和不可变下载/预览；写入方法统一返回 `405`。
+当 Assets 的任务选择 Elasticsearch sink 时，scanner 输出的 normalized
+file/coverage 文档可供 Assets finalizer 按 `runId` 读取。其他
+`AstroMetadataScanTask` 可以选择不同 sink，不能把 ES 当成 data-warehouse
+的全局输出约定。
 
 ## 任务生命周期
 
 ```text
 Assets 管理页面
   -> 创建一次性 public coverage task
-  -> data-warehouse 执行远程扫描
+  -> data-warehouse operator 执行远程扫描
   -> Assets MOC Core finalizer
   -> locked manifest + MOC + v3 package
   -> Assets catalog 激活
@@ -54,4 +50,3 @@ Assets 管理页面
 必须定义 `depthMetric`、单位、波段、统计方法、HEALPix order/resolution、
 输入和算法版本，并记录 depth map SHA-256。没有科学定义前，validator 和
 发布流程不会接受虚假的深度文件。
-

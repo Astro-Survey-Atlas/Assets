@@ -5,6 +5,12 @@ export default defineConfig({
   build: {
     outDir: "../dist/site",
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        index: "site/index.html",
+        admin: "site/admin/index.html",
+      },
+    },
   },
   server: {
     proxy: {
@@ -13,4 +19,3 @@ export default defineConfig({
     },
   },
 });
-

@@ -8,7 +8,7 @@ test("release catalog verifies every public file and bundle digest", async () =>
   const catalog = await loadCatalog(projectRoot);
   assert.equal(catalog.manifest.schemaVersion, 1);
   assert.equal(catalog.manifest.statistics.packages, 14);
-  assert.equal(catalog.manifest.statistics.rawMocFiles, 38);
+  assert.equal(catalog.manifest.statistics.rawMocFiles, 41);
   assert.equal(catalog.manifest.statistics.acquired, 35);
   assert.equal(catalog.files.size, catalog.manifest.files.length);
   assert.ok(catalog.manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)));
@@ -17,14 +17,22 @@ test("release catalog verifies every public file and bundle digest", async () =>
 test("CSST release publishes reviewed MOC, geometry and complete evidence", async () => {
   const catalog = await loadCatalog(projectRoot, false);
   const files = catalog.manifest.files.filter((entry) => entry.surveyId === "csst");
-  assert.deepEqual(new Set(files.map((entry) => entry.id)), new Set([
+  const ids = new Set(files.map((entry) => entry.id));
+  for (const id of [
     "csst-coverage-job-snapshot", "csst-input-manifest", "csst-provenance", "csst-run-statistics", "csst-sample-report",
     "csst-wcs-geometry-summary", "csst-w1-display-footprint-nside16", "csst-w1-healpix-order8", "csst-w1-image-extent-moc-order8",
     "package-public-csst-footprints-3-0-0",
-  ]));
-  assert.equal(files.find((entry) => entry.kind === "moc")?.mediaType, "application/fits");
-  assert.ok(files.filter((entry) => entry.kind !== "package").every((entry) => entry.releaseId === "csst-sim-w1-20250731"));
-  assert.ok(files.filter((entry) => entry.kind !== "package").every((entry) => entry.product === "W1 simulated wide-field images"));
+  ]) assert.ok(ids.has(id), `missing CSST release asset: ${id}`);
+  for (const band of ["w2", "w3", "w4"]) for (const suffix of [
+    "coverage-job-snapshot", "layer-provenance", "moc", "normalized-scan", "preview-order4", "provenance", "query-order8", "run-statistics", "sample-report", "statistics",
+  ]) assert.ok(ids.has(`csst-${band}-${suffix}`) || ids.has(`layer-csst-sim-${band}-image-extent-${suffix}`), `missing CSST ${band.toUpperCase()} release asset: ${suffix}`);
+  assert.ok(files.filter((entry) => entry.kind === "moc").length >= 4);
+  assert.ok(files.filter((entry) => entry.kind === "moc").every((entry) => entry.mediaType === "application/fits"));
+  for (const band of ["w2", "w3", "w4"]) {
+    const releaseId = `csst-sim-${band}-20250731`;
+    assert.ok(files.some((entry) => entry.releaseId === releaseId && entry.kind === "moc"), `missing ${band.toUpperCase()} MOC`);
+    assert.ok(files.filter((entry) => entry.releaseId === releaseId && entry.kind !== "package").every((entry) => entry.product === `${band.toUpperCase()} simulated wide-field images`));
+  }
 });
 
 test("public API projection hides filesystem paths and exposes stable downloads", async () => {
@@ -59,4 +67,10 @@ test("DESI official tile tables and resource package are downloadable release as
   ]) assert.ok(downloads.has(downloadName), `missing DESI release asset: ${downloadName}`);
   assert.ok(files.some((entry) => entry.kind === "geometry" && entry.downloadName === "desi-dr1-tiles-iron.fits" && entry.mediaType === "application/fits"));
   assert.ok(files.some((entry) => entry.kind === "geometry" && entry.downloadName === "desi-edr-tiles-fuji.fits" && entry.mediaType === "application/fits"));
+});
+
+test("admin page is included as a separate deployable entry point", async () => {
+  const html = await (await import("node:fs/promises")).readFile("site/admin/index.html", "utf8");
+  assert.match(html, /Coverage Task/);
+  assert.match(html, /\/admin\/main\.ts/);
 });

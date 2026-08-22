@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-21T22:57:05.370160Z",
+  "surveyId": "csst",
+  "releases": [
+    {
+      "releaseId": "csst-sim-w2-20250731",
+      "scannerRunId": "workspace-coverage-ec9448e73ced-retry4",
+      "mocSha256": "909ec26a41a54d2ad41444366a340e71fd5c7bc3da7a36cfc44a18ce5c21225b",
+      "statistics": {
+        "areaDeg2": 8091.630033480859,
+        "cellCount": 2519,
+        "maxOrder": 8,
+        "mocSha256": "909ec26a41a54d2ad41444366a340e71fd5c7bc3da7a36cfc44a18ce5c21225b",
+        "previewPixelCount": 679,
+        "queryPixelCount": 154256,
+        "schemaVersion": 1,
+        "matchedFiles": 182736,
+        "processedFiles": 182736,
+        "excludedFiles": 0,
+        "coverageDocuments": 154256,
+        "scannerRunId": "workspace-coverage-ec9448e73ced-retry4"
+      }
+    },
+    {
+      "releaseId": "csst-sim-w3-20250731",
+      "scannerRunId": "workspace-coverage-ee904e0f11af-retry3",
+      "mocSha256": "6bc369f232f1f1523f578e1a79f2828aa78ff2d1e243c9c8ad16a39928f0d698",
+      "statistics": {
+        "areaDeg2": 397.0383500377076,
+        "cellCount": 474,
+        "maxOrder": 8,
+        "mocSha256": "6bc369f232f1f1523f578e1a79f2828aa78ff2d1e243c9c8ad16a39928f0d698",
+        "previewPixelCount": 45,
+        "queryPixelCount": 7569,
+        "schemaVersion": 1,
+        "matchedFiles": 188136,
+        "processedFiles": 188136,
+        "excludedFiles": 0,
+        "coverageDocuments": 7569,
+        "scannerRunId": "workspace-coverage-ee904e0f11af-retry3"
+      }
+    },
+    {
+      "releaseId": "csst-sim-w4-20250731",
+      "scannerRunId": "workspace-coverage-dbf269d0f221-retry3",
+      "mocSha256": "f7796308322935b1f304b33e4d8429680290e15744c7a95246259f70ff4046db",
+      "statistics": {
+        "areaDeg2": 447.60579216168037,
+        "cellCount": 640,
+        "maxOrder": 8,
+        "mocSha256": "f7796308322935b1f304b33e4d8429680290e15744c7a95246259f70ff4046db",
+        "previewPixelCount": 53,
+        "queryPixelCount": 8533,
+        "schemaVersion": 1,
+        "matchedFiles": 211824,
+        "processedFiles": 211824,
+        "excludedFiles": 0,
+        "coverageDocuments": 8533,
+        "scannerRunId": "workspace-coverage-dbf269d0f221-retry3"
+      }
+    }
+  ]
+}

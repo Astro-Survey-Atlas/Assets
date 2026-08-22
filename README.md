@@ -2,8 +2,10 @@
 
 Independent public download service for verified Astro Survey Atlas coverage
 artifacts. This repository owns its data snapshot, website, container image and
-Helm chart. It has no runtime dependency on `astro-data-workspace` and does not
-share that project's image, chart or PVC.
+Helm chart. Assets is independently deployable and does not depend on another
+project's internal API, database, image, chart or PVC. When Assets requests
+coverage computation, it submits the standard `AstroDataSource` and
+`AstroMetadataScanTask` resources accepted by data-warehouse.
 
 ## Published release
 
@@ -39,9 +41,10 @@ local snapshot.
 The scientific and package contract is documented in
 [`docs/moc-core-contract.md`](docs/moc-core-contract.md). The reviewed CSST
 artifact is frozen and is validated in place rather than regenerated.
-The Assets/data-warehouse/Atlas boundary and one-shot task handoff are documented
-in [`docs/architecture-boundary.md`](docs/architecture-boundary.md); machine
-readable contracts live under [`contracts/`](contracts/).
+The Assets/data-warehouse/Atlas boundary and Assets' data-warehouse requirements
+are documented in [`docs/architecture-boundary.md`](docs/architecture-boundary.md)
+and [`docs/data-warehouse-requirements.md`](docs/data-warehouse-requirements.md);
+machine-readable contracts live under [`contracts/`](contracts/).
 
 ```bash
 python3 -m pip wheel --no-deps --no-build-isolation . -w wheelhouse

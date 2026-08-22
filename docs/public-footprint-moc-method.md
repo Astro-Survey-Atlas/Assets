@@ -4,19 +4,20 @@
 
 ## 证据等级
 
-发布后的产品级台账位于官网仓库 `Astro-Survey-Atlas-Assets/artifacts/public-survey-footprints/`；工作区只保留生成和校验流程。
+产品级台账、生成流程和校验流程均由本 Assets 仓库维护，台账位于
+`artifacts/public-survey-footprints/`。
 
 `artifacts/public-survey-footprints/sources.json` 是产品级台账。只有存在产品级几何来源、且原始制品已保存并通过校验的记录才标为 `acquired`。本次新增的 CDS 产品直接来自公开的 CDS MocServer/HiPS MOC；Euclid Q1 使用 Euclid Consortium 发布的 DS9 区域文件计算。尚未有产品几何的记录仍是 `overview_only` 或 `awaiting_geometry`，没有用面积、中心点、示意图或相邻产品代填。
 
 ## CSST W1 仿真图像覆盖
 
-CSST 条目描述尚未发射运行阶段的 W1 仿真数据，不是正式公开巡天 footprint。输入固定为已登记 OSS Connector 的 `W1_Phot/` Prefix，且只接受 basename 匹配 `^CSST_MSC_MS_WIDE_.*\\.fits$` 的文件。全量 Workspace run `ingest-2789ca60-c9db-46b9-9314-e581c91ab836` 匹配 178,056 个 FITS 文件，逐文件通过 Range 请求读取 FITS header，并从 `IMAGE` HDU 的 ICRS WCS 边界生成 `image_extent` 覆盖；不下载图像像素，也不使用目录对象位置代替图像范围。
+CSST 条目描述尚未发射运行阶段的 W1 仿真数据，不是正式公开巡天 footprint。Assets 通过标准 coverage task 指定 `W1_Phot/` 输入，data-warehouse 执行文件读取和 FITS-WCS 解析；历史运行记录 `workspaceRunId=ingest-2789ca60-c9db-46b9-9314-e581c91ab836` 作为 provenance 事实保留，当前证据不把它当作 Assets 或 Atlas 的共享任务接口。该运行匹配 178,056 个 FITS 文件，逐文件通过 Range 请求读取 FITS header，并从 `IMAGE` HDU 的 ICRS WCS 边界生成 `image_extent` 覆盖；不下载图像像素，也不使用目录对象位置代替图像范围。
 
 WCS 边界使用包容性 NESTED HEALPix polygon rasterization，原生发布分辨率为 order 8（NSIDE 256）。标准 WCS 关键字始终是几何依据；`RA_OBJ/DEC_OBJ`、`RA_PNT0/DEC_PNT0` 和 `RA_PNT1/DEC_PNT1` 仅用于中心一致性审计。一个输入文件的 `CD2_1=0.003676972383887528 deg/pix` 会令 20,000 像素轴跨越约 73 度，明显偏离同批 WIDE 图像，审核后从公开并集中剔除并保留异常证据。
 
 审核后的 178,055 个文件并集包含 6,763 个 order-8 像元，面积为 354.7589326601951 平方度。项目路径中的“1000 平方度”只是仿真项目标签，不能作为当前文件集合的实测覆盖面积。官网使用的 46 个 NSIDE 16 像元是从原生 order-8 MOC 归并父像元所得的 display-resolution reduction，不是重新计算的高精度边界。
 
-完整输入 manifest、任务快照、统计、异常说明、order-8 JSON、FITS NUNIQ MOC、NSIDE 16 展示点阵和各文件 SHA-256 位于 `artifacts/public-survey-footprints/csst/`。OSS ETag 只作为对象版本证据，不冒充内容 SHA-256；静态 Assets 不保存或暴露 OSS 凭据。
+完整输入 manifest、任务快照、统计、异常说明、order-8 JSON、FITS NUNIQ MOC、NSIDE 16 HEALPix 单元预览和各文件 SHA-256 位于 `artifacts/public-survey-footprints/csst/`。OSS ETag 只作为对象版本证据，不冒充内容 SHA-256；这些静态制品不包含原始远程凭据，凭据的存储和解析不属于 MOC 计算方法。
 
 ## CDS MOC 产品
 

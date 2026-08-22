@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { publicManifest, type LoadedCatalog } from "./catalog.js";
 import type { PublicAssetProjection, PublicSurveyCatalog, PublicSurveyRecord } from "./types.js";
+import { productId } from "./products.js";
 
 type DownloadableAsset = PublicAssetProjection;
 
@@ -34,6 +35,7 @@ export async function loadSurveyIndex(root: string, catalog: LoadedCatalog, cove
     const pixels = new Set(coverage.footprints.filter((footprint) => footprint.surveyId === survey.id).flatMap((footprint) => footprint.pixels));
     return {
       ...survey,
+      releases: survey.releases.map((release) => ({ ...release, products: release.products.map((product) => ({ ...product, productId: productId(survey.id, release.id, product.name) })) })),
       imageUrl: `/surveys/${encodeURIComponent(survey.id)}.png`,
       statistics: {
         publicProducts: products.length,

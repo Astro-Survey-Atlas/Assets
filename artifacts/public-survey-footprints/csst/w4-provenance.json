@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-21T22:57:05.258207Z",
+  "scannerRunId": "workspace-coverage-dbf269d0f221-retry3",
+  "sourcePrefix": "s3://data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot/",
+  "fileNamePattern": "^CSST_MSC_MS_WIDE_.*\\.fits$",
+  "matchedFiles": 211824,
+  "includedFiles": 211824,
+  "excludedFiles": 0,
+  "wcsErrors": 0,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "coverageRole": "image_extent",
+  "dataOrigin": "simulated",
+  "sourceTier": "user_file_derived",
+  "input": {
+    "path": "w4-normalized-scan.json",
+    "sha256": "9efd8d43cd5349458f5681907c8958d378514770b9a5389ad7e370f77f5b8be8",
+    "sizeBytes": 444221
+  },
+  "outputs": {
+    "moc": {
+      "path": "csst-sim-w4-image-extent.moc.fits",
+      "sha256": "f7796308322935b1f304b33e4d8429680290e15744c7a95246259f70ff4046db"
+    },
+    "query": {
+      "path": "query-order8.json",
+      "sha256": "217b57dcf3eafa22927437422981d60f0348629f1c3549365205b67c3593bd54"
+    },
+    "preview": {
+      "path": "preview-order4.json",
+      "sha256": "3c950781b582a9adfbb6f7fca993a941707d1092dfa77f65c07cb5b493df72c5"
+    },
+    "statistics": {
+      "path": "statistics.json",
+      "sha256": "418abf362864bd6e19056fab6b8e5f62b9279748b3a1a1e6116b59c14ebab3fd"
+    }
+  }
+}

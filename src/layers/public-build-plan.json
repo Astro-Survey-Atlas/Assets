@@ -3,6 +3,21 @@
   "sourceDateEpoch": 1787184000,
   "builds": [
     {
+      "spec": "src/layers/recipes/csst-sim-w2-image-extent.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent",
+      "expectedSha256": "909ec26a41a54d2ad41444366a340e71fd5c7bc3da7a36cfc44a18ce5c21225b"
+    },
+    {
+      "spec": "src/layers/recipes/csst-sim-w3-image-extent.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent",
+      "expectedSha256": "6bc369f232f1f1523f578e1a79f2828aa78ff2d1e243c9c8ad16a39928f0d698"
+    },
+    {
+      "spec": "src/layers/recipes/csst-sim-w4-image-extent.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent",
+      "expectedSha256": "f7796308322935b1f304b33e4d8429680290e15744c7a95246259f70ff4046db"
+    },
+    {
       "spec": "src/layers/recipes/desi-dr1-spectra-footprint.lock.json",
       "output": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint",
       "expectedSha256": "e3fb86b871d2e24e3fd40724ea241d222988d8fd7262fa6b3855f59b3aae9c40"

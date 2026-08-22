@@ -51,12 +51,10 @@
             {
               "name": "W2 simulated wide-field images",
               "modality": "imaging",
-              "description": "CSST W2_Phot 仿真宽场 FITS 图像；覆盖待通过独立 coverage job 扫描并由 Assets MOC Core 锁定。",
-              "status": "awaiting_geometry",
+              "description": "W2_Phot FITS-WCS 图像范围由 data-warehouse coverage task 扫描并由 Assets MOC Core 锁定；实际覆盖面积 8091.630033 平方度。",
+              "status": "acquired",
               "sourceUrl": "https://nadc.china-vo.org/data/",
-              "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
-              "reason": "W2/W3/W4 FITS-WCS scan has not been completed and locked by Assets.",
-              "manualStep": "Run the W2_Phot FITS-WCS coverage job with the existing CSST Connector, then import the locked Core result."
+              "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot"
             }
           ]
         },
@@ -74,12 +72,10 @@
             {
               "name": "W3 simulated wide-field images",
               "modality": "imaging",
-              "description": "CSST W3_Phot 仿真宽场 FITS 图像；覆盖待通过独立 coverage job 扫描并由 Assets MOC Core 锁定。",
-              "status": "awaiting_geometry",
+              "description": "W3_Phot FITS-WCS 图像范围由 data-warehouse coverage task 扫描并由 Assets MOC Core 锁定；实际覆盖面积 397.038350 平方度。",
+              "status": "acquired",
               "sourceUrl": "https://nadc.china-vo.org/data/",
-              "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
-              "reason": "W2/W3/W4 FITS-WCS scan has not been completed and locked by Assets.",
-              "manualStep": "Run the W3_Phot FITS-WCS coverage job with the existing CSST Connector, then import the locked Core result."
+              "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot"
             }
           ]
         },
@@ -97,12 +93,10 @@
             {
               "name": "W4 simulated wide-field images",
               "modality": "imaging",
-              "description": "CSST W4_Phot 仿真宽场 FITS 图像；覆盖待通过独立 coverage job 扫描并由 Assets MOC Core 锁定。",
-              "status": "awaiting_geometry",
+              "description": "W4_Phot FITS-WCS 图像范围由 data-warehouse coverage task 扫描并由 Assets MOC Core 锁定；实际覆盖面积 447.605792 平方度。",
+              "status": "acquired",
               "sourceUrl": "https://nadc.china-vo.org/data/",
-              "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
-              "reason": "W2/W3/W4 FITS-WCS scan has not been completed and locked by Assets.",
-              "manualStep": "Run the W4_Phot FITS-WCS coverage job with the existing CSST Connector, then import the locked Core result."
+              "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot"
             }
           ]
         }

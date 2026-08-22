@@ -2,7 +2,7 @@
 
 这是 Astro Survey Atlas Assets 的公开只读 API 维护入口。路由、响应字段、媒体类型、缓存、Range 或预览能力变更时，必须在同一变更中更新本文、`README.md` 的入口和对应 HTTP 测试。
 
-该服务只发布通过 `release-manifest.json` allowlist 校验的静态制品。它不读取 Workspace、OSS 或 Connector，不保存 OSS 凭据，也不会暴露制品的文件系统路径。
+该公开服务只读取已经构建并通过 `release-manifest.json` allowlist 校验的静态制品；运行时不访问 OSS、Connector、data-warehouse 或任务状态，也不处理或暴露原始远程凭据。这里描述的是公开只读服务边界，不限制 Assets 项目自行管理 DataSource、Secret 和任务。
 
 ## Conventions
 
@@ -28,9 +28,10 @@ GET /api/v1/assets
 
 返回当前 release manifest 的公开投影。每个 `files[]` 条目包含稳定 `id`、标签、媒体类型、下载名、大小、SHA-256、巡天/发布/产品关联和来源说明；服务器内部 `path` 不会返回。
 
-当前 release 也包含架构边界和 Resource Package v3 JSON Schema，作为普通
-allowlisted metadata/documentation 制品下载。data-warehouse task schema 是
-交接约束的公开定义，但不会由该 API 创建或执行任务。
+当前 release 也包含架构边界、Assets 对 data-warehouse 的需求和 Resource
+Package v3 JSON Schema，作为普通 allowlisted metadata/documentation 制品下载。
+data-warehouse task schema 是 Assets 用来生成标准 CRD 的公开输入约束；该公开
+API 本身保持只读，不创建或执行任务。
 
 可在线预览的制品额外包含：
 
@@ -49,15 +50,34 @@ allowlisted metadata/documentation 制品下载。data-warehouse task schema 是
 GET /api/v1/surveys
 ```
 
-返回公开巡天、Release 和产品状态的只读索引，供 Assets 网站渲染卡片和详情。它只反映审核后进入当前公开 release 的内容；Workspace 中尚未审核的登记或 coverage job 不会出现在这里。
+返回公开巡天、Release 和产品状态的只读索引，供 Assets 网站渲染卡片和详情。它只反映审核后进入当前公开 release 的内容；尚未审核的登记或 coverage task 不会出现在这里。
 
-## Coverage Index
+## Coverage Catalog And Blocks
+
+```http
+GET /api/v1/coverage/catalog
+GET /api/v1/coverage/blocks/{layerId}?order=4&tile=0
+```
+
+`coverage/catalog` is the lightweight runtime index. It declares `coordinateFrame: ICRS`, `ordering: NESTED`, the `tileScheme`, stable `layerId`/`productId`, real `availableOrders`, area and cell counts. A block contains only explicit `order`/`ipix` cells and a SHA-256 of that cell payload. Blocks are immutable and support gzip or Brotli content negotiation, `ETag` and long-lived cache headers. The browser requests overview blocks first and higher-order blocks only after zooming.
+
+## Legacy Coverage Index
 
 ```http
 GET /api/v1/coverage
 ```
 
-返回发布站展示用的巡天覆盖数据，包括坐标系、NSIDE 和各巡天的点阵。该端点用于网站绘制，不替代原始 MOC 或几何制品的下载。
+返回兼容旧客户端的聚合覆盖 manifest，包括坐标系、NSIDE 和各巡天的 HEALPix 像元。新客户端应使用上面的 catalog/block 路由；两者都不替代原始 MOC 或几何制品的下载。
+
+## Published Product Content
+
+公开页面可读取已发布的产品说明：
+
+```http
+GET /api/v1/products
+```
+
+草稿和版本控制只在管理员认证边界内：`GET /api/v1/admin/products`、`GET /api/v1/admin/products/{productId}`、`PUT /api/v1/admin/products/{productId}/draft`、`POST /api/v1/admin/products/{productId}/publish` 和 `GET /api/v1/admin/products/{productId}/history`。产品 ID 固定由 `surveyId + releaseId + product name` 生成；流程图节点的实现引用由 recipe 固定，管理员只能修改解释文本和证据链接。
 
 ## Download
 
@@ -114,4 +134,6 @@ Implementation index:
 - HTTP routes: `server/server.ts`
 - Public manifest projection and preview eligibility: `server/catalog.ts`
 - Survey index: `server/surveys.ts`
+- Coverage catalog and HEALPix block projection: `server/coverage.ts`
+- Product draft/publish store: `server/products.ts`
 - Release allowlist construction: `scripts/build-release-manifest.ts`
