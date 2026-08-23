@@ -52,6 +52,19 @@ export interface PublicAssetManifest {
 export type PublicSurveyModality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog" | "simulation";
 export type PublicProductStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
 
+export interface PublicCoverageOrders {
+  availableOrders: number[];
+  overviewOrder: number;
+  maxOrder: number;
+  layerId?: string;
+}
+
+export interface PublicCoverageOrderSummary {
+  availableOrders: number[];
+  overviewOrders: number[];
+  maxOrder: number | null;
+}
+
 export interface PublicSurveyProduct {
   productId?: string;
   name: string;
@@ -62,6 +75,7 @@ export interface PublicSurveyProduct {
   geometrySourceUrl?: string;
   reason?: string;
   manualStep?: string;
+  coverage?: PublicCoverageOrders;
 }
 
 export interface PublicSurveyRelease {
@@ -71,6 +85,7 @@ export interface PublicSurveyRelease {
   releasedYear?: number;
   modalities: PublicSurveyModality[];
   products: PublicSurveyProduct[];
+  coverageOrders?: PublicCoverageOrderSummary;
 }
 
 export interface PublicSurveyRecord {
@@ -81,6 +96,7 @@ export interface PublicSurveyRecord {
   description: string;
   modalities: PublicSurveyModality[];
   releases: PublicSurveyRelease[];
+  coverageOrders?: PublicCoverageOrderSummary;
 }
 
 export interface PublicSurveyCatalog {

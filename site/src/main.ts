@@ -1,5 +1,7 @@
-import { BadgeCheck, Box, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, Image, Layers3, ListChecks, RotateCcw, Search, ShieldCheck, Telescope, X, createIcons } from "lucide";
+import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Image, Layers3, ListChecks, RotateCcw, Search, ShieldCheck, Telescope, X, createIcons } from "lucide";
+import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
+import type { SurveyLayerContextMenu, SurveyLayerInspection, SurveyLayerState } from "./atlas/survey-layer-viewer.js";
 
 import "./styles.css";
 
@@ -42,6 +44,8 @@ interface SurveyProduct {
   geometrySourceUrl?: string;
   reason?: string;
   manualStep?: string;
+  productId?: string;
+  coverage?: { layerId: string; availableOrders: number[]; overviewOrder: number; maxOrder: number };
 }
 
 interface SurveyRelease {
@@ -51,6 +55,7 @@ interface SurveyRelease {
   releasedYear?: number;
   modalities: Modality[];
   products: SurveyProduct[];
+  coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null };
 }
 
 interface SurveyRecord {
@@ -61,6 +66,7 @@ interface SurveyRecord {
   description: string;
   modalities: Modality[];
   releases: SurveyRelease[];
+  coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null };
   imageUrl: string;
   statistics: {
     publicProducts: number;
@@ -99,6 +105,19 @@ const statusLabels: Record<ProductStatus, string> = {
   not_applicable: "不适用",
 };
 
+function orderLabel(coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number } | null): string {
+  if (!coverage?.availableOrders?.length) return "HEALPIX --";
+  const orders = [...new Set(coverage.availableOrders)].sort((a, b) => a - b);
+  return `O${orders.join(" · O")}`;
+}
+
+function orderSummaryLabel(summary?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }): string {
+  if (!summary?.availableOrders?.length) return "HEALPIX --";
+  const orders = [...new Set(summary.availableOrders)].sort((a, b) => a - b);
+  const overview = summary.overviewOrders?.length ? ` · OVERVIEW O${summary.overviewOrders.join("/O")}` : "";
+  return `O${orders.join(" / O")}${overview}`;
+}
+
 const assetGroupDefinitions: Array<{ id: "moc" | "geometry" | "package" | "evidence"; label: string; icon: string; kinds: AssetKind[] }> = [
   { id: "moc", label: "FITS MOC", icon: "telescope", kinds: ["moc"] },
   { id: "geometry", label: "几何", icon: "layers-3", kinds: ["geometry"] },
@@ -115,11 +134,13 @@ let coverageCatalog: CoverageCatalog | null = null;
 const coverageBlockCache = new Map<string, number[]>();
 const coverageRequests = new Map<string, AbortController>();
 const COVERAGE_CACHE_LIMIT = 128;
-let coverageLoadGeneration = 0;
+let pendingCoverageState: SurveyLayerState | null = null;
+let coverageStateFrame = 0;
+let overlapMode = false;
+let overlapRequestSequence = 0;
+let lastEscapeAt = -Infinity;
 
-async function fetchCoverageOverview(layer: CoverageCatalog["layers"][number]): Promise<number[]> {
-  const order = layer.overviewOrder;
-  const tile = 0;
+async function fetchCoverageBlock(layer: CoverageCatalog["layers"][number], order: number, tile: number): Promise<number[]> {
   const key = `${layer.layerId}:${order}:${tile}`;
   const cached = coverageBlockCache.get(key);
   if (cached) return cached;
@@ -140,6 +161,16 @@ async function fetchCoverageOverview(layer: CoverageCatalog["layers"][number]): 
   } finally {
     if (coverageRequests.get(key) === controller) coverageRequests.delete(key);
   }
+}
+
+async function fetchCoverageOverview(layer: CoverageCatalog["layers"][number]): Promise<number[]> {
+  return fetchCoverageBlock(layer, layer.overviewOrder, 0);
+}
+
+async function fetchCoverageLayerOrder(layer: CoverageCatalog["layers"][number], order: number): Promise<number[]> {
+  const tiles = layer.tileIdsByOrder?.[String(order)] ?? [0];
+  const blocks = await Promise.all(tiles.map((tile) => fetchCoverageBlock(layer, order, tile)));
+  return [...new Set(blocks.flat())].sort((a, b) => a - b);
 }
 
 function updateCoverageReadout(surveyId: string | null, product?: string): void {
@@ -164,39 +195,331 @@ function updateCoverageReadout(surveyId: string | null, product?: string): void 
   document.querySelectorAll<HTMLElement>(".survey-row").forEach((row) => { row.dataset.selected = row.dataset.surveyId === survey.id ? "true" : "false"; });
 }
 
+function updateCoverageState(state: SurveyLayerState): void {
+  pendingCoverageState = state;
+  if (coverageStateFrame) return;
+  coverageStateFrame = requestAnimationFrame(() => {
+    coverageStateFrame = 0;
+    const next = pendingCoverageState;
+    if (!next) return;
+    byId("coverage-status-nside").textContent = `${next.nside} · O${Math.round(Math.log2(next.nside))}`;
+    byId("coverage-status-fov").textContent = `${next.effectiveFovDeg.toFixed(1)}°`;
+    const [x, y, z] = next.cameraPosition;
+    byId("coverage-status-camera").textContent = `${next.cameraDistance.toFixed(2)} / ${x.toFixed(1)},${y.toFixed(1)},${z.toFixed(1)}`;
+  });
+}
+
+function updateCoverageInspector(inspection: SurveyLayerInspection | null): void {
+  const panel = byId("coverage-detail-panel");
+  if (!inspection) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  byId("coverage-detail-kicker").textContent = "CELL INSPECTOR";
+  byId("coverage-detail-title").textContent = `ORDER ${Math.round(Math.log2(inspection.nside))} · IPix ${inspection.pixel}`;
+  const content = byId("coverage-detail-content");
+  const rows: Array<[string, string]> = [
+    ["NSIDE", String(inspection.nside)],
+    ["RA / DEC", `${inspection.centerRaDeg.toFixed(4)}° / ${inspection.centerDecDeg.toFixed(4)}°`],
+    ["POINTER", `${inspection.pointerRaDeg.toFixed(4)}° / ${inspection.pointerDecDeg.toFixed(4)}°`],
+    ["SURVEYS", inspection.surveyIds.length ? inspection.surveyIds.map((id) => surveyIndex?.surveys.find((survey) => survey.id === id)?.name ?? id).join(", ") : "--"],
+    ["RELEASES", inspection.releaseIds.length ? inspection.releaseIds.join(", ") : "--"],
+    ["SOURCES", inspection.artifacts.length ? inspection.artifacts.map((artifact) => artifact.product).join(", ") : inspection.workspaceAvailable ? "workspace layer" : "--"],
+  ];
+  content.replaceChildren(...rows.flatMap(([label, value]) => {
+    const dt = document.createElement("dt"); dt.textContent = label;
+    const dd = document.createElement("dd"); dd.textContent = value;
+    return [dt, dd];
+  }));
+}
+
+function visibleSurveyIdsFromControls(): string[] {
+  return [...byId("coverage-layers").querySelectorAll<HTMLInputElement>("input[type=checkbox]:checked")]
+    .map((input) => input.dataset.surveyId)
+    .filter((value): value is string => Boolean(value));
+}
+
+function commonOverviewOrder(surveyIds: string[] = visibleSurveyIdsFromControls()): number {
+  const layers = coverageCatalog?.layers.filter((layer) => surveyIds.includes(layer.surveyId)) ?? [];
+  const bySurvey = new Map<string, Set<number>>();
+  layers.forEach((layer) => { const orders = bySurvey.get(layer.surveyId) ?? new Set<number>(); layer.availableOrders.forEach((order) => orders.add(order)); bySurvey.set(layer.surveyId, orders); });
+  const common = [...bySurvey.values()].reduce<number[]>((orders, available, index) => index === 0 ? [...available] : orders.filter((order) => available.has(order)), []);
+  return common.length ? Math.max(...common) : 4;
+}
+
+function surveyCellsAtOrder(surveyId: string, order: number): Set<number> {
+  const cells = new Set<number>();
+  for (const layer of coverageCatalog?.layers.filter((candidate) => candidate.surveyId === surveyId && candidate.availableOrders.includes(order)) ?? []) {
+    const tiles = layer.tileIdsByOrder?.[String(order)] ?? [0];
+    tiles.forEach((tile) => (coverageBlockCache.get(`${layer.layerId}:${order}:${tile}`) ?? []).forEach((pixel) => cells.add(pixel)));
+  }
+  return cells;
+}
+
+function overlapPixelsForSurveys(surveyIds: string[], order: number): number[] {
+  const sets = surveyIds.map((surveyId) => surveyCellsAtOrder(surveyId, order));
+  if (sets.length < 2 || sets.some((set) => !set.size)) return [];
+  const [first, ...rest] = sets;
+  return [...first!].filter((pixel) => rest.every((set) => set.has(pixel))).sort((a, b) => a - b);
+}
+
+function overlapBounds(pixels: number[], order: number): { areaDeg2: number; raMin: number; raMax: number; decMin: number; decMax: number } {
+  const healpix = new Healpix(2 ** order);
+  const values: Array<{ ra: number; dec: number }> = [];
+  pixels.forEach((pixel) => {
+    for (const point of healpix.getBoundaries(pixel)) {
+      const radius = Math.hypot(point.x, point.y, point.z) || 1;
+      values.push({ ra: ((Math.atan2(point.y, point.x) * 180 / Math.PI) + 360) % 360, dec: Math.asin(point.z / radius) * 180 / Math.PI });
+    }
+  });
+  const areaDeg2 = pixels.length * (41252.96124941927 / (12 * (2 ** order) ** 2));
+  return {
+    areaDeg2,
+    raMin: values.length ? Math.min(...values.map((value) => value.ra)) : 0,
+    raMax: values.length ? Math.max(...values.map((value) => value.ra)) : 0,
+    decMin: values.length ? Math.min(...values.map((value) => value.dec)) : 0,
+    decMax: values.length ? Math.max(...values.map((value) => value.dec)) : 0,
+  };
+}
+
+interface OverlapComponentView { id: string; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; surveys?: Array<{ surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }> }
+
+function overlapComponents(pixels: number[], order: number): OverlapComponentView[] {
+  const pending = new Set(pixels);
+  const result: OverlapComponentView[] = [];
+  const healpix = new Healpix(2 ** order);
+  while (pending.size) {
+    const start = pending.values().next().value as number;
+    const queue = [start];
+    const cells: number[] = [];
+    pending.delete(start);
+    while (queue.length) {
+      const pixel = queue.pop()!;
+      cells.push(pixel);
+      const neighbours = healpix.neighbours(pixel);
+      for (const index of [0, 2, 4, 6]) {
+        const neighbour = neighbours[index] ?? -1;
+        if (neighbour >= 0 && pending.delete(neighbour)) queue.push(neighbour);
+      }
+    }
+    cells.sort((a, b) => a - b);
+    result.push({ id: `C${String(result.length + 1).padStart(2, "0")}`, order, cells, bounds: overlapBounds(cells, order) });
+  }
+  return result;
+}
+
+function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number, scope = "GLOBAL", componentData?: OverlapComponentView[]): void {
+  const panel = byId("coverage-detail-panel");
+  const content = byId("coverage-detail-content");
+  panel.hidden = false;
+  byId("coverage-detail-kicker").textContent = "OVERLAP RESULT";
+  byId("coverage-detail-title").textContent = `${scope} · ${surveyIds.length} SURVEYS`;
+  content.replaceChildren();
+  const summary = document.createElement("p");
+  summary.className = "overlap-summary";
+  summary.textContent = pixels.length ? `COMMON ORDER O${order} · NSIDE ${2 ** order} · ${pixels.length.toLocaleString("en-US")} cells` : `COMMON ORDER O${order} · 没有公共覆盖像元`;
+  content.append(summary);
+  if (!pixels.length) return;
+  const components = componentData?.length ? componentData : overlapComponents(pixels, order);
+  const componentNav = document.createElement("div");
+  componentNav.className = "overlap-components";
+  const heading = document.createElement("strong");
+  heading.textContent = `${components.length} CONNECTED COMPONENT${components.length === 1 ? "" : "S"}`;
+  componentNav.append(heading);
+  components.forEach((component, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = index === 0 ? "is-active" : "";
+    button.textContent = component.id;
+    button.addEventListener("click", () => {
+      componentNav.querySelectorAll("button").forEach((entry) => entry.classList.remove("is-active"));
+      button.classList.add("is-active");
+      renderOverlapComponent(component, surveyIds, content);
+      coverageDots?.focusPixels(component.order, component.cells);
+    });
+    componentNav.append(button);
+  });
+  content.append(componentNav);
+  renderOverlapComponent(components[0]!, surveyIds, content);
+}
+
+function renderOverlapComponent(component: OverlapComponentView, surveyIds: string[], content: HTMLElement): void {
+  content.querySelectorAll(".overlap-component-detail, .overlap-products").forEach((node) => node.remove());
+  const detail = document.createElement("div");
+  detail.className = "overlap-component-detail";
+  const bounds = component.bounds;
+  detail.textContent = `${component.id} · ${component.cells.length.toLocaleString("en-US")} cells · ${bounds.areaDeg2.toFixed(2)} deg² · RA ${bounds.raMin.toFixed(2)}°${bounds.raWraps ? "↷" : "–"}${bounds.raMax.toFixed(2)}° · DEC ${bounds.decMin.toFixed(2)}°–${bounds.decMax.toFixed(2)}°`;
+  content.append(detail);
+  const list = document.createElement("div");
+  list.className = "overlap-products";
+  const entries = component.surveys ?? surveyIds.flatMap((surveyId) => {
+    const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
+    return survey?.releases.flatMap((release) => release.products.filter((product) => product.coverage).map((product) => ({ surveyId, releaseId: release.id, product: product.name, modality: product.modality, downloadUrl: product.sourceUrl }))) ?? [];
+  });
+  entries.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "coverage-detail-product";
+    row.textContent = `${surveyIndex?.surveys.find((survey) => survey.id === entry.surveyId)?.name ?? entry.surveyId} · ${entry.releaseId} · ${entry.product} · ${entry.modality ?? "--"}`;
+    if (entry.sourceUnitIndex) row.append(Object.assign(document.createElement("small"), { textContent: `${entry.sourceUnitIndex.status.toUpperCase()}: ${entry.sourceUnitIndex.notes}` }));
+    if (entry.sourceUnits) {
+      row.append(Object.assign(document.createElement("small"), { textContent: `${entry.sourceUnits.totalUnits} ${entry.sourceUnits.unitKind}${entry.sourceUnits.totalUnits === 1 ? "" : "s"} matched${entry.sourceUnits.truncated ? " · first results shown" : ""}` }));
+      const links = document.createElement("div"); links.className = "overlap-unit-links";
+      entry.sourceUnits.units.slice(0, 18).forEach((unit) => { const link = document.createElement("a"); link.href = unit.downloadUrl; link.target = "_blank"; link.rel = "noreferrer"; link.textContent = `TILE ${unit.unitId}`; link.title = `NEXP ${unit.exposureCount} · LASTNIGHT ${unit.lastNight}`; links.append(link); });
+      row.append(links);
+    }
+    if (entry.downloadUrl) { const link = document.createElement("a"); link.href = entry.downloadUrl; link.target = "_blank"; link.rel = "noreferrer"; link.textContent = "官方 Release 入口"; row.append(link); }
+    list.append(row);
+  });
+  if (!entries.length) list.append(Object.assign(document.createElement("p"), { className: "overlap-empty", textContent: "当前重合区域没有已发布产品。" }));
+  content.append(list);
+}
+
+async function activateOverlap(forceActive?: boolean): Promise<void> {
+  const surveyIds = visibleSurveyIdsFromControls();
+  const order = commonOverviewOrder(surveyIds);
+  if (surveyIds.length < 2) {
+    toast("至少勾选两个巡天才能计算重合");
+    return;
+  }
+  const activate = forceActive ?? !overlapMode;
+  const requestSequence = ++overlapRequestSequence;
+  overlapMode = activate;
+  if (!activate) {
+    coverageDots?.setOverlapMode(false);
+    byId("coverage-detail-panel").hidden = true;
+    return;
+  }
+  coverageDots?.setOverlapMode(true);
+  const layers = coverageCatalog?.layers.filter((layer) => surveyIds.includes(layer.surveyId) && layer.availableOrders.includes(order)) ?? [];
+  await Promise.all(layers.map((layer) => fetchCoverageLayerOrder(layer, order)));
+  const pixels = overlapPixelsForSurveys(surveyIds, order);
+  if (!overlapMode || requestSequence !== overlapRequestSequence) return;
+  const localComponents = overlapComponents(pixels, order);
+  coverageDots?.setOverlapCells(order, pixels);
+  renderOverlapPanel(surveyIds, pixels, order, "GLOBAL", localComponents);
+  if (localComponents[0]) coverageDots?.focusPixels(localComponents[0].order, localComponents[0].cells);
+  let renderedPixels = pixels;
+  let renderedOrder = order;
+  try {
+    const response = await fetch("/api/v1/coverage/overlap", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ surveyIds, requestedOrder: order }) });
+    if (!overlapMode || requestSequence !== overlapRequestSequence) return;
+    if (response.ok) {
+      const result = await response.json() as { components?: OverlapComponentView[]; commonOrder?: number; pixels?: number[] };
+      renderedPixels = result.pixels ?? pixels;
+      renderedOrder = result.commonOrder ?? order;
+      coverageDots?.setOverlapCells(renderedOrder, renderedPixels);
+      renderOverlapPanel(surveyIds, renderedPixels, renderedOrder, "GLOBAL", result.components);
+      const firstComponent = result.components?.[0];
+      if (firstComponent) coverageDots?.focusPixels(firstComponent.order, firstComponent.cells);
+    }
+  } catch {
+    // The local overlap remains usable when download-plan enrichment fails.
+  }
+  byId("coverage-state").textContent = renderedPixels.length ? `OVERLAP O${renderedOrder} · ${renderedPixels.length.toLocaleString("en-US")} CELLS` : `NO COMMON COVERAGE · O${renderedOrder}`;
+}
+
+function closeCoverageContextMenu(): void {
+  const menu = byId("coverage-context-menu");
+  menu.hidden = true;
+  menu.replaceChildren();
+}
+
+function openCoverageContextMenu(menuState: SurveyLayerContextMenu): void {
+  const menu = byId("coverage-context-menu");
+  menu.replaceChildren();
+  const addAction = (label: string, action: () => void): void => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", () => { action(); closeCoverageContextMenu(); });
+    menu.append(button);
+  };
+  addAction("查看当前区块覆盖与下载", () => {
+    renderOverlapPanel(menuState.surveyIds, menuState.pixels, menuState.nside === 16 ? 4 : Math.round(Math.log2(menuState.nside)), "SELECTED CELL");
+  });
+  const bounds = byId("coverage-scene").getBoundingClientRect();
+  menu.style.left = `${Math.min(Math.max(12, menuState.clientX - bounds.left), bounds.width - 250)}px`;
+  menu.style.top = `${Math.min(Math.max(72, menuState.clientY - bounds.top), bounds.height - 180)}px`;
+  menu.hidden = false;
+}
+
 function renderCoverageLayers(): void {
   const host = byId("coverage-layers");
   host.replaceChildren();
   if (!coverageCatalog) return;
+  const search = document.createElement("label");
+  search.className = "coverage-layer-search";
+  search.innerHTML = `<i data-lucide="search"></i><input id="coverage-layer-search" type="search" autocomplete="off" placeholder="筛选巡天图层" aria-label="筛选巡天图层" />`;
+  host.append(search);
+  const filterInput = search.querySelector<HTMLInputElement>("input");
   const grouped = new Map<string, CoverageCatalog["layers"]>();
   for (const layer of coverageCatalog.layers) grouped.set(layer.surveyId, [...(grouped.get(layer.surveyId) ?? []), layer]);
   for (const [surveyId, layers] of grouped) {
     const label = document.createElement("label");
     label.className = "coverage-layer-toggle";
+    label.setAttribute("title", "拖动三横线把手以调整图层顺序");
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = true;
     input.dataset.surveyId = surveyId;
     const name = document.createElement("span");
     const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
+    label.dataset.searchText = `${survey?.name ?? surveyId} ${survey?.mission ?? ""}`.toLocaleLowerCase();
     name.textContent = survey?.name ?? surveyId.toUpperCase();
+    name.className = "coverage-layer-name";
+    const swatch = document.createElement("span");
+    swatch.className = "coverage-layer-swatch";
+    swatch.style.backgroundColor = layers[0]?.color ?? survey?.color ?? "#42d5c4";
+    swatch.setAttribute("aria-label", `图层颜色 ${swatch.style.backgroundColor}`);
+    const modalities = [...new Set(layers.flatMap((layer) => {
+      const release = survey?.releases.find((entry) => entry.id === layer.releaseId);
+      const product = release?.products.find((entry) => entry.name === layer.product);
+      return product?.modality ? [modalityLabels[product.modality as Modality] ?? product.modality] : [];
+    }))];
+    const modality = document.createElement("small");
+    modality.className = "coverage-layer-modality";
+    modality.textContent = modalities.length ? modalities.join(" · ") : "MODALITY --";
+    modality.title = modalities.length ? `模态：${modalities.join("、")}` : "未提供模态信息";
     const count = document.createElement("small");
-    count.textContent = `${layers.length} products`;
+    count.className = "coverage-layer-count";
+    const orders = [...new Set(layers.flatMap((layer) => layer.availableOrders))].sort((a, b) => a - b);
+    count.textContent = `${layers.length} products · O${orders.join("/O") || "--"}`;
+    const handle = document.createElement("span");
+    handle.className = "coverage-layer-handle";
+    handle.innerHTML = `<i data-lucide="grip-horizontal"></i>`;
+    handle.setAttribute("role", "img");
+    handle.setAttribute("aria-label", "拖动把手");
+    handle.title = "拖动排序";
     input.addEventListener("change", () => {
-      const generation = ++coverageLoadGeneration;
-      const enabled = new Set([...host.querySelectorAll<HTMLInputElement>("input:checked")].map((entry) => entry.dataset.surveyId));
-      const selected = coverageCatalog?.layers.filter((entry) => enabled.has(entry.surveyId)) ?? [];
-      const blocks = new Map<string, number[]>();
-      void Promise.all(selected.map(async (entry) => {
-        const cells = await fetchCoverageOverview(entry);
-        if (cells.length) blocks.set(`${entry.layerId}:${entry.overviewOrder}`, cells);
-      })).then(() => {
-        if (generation === coverageLoadGeneration) coverageDots?.loadCatalog({ ...coverageCatalog!, layers: selected }, blocks, surveyIndex?.surveys ?? []);
-      });
+      const enabled = new Set([...host.querySelectorAll<HTMLInputElement>("input:checked")].map((entry) => entry.dataset.surveyId).filter(Boolean) as string[]);
+      coverageDots?.setVisibleSurveys(enabled);
+      if (overlapMode) {
+        void activateOverlap(true);
+      }
     });
-    label.append(input, name, count);
+    label.draggable = true;
+    label.dataset.layerKey = `public-survey:${surveyId}`;
+    label.addEventListener("dragstart", () => label.classList.add("is-dragging"));
+    label.addEventListener("dragend", () => { label.classList.remove("is-dragging"); host.querySelectorAll(".is-drop-target").forEach((node) => node.classList.remove("is-drop-target")); });
+    label.addEventListener("dragover", (event) => { event.preventDefault(); label.classList.add("is-drop-target"); });
+    label.addEventListener("dragleave", () => label.classList.remove("is-drop-target"));
+    label.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const dragging = host.querySelector<HTMLElement>(".is-dragging");
+      if (!dragging || dragging === label) return;
+      const rect = label.getBoundingClientRect();
+      host.insertBefore(dragging, event.clientY < rect.top + rect.height / 2 ? label : label.nextSibling);
+      coverageDots?.setLayerOrder([...host.querySelectorAll<HTMLElement>("[data-layer-key]")].map((node) => node.dataset.layerKey!).filter(Boolean));
+    });
+    label.append(input, swatch, handle, name, modality, count);
     host.append(label);
   }
+  filterInput?.addEventListener("input", () => {
+    const query = filterInput.value.trim().toLocaleLowerCase();
+    host.querySelectorAll<HTMLElement>(".coverage-layer-toggle").forEach((row) => { row.hidden = Boolean(query) && !row.dataset.searchText?.includes(query); });
+  });
+  renderIcons();
 }
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -225,7 +548,7 @@ async function copy(value: string): Promise<void> {
 
 function renderIcons(): void {
     createIcons({
-    icons: { BadgeCheck, Box, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, Image, Layers3, ListChecks, RotateCcw, Search, ShieldCheck, Telescope, X },
+    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Image, Layers3, ListChecks, RotateCcw, Search, ShieldCheck, Telescope, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -278,6 +601,10 @@ function showSurveyProducts(survey: SurveyRecord): void {
   const list = document.createElement("div");
   list.className = "product-list";
   for (const release of survey.releases) {
+    const releaseBanner = document.createElement("div");
+    releaseBanner.className = "release-order-banner";
+    releaseBanner.textContent = `${release.label} · ${orderSummaryLabel(release.coverageOrders)}`;
+    list.append(releaseBanner);
     for (const product of release.products) {
       const row = document.createElement("section");
       row.className = "product-row";
@@ -285,7 +612,8 @@ function showSurveyProducts(survey: SurveyRecord): void {
       const releaseLabel = document.createElement("span"); releaseLabel.className = "product-release"; releaseLabel.textContent = release.label;
       const name = document.createElement("strong"); name.textContent = product.name;
       const detail = document.createElement("p"); detail.textContent = product.description;
-      identity.append(releaseLabel, name, detail);
+      const order = document.createElement("code"); order.className = "product-order"; order.textContent = orderLabel(product.coverage);
+      identity.append(releaseLabel, name, order, detail);
       const status = document.createElement("div"); status.className = "product-status";
       const pill = document.createElement("span"); pill.className = "status-pill"; pill.dataset.status = product.status; pill.textContent = statusLabels[product.status];
       const note = document.createElement("p"); note.textContent = statusDescription(product);
@@ -435,7 +763,7 @@ function renderSurveys(): void {
     };
     addMetric("PUBLIC PRODUCTS", `${survey.statistics.acquired} / ${survey.statistics.publicProducts}`, true);
     addMetric("HEALPIX CELLS", survey.statistics.footprintCells ? survey.statistics.footprintCells.toLocaleString("en-US") : "--");
-    addMetric("LATEST RELEASE", survey.releases.at(-1)?.label ?? "PUBLIC");
+    addMetric("HEALPIX ORDER", orderSummaryLabel(survey.coverageOrders));
 
     const actions = document.createElement("div"); actions.className = "survey-actions";
     const detail = document.createElement("button"); detail.type = "button"; detail.className = "text-action"; detail.title = `查看 ${survey.name} 产品`; detail.append(icon("list-checks")); const detailLabel = document.createElement("span"); detailLabel.textContent = "产品详情"; detail.append(detailLabel); detail.addEventListener("click", () => showSurveyProducts(survey));
@@ -460,7 +788,7 @@ function renderSurveys(): void {
 
 async function initialize(): Promise<void> {
   try {
-    coverageDots = new AtlasCoverageGlobe(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"), updateCoverageReadout);
+    coverageDots = new AtlasCoverageGlobe(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"), updateCoverageReadout, updateCoverageInspector, updateCoverageState, openCoverageContextMenu);
   } catch (error) {
     console.warn("HEALPix globe unavailable", error);
     byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
@@ -490,7 +818,7 @@ async function initialize(): Promise<void> {
   const assetsResponse = await assetsPromise;
   if (!assetsResponse.ok) throw new Error("Public asset catalog request failed");
   manifest = await assetsResponse.json() as ReleaseManifest;
-  byId("header-release").textContent = `${manifest.bundle.id.toUpperCase()} · VERIFIED`;
+  byId("footer-release").textContent = `${manifest.bundle.id.toUpperCase()} · VERIFIED`;
   byId("stat-releases").textContent = String(manifest.statistics.releases);
   byId("stat-acquired").textContent = String(manifest.statistics.acquired);
   byId("stat-moc").textContent = String(manifest.statistics.rawMocFiles);
@@ -511,15 +839,65 @@ byId("dialog-close").addEventListener("click", () => byId<HTMLDialogElement>("su
 byId<HTMLDialogElement>("survey-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("survey-dialog").close(); });
 byId("preview-close").addEventListener("click", () => byId<HTMLDialogElement>("preview-dialog").close());
 byId<HTMLDialogElement>("preview-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("preview-dialog").close(); });
-byId("coverage-reset").addEventListener("click", () => coverageDots?.resetView());
+function resetCoverageExperience(): void {
+  closeCoverageContextMenu();
+  overlapMode = false;
+  coverageDots?.setOverlapMode(false);
+  coverageDots?.clearSelection();
+  coverageDots?.resetView();
+  byId("coverage-detail-panel").hidden = true;
+  updateCoverageInspector(null);
+}
+
+byId("coverage-reset").addEventListener("click", resetCoverageExperience);
 byId("coverage-layers-toggle").addEventListener("click", () => {
   const layers = byId("coverage-layers");
   layers.hidden = !layers.hidden;
+});
+byId("coverage-help-toggle").addEventListener("click", () => {
+  byId("coverage-help").hidden = !byId("coverage-help").hidden;
+});
+byId("coverage-help-close").addEventListener("click", () => { byId("coverage-help").hidden = true; });
+
+document.addEventListener("keydown", (event) => {
+  const target = event.target as HTMLElement | null;
+  if (target && (target.matches("input, textarea, select") || target.isContentEditable)) return;
+  if (event.key === "Escape") {
+    const now = performance.now();
+    const doubleEscape = now - lastEscapeAt < 500;
+    lastEscapeAt = now;
+    closeCoverageContextMenu();
+    overlapMode = false;
+    coverageDots?.setOverlapMode(false);
+    byId("coverage-detail-panel").hidden = true;
+    coverageDots?.clearSelection();
+    updateCoverageInspector(null);
+    if (doubleEscape) resetCoverageExperience();
+    return;
+  }
+  if (event.key.toLowerCase() === "r") {
+    event.preventDefault();
+    resetCoverageExperience();
+    return;
+  }
+  if (event.key.toLowerCase() === "f") {
+    event.preventDefault();
+    coverageDots?.focusSelection();
+  }
+  if (event.key.toLowerCase() === "g") {
+    event.preventDefault();
+    void activateOverlap();
+  }
+});
+
+document.addEventListener("pointerdown", (event) => {
+  const menu = byId("coverage-context-menu");
+  if (!menu.hidden && !menu.contains(event.target as Node)) closeCoverageContextMenu();
 });
 
 renderIcons();
 void initialize().catch((error) => {
   console.error(error);
-  byId("header-release").textContent = "RELEASE UNAVAILABLE";
+  byId("coverage-state").textContent = "RELEASE UNAVAILABLE";
   byId("survey-list").replaceChildren(Object.assign(document.createElement("div"), { className: "error-row", textContent: "巡天公开目录载入失败" }));
 });

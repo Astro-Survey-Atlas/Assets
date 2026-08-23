@@ -6,7 +6,7 @@ interface AdminConfig { enabled: boolean; authRequired: boolean; namespace: stri
 interface Connector { name: string; type: ConnectorType | "oss"; endpoint?: string; bucket?: string; prefix?: string; accessKeyConfigured?: boolean; pvcName?: string; localPath?: string; phase?: string; message?: string; createdAt?: string }
 interface TaskStatus { phase: string; backend?: string; runId?: string; discoveredFiles?: number; processedHdus?: number; coverageDocuments?: number; objectDocuments?: number; startedAt?: string; completedAt?: string; message?: string }
 interface Task { name: string; createdAt?: string; layerId?: string; surveyId?: string; releaseId?: string; product?: string; mode?: string; backend?: string; sourceConnector?: string; sinkConnector?: string; sourcePaths: string[]; fileNamePattern?: string; tags: string[]; batchId?: string; status: TaskStatus }
-interface Product { productId: string; draft: { productId: string; surveyId: string; releaseId: string; name: string; layerId?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } } }; published: unknown; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null }
+interface Product { productId: string; draft: { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } } }; published: unknown; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number } }
 
 const tokenKey = "astro-survey-atlas-assets.admin-token";
 let adminConfig: AdminConfig | null = null;
@@ -111,13 +111,22 @@ function renderTasks(tasks: Task[]): void {
 }
 
 let productRecords: Product[] = [];
+let productQuery = "";
+let refreshInFlight: Promise<void> | null = null;
 function renderProducts(products: Product[]): void {
   productRecords = products;
   const list = byId("product-list");
   const select = byId<HTMLSelectElement>("task-product");
   select.replaceChildren(new Option("选择 Catalog 产品", ""), ...products.map((product) => new Option(`${product.draft.surveyId.toUpperCase()} · ${product.draft.name}`, product.productId)));
-  if (!products.length) { list.innerHTML = `<div class="resource-empty">暂无 Catalog 产品</div>`; return; }
-  list.innerHTML = products.map((product) => `<article class="product-row"><strong>${escapeText(product.draft.name)}</strong><small>${escapeText(product.draft.surveyId)} / ${escapeText(product.draft.releaseId)} · rev ${product.revision}${product.publishedRevision ? ` · published ${product.publishedRevision}` : " · 草稿"}</small><div class="product-row-actions"><button type="button" data-edit-product="${escapeText(product.productId)}" title="编辑产品"><i data-lucide="pencil"></i><span>编辑</span></button><button type="button" data-publish-product="${escapeText(product.productId)}" data-publish title="发布产品"><i data-lucide="upload"></i><span>发布</span></button></div></article>`).join("");
+  const filtered = products.filter((product) => {
+    if (!productQuery) return true;
+    const orders = product.coverage?.availableOrders ?? product.draft.coverage?.availableOrders ?? [];
+    return `${product.draft.surveyId} ${product.draft.releaseId} ${product.draft.name} ${product.draft.modality ?? ""} ${product.draft.mode ?? ""} ${orders.map((order) => `O${order}`).join(" ")}`.toLocaleLowerCase().includes(productQuery);
+  });
+  if (!filtered.length) { list.innerHTML = `<div class="resource-empty">${products.length ? "没有匹配的公共产品" : "暂无 Catalog 产品"}</div>`; return; }
+  const grouped = new Map<string, Product[]>();
+  filtered.forEach((product) => grouped.set(product.draft.surveyId, [...(grouped.get(product.draft.surveyId) ?? []), product]));
+  list.innerHTML = [...grouped.entries()].map(([surveyId, records]) => `<section class="admin-product-survey"><h4>${escapeText(surveyId.toUpperCase())} <small>${records.length} products</small></h4>${records.map((product) => `<article class="product-row"><strong>${escapeText(product.draft.name)}</strong><small>${escapeText(product.draft.releaseId)} · HEALPix ${(product.coverage?.availableOrders ?? product.draft.coverage?.availableOrders ?? []).map((order) => `O${order}`).join(" / ") || "--"} · rev ${product.revision}${product.publishedRevision ? ` · published ${product.publishedRevision}` : " · 草稿"}</small><div class="product-row-actions"><button type="button" data-edit-product="${escapeText(product.productId)}" title="编辑产品"><i data-lucide="pencil"></i><span>编辑</span></button><button type="button" data-publish-product="${escapeText(product.productId)}" data-publish title="发布产品"><i data-lucide="upload"></i><span>发布</span></button></div></article>`).join("")}</section>`).join("");
   list.querySelectorAll<HTMLButtonElement>("[data-edit-product]").forEach((button) => button.addEventListener("click", () => openProduct(button.dataset.editProduct ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-publish-product]").forEach((button) => button.addEventListener("click", () => void publishProduct(button.dataset.publishProduct ?? "")));
   renderIcons();
@@ -172,7 +181,11 @@ async function publishProduct(productId: string): Promise<void> {
 }
 
 async function refresh(): Promise<void> {
-  byId("admin-status").textContent = "LOADING";
+  if (refreshInFlight) return refreshInFlight;
+  const button = byId<HTMLButtonElement>("refresh-button");
+  button.disabled = true;
+  byId("admin-status").textContent = "REFRESHING…";
+  refreshInFlight = (async () => {
   const [connectors, tasks, products] = await Promise.allSettled([
     api<{ connectors: Connector[] }>("/api/v1/admin/connectors"),
     api<{ tasks: Task[] }>("/api/v1/admin/tasks"),
@@ -182,12 +195,20 @@ async function refresh(): Promise<void> {
   else toast(connectors.reason instanceof Error ? connectors.reason.message : "Connector 刷新失败", true);
   if (tasks.status === "fulfilled") renderTasks(tasks.value.tasks);
   else toast(tasks.reason instanceof Error ? tasks.reason.message : "任务刷新失败", true);
-  if (products.status === "fulfilled") renderProducts(products.value.products);
+  if (products.status === "fulfilled") renderProducts(Array.isArray(products.value.products) ? products.value.products : []);
   else renderProductLoadError(products.reason instanceof Error ? products.reason.message : "产品刷新失败");
   const connectorCount = connectors.status === "fulfilled" ? connectors.value.connectors.length : "--";
   const taskCount = tasks.status === "fulfilled" ? tasks.value.tasks.length : "--";
   const productCount = products.status === "fulfilled" ? products.value.products.length : "--";
-  byId("admin-status").textContent = `${connectorCount} CONNECTORS · ${taskCount} TASKS · ${productCount} PRODUCTS`;
+  byId("admin-status").textContent = `${connectorCount} CONNECTORS · ${taskCount} TASKS · ${productCount} PRODUCTS · ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+  })().catch((error) => {
+    toast(error instanceof Error ? error.message : "刷新失败", true);
+    byId("admin-status").textContent = "REFRESH FAILED";
+  }).finally(() => {
+    button.disabled = false;
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 function formValue(form: HTMLFormElement, name: string): string {
@@ -218,6 +239,7 @@ async function submitConnector(event: SubmitEvent): Promise<void> {
     await api("/api/v1/admin/connectors", { method: "POST", body: JSON.stringify(input) });
     form.reset();
     updateConnectorFields();
+    byId<HTMLDialogElement>("connector-dialog").close();
     setMessage("connector", "Connector 已创建");
     toast("Connector 已创建");
     await refresh();
@@ -233,6 +255,7 @@ async function submitTask(event: SubmitEvent): Promise<void> {
   setMessage("task", "正在提交 CRD…");
   try {
     await api("/api/v1/admin/tasks", { method: "POST", body: JSON.stringify(input) });
+    byId<HTMLDialogElement>("task-dialog").close();
     setMessage("task", "Coverage Task 已提交");
     toast("Coverage Task 已提交");
     await refresh();
@@ -277,5 +300,13 @@ byId<HTMLFormElement>("product-form").addEventListener("submit", (event) => void
 byId("product-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("product-dialog").close());
 byId("task-product").addEventListener("change", (event) => setDerivedProduct((event.currentTarget as HTMLSelectElement).value));
 byId("connector-type").addEventListener("change", updateConnectorFields);
+byId("connector-create-button").addEventListener("click", () => byId<HTMLDialogElement>("connector-dialog").showModal());
+byId("connector-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("connector-dialog").close());
+byId("task-create-button").addEventListener("click", () => byId<HTMLDialogElement>("task-dialog").showModal());
+byId("task-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("task-dialog").close());
+byId<HTMLInputElement>("product-search").addEventListener("input", (event) => {
+  productQuery = (event.currentTarget as HTMLInputElement).value.trim().toLocaleLowerCase();
+  renderProducts(productRecords);
+});
 updateConnectorFields();
 void initialize();

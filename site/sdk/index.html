@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#050a10" />
+    <link rel="stylesheet" href="../src/styles.css" />
+    <title>Astro Survey Atlas Assets · SDK</title>
+  </head>
+  <body class="resources-page sdk-page">
+    <header class="site-header resources-header"><a class="brand" href="/" aria-label="Astro Survey Atlas Assets"><span><strong>ASTRO SURVEY ATLAS ASSETS</strong><small>SDK DOCUMENTATION</small></span></a><nav class="site-nav" aria-label="站点导航"><a class="site-nav-link" href="/github/">GitHub</a><a class="site-nav-link" href="/surveys/">巡天目录</a><a class="site-nav-link" href="/sdk/" aria-current="page">SDK</a><a class="admin-entry" href="/">天球</a></nav></header>
+    <main class="resources-main"><section class="resources-hero"><p class="eyebrow">OFFLINE TOOLCHAIN / PYTHON + CLI</p><h1>astro-survey-moc-core</h1><p>使用确定性的工具链读取覆盖输入、生成 IVOA FITS MOC、构建查询 order 和 Resource Package，并对结果执行严格校验。</p></section><section class="resources-grid"><article class="resource-band"><p class="eyebrow">INSTALL</p><h2>构建本地 wheel</h2><pre><code>python3 -m pip wheel --no-deps --no-build-isolation . -w wheelhouse
+python3 -m pip install wheelhouse/*.whl</code></pre></article><article class="resource-band"><p class="eyebrow">CLI</p><h2>检查版本与生成索引</h2><pre><code>python3 -m astro_survey_moc_core.cli --version
+astro-survey-moc-core project --moc merged.fits --order 8 --output query-order8.json</code></pre></article><article class="resource-band"><p class="eyebrow">CONTRACT</p><h2>输出约束</h2><p>统一使用 ICRS 坐标和 NESTED HEALPix。order-4 可用于首页预览，order-8 或更高 order 只在输入真实提供时发布，不对缺失精度进行推断。</p><a class="resource-link" href="https://github.com/AaronYang0628/Astro-Survey-Atlas-Assets/blob/main/docs/moc-core-contract.md" target="_blank" rel="noreferrer">查看 Core contract</a></article></section></main><footer><span>ICRS / NESTED HEALPIX / SHA-256</span><span>ASTRO SURVEY ATLAS ASSETS</span></footer>
+  </body>
+</html>

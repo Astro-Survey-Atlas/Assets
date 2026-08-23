@@ -8,6 +8,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import {
   buildSurveyLayerModel,
   overlapCountByPixel,
+  sideNeighbours,
   visibleCoverageAtPixel,
   visibleSurveySlots,
   type CoverageCellMembership,
@@ -18,6 +19,7 @@ import type { SurveyFootprint, SurveyFootprintManifest } from "./survey-footprin
 import type { SurveyCard } from "./survey-registry.js";
 import { cartesianToRaDec, raDecToCartesian } from "./coordinates.js";
 import { normalizeLayerOrder, visibleLayerDepths, type LayerDepth } from "./layer-order.js";
+import { buildOverlapHighlight } from "./overlap-highlight.js";
 import {
   buildSphericalCellEdges,
   buildSphericalCellVolumeEdges,
@@ -198,6 +200,8 @@ interface FragmentTransition {
   direction: "in" | "out";
   meshMaterials: THREE.MeshBasicMaterial[];
   lineMaterials: THREE.LineBasicMaterial[];
+  meshOpacity: number;
+  lineOpacity: number;
 }
 
 interface ExplodedFragment {
@@ -232,7 +236,7 @@ interface CameraTransition {
 }
 
 const BASE_COLOR = new THREE.Color("#168f89");
-const OVERLAP_COLOR = new THREE.Color("#b88e22");
+const OVERLAP_COLOR = new THREE.Color("#ffd24a");
 const SELECTION_COLOR = new THREE.Color("#9fe7e0");
 const SELECTION_EDGE_COLOR = new THREE.Color("#e7fffb");
 const WORKSPACE_COLOR = new THREE.Color("#d69b4e");
@@ -342,7 +346,7 @@ function shortLayerLabel(value: string): string {
   return normalized.length > 12 ? `${normalized.slice(0, 10)}..` : normalized;
 }
 
-function countLabelSprite(text: string, position: THREE.Vector3): THREE.Sprite {
+function countLabelSprite(text: string, position: THREE.Vector3, depthTest = true): THREE.Sprite {
   const canvas = document.createElement("canvas");
   canvas.width = 192;
   canvas.height = 64;
@@ -362,7 +366,7 @@ function countLabelSprite(text: string, position: THREE.Vector3): THREE.Sprite {
   context.fillText(text, canvas.width / 2, canvas.height / 2 + 1);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: true, depthWrite: false }));
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest, depthWrite: false }));
   sprite.position.copy(position);
   sprite.scale.set(0.15, 0.05, 1);
   sprite.renderOrder = LABEL_RENDER_ORDER;
@@ -380,6 +384,8 @@ export class SurveyLayerViewer {
   readonly #starField: THREE.Points;
   readonly #controls: OrbitControls;
   #bloomStrength = 0.4;
+  #interactionQualityActive = false;
+  #basePixelRatio = 1;
   #backgroundColor: number | null = null;
   readonly #raycaster = new THREE.Raycaster();
   readonly #pointer = new THREE.Vector2();
@@ -388,6 +394,7 @@ export class SurveyLayerViewer {
   readonly #retiredGroup = new THREE.Group();
   readonly #selectionGroup = new THREE.Group();
   readonly #explosionGroup = new THREE.Group();
+  readonly #overlapLabelGroup = new THREE.Group();
   readonly #drillGroup = new THREE.Group();
   readonly #objectPointGroup = new THREE.Group();
   readonly #resizeObserver: ResizeObserver;
@@ -404,6 +411,7 @@ export class SurveyLayerViewer {
   readonly #visibleAssetIds = new Set<string>();
   readonly #layerMeshes: LayerMesh[] = [];
   readonly #coverageEdgeMaterials: THREE.LineBasicMaterial[] = [];
+  readonly #overlapDashMaterials: THREE.LineDashedMaterial[] = [];
   readonly #meshBySurvey = new Map<string, LayerMesh>();
   #workspaceLayers = new Map<string, WorkspaceCoverageLayer>();
   #layerOrder: string[] = [];
@@ -427,6 +435,9 @@ export class SurveyLayerViewer {
   #drillCells = new Map<number, SurveyDrillCell>();
   #drillFocusActive = false;
   #focusedAssetId: string | null = null;
+  #overlapMode = false;
+  #overlapNside: number | null = null;
+  #overlapPixels: number[] | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -450,8 +461,10 @@ export class SurveyLayerViewer {
     this.#model = buildSurveyLayerModel(surveys, manifest);
     surveys.forEach((survey) => this.#colorBySurvey.set(survey.id, displayColor(survey.color)));
 
-    this.#renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-    this.#renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const highResolutionViewport = window.innerWidth * window.innerHeight >= 3_000_000;
+    this.#renderer = new THREE.WebGLRenderer({ canvas, antialias: !highResolutionViewport, powerPreference: "high-performance" });
+    this.#basePixelRatio = Math.min(window.devicePixelRatio, 1.35);
+    this.#renderer.setPixelRatio(this.#basePixelRatio);
     this.#renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.#renderer.debug.checkShaderErrors = true;
 
@@ -469,8 +482,10 @@ export class SurveyLayerViewer {
     this.#controls.minDistance = 0.002;
     this.#controls.maxDistance = 7.5;
     this.#controls.addEventListener("change", this.#handleControlsChange);
+    this.#controls.addEventListener("start", this.#handleControlsStart);
+    this.#controls.addEventListener("end", this.#handleControlsEnd);
     this.#starField = this.#backgroundStars();
-    this.#scene.add(this.#starField, this.#coverageGroup, this.#workspaceCoverageGroup, this.#drillGroup, this.#objectPointGroup, this.#retiredGroup, this.#selectionGroup, this.#explosionGroup);
+    this.#scene.add(this.#starField, this.#coverageGroup, this.#workspaceCoverageGroup, this.#drillGroup, this.#objectPointGroup, this.#retiredGroup, this.#selectionGroup, this.#explosionGroup, this.#overlapLabelGroup);
     this.setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
     this.#canvas.addEventListener("pointerdown", this.#handlePointerDown);
     this.#canvas.addEventListener("pointerup", this.#handlePointerUp);
@@ -698,6 +713,19 @@ export class SurveyLayerViewer {
     );
   }
 
+  focusPixels(nside: number, pixels: readonly number[]): void {
+    if (!pixels.length) return;
+    const direction = this.#pixelDirectionAt(nside, pixels);
+    let angularRadius = 0;
+    for (const pixel of pixels) for (const corner of sphericalCellBoundary(nside, pixel, 1)) angularRadius = Math.max(angularRadius, direction.angleTo(corner));
+    const outer = this.#outerRadius;
+    const halfFov = Math.max(THREE.MathUtils.degToRad(4), angularRadius * 1.35);
+    const fitDistance = outer / Math.tan(Math.min(Math.PI / 3, halfFov * 1.25));
+    const distance = THREE.MathUtils.clamp(Math.max(outer * 1.55, fitDistance), outer * 1.55, outer * 2.8);
+    const pose = narrativeCameraPose(direction, distance, outer, 0.24);
+    this.#startCameraTransition(pose.camera, pose.target, 720);
+  }
+
   focusAsset(assetId: string): void {
     const layer = [...this.#workspaceLayers.values()].find((candidate) => this.#workspaceLayerAssetIds(candidate).includes(assetId));
     if (!layer || !this.#visibleAssetIds.has(assetId) || !layer.pixels.length) return;
@@ -737,6 +765,24 @@ export class SurveyLayerViewer {
     if (this.#focusedSurveyId && !this.#visibleSurveyIds.has(this.#focusedSurveyId)) this.#focusedSurveyId = null;
     this.#pruneSelection();
     this.#rebuildVisible(true);
+  }
+
+  setOverlapMode(active: boolean): void {
+    if (this.#overlapMode === active) return;
+    this.#overlapMode = active;
+    // Overlap is a co-registered view, not an additional exploded layer.
+    // Keep every selected survey on the unit sphere and restore the normal
+    // radial presentation when the mode is dismissed.
+    this.#layoutMode = active ? "overlap" : "layers";
+    if (!active) { this.#overlapNside = null; this.#overlapPixels = null; }
+    this.#rebuildVisible(true);
+  }
+
+  setOverlapCells(nside: number, pixels: readonly number[]): void {
+    if (!Number.isInteger(nside) || nside < 1) return;
+    this.#overlapNside = nside;
+    this.#overlapPixels = [...new Set(pixels)].sort((left, right) => left - right);
+    if (this.#overlapMode) this.#rebuildVisible(true);
   }
 
   setVisibleAssets(assetIds: Iterable<string>): void {
@@ -781,6 +827,8 @@ export class SurveyLayerViewer {
 
   clearRegionSelection(): void {
     this.#clearSelection();
+    this.#clearExplosion(true);
+    this.#onInspection(null);
   }
 
   setRegionSelection(pixels: Iterable<number>): void {
@@ -862,7 +910,11 @@ export class SurveyLayerViewer {
   focusData(): void {
     this.#cameraTransition = null;
     const radius = this.#outerRadius;
-    this.#camera.position.set(radius * 1.72, radius * 1.48, radius * 1.56);
+    // Keep the complete exploded layer stack inside the vertical FOV on both
+    // desktop and portrait viewports. The previous fixed vector clipped the
+    // outer layers on narrow screens.
+    const viewDirection = new THREE.Vector3(1.72, 1.48, 1.56).normalize();
+    this.#camera.position.copy(viewDirection.multiplyScalar(radius * 3.35));
     this.#controls.target.set(0, 0, 0);
     this.#controls.enabled = true;
     this.#controls.minDistance = 0.002;
@@ -877,6 +929,8 @@ export class SurveyLayerViewer {
     this.#clickTimer = null;
     this.#resizeObserver.disconnect();
     this.#controls.removeEventListener("change", this.#handleControlsChange);
+    this.#controls.removeEventListener("start", this.#handleControlsStart);
+    this.#controls.removeEventListener("end", this.#handleControlsEnd);
     this.#controls.dispose();
     this.#canvas.removeEventListener("pointerdown", this.#handlePointerDown);
     this.#canvas.removeEventListener("pointerup", this.#handlePointerUp);
@@ -904,6 +958,7 @@ export class SurveyLayerViewer {
       if (!depth.key.startsWith("public-survey:")) return;
       this.#buildSurveyLayer(depth.key.slice("public-survey:".length), depth.radius, animated, depth.renderOrder);
     });
+    if (this.#overlapMode) this.#buildOverlapLayer(animated);
     this.#rebuildWorkspaceCoverage(depthByKey);
     this.#buildInteractionLayer();
     this.#controls.minDistance = 0.002;
@@ -923,15 +978,34 @@ export class SurveyLayerViewer {
   }
 
   #buildOverlapLayer(animated: boolean): void {
+    clearGroup(this.#overlapLabelGroup);
     const counts = overlapCountByPixel(this.#model, this.#visibleSurveyIds);
-    const pixels = [...counts.keys()].sort((left, right) => left - right);
-    const maximum = Math.max(1, ...counts.values());
-    const cells = pixels.map((pixel) => {
-      const ratio = maximum <= 1 ? 0 : ((counts.get(pixel) ?? 1) - 1) / (maximum - 1);
-      const color = BASE_COLOR.clone().lerp(OVERLAP_COLOR, ratio);
-      return this.#cellInput(pixel, 1, color);
-    });
-    if (cells.length) this.#addFragmentLayer("__overlap__", pixels, cells, animated);
+    const selectedSurveys = [...this.#visibleSurveyIds].filter((surveyId) => (this.#model.pixelsBySurvey.get(surveyId)?.length ?? 0) > 0);
+    if (selectedSurveys.length < 2) return;
+    const nside = this.#overlapNside ?? this.#manifest.nside;
+    const pixels = this.#overlapPixels ?? [...counts.entries()].filter(([, count]) => count === selectedSurveys.length).map(([pixel]) => pixel).sort((left, right) => left - right);
+    if (!pixels.length) return;
+    // Lift the common cells above the co-registered survey surfaces so the
+    // filled result remains visible without exposing the far hemisphere.
+    const overlapRadius = Math.max(1.02, this.#outerRadius + 0.012);
+    const cells = pixels.map((pixel) => ({ nside, pixel, radius: overlapRadius, color: OVERLAP_COLOR, inset: nside === this.#manifest.nside ? 0.028 : 0.008 }));
+    if (cells.length) this.#addFragmentLayer("__overlap__", pixels, cells, animated, SELECTION_RENDER_ORDER - 1);
+    const pending = new Set(pixels);
+    let componentIndex = 0;
+    while (pending.size) {
+      const start = pending.values().next().value as number;
+      const queue = [start];
+      const component: number[] = [];
+      pending.delete(start);
+      while (queue.length) {
+        const pixel = queue.pop()!;
+        component.push(pixel);
+        for (const neighbour of sideNeighbours(nside, pixel)) {
+          if (pending.delete(neighbour)) queue.push(neighbour);
+        }
+      }
+      this.#overlapLabelGroup.add(countLabelSprite(`C${String(++componentIndex).padStart(2, "0")}`, this.#pixelDirectionAt(nside, component).multiplyScalar(overlapRadius + 0.025), false));
+    }
   }
 
   #buildInteractionLayer(): void {
@@ -1106,16 +1180,32 @@ export class SurveyLayerViewer {
   #addFragmentLayer(surveyId: string, pixels: number[], cells: SphericalCellSheetGeometryInput[], animated: boolean, renderOrder = 4): void {
     const root = new THREE.Group();
     root.scale.setScalar(animated ? 0.94 : 1);
-    const material = fragmentMaterial();
-    material.opacity = animated ? 0 : COVERAGE_OPACITY;
-    const mesh = new THREE.Mesh(buildSphericalCellSheetGeometry(cells), material) as LayerMesh;
-    mesh.userData = { surveyId, records: pixels.map((pixel) => ({ pixel })) };
-    mesh.renderOrder = renderOrder;
-    const lineMaterial = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: animated ? 0 : COVERAGE_EDGE_OPACITY, depthTest: true, depthWrite: false });
-    this.#coverageEdgeMaterials.push(lineMaterial);
-    const edges = new THREE.LineSegments(buildSphericalCellEdges(cells), lineMaterial);
-    edges.renderOrder = renderOrder + 1;
-    root.add(mesh, edges);
+    const isOverlap = surveyId === "__overlap__";
+    const meshOpacity = isOverlap ? 0.84 : COVERAGE_OPACITY;
+    const lineOpacity = isOverlap ? 0.98 : COVERAGE_EDGE_OPACITY;
+    let material: THREE.MeshBasicMaterial;
+    let mesh: LayerMesh;
+    const transitionLineMaterials: THREE.LineBasicMaterial[] = [];
+    if (!isOverlap) {
+      material = fragmentMaterial();
+      material.opacity = animated ? 0 : meshOpacity;
+      mesh = new THREE.Mesh(buildSphericalCellSheetGeometry(cells), material) as LayerMesh;
+      mesh.userData = { surveyId, records: pixels.map((pixel) => ({ pixel })) };
+      mesh.renderOrder = renderOrder;
+      const lineMaterial = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: animated ? 0 : lineOpacity, depthTest: true, depthWrite: false });
+      this.#coverageEdgeMaterials.push(lineMaterial);
+      const edges = new THREE.LineSegments(buildSphericalCellEdges(cells), lineMaterial);
+      edges.renderOrder = renderOrder + 1;
+      root.add(mesh, edges);
+      transitionLineMaterials.push(lineMaterial);
+    } else {
+      const highlight = buildOverlapHighlight(cells, renderOrder, animated ? 0 : meshOpacity);
+      material = highlight.meshMaterial;
+      mesh = highlight.mesh as LayerMesh;
+      mesh.userData = { surveyId, records: pixels.map((pixel) => ({ pixel })) };
+      this.#overlapDashMaterials.push(highlight.dashMaterial);
+      root.add(...highlight.root.children);
+    }
     this.#coverageGroup.add(root);
     this.#layerMeshes.push(mesh);
     if (surveyId !== "__overlap__") this.#meshBySurvey.set(surveyId, mesh);
@@ -1126,7 +1216,9 @@ export class SurveyLayerViewer {
         durationMs: 430,
         direction: "in",
         meshMaterials: [material],
-        lineMaterials: [lineMaterial],
+        lineMaterials: transitionLineMaterials,
+        meshOpacity,
+        lineOpacity,
       });
     }
   }
@@ -1134,6 +1226,8 @@ export class SurveyLayerViewer {
   #retireCoverage(animated: boolean): void {
     this.#layerMeshes.length = 0;
     this.#coverageEdgeMaterials.length = 0;
+    this.#overlapDashMaterials.length = 0;
+    clearGroup(this.#overlapLabelGroup);
     this.#meshBySurvey.clear();
     for (const root of [...this.#coverageGroup.children] as THREE.Group[]) {
       this.#coverageGroup.remove(root);
@@ -1155,13 +1249,17 @@ export class SurveyLayerViewer {
         direction: "out",
         meshMaterials,
         lineMaterials,
+        meshOpacity: root.getObjectByProperty("type", "Mesh")?.userData?.surveyId === "__overlap__" ? 0.84 : COVERAGE_OPACITY,
+        lineOpacity: root.getObjectByProperty("type", "Mesh")?.userData?.surveyId === "__overlap__" ? 0.98 : COVERAGE_EDGE_OPACITY,
       });
     }
   }
 
   #applyFocus(): void {
     for (const [surveyId, mesh] of this.#meshBySurvey) {
-      mesh.material.opacity = this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null
+      mesh.material.opacity = this.#overlapMode
+        ? 0.07
+        : this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null
         ? DIMMED_OPACITY
         : this.#focusedSurveyId === surveyId ? 0.24 : COVERAGE_OPACITY;
     }
@@ -1172,7 +1270,7 @@ export class SurveyLayerViewer {
         ? DIMMED_OPACITY
         : this.#focusedAssetId && assetId === this.#focusedAssetId ? 0.28 : 0.14;
     });
-    const edgeOpacity = this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null ? DIMMED_EDGE_OPACITY : COVERAGE_EDGE_OPACITY;
+    const edgeOpacity = this.#overlapMode ? 0.12 : this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null ? DIMMED_EDGE_OPACITY : COVERAGE_EDGE_OPACITY;
     this.#coverageEdgeMaterials.forEach((material) => { material.opacity = edgeOpacity; });
     this.#requestRender();
   }
@@ -1644,11 +1742,11 @@ export class SurveyLayerViewer {
       const eased = easeInOut(progress);
       const opacity = transition.direction === "in" ? eased : 1 - eased;
       transition.root.scale.setScalar(transition.direction === "in" ? THREE.MathUtils.lerp(0.94, 1, eased) : THREE.MathUtils.lerp(1, 0.96, eased));
-      const coverageOpacity = this.#explodedPixel == null ? COVERAGE_OPACITY : DIMMED_OPACITY;
-      const edgeOpacity = this.#selectedPixels.size === 0 && this.#explodedPixel == null ? COVERAGE_EDGE_OPACITY : DIMMED_EDGE_OPACITY;
-      const fragmentOpacity = this.#selectedPixels.size === 0 && this.#explodedPixel == null ? coverageOpacity : DIMMED_OPACITY;
-      transition.meshMaterials.forEach((material) => { material.opacity = opacity * fragmentOpacity; });
-      transition.lineMaterials.forEach((material) => { material.opacity = opacity * edgeOpacity; });
+      const dimmed = this.#overlapMode || this.#selectedPixels.size > 0 || this.#explodedPixel != null;
+      const meshOpacity = dimmed && transition.meshOpacity < 0.5 ? DIMMED_OPACITY : transition.meshOpacity;
+      const lineOpacity = dimmed && transition.lineOpacity < 0.5 ? DIMMED_EDGE_OPACITY : transition.lineOpacity;
+      transition.meshMaterials.forEach((material) => { material.opacity = opacity * meshOpacity; });
+      transition.lineMaterials.forEach((material) => { material.opacity = opacity * lineOpacity; });
       if (progress < 1) continue;
       this.#fragmentTransitions.splice(index, 1);
       if (transition.direction === "out") {
@@ -1680,6 +1778,11 @@ export class SurveyLayerViewer {
   }
 
   #advanceSelectionAnimation(now: number): void {
+    const overlapPulse = 0.5 + 0.5 * Math.sin(now * 0.003);
+    this.#overlapDashMaterials.forEach((material) => {
+      material.dashOffset = -now * 0.00008;
+      material.opacity = 0.72 + overlapPulse * 0.28;
+    });
     if (!this.#selectionCoreMaterial || !this.#selectionEdgeMaterial || !this.#selectionGlowMaterial) return;
     const pulse = 0.5 + 0.5 * Math.sin(now * 0.004);
     this.#selectionEdgeMaterial.dashSize = 0.052 + pulse * 0.034;
@@ -1705,6 +1808,23 @@ export class SurveyLayerViewer {
   readonly #handleControlsChange = (): void => {
     this.#keepCameraOutside();
     this.#emitState();
+    this.#requestRender();
+  };
+
+  readonly #handleControlsStart = (): void => {
+    this.#interactionQualityActive = true;
+    this.#canvas.dataset.dragging = "true";
+    this.#bloomPass.enabled = false;
+    this.#renderer.setPixelRatio(Math.min(1, this.#basePixelRatio));
+    this.#composer.setSize(Math.max(1, Math.round(this.#canvas.clientWidth)), Math.max(1, Math.round(this.#canvas.clientHeight)));
+  };
+
+  readonly #handleControlsEnd = (): void => {
+    this.#interactionQualityActive = false;
+    delete this.#canvas.dataset.dragging;
+    this.#bloomPass.enabled = true;
+    this.#renderer.setPixelRatio(this.#basePixelRatio);
+    this.#composer.setSize(Math.max(1, Math.round(this.#canvas.clientWidth)), Math.max(1, Math.round(this.#canvas.clientHeight)));
     this.#requestRender();
   };
 
@@ -1836,7 +1956,8 @@ export class SurveyLayerViewer {
     const width = Math.max(1, Math.round(bounds.width));
     const height = Math.max(1, Math.round(bounds.height));
     this.#renderer.setSize(width, height, false);
-    this.#renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.#basePixelRatio = Math.min(window.devicePixelRatio, 1.35);
+    this.#renderer.setPixelRatio(this.#interactionQualityActive ? Math.min(1, this.#basePixelRatio) : this.#basePixelRatio);
     this.#composer.setSize(width, height);
     this.#camera.aspect = width / height;
     this.#camera.updateProjectionMatrix();
@@ -1855,7 +1976,7 @@ export class SurveyLayerViewer {
       const moving = this.#controls.enabled && this.#controls.update();
       this.#keepCameraOutside();
       this.#composer.render();
-      if (moving || this.#cameraTransition || this.#fragmentTransitions.length || this.#explosionTransition || this.#selectionEdgeMaterial) this.#requestRender();
+      if (moving || this.#cameraTransition || this.#fragmentTransitions.length || this.#explosionTransition || this.#selectionEdgeMaterial || this.#overlapDashMaterials.length) this.#requestRender();
     });
   }
 }

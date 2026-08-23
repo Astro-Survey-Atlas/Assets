@@ -69,6 +69,8 @@ export interface ConnectorView {
   accessKeyConfigured?: boolean;
   pvcName?: string;
   localPath?: string;
+  nodeName?: string;
+  nodePath?: string;
   phase?: string;
   message?: string;
   createdAt?: string;
@@ -354,6 +356,12 @@ function connectorView(resource: KubernetesResource): ConnectorView {
   const localPath = typeof annotations["astro.zhejianglab.org/local-path"] === "string"
     ? annotations["astro.zhejianglab.org/local-path"]
     : undefined;
+  const nodeName = typeof annotations["astro.zhejianglab.org/node-name"] === "string"
+    ? annotations["astro.zhejianglab.org/node-name"]
+    : undefined;
+  const nodePath = typeof annotations["astro.zhejianglab.org/node-path"] === "string"
+    ? annotations["astro.zhejianglab.org/node-path"]
+    : localPath;
   return {
     name: resource.metadata?.name ?? "",
     type: String(spec.type ?? "") as ConnectorType,
@@ -362,7 +370,9 @@ function connectorView(resource: KubernetesResource): ConnectorView {
     prefix: typeof spec.prefix === "string" ? spec.prefix : undefined,
     accessKeyConfigured: Boolean(credential && typeof credential === "object" && typeof (credential as Record<string, unknown>).name === "string"),
     pvcName: mount && typeof mount === "object" && typeof (mount as Record<string, unknown>).pvcName === "string" ? (mount as Record<string, unknown>).pvcName as string : undefined,
-    localPath,
+    localPath: nodeName && nodePath ? `${nodeName}:${nodePath}` : localPath,
+    nodeName,
+    nodePath,
     phase: typeof status.phase === "string" ? status.phase : undefined,
     message: typeof status.message === "string" ? status.message : undefined,
     createdAt: resource.metadata?.creationTimestamp,
@@ -417,7 +427,34 @@ function managedResourceName(name: string, suffix: string): string {
   return dnsName(`${base}-${suffix}`, "managed resource name");
 }
 
+function validateLocalLocation(value: string): { nodeName: string; nodePath: string; location: string } {
+  const separator = value.indexOf(":");
+  if (separator <= 0 || separator === value.length - 1 || value.indexOf(":", separator + 1) >= 0) {
+    throw new AdminHttpError(400, "localPath must use nodeName:/absolute/path format");
+  }
+  const nodeName = value.slice(0, separator).trim().toLowerCase();
+  if (nodeName.length > 253 || !/^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*$/.test(nodeName)) {
+    throw new AdminHttpError(400, "localPath nodeName must be a Kubernetes DNS name");
+  }
+  const nodePath = value.slice(separator + 1);
+  if (!nodePath.startsWith("/") || nodePath === "/") throw new AdminHttpError(400, "localPath must contain an absolute non-root path");
+  if (nodePath.split("/").some((segment) => segment === "." || segment === "..")) throw new AdminHttpError(400, "localPath cannot contain dot segments");
+  const normalized = path.posix.normalize(nodePath);
+  const root = process.env.ASSETS_LOCAL_PATH_ROOT?.trim();
+  if (root) {
+    const normalizedRoot = path.posix.normalize(root);
+    const relative = path.posix.relative(normalizedRoot, normalized);
+    if (relative.startsWith("..") || path.posix.isAbsolute(relative)) throw new AdminHttpError(400, "localPath is outside the configured host-path root");
+  }
+  return { nodeName, nodePath: normalized, location: `${nodeName}:${normalized}` };
+}
+
 function validateLocalPath(value: string): string {
+  return validateLocalLocation(value).location;
+}
+
+/* Legacy absolute paths are intentionally rejected for new connectors. */
+function validateLegacyLocalPath(value: string): string {
   if (!value.startsWith("/") || value === "/") throw new AdminHttpError(400, "localPath must be an absolute non-root path");
   if (value.split("/").some((segment) => segment === "." || segment === "..")) throw new AdminHttpError(400, "localPath cannot contain dot segments");
   const normalized = path.posix.normalize(value);
@@ -451,7 +488,7 @@ function connectorDetails(input: ConnectorInput, namespace: string): ConnectorRe
   const prefix = optionalText(input.prefix, "prefix", 2048);
   const accessKey = optionalText(input.accessKey, "accessKey", 512);
   const secretKey = optionalText(input.secretKey, "secretKey", 512);
-  const localPath = input.localPath === undefined ? undefined : validateLocalPath(requireText(input.localPath, "localPath", 2048));
+  const localLocation = input.localPath === undefined ? undefined : validateLocalLocation(requireText(input.localPath, "localPath", 2048));
   if (prefix?.split("/").some((segment) => segment === "." || segment === "..")) throw new AdminHttpError(400, "prefix cannot contain dot segments");
 
   const labels = {
@@ -462,7 +499,7 @@ function connectorDetails(input: ConnectorInput, namespace: string): ConnectorRe
     if (!endpoint) throw new AdminHttpError(400, "endpoint is required for S3 / OSS connectors");
     if (!bucket) throw new AdminHttpError(400, "bucket is required for S3 / OSS connectors");
     if (!accessKey || !secretKey) throw new AdminHttpError(400, "accessKey and secretKey are required for S3 / OSS connectors");
-    if (localPath) throw new AdminHttpError(400, "localPath is only valid for local connectors");
+    if (localLocation) throw new AdminHttpError(400, "localPath is only valid for local connectors");
     const secretName = managedResourceName(name, "credentials");
     const spec: Record<string, unknown> = { type, endpoint, bucket, credentialSecretRef: { name: secretName } };
     if (prefix) spec.prefix = prefix;
@@ -474,13 +511,17 @@ function connectorDetails(input: ConnectorInput, namespace: string): ConnectorRe
   }
 
   if (endpoint || bucket || prefix || accessKey || secretKey) throw new AdminHttpError(400, "Local connectors only accept localPath");
-  if (!localPath) throw new AdminHttpError(400, "localPath is required for local connectors");
+  if (!localLocation) throw new AdminHttpError(400, "localPath is required for local connectors");
   const persistentVolumeName = managedResourceName(name, "pv");
   const persistentVolumeClaimName = managedResourceName(name, "pvc");
   const dataSource: KubernetesResource = {
     apiVersion: "org.zhejianglab.astro.metadata/v1alpha1",
     kind: "AstroDataSource",
-    metadata: { name, namespace, labels, annotations: { "astro.zhejianglab.org/local-path": localPath } },
+    metadata: { name, namespace, labels, annotations: {
+      "astro.zhejianglab.org/local-path": localLocation.location,
+      "astro.zhejianglab.org/node-name": localLocation.nodeName,
+      "astro.zhejianglab.org/node-path": localLocation.nodePath,
+    } },
     spec: { type, mount: { pvcName: persistentVolumeClaimName } },
   };
   const persistentVolume: KubernetesResource = {
@@ -492,7 +533,12 @@ function connectorDetails(input: ConnectorInput, namespace: string): ConnectorRe
       accessModes: ["ReadWriteOnce"],
       persistentVolumeReclaimPolicy: "Retain",
       storageClassName: "",
-      hostPath: { path: localPath, type: "DirectoryOrCreate" },
+      hostPath: { path: localLocation.nodePath, type: "DirectoryOrCreate" },
+      nodeAffinity: {
+        required: {
+          nodeSelectorTerms: [{ matchExpressions: [{ key: "kubernetes.io/hostname", operator: "In", values: [localLocation.nodeName] }] }],
+        },
+      },
       claimRef: { namespace, name: persistentVolumeClaimName },
     },
   };

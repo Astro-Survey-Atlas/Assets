@@ -2,6 +2,8 @@ import {
   SurveyLayerViewer,
   type SurveyLayerHover,
   type SurveyLayerInspection,
+  type SurveyLayerState,
+  type SurveyLayerContextMenu,
 } from "./atlas/survey-layer-viewer.js";
 import type { SurveyFootprintManifest } from "./atlas/survey-footprints.js";
 import type { SurveyCard } from "./atlas/survey-registry.js";
@@ -19,6 +21,9 @@ export interface CoverageLayer {
   cellCount: number;
   areaDeg2: number;
   tileScheme: string;
+  tileIdsByOrder?: Record<string, number[]>;
+  recipe?: { recipeVersion: number; mode: string; coordinateFrame: string; ordering: string; maxOrder: number; queryOrder: number; previewOrder: number; sourceUrl?: string; steps: Array<{ id: string; kind: string; title: string; bodyMarkdown: string; order: number; implementationRef: string }> };
+  sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; indexUrl?: string; downloadUrlTemplate?: string; notes: string };
 }
 
 export interface CoverageCatalog {
@@ -40,6 +45,9 @@ export interface CoverageSurvey {
 }
 
 type ActiveChange = (surveyId: string | null, product?: string) => void;
+type InspectionChange = (inspection: SurveyLayerInspection | null) => void;
+type StateChange = (state: SurveyLayerState) => void;
+type ContextMenuChange = (menu: SurveyLayerContextMenu) => void;
 
 function surveyCardFor(record: CoverageSurvey): SurveyCard {
   return {
@@ -84,14 +92,20 @@ export class AtlasCoverageGlobe {
   readonly #host: HTMLElement;
   readonly #canvas: HTMLCanvasElement;
   readonly #onActiveChange: ActiveChange;
+  readonly #onInspectionChange: InspectionChange;
+  readonly #onStateChange: StateChange;
+  readonly #onContextMenu: ContextMenuChange;
   #viewer: SurveyLayerViewer | null = null;
   #visibleSurveyIds = new Set<string>();
   #surveys: CoverageSurvey[] = [];
 
-  constructor(host: HTMLElement, canvas: HTMLCanvasElement, onActiveChange: ActiveChange) {
+  constructor(host: HTMLElement, canvas: HTMLCanvasElement, onActiveChange: ActiveChange, onInspectionChange: InspectionChange = () => undefined, onStateChange: StateChange = () => undefined, onContextMenu: ContextMenuChange = () => undefined) {
     this.#host = host;
     this.#canvas = canvas;
     this.#onActiveChange = onActiveChange;
+    this.#onInspectionChange = onInspectionChange;
+    this.#onStateChange = onStateChange;
+    this.#onContextMenu = onContextMenu;
     canvas.dataset.renderer = "three";
   }
 
@@ -107,8 +121,8 @@ export class AtlasCoverageGlobe {
       () => undefined,
       (hover) => this.#handleHover(hover),
       (inspection) => this.#handleInspection(inspection),
-      () => undefined,
-      () => undefined,
+      (menu) => this.#onContextMenu(menu),
+      this.#onStateChange,
     );
     this.#viewer.setLayoutMode("layers");
     this.#visibleSurveyIds = new Set(catalog.layers.map((layer) => layer.surveyId));
@@ -124,9 +138,24 @@ export class AtlasCoverageGlobe {
     this.#viewer?.setVisibleSurveys(this.#visibleSurveyIds);
   }
 
+  setOverlapMode(active: boolean): void { this.#viewer?.setOverlapMode(active); }
+
+  setOverlapCells(order: number, pixels: readonly number[]): void { this.#viewer?.setOverlapCells(2 ** order, pixels); }
+
   setHighlightedSurvey(surveyId: string): void {
     this.#viewer?.focusSurvey(surveyId);
   }
+
+  focusSelection(): void { this.#viewer?.focusSelection(); }
+
+  focusPixels(order: number, pixels: readonly number[]): void { this.#viewer?.focusPixels(2 ** order, pixels); }
+
+  clearSelection(): void {
+    this.#viewer?.clearRegionSelection();
+    this.#onInspectionChange(null);
+  }
+
+  setLayerOrder(keys: Iterable<string>): void { this.#viewer?.setLayerOrder(keys); }
 
   setSelectedSurvey(surveyId: string): void {
     this.#visibleSurveyIds.add(surveyId);
@@ -136,6 +165,7 @@ export class AtlasCoverageGlobe {
   }
 
   resetView(): void {
+    this.#viewer?.clearTransientState();
     this.#viewer?.reset();
     this.#onActiveChange(null);
   }
@@ -151,6 +181,7 @@ export class AtlasCoverageGlobe {
   }
 
   #handleInspection(inspection: SurveyLayerInspection | null): void {
+    this.#onInspectionChange(inspection);
     if (!inspection?.surveyIds.length) return;
     this.#onActiveChange(inspection.surveyIds[0]!, inspection.artifacts[0]?.product);
   }

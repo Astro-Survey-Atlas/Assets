@@ -9,6 +9,9 @@ export default defineConfig({
       input: {
         index: "site/index.html",
         admin: "site/admin/index.html",
+        github: "site/github/index.html",
+        surveys: "site/surveys/index.html",
+        sdk: "site/sdk/index.html",
       },
     },
   },

@@ -98,10 +98,30 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.ok(coverage.footprints.every((footprint) => footprint.pixels.length > 0));
   assert.equal(coverage.footprints.find((footprint) => footprint.surveyId === "csst")?.pixels.length, 46);
 
+  const coverageCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`);
+  assert.equal(coverageCatalogResponse.status, 200);
+  const coverageCatalog = await coverageCatalogResponse.json() as { ordering: string; layers: Array<{ layerId: string; surveyId: string; availableOrders: number[]; tileIdsByOrder: Record<string, number[]>; recipe?: { mode: string; steps: unknown[] }; sourceUnitIndex?: { status: string } }> };
+  assert.equal(coverageCatalog.ordering, "NESTED");
+  assert.ok(coverageCatalog.layers.every((layer) => layer.availableOrders.every((order) => Array.isArray(layer.tileIdsByOrder[String(order)]))));
+  const desiLayer = coverageCatalog.layers.find((layer) => layer.layerId === "desi-dr1-spectra-footprint");
+  assert.equal(desiLayer?.recipe?.mode, "tile-table");
+  assert.ok((desiLayer?.recipe?.steps.length ?? 0) >= 7);
+  assert.equal(desiLayer?.sourceUnitIndex?.status, "exact");
+  const csstW2Layer = coverageCatalog.layers.find((layer) => layer.layerId === "csst-sim-w2-image-extent");
+  assert.equal(csstW2Layer?.recipe?.mode, "nested-healpix");
+  assert.ok(csstW2Layer?.recipe?.steps.some((step: any) => step.id === "header"));
+  assert.ok(csstW2Layer?.recipe?.steps.some((step: any) => step.id === "normalize"));
+  const csstW1Layer = coverageCatalog.layers.find((layer) => layer.layerId === "csst-sim-w1-image-extent");
+  assert.equal(csstW1Layer?.recipe?.mode, "fits-wcs");
+  assert.ok(csstW1Layer?.recipe?.steps.some((step: any) => step.id === "header"));
+
+  const invalidOverlap = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["desi"] }) });
+  assert.equal(invalidOverlap.status, 400);
+
   const surveysResponse = await fetch(`http://127.0.0.1:${port}/api/v1/surveys`);
   assert.equal(surveysResponse.status, 200);
   const surveys = await surveysResponse.json() as {
-    surveys: Array<{ id: string; modalities: string[]; statistics: { publicProducts: number; acquired: number }; releases: Array<{ products: Array<{ status: string; reason?: string }> }>; assets: Array<{ surveyId?: string; downloadUrl: string }> }>;
+    surveys: Array<{ id: string; modalities: string[]; statistics: { publicProducts: number; acquired: number }; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; releases: Array<{ coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; products: Array<{ status: string; reason?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number } }> }>; assets: Array<{ surveyId?: string; downloadUrl: string }> }>;
     sharedAssets: Array<{ surveyId?: string; downloadUrl: string }>;
   };
   assert.equal(surveys.surveys.length, 14);
@@ -109,6 +129,10 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.ok(csst);
   assert.deepEqual(csst.modalities.sort(), ["catalog", "imaging", "photometry", "simulation"]);
   assert.equal(csst.releases[0]?.products[0]?.status, "acquired");
+  assert.deepEqual(csst.releases[0]?.products[0]?.coverage?.availableOrders, [4]);
+  assert.equal(csst.releases[0]?.coverageOrders?.overviewOrders[0], 4);
+  assert.ok(csst.coverageOrders?.availableOrders.includes(8));
+  assert.deepEqual(csst.releases[1]?.products[0]?.coverage?.availableOrders, [4, 8]);
   assert.ok(csst.assets.some((asset) => asset.downloadUrl.includes("csst-coverage-job-snapshot")));
   assert.ok(surveys.surveys.every((survey) => survey.modalities.length > 0 && survey.statistics.publicProducts > 0));
   assert.ok(surveys.surveys.every((survey) => survey.assets.every((asset) => asset.surveyId === survey.id && asset.downloadUrl.startsWith("/api/v1/assets/"))));

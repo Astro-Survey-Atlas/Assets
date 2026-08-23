@@ -3,18 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f3efe6" />
-    <meta name="description" content="Astro Survey Atlas 公共天空覆盖制品与可验证下载目录" />
+    <meta name="theme-color" content="#050a10" />
+    <meta name="description" content="Astro Survey Atlas Assets public sky coverage" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Astro Survey Atlas · Public Assets</title>
+    <title>Astro Survey Atlas Assets</title>
   </head>
   <body>
     <header class="site-header">
       <a class="brand" href="/" aria-label="Astro Survey Atlas Public Assets">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <span><strong>ASTRO SURVEY ATLAS</strong><small>PUBLIC ASSET ARCHIVE</small></span>
+        <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+          <circle class="brand-orbit brand-orbit-a" cx="20" cy="20" r="15.5" />
+          <circle class="brand-orbit brand-orbit-b" cx="20" cy="20" r="10.5" />
+          <ellipse class="brand-orbit brand-orbit-c" cx="20" cy="20" rx="16" ry="6.5" transform="rotate(-28 20 20)" />
+          <path class="brand-globe" d="M12.8 20a7.2 7.2 0 0 0 14.4 0 7.2 7.2 0 0 0-14.4 0Z" />
+          <path class="brand-globe-line" d="M13.8 20h12.4M20 13.2c2.1 2 3.2 4.3 3.2 6.8S22.1 24.8 20 26.8c-2.1-2-3.2-4.3-3.2-6.8s1.1-4.8 3.2-6.8Z" />
+          <circle class="brand-node brand-node-a" cx="6" cy="14" r="2" />
+          <circle class="brand-node brand-node-b" cx="33" cy="27" r="2" />
+        </svg>
+        <span><strong>ASTRO SURVEY ATLAS ASSETS</strong><small>PUBLIC COVERAGE CONTROL</small></span>
       </a>
-      <div class="release-state"><span aria-hidden="true"></span><output id="header-release">VERIFYING RELEASE</output></div>
+      <nav class="site-nav" aria-label="站点导航">
+        <a class="site-nav-link" href="/github/" title="查看项目说明与 GitHub 仓库"><i data-lucide="git-branch"></i><span>GitHub</span></a>
+        <a class="site-nav-link" href="/surveys/" title="查看巡天目录"><i data-lucide="telescope"></i><span>巡天目录</span></a>
+        <a class="site-nav-link" href="/sdk/" title="查看 SDK 文档"><i data-lucide="file-code-2"></i><span>SDK</span></a>
+      </nav>
       <a class="admin-entry" href="/admin/" title="打开 Assets 管理台"><i data-lucide="shield-check"></i><span>管理台</span></a>
     </header>
 
@@ -24,13 +36,34 @@
         <div class="coverage-tools">
           <button id="coverage-reset" class="icon-button" type="button" title="重置天球视角" aria-label="重置天球视角"><i data-lucide="rotate-ccw"></i></button>
           <button id="coverage-layers-toggle" class="icon-button" type="button" title="打开图层" aria-label="打开图层"><i data-lucide="layers-3"></i></button>
+          <button id="coverage-help-toggle" class="icon-button" type="button" title="查看快捷键说明" aria-label="查看快捷键说明"><i data-lucide="circle-help"></i></button>
         </div>
         <div id="coverage-layers" class="coverage-layers" hidden aria-label="覆盖图层"></div>
+        <aside id="coverage-help" class="coverage-help" hidden aria-label="天球快捷键说明">
+          <div class="coverage-help-heading"><strong>SHORTCUTS</strong><button id="coverage-help-close" class="icon-button" type="button" title="关闭快捷键说明" aria-label="关闭快捷键说明"><i data-lucide="x"></i></button></div>
+          <dl>
+            <div><dt>F</dt><dd>聚焦当前选中的区块，并缩小视野范围。</dd></div>
+            <div><dt>G</dt><dd>将已选巡天切换为同半径重合视图，并高亮公共覆盖。</dd></div>
+            <div><dt>ESC</dt><dd>退出重合视图并清除当前选区与信息面板。</dd></div>
+            <div><dt>R</dt><dd>重置天球和摄像机到初始位置；连按两次 ESC 也执行重置。</dd></div>
+          </dl>
+        </aside>
         <div class="coverage-readout" aria-live="polite">
           <span class="coverage-readout-kicker">SKY COVERAGE / ICRS</span>
           <strong id="coverage-selection-title">ALL PUBLIC SURVEYS</strong>
           <span id="coverage-selection-meta">NESTED HEALPIX · NSIDE 16</span>
           <span class="coverage-readout-status"><span aria-hidden="true"></span><output id="coverage-state">LOADING HEALPIX CELLS</output></span>
+        </div>
+        <aside id="coverage-detail-panel" class="coverage-detail-panel" hidden aria-live="polite" aria-label="区块覆盖信息">
+          <div id="coverage-detail-kicker" class="coverage-detail-kicker">CELL INSPECTOR</div>
+          <strong id="coverage-detail-title">HEALPIX CELL</strong>
+          <div id="coverage-detail-content"></div>
+        </aside>
+        <div id="coverage-context-menu" class="coverage-context-menu" hidden role="menu" aria-label="覆盖区域操作"></div>
+        <div id="coverage-status" class="coverage-status" aria-live="polite">
+          <span>NSIDE <output id="coverage-status-nside">--</output></span>
+          <span>FOV <output id="coverage-status-fov">--</output></span>
+          <span>CAM <output id="coverage-status-camera">--</output></span>
         </div>
       </div>
 
@@ -84,8 +117,8 @@
     </main>
 
     <footer>
-      <span>ASTRO SURVEY ATLAS · PUBLIC ASSET ARCHIVE</span>
       <span>ICRS / NESTED HEALPIX / SHA-256</span>
+      <span id="footer-release">PUBLIC-SURVEY-FOOTPRINTS-2026-08-20 · VERIFIED</span>
     </footer>
 
     <dialog id="survey-dialog" class="survey-dialog">

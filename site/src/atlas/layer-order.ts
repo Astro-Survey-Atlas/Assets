@@ -6,7 +6,11 @@ export interface LayerDepth {
   renderOrder: number;
 }
 
-const OVERLAP_DEPTH_STEP = 0.0015;
+// Overlap mode is a true co-registered view: every survey surface is drawn on
+// the same unit sphere. Render order (rather than radial separation) keeps the
+// transparent meshes deterministic and leaves the intersection highlighter
+// visible above them.
+const OVERLAP_DEPTH_STEP = 0;
 const RADIAL_DEPTH_STEP = 0.075;
 
 export function normalizeLayerOrder(

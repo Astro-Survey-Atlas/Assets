@@ -9,7 +9,9 @@ import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } fro
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
 import { coverageBlock, loadCoverageCatalog } from "./coverage.js";
-import { ProductStore } from "./products.js";
+import { overlapForLayers } from "./overlap.js";
+import { ProductStore, type ProductRecord } from "./products.js";
+import { SourceUnitWorkerStore } from "./source-units.js";
 
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
@@ -23,11 +25,56 @@ const coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src",
   nside: number;
   footprints: Array<Record<string, unknown> & { surveyId: string; releaseId: string; product: string; nside: number; pixels: number[] }>;
 };
-const surveyIndex = await loadSurveyIndex(releaseRoot, catalog, coverageManifest);
 const coverageCatalog = await loadCoverageCatalog(releaseRoot, coverageManifest);
+const surveyIndex = await loadSurveyIndex(releaseRoot, catalog, coverageManifest, coverageCatalog.layers);
 const admin = new AssetsAdmin();
 const products = new ProductStore();
-await products.initialize(releaseRoot);
+await products.initialize(releaseRoot, coverageCatalog.layers);
+let sourceUnitsPromise: Promise<SourceUnitWorkerStore> | null = null;
+function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
+  if (!sourceUnitsPromise) {
+    sourceUnitsPromise = SourceUnitWorkerStore.load(releaseRoot).catch((error) => {
+      sourceUnitsPromise = null;
+      throw error;
+    });
+  }
+  return sourceUnitsPromise;
+}
+
+function productCoverage(record: ProductRecord): Record<string, unknown> | undefined {
+  const layer = coverageCatalog.layers.find((candidate) => candidate.surveyId === record.draft.surveyId
+    && candidate.releaseId === record.draft.releaseId
+    && candidate.product === record.draft.name);
+  if (!layer) return undefined;
+  return { layerId: layer.layerId, availableOrders: layer.availableOrders, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder };
+}
+
+function adminProductView(record: ProductRecord): Record<string, unknown> {
+  return { ...record, ...(productCoverage(record) ? { coverage: productCoverage(record) } : {}) };
+}
+
+function adminProductSummaries(records: ProductRecord[]): Array<Record<string, unknown>> {
+  const grouped = new Map<string, { surveyId: string; productCount: number; publishedCount: number; releases: Set<string>; availableOrders: Set<number>; maxOrder: number | null }>();
+  for (const record of records) {
+    const surveyId = record.draft.surveyId;
+    const summary = grouped.get(surveyId) ?? { surveyId, productCount: 0, publishedCount: 0, releases: new Set<string>(), availableOrders: new Set<number>(), maxOrder: null };
+    summary.productCount += 1;
+    if (record.published) summary.publishedCount += 1;
+    summary.releases.add(record.draft.releaseId);
+    const coverage = productCoverage(record);
+    if (coverage && Array.isArray(coverage.availableOrders)) coverage.availableOrders.forEach((order) => summary.availableOrders.add(order as number));
+    if (coverage && typeof coverage.maxOrder === "number") summary.maxOrder = Math.max(summary.maxOrder ?? 0, coverage.maxOrder);
+    grouped.set(surveyId, summary);
+  }
+  return [...grouped.values()].sort((a, b) => a.surveyId.localeCompare(b.surveyId)).map((summary) => ({
+    surveyId: summary.surveyId,
+    productCount: summary.productCount,
+    publishedCount: summary.publishedCount,
+    releaseCount: summary.releases.size,
+    availableOrders: [...summary.availableOrders].sort((a, b) => a - b),
+    maxOrder: summary.maxOrder,
+  }));
+}
 const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
 const MAX_FITS_HEADER_BYTES = 256 * 1024;
 const MAX_ZIP_DIRECTORY_BYTES = 8 * 1024 * 1024;
@@ -424,10 +471,20 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       }
       return json(response, 201, { task: await admin.createTask(input) });
     }
-    if (pathname === "/api/v1/admin/products" && request.method === "GET") return json(response, 200, { products: products.list() });
+    if (pathname === "/api/v1/admin/products" && request.method === "GET") {
+      const records = products.list();
+      const query = requestQuery(request);
+      if (query.get("view") === "surveys") return json(response, 200, { surveys: adminProductSummaries(records) });
+      const surveyId = query.get("surveyId")?.trim();
+      const filtered = surveyId ? records.filter((record) => record.draft.surveyId === surveyId) : records;
+      return json(response, 200, { products: filtered.map(adminProductView) });
+    }
     const productMatch = /^\/api\/v1\/admin\/products\/([^/]+)$/.exec(pathname);
     const draftMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/draft$/.exec(pathname);
-    if (productMatch?.[1] && request.method === "GET") return json(response, 200, { product: products.get(decodeURIComponent(productMatch[1])) });
+    if (productMatch?.[1] && request.method === "GET") {
+      const record = products.get(decodeURIComponent(productMatch[1]));
+      return json(response, 200, { product: adminProductView(record) });
+    }
     if ((productMatch?.[1] || draftMatch?.[1]) && request.method === "PUT") {
       const body = await requestJsonBody(request);
       const productId = productMatch?.[1] ?? draftMatch?.[1]!;
@@ -461,11 +518,37 @@ function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, p
   compressedJson(request, response, 200, block, "public, max-age=31536000, immutable", `"sha256-${block.sha256}"`);
 }
 
+async function sendCoverageOverlap(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
+  const surveyIds = Array.isArray(body.surveyIds) ? body.surveyIds.filter((value): value is string => typeof value === "string") : [];
+  const requestedOrder = typeof body.requestedOrder === "number" && Number.isInteger(body.requestedOrder) ? body.requestedOrder : undefined;
+  const result = overlapForLayers([...coverageCatalog.records.values()], surveyIds, requestedOrder);
+  if (!result) return json(response, 400, { error: "At least two surveys with a common HEALPix order are required" });
+  const selectedLayers = [...coverageCatalog.records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
+  const needsSourceUnits = result.components.length > 0 && selectedLayers.some((layer) => layer.sourceUnitIndex?.status === "exact");
+  const sourceUnits = needsSourceUnits ? await sourceUnitsStore() : null;
+  const componentDetails = await Promise.all(result.components.map(async (component) => {
+    const componentCells = new Set(component.cells);
+    return { ...component,
+    surveys: await Promise.all(selectedLayers.filter((layer) => layer.cells.get(component.order)?.some((pixel) => componentCells.has(pixel))).map(async (layer) => ({
+      surveyId: layer.surveyId,
+      releaseId: layer.releaseId,
+      product: layer.product,
+      modality: layer.modality ?? "coverage",
+      sourceUnitIndex: layer.sourceUnitIndex,
+      sourceUnits: sourceUnits ? await sourceUnits.match(layer.layerId, component.order, component.cells) : null,
+      downloadUrl: layer.recipe?.sourceUrl,
+    }))) };
+  }));
+  return compressedJson(request, response, 200, { ...result, components: componentDetails }, "public, max-age=60, stale-while-revalidate=120");
+}
+
 const server = http.createServer((request, response) => {
   void (async () => {
     securityHeaders(response);
     const pathname = requestPath(request);
     if (pathname.startsWith("/api/v1/admin/")) return sendAdmin(request, response, pathname);
+    if (pathname === "/api/v1/coverage/overlap" && request.method === "POST") return sendCoverageOverlap(request, response);
     if (request.method !== "GET" && request.method !== "HEAD") return json(response, 405, { error: "Method not allowed" });
     if (pathname === "/healthz") return json(response, 200, {
       status: "ok",
@@ -483,12 +566,17 @@ const server = http.createServer((request, response) => {
     if (pathname.startsWith("/api/v1/coverage/blocks/")) return sendCoverageBlock(request, response, pathname);
     if (pathname === "/api/v1/coverage") return json(response, 200, coverageManifest);
     if (pathname === "/api/v1/surveys") return json(response, 200, surveyIndex);
-    if (pathname === "/api/v1/products") return json(response, 200, { products: products.list().filter((record) => record.published).map((record) => record.published) });
+    if (pathname === "/api/v1/products") return json(response, 200, { products: products.list().filter((record) => record.published).map((record) => {
+      const published = structuredClone(record.published!);
+      const coverage = productCoverage(record);
+      return coverage ? { ...published, coverage } : published;
+    }) });
     const download = /^\/api\/v1\/assets\/([a-z0-9-]+)\/download$/.exec(pathname);
     if (download?.[1]) return sendDownload(request, response, catalog, download[1]);
     const preview = /^\/api\/v1\/assets\/([a-z0-9-]+)\/preview$/.exec(pathname);
     if (preview?.[1]) return sendPreview(request, response, catalog, preview[1]);
     if (pathname.startsWith("/api/")) return json(response, 404, { error: "API endpoint not found" });
+    if (pathname === "/resources" || pathname.startsWith("/resources/")) return json(response, 404, { error: "Resources route has been split into /github/, /surveys/ and /sdk/" });
     return sendStatic(response, pathname);
   })().catch((error) => {
     console.error(error);
@@ -502,6 +590,7 @@ server.listen(port, host, () => {
 });
 
 function shutdown(): void {
+  void sourceUnitsPromise?.then((store) => store.terminate()).catch(() => undefined);
   server.close(() => process.exit(0));
 }
 

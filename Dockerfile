@@ -22,7 +22,8 @@ RUN if [ "$FRONTEND_ONLY" = "true" ]; then \
       npm run build:server && npm run build:site; \
     else \
       npm run build; \
-    fi
+    fi \
+    && npm prune --omit=dev
 
 FROM node:22.22.1-bookworm-slim AS runtime
 
@@ -39,6 +40,8 @@ RUN groupadd --gid 10001 atlas \
     && chown -R atlas:atlas /data /tmp
 COPY --from=build --chown=atlas:atlas /app/dist/server ./dist/server
 COPY --from=build --chown=atlas:atlas /app/dist/site ./site
+COPY --from=build --chown=atlas:atlas /app/package.json ./package.json
+COPY --from=build --chown=atlas:atlas /app/node_modules ./node_modules
 COPY --from=build --chown=atlas:atlas /app/artifacts ./release/artifacts
 COPY --from=build --chown=atlas:atlas /app/src/footprints ./release/src/footprints
 COPY --from=build --chown=atlas:atlas /app/src/surveys ./release/src/surveys

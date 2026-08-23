@@ -4,14 +4,17 @@ import test from "node:test";
 import { AdminHttpError, buildConnectorResource, buildConnectorResources, buildTaskResource } from "../server/admin.js";
 
 test("connector resources keep fields specific to their selected type", () => {
-  const local = buildConnectorResources({ name: "assets-local", type: "local", localPath: "/data/coverage-inputs" }, "warehouse");
+  const local = buildConnectorResources({ name: "assets-local", type: "local", localPath: "eva7028:/data/coverage-inputs" }, "warehouse");
   assert.deepEqual(local.dataSource.spec, { type: "local", mount: { pvcName: "assets-local-pvc" } });
   assert.equal(local.persistentVolume?.spec?.hostPath && (local.persistentVolume.spec.hostPath as Record<string, unknown>).path, "/data/coverage-inputs");
+  assert.deepEqual((local.persistentVolume?.spec?.nodeAffinity as Record<string, unknown>)?.required, { nodeSelectorTerms: [{ matchExpressions: [{ key: "kubernetes.io/hostname", operator: "In", values: ["eva7028"] }] }] });
+  assert.equal(local.dataSource.metadata?.annotations?.["astro.zhejianglab.org/local-path"], "eva7028:/data/coverage-inputs");
   assert.equal(local.persistentVolumeClaim?.metadata?.name, "assets-local-pvc");
   const objectStorage = buildConnectorResources({ name: "assets-s3", type: "s3", endpoint: "https://object.example", bucket: "data", accessKey: "key", secretKey: "secret" }, "warehouse");
   assert.deepEqual(objectStorage.dataSource.spec, { type: "s3", endpoint: "https://object.example", bucket: "data", credentialSecretRef: { name: "assets-s3-credentials" } });
   assert.deepEqual(objectStorage.secret?.stringData, { "access-key": "key", "secret-key": "secret" });
-  assert.throws(() => buildConnectorResource({ name: "assets-invalid-local", type: "local", localPath: "/data/local", endpoint: "https://object.example" }, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400);
+  assert.throws(() => buildConnectorResource({ name: "assets-invalid-local", type: "local", localPath: "eva7028:/data/local", endpoint: "https://object.example" }, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400);
+  assert.throws(() => buildConnectorResource({ name: "assets-invalid-node", type: "local", localPath: "eva7028:/data/../secrets" }, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400);
   assert.throws(() => buildConnectorResource({ name: "assets-invalid-es", type: "elasticsearch", endpoint: "https://search.example" } as never, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400);
   assert.throws(() => buildConnectorResource({ name: "assets-invalid-s3", type: "s3", endpoint: "https://object.example", bucket: "data", credentialSecretName: "user-secret" } as never, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400);
 });

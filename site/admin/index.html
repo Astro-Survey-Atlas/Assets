@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f3efe6" />
-    <title>Assets 管理台</title>
+    <meta name="theme-color" content="#050a10" />
+    <title>Astro Survey Atlas Assets · Control Room</title>
   </head>
   <body>
     <header class="admin-header">
-      <a class="admin-brand" href="/" aria-label="返回 Assets 公共目录"><span class="admin-mark" aria-hidden="true"></span><span><strong>ASTRO SURVEY ATLAS</strong><small>ASSETS CONTROL ROOM</small></span></a>
+      <a class="admin-brand" href="/" aria-label="返回 Assets 公共目录"><svg class="admin-mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><circle cx="20" cy="20" r="15.5"/><circle cx="20" cy="20" r="10.5"/><ellipse cx="20" cy="20" rx="16" ry="6.5" transform="rotate(-28 20 20)"/><path d="M12.8 20a7.2 7.2 0 0 0 14.4 0 7.2 7.2 0 0 0-14.4 0Z"/><path class="admin-globe-line" d="M13.8 20h12.4M20 13.2c2.1 2 3.2 4.3 3.2 6.8S22.1 24.8 20 26.8c-2.1-2-3.2-4.3-3.2-6.8s1.1-4.8 3.2-6.8Z"/><circle class="admin-node" cx="6" cy="14" r="2"/><circle class="admin-node admin-node-b" cx="33" cy="27" r="2"/></svg><span><strong>ASTRO SURVEY ATLAS ASSETS</strong><small>CONTROL ROOM</small></span></a>
       <div class="admin-header-actions"><a href="/" title="返回公共目录"><i data-lucide="arrow-left"></i><span>公共目录</span></a><button id="logout-button" type="button" title="清除当前管理员会话"><i data-lucide="log-out"></i><span>退出</span></button></div>
     </header>
 
@@ -30,10 +30,16 @@
 
       <section id="admin-workspace" class="admin-workspace" hidden>
         <div class="admin-toolbar"><div><p class="admin-eyebrow">OPERATOR RESOURCES</p><h2>Connector 与任务</h2></div><div class="admin-toolbar-actions"><button id="refresh-button" class="admin-quiet" type="button" title="刷新 Connector 和任务记录"><i data-lucide="refresh-cw"></i><span>刷新</span></button><output id="admin-status" aria-live="polite">READY</output></div></div>
+        <div class="admin-command-strip" aria-label="管理台快捷操作">
+          <button id="connector-create-button" class="admin-primary" type="button"><i data-lucide="plus"></i><span>创建 Connector</span></button>
+          <button id="task-create-button" class="admin-primary" type="button"><i data-lucide="send"></i><span>创建扫描任务</span></button>
+          <label class="admin-product-search"><span>公共产品搜索</span><input id="product-search" type="search" autocomplete="off" placeholder="巡天、Release、产品、模态或 O4/O8" /></label>
+        </div>
         <div class="admin-grid">
           <section class="admin-section" aria-labelledby="connector-title">
             <div class="section-heading"><div><span class="section-index">01</span><h3 id="connector-title">定义 Connector</h3></div><span class="section-note">AstroDataSource</span></div>
-            <form id="connector-form" class="admin-form">
+            <dialog id="connector-dialog" class="admin-dialog">
+            <form id="connector-form" method="dialog" class="admin-form">
               <label><span>名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="csst-w2-source" /></label>
               <label><span>类型</span><select name="type" id="connector-type"><option value="s3">S3 / OSS 对象存储</option><option value="local">Local 本地存储</option></select></label>
               <label data-connector-object><span>Endpoint</span><input name="endpoint" type="url" placeholder="https://object.example" /></label>
@@ -41,16 +47,18 @@
               <label data-connector-object><span>Prefix</span><input name="prefix" placeholder="projects/CSST/..." /></label>
               <label data-connector-object><span>Access key</span><input name="accessKey" autocomplete="off" /></label>
               <label data-connector-object><span>Secret key</span><input name="secretKey" type="password" autocomplete="new-password" /></label>
-              <label data-connector-local hidden><span>Local path</span><input name="localPath" placeholder="/data/coverage-inputs" /></label>
-              <button class="admin-primary" type="submit"><i data-lucide="plus"></i><span>创建 Connector</span></button>
+              <label data-connector-local hidden><span>Local path</span><input name="localPath" placeholder="eva7028:/data/coverage-inputs" /></label>
+              <div class="form-row"><button id="connector-dialog-cancel" class="admin-quiet" type="button">取消</button><button class="admin-primary" type="submit"><i data-lucide="plus"></i><span>创建 Connector</span></button></div>
               <p class="form-message" data-form-message="connector" role="status"></p>
             </form>
+            </dialog>
             <div class="resource-list" id="connector-list"><div class="resource-empty">尚未读取 Connector</div></div>
           </section>
 
           <section class="admin-section admin-task-section" aria-labelledby="task-title">
             <div class="section-heading"><div><span class="section-index">02</span><h3 id="task-title">提交公共覆盖任务</h3></div><span class="section-note">AstroMetadataScanTask</span></div>
-            <form id="task-form" class="admin-form">
+            <dialog id="task-dialog" class="admin-dialog">
+            <form id="task-form" method="dialog" class="admin-form">
               <label><span>Catalog 产品</span><select name="productId" id="task-product" required><option value="">加载中…</option></select></label>
               <output id="task-derived-summary" class="derived-summary">选择产品后自动带出 survey、release、layer 和标准覆盖模式。</output>
               <label><span>任务名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="csst-w2-coverage" /></label>
@@ -64,9 +72,14 @@
               <div class="form-row"><label><span>允许后缀</span><input name="allowedSuffixes" placeholder=".fits" /></label><label><span>最大 HEALPix order</span><input name="maxOrder" type="number" min="1" max="29" value="8" /></label></div>
               <div class="form-row"><label><span>File index</span><input name="fileIndex" value="astro_file_index_v1" disabled /></label><label><span>Coverage index</span><input name="coverageIndex" value="astro_coverage_index_v1" disabled /></label></div>
               <label><span>批次 ID <small>留空则自动生成</small></span><input name="batchId" placeholder="csst-w2-coverage-20260822" /></label>
-              <button class="admin-primary" type="submit"><i data-lucide="send"></i><span>提交 Coverage Task</span></button>
+              <div class="form-row"><button id="task-dialog-cancel" class="admin-quiet" type="button">取消</button><button class="admin-primary" type="submit"><i data-lucide="send"></i><span>提交 Coverage Task</span></button></div>
               <p class="form-message" data-form-message="task" role="status"></p>
             </form>
+            </dialog>
+            <section aria-labelledby="records-title">
+              <div class="section-heading"><div><span class="section-index">02A</span><h3 id="records-title">执行记录</h3></div><span class="section-note">Assets tasks</span></div>
+              <div class="task-table-wrap"><table><thead><tr><th>任务</th><th>覆盖层</th><th>输入</th><th>状态</th><th>统计</th><th>时间</th></tr></thead><tbody id="task-list"><tr><td colspan="6" class="resource-empty">尚未读取任务</td></tr></tbody></table></div>
+            </section>
           </section>
 
           <section class="admin-section product-section" aria-labelledby="product-title">
@@ -87,10 +100,6 @@
           </section>
         </div>
 
-        <section class="admin-section task-records" aria-labelledby="records-title">
-          <div class="section-heading"><div><span class="section-index">04</span><h3 id="records-title">执行记录</h3></div><span class="section-note">仅显示 Assets 标签下的任务</span></div>
-          <div class="task-table-wrap"><table><thead><tr><th>任务</th><th>覆盖层</th><th>输入</th><th>状态</th><th>统计</th><th>时间</th></tr></thead><tbody id="task-list"><tr><td colspan="6" class="resource-empty">尚未读取任务</td></tr></tbody></table></div>
-        </section>
       </section>
     </main>
     <div id="admin-toast" class="admin-toast" role="status" aria-live="polite"></div>
