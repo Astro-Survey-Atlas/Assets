@@ -19,10 +19,11 @@ test("CSST release publishes reviewed MOC, geometry and complete evidence", asyn
   const files = catalog.manifest.files.filter((entry) => entry.surveyId === "csst");
   const ids = new Set(files.map((entry) => entry.id));
   for (const id of [
-    "csst-coverage-job-snapshot", "csst-input-manifest", "csst-provenance", "csst-run-statistics", "csst-sample-report",
+    "csst-coverage-job-snapshot", "csst-provenance", "csst-run-statistics", "csst-sample-report",
     "csst-wcs-geometry-summary", "csst-w1-display-footprint-nside16", "csst-w1-healpix-order8", "csst-w1-image-extent-moc-order8",
     "package-public-csst-footprints-3-0-0",
   ]) assert.ok(ids.has(id), `missing CSST release asset: ${id}`);
+  assert.equal(ids.has("csst-input-manifest"), false, "the 205 MB input manifest belongs on evidence storage, not the public release allowlist");
   for (const band of ["w2", "w3", "w4"]) for (const suffix of [
     "coverage-job-snapshot", "layer-provenance", "moc", "normalized-scan", "preview-order4", "provenance", "query-order8", "run-statistics", "sample-report", "statistics",
   ]) assert.ok(ids.has(`csst-${band}-${suffix}`) || ids.has(`layer-csst-sim-${band}-image-extent-${suffix}`), `missing CSST ${band.toUpperCase()} release asset: ${suffix}`);

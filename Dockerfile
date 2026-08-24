@@ -23,7 +23,7 @@ RUN if [ "$FRONTEND_ONLY" = "true" ]; then \
     else \
       npm run build; \
     fi \
-    && npm prune --omit=dev
+    && npm prune --omit=dev --offline
 
 FROM node:22.22.1-bookworm-slim AS runtime
 

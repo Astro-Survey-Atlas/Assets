@@ -37,5 +37,30 @@ persistence:
   accessModes: [ReadWriteOnce]
   size: 256Mi
 
+evidencePersistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: nfs-data
+  accessModes: [ReadWriteOnce]
+  size: 256Gi
+
+# A single overlap can retain the public catalog, a DESI source-unit worker
+# and bounded warehouse evidence responses at the same time.
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 768Mi
+
+syncResources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
 nodeSelector:
   kubernetes.io/hostname: eva7028

@@ -100,7 +100,7 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
 
   const coverageCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`);
   assert.equal(coverageCatalogResponse.status, 200);
-  const coverageCatalog = await coverageCatalogResponse.json() as { ordering: string; layers: Array<{ layerId: string; surveyId: string; availableOrders: number[]; tileIdsByOrder: Record<string, number[]>; recipe?: { mode: string; steps: unknown[] }; sourceUnitIndex?: { status: string } }> };
+  const coverageCatalog = await coverageCatalogResponse.json() as { ordering: string; layers: Array<{ layerId: string; surveyId: string; availableOrders: number[]; tileIdsByOrder: Record<string, number[]>; recipe?: { mode: string; steps: any[] }; sourceUnitIndex?: { status: string; unitKind?: string } }> };
   assert.equal(coverageCatalog.ordering, "NESTED");
   assert.ok(coverageCatalog.layers.every((layer) => layer.availableOrders.every((order) => Array.isArray(layer.tileIdsByOrder[String(order)]))));
   const desiLayer = coverageCatalog.layers.find((layer) => layer.layerId === "desi-dr1-spectra-footprint");
@@ -109,6 +109,8 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.equal(desiLayer?.sourceUnitIndex?.status, "exact");
   const csstW2Layer = coverageCatalog.layers.find((layer) => layer.layerId === "csst-sim-w2-image-extent");
   assert.equal(csstW2Layer?.recipe?.mode, "nested-healpix");
+  assert.equal(csstW2Layer?.sourceUnitIndex?.status, "exact");
+  assert.equal(csstW2Layer?.sourceUnitIndex?.unitKind, "file");
   assert.ok(csstW2Layer?.recipe?.steps.some((step: any) => step.id === "header"));
   assert.ok(csstW2Layer?.recipe?.steps.some((step: any) => step.id === "normalize"));
   const csstW1Layer = coverageCatalog.layers.find((layer) => layer.layerId === "csst-sim-w1-image-extent");
@@ -117,6 +119,12 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
 
   const invalidOverlap = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["desi"] }) });
   assert.equal(invalidOverlap.status, 400);
+
+  const reverseLookup = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/reverse-lookup`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ layerIds: ["desi-dr1-spectra-footprint"], order: 4, cells: [1087] }) });
+  assert.equal(reverseLookup.status, 200);
+  const reverseBody = await reverseLookup.json() as { available: boolean; precision: string };
+  assert.equal(reverseBody.available, false);
+  assert.equal(reverseBody.precision, "entrypoint-only");
 
   const surveysResponse = await fetch(`http://127.0.0.1:${port}/api/v1/surveys`);
   assert.equal(surveysResponse.status, 200);

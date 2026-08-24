@@ -151,9 +151,13 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
       ...(registeredSourceUrl ? { sourceUrl: registeredSourceUrl } : {}),
       steps: recipeSteps(mode, registeredRecipe),
     };
-    const sourceUnitIndex: SourceUnitIndexSummary = mode === "tile-table"
-      ? { status: footprint.surveyId === "desi" ? "exact" : "estimated", unitKind: "tile", indexUrl: registered?.recipePath, downloadUrlTemplate: footprint.surveyId === "desi" ? "https://data.desi.lbl.gov/public/{release}/spectro/redux/{specprod}/tiles/cumulative/{tileId}/{lastNight}/" : undefined, notes: footprint.surveyId === "desi" ? "由官方 TILE_COMPLETENESS 快照与锁定 recipe 构建运行时 tile 反向索引。" : "当前发布保存了 tile 表和几何规则；精确 tile 反向索引尚未提供。" }
-      : { status: "entrypoint-only", notes: "当前 MOC 未保存可复核的原始 source-unit 反向索引，只提供 Release 官方入口。" };
+    const hasWarehouseFileEvidence = registered?.sourceTier === "user_file_derived"
+      && (typeof registeredRecipe.scannerRunId === "string" || (footprint.sourceId?.startsWith("workspace-coverage-") ?? false));
+    const sourceUnitIndex: SourceUnitIndexSummary = hasWarehouseFileEvidence
+      ? { status: "exact", unitKind: "file", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "由 warehouse file/coverage evidence 索引按实际 NESTED order/ipix 反查源文件、WCS、ETag 与下载范围。" }
+      : mode === "tile-table"
+        ? { status: footprint.surveyId === "desi" ? "exact" : "estimated", unitKind: "tile", indexUrl: registered?.recipePath, downloadUrlTemplate: footprint.surveyId === "desi" ? "https://data.desi.lbl.gov/public/{release}/spectro/redux/{specprod}/tiles/cumulative/{tileId}/{lastNight}/" : undefined, notes: footprint.surveyId === "desi" ? "由官方 TILE_COMPLETENESS 快照与锁定 recipe 构建运行时 tile 反向索引。" : "当前发布保存了 tile 表和几何规则；精确 tile 反向索引尚未提供。" }
+        : { status: "entrypoint-only", notes: "当前 MOC 未保存可复核的原始 source-unit 反向索引，只提供 Release 官方入口。" };
     const record: CoverageCellLayer = {
       layerId,
       productId: createHash("sha256").update(`${footprint.surveyId}\n${footprint.releaseId}\n${footprint.product}`).digest("hex").slice(0, 20),

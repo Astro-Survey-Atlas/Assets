@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-survey-atlas-assets.dev/contracts/coverage-evidence-v1.schema.json",
+  "title": "Astro Survey Atlas coverage evidence v1",
+  "type": "object",
+  "required": ["schemaVersion", "layerId", "surveyId", "releaseId", "productId", "coordinateFrame", "ordering", "availableOrders", "overviewOrder", "maxOrder", "scanRunId", "sourceSnapshot", "steps", "outputs"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "layerId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "surveyId": { "type": "string", "minLength": 1 },
+    "releaseId": { "type": "string", "minLength": 1 },
+    "productId": { "type": "string", "minLength": 1 },
+    "modality": { "type": "string", "minLength": 1 },
+    "coordinateFrame": { "const": "ICRS" },
+    "ordering": { "const": "NESTED" },
+    "availableOrders": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 29 }, "uniqueItems": true, "minItems": 1 },
+    "overviewOrder": { "type": "integer", "minimum": 0, "maximum": 29 },
+    "maxOrder": { "type": "integer", "minimum": 0, "maximum": 29 },
+    "scanRunId": { "type": "string", "minLength": 1 },
+    "sourceSnapshot": {
+      "type": "object",
+      "required": ["uri", "sha256"],
+      "properties": { "uri": { "type": "string", "minLength": 1 }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "sizeBytes": { "type": "integer", "minimum": 0 } },
+      "additionalProperties": false
+    },
+    "steps": {
+      "type": "array", "minItems": 1,
+      "items": { "type": "object", "required": ["id", "kind", "title", "implementationRef", "order"], "properties": { "id": { "type": "string" }, "kind": { "type": "string" }, "title": { "type": "string" }, "implementationRef": { "type": "string" }, "order": { "type": "integer", "minimum": 0 }, "evidenceRefs": { "type": "array", "items": { "type": "string" } } }, "additionalProperties": false }
+    },
+    "outputs": {
+      "type": "object",
+      "required": ["moc", "query", "preview", "statistics", "manifest", "provenance"],
+      "properties": {
+        "moc": { "$ref": "#/$defs/hashedFile" }, "query": { "$ref": "#/$defs/hashedFile" }, "preview": { "$ref": "#/$defs/hashedFile" }, "statistics": { "$ref": "#/$defs/hashedFile" }, "manifest": { "$ref": "#/$defs/hashedFile" }, "provenance": { "$ref": "#/$defs/hashedFile" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": { "hashedFile": { "type": "object", "required": ["uri", "sha256", "deliveryClass"], "properties": { "uri": { "type": "string" }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "sizeBytes": { "type": "integer", "minimum": 0 }, "deliveryClass": { "enum": ["runtime", "evidence"] } }, "additionalProperties": false } },
+  "additionalProperties": false
+}

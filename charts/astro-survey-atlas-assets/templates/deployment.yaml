@@ -68,6 +68,12 @@ spec:
               value: {{ .Values.admin.warehouseNamespace | quote }}
             - name: ASSETS_LOCAL_PATH_ROOT
               value: {{ .Values.admin.localPathRoot | quote }}
+            - name: ASSETS_WAREHOUSE_ES_URL
+              value: {{ .Values.warehouse.elasticsearchUrl | quote }}
+            - name: ASSETS_WAREHOUSE_COVERAGE_INDEX
+              value: {{ .Values.warehouse.coverageIndex | quote }}
+            - name: ASSETS_WAREHOUSE_FILE_INDEX
+              value: {{ .Values.warehouse.fileIndex | quote }}
             {{- if .Values.admin.enabled }}
             - name: ASSETS_ADMIN_TOKEN
               valueFrom:
@@ -100,6 +106,9 @@ spec:
             - name: content
               mountPath: /var/lib/assets-content
               readOnly: false
+            - name: evidence
+              mountPath: /var/lib/assets-evidence
+              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -110,6 +119,13 @@ spec:
           {{- if .Values.contentPersistence.enabled }}
           persistentVolumeClaim:
             claimName: {{ default (printf "%s-content" (include "astro-survey-atlas-assets.fullname" .)) .Values.contentPersistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: evidence
+          {{- if .Values.evidencePersistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-evidence" (include "astro-survey-atlas-assets.fullname" .)) .Values.evidencePersistence.existingClaim }}
           {{- else }}
           emptyDir: {}
           {{- end }}

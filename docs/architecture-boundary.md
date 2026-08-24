@@ -2,8 +2,8 @@
 
 这份文档只定义 Assets 自己的职责，以及 Assets 调用 data-warehouse 时
 需要遵守的边界。Assets、data-warehouse 和 Atlas 是三个独立项目；任何一个
-项目都可以独立提交自己的任务，不能把另一个项目的内部 API、数据库或任务
-历史当作依赖。
+项目都可以独立提交自己的任务。Assets 不依赖旧 Assets ES；覆盖反查只依赖
+明确配置的 data-warehouse Elasticsearch 索引合同。
 
 ## 职责
 
@@ -24,7 +24,8 @@ Assets 管理页只读取自己提交的 CRD status。status 是 data-warehouse 
 对单个 CRD 的运行观测，不是三方共享的任务历史或业务状态。
 
 当 Assets 的任务选择 Elasticsearch sink 时，scanner 输出的 normalized
-file/coverage 文档可供 Assets finalizer 按 `runId` 读取。其他
+file/coverage 文档可供 Assets finalizer 按 `runId` 读取，并在发布后由
+warehouse `astro_file_index_v1` / `astro_coverage_index_v1` 提供反查。其他
 `AstroMetadataScanTask` 可以选择不同 sink，不能把 ES 当成 data-warehouse
 的全局输出约定。
 

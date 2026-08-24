@@ -1,0 +1,16 @@
+{{- if and .Values.evidencePersistence.enabled (not .Values.evidencePersistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "astro-survey-atlas-assets.fullname" . }}-evidence
+  labels:
+    {{- include "astro-survey-atlas-assets.labels" . | nindent 4 }}
+spec:
+  accessModes: {{ toYaml .Values.evidencePersistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.evidencePersistence.size }}
+  {{- with .Values.evidencePersistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}

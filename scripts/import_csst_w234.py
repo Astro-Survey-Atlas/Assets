@@ -242,13 +242,13 @@ def update_catalogs(results: list[dict[str, Any]]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--es-url", default="http://127.0.0.1:19200")
+    parser.add_argument("--source-es-url", required=True, help="explicit source Elasticsearch URL; never used by the Assets runtime")
     parser.add_argument("--run", action="append", required=True, metavar="BAND=RUN_ID")
     args = parser.parse_args()
     runs = {item.split("=", 1)[0].upper(): item.split("=", 1)[1] for item in args.run}
     if set(runs) != set(BANDS):
         raise SystemExit("--run must provide W2, W3 and W4")
-    results = [import_band(args.es_url.rstrip("/"), band, runs[band]) for band in BANDS]
+    results = [import_band(args.source_es_url.rstrip("/"), band, runs[band]) for band in BANDS]
     update_catalogs(results)
 
 

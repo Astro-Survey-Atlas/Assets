@@ -16,6 +16,9 @@ dependencies = [
   "numpy>=1.24",
 ]
 
+[project.optional-dependencies]
+evidence = ["pyarrow>=15"]
+
 [project.scripts]
 astro-survey-moc-core = "astro_survey_moc_core.cli:main"
 

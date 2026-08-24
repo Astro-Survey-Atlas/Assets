@@ -322,7 +322,6 @@ async function build(): Promise<PublicAssetManifest> {
 
   const csstEvidence = [
     ["csst-coverage-job-snapshot", "metadata", "CSST W1 coverage job snapshot", "coverage-job-snapshot.json", "Data-warehouse coverage request, scanner configuration and review decision for CSST W1 simulated wide-field images."],
-    ["csst-input-manifest", "manifest", "CSST W1 input manifest", "input-manifest.json", "Complete 178,056-file W1_Phot manifest with WCS summaries, ETags and the reviewed exclusion."],
     ["csst-wcs-geometry-summary", "metadata", "CSST W1 WCS geometry summary", "wcs-geometry-summary.json", "Measured WCS bounds, HEALPix order, area, nominal-area comparison and anomaly decision."],
     ["csst-run-statistics", "metadata", "CSST W1 full-run statistics", "run-statistics.json", "Summed 64-shard data-warehouse and selected sink coverage statistics."],
     ["csst-sample-report", "metadata", "CSST W1 sample and smoke report", "sample-report.json", "Restricted-directory samples, smoke result and full-run anomaly audit."],

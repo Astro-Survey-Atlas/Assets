@@ -12,6 +12,7 @@ import { coverageBlock, loadCoverageCatalog } from "./coverage.js";
 import { overlapForLayers } from "./overlap.js";
 import { ProductStore, type ProductRecord } from "./products.js";
 import { SourceUnitWorkerStore } from "./source-units.js";
+import { CoverageEvidenceStore, EvidenceStoreError } from "./evidence-store.js";
 
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
@@ -30,6 +31,11 @@ const surveyIndex = await loadSurveyIndex(releaseRoot, catalog, coverageManifest
 const admin = new AssetsAdmin();
 const products = new ProductStore();
 await products.initialize(releaseRoot, coverageCatalog.layers);
+const evidenceStore = new CoverageEvidenceStore({
+  url: process.env.ASSETS_WAREHOUSE_ES_URL,
+  coverageIndex: process.env.ASSETS_WAREHOUSE_COVERAGE_INDEX,
+  fileIndex: process.env.ASSETS_WAREHOUSE_FILE_INDEX,
+});
 let sourceUnitsPromise: Promise<SourceUnitWorkerStore> | null = null;
 function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
   if (!sourceUnitsPromise) {
@@ -39,6 +45,16 @@ function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
     });
   }
   return sourceUnitsPromise;
+}
+
+async function sourceUnitsReadyWithin(timeoutMs: number): Promise<SourceUnitWorkerStore | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs);
+    timer.unref();
+  });
+  try { return await Promise.race([sourceUnitsStore(), timeout]); }
+  finally { if (timer) clearTimeout(timer); }
 }
 
 function productCoverage(record: ProductRecord): Record<string, unknown> | undefined {
@@ -525,11 +541,22 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
   const result = overlapForLayers([...coverageCatalog.records.values()], surveyIds, requestedOrder);
   if (!result) return json(response, 400, { error: "At least two surveys with a common HEALPix order are required" });
   const selectedLayers = [...coverageCatalog.records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
-  const needsSourceUnits = result.components.length > 0 && selectedLayers.some((layer) => layer.sourceUnitIndex?.status === "exact");
-  const sourceUnits = needsSourceUnits ? await sourceUnitsStore() : null;
+  const evidenceLayers = selectedLayers.filter((layer) => layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "file");
+  const needsSourceUnits = result.components.length > 0 && selectedLayers.some((layer) => layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "tile");
+  const sourceUnits = needsSourceUnits ? await sourceUnitsReadyWithin(1_000) : null;
   const componentDetails = await Promise.all(result.components.map(async (component) => {
     const componentCells = new Set(component.cells);
     return { ...component,
+    // File-level evidence can be very large for a connected component. The
+    // UI already has this component's cells, so it requests the exact bounded
+    // file plan only when the user opens that component.
+    evidenceLookup: evidenceLayers.length ? {
+      endpoint: "/api/v1/coverage/reverse-lookup",
+      layerIds: evidenceLayers.map((layer) => layer.layerId),
+      order: component.order,
+      precision: "exact",
+      deferred: true,
+    } : undefined,
     surveys: await Promise.all(selectedLayers.filter((layer) => layer.cells.get(component.order)?.some((pixel) => componentCells.has(pixel))).map(async (layer) => ({
       surveyId: layer.surveyId,
       releaseId: layer.releaseId,
@@ -543,12 +570,23 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
   return compressedJson(request, response, 200, { ...result, components: componentDetails }, "public, max-age=60, stale-while-revalidate=120");
 }
 
+async function sendCoverageReverseLookup(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
+  const layerIds = Array.isArray(body.layerIds) ? body.layerIds.filter((value): value is string => typeof value === "string") : [];
+  const cells = Array.isArray(body.cells) ? body.cells.filter((value): value is number => typeof value === "number" && Number.isSafeInteger(value)) : [];
+  const order = typeof body.order === "number" && Number.isSafeInteger(body.order) ? body.order : Number.NaN;
+  const limit = typeof body.limit === "number" && Number.isSafeInteger(body.limit) ? body.limit : undefined;
+  if (layerIds.length < 1 || !Number.isSafeInteger(order) || order < 0 || order > 29 || !cells.length) return json(response, 400, { error: "layerIds, order and cells are required" });
+  return compressedJson(request, response, 200, await evidenceStore.reverseLookup({ layerIds, order, cells, limit }), "public, max-age=30, stale-while-revalidate=60");
+}
+
 const server = http.createServer((request, response) => {
   void (async () => {
     securityHeaders(response);
     const pathname = requestPath(request);
     if (pathname.startsWith("/api/v1/admin/")) return sendAdmin(request, response, pathname);
     if (pathname === "/api/v1/coverage/overlap" && request.method === "POST") return sendCoverageOverlap(request, response);
+    if (pathname === "/api/v1/coverage/reverse-lookup" && request.method === "POST") return sendCoverageReverseLookup(request, response);
     if (request.method !== "GET" && request.method !== "HEAD") return json(response, 405, { error: "Method not allowed" });
     if (pathname === "/healthz") return json(response, 200, {
       status: "ok",
@@ -580,7 +618,11 @@ const server = http.createServer((request, response) => {
     return sendStatic(response, pathname);
   })().catch((error) => {
     console.error(error);
-    if (!response.headersSent) json(response, 500, { error: "Internal server error" });
+    if (!response.headersSent) {
+      const statusCode = error instanceof EvidenceStoreError ? error.statusCode : 500;
+      const message = error instanceof EvidenceStoreError && statusCode >= 500 ? "Warehouse evidence service is unavailable" : error instanceof Error ? error.message : "Internal server error";
+      json(response, statusCode, { error: message });
+    }
     else response.destroy();
   });
 });

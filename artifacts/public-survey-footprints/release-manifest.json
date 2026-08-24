@@ -3,7 +3,7 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "7cb7570687a8c012cea5724c73684d5e170254e0ee8951f964384a97bbefc581"
+    "sha256": "1d244bb144930dfd4bd2330d3127ba8fd72a83fff50efd2bd34749aacb5f31f5"
   },
   "statistics": {
     "releases": 52,
@@ -14,9 +14,9 @@
     "footprints": 41,
     "packages": 14,
     "rawMocFiles": 41,
-    "totalBytes": 238566438,
-    "runtimeBytes": 6664626,
-    "evidenceBytes": 231901812
+    "totalBytes": 33301151,
+    "runtimeBytes": 6664754,
+    "evidenceBytes": 26636397
   },
   "files": [
     {
@@ -28,8 +28,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/architecture-boundary.md",
-      "sizeBytes": 3031,
-      "sha256": "2917d87651cf9d58fdc964b41d3c77e43daf8074143683abf252322513877b4d"
+      "sizeBytes": 3159,
+      "sha256": "33d28198f0b61666f353253fb30e5bf1dc5ba24e255ed0a8c4c6c3aa9b480a73"
     },
     {
       "id": "documentation-data-warehouse-requirements",
@@ -450,21 +450,6 @@
       "path": "src/footprints/survey-footprints.json",
       "sizeBytes": 930773,
       "sha256": "e214787d981e71505b6f46661aa39baf209333b90ec3b2dde3e674707889fc1b"
-    },
-    {
-      "id": "csst-input-manifest",
-      "kind": "manifest",
-      "label": "CSST W1 input manifest",
-      "description": "Complete 178,056-file W1_Phot manifest with WCS summaries, ETags and the reviewed exclusion.",
-      "downloadName": "csst-w1-input-manifest.json",
-      "mediaType": "application/json",
-      "surveyId": "csst",
-      "releaseId": "csst-sim-w1-20250731",
-      "product": "W1 simulated wide-field images",
-      "deliveryClass": "evidence",
-      "path": "artifacts/public-survey-footprints/csst/input-manifest.json",
-      "sizeBytes": 205265415,
-      "sha256": "dda4306e2ee89afd7ce30d4ee31ee8b3dcca65cb2a693145180c9c6baa2ebb1f"
     },
     {
       "id": "csst-w2-normalized-scan",

@@ -17,6 +17,11 @@ admin:
     name: ""
     key: token
 
+warehouse:
+  elasticsearchUrl: http://warehouse-elasticsearch.warehouse.svc.cluster.local:9200
+  coverageIndex: astro_coverage_index_v1
+  fileIndex: astro_file_index_v1
+
 service:
   type: ClusterIP
   port: 80
@@ -46,6 +51,13 @@ contentPersistence:
   storageClass: ""
   accessModes: [ReadWriteOnce]
   size: 64Mi
+
+evidencePersistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes: [ReadWriteOnce]
+  size: 256Gi
 
 nodeSelector: {}
 tolerations: []

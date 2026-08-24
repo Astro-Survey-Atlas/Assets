@@ -1,56 +1,93 @@
 # Astro Survey Atlas Assets
 
-Independent public download service for verified Astro Survey Atlas coverage
-artifacts. This repository owns its data snapshot, website, container image and
-Helm chart. Assets is independently deployable and does not depend on another
-project's internal API, database, image, chart or PVC. When Assets requests
-coverage computation, it submits the standard `AstroDataSource` and
-`AstroMetadataScanTask` resources accepted by data-warehouse.
+Astro Survey Atlas Assets is the public, reproducible coverage service for
+astronomical surveys. It publishes ICRS/NESTED HEALPix footprints, lets users
+compare selected surveys at their highest common precision, and turns an
+overlap into a reviewable download plan: survey/release/modality, RA/DEC
+extent, source files, tile/brick identifiers and download entrypoints.
 
-## Published release
+This repository is the Assets boundary. It owns release manifests, MOC/query
+blocks, previews, product presentation, evidence hashes and the public API.
+`data-warehouse` owns scan execution and operator status. Assets submits the
+standard scan task and consumes normalized file and coverage documents.
+Atlas is the user-facing visualization/client layer. Assets never depends on
+Atlas internals.
 
-The authoritative inputs are:
+## Processing model
 
-- `src/footprints/survey-footprints.json`
-- `artifacts/public-survey-footprints/provenance.json`
-- `src/layers/layer-registry.json`
+Every survey recipe follows the same auditable forward path. The recipe lock
+records the actual source snapshot, scanner run, implementation reference,
+available HEALPix orders and output hashes.
 
-The release includes native FITS MOCs and source records, the Euclid Q1 DS9
-geometry archive, official DESI EDR/DR1 observed-tile FITS tables, current resource-package ZIP files, the product status
-ledger, calculation notes, normalized manifests and SHA-256 provenance.
-The Assets-owned Core build plan in `src/layers/public-build-plan.json` also
-publishes locked Euclid Q1, DESI EDR and DESI DR1 authoritative layers with
-their order-8 query indexes, order-4 previews, statistics and provenance.
-The layer registry reserves stable IDs for the next Euclid ERO/Q2 and Legacy
-DR1–DR10 layers as `awaiting_snapshot`; those entries are metadata only until
-official inputs are acquired, locked and added to the build plan.
-Only files referenced by `release-manifest.json` are exposed by the anonymous
-download API. Historical package archives that are not in the current catalog
-remain unavailable through HTTP.
-
-## Offline MOC Core
-
-This repository also owns the `astro-survey-moc-core` distribution, whose
-Python import package is explicitly named `astro_survey_moc_core`, and the
-`astro-survey-moc-core` CLI. The Core writes deterministic IVOA FITS MOCs,
-derives order-8 query indexes and order-4 previews, merges stable shard output,
-and builds or validates Resource Package v3 archives. `refresh` is its only
-networked command; `rebuild` (or `build --rebuild`) requires a SHA-256 locked
-local snapshot.
-
-The scientific and package contract is documented in
-[`docs/moc-core-contract.md`](docs/moc-core-contract.md). The reviewed CSST
-artifact is frozen and is validated in place rather than regenerated.
-The Assets/data-warehouse/Atlas boundary and Assets' data-warehouse requirements
-are documented in [`docs/architecture-boundary.md`](docs/architecture-boundary.md)
-and [`docs/data-warehouse-requirements.md`](docs/data-warehouse-requirements.md);
-machine-readable contracts live under [`contracts/`](contracts/).
-
-```bash
-python3 -m pip wheel --no-deps --no-build-isolation . -w wheelhouse
-python3 -m astro_survey_moc_core.cli --version
-python3 -m unittest discover -s python-tests -v
+```mermaid
+flowchart LR
+  A[Source inventory snapshot] --> B[File/catalog filter]
+  B --> C[Metadata or FITS-WCS read]
+  C --> D[ICRS validation]
+  D --> E[Geometry extraction]
+  E --> F[NESTED HEALPix rasterization]
+  F --> G[Normalize order/ipix]
+  G --> H[Union and deduplicate]
+  H --> I[MOC query preview statistics]
+  I --> J[Manifest and coverage edges]
+  J --> K[Warehouse Elasticsearch]
+  J --> L[Evidence PVC Parquet]
+  I --> M[SHA-256 release]
 ```
+
+The reverse path is equally fixed. It never mixes orders: an order-4-only
+layer limits the result to order 4/NSIDE 16, while a layer with an order-8
+scan can participate at order 8. Every response states `exact`, `estimated`,
+`entrypoint-only` or `truncated` precision.
+
+```mermaid
+flowchart LR
+  A[Select surveys/layers] --> B[Highest common available order]
+  B --> C[Intersect explicit order/ipix cells]
+  C --> D[Connected components C01 C02]
+  D --> E[Warehouse coverage-edge lookup]
+  E --> F[File WCS tile/brick metadata]
+  F --> G[Download plan and limits]
+```
+
+The detailed contract is in [`docs/coverage-workflow.md`](docs/coverage-workflow.md)
+and [`contracts/coverage-evidence-v1.schema.json`](contracts/coverage-evidence-v1.schema.json).
+The repository workflow is enforced by [`AGENTS.md`](AGENTS.md) and the
+`skills/astro-survey-atlas-coverage-workflow` skill.
+
+## Runtime and evidence
+
+Runtime delivery is deliberately small: coverage catalog, visible HEALPix
+blocks, survey catalog, published product content, previews and lightweight
+metadata. Evidence delivery contains input manifests, normalized scans, task
+snapshots, raw MOCs and complete provenance. Evidence is retained on the
+evidence PVC/object store, downloadable and hash-verifiable, but is never an
+initial browser request.
+
+For CSST, `files.parquet` stores source file/WCS/ETag metadata and
+`coverage_edges.parquet` stores the mapping from `layerId + order + ipix` to
+source files. Parquet is for audit, rebuild and bulk export; online reverse
+lookup uses the warehouse indices:
+
+- `astro_file_index_v1`
+- `astro_coverage_index_v1`
+- `astro_object_index_v1` (when an object workflow is published)
+
+The Assets runtime only uses `ASSETS_WAREHOUSE_ES_URL`. The historical ES URL
+is accepted only by the explicit one-shot migration script.
+
+## Public API
+
+- `GET /api/v1/coverage/catalog` and `GET /api/v1/coverage/blocks/:layerId`
+  expose catalog metadata and cached blocks.
+- `POST /api/v1/coverage/overlap` computes common-order cells and C01/C02
+  components.
+- `POST /api/v1/coverage/reverse-lookup` returns source files, WCS bounds,
+  download entrypoints and precision/limit metadata for selected cells.
+- `GET /api/v1/surveys` and `GET /api/v1/products` expose the public catalog
+  and published product content. Draft product content is admin-only.
+- `GET /github/`, `/surveys/` and `/sdk/` are separate documentation/catalog
+  pages; `/resources/` is intentionally not a route.
 
 ## Local development
 
@@ -61,43 +98,43 @@ npm test
 npm start
 ```
 
-The site listens on `http://127.0.0.1:4180` by default. For split development,
-run `npm run dev` and `npm run dev:site`; Vite proxies API requests to port
-`4180`.
+The service listens on `http://127.0.0.1:4180`. Set
+`ASSETS_WAREHOUSE_ES_URL` when testing file-level reverse lookup locally; the
+public geometry API remains usable without it.
 
-The maintained public API contract is in
-[`docs/api-reference.md`](docs/api-reference.md). Update it together with the
-route implementation and HTTP tests whenever an API changes. It covers the
-catalog, survey and coverage indexes, downloads, online previews, byte ranges,
-checksums and security boundaries.
+## Evidence migration
 
-## Release validation
-
-`npm run assets:build` validates the source provenance, every native FITS MOC,
-Euclid geometry, current package archive and supporting record. It then writes
-the closed download allowlist and renders `site/public/coverage-overview.png`
-from the real NSIDE 16 footprint manifest.
-
-The container repeats catalog verification at startup. The Helm init container
-copies a verified release into a versioned PVC directory and atomically moves
-the `current` symlink only after the copied data passes the same checks.
-
-## Container and Helm
+The source must be explicit and the target defaults to the warehouse service.
+Run a dry run before importing any records:
 
 ```bash
-podman build \
-  --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
-  -t crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:1.0.0-dev .
-
-helm lint charts/astro-survey-atlas-assets
-helm upgrade --install astro-survey-atlas-assets \
-  charts/astro-survey-atlas-assets \
-  --namespace astro-survey-atlas-assets \
-  --create-namespace \
-  -f deploy/k3s-values.yaml
+python3 scripts/migrate_csst_evidence.py \
+  --source-es-url http://legacy-es:9200 \
+  --run W1=workspace-coverage-04a0be5dc49c \
+  --run W2=workspace-coverage-ec9448e73ced-retry4 \
+  --run W3=workspace-coverage-ee904e0f11af-retry3 \
+  --run W4=workspace-coverage-dbf269d0f221-retry3 \
+  --dry-run
 ```
 
-The K3s values reserve NodePort `32083`, use the `nfs-data` storage class and
-publish `astro.assets.dev.72602.space` through the nginx Ingress.
-DNS for that host remains an external prerequisite; NodePort access works
-independently at `http://10.15.51.75:32083/` on the current cluster node.
+Add `--evidence-dir /var/lib/assets-evidence/csst` with the `evidence` Python
+extra installed to write compressed Parquet tables. The importer never copies
+the historical 205 MB W1 manifest into runtime delivery.
+
+## Build and deploy
+
+```bash
+npm run assets:build
+npm run build:server
+npm run build:site
+helm lint charts/astro-survey-atlas-assets
+helm template astro-survey-atlas-assets charts/astro-survey-atlas-assets \
+  -f deploy/k3s-values.yaml
+helm upgrade --install astro-survey-atlas-assets \
+  charts/astro-survey-atlas-assets --namespace astro-survey-atlas-assets \
+  --create-namespace -f deploy/k3s-values.yaml
+```
+
+The chart configures the warehouse Elasticsearch URL, the Assets content PVC
+and the release PVC. The large CSST input manifest remains evidence storage,
+not a Git-tracked homepage/runtime asset.

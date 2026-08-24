@@ -25,7 +25,13 @@ export interface SourceUnitMatch {
 
 interface SourceUnitLayerIndex {
   layerId: string;
-  byOrder: Map<number, Map<number, number[]>>;
+  /**
+   * A coarse, NESTED parent-cell index bounds the exact work per request.
+   * Keeping an order-8 reverse map for every DESI tile creates millions of
+   * JavaScript Map/Array entries and exceeds the site's memory limit.
+   */
+  coarseOrder: number;
+  coarseByPixel: Map<number, number[]>;
   units: SourceUnit[];
 }
 
@@ -138,17 +144,18 @@ async function buildDesiLayer(root: string, input: { layerId: string; releaseId:
       downloadUrl: `https://data.desi.lbl.gov/public/${release}/spectro/redux/${specprod}/tiles/cumulative/${tileId}/${lastNight}/`,
     });
   }
-  const byOrder = new Map<number, Map<number, number[]>>();
-  for (const order of [4, 8]) {
-    const healpix = new Healpix(2 ** order);
-    const byPixel = new Map<number, number[]>();
-    units.forEach((unit, unitIndex) => {
-      const pointing = new Pointing(null, false, (90 - unit.decDeg) * Math.PI / 180, unit.raDeg * Math.PI / 180);
-      rangePixels(healpix, pointing, unit.radiusDeg).forEach((pixel) => byPixel.set(pixel, [...(byPixel.get(pixel) ?? []), unitIndex]));
+  const coarseOrder = 4;
+  const coarseHealpix = new Healpix(2 ** coarseOrder);
+  const coarseByPixel = new Map<number, number[]>();
+  units.forEach((unit, unitIndex) => {
+    const pointing = new Pointing(null, false, (90 - unit.decDeg) * Math.PI / 180, unit.raDeg * Math.PI / 180);
+    rangePixels(coarseHealpix, pointing, unit.radiusDeg).forEach((pixel) => {
+      const candidates = coarseByPixel.get(pixel);
+      if (candidates) candidates.push(unitIndex);
+      else coarseByPixel.set(pixel, [unitIndex]);
     });
-    byOrder.set(order, byPixel);
-  }
-  return { layerId: input.layerId, byOrder, units };
+  });
+  return { layerId: input.layerId, coarseOrder, coarseByPixel, units };
 }
 
 export class SourceUnitStore {
@@ -164,12 +171,26 @@ export class SourceUnitStore {
 
   match(layerId: string, order: number, cells: number[], limit = 120): SourceUnitMatch | null {
     const layer = this.#layers.get(layerId);
-    const byPixel = layer?.byOrder.get(order);
-    if (!layer || !byPixel) return null;
+    if (!layer || order < layer.coarseOrder) return null;
     const unitIndexes = new Set<number>();
-    cells.forEach((pixel) => byPixel.get(pixel)?.forEach((index) => unitIndexes.add(index)));
-    const allUnits = [...unitIndexes].map((index) => layer.units[index]!).sort((left, right) => Number(left.unitId) - Number(right.unitId));
-    return { status: "exact", unitKind: "tile", units: allUnits.slice(0, limit), totalUnits: allUnits.length, truncated: allUnits.length > limit, notes: "由生成 MOC 的同一份官方 TILE_COMPLETENESS 快照、NEXP 筛选和焦面半径与重合 HEALPix cells 求交。" };
+    const parentScale = 2 ** (2 * (order - layer.coarseOrder));
+    cells.forEach((pixel) => layer.coarseByPixel.get(Math.floor(pixel / parentScale))?.forEach((index) => unitIndexes.add(index)));
+
+    // At order 4 the compact index is already the exact inclusive raster.
+    // At a finer order, validate only its coarse candidates against the
+    // requested cells using the same queryDiscInclusive rasterization.
+    const selected = new Set(cells);
+    const exactHealpix = order === layer.coarseOrder ? null : new Healpix(2 ** order);
+    const allUnits = [...unitIndexes]
+      .filter((index) => {
+        if (!exactHealpix) return true;
+        const unit = layer.units[index]!;
+        const pointing = new Pointing(null, false, (90 - unit.decDeg) * Math.PI / 180, unit.raDeg * Math.PI / 180);
+        return rangePixels(exactHealpix, pointing, unit.radiusDeg).some((pixel) => selected.has(pixel));
+      })
+      .map((index) => layer.units[index]!)
+      .sort((left, right) => Number(left.unitId) - Number(right.unitId));
+    return { status: "exact", unitKind: "tile", units: allUnits.slice(0, limit), totalUnits: allUnits.length, truncated: allUnits.length > limit, notes: "由生成 MOC 的同一份官方 TILE_COMPLETENESS 快照、NEXP 筛选和焦面半径与重合 HEALPix cells 求交；order-4 父像元只用于缩小候选集合。" };
   }
 }
 

@@ -2,7 +2,11 @@
 
 这是 Astro Survey Atlas Assets 的公开只读 API 维护入口。路由、响应字段、媒体类型、缓存、Range 或预览能力变更时，必须在同一变更中更新本文、`README.md` 的入口和对应 HTTP 测试。
 
-该公开服务只读取已经构建并通过 `release-manifest.json` allowlist 校验的静态制品；运行时不访问 OSS、Connector、data-warehouse 或任务状态，也不处理或暴露原始远程凭据。这里描述的是公开只读服务边界，不限制 Assets 项目自行管理 DataSource、Secret 和任务。
+公开 catalog、block、下载和预览只读取已经构建并通过
+`release-manifest.json` allowlist 校验的静态制品。覆盖反查是一个明确的
+warehouse Elasticsearch 读路径（`ASSETS_WAREHOUSE_ES_URL`），不会访问 OSS
+或旧 Assets ES，也不处理或暴露原始远程凭据。这里描述的是公开只读服务
+边界，不限制 Assets 项目自行管理 DataSource、Secret 和任务。
 
 ## Conventions
 
@@ -69,10 +73,31 @@ GET /api/v1/coverage/blocks/{layerId}?order=4&tile=0
 
 ```http
 POST /api/v1/coverage/overlap
+```
+
+`overlap` selects the highest HEALPix order shared by all selected surveys and
+returns explicit cells plus connected components (`C01`, `C02`, ...). Every
+component includes the selected layer precision and an `evidence` object. When
+warehouse ES is unavailable, geometry still works and evidence is marked
+`entrypoint-only`.
+
 Content-Type: application/json
 
+```json
 {"surveyIds":["desi","legacy-surveys"],"requestedOrder":8}
 ```
+
+### `POST /api/v1/coverage/reverse-lookup`
+
+Request:
+
+```json
+{"layerIds":["desi-dr1-spectra-footprint"],"order":8,"cells":[123,456],"limit":500}
+```
+
+The response includes the requested `order`/`nside`, `precision`, coverage
+edges, source file IDs, URI/name/ETag/WCS bounds, download entrypoints and a
+`truncated` flag. It never upgrades an order-4-only layer to order 8.
 
 The service unions published products within each selected survey, then intersects the resulting survey coverages. It uses the highest real order shared by every selected survey that does not exceed `requestedOrder`; no layer is upsampled to an order it does not publish. The response reports `commonOrder`, explicit NESTED `pixels`, four-side-connected components with stable `C01` identifiers and RA/DEC bounds, plus source-unit/download matches when a release has a locked reverse index. At least two distinct survey IDs are required.
 

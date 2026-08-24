@@ -1,0 +1,4 @@
+interface:
+  display_name: "Astro Survey Coverage Workflow"
+  short_description: "Enforce coverage, evidence, and reverse-lookup rules"
+  default_prompt: "Use $astro-survey-atlas-coverage-workflow to update this survey coverage workflow without weakening evidence or HEALPix precision."
