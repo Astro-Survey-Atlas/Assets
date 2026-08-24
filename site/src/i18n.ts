@@ -1,0 +1,275 @@
+export type Locale = "en" | "zh";
+
+const STORAGE_KEY = "astro-survey-atlas.locale";
+
+const messages: Record<Locale, Record<string, string>> = {
+  en: {
+    "nav.home": "Home",
+    "nav.github": "GitHub",
+    "nav.surveys": "Survey Directory",
+    "nav.sdk": "SDK",
+    "nav.admin": "Control Room",
+    "nav.sky": "Sky Atlas",
+    "nav.language": "Switch language",
+    "nav.english": "EN",
+    "nav.chinese": "中",
+    "home.eyebrow": "PUBLIC SKY DATA / OPEN INFRASTRUCTURE",
+    "home.titleLine1": "Make sky coverage",
+    "home.titleLine2": "a data entry point",
+    "home.lead": "Unify coverage scattered across catalogs, MOCs, FITS files, and scan evidence into public assets that are comparable, locatable, and verifiable.",
+    "home.enter": "Enter the sky",
+    "home.directory": "Survey directory",
+    "home.why": "WHY THIS EXISTS",
+    "home.reason": "Finding data should not mean guessing across archives, MOCs, and file names. Atlas answers where surveys overlap first, then takes you to the real release, source file, and download entry point.",
+    "home.coordinates": "COORDINATES",
+    "home.pixelOrder": "PIXEL ORDER",
+    "home.releases": "RELEASES",
+    "home.provenance": "PROVENANCE",
+    "home.explore": "EXPLORE THE SKY",
+    "coverage.allSurveys": "ALL PUBLIC SURVEYS",
+    "coverage.loading": "LOADING HEALPIX CELLS",
+    "coverage.previewUnavailable": "COVERAGE PREVIEW UNAVAILABLE",
+    "coverage.publicCells": "PUBLIC HEALPIX CELL COVERAGE",
+    "coverage.shortcuts": "SHORTCUTS",
+    "coverage.focus": "Focus the selected region and narrow the field of view.",
+    "coverage.overlapShortcut": "Toggle the selected surveys into a co-registered overlap view.",
+    "coverage.escape": "Exit overlap and clear the current selection and inspector.",
+    "coverage.resetShortcut": "Reset the sky and camera to the starting view.",
+    "coverage.cellInspector": "CELL INSPECTOR",
+    "coverage.healpixCell": "HEALPIX CELL",
+    "coverage.overlapResult": "OVERLAP RESULT",
+    "coverage.downloadCurrent": "Download Cxx CSV",
+    "coverage.downloadAll": "Download all CSV",
+    "coverage.downloadLoading": "Preparing CSV…",
+    "coverage.downloadUnavailable": "Download plan unavailable",
+    "coverage.downloadReady": "Download plan ready",
+    "coverage.selectedComponent": "SELECTED COMPONENT",
+    "coverage.commonOrder": "COMMON ORDER",
+    "coverage.noCommon": "No common coverage cells",
+    "coverage.evidenceUnavailable": "Evidence index unavailable; keeping the overlap geometry and official entry point.",
+    "coverage.noSourceFiles": "No downloadable source files were returned for this component.",
+    "coverage.downloadOfficial": "Download / official entry",
+    "coverage.queryingPlan": "Querying file coverage and download plan…",
+    "coverage.reverseFailed": "File reverse lookup failed; keep this region and retry.",
+    "coverage.releaseEntry": "Official release entry",
+    "coverage.noProducts": "No published products in this overlap region.",
+    "coverage.needTwoSurveys": "Select at least two surveys to calculate overlap",
+    "coverage.inspectDownload": "Inspect coverage and downloads for this cell",
+    "coverage.releaseUnavailable": "RELEASE UNAVAILABLE",
+    "coverage.catalogLoadFailed": "Public survey directory failed to load",
+    "coverage.explore": "EXPLORE THE SKY",
+    "common.close": "Close",
+    "common.search": "Search surveys, missions, modalities, or products",
+    "common.noMatch": "No matching surveys",
+    "common.noProducts": "No published products in this region.",
+    "directory.eyebrow": "PUBLIC SKY COVERAGE CATALOG / 2026.08",
+    "directory.title": "Public Survey Footprints",
+    "directory.lead": "Readable, comparable, downloadable sky coverage for public surveys. Each record links to native FITS MOCs, geometry sources, release packages, and reviewable evidence.",
+    "directory.noteTitle": "Directory notes",
+    "directory.note": "ICRS coordinates and NESTED HEALPix provide one spatial language for public releases. Survey colors map to the sky; focus or select a record to locate its coverage.",
+    "directory.bySurvey": "Browse public assets by survey",
+    "directory.resultHint": "Each record shows published products, coverage cells, and download entry points",
+    "integrity.eyebrow": "REPRODUCIBLE EVIDENCE",
+    "integrity.title": "Every download has a source and hash",
+    "integrity.copy": "Release manifests, source files, and provenance are preserved together. Verify every download independently with SHA-256.",
+    "integrity.provenance": "Download provenance",
+    "page.github.eyebrow": "PROJECT / OPEN SCIENCE INFRASTRUCTURE",
+    "page.github.lead": "A public, reproducible spatial asset layer for survey coverage, releases, and evidence.",
+    "page.github.open": "Open GitHub repository",
+    "page.github.problemEyebrow": "WHY THIS EXISTS",
+    "page.github.problemTitle": "The problem we are solving",
+    "page.github.problem": "Survey coverage is often scattered across papers, web pages, FITS files, and temporary scripts. Assets normalizes these sources into ICRS and NESTED HEALPix so researchers can compare overlap before deciding what to download.",
+    "page.github.promiseEyebrow": "DATA PROMISE",
+    "page.github.promiseTitle": "Every result is traceable",
+    "page.github.promise": "Runtime coverage, native FITS MOCs, geometry sources, manifests, provenance, and SHA-256 form one release record. The home page loads lightweight runtime blocks while full evidence remains in the release directory.",
+    "page.github.noteEyebrow": "CUSTOM PROJECT NOTE",
+    "page.github.noteTitle": "A note for collaborators",
+    "page.github.note": "Use this stable project entry point to add research goals, inclusion criteria, contribution guidance, citation information, contact details, or survey review status.",
+    "page.github.contributeEyebrow": "CONTRIBUTE",
+    "page.github.contributeTitle": "How to contribute",
+    "page.github.contribute": "When submitting a public release, geometry revision, MOC improvement, or evidence link, include the source, coordinate frame, HEALPix order, file hash, and reproducible verification steps.",
+    "page.surveys.eyebrow": "PUBLIC SKY COVERAGE / SURVEY DIRECTORY",
+    "page.surveys.title": "Surveys, releases, and HEALPix capability",
+    "page.surveys.lead": "Browse releases, products, modalities, and the actual HEALPix orders available for each survey.",
+    "page.surveys.directory": "PUBLIC PRODUCTS",
+    "page.surveys.search": "Search survey, mission, or modality",
+    "page.sdk.eyebrow": "OFFLINE TOOLCHAIN / PYTHON + CLI",
+    "page.sdk.lead": "A deterministic toolchain for reading coverage inputs, generating IVOA FITS MOCs, building query orders and Resource Packages, and validating every result.",
+    "page.sdk.install": "Build a local wheel",
+    "page.sdk.cli": "Check versions and build indexes",
+    "page.sdk.contract": "Output contract",
+    "page.sdk.contractBody": "Use ICRS coordinates and NESTED HEALPix throughout. Order 4 is reserved for the home preview; order 8 or higher is published only when the input provides that precision. Missing precision is never inferred.",
+    "page.sdk.contractLink": "View Core contract",
+    "page.resources.title": "Public resources",
+    "page.resources.lead": "Published documentation, packages, provenance, and survey assets.",
+    "page.resources.githubBody": "Snapshots, release manifests, resource packages, and the Assets service are maintained together in one auditable repository.",
+    "page.resources.sdkBody": "The Python package and CLI generate deterministic IVOA FITS MOCs, order-8 query indexes, order-4 previews, and Resource Package v3.",
+    "page.resources.coreLink": "View Core contract",
+    "admin.publicDirectory": "Public directory",
+    "admin.logout": "Log out",
+    "admin.disabled": "Control room disabled",
+    "admin.invalidToken": "Invalid administrator token",
+    "admin.refreshing": "REFRESHING…",
+    "admin.refreshFailed": "REFRESH FAILED",
+  },
+  zh: {
+    "nav.home": "首页",
+    "nav.github": "GitHub",
+    "nav.surveys": "巡天目录",
+    "nav.sdk": "SDK",
+    "nav.admin": "管理台",
+    "nav.sky": "天球",
+    "nav.language": "切换语言",
+    "nav.english": "EN",
+    "nav.chinese": "中",
+    "home.eyebrow": "PUBLIC SKY DATA / OPEN INFRASTRUCTURE",
+    "home.titleLine1": "让天空覆盖",
+    "home.titleLine2": "成为数据入口",
+    "home.lead": "把分散在目录、MOC、FITS 和扫描证据里的天空覆盖，统一成可比较、可定位、可复核的公共资产。",
+    "home.enter": "进入天球",
+    "home.directory": "巡天目录",
+    "home.why": "WHY THIS EXISTS",
+    "home.reason": "找到数据不该意味着在 archive、MOC 和文件命名之间反复猜测。Atlas 先回答“哪里重合”，再把你带到真实的 Release、源文件和下载入口。",
+    "home.coordinates": "COORDINATES",
+    "home.pixelOrder": "PIXEL ORDER",
+    "home.releases": "RELEASES",
+    "home.provenance": "PROVENANCE",
+    "home.explore": "EXPLORE THE SKY",
+    "coverage.allSurveys": "ALL PUBLIC SURVEYS",
+    "coverage.loading": "LOADING HEALPIX CELLS",
+    "coverage.previewUnavailable": "COVERAGE PREVIEW UNAVAILABLE",
+    "coverage.publicCells": "PUBLIC HEALPIX CELL COVERAGE",
+    "coverage.shortcuts": "SHORTCUTS",
+    "coverage.focus": "聚焦当前选中的区块，并缩小视野范围。",
+    "coverage.overlapShortcut": "将已选巡天切换为同半径重合视图，并高亮公共覆盖。",
+    "coverage.escape": "退出重合视图并清除当前选区与信息面板。",
+    "coverage.resetShortcut": "重置天球和摄像机到初始位置。",
+    "coverage.cellInspector": "CELL INSPECTOR",
+    "coverage.healpixCell": "HEALPIX CELL",
+    "coverage.overlapResult": "OVERLAP RESULT",
+    "coverage.downloadCurrent": "下载当前 Cxx CSV",
+    "coverage.downloadAll": "下载全部 CSV",
+    "coverage.downloadLoading": "正在准备 CSV…",
+    "coverage.downloadUnavailable": "下载计划不可用",
+    "coverage.downloadReady": "下载计划已准备好",
+    "coverage.selectedComponent": "SELECTED COMPONENT",
+    "coverage.commonOrder": "公共 order",
+    "coverage.noCommon": "没有公共覆盖像元",
+    "coverage.evidenceUnavailable": "证据索引暂不可用；保留当前重合几何与官方入口。",
+    "coverage.noSourceFiles": "该连通区没有返回可下载源文件。",
+    "coverage.downloadOfficial": "下载 / 官方入口",
+    "coverage.queryingPlan": "正在查询文件覆盖与下载计划…",
+    "coverage.reverseFailed": "文件反查暂时失败；可保留当前区域并重试。",
+    "coverage.releaseEntry": "官方 Release 入口",
+    "coverage.noProducts": "当前重合区域没有已发布产品。",
+    "coverage.needTwoSurveys": "至少勾选两个巡天才能计算重合",
+    "coverage.inspectDownload": "查看当前区块覆盖与下载",
+    "coverage.releaseUnavailable": "发布包不可用",
+    "coverage.catalogLoadFailed": "巡天公开目录载入失败",
+    "coverage.explore": "EXPLORE THE SKY",
+    "common.close": "关闭",
+    "common.search": "搜索巡天、任务、模态或产品",
+    "common.noMatch": "没有匹配的巡天",
+    "common.noProducts": "当前重合区域没有已发布产品。",
+    "directory.eyebrow": "PUBLIC SKY COVERAGE CATALOG / 2026.08",
+    "directory.title": "Public Survey Footprints",
+    "directory.lead": "把不同巡天的天空覆盖整理成可读、可比较、可下载的空间资产。每一条记录都链接到原生 FITS MOC、几何来源、资源包与可复核证据。",
+    "directory.noteTitle": "目录说明",
+    "directory.note": "使用 ICRS 坐标和 NESTED HEALPix 统一表达公开 Release。巡天自身色彩对应天球覆盖；将鼠标移入、用键盘聚焦或点击记录即可定位覆盖区域。",
+    "directory.bySurvey": "按巡天浏览公开资产",
+    "directory.resultHint": "每条记录显示已收录产品、覆盖像元与下载入口",
+    "integrity.eyebrow": "REPRODUCIBLE EVIDENCE",
+    "integrity.title": "每一个下载都有来源和哈希",
+    "integrity.copy": "发布 manifest、原始文件和 provenance 同步保存。下载后可用以下 SHA-256 独立复核。",
+    "integrity.provenance": "下载 provenance",
+    "page.github.eyebrow": "PROJECT / OPEN SCIENCE INFRASTRUCTURE",
+    "page.github.lead": "这个项目把公开巡天的天空覆盖、Release 资源和可复核证据整理成一套可下载、可比较、可复现的空间资产。",
+    "page.github.open": "打开 GitHub 仓库",
+    "page.github.problemEyebrow": "WHY THIS EXISTS",
+    "page.github.problemTitle": "我们在解决什么问题",
+    "page.github.problem": "巡天覆盖信息常常分散在论文、网页、FITS 文件和临时脚本中。Assets 将这些来源统一到 ICRS 坐标与 NESTED HEALPix 表达，让研究者可以先比较重合范围，再决定下载哪些产品。",
+    "page.github.promiseEyebrow": "DATA PROMISE",
+    "page.github.promiseTitle": "每个结果都可追溯",
+    "page.github.promise": "运行时覆盖数据、原生 FITS MOC、几何来源、manifest、provenance 和 SHA-256 共同组成发布记录。首页只加载轻量运行时块，完整证据仍保留在发布目录中。",
+    "page.github.noteEyebrow": "CUSTOM PROJECT NOTE",
+    "page.github.noteTitle": "给协作者的说明",
+    "page.github.note": "这里是项目维护者的自定义说明区。可以继续补充研究目标、数据纳入标准、贡献流程、引用方式、联系信息或特定巡天的审阅状态。",
+    "page.github.contributeEyebrow": "CONTRIBUTE",
+    "page.github.contributeTitle": "如何参与",
+    "page.github.contribute": "提交新的公开 Release、修订几何来源、改进 MOC 生成逻辑或补充证据链接时，请在仓库中附上来源、坐标系、HEALPix order、文件哈希和可复核步骤。",
+    "page.surveys.eyebrow": "PUBLIC SKY COVERAGE / SURVEY DIRECTORY",
+    "page.surveys.title": "巡天、Release 与 HEALPix 能力",
+    "page.surveys.lead": "按巡天浏览 Release、产品、模态和实际可用的 HEALPix order。点击产品可以查看已发布说明、流程、证据和下载资源。",
+    "page.surveys.directory": "公开覆盖产品",
+    "page.surveys.search": "搜索巡天、mission 或模态",
+    "page.sdk.eyebrow": "OFFLINE TOOLCHAIN / PYTHON + CLI",
+    "page.sdk.lead": "使用确定性的工具链读取覆盖输入、生成 IVOA FITS MOC、构建查询 order 和 Resource Package，并对结果执行严格校验。",
+    "page.sdk.install": "构建本地 wheel",
+    "page.sdk.cli": "检查版本与生成索引",
+    "page.sdk.contract": "输出约束",
+    "page.sdk.contractBody": "统一使用 ICRS 坐标和 NESTED HEALPix。order-4 仅用于首页预览；order-8 或更高 order 只有在输入真实提供该精度时才会发布，不对缺失精度进行推断。",
+    "page.sdk.contractLink": "查看 Core contract",
+    "page.resources.title": "公开资源",
+    "page.resources.lead": "已发布文档、资源包、provenance 和巡天资产。",
+    "page.resources.githubBody": "数据快照、发布 manifest、资源包和 Assets 服务都在同一个可审计仓库中维护。",
+    "page.resources.sdkBody": "Python 包和 CLI 生成确定性的 IVOA FITS MOC、order-8 查询索引、order-4 预览和 Resource Package v3。",
+    "page.resources.coreLink": "查看 Core contract",
+    "admin.publicDirectory": "公共目录",
+    "admin.logout": "退出",
+    "admin.disabled": "管理台未启用",
+    "admin.invalidToken": "管理员令牌无效",
+    "admin.refreshing": "REFRESHING…",
+    "admin.refreshFailed": "REFRESH FAILED",
+  },
+};
+
+export function getLocale(): Locale {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY) === "zh" ? "zh" : "en";
+  } catch {
+    return "en";
+  }
+}
+
+export function t(key: string, fallback?: string): string {
+  return messages[getLocale()][key] ?? messages.en[key] ?? fallback ?? key;
+}
+
+function applyElement(element: HTMLElement, locale: Locale): void {
+  const key = element.dataset.i18n;
+  if (key) element.textContent = messages[locale][key] ?? messages.en[key] ?? key;
+  const attributeKeys: Array<[string, string | undefined]> = [
+    ["aria-label", element.dataset.i18nAriaLabel],
+    ["title", element.dataset.i18nTitle],
+    ["placeholder", element.dataset.i18nPlaceholder],
+  ];
+  for (const [attribute, attributeKey] of attributeKeys) {
+    if (attributeKey) element.setAttribute(attribute, messages[locale][attributeKey] ?? messages.en[attributeKey] ?? attributeKey);
+  }
+}
+
+export function applyTranslations(root: ParentNode = document): void {
+  const locale = getLocale();
+  document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+  root.querySelectorAll<HTMLElement>("[data-i18n], [data-i18n-aria-label], [data-i18n-title], [data-i18n-placeholder]").forEach((element) => applyElement(element, locale));
+  root.querySelectorAll<HTMLElement>("[data-locale-toggle]").forEach((element) => {
+    element.setAttribute("aria-label", messages[locale]["nav.language"]!);
+    element.setAttribute("title", messages[locale]["nav.language"]!);
+    element.dataset.locale = locale;
+  });
+}
+
+export function setLocale(locale: Locale): void {
+  try { window.localStorage.setItem(STORAGE_KEY, locale); } catch { /* private browsing */ }
+  applyTranslations();
+  window.dispatchEvent(new CustomEvent("atlas:locale-change", { detail: { locale } }));
+}
+
+export function mountLocaleControls(root: ParentNode = document): void {
+  root.querySelectorAll<HTMLElement>("[data-locale-toggle]").forEach((element) => {
+    element.addEventListener("click", () => setLocale(getLocale() === "en" ? "zh" : "en"));
+  });
+  applyTranslations(root);
+}
+
+export function locale(): Locale { return getLocale(); }

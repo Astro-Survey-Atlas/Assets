@@ -1,5 +1,8 @@
 import { ArrowLeft, LogOut, Pencil, Plus, RefreshCw, Send, ShieldCheck, Unlock, Upload, createIcons } from "lucide";
 import "./styles.css";
+import { mountLocaleControls, t } from "../src/i18n.js";
+
+mountLocaleControls();
 
 type ConnectorType = "s3" | "local";
 interface AdminConfig { enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; connectorTypes: ConnectorType[]; backends: string[] } }
@@ -269,7 +272,7 @@ async function initialize(): Promise<void> {
     byId("admin-namespace").textContent = adminConfig.namespace;
     byId("admin-capability").textContent = adminConfig.enabled && adminConfig.kubernetesConfigured ? "ONLINE" : "NOT CONFIGURED";
     if (!adminConfig.enabled) {
-      byId("login-title").textContent = "管理台未启用";
+      byId("login-title").textContent = t("admin.disabled");
       byId("login-error").textContent = "当前部署未启用 Kubernetes 管理连接。";
       byId("login-error").hidden = false;
       return;
@@ -279,7 +282,7 @@ async function initialize(): Promise<void> {
       await refresh();
     }
   } catch (error) {
-    byId("login-error").textContent = error instanceof Error ? error.message : "无法读取管理配置";
+    byId("login-error").textContent = error instanceof Error ? error.message : "Unable to read admin configuration";
     byId("login-error").hidden = false;
   }
 }

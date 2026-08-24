@@ -20,6 +20,7 @@ import type { SurveyCard } from "./survey-registry.js";
 import { cartesianToRaDec, raDecToCartesian } from "./coordinates.js";
 import { normalizeLayerOrder, visibleLayerDepths, type LayerDepth } from "./layer-order.js";
 import { buildOverlapHighlight } from "./overlap-highlight.js";
+import type { OverlapHighlight } from "./overlap-highlight.js";
 import {
   buildSphericalCellEdges,
   buildSphericalCellVolumeEdges,
@@ -80,6 +81,12 @@ export interface SurveyLayerContextMenu {
   surveyIds: string[];
   releaseIds?: string[];
   assetIds: string[];
+}
+
+export interface SurveyLayerOverlapComponent {
+  id: string;
+  order: number;
+  cells: number[];
 }
 
 export interface WorkspaceCoverageLayer {
@@ -192,6 +199,7 @@ interface LayerMesh extends THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMate
 }
 
 type PointerCoordinates = Pick<PointerEvent, "clientX" | "clientY">;
+type OverlapComponentChange = (component: SurveyLayerOverlapComponent) => void;
 
 interface FragmentTransition {
   root: THREE.Group;
@@ -295,6 +303,43 @@ function narrativeCameraPose(direction: THREE.Vector3, distance: number, outerRa
   return { camera, target };
 }
 
+export function cameraDistanceForAngularRadius(angularRadius: number, outerRadius: number): number {
+  const safeRadius = Math.max(0, Math.min(Math.PI / 2, angularRadius));
+  const desiredHalfView = THREE.MathUtils.clamp(
+    Math.max(safeRadius * 1.5, THREE.MathUtils.degToRad(8)),
+    THREE.MathUtils.degToRad(8),
+    THREE.MathUtils.degToRad(20),
+  );
+  const surfaceRadius = outerRadius * Math.tan(safeRadius);
+  const surfaceGap = THREE.MathUtils.clamp(
+    surfaceRadius / Math.tan(desiredHalfView),
+    outerRadius * 0.08,
+    outerRadius * 1.4,
+  );
+  return outerRadius + surfaceGap;
+}
+
+function overlapComponentsForPixels(pixels: readonly number[], nside: number): SurveyLayerOverlapComponent[] {
+  const pending = new Set(pixels);
+  const result: SurveyLayerOverlapComponent[] = [];
+  while (pending.size) {
+    const start = pending.values().next().value as number;
+    const queue = [start];
+    const cells: number[] = [];
+    pending.delete(start);
+    while (queue.length) {
+      const pixel = queue.pop()!;
+      cells.push(pixel);
+      for (const neighbour of sideNeighbours(nside, pixel)) {
+        if (pending.delete(neighbour)) queue.push(neighbour);
+      }
+    }
+    cells.sort((left, right) => left - right);
+    result.push({ id: `C${String(result.length + 1).padStart(2, "0")}`, order: Math.round(Math.log2(nside)), cells });
+  }
+  return result;
+}
+
 function artifactKey(artifact: SurveyFootprint): string {
   return `${artifact.surveyId}:${artifact.releaseId}:${artifact.product}:${artifact.label}`;
 }
@@ -395,6 +440,7 @@ export class SurveyLayerViewer {
   readonly #selectionGroup = new THREE.Group();
   readonly #explosionGroup = new THREE.Group();
   readonly #overlapLabelGroup = new THREE.Group();
+  readonly #overlapSelectionGroup = new THREE.Group();
   readonly #drillGroup = new THREE.Group();
   readonly #objectPointGroup = new THREE.Group();
   readonly #resizeObserver: ResizeObserver;
@@ -404,6 +450,7 @@ export class SurveyLayerViewer {
   readonly #onStateChange: (state: SurveyLayerState) => void;
   readonly #onContextMenu: (menu: SurveyLayerContextMenu) => void;
   readonly #onObjectPoint?: (point: SurveyObjectPoint) => void;
+  readonly #onOverlapComponent?: OverlapComponentChange;
   readonly #model: SurveyLayerModel;
   readonly #colorBySurvey = new Map<string, THREE.Color>();
   readonly #selectedPixels = new Set<number>();
@@ -438,6 +485,9 @@ export class SurveyLayerViewer {
   #overlapMode = false;
   #overlapNside: number | null = null;
   #overlapPixels: number[] | null = null;
+  #overlapComponents: SurveyLayerOverlapComponent[] = [];
+  #activeOverlapComponentId: string | null = null;
+  #activeOverlapHighlight: OverlapHighlight | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -449,6 +499,7 @@ export class SurveyLayerViewer {
     onContextMenu: (menu: SurveyLayerContextMenu) => void,
     onStateChange: (state: SurveyLayerState) => void,
     onObjectPoint?: (point: SurveyObjectPoint) => void,
+    onOverlapComponent?: OverlapComponentChange,
   ) {
     this.#canvas = canvas;
     this.#manifest = manifest;
@@ -458,6 +509,7 @@ export class SurveyLayerViewer {
     this.#onContextMenu = onContextMenu;
     this.#onStateChange = onStateChange;
     this.#onObjectPoint = onObjectPoint;
+    this.#onOverlapComponent = onOverlapComponent;
     this.#model = buildSurveyLayerModel(surveys, manifest);
     surveys.forEach((survey) => this.#colorBySurvey.set(survey.id, displayColor(survey.color)));
 
@@ -485,7 +537,7 @@ export class SurveyLayerViewer {
     this.#controls.addEventListener("start", this.#handleControlsStart);
     this.#controls.addEventListener("end", this.#handleControlsEnd);
     this.#starField = this.#backgroundStars();
-    this.#scene.add(this.#starField, this.#coverageGroup, this.#workspaceCoverageGroup, this.#drillGroup, this.#objectPointGroup, this.#retiredGroup, this.#selectionGroup, this.#explosionGroup, this.#overlapLabelGroup);
+    this.#scene.add(this.#starField, this.#coverageGroup, this.#workspaceCoverageGroup, this.#drillGroup, this.#objectPointGroup, this.#retiredGroup, this.#selectionGroup, this.#explosionGroup, this.#overlapSelectionGroup, this.#overlapLabelGroup);
     this.setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
     this.#canvas.addEventListener("pointerdown", this.#handlePointerDown);
     this.#canvas.addEventListener("pointerup", this.#handlePointerUp);
@@ -677,8 +729,9 @@ export class SurveyLayerViewer {
 
   focusCell(nside: number, pixel: number): void {
     const direction = this.#pixelDirectionAt(nside, [pixel]);
+    const angularRadius = Math.max(...sphericalCellBoundary(nside, pixel, 1).map((corner) => direction.angleTo(corner)));
     const outer = this.#outerRadius;
-    const distance = Math.max(outer * 1.55, outer + 0.08);
+    const distance = cameraDistanceForAngularRadius(angularRadius, outer);
     const pose = narrativeCameraPose(direction, distance, outer, 0.32);
     this.#startCameraTransition(
       pose.camera,
@@ -719,9 +772,7 @@ export class SurveyLayerViewer {
     let angularRadius = 0;
     for (const pixel of pixels) for (const corner of sphericalCellBoundary(nside, pixel, 1)) angularRadius = Math.max(angularRadius, direction.angleTo(corner));
     const outer = this.#outerRadius;
-    const halfFov = Math.max(THREE.MathUtils.degToRad(4), angularRadius * 1.35);
-    const fitDistance = outer / Math.tan(Math.min(Math.PI / 3, halfFov * 1.25));
-    const distance = THREE.MathUtils.clamp(Math.max(outer * 1.55, fitDistance), outer * 1.55, outer * 2.8);
+    const distance = cameraDistanceForAngularRadius(angularRadius, outer);
     const pose = narrativeCameraPose(direction, distance, outer, 0.24);
     this.#startCameraTransition(pose.camera, pose.target, 720);
   }
@@ -778,7 +829,14 @@ export class SurveyLayerViewer {
     // Keep every selected survey on the unit sphere and restore the normal
     // radial presentation when the mode is dismissed.
     this.#layoutMode = active ? "overlap" : "layers";
-    if (!active) { this.#overlapNside = null; this.#overlapPixels = null; }
+    if (!active) {
+      this.#overlapNside = null;
+      this.#overlapPixels = null;
+      this.#overlapComponents = [];
+      this.#activeOverlapComponentId = null;
+      clearGroup(this.#overlapSelectionGroup);
+      this.#activeOverlapHighlight = null;
+    }
     this.#rebuildVisible(true);
   }
 
@@ -787,6 +845,38 @@ export class SurveyLayerViewer {
     this.#overlapNside = nside;
     this.#overlapPixels = [...new Set(pixels)].sort((left, right) => left - right);
     if (this.#overlapMode) this.#rebuildVisible(true);
+  }
+
+  setOverlapComponents(components: readonly SurveyLayerOverlapComponent[]): void {
+    this.#overlapComponents = components
+      .filter((component) => Number.isInteger(component.order) && component.order >= 0 && Array.isArray(component.cells) && component.cells.length > 0)
+      .map((component) => ({ id: component.id, order: component.order, cells: [...new Set(component.cells)].sort((left, right) => left - right) }));
+    if (!this.#overlapComponents.some((component) => component.id === this.#activeOverlapComponentId)) this.#activeOverlapComponentId = null;
+    if (this.#overlapMode) this.#rebuildVisible(true);
+  }
+
+  setActiveOverlapComponent(componentId: string | null): void {
+    this.#activeOverlapComponentId = componentId;
+    clearGroup(this.#overlapSelectionGroup);
+    this.#activeOverlapHighlight = null;
+    if (this.#overlapMode && componentId) {
+      const component = this.#overlapComponents.find((candidate) => candidate.id === componentId);
+      const nside = component ? 2 ** component.order : this.#overlapNside ?? this.#manifest.nside;
+      if (component?.cells.length) {
+        const radius = Math.max(1.025, this.#outerRadius + 0.028);
+        const highlight = buildOverlapHighlight(component.cells.map((pixel) => ({
+          nside,
+          pixel,
+          radius,
+          color: SELECTION_COLOR,
+          inset: nside === this.#manifest.nside ? 0.016 : 0.006,
+        })), SELECTION_RENDER_ORDER + 2, 0.26);
+        this.#activeOverlapHighlight = highlight;
+        this.#overlapSelectionGroup.add(highlight.root);
+      }
+    }
+    if (this.#overlapMode) this.#rebuildOverlapLabels();
+    this.#requestRender();
   }
 
   setVisibleAssets(assetIds: Iterable<string>): void {
@@ -914,10 +1004,7 @@ export class SurveyLayerViewer {
   focusData(): void {
     this.#cameraTransition = null;
     const radius = this.#outerRadius;
-    // Keep the complete exploded layer stack inside the vertical FOV on both
-    // desktop and portrait viewports. The previous fixed vector clipped the
-    // outer layers on narrow screens.
-    const viewDirection = new THREE.Vector3(1.72, 1.48, 1.56).normalize();
+    const viewDirection = this.#dataViewDirection();
     this.#camera.position.copy(viewDirection.multiplyScalar(radius * 3.35));
     this.#controls.target.set(0, 0, 0);
     this.#controls.enabled = true;
@@ -925,6 +1012,34 @@ export class SurveyLayerViewer {
     this.#controls.update();
     this.#emitState();
     this.#requestRender();
+  }
+
+  setHomePresentation(): void {
+    this.#cameraTransition = null;
+    const radius = this.#outerRadius;
+    const viewDirection = new THREE.Vector3(1.8, 0.34, 1.24).normalize();
+    this.#camera.position.copy(viewDirection.multiplyScalar(radius * 1.92));
+    this.#controls.target.copy(viewDirection).multiplyScalar(radius * 0.52);
+    this.#controls.enabled = true;
+    this.#controls.minDistance = 0.002;
+    this.#controls.update();
+    this.#emitState();
+    this.#requestRender();
+  }
+
+  transitionToDataPresentation(durationMs = 900): void {
+    const radius = this.#outerRadius;
+    this.#startCameraTransition(
+      this.#dataViewDirection().multiplyScalar(radius * 3.35),
+      new THREE.Vector3(),
+      durationMs,
+    );
+  }
+
+  #dataViewDirection(): THREE.Vector3 {
+    // Keep the complete layer stack inside the vertical FOV on desktop and
+    // portrait viewports while retaining a readable three-quarter angle.
+    return new THREE.Vector3(1.72, 1.48, 1.56).normalize();
   }
 
   dispose(): void {
@@ -982,7 +1097,6 @@ export class SurveyLayerViewer {
   }
 
   #buildOverlapLayer(animated: boolean): void {
-    clearGroup(this.#overlapLabelGroup);
     const counts = overlapCountByPixel(this.#model, this.#visibleSurveyIds);
     const selectedSurveys = [...this.#visibleSurveyIds].filter((surveyId) => (this.#model.pixelsBySurvey.get(surveyId)?.length ?? 0) > 0);
     if (selectedSurveys.length < 2) return;
@@ -994,22 +1108,21 @@ export class SurveyLayerViewer {
     const overlapRadius = Math.max(1.02, this.#outerRadius + 0.012);
     const cells = pixels.map((pixel) => ({ nside, pixel, radius: overlapRadius, color: OVERLAP_COLOR, inset: nside === this.#manifest.nside ? 0.028 : 0.008 }));
     if (cells.length) this.#addFragmentLayer("__overlap__", pixels, cells, animated, SELECTION_RENDER_ORDER - 1);
-    const pending = new Set(pixels);
-    let componentIndex = 0;
-    while (pending.size) {
-      const start = pending.values().next().value as number;
-      const queue = [start];
-      const component: number[] = [];
-      pending.delete(start);
-      while (queue.length) {
-        const pixel = queue.pop()!;
-        component.push(pixel);
-        for (const neighbour of sideNeighbours(nside, pixel)) {
-          if (pending.delete(neighbour)) queue.push(neighbour);
-        }
-      }
-      this.#overlapLabelGroup.add(countLabelSprite(`C${String(++componentIndex).padStart(2, "0")}`, this.#pixelDirectionAt(nside, component).multiplyScalar(overlapRadius + 0.025), false));
-    }
+    this.#rebuildOverlapLabels(nside, pixels, overlapRadius);
+  }
+
+  #rebuildOverlapLabels(nside = this.#overlapNside ?? this.#manifest.nside, pixels = this.#overlapPixels ?? [], overlapRadius = Math.max(1.02, this.#outerRadius + 0.012)): void {
+    clearGroup(this.#overlapLabelGroup);
+    if (!this.#overlapMode || !pixels.length) return;
+    const components = this.#overlapComponents.length && this.#overlapComponents[0]!.order === Math.round(Math.log2(nside))
+      ? this.#overlapComponents
+      : overlapComponentsForPixels(pixels, nside);
+    components.forEach((component) => {
+      if (component.id === this.#activeOverlapComponentId) return;
+      const label = countLabelSprite(component.id, this.#pixelDirectionAt(nside, component.cells).multiplyScalar(overlapRadius + 0.025), false);
+      label.userData = { overlapComponent: component };
+      this.#overlapLabelGroup.add(label);
+    });
   }
 
   #buildInteractionLayer(): void {
@@ -1318,6 +1431,16 @@ export class SurveyLayerViewer {
     this.#pointer.set(((event.clientX - bounds.left) / bounds.width) * 2 - 1, -((event.clientY - bounds.top) / bounds.height) * 2 + 1);
     this.#raycaster.setFromCamera(this.#pointer, this.#camera);
     return this.#objectPointAt(event);
+  }
+
+  #pickOverlapComponent(event: PointerCoordinates): SurveyLayerOverlapComponent | null {
+    const bounds = this.#canvas.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return null;
+    this.#pointer.set(((event.clientX - bounds.left) / bounds.width) * 2 - 1, -((event.clientY - bounds.top) / bounds.height) * 2 + 1);
+    this.#raycaster.setFromCamera(this.#pointer, this.#camera);
+    const hit = this.#raycaster.intersectObjects([this.#overlapLabelGroup], true)[0];
+    const component = hit?.object.userData.overlapComponent as SurveyLayerOverlapComponent | undefined;
+    return component ?? null;
   }
 
   #intersectUnitSphere(ray: THREE.Ray): THREE.Vector3 | null {
@@ -1784,7 +1907,7 @@ export class SurveyLayerViewer {
   #advanceSelectionAnimation(now: number): void {
     const overlapPulse = 0.5 + 0.5 * Math.sin(now * 0.003);
     this.#overlapDashMaterials.forEach((material) => {
-      material.dashOffset = -now * 0.00008;
+      (material as THREE.LineDashedMaterial & { dashOffset: number }).dashOffset = -now * 0.00008;
       material.opacity = 0.72 + overlapPulse * 0.28;
     });
     if (!this.#selectionCoreMaterial || !this.#selectionEdgeMaterial || !this.#selectionGlowMaterial) return;
@@ -1850,7 +1973,6 @@ export class SurveyLayerViewer {
     const distance = Math.hypot(event.clientX - this.#pointerStart.x, event.clientY - this.#pointerStart.y);
     this.#pointerStart = null;
     if (distance >= 5) return;
-    if (this.#overlapMode) return;
     if (this.#clickTimer) clearTimeout(this.#clickTimer);
     const click = {
       clientX: event.clientX,
@@ -1858,6 +1980,11 @@ export class SurveyLayerViewer {
       ctrlKey: event.ctrlKey,
       metaKey: event.metaKey,
     };
+    if (this.#overlapMode) {
+      const component = this.#pickOverlapComponent(click);
+      if (component) this.#onOverlapComponent?.(component);
+      return;
+    }
     this.#clickTimer = setTimeout(() => {
       this.#clickTimer = null;
       const object = this.#pickObject(click);

@@ -6,6 +6,7 @@ import type { CoverageCellLayer } from "../server/coverage.js";
 import { highestCommonOrder, overlapForLayers } from "../server/overlap.js";
 import { SourceUnitStore } from "../server/source-units.js";
 import { buildOverlapHighlight } from "../site/src/atlas/overlap-highlight.js";
+import { cameraDistanceForAngularRadius } from "../site/src/atlas/survey-layer-viewer.js";
 import * as THREE from "three";
 
 function layer(layerId: string, surveyId: string, orders: Record<number, number[]>): CoverageCellLayer {
@@ -37,6 +38,15 @@ test("overlap components use side neighbours and remain stable", () => {
   assert.ok(result.components.some((component) => JSON.stringify(component.cells) === JSON.stringify([start, side].sort((left, right) => left - right))));
   assert.equal(result.components[0]?.id, "C01");
   assert.equal(result.components[1]?.id, "C02");
+});
+
+test("component camera fitting zooms small regions without the old distance cap", () => {
+  const small = cameraDistanceForAngularRadius(THREE.MathUtils.degToRad(1.8), 1);
+  const large = cameraDistanceForAngularRadius(THREE.MathUtils.degToRad(13), 1);
+  assert.ok(small > 1.08);
+  assert.ok(small < 2.8);
+  assert.ok(large > small);
+  assert.ok(large < 2.8);
 });
 
 test("overlap highlight builds solid cells and flow edges without a runtime error", () => {

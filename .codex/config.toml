@@ -5,5 +5,5 @@ disable_response_storage = true
 network_access = "enabled"
 sandbox_mode = "danger-full-access"
 approval_policy = "never"
-model_context_window = 1000000
-model_auto_compact_token_limit = 400000
+model_context_window = 272000
+model_auto_compact_token_limit = 240000

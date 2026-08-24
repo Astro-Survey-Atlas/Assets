@@ -4,6 +4,7 @@ import {
   type SurveyLayerInspection,
   type SurveyLayerState,
   type SurveyLayerContextMenu,
+  type SurveyLayerOverlapComponent,
 } from "./atlas/survey-layer-viewer.js";
 import type { SurveyFootprintManifest } from "./atlas/survey-footprints.js";
 import type { SurveyCard } from "./atlas/survey-registry.js";
@@ -48,6 +49,7 @@ type ActiveChange = (surveyId: string | null, product?: string) => void;
 type InspectionChange = (inspection: SurveyLayerInspection | null) => void;
 type StateChange = (state: SurveyLayerState) => void;
 type ContextMenuChange = (menu: SurveyLayerContextMenu) => void;
+type OverlapComponentChange = (component: SurveyLayerOverlapComponent) => void;
 
 function surveyCardFor(record: CoverageSurvey): SurveyCard {
   return {
@@ -95,17 +97,19 @@ export class AtlasCoverageGlobe {
   readonly #onInspectionChange: InspectionChange;
   readonly #onStateChange: StateChange;
   readonly #onContextMenu: ContextMenuChange;
+  readonly #onOverlapComponent: OverlapComponentChange;
   #viewer: SurveyLayerViewer | null = null;
   #visibleSurveyIds = new Set<string>();
   #surveys: CoverageSurvey[] = [];
 
-  constructor(host: HTMLElement, canvas: HTMLCanvasElement, onActiveChange: ActiveChange, onInspectionChange: InspectionChange = () => undefined, onStateChange: StateChange = () => undefined, onContextMenu: ContextMenuChange = () => undefined) {
+  constructor(host: HTMLElement, canvas: HTMLCanvasElement, onActiveChange: ActiveChange, onInspectionChange: InspectionChange = () => undefined, onStateChange: StateChange = () => undefined, onContextMenu: ContextMenuChange = () => undefined, onOverlapComponent: OverlapComponentChange = () => undefined) {
     this.#host = host;
     this.#canvas = canvas;
     this.#onActiveChange = onActiveChange;
     this.#onInspectionChange = onInspectionChange;
     this.#onStateChange = onStateChange;
     this.#onContextMenu = onContextMenu;
+    this.#onOverlapComponent = onOverlapComponent;
     canvas.dataset.renderer = "three";
   }
 
@@ -123,13 +127,15 @@ export class AtlasCoverageGlobe {
       (inspection) => this.#handleInspection(inspection),
       (menu) => this.#onContextMenu(menu),
       this.#onStateChange,
+      undefined,
+      (component) => this.#onOverlapComponent(component),
     );
     this.#viewer.setLayoutMode("layers");
     this.#visibleSurveyIds = new Set(catalog.layers.map((layer) => layer.surveyId));
     this.#viewer.setVisibleSurveys(this.#visibleSurveyIds);
     // The viewer is constructed before coverage is known. Reframe once the
     // loaded layers establish the actual outer radius of the globe.
-    this.#viewer.focusData();
+    this.#viewer.setHomePresentation();
     this.#host.dataset.ready = "true";
   }
 
@@ -142,6 +148,10 @@ export class AtlasCoverageGlobe {
 
   setOverlapCells(order: number, pixels: readonly number[]): void { this.#viewer?.setOverlapCells(2 ** order, pixels); }
 
+  setOverlapComponents(components: readonly SurveyLayerOverlapComponent[]): void { this.#viewer?.setOverlapComponents(components); }
+
+  setActiveOverlapComponent(componentId: string | null): void { this.#viewer?.setActiveOverlapComponent(componentId); }
+
   setHighlightedSurvey(surveyId: string): void {
     this.#viewer?.focusSurvey(surveyId);
   }
@@ -149,6 +159,10 @@ export class AtlasCoverageGlobe {
   focusSelection(): void { this.#viewer?.focusSelection(); }
 
   focusPixels(order: number, pixels: readonly number[]): void { this.#viewer?.focusPixels(2 ** order, pixels); }
+
+  transitionToDataView(durationMs = 900): void { this.#viewer?.transitionToDataPresentation(durationMs); }
+
+  setHomePresentation(): void { this.#viewer?.setHomePresentation(); }
 
   clearSelection(): void {
     this.#viewer?.clearRegionSelection();
