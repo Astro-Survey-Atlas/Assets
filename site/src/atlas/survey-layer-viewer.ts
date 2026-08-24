@@ -769,6 +769,10 @@ export class SurveyLayerViewer {
 
   setOverlapMode(active: boolean): void {
     if (this.#overlapMode === active) return;
+    if (active && this.#clickTimer) {
+      clearTimeout(this.#clickTimer);
+      this.#clickTimer = null;
+    }
     this.#overlapMode = active;
     // Overlap is a co-registered view, not an additional exploded layer.
     // Keep every selected survey on the unit sphere and restore the normal
@@ -1846,6 +1850,7 @@ export class SurveyLayerViewer {
     const distance = Math.hypot(event.clientX - this.#pointerStart.x, event.clientY - this.#pointerStart.y);
     this.#pointerStart = null;
     if (distance >= 5) return;
+    if (this.#overlapMode) return;
     if (this.#clickTimer) clearTimeout(this.#clickTimer);
     const click = {
       clientX: event.clientX,
@@ -1868,6 +1873,7 @@ export class SurveyLayerViewer {
 
   readonly #handleDoubleClick = (event: MouseEvent): void => {
     if (event.button !== 0) return;
+    if (this.#overlapMode) return;
     if (this.#clickTimer) clearTimeout(this.#clickTimer);
     this.#clickTimer = null;
     const hit = this.#pickCell(event);
@@ -1881,6 +1887,10 @@ export class SurveyLayerViewer {
   };
 
   readonly #handlePointerMove = (event: PointerEvent): void => {
+    if (this.#overlapMode) {
+      this.#onHover(null);
+      return;
+    }
     if (this.#pointerStart && Math.hypot(event.clientX - this.#pointerStart.x, event.clientY - this.#pointerStart.y) >= 5) return;
     const hit = this.#pickCell(event);
     if (!hit) {
@@ -1913,6 +1923,7 @@ export class SurveyLayerViewer {
   readonly #handlePointerCancel = (): void => { this.#pointerStart = null; };
   readonly #handleContextMenu = (event: MouseEvent): void => {
     event.preventDefault();
+    if (this.#overlapMode) return;
     const hit = this.#pickCell(event);
     if (!hit || hit.nside !== this.#manifest.nside) {
       this.#onHover(null);

@@ -138,6 +138,8 @@ let pendingCoverageState: SurveyLayerState | null = null;
 let coverageStateFrame = 0;
 let overlapMode = false;
 let overlapRequestSequence = 0;
+let overlapEvidenceSequence = 0;
+let overlapEvidenceController: AbortController | null = null;
 let lastEscapeAt = -Infinity;
 
 async function fetchCoverageBlock(layer: CoverageCatalog["layers"][number], order: number, tile: number): Promise<number[]> {
@@ -283,7 +285,9 @@ function overlapBounds(pixels: number[], order: number): { areaDeg2: number; raM
   };
 }
 
-interface OverlapComponentView { id: string; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; surveys?: Array<{ surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }> }
+interface OverlapEvidenceLookup { endpoint: string; layerIds: string[]; order: number; precision: "exact" | "estimated" | "entrypoint-only" | "truncated"; deferred: boolean }
+interface OverlapEvidenceResult { available: boolean; precision: string; truncated: boolean; edges: Array<{ layerId?: string; releaseId?: string; sourceFileId?: string; fileName?: string; sourceUri?: string; downloadUrl?: string; ipix: number; precision: string }>; sourceFiles: Array<Record<string, unknown>>; notes?: string[] }
+interface OverlapComponentView { id: string; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; evidenceLookup?: OverlapEvidenceLookup; surveys?: Array<{ surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }> }
 
 function overlapComponents(pixels: number[], order: number): OverlapComponentView[] {
   const pending = new Set(pixels);
@@ -335,8 +339,8 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
     button.addEventListener("click", () => {
       componentNav.querySelectorAll("button").forEach((entry) => entry.classList.remove("is-active"));
       button.classList.add("is-active");
-      renderOverlapComponent(component, surveyIds, content);
       coverageDots?.focusPixels(component.order, component.cells);
+      renderOverlapComponent(component, surveyIds, content);
     });
     componentNav.append(button);
   });
@@ -344,7 +348,94 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
   renderOverlapComponent(components[0]!, surveyIds, content);
 }
 
+function sourceValue(source: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.length) return value;
+  }
+  return undefined;
+}
+
+function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): void {
+  node.replaceChildren();
+  if (!result.available) {
+    node.append(Object.assign(document.createElement("small"), { textContent: "证据索引暂不可用；保留当前重合几何与官方入口。" }));
+    return;
+  }
+  const files = new Map<string, Record<string, unknown>>();
+  result.sourceFiles.forEach((source) => {
+    const id = sourceValue(source, ["fileId", "file_id", "sourceFileId", "source_file_id", "_id"]) ?? String(files.size);
+    files.set(id, source);
+  });
+  const heading = document.createElement("strong");
+  heading.textContent = `DOWNLOAD PLAN · ${files.size} files · ${result.edges.length} coverage edges${result.truncated ? " · truncated" : ""}`;
+  node.append(heading);
+  if (!files.size) {
+    node.append(Object.assign(document.createElement("small"), { textContent: "该连通区没有返回可下载源文件。" }));
+    return;
+  }
+  const list = document.createElement("div");
+  list.className = "overlap-evidence-files";
+  files.forEach((source) => {
+    const row = document.createElement("div");
+    row.className = "overlap-evidence-file";
+    const name = sourceValue(source, ["name", "fileName", "file_name", "uri", "source_uri", "urn"]) ?? "source file";
+    const title = document.createElement("strong");
+    title.textContent = name;
+    row.append(title);
+    const wcs = source.wcs_summary;
+    if (wcs && typeof wcs === "object") {
+      const summary = wcs as Record<string, unknown>;
+      const raMin = Number(summary.ra_min_deg);
+      const raMax = Number(summary.ra_max_deg);
+      const decMin = Number(summary.dec_min_deg);
+      const decMax = Number(summary.dec_max_deg);
+      if ([raMin, raMax, decMin, decMax].every(Number.isFinite)) row.append(Object.assign(document.createElement("small"), { textContent: `RA ${raMin.toFixed(3)}°–${raMax.toFixed(3)}° · DEC ${decMin.toFixed(3)}°–${decMax.toFixed(3)}°` }));
+    }
+    const uri = sourceValue(source, ["downloadUrl", "download_url", "sourceUrl", "source_url", "uri", "source_uri", "urn"]);
+    if (uri) {
+      if (/^https?:\/\//i.test(uri)) {
+        const link = document.createElement("a");
+        link.href = uri;
+        link.target = "_blank";
+        link.rel = "noreferrer";
+        link.textContent = "下载 / 官方入口";
+        row.append(link);
+      } else row.append(Object.assign(document.createElement("code"), { textContent: uri }));
+    }
+    list.append(row);
+  });
+  node.append(list);
+}
+
+async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLElement): Promise<void> {
+  const lookup = component.evidenceLookup;
+  if (!lookup) return;
+  overlapEvidenceController?.abort();
+  const controller = new AbortController();
+  overlapEvidenceController = controller;
+  const request = ++overlapEvidenceSequence;
+  node.replaceChildren(Object.assign(document.createElement("small"), { textContent: "正在查询文件覆盖与下载计划…" }));
+  try {
+    const response = await fetch(lookup.endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ layerIds: lookup.layerIds, order: lookup.order, cells: component.cells, limit: 250 }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`reverse lookup HTTP ${response.status}`);
+    const result = await response.json() as OverlapEvidenceResult;
+    if (request === overlapEvidenceSequence && !controller.signal.aborted) renderEvidencePlan(node, result);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    if (request === overlapEvidenceSequence) node.replaceChildren(Object.assign(document.createElement("small"), { textContent: "文件反查暂时失败；可保留当前区域并重试。" }));
+  } finally {
+    if (overlapEvidenceController === controller) overlapEvidenceController = null;
+  }
+}
+
 function renderOverlapComponent(component: OverlapComponentView, surveyIds: string[], content: HTMLElement): void {
+  overlapEvidenceController?.abort();
   content.querySelectorAll(".overlap-component-detail, .overlap-products").forEach((node) => node.remove());
   const detail = document.createElement("div");
   detail.className = "overlap-component-detail";
@@ -372,6 +463,12 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
     list.append(row);
   });
   if (!entries.length) list.append(Object.assign(document.createElement("p"), { className: "overlap-empty", textContent: "当前重合区域没有已发布产品。" }));
+  if (component.evidenceLookup) {
+    const evidence = document.createElement("div");
+    evidence.className = "overlap-evidence-plan";
+    list.append(evidence);
+    void loadOverlapEvidence(component, evidence);
+  }
   content.append(list);
 }
 
@@ -386,6 +483,8 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
   const requestSequence = ++overlapRequestSequence;
   overlapMode = activate;
   if (!activate) {
+    overlapEvidenceController?.abort();
+    overlapEvidenceSequence += 1;
     coverageDots?.setOverlapMode(false);
     byId("coverage-detail-panel").hidden = true;
     return;
