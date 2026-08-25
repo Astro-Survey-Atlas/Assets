@@ -72,6 +72,6 @@ test("DESI official tile tables and resource package are downloadable release as
 
 test("admin page is included as a separate deployable entry point", async () => {
   const html = await (await import("node:fs/promises")).readFile("site/admin/index.html", "utf8");
-  assert.match(html, /Coverage Task/);
+  assert.match(html, /ScanRequest/);
   assert.match(html, /\/admin\/main\.ts/);
 });

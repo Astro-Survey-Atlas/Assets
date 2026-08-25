@@ -5,26 +5,26 @@
 
 ## 1. 调用边界
 
-Assets 通过 Kubernetes API 提交标准资源：
+Assets 通过 Kubernetes API 提交 `atlas.zhejianglab.org/v1alpha1` 的
+`ScanRequest`。Connector 在 Assets 管理的 ConfigMap 中保存 endpoint、region、
+bucket、prefix 和 Secret 引用名；远程对象存储的 access key/secret key 只存
+在同 namespace 的 Secret 中。ScanRequest 的 `spec.plan` 是一个 ScanPlan v2，
+`spec.credentials` 只声明 Secret 名称和键名，不携带值。
 
-- `AstroDataSource`：由 Assets 自己管理的 source/sink 配置和凭据引用；
-- `AstroMetadataScanTask`：一次性覆盖计算任务。
+Assets 自己负责 Connector、Secret、任务标签、任务名称、幂等键和页面展示。
+data-warehouse 不需要知道 Assets 的数据库或页面模型。Assets 不调用 Atlas API，
+Atlas 也不需要调用 Assets 的计算接口。
 
-Assets 自己负责 Connector、DataSource、Secret、任务标签、任务名称、
-幂等键和任务历史。data-warehouse 不需要知道 Assets 的数据库或页面模型。
-Assets 不调用 Atlas API，Atlas 也不需要调用 Assets 的计算接口。
-
-data-warehouse 只需要按 CRD 标准承接任务，允许不同调用方拥有不同的
-metadata labels，并按资源自身的 source、handlers、userProperties、
-extraEnv 和 sink 执行。
+data-warehouse 只需要校验并执行 ScanPlan v2；调用方不能再指定旧的
+`handlers`、`userProperties` 或任意 sink 参数。
 
 ## 2. 标准任务要求
 
 Assets 生成的最小任务包含：
 
 ```yaml
-apiVersion: org.zhejianglab.astro.metadata/v1alpha1
-kind: AstroMetadataScanTask
+apiVersion: atlas.zhejianglab.org/v1alpha1
+kind: ScanRequest
 metadata:
   name: <assets-task-id>
   namespace: <warehouse-namespace>
@@ -34,24 +34,29 @@ metadata:
     astro.zhejianglab.org/task-id: <assets-task-id>
     astro.zhejianglab.org/layer-id: <layer-id>
 spec:
-  backend: job
-  source:
-    dataSourceRef: {name: <source-data-source>}
-    paths: [<source-path>]
-  handlers: [default, fits, coverage]
-  userProperties: {}
-  sink:
-    dataSourceRef: {name: <sink-data-source>}
-  extraEnv:
-    batchId: <stable-run-id>
+  scanner:
+    image: <scanner-image>
+    evidence: {claimName: <evidence-pvc>, mountPath: /var/lib/atlas-evidence}
+  credentials:
+    source: {secretName: <connector>-credentials, accessKeyKey: accessKey, secretKeyKey: secretKey}
+  plan:
+    version: 2
+    scanRunId: <stable-run-id>
+    layer: {layerId: <layer-id>, surveyId: <survey>, releaseId: <release>, productId: <product>, modality: image, coverageRole: footprint}
+    source:
+      connector: {type: oss, endpoint: <endpoint>, region: <region>, credentialRef: {accessKeyEnv: ATLAS_SOURCE_ACCESS_KEY, secretKeyEnv: ATLAS_SOURCE_SECRET_KEY}}
+      location: {bucket: <bucket>, prefix: <source-prefix>}
+    filters: {includeSuffixes: [.fits]}
+    extraction: {mode: fits-wcs, outputOrder: 8}
+    sink: {connector: {type: elasticsearch, endpoint: <warehouse-es>, credentialRef: {}}}
+    evidence: {outputPath: /var/lib/atlas-evidence/<stable-run-id>}
 ```
 
 要求：
 
-- Job 和 Flink backend 使用相同的输入和 status 语义；
-- `extraEnv.batchId` 能稳定映射到 status `runId`；
-- operator 不丢失合法的 `userProperties`；
-- `extraEnv` 不能覆盖 operator 管理的连接参数；
+- Job backend 使用 ScanPlan v2 的输入和 status 语义；
+- `plan.scanRunId` 稳定映射到 status summary 的 `scanRunId`；
+- Operator 不把凭据值写入 plan ConfigMap、Job、日志或索引；
 - 任务名称冲突、重复提交和幂等行为必须返回明确结果；
 - Job、Pod 或 FlinkSessionJob 保留调用方提供的追踪 labels。
 
@@ -61,8 +66,9 @@ Assets 管理页只读取自己标签下的 CRD。data-warehouse 不需要保存
 任务历史，但需要保持现有 status 字段的兼容性：
 
 ```text
-phase, backend, runId, discoveredFiles, processedHdus,
-coverageDocuments, objectDocuments, startedAt, completedAt, message
+phase, reason, message, summary.scanRunId, summary.discoveredFileCount,
+summary.processedItemCount, summary.coverageRecordCount, summary.errorCount,
+summary.availableOrders, summary.evidencePath
 ```
 
 status 只描述对应 CRD 的执行观测。它不是 Assets 与 data-warehouse 的共享
@@ -101,7 +107,7 @@ spatial_error
 
 - FITS WCS coverage；
 - catalog RA/Dec coverage；
-- declared nested HEALPix coverage。
+- declared NESTED HEALPix coverage（ScanPlan 模式为 `catalog-healpix`）。
 
 这些模式需要在 Job/Flink 两条路径保持一致，并对非法坐标、缺少空间字段、
 空输入和解析失败返回明确的 `spatial_status`/`spatial_error`。
@@ -148,13 +154,13 @@ Assets 计划使用但当前 scanner 尚未实现的模式：
 ### 阶段 D：部署承接
 
 - 提供 Assets 独立 ServiceAccount 的 RBAC 示例；
-- 验证 Assets 可创建/读取自己的 DataSource 和 ScanTask；
+- 验证 Assets 可创建/读取自己的 ConfigMap、Secret 和 ScanRequest；
 - 验证任务 labels 能隔离其他调用方；
 - 提供 scanner 镜像、CRD 版本、namespace、sink 和回滚配置说明。
 
 ## 8. 成功标准
 
-Assets 提交合法 CRD 后，data-warehouse 能创建并执行任务；Assets 能通过
-Kubernetes API 读取自己任务的 phase、runId、计数和错误；选择 ES sink 的
+Assets 提交合法 ScanRequest 后，data-warehouse 能创建并执行任务；Assets 能通过
+Kubernetes API 读取自己任务的 phase、scanRunId、计数和错误；选择 ES sink 的
 coverage 任务能产生可按 runId 查询的非空结果；其他 sink 和其他调用方的
 任务不受 Assets 约束影响。

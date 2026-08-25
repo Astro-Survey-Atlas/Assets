@@ -6,12 +6,13 @@
 `release-manifest.json` allowlist 校验的静态制品。覆盖反查是一个明确的
 warehouse Elasticsearch 读路径（`ASSETS_WAREHOUSE_ES_URL`），不会访问 OSS
 或旧 Assets ES，也不处理或暴露原始远程凭据。这里描述的是公开只读服务
-边界，不限制 Assets 项目自行管理 DataSource、Secret 和任务。
+边界，不限制 Assets 项目自行管理 ConfigMap、Secret 和 ScanRequest。
 
 ## Conventions
 
 - Base path: `/api/v1`。
-- 所有接口只接受 `GET` 和 `HEAD`；其它方法返回 `405`。
+- 公开只读接口只接受 `GET` 和 `HEAD`；其它方法返回 `405`。管理员端点按各自
+  契约接受 `GET`、`POST` 或 `PUT`，并需要管理员令牌。
 - JSON 响应使用 `application/json; charset=utf-8`，目录接口使用 `Cache-Control: no-cache`。
 - 对单个公开制品的下载和预览，`ETag` 为不可变的 `"sha256-<digest>"`，并返回 `X-Content-SHA256`。
 - 未知 API 返回 `{ "error": "API endpoint not found" }` 和 `404`。
@@ -35,7 +36,8 @@ GET /api/v1/assets
 当前 release 也包含架构边界、Assets 对 data-warehouse 的需求和 Resource
 Package v3 JSON Schema，作为普通 allowlisted metadata/documentation 制品下载。
 data-warehouse task schema 是 Assets 用来生成标准 CRD 的公开输入约束；该公开
-API 本身保持只读，不创建或执行任务。
+API 本身保持只读，不创建或执行任务。认证后的管理端点另有明确的
+`POST`/`PUT` 路由，用于创建 Connector、提交 ScanRequest 和编辑产品。
 
 可在线预览的制品额外包含：
 

@@ -60,6 +60,9 @@
         "enabled": { "type": "boolean" },
         "warehouseNamespace": { "type": "string", "minLength": 1 },
         "localPathRoot": { "type": "string", "minLength": 1 },
+        "warehouseScannerImage": { "type": "string", "minLength": 1 },
+        "warehouseEvidenceClaim": { "type": "string", "minLength": 1 },
+        "warehouseEvidenceMountPath": { "type": "string", "pattern": "^/[^\\s]*$" },
         "adminTokenSecret": {
           "type": "object",
           "properties": {
@@ -69,16 +72,17 @@
           "required": ["name", "key"]
         }
       },
-      "required": ["enabled", "warehouseNamespace", "localPathRoot", "adminTokenSecret"]
+      "required": ["enabled", "warehouseNamespace", "localPathRoot", "warehouseScannerImage", "warehouseEvidenceClaim", "warehouseEvidenceMountPath", "adminTokenSecret"]
     },
     "warehouse": {
       "type": "object",
       "properties": {
         "elasticsearchUrl": { "type": "string", "format": "uri", "minLength": 1 },
+        "layerIndex": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
         "coverageIndex": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
         "fileIndex": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" }
       },
-      "required": ["elasticsearchUrl", "coverageIndex", "fileIndex"]
+      "required": ["elasticsearchUrl", "layerIndex", "coverageIndex", "fileIndex"]
     },
     "ingress": { "type": "object" },
     "resources": { "type": "object" },

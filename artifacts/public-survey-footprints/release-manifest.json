@@ -3,7 +3,7 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "1d244bb144930dfd4bd2330d3127ba8fd72a83fff50efd2bd34749aacb5f31f5"
+    "sha256": "e6cbb9dcca82d79ce6bd129634d4235a85d3185a4fe078c8d2aa2258b59c8134"
   },
   "statistics": {
     "releases": 52,
@@ -14,8 +14,8 @@
     "footprints": 41,
     "packages": 14,
     "rawMocFiles": 41,
-    "totalBytes": 33301151,
-    "runtimeBytes": 6664754,
+    "totalBytes": 33302006,
+    "runtimeBytes": 6665609,
     "evidenceBytes": 26636397
   },
   "files": [
@@ -28,8 +28,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/architecture-boundary.md",
-      "sizeBytes": 3159,
-      "sha256": "33d28198f0b61666f353253fb30e5bf1dc5ba24e255ed0a8c4c6c3aa9b480a73"
+      "sizeBytes": 3128,
+      "sha256": "88f4f76c857e9dee6b6682004d02edb2c27674a29bb291783ee45f589c9a9e42"
     },
     {
       "id": "documentation-data-warehouse-requirements",
@@ -40,8 +40,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/data-warehouse-requirements.md",
-      "sizeBytes": 5719,
-      "sha256": "4f2ba481b6fac3f455d3d8d1cac26e419e6beced47ac994fcbee166ca6417cbd"
+      "sizeBytes": 6605,
+      "sha256": "d63f6f662ef18ceda5557ab32648ae2f909991729a31453ccc90efaf5b9072bc"
     },
     {
       "id": "documentation-moc-core-contract",

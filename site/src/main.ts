@@ -195,7 +195,7 @@ async function fetchCoverageBlock(layer: CoverageCatalog["layers"][number], orde
 }
 
 async function fetchCoverageOverview(layer: CoverageCatalog["layers"][number]): Promise<number[]> {
-  return fetchCoverageBlock(layer, layer.overviewOrder, 0);
+  return fetchCoverageLayerOrder(layer, layer.overviewOrder);
 }
 
 async function fetchCoverageLayerOrder(layer: CoverageCatalog["layers"][number], order: number): Promise<number[]> {

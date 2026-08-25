@@ -4,15 +4,14 @@ import path from "node:path";
 import { request as httpRequest, type IncomingMessage, type RequestOptions as HttpRequestOptions } from "node:http";
 import { request as httpsRequest, type RequestOptions as HttpsRequestOptions } from "node:https";
 
-const API_GROUP = "/apis/org.zhejianglab.astro.metadata/v1alpha1";
+const API_GROUP = "/apis/atlas.zhejianglab.org/v1alpha1";
 export const ASSETS_MANAGED_BY = "astro-survey-atlas-assets";
 export const PUBLIC_COVERAGE_KIND = "public-coverage";
 export const SUPPORTED_COVERAGE_MODES = ["fits-wcs", "catalog-radec", "nested-healpix"] as const;
-export const CONNECTOR_TYPES = ["s3", "local"] as const;
-const LEGACY_CONNECTOR_TYPES = ["s3", "oss", "local"] as const;
+export const CONNECTOR_TYPES = ["s3", "oss", "local"] as const;
 
 export type CoverageMode = typeof SUPPORTED_COVERAGE_MODES[number];
-export type ConnectorType = typeof LEGACY_CONNECTOR_TYPES[number];
+export type ConnectorType = typeof CONNECTOR_TYPES[number];
 export type ConnectorInputType = typeof CONNECTOR_TYPES[number];
 export type TaskBackend = "job" | "flink";
 
@@ -24,6 +23,10 @@ export interface AdminConfig {
   apiBaseUrl?: string;
   tokenFile: string;
   caFile: string;
+  warehouseEsUrl: string;
+  scannerImage: string;
+  evidenceClaimName: string;
+  evidenceMountPath: string;
 }
 
 interface KubernetesMetadata {
@@ -53,6 +56,7 @@ export interface ConnectorInput {
   name: string;
   type: ConnectorInputType;
   endpoint?: string;
+  region?: string;
   bucket?: string;
   prefix?: string;
   accessKey?: string;
@@ -64,6 +68,7 @@ export interface ConnectorView {
   name: string;
   type: ConnectorType;
   endpoint?: string;
+  region?: string;
   bucket?: string;
   prefix?: string;
   accessKeyConfigured?: boolean;
@@ -82,6 +87,8 @@ export interface CoverageTaskInput {
   surveyId: string;
   releaseId: string;
   product: string;
+  productId?: string;
+  modality?: string;
   mode: CoverageMode;
   coverageRole: "image_extent" | "object_presence" | "footprint_extent";
   dataOrigin: "observed" | "simulated" | "catalog";
@@ -98,6 +105,11 @@ export interface CoverageTaskInput {
   fileIndex?: string;
   coverageIndex?: string;
   objectIndex?: string;
+  raColumn?: string;
+  decColumn?: string;
+  healpixColumn?: string;
+  healpixOrderColumn?: string;
+  healpixOrder?: number;
   batchId?: string;
 }
 
@@ -163,6 +175,11 @@ export function loadAdminConfig(environment: NodeJS.ProcessEnv = process.env): A
     apiBaseUrl: environment.ASSETS_KUBE_API_URL?.trim() || (host ? `https://${host}:${port}` : undefined),
     tokenFile: environment.ASSETS_KUBE_TOKEN_FILE?.trim() || "/var/run/secrets/kubernetes.io/serviceaccount/token",
     caFile: environment.ASSETS_KUBE_CA_FILE?.trim() || "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+    warehouseEsUrl: environment.ASSETS_WAREHOUSE_ES_URL?.trim() || "http://warehouse-elasticsearch.warehouse.svc.cluster.local:9200",
+    scannerImage: environment.ASSETS_WAREHOUSE_SCANNER_IMAGE?.trim()
+      || "crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260825-fix3",
+    evidenceClaimName: environment.ASSETS_WAREHOUSE_EVIDENCE_CLAIM?.trim() || "atlas-evidence",
+    evidenceMountPath: environment.ASSETS_WAREHOUSE_EVIDENCE_MOUNT_PATH?.trim() || "/var/lib/atlas-evidence",
   };
 }
 
@@ -269,6 +286,21 @@ export class KubernetesApi {
     return this.request<KubernetesResource>("POST", coreResourcePath(plural, undefined, namespace), resource);
   }
 
+  async listCore(plural: string, selector: string, namespace?: string): Promise<KubernetesResource[]> {
+    const query = selector ? `?labelSelector=${encodeURIComponent(selector)}` : "";
+    const result = await this.request<KubernetesResourceList>("GET", `${coreResourcePath(plural, undefined, namespace)}${query}`);
+    return Array.isArray(result.items) ? result.items : [];
+  }
+
+  async getCore(plural: string, name: string, namespace?: string): Promise<KubernetesResource | null> {
+    try {
+      return await this.request<KubernetesResource>("GET", coreResourcePath(plural, name, namespace));
+    } catch (error) {
+      if (error instanceof KubernetesApiError && error.statusCode === 404) return null;
+      throw error;
+    }
+  }
+
   async deleteCore(plural: string, name: string, namespace?: string): Promise<void> {
     try {
       await this.request("DELETE", coreResourcePath(plural, name, namespace));
@@ -348,29 +380,20 @@ export class KubernetesApi {
 }
 
 function connectorView(resource: KubernetesResource): ConnectorView {
-  const spec = resource.spec ?? {};
+  const data = resource.data ?? {};
   const status = resource.status ?? {};
-  const annotations = resource.metadata?.annotations ?? {};
-  const credential = spec.credentialSecretRef;
-  const mount = spec.mount;
-  const localPath = typeof annotations["astro.zhejianglab.org/local-path"] === "string"
-    ? annotations["astro.zhejianglab.org/local-path"]
-    : undefined;
-  const nodeName = typeof annotations["astro.zhejianglab.org/node-name"] === "string"
-    ? annotations["astro.zhejianglab.org/node-name"]
-    : undefined;
-  const nodePath = typeof annotations["astro.zhejianglab.org/node-path"] === "string"
-    ? annotations["astro.zhejianglab.org/node-path"]
-    : localPath;
+  const nodeName = typeof data.nodeName === "string" ? data.nodeName : undefined;
+  const nodePath = typeof data.nodePath === "string" ? data.nodePath : undefined;
   return {
     name: resource.metadata?.name ?? "",
-    type: String(spec.type ?? "") as ConnectorType,
-    endpoint: typeof spec.endpoint === "string" ? spec.endpoint : undefined,
-    bucket: typeof spec.bucket === "string" ? spec.bucket : undefined,
-    prefix: typeof spec.prefix === "string" ? spec.prefix : undefined,
-    accessKeyConfigured: Boolean(credential && typeof credential === "object" && typeof (credential as Record<string, unknown>).name === "string"),
-    pvcName: mount && typeof mount === "object" && typeof (mount as Record<string, unknown>).pvcName === "string" ? (mount as Record<string, unknown>).pvcName as string : undefined,
-    localPath: nodeName && nodePath ? `${nodeName}:${nodePath}` : localPath,
+    type: String(data.type ?? "") as ConnectorType,
+    endpoint: typeof data.endpoint === "string" ? data.endpoint : undefined,
+    region: typeof data.region === "string" ? data.region : undefined,
+    bucket: typeof data.bucket === "string" ? data.bucket : undefined,
+    prefix: typeof data.prefix === "string" ? data.prefix : undefined,
+    accessKeyConfigured: typeof data.credentialSecretName === "string" && data.credentialSecretName.length > 0,
+    pvcName: typeof data.pvcName === "string" ? data.pvcName : undefined,
+    localPath: nodeName && nodePath ? `${nodeName}:${nodePath}` : typeof data.localPath === "string" ? data.localPath : undefined,
     nodeName,
     nodePath,
     phase: typeof status.phase === "string" ? status.phase : undefined,
@@ -381,42 +404,52 @@ function connectorView(resource: KubernetesResource): ConnectorView {
 
 function statusView(status: Record<string, unknown> | undefined): TaskStatusView {
   const value = status ?? {};
+  const summary = value.summary && typeof value.summary === "object" ? value.summary as Record<string, unknown> : {};
   const result: TaskStatusView = { phase: typeof value.phase === "string" ? value.phase : "Pending" };
   for (const key of ["backend", "runId", "startedAt", "completedAt", "message"] as const) {
     if (typeof value[key] === "string") result[key] = value[key] as string;
   }
+  if (typeof value.message !== "string" && typeof value.reason === "string") result.message = value.reason;
   for (const key of ["discoveredFiles", "processedHdus", "coverageDocuments", "objectDocuments"] as const) {
-    if (typeof value[key] === "number") result[key] = value[key] as number;
+    const summaryKey = key === "discoveredFiles" ? "discoveredFileCount"
+      : key === "processedHdus" ? "processedItemCount"
+        : key === "coverageDocuments" ? "coverageRecordCount" : "objectDocumentCount";
+    const count = typeof value[key] === "number" ? value[key] : summary[summaryKey];
+    if (typeof count === "number") result[key] = count;
   }
+  if (typeof summary.runId === "string" && !result.runId) result.runId = summary.runId;
+  if (typeof summary.startedAt === "string" && !result.startedAt) result.startedAt = summary.startedAt;
+  if (typeof summary.completedAt === "string" && !result.completedAt) result.completedAt = summary.completedAt;
+  if (typeof summary.errors === "number" && !result.message && summary.errors > 0) result.message = `${summary.errors} scan errors retained as evidence`;
   return result;
 }
 
 function taskView(resource: KubernetesResource): CoverageTaskView {
   const spec = resource.spec ?? {};
-  const source = spec.source && typeof spec.source === "object" ? spec.source as Record<string, unknown> : {};
-  const sourceRef = source.dataSourceRef && typeof source.dataSourceRef === "object" ? source.dataSourceRef as Record<string, unknown> : {};
-  const sink = spec.sink && typeof spec.sink === "object" ? spec.sink as Record<string, unknown> : undefined;
-  const sinkRef = sink?.dataSourceRef && typeof sink.dataSourceRef === "object" ? sink.dataSourceRef as Record<string, unknown> : undefined;
-  const properties = spec.userProperties && typeof spec.userProperties === "object" ? spec.userProperties as Record<string, unknown> : {};
-  const extraEnv = spec.extraEnv && typeof spec.extraEnv === "object" ? spec.extraEnv as Record<string, unknown> : {};
+  const plan = spec.plan && typeof spec.plan === "object" ? spec.plan as Record<string, unknown> : {};
+  const layer = plan.layer && typeof plan.layer === "object" ? plan.layer as Record<string, unknown> : {};
+  const source = plan.source && typeof plan.source === "object" ? plan.source as Record<string, unknown> : {};
+  const connector = source.connector && typeof source.connector === "object" ? source.connector as Record<string, unknown> : {};
+  const location = source.location && typeof source.location === "object" ? source.location as Record<string, unknown> : {};
+  const extraction = plan.extraction && typeof plan.extraction === "object" ? plan.extraction as Record<string, unknown> : {};
+  const labels = resource.metadata?.labels ?? {};
+  const sourcePath = typeof location.bucket === "string"
+    ? `${typeof connector.type === "string" ? connector.type : "s3"}://${location.bucket}/${typeof location.prefix === "string" ? location.prefix : ""}`
+    : typeof location.rootPath === "string" ? location.rootPath : undefined;
   return {
     name: resource.metadata?.name ?? "",
     namespace: resource.metadata?.namespace,
     createdAt: resource.metadata?.creationTimestamp,
-    layerId: typeof properties.layerId === "string" ? properties.layerId : resource.metadata?.labels?.["astro.zhejianglab.org/layer-id"],
-    surveyId: typeof properties.survey === "string" ? properties.survey : undefined,
-    releaseId: typeof properties.release === "string" ? properties.release : undefined,
-    product: typeof properties.product === "string" ? properties.product : undefined,
-    mode: typeof properties.spatialMode === "string" ? properties.spatialMode : undefined,
-    backend: typeof spec.backend === "string" ? spec.backend : "job",
-    sourceConnector: typeof sourceRef.name === "string" ? sourceRef.name : undefined,
-    sinkConnector: typeof sinkRef?.name === "string" ? sinkRef.name : undefined,
-    sourcePaths: Array.isArray(source.paths) ? source.paths.filter((path): path is string => typeof path === "string") : [],
-    fileNamePattern: typeof spec.fileNamePattern === "string"
-      ? spec.fileNamePattern
-      : typeof properties.fileNamePattern === "string" ? properties.fileNamePattern : undefined,
-    tags: Array.isArray(spec.tags) ? spec.tags.filter((tag): tag is string => typeof tag === "string") : [],
-    batchId: typeof extraEnv.batchId === "string" ? extraEnv.batchId : undefined,
+    layerId: typeof layer.layerId === "string" ? layer.layerId : labels["astro.zhejianglab.org/layer-id"],
+    surveyId: typeof layer.surveyId === "string" ? layer.surveyId : undefined,
+    releaseId: typeof layer.releaseId === "string" ? layer.releaseId : undefined,
+    product: typeof layer.productId === "string" ? layer.productId : undefined,
+    mode: typeof extraction.mode === "string" ? extraction.mode : undefined,
+    backend: "job",
+    sourceConnector: labels["astro.zhejianglab.org/source-connector"],
+    sourcePaths: sourcePath ? [sourcePath] : [],
+    tags: [],
+    batchId: typeof plan.scanRunId === "string" ? plan.scanRunId : undefined,
     status: statusView(resource.status),
   };
 }
@@ -468,7 +501,7 @@ function validateLegacyLocalPath(value: string): string {
 }
 
 interface ConnectorResources {
-  dataSource: KubernetesResource;
+  configMap: KubernetesResource;
   secret?: KubernetesResource;
   persistentVolume?: KubernetesResource;
   persistentVolumeClaim?: KubernetesResource;
@@ -477,13 +510,57 @@ interface ConnectorResources {
   persistentVolumeClaimName?: string;
 }
 
+interface ConnectorDefinition {
+  name: string;
+  type: ConnectorType;
+  endpoint?: string;
+  region?: string;
+  bucket?: string;
+  prefix?: string;
+  localPath?: string;
+  nodeName?: string;
+  nodePath?: string;
+  pvcName?: string;
+  credentialSecretName?: string;
+}
+
+function validateEndpoint(value: string): string {
+  try {
+    const endpoint = new URL(value);
+    if (!(["http:", "https:"].includes(endpoint.protocol)) || !endpoint.hostname) throw new Error("invalid endpoint");
+  } catch {
+    throw new AdminHttpError(400, "endpoint must be an http or https URL");
+  }
+  return value;
+}
+
+function connectorDefinition(resource: KubernetesResource): ConnectorDefinition {
+  const data = resource.data ?? {};
+  const type = String(data.type ?? "") as ConnectorType;
+  return {
+    name: resource.metadata?.name ?? "",
+    type,
+    endpoint: data.endpoint,
+    region: data.region,
+    bucket: data.bucket,
+    prefix: data.prefix,
+    localPath: data.localPath,
+    nodeName: data.nodeName,
+    nodePath: data.nodePath,
+    pvcName: data.pvcName,
+    credentialSecretName: data.credentialSecretName,
+  };
+}
+
 function connectorDetails(input: ConnectorInput, namespace: string): ConnectorResources {
-  const allowedFields = new Set(["name", "type", "endpoint", "bucket", "prefix", "accessKey", "secretKey", "localPath"]);
+  const allowedFields = new Set(["name", "type", "endpoint", "region", "bucket", "prefix", "accessKey", "secretKey", "localPath"]);
   const unknown = Object.keys(input as unknown as Record<string, unknown>).find((key) => !allowedFields.has(key));
   if (unknown) throw new AdminHttpError(400, `${unknown} is not supported for connectors`);
   const name = dnsName(input.name, "name");
   const type = enumValue(input.type, CONNECTOR_TYPES, "type");
   const endpoint = optionalText(input.endpoint, "endpoint", 2048);
+  if (endpoint) validateEndpoint(endpoint);
+  const region = optionalText(input.region, "region", 128);
   const bucket = optionalText(input.bucket, "bucket", 255);
   const prefix = optionalText(input.prefix, "prefix", 2048);
   const accessKey = optionalText(input.accessKey, "accessKey", 512);
@@ -495,34 +572,44 @@ function connectorDetails(input: ConnectorInput, namespace: string): ConnectorRe
     "app.kubernetes.io/managed-by": ASSETS_MANAGED_BY,
     "astro.zhejianglab.org/resource-kind": "connector",
   };
-  if (type === "s3") {
+  if (type === "s3" || type === "oss") {
     if (!endpoint) throw new AdminHttpError(400, "endpoint is required for S3 / OSS connectors");
     if (!bucket) throw new AdminHttpError(400, "bucket is required for S3 / OSS connectors");
     if (!accessKey || !secretKey) throw new AdminHttpError(400, "accessKey and secretKey are required for S3 / OSS connectors");
     if (localLocation) throw new AdminHttpError(400, "localPath is only valid for local connectors");
     const secretName = managedResourceName(name, "credentials");
-    const spec: Record<string, unknown> = { type, endpoint, bucket, credentialSecretRef: { name: secretName } };
-    if (prefix) spec.prefix = prefix;
+    const data: Record<string, string> = {
+      type,
+      endpoint,
+      bucket,
+      ...(region ? { region } : {}),
+      ...(prefix ? { prefix } : {}),
+      credentialSecretName: secretName,
+      accessKeyKey: "accessKey",
+      secretKeyKey: "secretKey",
+    };
     return {
-      dataSource: { apiVersion: "org.zhejianglab.astro.metadata/v1alpha1", kind: "AstroDataSource", metadata: { name, namespace, labels }, spec },
-      secret: { apiVersion: "v1", kind: "Secret", metadata: { name: secretName, namespace, labels }, type: "Opaque", stringData: { "access-key": accessKey, "secret-key": secretKey } },
+      configMap: { apiVersion: "v1", kind: "ConfigMap", metadata: { name, namespace, labels }, data },
+      secret: { apiVersion: "v1", kind: "Secret", metadata: { name: secretName, namespace, labels }, type: "Opaque", stringData: { accessKey, secretKey } },
       secretName,
     };
   }
 
-  if (endpoint || bucket || prefix || accessKey || secretKey) throw new AdminHttpError(400, "Local connectors only accept localPath");
+  if (endpoint || region || bucket || prefix || accessKey || secretKey) throw new AdminHttpError(400, "Local connectors only accept localPath");
   if (!localLocation) throw new AdminHttpError(400, "localPath is required for local connectors");
   const persistentVolumeName = managedResourceName(name, "pv");
   const persistentVolumeClaimName = managedResourceName(name, "pvc");
-  const dataSource: KubernetesResource = {
-    apiVersion: "org.zhejianglab.astro.metadata/v1alpha1",
-    kind: "AstroDataSource",
-    metadata: { name, namespace, labels, annotations: {
-      "astro.zhejianglab.org/local-path": localLocation.location,
-      "astro.zhejianglab.org/node-name": localLocation.nodeName,
-      "astro.zhejianglab.org/node-path": localLocation.nodePath,
-    } },
-    spec: { type, mount: { pvcName: persistentVolumeClaimName } },
+  const configMap: KubernetesResource = {
+    apiVersion: "v1",
+    kind: "ConfigMap",
+    metadata: { name, namespace, labels },
+    data: {
+      type,
+      localPath: localLocation.location,
+      nodeName: localLocation.nodeName,
+      nodePath: localLocation.nodePath,
+      pvcName: persistentVolumeClaimName,
+    },
   };
   const persistentVolume: KubernetesResource = {
     apiVersion: "v1",
@@ -548,18 +635,59 @@ function connectorDetails(input: ConnectorInput, namespace: string): ConnectorRe
     metadata: { name: persistentVolumeClaimName, namespace, labels },
     spec: { accessModes: ["ReadWriteOnce"], storageClassName: "", volumeName: persistentVolumeName, resources: { requests: { storage: "1Ti" } } },
   };
-  return { dataSource, persistentVolume, persistentVolumeClaim, persistentVolumeName, persistentVolumeClaimName };
+  return { configMap, persistentVolume, persistentVolumeClaim, persistentVolumeName, persistentVolumeClaimName };
 }
 
 function buildConnectorResource(input: ConnectorInput, namespace: string): KubernetesResource {
-  return connectorDetails(input, namespace).dataSource;
+  return connectorDetails(input, namespace).configMap;
 }
 
 function buildConnectorResources(input: ConnectorInput, namespace: string): ConnectorResources {
   return connectorDetails(input, namespace);
 }
 
-function buildTaskResource(input: CoverageTaskInput, namespace: string): KubernetesResource {
+function productSlug(value: string): string {
+  const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 63);
+  return slug || "product";
+}
+
+function warehouseModality(value: string | undefined, mode: CoverageMode): string {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (["image", "imaging", "photometry", "infrared", "ultraviolet"].includes(normalized)) return "image";
+  if (["spectrum", "spectroscopy"].includes(normalized)) return "spectrum";
+  if (normalized === "catalog" || mode === "catalog-radec" || mode === "nested-healpix") return "catalog";
+  if (["cube", "timeseries", "visibility", "event"].includes(normalized)) return normalized;
+  return "other";
+}
+
+function warehouseCoverageRole(value: CoverageTaskInput["coverageRole"]): "footprint" | "occupancy" {
+  return value === "object_presence" ? "occupancy" : "footprint";
+}
+
+function objectLocation(inputPath: string, connector: ConnectorDefinition): { bucket: string; prefix?: string } {
+  const value = inputPath.trim();
+  const uri = /^(s3|oss):\/\/([^/]+)(?:\/(.*))?$/.exec(value);
+  const bucket = uri?.[2] ?? connector.bucket;
+  if (!bucket) throw new AdminHttpError(400, "object connector bucket is required");
+  if (uri && connector.bucket && uri[2] !== connector.bucket) throw new AdminHttpError(400, "source path bucket differs from connector bucket");
+  const prefix = uri
+    ? (uri[3] || connector.prefix)
+    : (value ? value.replace(/^\/+/, "") : connector.prefix);
+  if (prefix?.split("/").some((segment) => segment === "." || segment === "..")) throw new AdminHttpError(400, "source path cannot contain dot segments");
+  return { bucket, ...(prefix ? { prefix } : {}) };
+}
+
+function buildTaskResource(
+  input: CoverageTaskInput,
+  namespace: string,
+  connector: ConnectorDefinition = {
+    name: input.sourceConnector,
+    type: "oss",
+    endpoint: "https://object.example.invalid",
+    bucket: "example",
+  },
+  config: AdminConfig = loadAdminConfig(),
+): KubernetesResource {
   const name = dnsName(input.name, "name");
   const layerId = dnsName(input.layerId, "layerId");
   const surveyId = dnsName(input.surveyId, "surveyId");
@@ -570,56 +698,75 @@ function buildTaskResource(input: CoverageTaskInput, namespace: string): Kuberne
   const dataOrigin = enumValue(input.dataOrigin, ["observed", "simulated", "catalog"] as const, "dataOrigin");
   const sourceTier = enumValue(input.sourceTier, ["official_geometry", "official_inventory_derived", "third_party_moc", "best_effort_derived", "user_file_derived"] as const, "sourceTier");
   const sourceConnector = dnsName(input.sourceConnector, "sourceConnector");
-  if (input.sinkConnector) throw new AdminHttpError(400, "sinkConnector is not supported");
+  if (input.sinkConnector) throw new AdminHttpError(400, "sinkConnector is not supported; the Warehouse endpoint is configured by Assets");
   const sourcePaths = optionalPathList(input.sourcePaths);
+  if (sourcePaths.length !== 1) throw new AdminHttpError(400, "ScanPlan v2 binds one ScanRequest to exactly one source prefix or file");
   const backend = input.backend ?? "job";
-  if (backend !== "job" && backend !== "flink") throw new AdminHttpError(400, "backend must be job or flink");
+  if (backend !== "job") throw new AdminHttpError(400, "the new Warehouse control plane supports Job scans only");
   const fileNamePattern = optionalText(input.fileNamePattern, "fileNamePattern", 512);
-  if (fileNamePattern && (fileNamePattern.includes("/") || /[\u0000\r\n]/.test(fileNamePattern))) throw new AdminHttpError(400, "fileNamePattern must match a basename");
+  if (fileNamePattern) throw new AdminHttpError(400, "fileNamePattern is not part of ScanPlan v2; narrow the source prefix or suffix filter");
   const tags = optionalTags(input.tags);
+  if (tags.length) throw new AdminHttpError(400, "tags are not part of ScanPlan v2");
   const scanShards = safePositiveInteger(input.scanShards, "scanShards", 1, 256);
-  const maxOrder = safePositiveInteger(input.maxOrder, "maxOrder", 8, 29);
+  if (scanShards > 1) throw new AdminHttpError(400, "scanShards is not part of ScanPlan v2; submit one bounded ScanRequest");
+  const maxOrder = safePositiveInteger(input.maxOrder, "maxOrder", 8, 12);
   const allowedSuffixes = optionalText(input.allowedSuffixes, "allowedSuffixes", 128);
   const batchId = input.batchId ? dnsName(input.batchId, "batchId") : `${name}-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
-  const fileIndex = indexName(input.fileIndex || "astro_file_index_v1", "fileIndex");
-  const coverageIndex = indexName(input.coverageIndex || "astro_coverage_index_v1", "coverageIndex");
+  const fileIndex = indexName(input.fileIndex || "ast_file_index_v1", "fileIndex");
+  const coverageIndex = indexName(input.coverageIndex || "ast_coverage_index_v1", "coverageIndex");
   const objectIndex = indexName(input.objectIndex || "astro_object_index_v1", "objectIndex");
-  const userProperties: Record<string, string> = {
-    survey: surveyId,
-    release: releaseId,
-    product,
-    layerId,
-    spatialMode: mode,
-    coordinateFrame: "ICRS",
-    ordering: "NESTED",
-    maxOrder: String(maxOrder),
-    queryOrder: "8",
-    previewOrder: "4",
-    coverageRole,
-    dataOrigin,
-    sourceTier,
-    fileIndex,
-    coverageIndex,
-    objectIndex,
-    ...(fileNamePattern ? { fileNamePattern } : {}),
+  if (fileIndex !== "ast_file_index_v1" || coverageIndex !== "ast_coverage_index_v1") throw new AdminHttpError(400, "Warehouse v2 uses the fixed ast_* index contract");
+  if (objectIndex !== "astro_object_index_v1") throw new AdminHttpError(400, "objectIndex is not configurable in ScanPlan v2");
+  if (!connector.endpoint && connector.type !== "local") throw new AdminHttpError(400, "source connector endpoint is missing");
+  if (!connector.bucket && connector.type !== "local") throw new AdminHttpError(400, "source connector bucket is missing");
+
+  const extractionMode = mode === "nested-healpix" ? "catalog-healpix" : mode;
+  const catalog: Record<string, unknown> = {};
+  if (extractionMode === "catalog-radec") {
+    catalog.raColumn = requireText(input.raColumn, "raColumn", 128);
+    catalog.decColumn = requireText(input.decColumn, "decColumn", 128);
+  }
+  if (extractionMode === "catalog-healpix") {
+    catalog.healpixColumn = requireText(input.healpixColumn, "healpixColumn", 128);
+    const hasFixedOrder = input.healpixOrder !== undefined;
+    const hasOrderColumn = Boolean(input.healpixOrderColumn);
+    if (hasFixedOrder === hasOrderColumn) throw new AdminHttpError(400, "catalog-healpix requires exactly one healpixOrder or healpixOrderColumn");
+    if (hasFixedOrder) catalog.healpixOrder = safePositiveInteger(input.healpixOrder, "healpixOrder", 8, 29);
+    else catalog.healpixOrderColumn = requireText(input.healpixOrderColumn, "healpixOrderColumn", 128);
+  }
+
+  const location = connector.type === "local"
+    ? { rootPath: "/data" }
+    : objectLocation(sourcePaths[0]!, connector);
+  const sourceConnectorPlan: Record<string, unknown> = {
+    type: connector.type,
+    ...(connector.endpoint ? { endpoint: connector.endpoint } : {}),
+    ...(connector.region ? { region: connector.region } : {}),
+    credentialRef: connector.credentialSecretName ? {
+      accessKeyEnv: "ATLAS_SOURCE_ACCESS_KEY",
+      secretKeyEnv: "ATLAS_SOURCE_SECRET_KEY",
+    } : {},
   };
-  const source: Record<string, unknown> = { dataSourceRef: { name: sourceConnector }, paths: sourcePaths };
-  const spec: Record<string, unknown> = {
-    backend,
-    source,
-    handlers: mode === "fits-wcs" ? ["default", "fits", "coverage"] : ["default", "coverage"],
-    tags,
-    userProperties,
-    pathPatterns: {},
-    extraEnv: {
-      batchId,
-      ...(scanShards > 1 ? { scanShards: String(scanShards) } : {}),
-      ...(allowedSuffixes ? { allowedSuffixes } : {}),
+  const plan = {
+    version: 2,
+    scanRunId: batchId,
+    layer: {
+      layerId,
+      surveyId,
+      releaseId,
+      productId: input.productId ? dnsName(input.productId, "productId") : productSlug(product),
+      modality: warehouseModality(input.modality, mode),
+      coverageRole: warehouseCoverageRole(coverageRole),
     },
+    source: { connector: sourceConnectorPlan, location },
+    filters: { includeSuffixes: allowedSuffixes ? allowedSuffixes.split(/[\s,]+/).filter(Boolean) : [] },
+    extraction: { mode: extractionMode, ...(extractionMode === "catalog-healpix" ? {} : { outputOrder: maxOrder }), catalog },
+    sink: { connector: { type: "elasticsearch", endpoint: config.warehouseEsUrl, credentialRef: {} } },
+    evidence: { outputPath: `${config.evidenceMountPath.replace(/\/+$/, "")}/${batchId}` },
   };
   return {
-    apiVersion: "org.zhejianglab.astro.metadata/v1alpha1",
-    kind: "AstroMetadataScanTask",
+    apiVersion: "atlas.zhejianglab.org/v1alpha1",
+    kind: "ScanRequest",
     metadata: {
       name,
       namespace,
@@ -629,9 +776,22 @@ function buildTaskResource(input: CoverageTaskInput, namespace: string): Kuberne
         "astro.zhejianglab.org/task-id": name,
         "astro.zhejianglab.org/layer-id": layerId,
         "astro.zhejianglab.org/survey-id": surveyId,
+        "astro.zhejianglab.org/source-connector": sourceConnector,
       },
     },
-    spec,
+    spec: {
+      scanner: {
+        image: config.scannerImage,
+        backoffLimit: 1,
+        activeDeadlineSeconds: 86_400,
+        ttlSecondsAfterFinished: 86_400,
+        evidence: { claimName: config.evidenceClaimName, mountPath: config.evidenceMountPath },
+      },
+      credentials: connector.credentialSecretName ? {
+        source: { secretName: connector.credentialSecretName, accessKeyKey: "accessKey", secretKeyKey: "secretKey" },
+      } : {},
+      plan,
+    },
   };
 }
 
@@ -654,6 +814,7 @@ export class AssetsAdmin {
         coverageModes: [...SUPPORTED_COVERAGE_MODES],
         connectorTypes: [...CONNECTOR_TYPES],
         backends: ["job"],
+        scanRequestApiVersion: "atlas.zhejianglab.org/v1alpha1",
       },
     };
   }
@@ -665,13 +826,13 @@ export class AssetsAdmin {
   }
 
   async listConnectors(): Promise<ConnectorView[]> {
-    const resources = await this.kube.list("astrodatasources", `app.kubernetes.io/managed-by=${ASSETS_MANAGED_BY},astro.zhejianglab.org/resource-kind=connector`);
-    return resources.map(connectorView).filter((connector) => connector.type === "s3" || connector.type === "oss" || connector.type === "local").sort((a, b) => a.name.localeCompare(b.name));
+    const resources = await this.kube.listCore("configmaps", `app.kubernetes.io/managed-by=${ASSETS_MANAGED_BY},astro.zhejianglab.org/resource-kind=connector`, this.config.namespace);
+    return resources.map(connectorView).filter((connector) => CONNECTOR_TYPES.includes(connector.type)).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async createConnector(input: ConnectorInput): Promise<ConnectorView> {
     const resources = connectorDetails(input, this.config.namespace);
-    const resource = resources.dataSource;
+    const resource = resources.configMap;
     const created: Array<{ plural: string; name: string; namespace?: string }> = [];
     try {
       if (resources.secret && resources.secretName) {
@@ -686,7 +847,7 @@ export class AssetsAdmin {
         await this.kube.createCore("persistentvolumeclaims", resources.persistentVolumeClaim, this.config.namespace);
         created.push({ plural: "persistentvolumeclaims", name: resources.persistentVolumeClaimName, namespace: this.config.namespace });
       }
-      return connectorView(await this.kube.create("astrodatasources", resource));
+      return connectorView(await this.kube.createCore("configmaps", resource, this.config.namespace));
     } catch (error) {
       await Promise.allSettled(created.reverse().map((entry) => this.kube.deleteCore(entry.plural, entry.name, entry.namespace)));
       if (error instanceof KubernetesApiError && error.statusCode === 409) throw new AdminHttpError(409, `Connector ${String(resource.metadata?.name)} already exists`);
@@ -695,20 +856,25 @@ export class AssetsAdmin {
   }
 
   async listTasks(): Promise<CoverageTaskView[]> {
-    const resources = await this.kube.list("astrometadatascantasks", `app.kubernetes.io/managed-by=${ASSETS_MANAGED_BY},astro.zhejianglab.org/task-kind=${PUBLIC_COVERAGE_KIND}`);
+    const resources = await this.kube.list("scanrequests", `app.kubernetes.io/managed-by=${ASSETS_MANAGED_BY},astro.zhejianglab.org/task-kind=${PUBLIC_COVERAGE_KIND}`);
     return resources.map(taskView).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   }
 
   async createTask(input: CoverageTaskInput): Promise<CoverageTaskView> {
     if (input.sinkConnector) throw new AdminHttpError(400, "sinkConnector is not supported");
     const sourceName = dnsName(input.sourceConnector, "sourceConnector");
-    const source = await this.kube.get("astrodatasources", sourceName);
+    const source = await this.kube.getCore("configmaps", sourceName, this.config.namespace);
     if (!source) throw new AdminHttpError(400, `Source connector ${sourceName} was not found`);
-    const sourceType = source.spec?.type;
+    const sourceType = source.data?.type;
     if (sourceType !== "s3" && sourceType !== "oss" && sourceType !== "local") throw new AdminHttpError(400, "Source connector must be S3 / OSS or local");
-    const resource = buildTaskResource({ ...input, sourceConnector: sourceName }, this.config.namespace);
+    if (sourceType === "local") throw new AdminHttpError(400, "local connectors are registered for inventory, but Warehouse ScanRequest currently supports remote object stores only");
+    const definition = connectorDefinition(source);
+    if (!definition.credentialSecretName) throw new AdminHttpError(400, `Source connector ${sourceName} has no credential Secret reference`);
+    const credentialSecret = await this.kube.getCore("secrets", definition.credentialSecretName, this.config.namespace);
+    if (!credentialSecret) throw new AdminHttpError(400, `Source connector ${sourceName} credential Secret is missing`);
+    const resource = buildTaskResource({ ...input, sourceConnector: sourceName }, this.config.namespace, definition, this.config);
     try {
-      return taskView(await this.kube.create("astrometadatascantasks", resource));
+      return taskView(await this.kube.create("scanrequests", resource));
     } catch (error) {
       if (error instanceof KubernetesApiError && error.statusCode === 409) throw new AdminHttpError(409, `Coverage task ${String(resource.metadata?.name)} already exists`);
       throw error;

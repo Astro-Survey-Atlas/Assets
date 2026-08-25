@@ -37,12 +37,13 @@
         </div>
         <div class="admin-grid">
           <section class="admin-section" aria-labelledby="connector-title">
-            <div class="section-heading"><div><span class="section-index">01</span><h3 id="connector-title">定义 Connector</h3></div><span class="section-note">AstroDataSource</span></div>
+            <div class="section-heading"><div><span class="section-index">01</span><h3 id="connector-title">定义 Connector</h3></div><span class="section-note">ConfigMap + Secret</span></div>
             <dialog id="connector-dialog" class="admin-dialog">
             <form id="connector-form" method="dialog" class="admin-form">
               <label><span>名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="csst-w2-source" /></label>
-              <label><span>类型</span><select name="type" id="connector-type"><option value="s3">S3 / OSS 对象存储</option><option value="local">Local 本地存储</option></select></label>
+              <label><span>类型</span><select name="type" id="connector-type"><option value="oss">OSS 对象存储</option><option value="s3">S3 兼容对象存储</option><option value="local">Local 本地存储</option></select></label>
               <label data-connector-object><span>Endpoint</span><input name="endpoint" type="url" placeholder="https://object.example" /></label>
+              <label data-connector-object><span>Region</span><input name="region" placeholder="cn-hangzhou-zjy-d01" /></label>
               <label data-connector-object><span>Bucket</span><input name="bucket" placeholder="data-and-computing" /></label>
               <label data-connector-object><span>Prefix</span><input name="prefix" placeholder="projects/CSST/..." /></label>
               <label data-connector-object><span>Access key</span><input name="accessKey" autocomplete="off" /></label>
@@ -56,23 +57,24 @@
           </section>
 
           <section class="admin-section admin-task-section" aria-labelledby="task-title">
-            <div class="section-heading"><div><span class="section-index">02</span><h3 id="task-title">提交公共覆盖任务</h3></div><span class="section-note">AstroMetadataScanTask</span></div>
+            <div class="section-heading"><div><span class="section-index">02</span><h3 id="task-title">提交公共覆盖任务</h3></div><span class="section-note">Warehouse ScanRequest v1alpha1</span></div>
             <dialog id="task-dialog" class="admin-dialog">
             <form id="task-form" method="dialog" class="admin-form">
               <label><span>Catalog 产品</span><select name="productId" id="task-product" required><option value="">加载中…</option></select></label>
-              <output id="task-derived-summary" class="derived-summary">选择产品后自动带出 survey、release、layer 和标准覆盖模式。</output>
+              <output id="task-derived-summary" class="derived-summary">选择产品后自动带出 survey、release、layer 和 ScanPlan v2 模式。</output>
               <label><span>任务名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="csst-w2-coverage" /></label>
               <div class="form-row"><label data-derived-field hidden><span>Layer ID</span><input name="layerId" disabled /></label><label data-derived-field hidden><span>Survey ID</span><input name="surveyId" disabled /></label><label data-derived-field hidden><span>Release ID</span><input name="releaseId" disabled /></label><label data-derived-field hidden><span>产品名称</span><input name="product" disabled /></label></div>
               <div class="form-row"><label data-derived-field hidden><span>Coverage 模式</span><select name="mode" disabled><option value="fits-wcs">FITS WCS</option><option value="catalog-radec">Catalog RA/Dec</option><option value="nested-healpix">Nested HEALPix</option></select></label><label><span>Backend</span><select name="backend"><option value="job">Job</option></select></label></div>
               <div class="form-row"><label data-derived-field hidden><span>Coverage role</span><select name="coverageRole" disabled><option value="image_extent">image_extent</option><option value="object_presence">object_presence</option><option value="footprint_extent">footprint_extent</option></select></label><label data-derived-field hidden><span>Data origin</span><select name="dataOrigin" disabled><option value="simulated">simulated</option><option value="observed">observed</option><option value="catalog">catalog</option></select></label></div>
               <label><span>Source Connector</span><select name="sourceConnector" id="source-connector" required><option value="">加载中…</option></select></label>
-              <label><span>Source paths <small>每行一个路径</small></span><textarea name="sourcePaths" rows="3" required placeholder="s3://bucket/prefix"></textarea></label>
-              <label><span>文件名正则 <small>仅匹配 basename</small></span><input name="fileNamePattern" placeholder="^CSST_MSC_MS_WIDE_.*\\.fits$" /></label>
-              <div class="form-row"><label><span>Tags <small>逗号分隔</small></span><input name="tags" placeholder="imaging,simulation" /></label><label><span>分片数</span><input name="scanShards" type="number" min="1" max="256" value="1" /></label></div>
-              <div class="form-row"><label><span>允许后缀</span><input name="allowedSuffixes" placeholder=".fits" /></label><label><span>最大 HEALPix order</span><input name="maxOrder" type="number" min="1" max="29" value="8" /></label></div>
-              <div class="form-row"><label><span>File index</span><input name="fileIndex" value="astro_file_index_v1" disabled /></label><label><span>Coverage index</span><input name="coverageIndex" value="astro_coverage_index_v1" disabled /></label></div>
+              <label><span>Source path <small>当前一个 ScanRequest 绑定一个前缀或文件</small></span><textarea name="sourcePaths" rows="3" required placeholder="oss://bucket/prefix"></textarea></label>
+              <div class="form-row"><label><span>允许后缀</span><input name="allowedSuffixes" placeholder=".fits" /></label><label><span>计算 HEALPix order</span><input name="maxOrder" type="number" min="1" max="12" value="8" /></label></div>
+              <div class="form-row"><label><span>RA 列名 <small>Catalog RA/Dec 模式填写</small></span><input name="raColumn" placeholder="ra" /></label><label><span>Dec 列名 <small>Catalog RA/Dec 模式填写</small></span><input name="decColumn" placeholder="dec" /></label></div>
+              <div class="form-row"><label><span>HEALPix 列名 <small>原生 HEALPix 模式填写</small></span><input name="healpixColumn" placeholder="healpix" /></label><label><span>HEALPix order 列名</span><input name="healpixOrderColumn" placeholder="order" /></label></div>
+              <label><span>固定 HEALPix order <small>与 order 列名二选一</small></span><input name="healpixOrder" type="number" min="1" max="29" placeholder="8" /></label>
+              <div class="form-row"><label><span>File index</span><input name="fileIndex" value="ast_file_index_v1" disabled /></label><label><span>Coverage index</span><input name="coverageIndex" value="ast_coverage_index_v1" disabled /></label></div>
               <label><span>批次 ID <small>留空则自动生成</small></span><input name="batchId" placeholder="csst-w2-coverage-20260822" /></label>
-              <div class="form-row"><button id="task-dialog-cancel" class="admin-quiet" type="button">取消</button><button class="admin-primary" type="submit"><i data-lucide="send"></i><span>提交 Coverage Task</span></button></div>
+              <div class="form-row"><button id="task-dialog-cancel" class="admin-quiet" type="button">取消</button><button class="admin-primary" type="submit"><i data-lucide="send"></i><span>提交 ScanRequest</span></button></div>
               <p class="form-message" data-form-message="task" role="status"></p>
             </form>
             </dialog>

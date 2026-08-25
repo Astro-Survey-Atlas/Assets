@@ -6,9 +6,18 @@ image:
 imagePullSecrets:
   - name: aliyun-registry
 
+warehouse:
+  elasticsearchUrl: http://warehouse-elasticsearch.warehouse.svc.cluster.local:9200
+  layerIndex: ast_layer_index_v1
+  coverageIndex: ast_coverage_index_v1
+  fileIndex: ast_file_index_v1
+
 admin:
   enabled: true
   warehouseNamespace: warehouse
+  warehouseScannerImage: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260825-fix3
+  warehouseEvidenceClaim: atlas-evidence-smoke
+  warehouseEvidenceMountPath: /var/lib/atlas-evidence
   adminTokenSecret:
     name: astro-survey-atlas-assets-admin
     key: token

@@ -4,9 +4,9 @@ import { mountLocaleControls, t } from "../src/i18n.js";
 
 mountLocaleControls();
 
-type ConnectorType = "s3" | "local";
-interface AdminConfig { enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; connectorTypes: ConnectorType[]; backends: string[] } }
-interface Connector { name: string; type: ConnectorType | "oss"; endpoint?: string; bucket?: string; prefix?: string; accessKeyConfigured?: boolean; pvcName?: string; localPath?: string; phase?: string; message?: string; createdAt?: string }
+type ConnectorType = "s3" | "oss" | "local";
+interface AdminConfig { enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; connectorTypes: ConnectorType[]; backends: string[]; scanRequestApiVersion?: string } }
+interface Connector { name: string; type: ConnectorType; endpoint?: string; region?: string; bucket?: string; prefix?: string; accessKeyConfigured?: boolean; pvcName?: string; localPath?: string; phase?: string; message?: string; createdAt?: string }
 interface TaskStatus { phase: string; backend?: string; runId?: string; discoveredFiles?: number; processedHdus?: number; coverageDocuments?: number; objectDocuments?: number; startedAt?: string; completedAt?: string; message?: string }
 interface Task { name: string; createdAt?: string; layerId?: string; surveyId?: string; releaseId?: string; product?: string; mode?: string; backend?: string; sourceConnector?: string; sinkConnector?: string; sourcePaths: string[]; fileNamePattern?: string; tags: string[]; batchId?: string; status: TaskStatus }
 interface Product { productId: string; draft: { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } } }; published: unknown; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number } }
@@ -90,8 +90,8 @@ function renderConnectors(connectors: Connector[]): void {
     return;
   }
   list.innerHTML = connectors.map((connector) => {
-    const type = connector.type === "local" ? "LOCAL" : "S3 / OSS";
-    const location = connector.type === "local" ? connector.localPath ?? connector.pvcName ?? "受管本地存储" : `${connector.endpoint ?? ""}${connector.bucket ? ` · ${connector.bucket}` : ""}${connector.prefix ? ` / ${connector.prefix}` : ""}`;
+    const type = connector.type === "local" ? "LOCAL" : connector.type.toUpperCase();
+    const location = connector.type === "local" ? connector.localPath ?? connector.pvcName ?? "受管本地存储" : `${connector.endpoint ?? ""}${connector.region ? ` · ${connector.region}` : ""}${connector.bucket ? ` · ${connector.bucket}` : ""}${connector.prefix ? ` / ${connector.prefix}` : ""}`;
     return `<article class="resource-row"><div><strong>${escapeText(connector.name)}</strong><span>${type} · ${escapeText(connector.phase ?? "UNKNOWN")}</span><p>${escapeText(location)}</p></div><code>${escapeText(connector.message ?? "")}</code></article>`;
   }).join("");
 }
@@ -145,7 +145,7 @@ function renderProductLoadError(message: string): void {
 function setDerivedProduct(productId: string): void {
   const product = productRecords.find((entry) => entry.productId === productId);
   const output = byId("task-derived-summary");
-  if (!product) { output.textContent = "选择产品后自动带出 survey、release、layer 和标准覆盖模式。"; return; }
+  if (!product) { output.textContent = "选择产品后自动带出 survey、release、layer 和 ScanPlan v2 模式。"; return; }
   output.textContent = `${product.draft.surveyId.toUpperCase()} / ${product.draft.releaseId} · ${product.draft.layerId ?? "未注册 layer"} · ${product.draft.mode ?? "待 recipe"} · ${product.draft.coverageRole ?? "待 recipe"}`;
   for (const [name, value] of [["layerId", product.draft.layerId], ["surveyId", product.draft.surveyId], ["releaseId", product.draft.releaseId], ["product", product.draft.name], ["mode", product.draft.mode], ["coverageRole", product.draft.coverageRole], ["dataOrigin", product.draft.dataOrigin]] as const) {
     const field = document.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${name}"]`);
@@ -220,7 +220,7 @@ function formValue(form: HTMLFormElement, name: string): string {
 
 function updateConnectorFields(): void {
   const type = byId<HTMLSelectElement>("connector-type").value;
-  const objectStorage = type === "s3";
+  const objectStorage = type === "s3" || type === "oss";
   document.querySelectorAll<HTMLElement>("[data-connector-object], [data-connector-local]").forEach((element) => {
     const field = element.querySelector<HTMLInputElement>("input,select");
     const visible = element.hasAttribute("data-connector-local") ? type === "local"
@@ -236,7 +236,7 @@ function updateConnectorFields(): void {
 async function submitConnector(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   const form = event.currentTarget as HTMLFormElement;
-  const input = { name: formValue(form, "name"), type: formValue(form, "type"), endpoint: formValue(form, "endpoint") || undefined, bucket: formValue(form, "bucket") || undefined, prefix: formValue(form, "prefix") || undefined, accessKey: formValue(form, "accessKey") || undefined, secretKey: formValue(form, "secretKey") || undefined, localPath: formValue(form, "localPath") || undefined };
+  const input = { name: formValue(form, "name"), type: formValue(form, "type"), endpoint: formValue(form, "endpoint") || undefined, region: formValue(form, "region") || undefined, bucket: formValue(form, "bucket") || undefined, prefix: formValue(form, "prefix") || undefined, accessKey: formValue(form, "accessKey") || undefined, secretKey: formValue(form, "secretKey") || undefined, localPath: formValue(form, "localPath") || undefined };
   setMessage("connector", "正在创建…");
   try {
     await api("/api/v1/admin/connectors", { method: "POST", body: JSON.stringify(input) });
@@ -253,14 +253,14 @@ async function submitTask(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   const form = event.currentTarget as HTMLFormElement;
   const input = {
-    name: formValue(form, "name"), productId: formValue(form, "productId"), sourceConnector: formValue(form, "sourceConnector"), sourcePaths: formValue(form, "sourcePaths").split(/\r?\n/).map((path) => path.trim()).filter(Boolean), backend: formValue(form, "backend"), fileNamePattern: formValue(form, "fileNamePattern") || undefined, tags: formValue(form, "tags").split(",").map((tag) => tag.trim()).filter(Boolean), scanShards: Number(formValue(form, "scanShards") || "1"), allowedSuffixes: formValue(form, "allowedSuffixes") || undefined, maxOrder: Number(formValue(form, "maxOrder") || "8"), fileIndex: formValue(form, "fileIndex"), coverageIndex: formValue(form, "coverageIndex"), batchId: formValue(form, "batchId") || undefined,
+    name: formValue(form, "name"), productId: formValue(form, "productId"), sourceConnector: formValue(form, "sourceConnector"), sourcePaths: formValue(form, "sourcePaths").split(/\r?\n/).map((path) => path.trim()).filter(Boolean), backend: formValue(form, "backend"), allowedSuffixes: formValue(form, "allowedSuffixes") || undefined, maxOrder: Number(formValue(form, "maxOrder") || "8"), raColumn: formValue(form, "raColumn") || undefined, decColumn: formValue(form, "decColumn") || undefined, healpixColumn: formValue(form, "healpixColumn") || undefined, healpixOrderColumn: formValue(form, "healpixOrderColumn") || undefined, healpixOrder: formValue(form, "healpixOrder") ? Number(formValue(form, "healpixOrder")) : undefined, fileIndex: formValue(form, "fileIndex"), coverageIndex: formValue(form, "coverageIndex"), batchId: formValue(form, "batchId") || undefined,
   };
   setMessage("task", "正在提交 CRD…");
   try {
     await api("/api/v1/admin/tasks", { method: "POST", body: JSON.stringify(input) });
     byId<HTMLDialogElement>("task-dialog").close();
-    setMessage("task", "Coverage Task 已提交");
-    toast("Coverage Task 已提交");
+    setMessage("task", "ScanRequest 已提交");
+    toast("ScanRequest 已提交");
     await refresh();
   } catch (error) { setMessage("task", error instanceof Error ? error.message : "提交失败", true); }
 }

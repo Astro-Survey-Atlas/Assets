@@ -8,7 +8,7 @@ import { AdminHttpError, AssetsAdmin, KubernetesApiError, adminFromRequest, type
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
-import { coverageBlock, loadCoverageCatalog } from "./coverage.js";
+import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog } from "./coverage.js";
 import { overlapForLayers } from "./overlap.js";
 import { ProductStore, type ProductRecord } from "./products.js";
 import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
@@ -26,16 +26,45 @@ const coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src",
   nside: number;
   footprints: Array<Record<string, unknown> & { surveyId: string; releaseId: string; product: string; nside: number; pixels: number[] }>;
 };
-const coverageCatalog = await loadCoverageCatalog(releaseRoot, coverageManifest);
-const surveyIndex = await loadSurveyIndex(releaseRoot, catalog, coverageManifest, coverageCatalog.layers);
-const admin = new AssetsAdmin();
-const products = new ProductStore();
-await products.initialize(releaseRoot, coverageCatalog.layers);
 const evidenceStore = new CoverageEvidenceStore({
   url: process.env.ASSETS_WAREHOUSE_ES_URL,
+  layerIndex: process.env.ASSETS_WAREHOUSE_LAYER_INDEX,
   coverageIndex: process.env.ASSETS_WAREHOUSE_COVERAGE_INDEX,
   fileIndex: process.env.ASSETS_WAREHOUSE_FILE_INDEX,
 });
+const staticCoverageCatalog = await loadCoverageCatalog(releaseRoot, coverageManifest);
+let coverageCatalog = staticCoverageCatalog;
+let runtimeCoverageManifest = coverageManifest;
+if (evidenceStore.configured) {
+  try {
+    const warehouseSnapshot = await evidenceStore.loadCurrentCoverageCatalog();
+    if (warehouseSnapshot?.layers.length) {
+      coverageCatalog = coverageCatalogFromWarehouse(staticCoverageCatalog, warehouseSnapshot);
+      runtimeCoverageManifest = {
+        ...coverageManifest,
+        generatedAt: new Date().toISOString(),
+        nside: coverageCatalog.layers.length ? 2 ** Math.min(...coverageCatalog.layers.map((layer) => layer.overviewOrder)) : coverageManifest.nside,
+        footprints: [...coverageCatalog.records.values()].map((layer) => ({
+          surveyId: layer.surveyId,
+          releaseId: layer.releaseId,
+          product: layer.product,
+          nside: 2 ** layer.overviewOrder,
+          pixels: layer.cells.get(layer.overviewOrder) ?? [],
+          sourceUrl: layer.recipe?.sourceUrl,
+        })),
+      };
+      console.info(`Loaded ${coverageCatalog.layers.length} ACTIVE Warehouse coverage layers from ${evidenceStore.layerIndex}/${evidenceStore.coverageIndex}`);
+    } else {
+      console.warn("Warehouse ES is configured but has no ACTIVE layers; using the checked-in public geometry until a scan completes.");
+    }
+  } catch (error) {
+    console.warn(`Warehouse coverage catalog unavailable; using checked-in geometry: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+const surveyIndex = await loadSurveyIndex(releaseRoot, catalog, runtimeCoverageManifest, coverageCatalog.layers);
+const admin = new AssetsAdmin();
+const products = new ProductStore();
+await products.initialize(releaseRoot, coverageCatalog.layers);
 let sourceUnitsPromise: Promise<SourceUnitWorkerStore> | null = null;
 let sourceUnitsFallbackPromise: Promise<SourceUnitStore> | null = null;
 function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
@@ -486,7 +515,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       const input = await requestJsonBody(request) as unknown as CoverageTaskInput & { productId?: string };
       if (input.productId) {
         const product = products.get(input.productId).draft;
-        const immutable: Array<[keyof CoverageTaskInput, string | undefined]> = [["layerId", product.layerId], ["surveyId", product.surveyId], ["releaseId", product.releaseId], ["product", product.name], ["mode", product.mode], ["coverageRole", product.coverageRole], ["dataOrigin", product.dataOrigin], ["sourceTier", product.sourceTier]];
+        const immutable: Array<[keyof CoverageTaskInput, string | undefined]> = [["layerId", product.layerId], ["surveyId", product.surveyId], ["releaseId", product.releaseId], ["product", product.name], ["productId", product.productId], ["modality", product.modality], ["mode", product.mode], ["coverageRole", product.coverageRole], ["dataOrigin", product.dataOrigin], ["sourceTier", product.sourceTier]];
         for (const [key, expected] of immutable) if (input[key] !== undefined && input[key] !== expected) return json(response, 400, { error: `${String(key)} is defined by the selected product` });
         const derived = {
           ...input,
@@ -494,6 +523,8 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
           surveyId: product.surveyId,
           releaseId: product.releaseId,
           product: product.name,
+          productId: product.productId,
+          modality: product.modality,
           mode: product.mode ?? input.mode,
           coverageRole: product.coverageRole ?? input.coverageRole,
           dataOrigin: product.dataOrigin ?? input.dataOrigin,
@@ -619,7 +650,7 @@ const server = http.createServer((request, response) => {
       return compressedJson(request, response, 200, publicCoverageCatalog, "public, max-age=300, stale-while-revalidate=60");
     }
     if (pathname.startsWith("/api/v1/coverage/blocks/")) return sendCoverageBlock(request, response, pathname);
-    if (pathname === "/api/v1/coverage") return json(response, 200, coverageManifest);
+    if (pathname === "/api/v1/coverage") return json(response, 200, runtimeCoverageManifest);
     if (pathname === "/api/v1/surveys") return json(response, 200, surveyIndex);
     if (pathname === "/api/v1/products") return json(response, 200, { products: products.list().filter((record) => record.published).map((record) => {
       const published = structuredClone(record.published!);

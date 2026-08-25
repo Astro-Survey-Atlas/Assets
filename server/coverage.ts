@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { WarehouseCoverageCatalogSnapshot } from "./evidence-store.js";
+
 export interface CoverageCellLayer {
   layerId: string;
   productId: string;
@@ -195,6 +197,66 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
   }
   const layers = [...records.values()].map(({ cells, ...record }) => ({ ...record, tileIdsByOrder: Object.fromEntries([...cells.entries()].map(([order, values]) => [String(order), [...new Set(values.map((cell) => Math.floor(cell / 4096)))].sort((a, b) => a - b)])) }));
   return { schemaVersion: 1, coordinateFrame: "ICRS", ordering: "NESTED", tileScheme: "ipix-range-4096", layers, records };
+}
+
+/** Replace the checked-in geometry with current ACTIVE Warehouse coverage. */
+export function coverageCatalogFromWarehouse(
+  base: CoverageCatalog & { records: Map<string, CoverageCellLayer> },
+  snapshot: WarehouseCoverageCatalogSnapshot,
+): CoverageCatalog & { records: Map<string, CoverageCellLayer> } {
+  const fallbackById = base.records;
+  const records = new Map<string, CoverageCellLayer>();
+  for (const layer of snapshot.layers) {
+    const fallback = fallbackById.get(layer.layerId);
+    const cells = new Map<number, number[]>();
+    snapshot.coverages
+      .filter((coverage) => coverage.layerId === layer.layerId)
+      .forEach((coverage) => {
+        const values = cells.get(coverage.order) ?? [];
+        values.push(coverage.ipix);
+        cells.set(coverage.order, values);
+      });
+    for (const [order, values] of cells) cells.set(order, [...new Set(values)].sort((a, b) => a - b));
+    const availableOrders = [...cells.keys()].sort((a, b) => a - b);
+    const overviewOrder = availableOrders[0] ?? layer.availableOrders[0] ?? 0;
+    const overviewCells = cells.get(overviewOrder) ?? [];
+    const modality = layer.modality ?? fallback?.modality;
+    const recipe: CoverageRecipeSummary = fallback?.recipe ?? {
+      recipeVersion: 1,
+      mode: "warehouse",
+      coordinateFrame: "ICRS",
+      ordering: "NESTED",
+      maxOrder: Math.max(...availableOrders, overviewOrder),
+      queryOrder: Math.max(...availableOrders, overviewOrder),
+      previewOrder: overviewOrder,
+      ...(layer.entrypoint ? { sourceUrl: layer.entrypoint } : {}),
+      steps: [{ id: "warehouse", kind: "warehouse-scan", title: "Warehouse current-state scan", bodyMarkdown: "来自新版 Warehouse ACTIVE layer 与显式 NESTED coverage edges。", order: 0, implementationRef: "warehouse.ast_coverage_index_v1" }],
+    };
+    const record: CoverageCellLayer = {
+      layerId: layer.layerId,
+      productId: layer.productId,
+      surveyId: layer.surveyId,
+      releaseId: layer.releaseId,
+      product: fallback?.product ?? layer.productId,
+      modality,
+      color: fallback?.color ?? colorFor(layer.surveyId),
+      availableOrders,
+      overviewOrder,
+      maxOrder: Math.max(...availableOrders, overviewOrder),
+      cellCount: overviewCells.length,
+      areaDeg2: overviewCells.length * (41252.96124941927 / (12 * (2 ** overviewOrder) ** 2)),
+      tileScheme: "ipix-range-4096",
+      cells,
+      recipe,
+      sourceUnitIndex: { status: "exact", unitKind: "file", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "由新版 Warehouse ast_coverage_index_v1 反查当前 layer 的 FileAsset。" },
+    };
+    records.set(record.layerId, record);
+  }
+  const layers = [...records.values()].map(({ cells, ...record }) => ({
+    ...record,
+    tileIdsByOrder: Object.fromEntries([...cells.entries()].map(([order, values]) => [String(order), [...new Set(values.map((cell) => Math.floor(cell / 4096)))].sort((a, b) => a - b)])),
+  }));
+  return { ...base, layers, records };
 }
 
 export function coverageBlock(record: CoverageCellLayer, order: number, tileId: number): { layerId: string; order: number; tileId: number; cells: number[]; sha256: string } | null {

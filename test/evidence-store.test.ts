@@ -8,19 +8,38 @@ test("warehouse evidence lookup preserves explicit order and source file metadat
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
     requests.push({ url, body: JSON.parse(String(init?.body)) });
-    if (url.includes("astro_file_index_v1")) return new Response(JSON.stringify({ hits: { hits: [{ _id: "file-1", _source: { name: "tile.fits", etag: "abc" } }] } }), { status: 200 });
-    return new Response(JSON.stringify({ hits: { total: { value: 1 }, hits: [{ _id: "edge-1", _source: { layer_id: "desi-dr1-spectra-footprint", survey_id: "desi", order: 4, ipix: 123, source_file_id: "file-1", ra_min: 10, ra_max: 12, dec_min: -2, dec_max: 3 } }] } }), { status: 200 });
+    if (url.includes("ast_layer_index_v1")) return new Response(JSON.stringify({ hits: { total: { value: 1 }, hits: [{ _id: "desi-dr1-spectra-footprint", _source: { layer_id: "desi-dr1-spectra-footprint", state: "ACTIVE" } }] } }), { status: 200 });
+    if (url.includes("ast_file_index_v1")) return new Response(JSON.stringify({ hits: { hits: [{ _id: "file-1", _source: { file_name: "tile.fits", etag: "abc" } }] } }), { status: 200 });
+    return new Response(JSON.stringify({ hits: { total: { value: 1 }, hits: [{ _id: "edge-1", _source: { layer_id: "desi-dr1-spectra-footprint", order: 4, ipix: 123, source_file_id: "file-1", source_uri: "oss://tiles/tile.fits", precision: "exact" } }] } }), { status: 200 });
   };
   const store = new CoverageEvidenceStore({ url: "http://warehouse:9200", fetchImpl });
   const result = await store.reverseLookup({ layerIds: ["desi-dr1-spectra-footprint"], order: 4, cells: [123] });
   assert.equal(result.available, true);
   assert.equal(result.precision, "exact");
   assert.equal(result.edges[0]?.ipix, 123);
-  assert.equal(result.sourceFiles[0]?.name, "tile.fits");
-  assert.equal(requests.length, 2);
-  const orderClause = requests[0]?.body.query.bool.must[0];
+  assert.equal(result.sourceFiles[0]?.file_name, "tile.fits");
+  assert.equal(requests.length, 3);
+  const orderClause = requests[1]?.body.query.bool.must[0];
   assert.equal(orderClause?.bool?.minimum_should_match, 1);
-  assert.ok(orderClause?.bool?.should.some((clause: any) => clause.term?.order === 4));
+  assert.ok(orderClause?.bool?.should.some((clause: any) => clause.term?.healpix_order === 4));
+});
+
+test("warehouse coverage contract fields are normalized for reverse lookup", async () => {
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("ast_layer_index_v1")) return new Response(JSON.stringify({ hits: { hits: [{ _id: "layer-1", _source: { layer_id: "layer-1", state: "ACTIVE" } }] } }), { status: 200 });
+    if (url.includes("ast_file_index_v1")) return new Response(JSON.stringify({ hits: { hits: [{ _id: "file-1", _source: { file_id: "file-1", file_name: "catalog.csv" } }] } }), { status: 200 });
+    return new Response(JSON.stringify({ hits: { total: { value: 1 }, hits: [{ _id: "edge-1", _source: {
+      layer_id: "layer-1", healpix_order: 8, healpix_cell: 185860, source_file_id: "file-1",
+      source_uri: "s3://catalog.csv", coverage_method: "catalog_radec", precision: "exact",
+    } }] } }), { status: 200 });
+  };
+  const result = await new CoverageEvidenceStore({ url: "http://warehouse:9200", fetchImpl }).reverseLookup({ layerIds: ["layer-1"], order: 8, cells: [185860] });
+  assert.equal(result.available, true);
+  assert.equal(result.edges[0]?.ipix, 185860);
+  assert.equal(result.edges[0]?.order, 8);
+  assert.equal(result.edges[0]?.sourceUri, "s3://catalog.csv");
+  assert.equal(result.sourceFiles[0]?.file_name, "catalog.csv");
 });
 
 test("missing warehouse configuration is explicit and non-blocking", async () => {

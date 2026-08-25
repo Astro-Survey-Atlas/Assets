@@ -68,8 +68,16 @@ spec:
               value: {{ .Values.admin.warehouseNamespace | quote }}
             - name: ASSETS_LOCAL_PATH_ROOT
               value: {{ .Values.admin.localPathRoot | quote }}
+            - name: ASSETS_WAREHOUSE_SCANNER_IMAGE
+              value: {{ .Values.admin.warehouseScannerImage | quote }}
+            - name: ASSETS_WAREHOUSE_EVIDENCE_CLAIM
+              value: {{ .Values.admin.warehouseEvidenceClaim | quote }}
+            - name: ASSETS_WAREHOUSE_EVIDENCE_MOUNT_PATH
+              value: {{ .Values.admin.warehouseEvidenceMountPath | quote }}
             - name: ASSETS_WAREHOUSE_ES_URL
               value: {{ .Values.warehouse.elasticsearchUrl | quote }}
+            - name: ASSETS_WAREHOUSE_LAYER_INDEX
+              value: {{ .Values.warehouse.layerIndex | quote }}
             - name: ASSETS_WAREHOUSE_COVERAGE_INDEX
               value: {{ .Values.warehouse.coverageIndex | quote }}
             - name: ASSETS_WAREHOUSE_FILE_INDEX

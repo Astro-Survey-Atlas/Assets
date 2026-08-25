@@ -9,24 +9,23 @@
 
 | 组件 | 负责 | 不负责 |
 | --- | --- | --- |
-| Assets | 公共 survey/release/product/layer 注册；Connector、DataSource、Secret 和一次性 coverage task；任务状态读取；MOC Core 的生成、合并、锁定；Resource Package、manifest、provenance、catalog 和只读下载 API | Atlas 用户资产、Atlas 任务历史和 Atlas API；data-warehouse 的内部实现 |
-| data-warehouse | 接收标准 Kubernetes CRD；按任务指定的 source、handlers 和 sink 执行扫描；维护 operator status；提供 scanner 的执行合同 | Assets 的 catalog 激活、MOC Core、Resource Package 发布；不规定所有任务的统一 sink |
+| Assets | 公共 survey/release/product/layer 注册；用 ConfigMap + Secret 管理远程 Connector；提交一次性 `ScanRequest`；读取任务状态；MOC Core 的生成、合并、锁定；Resource Package、manifest、provenance、catalog 和只读下载 API | Atlas 用户资产、Atlas 任务历史和 Atlas API；data-warehouse 的内部实现 |
+| data-warehouse | 接收 `atlas.zhejianglab.org/v1alpha1/ScanRequest`；校验并执行嵌入的 ScanPlan v2；维护 operator status；提供 scanner 的执行合同 | Assets 的 catalog 激活、MOC Core、Resource Package 发布；不规定所有任务的统一 sink |
 | Atlas | 独立的用户资产、任务历史、查询索引和前端；可独立向 data-warehouse 提交自己的任务；安装并验证 Assets 公共资源包 | Assets 的 Connector、任务状态、数据库、worker 或计算实现 |
 
-Assets 到 data-warehouse 的 coverage task 配置使用
-[`coverage-task-v1.schema.json`](../contracts/coverage-task-v1.schema.json)。它
-是 Assets 侧的输入契约，用于生成标准 `AstroDataSource` 和
-`AstroMetadataScanTask`，不是 data-warehouse 的内部数据库模型，也不是
-Atlas 的共享业务 API。凭据如何保存由 Assets 自己决定；CRD 只引用任务需要
-的 DataSource/Secret。
+Assets 管理输入是产品/layer、Connector 名称、源前缀和 ScanPlan 参数。服务端
+从 Connector ConfigMap 读取非敏感元数据，从同名 Secret 只引用
+`accessKey`/`secretKey`，然后生成标准 `ScanRequest`。ScanPlan v2 是
+data-warehouse 的公开执行合同，不是 Assets 或 Atlas 的数据库模型；凭据值永远
+不进入 plan、ConfigMap、日志或响应。
 
 Assets 管理页只读取自己提交的 CRD status。status 是 data-warehouse operator
 对单个 CRD 的运行观测，不是三方共享的任务历史或业务状态。
 
 当 Assets 的任务选择 Elasticsearch sink 时，scanner 输出的 normalized
-file/coverage 文档可供 Assets finalizer 按 `runId` 读取，并在发布后由
-warehouse `astro_file_index_v1` / `astro_coverage_index_v1` 提供反查。其他
-`AstroMetadataScanTask` 可以选择不同 sink，不能把 ES 当成 data-warehouse
+file/coverage 文档可供 Assets 按 `scanRunId` 读取，并由 warehouse
+`ast_file_index_v1` / `ast_coverage_index_v1` 提供反查。其他
+`ScanRequest` 可以选择不同 sink，不能把 ES 当成 data-warehouse
 的全局输出约定。
 
 ## 任务生命周期

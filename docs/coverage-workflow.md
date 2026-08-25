@@ -49,5 +49,5 @@ If a selected layer only has order 4, the common result is limited to order 4
 and explicitly says so.
 
 `coverage_edges.parquet` is the offline reconstruction source. Online lookup
-uses the warehouse `astro_coverage_index_v1` and `astro_file_index_v1` indices;
+uses the warehouse `ast_coverage_index_v1` and `ast_file_index_v1` indices;
 the old Assets ES is never a runtime dependency.
