@@ -120,6 +120,15 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   const invalidOverlap = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["desi"] }) });
   assert.equal(invalidOverlap.status, 400);
 
+  const csstDesiOverlap = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["csst", "desi"], requestedOrder: 4 }) });
+  assert.equal(csstDesiOverlap.status, 200);
+  const csstDesiOverlapBody = await csstDesiOverlap.json() as { commonOrder: number; pixels: number[]; components: Array<{ order: number; surveys?: Array<{ sourceUnitIndex?: { unitKind?: string }; sourceUnits?: { units: Array<{ unitId: string }>; totalUnits: number } | null }> }> };
+  assert.equal(csstDesiOverlapBody.commonOrder, 4);
+  assert.ok(csstDesiOverlapBody.pixels.length > 0);
+  assert.ok(csstDesiOverlapBody.components.every((component) => component.order === 4));
+  const tileMatches = csstDesiOverlapBody.components.flatMap((component) => component.surveys ?? []).filter((entry) => entry.sourceUnitIndex?.unitKind === "tile").map((entry) => entry.sourceUnits).filter((value): value is { units: Array<{ unitId: string }>; totalUnits: number } => Boolean(value));
+  assert.ok(tileMatches.some((match) => match.totalUnits > 0 && match.units.some((unit) => unit.unitId)));
+
   const reverseLookup = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/reverse-lookup`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ layerIds: ["desi-dr1-spectra-footprint"], order: 4, cells: [1087] }) });
   assert.equal(reverseLookup.status, 200);
   const reverseBody = await reverseLookup.json() as { available: boolean; precision: string };

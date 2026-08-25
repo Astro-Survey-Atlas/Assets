@@ -11,7 +11,9 @@ export interface LayerDepth {
 // transparent meshes deterministic and leaves the intersection highlighter
 // visible above them.
 const OVERLAP_DEPTH_STEP = 0;
-const RADIAL_DEPTH_STEP = 0.075;
+// Keep the public survey surfaces visibly separated in the hero composition.
+// Overlap mode still collapses these surfaces back onto one sphere.
+const RADIAL_DEPTH_STEP = 0.12;
 
 export function normalizeLayerOrder(
   knownKeys: Iterable<string>,

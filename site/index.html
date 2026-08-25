@@ -35,12 +35,21 @@
     <main>
       <div id="coverage-scene" class="coverage-scene" aria-label="公开巡天 HEALPix 天球覆盖">
         <canvas id="coverage-canvas" role="img" aria-label="根据公开覆盖块绘制的 HEALPix 单元"></canvas>
-        <div class="coverage-tools">
+      </div>
+      <div class="coverage-tools">
           <button id="coverage-reset" class="icon-button" type="button" title="重置天球视角" aria-label="重置天球视角"><i data-lucide="rotate-ccw"></i></button>
           <button id="coverage-layers-toggle" class="icon-button" type="button" title="打开图层" aria-label="打开图层"><i data-lucide="layers-3"></i></button>
           <button id="coverage-help-toggle" class="icon-button" type="button" title="查看快捷键说明" aria-label="查看快捷键说明"><i data-lucide="circle-help"></i></button>
         </div>
         <div id="coverage-layers" class="coverage-layers" hidden aria-label="覆盖图层"></div>
+        <aside id="coverage-empty-guide" class="coverage-empty-guide" hidden aria-live="polite" aria-label="选择巡天引导">
+          <div class="coverage-empty-guide-mark" aria-hidden="true"><i data-lucide="layers-3"></i></div>
+          <div class="coverage-empty-guide-copy">
+            <strong data-i18n="coverage.emptyGuideTitle">NO SURVEY SELECTED</strong>
+            <p data-i18n="coverage.emptyGuideBody">Click the layers button to open the survey list, then try selecting one.</p>
+            <button id="coverage-empty-guide-action" class="coverage-empty-guide-action" type="button"><i data-lucide="layers-3"></i><span data-i18n="coverage.emptyGuideAction">Open survey layers</span></button>
+          </div>
+        </aside>
         <aside id="coverage-help" class="coverage-help" hidden aria-label="天球快捷键说明">
           <div class="coverage-help-heading"><strong data-i18n="coverage.shortcuts">SHORTCUTS</strong><button id="coverage-help-close" class="icon-button" type="button" data-i18n-title="common.close" data-i18n-aria-label="common.close"><i data-lucide="x"></i></button></div>
           <dl>
@@ -61,18 +70,12 @@
           <strong id="coverage-detail-title" data-i18n="coverage.healpixCell">HEALPIX CELL</strong>
           <div id="coverage-detail-content"></div>
         </aside>
-        <aside id="overlap-hud" class="overlap-hud" hidden aria-live="polite" aria-label="Selected overlap component">
-          <div class="overlap-hud-kicker" data-i18n="coverage.selectedComponent">SELECTED COMPONENT</div>
-          <strong id="overlap-hud-title">C01</strong>
-          <span id="overlap-hud-summary"></span>
-          <span id="overlap-hud-bounds"></span>
-        </aside>
+        <aside id="selection-queue" class="selection-queue" hidden aria-live="polite" aria-label="当前选择"></aside>
         <div id="coverage-context-menu" class="coverage-context-menu" hidden role="menu" aria-label="覆盖区域操作"></div>
-        <div id="coverage-status" class="coverage-status" aria-live="polite">
+      <div id="coverage-status" class="coverage-status" aria-live="polite">
           <span>NSIDE <output id="coverage-status-nside">--</output></span>
           <span>FOV <output id="coverage-status-fov">--</output></span>
           <span>CAM <output id="coverage-status-camera">--</output></span>
-        </div>
       </div>
 
       <section id="home-hero" class="home-hero" aria-labelledby="home-title">
@@ -98,7 +101,7 @@
         <div class="home-hero-scroll" aria-hidden="true"><span></span><small data-i18n="home.explore">EXPLORE THE SKY</small></div>
       </section>
 
-      <section class="directory-intro" aria-labelledby="page-title" hidden>
+      <section class="directory-intro" aria-labelledby="page-title">
         <div class="intro-copy">
           <p class="eyebrow" data-i18n="directory.eyebrow">PUBLIC SKY COVERAGE CATALOG / 2026.08</p>
           <h1 id="page-title" data-i18n="directory.title">Public Survey Footprints</h1>
@@ -115,17 +118,18 @@
         </div>
       </section>
 
-      <section class="catalog-shell" aria-labelledby="catalog-title" hidden>
+      <section class="catalog-shell" aria-labelledby="catalog-title">
         <div class="catalog-heading">
           <div>
             <p class="eyebrow">SURVEY REGISTER / SORTED BY SOURCE</p>
             <h2 id="catalog-title" data-i18n="directory.bySurvey">Browse public assets by survey</h2>
           </div>
-          <label class="search-field">
+          <div class="search-field">
             <i data-lucide="search"></i>
-            <span class="sr-only">搜索巡天</span>
+            <label class="sr-only" for="survey-search">搜索巡天</label>
             <input id="survey-search" type="search" autocomplete="off" data-i18n-placeholder="common.search" placeholder="Search surveys, missions, modalities, or products" />
-          </label>
+            <button id="survey-filter-toggle" class="search-filter-button" type="button" data-i18n-title="directory.filterTitle" data-i18n-aria-label="directory.filterTitle" title="FILTER BY MODALITY" aria-label="FILTER BY MODALITY" aria-haspopup="dialog" aria-controls="survey-filter-dialog"><i data-lucide="list-filter"></i><span data-i18n="directory.filterShort">FILTER</span></button>
+          </div>
         </div>
         <div class="survey-result-row"><output id="survey-count">--</output><span data-i18n="directory.resultHint">Each record shows published products, coverage cells, and download entry points</span></div>
         <div id="survey-list" class="survey-list" aria-live="polite">
@@ -133,7 +137,7 @@
         </div>
       </section>
 
-      <section class="integrity-band" aria-labelledby="integrity-title" hidden>
+      <section class="integrity-band" aria-labelledby="integrity-title">
         <div>
           <p class="eyebrow" data-i18n="integrity.eyebrow">REPRODUCIBLE EVIDENCE</p>
           <h2 id="integrity-title" data-i18n="integrity.title">Every download has a source and hash</h2>
@@ -160,6 +164,17 @@
     <dialog id="preview-dialog" class="survey-dialog preview-dialog">
       <div class="dialog-bar"><span id="preview-kind">FILE PREVIEW</span><button id="preview-close" class="icon-button" type="button" aria-label="关闭预览" title="关闭"><i data-lucide="x"></i></button></div>
       <div id="preview-content" class="survey-dialog-content preview-content"></div>
+    </dialog>
+
+    <dialog id="survey-filter-dialog" class="survey-dialog survey-filter-dialog">
+      <div class="dialog-bar"><span data-i18n="directory.filterTitle">FILTER BY MODALITY</span><button id="survey-filter-close" class="icon-button" type="button" data-i18n-title="common.close" data-i18n-aria-label="common.close"><i data-lucide="x"></i></button></div>
+      <div class="survey-dialog-content">
+        <div class="survey-filter-heading">
+          <strong data-i18n="directory.filterHeading">Choose modalities</strong>
+          <span id="survey-filter-count"></span>
+        </div>
+        <div id="survey-filter-options" class="survey-filter-options"></div>
+      </div>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

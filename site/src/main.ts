@@ -1,4 +1,4 @@
-import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, RotateCcw, Search, ShieldCheck, Telescope, X, createIcons } from "lucide";
+import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, RotateCcw, Search, ShieldCheck, Telescope, X, createIcons } from "lucide";
 import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 import type { SurveyLayerContextMenu, SurveyLayerInspection, SurveyLayerOverlapComponent, SurveyLayerState } from "./atlas/survey-layer-viewer.js";
@@ -136,6 +136,8 @@ const assetGroupDefinitions: Array<{ id: "moc" | "geometry" | "package" | "evide
 let manifest: ReleaseManifest | null = null;
 let surveyIndex: SurveyIndex | null = null;
 let search = "";
+const selectedModalities = new Set<Modality>();
+let modalityFilterInitialized = false;
 let coverageDots: AtlasCoverageGlobe | null = null;
 let activeSurveyId: string | null = null;
 let coverageCatalog: CoverageCatalog | null = null;
@@ -147,14 +149,27 @@ let coverageStateFrame = 0;
 let overlapMode = false;
 let overlapRequestSequence = 0;
 let overlapEvidenceSequence = 0;
+let overlapController: AbortController | null = null;
 let overlapEvidenceController: AbortController | null = null;
 let activeOverlapSurveyIds: string[] = [];
 let activeOverlapComponents: OverlapComponentView[] = [];
+const queuedLayerIds = new Set<string>();
+let selectedQueueComponent: OverlapComponentView | null = null;
+let renderedQueueComponentId: string | null = null;
+let layerCloseTimer: number | null = null;
+let layerCloseDeadline = 0;
+let layerCloseRemaining = 0;
+let layerClosePaused = false;
 const overlapEvidenceCache = new Map<string, OverlapEvidenceResult>();
 let lastEscapeAt = -Infinity;
 let homeEntered = false;
+let coverageSelectionInitialized = false;
 
 mountLocaleControls();
+
+function isAtlasInteractive(): boolean {
+  return document.body.dataset.homeState === "atlas";
+}
 
 async function fetchCoverageBlock(layer: CoverageCatalog["layers"][number], order: number, tile: number): Promise<number[]> {
   const key = `${layer.layerId}:${order}:${tile}`;
@@ -201,14 +216,12 @@ function updateCoverageReadout(surveyId: string | null, product?: string): void 
     title.textContent = t("coverage.allSurveys");
     meta.textContent = "NESTED HEALPIX · NSIDE 16";
     state.textContent = coverageDots ? t("coverage.publicCells") : t("coverage.previewUnavailable");
-    document.querySelectorAll<HTMLElement>(".survey-row").forEach((row) => { row.dataset.selected = "false"; });
     return;
   }
   scene.style.setProperty("--coverage-color", survey.color);
   title.textContent = product ? `${survey.name.toUpperCase()} · ${product.toUpperCase()}` : survey.name.toUpperCase();
   meta.textContent = `${survey.mission} · ${survey.statistics.footprintCells.toLocaleString("en-US")} HEALPIX CELLS`;
   state.textContent = `${survey.statistics.acquired}/${survey.statistics.publicProducts} PRODUCTS · SELECTED`;
-  document.querySelectorAll<HTMLElement>(".survey-row").forEach((row) => { row.dataset.selected = row.dataset.surveyId === survey.id ? "true" : "false"; });
 }
 
 function updateCoverageState(state: SurveyLayerState): void {
@@ -228,9 +241,15 @@ function updateCoverageState(state: SurveyLayerState): void {
 function updateCoverageInspector(inspection: SurveyLayerInspection | null): void {
   const panel = byId("coverage-detail-panel");
   if (!inspection) {
-    panel.hidden = true;
+    if (!overlapMode) panel.hidden = true;
     return;
   }
+  if (overlapMode) return;
+  panel.classList.remove("is-overlap-panel");
+  panel.style.removeProperty("left");
+  panel.style.removeProperty("top");
+  panel.style.removeProperty("right");
+  panel.style.removeProperty("width");
   panel.hidden = false;
   byId("coverage-detail-kicker").textContent = t("coverage.cellInspector");
   byId("coverage-detail-title").textContent = `ORDER ${Math.round(Math.log2(inspection.nside))} · IPix ${inspection.pixel}`;
@@ -254,6 +273,18 @@ function visibleSurveyIdsFromControls(): string[] {
   return [...byId("coverage-layers").querySelectorAll<HTMLInputElement>("input[type=checkbox]:checked")]
     .map((input) => input.dataset.surveyId)
     .filter((value): value is string => Boolean(value));
+}
+
+function applyCoverageSelection(surveyIds: Iterable<string>): void {
+  const next = new Set(surveyIds);
+  coverageSelectionInitialized = true;
+  queuedLayerIds.clear();
+  next.forEach((surveyId) => queuedLayerIds.add(surveyId));
+  coverageDots?.setVisibleSurveys(next);
+  byId("coverage-layers").querySelectorAll<HTMLInputElement>("input[data-survey-id]").forEach((input) => {
+    input.checked = next.has(input.dataset.surveyId ?? "");
+  });
+  renderSelectionQueue();
 }
 
 function commonOverviewOrder(surveyIds: string[] = visibleSurveyIdsFromControls()): number {
@@ -301,7 +332,7 @@ function overlapBounds(pixels: number[], order: number): { areaDeg2: number; raM
 
 interface OverlapEvidenceLookup { endpoint: string; layerIds: string[]; order: number; precision: "exact" | "estimated" | "entrypoint-only" | "truncated"; deferred: boolean }
 interface OverlapEvidenceResult { available: boolean; precision: string; truncated: boolean; edges: Array<{ layerId?: string; releaseId?: string; sourceFileId?: string; fileName?: string; sourceUri?: string; downloadUrl?: string; ipix: number; precision: string }>; sourceFiles: Array<Record<string, unknown>>; notes?: string[] }
-interface OverlapComponentView { id: string; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; evidenceLookup?: OverlapEvidenceLookup; surveys?: Array<{ surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }> }
+interface OverlapComponentView { id: string; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; evidenceLookup?: OverlapEvidenceLookup; surveys?: Array<{ surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; unitKind?: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }> }
 
 function overlapComponents(pixels: number[], order: number): OverlapComponentView[] {
   const pending = new Set(pixels);
@@ -327,9 +358,202 @@ function overlapComponents(pixels: number[], order: number): OverlapComponentVie
   return result;
 }
 
+function positionOverlapPanel(): void {
+  const panel = byId("coverage-detail-panel");
+  if (!panel.classList.contains("is-overlap-panel")) return;
+  panel.style.left = "auto";
+  panel.style.right = window.innerWidth <= 820 ? "14px" : "28px";
+  panel.style.top = window.innerWidth <= 820 ? "150px" : "214px";
+  panel.style.width = window.innerWidth <= 820 ? "min(300px, calc(100vw - 28px))" : "300px";
+}
+
+function layersForSurvey(surveyId: string): CoverageCatalog["layers"] {
+  return coverageCatalog?.layers.filter((layer) => layer.surveyId === surveyId) ?? [];
+}
+
+function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLElement {
+  const layers = layersForSurvey(surveyId);
+  const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
+  const color = layers[0]?.color ?? survey?.color ?? "#42d5c4";
+  const panel = document.createElement("div");
+  panel.className = persistent ? "selection-queue-entry coverage-layer-detail-persistent" : "coverage-layer-detail";
+  const body = persistent ? document.createElement("div") : panel;
+  if (persistent) body.className = "coverage-layer-detail-body";
+  panel.dataset.surveyId = surveyId;
+  panel.style.setProperty("--layer-color", color);
+  panel.setAttribute("aria-label", `${survey?.name ?? surveyId} 图层详情`);
+  const kicker = document.createElement("span");
+  kicker.className = "coverage-layer-detail-kicker";
+  kicker.textContent = "COVERAGE LAYER";
+  const title = document.createElement("strong");
+  title.textContent = survey?.name ?? surveyId.toUpperCase();
+  const summary = document.createElement("small");
+  const orders = [...new Set(layers.flatMap((layer) => layer.availableOrders))].sort((a, b) => a - b);
+  const modalities = [...new Set(layers.flatMap((layer) => {
+    const release = survey?.releases.find((entry) => entry.id === layer.releaseId);
+    const product = release?.products.find((entry) => entry.name === layer.product);
+    return product?.modality ? [modalityLabel(product.modality)] : [];
+  }))];
+  summary.textContent = `${layers.length} products · ${orders.length ? `O${orders.join("/O")}` : "HEALPIX --"}${modalities.length ? ` · ${modalities.join(" · ")}` : ""}`;
+  body.append(kicker, title, summary);
+  const list = document.createElement("div");
+  list.className = "coverage-layer-detail-list";
+  layers.forEach((layer) => {
+    const release = survey?.releases.find((entry) => entry.id === layer.releaseId);
+    const product = release?.products.find((entry) => entry.name === layer.product);
+    const row = document.createElement("div");
+    row.className = "coverage-layer-detail-row";
+    row.textContent = `${layer.product || product?.name || "Coverage"} · ${layer.releaseId || release?.label || "--"} · ${layer.availableOrders.length ? `O${layer.availableOrders.join("/O")}` : "HEALPIX --"}`;
+    list.append(row);
+  });
+  body.append(list);
+  if (persistent) panel.append(body);
+  return panel;
+}
+
+function createSelectedComponentDetail(component: OverlapComponentView): HTMLElement {
+  const panel = document.createElement("div");
+  panel.className = `selection-queue-entry selection-queue-component${renderedQueueComponentId === component.id ? "" : " is-entering"}`;
+  panel.dataset.queueKey = "component";
+  panel.style.setProperty("--layer-color", "var(--ochre)");
+  const kicker = document.createElement("span");
+  kicker.className = "coverage-layer-detail-kicker";
+  kicker.textContent = t("coverage.selectedComponent");
+  const title = document.createElement("strong");
+  title.textContent = component.id;
+  const summary = document.createElement("small");
+  summary.textContent = `O${component.order} · NSIDE ${2 ** component.order} · ${component.cells.length.toLocaleString("en-US")} cells · ${component.bounds.areaDeg2.toFixed(2)} deg²`;
+  const bounds = document.createElement("small");
+  bounds.textContent = `RA ${component.bounds.raMin.toFixed(2)}°–${component.bounds.raMax.toFixed(2)}° · DEC ${component.bounds.decMin.toFixed(2)}°–${component.bounds.decMax.toFixed(2)}°`;
+  panel.append(kicker, title, summary, bounds);
+  return panel;
+}
+
+function positionSelectionQueue(): void {
+  const queue = byId("selection-queue");
+  if (window.innerWidth <= 820) {
+    queue.style.removeProperty("top");
+    queue.style.removeProperty("left");
+    queue.style.removeProperty("width");
+    return;
+  }
+  const layers = byId("coverage-layers");
+  const top = layers.hidden ? 132 : Math.min(window.innerHeight - 180, layers.getBoundingClientRect().bottom + 16);
+  queue.style.top = `${Math.max(132, top)}px`;
+  queue.style.left = "28px";
+  queue.style.width = "min(330px, calc(100vw - 56px))";
+}
+
+function updateCoverageEmptyGuide(): void {
+  const guide = byId("coverage-empty-guide");
+  const layers = byId("coverage-layers");
+  const shouldShow = isAtlasInteractive()
+    && Boolean(coverageCatalog?.layers.length)
+    && queuedLayerIds.size === 0
+    && layers.hidden;
+  guide.hidden = !shouldShow;
+}
+
+function renderSelectionQueue(): void {
+  const queue = byId("selection-queue");
+  const entries: HTMLElement[] = [];
+  queuedLayerIds.forEach((surveyId) => {
+    if (layersForSurvey(surveyId).length) entries.push(createCoverageLayerDetail(surveyId, true));
+  });
+  if (selectedQueueComponent && overlapMode) entries.push(createSelectedComponentDetail(selectedQueueComponent));
+  queue.replaceChildren(...entries);
+  renderedQueueComponentId = selectedQueueComponent?.id ?? null;
+  queue.hidden = entries.length === 0 || !isAtlasInteractive();
+  positionSelectionQueue();
+  updateCoverageEmptyGuide();
+}
+
+function clearLayerCloseTimer(): void {
+  if (layerCloseTimer !== null) window.clearTimeout(layerCloseTimer);
+  layerCloseTimer = null;
+  layerCloseDeadline = 0;
+  layerCloseRemaining = 0;
+  layerClosePaused = false;
+}
+
+function scheduleLayerCloseTimer(): void {
+  if (layerClosePaused || layerCloseRemaining <= 0) return;
+  layerCloseDeadline = Date.now() + layerCloseRemaining;
+  layerCloseTimer = window.setTimeout(() => {
+    layerCloseTimer = null;
+    layerCloseRemaining = 0;
+    byId("coverage-layers").hidden = true;
+    positionSelectionQueue();
+    updateCoverageEmptyGuide();
+  }, layerCloseRemaining);
+}
+
+function restartLayerCloseTimer(): void {
+  if (layerCloseTimer !== null) window.clearTimeout(layerCloseTimer);
+  layerCloseRemaining = 10_000;
+  scheduleLayerCloseTimer();
+}
+
+function pauseLayerCloseTimer(): void {
+  if (layerCloseTimer === null || layerClosePaused) return;
+  layerClosePaused = true;
+  window.clearTimeout(layerCloseTimer);
+  layerCloseTimer = null;
+  layerCloseRemaining = Math.max(0, layerCloseDeadline - Date.now());
+}
+
+function resumeLayerCloseTimer(): void {
+  if (!layerClosePaused) return;
+  layerClosePaused = false;
+  scheduleLayerCloseTimer();
+}
+
+function bindLayerCloseTimer(host: HTMLElement): void {
+  if (host.dataset.timerBound === "true") return;
+  host.dataset.timerBound = "true";
+  host.addEventListener("pointerenter", pauseLayerCloseTimer);
+  host.addEventListener("pointerleave", resumeLayerCloseTimer);
+}
+
+function renderOverlapLoadingPanel(surveyIds: string[], order: number): void {
+  const panel = byId("coverage-detail-panel");
+  const content = byId("coverage-detail-content");
+  panel.classList.add("is-overlap-panel");
+  panel.hidden = false;
+  byId("coverage-detail-kicker").textContent = t("coverage.overlapResult");
+  byId("coverage-detail-title").textContent = `GLOBAL · ${surveyIds.length} SURVEYS`;
+  const summary = document.createElement("p");
+  summary.className = "overlap-summary";
+  summary.textContent = `${t("coverage.commonOrder")} O${order}`;
+  const loading = document.createElement("div");
+  loading.className = "overlap-loading";
+  const spinner = document.createElement("span");
+  spinner.setAttribute("aria-hidden", "true");
+  const label = document.createElement("strong");
+  label.textContent = t("coverage.queryingPlan");
+  loading.append(spinner, label);
+  content.replaceChildren(summary, loading);
+  positionOverlapPanel();
+}
+
+function renderOverlapErrorPanel(surveyIds: string[]): void {
+  const panel = byId("coverage-detail-panel");
+  const content = byId("coverage-detail-content");
+  panel.classList.add("is-overlap-panel");
+  panel.hidden = false;
+  byId("coverage-detail-kicker").textContent = t("coverage.overlapResult");
+  byId("coverage-detail-title").textContent = `GLOBAL · ${surveyIds.length} SURVEYS`;
+  const message = document.createElement("p");
+  message.className = "overlap-error";
+  message.textContent = t("coverage.overlapFailed");
+  content.replaceChildren(message);
+  positionOverlapPanel();
+}
+
 function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number, scope = "GLOBAL", componentData?: OverlapComponentView[]): void {
   const panel = byId("coverage-detail-panel");
   const content = byId("coverage-detail-content");
+  panel.classList.add("is-overlap-panel");
   panel.hidden = false;
   byId("coverage-detail-kicker").textContent = t("coverage.overlapResult");
   byId("coverage-detail-title").textContent = `${scope} · ${surveyIds.length} SURVEYS`;
@@ -338,7 +562,10 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
   summary.className = "overlap-summary";
   summary.textContent = pixels.length ? `${t("coverage.commonOrder")} O${order} · NSIDE ${2 ** order} · ${pixels.length.toLocaleString("en-US")} cells` : `${t("coverage.commonOrder")} O${order} · ${t("coverage.noCommon")}`;
   content.append(summary);
-  if (!pixels.length) return;
+  if (!pixels.length) {
+    positionOverlapPanel();
+    return;
+  }
   const components = componentData?.length ? componentData : overlapComponents(pixels, order);
   const componentNav = document.createElement("div");
   componentNav.className = "overlap-components";
@@ -356,10 +583,9 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
     componentNav.append(button);
   });
   content.append(componentNav);
-  coverageDots?.setActiveOverlapComponent(null);
-  updateOverlapHud(null);
-  coverageDots?.focusPixels(components[0]!.order, components[0]!.cells);
-  renderOverlapComponent(components[0]!, surveyIds, content);
+  const initialComponent = components.find((component) => component.id === selectedQueueComponent?.id) ?? components[0]!;
+  selectOverlapComponent(initialComponent, surveyIds, content);
+  positionOverlapPanel();
 }
 
 function selectOverlapComponent(component: OverlapComponentView, surveyIds = activeOverlapSurveyIds, content = byId("coverage-detail-content")): void {
@@ -381,15 +607,16 @@ function handleOverlapComponentLabel(component: SurveyLayerOverlapComponent): vo
 }
 
 function updateOverlapHud(component: OverlapComponentView | null): void {
-  const hud = byId("overlap-hud");
   if (!component || !overlapMode) {
-    hud.hidden = true;
+    selectedQueueComponent = null;
+    renderedQueueComponentId = null;
+    renderSelectionQueue();
     return;
   }
-  hud.hidden = false;
-  byId("overlap-hud-title").textContent = component.id;
-  byId("overlap-hud-summary").textContent = `O${component.order} · NSIDE ${2 ** component.order} · ${component.cells.length.toLocaleString("en-US")} cells · ${component.bounds.areaDeg2.toFixed(2)} deg²`;
-  byId("overlap-hud-bounds").textContent = `RA ${component.bounds.raMin.toFixed(2)}°–${component.bounds.raMax.toFixed(2)}° · DEC ${component.bounds.decMin.toFixed(2)}°–${component.bounds.decMax.toFixed(2)}°`;
+  renderedQueueComponentId = selectedQueueComponent?.id ?? null;
+  selectedQueueComponent = component;
+  renderSelectionQueue();
+  positionOverlapPanel();
 }
 
 function sourceValue(source: Record<string, unknown>, keys: string[]): string | undefined {
@@ -555,14 +782,14 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
 
 function renderOverlapComponent(component: OverlapComponentView, surveyIds: string[], content: HTMLElement): void {
   overlapEvidenceController?.abort();
-  content.querySelectorAll(".overlap-component-detail, .overlap-products").forEach((node) => node.remove());
+  content.querySelectorAll(".overlap-component-detail, .overlap-products, .overlap-result-actions, .overlap-evidence-plan").forEach((node) => node.remove());
   const detail = document.createElement("div");
   detail.className = "overlap-component-detail";
   const bounds = component.bounds;
   detail.textContent = `${component.id} · ${component.cells.length.toLocaleString("en-US")} cells · ${bounds.areaDeg2.toFixed(2)} deg² · RA ${bounds.raMin.toFixed(2)}°${bounds.raWraps ? "↷" : "–"}${bounds.raMax.toFixed(2)}° · DEC ${bounds.decMin.toFixed(2)}°–${bounds.decMax.toFixed(2)}°`;
   content.append(detail);
-  const list = document.createElement("div");
-  list.className = "overlap-products";
+  const products = document.createElement("div");
+  products.className = "overlap-products";
   const entries = component.surveys ?? surveyIds.flatMap((surveyId) => {
     const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
     return survey?.releases.flatMap((release) => release.products.filter((product) => product.coverage).map((product) => ({ surveyId, releaseId: release.id, product: product.name, modality: product.modality, downloadUrl: product.sourceUrl }))) ?? [];
@@ -572,16 +799,54 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
     row.className = "coverage-detail-product";
     row.textContent = `${surveyIndex?.surveys.find((survey) => survey.id === entry.surveyId)?.name ?? entry.surveyId} · ${entry.releaseId} · ${entry.product} · ${entry.modality ?? "--"}`;
     if (entry.sourceUnitIndex) row.append(Object.assign(document.createElement("small"), { textContent: `${entry.sourceUnitIndex.status.toUpperCase()}: ${entry.sourceUnitIndex.notes}` }));
-    if (entry.sourceUnits) {
-      row.append(Object.assign(document.createElement("small"), { textContent: `${entry.sourceUnits.totalUnits} ${entry.sourceUnits.unitKind}${entry.sourceUnits.totalUnits === 1 ? "" : "s"} matched${entry.sourceUnits.truncated ? " · first results shown" : ""}` }));
-      const links = document.createElement("div"); links.className = "overlap-unit-links";
-      entry.sourceUnits.units.slice(0, 18).forEach((unit) => { const link = document.createElement("a"); link.href = unit.downloadUrl; link.target = "_blank"; link.rel = "noreferrer"; link.textContent = `TILE ${unit.unitId}`; link.title = `NEXP ${unit.exposureCount} · LASTNIGHT ${unit.lastNight}`; links.append(link); });
-      row.append(links);
+    if (entry.sourceUnitIndex?.unitKind === "tile" && !entry.sourceUnits) {
+      row.append(Object.assign(document.createElement("small"), { textContent: t("coverage.tileLookupUnavailable") }));
+    }
+    if (entry.sourceUnits?.unitKind === "tile") {
+      const tilePlan = document.createElement("section");
+      tilePlan.className = "overlap-tile-plan";
+      const tileHeading = document.createElement("div");
+      tileHeading.className = "overlap-tile-heading";
+      const tileTitle = document.createElement("strong");
+      tileTitle.textContent = `${t("coverage.tileMatches")} · ${entry.sourceUnits.totalUnits}`;
+      const tileStatus = document.createElement("small");
+      tileStatus.textContent = entry.sourceUnits.truncated ? t("coverage.tileFirstResults") : t("coverage.tileExact");
+      tileHeading.append(tileTitle, tileStatus);
+      tilePlan.append(tileHeading);
+      if (!entry.sourceUnits.units.length) {
+        tilePlan.append(Object.assign(document.createElement("small"), { className: "overlap-tile-empty", textContent: t("coverage.tileNoMatches") }));
+      } else {
+        const tileList = document.createElement("div");
+        tileList.className = "overlap-tile-list";
+        entry.sourceUnits.units.forEach((unit) => {
+          const tileRow = document.createElement("div");
+          tileRow.className = "overlap-tile-row";
+          const tileCopy = document.createElement("div");
+          tileCopy.className = "overlap-tile-copy";
+          const link = document.createElement("a");
+          link.className = "overlap-tile-link";
+          link.href = unit.downloadUrl;
+          link.target = "_blank";
+          link.rel = "noreferrer";
+          link.textContent = `TILE ${unit.unitId}`;
+          link.title = `TILE ${unit.unitId} · NEXP ${unit.exposureCount} · LASTNIGHT ${unit.lastNight}`;
+          const metadata = document.createElement("small");
+          metadata.textContent = `NEXP ${unit.exposureCount} · LASTNIGHT ${unit.lastNight}`;
+          tileCopy.append(link, metadata);
+          tileRow.append(tileCopy);
+          tileList.append(tileRow);
+        });
+        tilePlan.append(tileList);
+      }
+      row.append(tilePlan);
     }
     if (entry.downloadUrl) { const link = document.createElement("a"); link.href = entry.downloadUrl; link.target = "_blank"; link.rel = "noreferrer"; link.textContent = t("coverage.releaseEntry"); row.append(link); }
-    list.append(row);
+    products.append(row);
   });
-  if (!entries.length) list.append(Object.assign(document.createElement("p"), { className: "overlap-empty", textContent: t("coverage.noProducts") }));
+  if (!entries.length) products.append(Object.assign(document.createElement("p"), { className: "overlap-empty", textContent: t("coverage.noProducts") }));
+  content.append(products);
+  const list = document.createElement("div");
+  list.className = "overlap-result-actions";
   const downloads = document.createElement("div");
   downloads.className = "overlap-download-actions";
   const currentDownload = document.createElement("button");
@@ -609,16 +874,19 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
 }
 
 async function activateOverlap(forceActive?: boolean): Promise<void> {
+  if (!isAtlasInteractive()) return;
   const surveyIds = visibleSurveyIdsFromControls();
-  const order = commonOverviewOrder(surveyIds);
-  if (surveyIds.length < 2) {
+  const activate = forceActive ?? !overlapMode;
+  if (activate && surveyIds.length < 2) {
     toast(t("coverage.needTwoSurveys"));
     return;
   }
-  const activate = forceActive ?? !overlapMode;
+  const order = commonOverviewOrder(surveyIds);
   const requestSequence = ++overlapRequestSequence;
   overlapMode = activate;
   if (!activate) {
+    overlapController?.abort();
+    overlapController = null;
     overlapEvidenceController?.abort();
     overlapEvidenceSequence += 1;
     activeOverlapSurveyIds = [];
@@ -627,42 +895,49 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
     coverageDots?.setOverlapMode(false);
     coverageDots?.setActiveOverlapComponent(null);
     updateOverlapHud(null);
-    byId("coverage-detail-panel").hidden = true;
+    const panel = byId("coverage-detail-panel");
+    panel.hidden = true;
+    panel.classList.remove("is-overlap-panel");
+    panel.style.removeProperty("left");
+    panel.style.removeProperty("top");
+    panel.style.removeProperty("right");
+    panel.style.removeProperty("width");
     return;
   }
   coverageDots?.setOverlapMode(true);
-  const layers = coverageCatalog?.layers.filter((layer) => surveyIds.includes(layer.surveyId) && layer.availableOrders.includes(order)) ?? [];
-  await Promise.all(layers.map((layer) => fetchCoverageLayerOrder(layer, order)));
-  const pixels = overlapPixelsForSurveys(surveyIds, order);
-  if (!overlapMode || requestSequence !== overlapRequestSequence) return;
-  const localComponents = overlapComponents(pixels, order);
-  activeOverlapSurveyIds = [...surveyIds];
-  activeOverlapComponents = localComponents;
-  overlapEvidenceCache.clear();
-  coverageDots?.setOverlapCells(order, pixels);
-  coverageDots?.setOverlapComponents(localComponents);
-  renderOverlapPanel(surveyIds, pixels, order, "GLOBAL", localComponents);
-  if (localComponents[0]) coverageDots?.focusPixels(localComponents[0].order, localComponents[0].cells);
-  let renderedPixels = pixels;
-  let renderedOrder = order;
+  activeOverlapComponents = [];
+  updateOverlapHud(null);
+  overlapController?.abort();
+  const controller = new AbortController();
+  overlapController = controller;
+  renderOverlapLoadingPanel(surveyIds, order);
   try {
-    const response = await fetch("/api/v1/coverage/overlap", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ surveyIds, requestedOrder: order }) });
+    const response = await fetch("/api/v1/coverage/overlap", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ surveyIds, requestedOrder: order }), signal: controller.signal });
     if (!overlapMode || requestSequence !== overlapRequestSequence) return;
-    if (response.ok) {
-      const result = await response.json() as { components?: OverlapComponentView[]; commonOrder?: number; pixels?: number[] };
-      renderedPixels = result.pixels ?? pixels;
-      renderedOrder = result.commonOrder ?? order;
-      activeOverlapComponents = result.components ?? localComponents;
-      coverageDots?.setOverlapCells(renderedOrder, renderedPixels);
-      coverageDots?.setOverlapComponents(activeOverlapComponents);
-      renderOverlapPanel(surveyIds, renderedPixels, renderedOrder, "GLOBAL", activeOverlapComponents);
-      const firstComponent = result.components?.[0];
-      if (firstComponent) coverageDots?.focusPixels(firstComponent.order, firstComponent.cells);
-    }
+    if (!response.ok) throw new Error(`overlap request failed: ${response.status}`);
+    const result = await response.json() as { components?: OverlapComponentView[]; commonOrder?: number; pixels?: number[] };
+    if (!overlapMode || requestSequence !== overlapRequestSequence) return;
+    const renderedPixels = result.pixels ?? [];
+    const renderedOrder = result.commonOrder ?? order;
+    activeOverlapSurveyIds = [...surveyIds];
+    activeOverlapComponents = result.components ?? [];
+    overlapEvidenceCache.clear();
+    coverageDots?.setOverlapCells(renderedOrder, renderedPixels);
+    coverageDots?.setOverlapComponents(activeOverlapComponents);
+    renderOverlapPanel(surveyIds, renderedPixels, renderedOrder, "GLOBAL", activeOverlapComponents);
+    const firstComponent = activeOverlapComponents[0];
+    if (firstComponent) coverageDots?.focusPixels(firstComponent.order, firstComponent.cells);
+    byId("coverage-state").textContent = renderedPixels.length ? `${t("coverage.commonOrder")} O${renderedOrder} · ${renderedPixels.length.toLocaleString("en-US")} CELLS` : `${t("coverage.noCommon")} · O${renderedOrder}`;
   } catch {
-    // The local overlap remains usable when download-plan enrichment fails.
+    if (!overlapMode || requestSequence !== overlapRequestSequence || controller.signal.aborted) return;
+    activeOverlapSurveyIds = [...surveyIds];
+    activeOverlapComponents = [];
+    coverageDots?.setOverlapCells(order, []);
+    coverageDots?.setOverlapComponents([]);
+    renderOverlapErrorPanel(surveyIds);
+    byId("coverage-state").textContent = t("coverage.overlapFailed");
   }
-  byId("coverage-state").textContent = renderedPixels.length ? `${t("coverage.commonOrder")} O${renderedOrder} · ${renderedPixels.length.toLocaleString("en-US")} CELLS` : `${t("coverage.noCommon")} · O${renderedOrder}`;
+  if (overlapController === controller) overlapController = null;
 }
 
 function closeCoverageContextMenu(): void {
@@ -672,6 +947,7 @@ function closeCoverageContextMenu(): void {
 }
 
 function openCoverageContextMenu(menuState: SurveyLayerContextMenu): void {
+  if (!isAtlasInteractive()) return;
   const menu = byId("coverage-context-menu");
   menu.replaceChildren();
   const addAction = (label: string, action: () => void): void => {
@@ -694,6 +970,7 @@ function renderCoverageLayers(): void {
   const host = byId("coverage-layers");
   host.replaceChildren();
   if (!coverageCatalog) return;
+  bindLayerCloseTimer(host);
   const search = document.createElement("label");
   search.className = "coverage-layer-search";
   search.innerHTML = `<i data-lucide="search"></i><input id="coverage-layer-search" type="search" autocomplete="off" placeholder="筛选巡天图层" aria-label="筛选巡天图层" />`;
@@ -702,12 +979,12 @@ function renderCoverageLayers(): void {
   const grouped = new Map<string, CoverageCatalog["layers"]>();
   for (const layer of coverageCatalog.layers) grouped.set(layer.surveyId, [...(grouped.get(layer.surveyId) ?? []), layer]);
   for (const [surveyId, layers] of grouped) {
-    const label = document.createElement("label");
+    const label = document.createElement("div");
     label.className = "coverage-layer-toggle";
     label.setAttribute("title", "拖动三横线把手以调整图层顺序");
     const input = document.createElement("input");
     input.type = "checkbox";
-    input.checked = true;
+    input.checked = queuedLayerIds.has(surveyId);
     input.dataset.surveyId = surveyId;
     const name = document.createElement("span");
     const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
@@ -718,19 +995,19 @@ function renderCoverageLayers(): void {
     swatch.className = "coverage-layer-swatch";
     swatch.style.backgroundColor = layers[0]?.color ?? survey?.color ?? "#42d5c4";
     swatch.setAttribute("aria-label", `图层颜色 ${swatch.style.backgroundColor}`);
-    const modalities = [...new Set(layers.flatMap((layer) => {
-      const release = survey?.releases.find((entry) => entry.id === layer.releaseId);
-      const product = release?.products.find((entry) => entry.name === layer.product);
-      return product?.modality ? [modalityLabel(product.modality as Modality) ?? product.modality] : [];
-    }))];
-    const modality = document.createElement("small");
-    modality.className = "coverage-layer-modality";
-    modality.textContent = modalities.length ? modalities.join(" · ") : "MODALITY --";
-    modality.title = modalities.length ? `模态：${modalities.join("、")}` : "未提供模态信息";
-    const count = document.createElement("small");
-    count.className = "coverage-layer-count";
-    const orders = [...new Set(layers.flatMap((layer) => layer.availableOrders))].sort((a, b) => a - b);
-    count.textContent = `${layers.length} products · O${orders.join("/O") || "--"}`;
+    const detail = createCoverageLayerDetail(surveyId);
+    label.addEventListener("pointerenter", () => {
+      const bounds = label.getBoundingClientRect();
+      const detailWidth = Math.min(292, Math.max(220, window.innerWidth - 390));
+      detail.style.top = `${Math.max(12, Math.min(bounds.top, window.innerHeight - 210))}px`;
+      detail.style.left = `${Math.min(bounds.right + 12, window.innerWidth - detailWidth - 12)}px`;
+      detail.style.display = "grid";
+    });
+    label.addEventListener("pointerleave", () => {
+      detail.style.removeProperty("top");
+      detail.style.removeProperty("left");
+      detail.style.removeProperty("display");
+    });
     const handle = document.createElement("span");
     handle.className = "coverage-layer-handle";
     handle.innerHTML = `<i data-lucide="grip-horizontal"></i>`;
@@ -738,10 +1015,13 @@ function renderCoverageLayers(): void {
     handle.setAttribute("aria-label", "拖动把手");
     handle.title = "拖动排序";
     input.addEventListener("change", () => {
-      const enabled = new Set([...host.querySelectorAll<HTMLInputElement>("input:checked")].map((entry) => entry.dataset.surveyId).filter(Boolean) as string[]);
-      coverageDots?.setVisibleSurveys(enabled);
+      const enabled = [...host.querySelectorAll<HTMLInputElement>("input:checked")]
+        .map((entry) => entry.dataset.surveyId)
+        .filter((value): value is string => Boolean(value));
+      applyCoverageSelection(enabled);
+      restartLayerCloseTimer();
       if (overlapMode) {
-        void activateOverlap(true);
+        void (enabled.length >= 2 ? activateOverlap(true) : activateOverlap(false));
       }
     });
     label.draggable = true;
@@ -758,7 +1038,7 @@ function renderCoverageLayers(): void {
       host.insertBefore(dragging, event.clientY < rect.top + rect.height / 2 ? label : label.nextSibling);
       coverageDots?.setLayerOrder([...host.querySelectorAll<HTMLElement>("[data-layer-key]")].map((node) => node.dataset.layerKey!).filter(Boolean));
     });
-    label.append(input, swatch, handle, name, modality, count);
+    label.append(input, swatch, handle, name, detail);
     host.append(label);
   }
   filterInput?.addEventListener("input", () => {
@@ -766,6 +1046,7 @@ function renderCoverageLayers(): void {
     host.querySelectorAll<HTMLElement>(".coverage-layer-toggle").forEach((row) => { row.hidden = Boolean(query) && !row.dataset.searchText?.includes(query); });
   });
   renderIcons();
+  renderSelectionQueue();
 }
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -794,7 +1075,7 @@ async function copy(value: string): Promise<void> {
 
 function renderIcons(): void {
     createIcons({
-    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, RotateCcw, Search, ShieldCheck, Telescope, X },
+    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, RotateCcw, Search, ShieldCheck, Telescope, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -813,16 +1094,58 @@ function assetGroups(survey: SurveyRecord): Array<{ id: "moc" | "geometry" | "pa
   }));
 }
 
+function initializeModalityFilter(): void {
+  if (modalityFilterInitialized || !surveyIndex) return;
+  surveyIndex.surveys.flatMap((survey) => survey.modalities).forEach((modality) => selectedModalities.add(modality));
+  modalityFilterInitialized = true;
+}
+
+function renderSurveyFilterOptions(): void {
+  initializeModalityFilter();
+  const host = byId("survey-filter-options");
+  const modalities = [...selectedModalities, ...((surveyIndex?.surveys.flatMap((survey) => survey.modalities) ?? []).filter((modality) => !selectedModalities.has(modality)))];
+  const unique = [...new Set(modalities)].sort((a, b) => modalityLabel(a).localeCompare(modalityLabel(b)));
+  host.replaceChildren(...unique.map((modality) => {
+    const label = document.createElement("label");
+    label.className = "survey-filter-option";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = selectedModalities.has(modality);
+    input.dataset.modality = modality;
+    input.addEventListener("change", () => {
+      if (input.checked) selectedModalities.add(modality);
+      else selectedModalities.delete(modality);
+      renderSurveys();
+      updateSurveyFilterCount();
+    });
+    const name = document.createElement("span");
+    name.textContent = modalityLabel(modality);
+    const count = document.createElement("small");
+    count.textContent = String(surveyIndex?.surveys.filter((survey) => survey.modalities.includes(modality)).length ?? 0);
+    label.append(input, name, count);
+    return label;
+  }));
+  updateSurveyFilterCount();
+}
+
+function updateSurveyFilterCount(): void {
+  const total = surveyIndex?.surveys.flatMap((survey) => survey.modalities).filter((modality, index, values) => values.indexOf(modality) === index).length ?? 0;
+  byId("survey-filter-count").textContent = `${selectedModalities.size} / ${total}`;
+}
+
 function filteredSurveys(): SurveyRecord[] {
   const surveys = surveyIndex?.surveys ?? [];
-  if (!search) return surveys;
-  return surveys.filter((survey) => [
+  return surveys.filter((survey) => {
+    if (!selectedModalities.size || !survey.modalities.some((modality) => selectedModalities.has(modality))) return false;
+    if (!search) return true;
+    return [
     survey.name,
     survey.mission,
     survey.description,
     ...survey.modalities.map((modality) => modalityLabel(modality)),
     ...survey.releases.flatMap((release) => [release.label, ...release.products.flatMap((product) => [product.name, product.description, product.reason, product.manualStep])]),
-  ].filter(Boolean).join(" ").toLocaleLowerCase().includes(search));
+    ].filter(Boolean).join(" ").toLocaleLowerCase().includes(search);
+  });
 }
 
 function statusDescription(product: SurveyProduct): string {
@@ -962,35 +1285,17 @@ function renderSurveys(): void {
     const row = document.createElement("article");
     row.className = "survey-row";
     row.dataset.surveyId = survey.id;
-    row.dataset.selected = activeSurveyId === survey.id ? "true" : "false";
-    row.tabIndex = 0;
     row.style.setProperty("--survey-color", survey.color);
     row.setAttribute("aria-label", `${survey.name}，${survey.mission}，${survey.statistics.acquired} 个已收录产品`);
 
-    const focusSurvey = (): void => coverageDots?.setHighlightedSurvey(survey.id);
-    const clearSurvey = (): void => { /* Keep the last active survey after leaving a record. */ };
-    row.addEventListener("pointerenter", focusSurvey);
-    row.addEventListener("pointerleave", clearSurvey);
-    row.addEventListener("focus", focusSurvey);
-    row.addEventListener("focusin", focusSurvey);
-    row.addEventListener("focusout", (event) => {
-      if (!row.contains(event.relatedTarget as Node | null)) clearSurvey();
-    });
-    row.addEventListener("click", (event) => {
-      if ((event.target as HTMLElement).closest("button, a")) return;
-      coverageDots?.setSelectedSurvey(survey.id);
-    });
-    row.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        coverageDots?.setSelectedSurvey(survey.id);
-      }
-    });
-
     const marker = document.createElement("span"); marker.className = "survey-marker"; marker.setAttribute("aria-hidden", "true");
-    const visual = document.createElement("div"); visual.className = "survey-thumb";
+    const visual = document.createElement("div"); visual.className = "survey-thumb"; visual.dataset.miniGlobe = survey.id;
     const image = document.createElement("img"); image.src = survey.imageUrl; image.alt = ""; image.loading = "lazy";
-    visual.append(image);
+    const miniGlobe = document.createElement("span");
+    miniGlobe.className = "survey-mini-globe";
+    miniGlobe.dataset.surveyId = survey.id;
+    miniGlobe.setAttribute("aria-hidden", "true");
+    visual.append(image, miniGlobe);
 
     const identity = document.createElement("div"); identity.className = "survey-identity";
     const overline = document.createElement("span"); overline.className = "survey-overline"; overline.textContent = survey.mission;
@@ -1012,6 +1317,14 @@ function renderSurveys(): void {
     addMetric("HEALPIX ORDER", orderSummaryLabel(survey.coverageOrders));
 
     const actions = document.createElement("div"); actions.className = "survey-actions";
+    const skyAction = document.createElement("button");
+    skyAction.type = "button";
+    skyAction.className = "asset-action sky-action";
+    skyAction.title = `${survey.name} · ${t("coverage.enterSurvey")}`;
+    skyAction.append(icon("telescope"));
+    const skyLabel = document.createElement("span"); skyLabel.textContent = t("coverage.enterSurvey"); skyAction.append(skyLabel);
+    skyAction.addEventListener("click", () => enterAtlasExperience(survey.id));
+    actions.append(skyAction);
     const detail = document.createElement("button"); detail.type = "button"; detail.className = "text-action"; detail.title = `查看 ${survey.name} 产品`; detail.append(icon("list-checks")); const detailLabel = document.createElement("span"); detailLabel.textContent = "产品详情"; detail.append(detailLabel); detail.addEventListener("click", () => showSurveyProducts(survey));
     actions.append(detail);
     assetGroups(survey).forEach((group) => {
@@ -1046,6 +1359,8 @@ async function initialize(): Promise<void> {
   ]);
   if (!surveysResponse.ok) throw new Error("Public survey catalog request failed");
   surveyIndex = await surveysResponse.json() as SurveyIndex;
+  initializeModalityFilter();
+  renderSurveys();
   if (coverageCatalogResponse.ok && coverageDots) {
     coverageCatalog = await coverageCatalogResponse.json() as CoverageCatalog;
     const blocks = new Map<string, number[]>();
@@ -1054,6 +1369,9 @@ async function initialize(): Promise<void> {
       if (cells.length) blocks.set(`${layer.layerId}:${layer.overviewOrder}`, cells);
     }));
     coverageDots.loadCatalog(coverageCatalog, blocks, surveyIndex.surveys);
+    if (coverageSelectionInitialized) coverageDots.setVisibleSurveys(queuedLayerIds);
+    else coverageDots.setVisibleSurveys(new Set(coverageCatalog.layers.map((layer) => layer.surveyId)));
+    if (homeEntered) coverageDots.transitionToDataView(1);
     renderCoverageLayers();
     updateCoverageReadout(null);
   } else if (coverageDots) {
@@ -1081,6 +1399,14 @@ byId<HTMLInputElement>("survey-search").addEventListener("input", (event) => {
   search = (event.currentTarget as HTMLInputElement).value.trim().toLocaleLowerCase();
   renderSurveys();
 });
+byId("survey-filter-toggle").addEventListener("click", () => {
+  renderSurveyFilterOptions();
+  byId<HTMLDialogElement>("survey-filter-dialog").showModal();
+});
+byId("survey-filter-close").addEventListener("click", () => byId<HTMLDialogElement>("survey-filter-dialog").close());
+byId<HTMLDialogElement>("survey-filter-dialog").addEventListener("click", (event) => {
+  if (event.target === event.currentTarget) byId<HTMLDialogElement>("survey-filter-dialog").close();
+});
 byId("copy-bundle-hash").addEventListener("click", () => { if (manifest) void copy(manifest.bundle.sha256); });
 byId("dialog-close").addEventListener("click", () => byId<HTMLDialogElement>("survey-dialog").close());
 byId<HTMLDialogElement>("survey-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("survey-dialog").close(); });
@@ -1088,7 +1414,11 @@ byId("preview-close").addEventListener("click", () => byId<HTMLDialogElement>("p
 byId<HTMLDialogElement>("preview-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("preview-dialog").close(); });
 function resetCoverageExperience(): void {
   closeCoverageContextMenu();
+  applyCoverageSelection([]);
+  clearLayerCloseTimer();
   overlapMode = false;
+  overlapController?.abort();
+  overlapController = null;
   activeOverlapSurveyIds = [];
   activeOverlapComponents = [];
   overlapEvidenceCache.clear();
@@ -1097,32 +1427,54 @@ function resetCoverageExperience(): void {
   updateOverlapHud(null);
   coverageDots?.clearSelection();
   coverageDots?.resetView();
-  byId("coverage-detail-panel").hidden = true;
+  const panel = byId("coverage-detail-panel");
+  panel.hidden = true;
+  panel.classList.remove("is-overlap-panel");
+  panel.style.removeProperty("left");
+  panel.style.removeProperty("top");
+  panel.style.removeProperty("right");
+  panel.style.removeProperty("width");
   updateCoverageInspector(null);
 }
 
-byId("coverage-reset").addEventListener("click", resetCoverageExperience);
+byId("coverage-reset").addEventListener("click", () => {
+  if (isAtlasInteractive()) resetCoverageExperience();
+});
 byId("coverage-layers-toggle").addEventListener("click", () => {
+  if (!isAtlasInteractive()) return;
   const layers = byId("coverage-layers");
   layers.hidden = !layers.hidden;
+  positionSelectionQueue();
+  positionOverlapPanel();
+  updateCoverageEmptyGuide();
+});
+byId("coverage-empty-guide-action").addEventListener("click", () => {
+  byId("coverage-layers-toggle").click();
 });
 byId("coverage-help-toggle").addEventListener("click", () => {
+  if (!isAtlasInteractive()) return;
   byId("coverage-help").hidden = !byId("coverage-help").hidden;
 });
 byId("coverage-help-close").addEventListener("click", () => { byId("coverage-help").hidden = true; });
 
-function enterAtlasExperience(): void {
+function enterAtlasExperience(surveyId?: string): void {
   if (homeEntered) return;
+  if (surveyId) applyCoverageSelection([surveyId]);
+  else applyCoverageSelection([]);
+  homeEntered = true;
   const hero = byId("home-hero");
+  document.body.dataset.homeState = "entering";
+  document.body.style.setProperty("--home-scroll-progress", "1");
+  window.scrollTo({ top: 0, behavior: "auto" });
+  hero.classList.add("is-exiting");
+  coverageDots?.transitionToDataView(900);
   const finish = (): void => {
-    homeEntered = true;
     document.body.dataset.homeState = "atlas";
-    hero.hidden = true;
     hero.setAttribute("aria-hidden", "true");
-    coverageDots?.transitionToDataView(900);
+    renderSelectionQueue();
+    updateCoverageEmptyGuide();
     byId("coverage-layers-toggle").focus();
   };
-  hero.classList.add("is-exiting");
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     finish();
     return;
@@ -1130,24 +1482,38 @@ function enterAtlasExperience(): void {
   window.setTimeout(finish, 680);
 }
 
-byId("home-enter").addEventListener("click", enterAtlasExperience);
+byId("home-enter").addEventListener("click", () => enterAtlasExperience());
+
+window.addEventListener("resize", () => {
+  positionSelectionQueue();
+  positionOverlapPanel();
+});
 
 document.addEventListener("keydown", (event) => {
   const target = event.target as HTMLElement | null;
   if (target && (target.matches("input, textarea, select") || target.isContentEditable)) return;
+  if (!isAtlasInteractive()) return;
   if (event.key === "Escape") {
     const now = performance.now();
     const doubleEscape = now - lastEscapeAt < 500;
     lastEscapeAt = now;
     closeCoverageContextMenu();
     overlapMode = false;
+    overlapController?.abort();
+    overlapController = null;
     activeOverlapSurveyIds = [];
     activeOverlapComponents = [];
     overlapEvidenceCache.clear();
     coverageDots?.setOverlapMode(false);
     coverageDots?.setActiveOverlapComponent(null);
     updateOverlapHud(null);
-    byId("coverage-detail-panel").hidden = true;
+    const panel = byId("coverage-detail-panel");
+    panel.hidden = true;
+    panel.classList.remove("is-overlap-panel");
+    panel.style.removeProperty("left");
+    panel.style.removeProperty("top");
+    panel.style.removeProperty("right");
+    panel.style.removeProperty("width");
     coverageDots?.clearSelection();
     updateCoverageInspector(null);
     if (doubleEscape) resetCoverageExperience();
@@ -1177,9 +1543,12 @@ window.addEventListener("atlas:locale-change", () => {
   updateCoverageReadout(activeSurveyId);
   if (surveyIndex) renderSurveys();
   if (overlapMode && activeOverlapComponents.length) {
-    const component = activeOverlapComponents.find((entry) => entry.id === byId("overlap-hud-title").textContent) ?? activeOverlapComponents[0];
+    const component = activeOverlapComponents.find((entry) => entry.id === selectedQueueComponent?.id) ?? activeOverlapComponents[0];
     if (component) renderOverlapPanel(activeOverlapSurveyIds, [...new Set(activeOverlapComponents.flatMap((entry) => entry.cells))], component.order, "GLOBAL", activeOverlapComponents);
   }
+  if (surveyIndex) renderSurveyFilterOptions();
+  renderSelectionQueue();
+  updateCoverageEmptyGuide();
 });
 
 renderIcons();

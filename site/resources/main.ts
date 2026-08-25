@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, FileCode2, Home, Search, X, createIcons } from "lucide";
+import { ArrowLeft, ExternalLink, FileCode2, GitBranch, Home, Search, Telescope, X, createIcons } from "lucide";
 import "../src/styles.css";
 import { locale, mountLocaleControls, t } from "../src/i18n.js";
 
@@ -186,7 +186,7 @@ function openHashProduct(): void {
 }
 
 function renderIcons(): void {
-  createIcons({ icons: { ArrowLeft, ExternalLink, FileCode2, Home, Search, X }, attrs: { "aria-hidden": "true" } });
+  createIcons({ icons: { ArrowLeft, ExternalLink, FileCode2, GitBranch, Home, Search, Telescope, X }, attrs: { "aria-hidden": "true" } });
 }
 
 byId<HTMLInputElement>("resource-search").addEventListener("input", (event) => {

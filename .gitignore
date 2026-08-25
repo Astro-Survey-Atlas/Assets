@@ -9,3 +9,4 @@ __pycache__/
 .env.*
 !.env.example
 artifacts/public-survey-footprints/csst/input-manifest.json
+.tmp-screens

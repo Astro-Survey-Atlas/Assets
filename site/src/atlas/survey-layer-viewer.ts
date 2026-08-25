@@ -243,11 +243,17 @@ interface CameraTransition {
   toTarget: THREE.Vector3;
 }
 
+interface CameraPose {
+  camera: THREE.Vector3;
+  target: THREE.Vector3;
+}
+
 const BASE_COLOR = new THREE.Color("#168f89");
 const OVERLAP_COLOR = new THREE.Color("#ffd24a");
 const SELECTION_COLOR = new THREE.Color("#9fe7e0");
 const SELECTION_EDGE_COLOR = new THREE.Color("#e7fffb");
 const WORKSPACE_COLOR = new THREE.Color("#d69b4e");
+const HOME_FOV_DEG = 30;
 const COVERAGE_OPACITY = 0.17;
 const COVERAGE_EDGE_OPACITY = 0.22;
 // Keep surrounding layers subdued while the selected region remains readable.
@@ -292,13 +298,16 @@ function easeInOut(progress: number): number {
     : 1 - ((-2 * progress + 2) ** 3) / 2;
 }
 
-function narrativeCameraPose(direction: THREE.Vector3, distance: number, outerRadius: number, tangentRatio: number): { camera: THREE.Vector3; target: THREE.Vector3 } {
-  const reference = Math.abs(direction.y) < 0.82
+function cameraUpForDirection(direction: THREE.Vector3): THREE.Vector3 {
+  const reference = Math.abs(direction.y) < 0.9
     ? new THREE.Vector3(0, 1, 0)
     : new THREE.Vector3(1, 0, 0);
-  const tangent = new THREE.Vector3().crossVectors(reference, direction).normalize();
-  const camera = direction.clone().multiplyScalar(distance).addScaledVector(tangent, outerRadius * tangentRatio);
-  camera.setLength(distance);
+  const up = reference.addScaledVector(direction, -reference.dot(direction));
+  return up.normalize();
+}
+
+function narrativeCameraPose(direction: THREE.Vector3, distance: number, outerRadius: number): CameraPose {
+  const camera = direction.clone().multiplyScalar(distance);
   const target = direction.clone().multiplyScalar(outerRadius * 0.98);
   return { camera, target };
 }
@@ -466,6 +475,7 @@ export class SurveyLayerViewer {
   #layoutMode: SurveyLayerLayoutMode = "layers";
   #interactionMode: SurveyLayerInteractionMode = "inspect";
   #focusedSurveyId: string | null = null;
+  #homeScrollProgress = 0;
   #renderQueued = false;
   #pointerStart: { x: number; y: number } | null = null;
   #clickTimer: ReturnType<typeof setTimeout> | null = null;
@@ -732,11 +742,12 @@ export class SurveyLayerViewer {
     const angularRadius = Math.max(...sphericalCellBoundary(nside, pixel, 1).map((corner) => direction.angleTo(corner)));
     const outer = this.#outerRadius;
     const distance = cameraDistanceForAngularRadius(angularRadius, outer);
-    const pose = narrativeCameraPose(direction, distance, outer, 0.32);
+    const pose = narrativeCameraPose(direction, distance, outer);
     this.#startCameraTransition(
       pose.camera,
       pose.target,
       720,
+      cameraUpForDirection(direction),
     );
   }
 
@@ -758,11 +769,12 @@ export class SurveyLayerViewer {
     const halfFov = Math.max(THREE.MathUtils.degToRad(4), angularRadius * 1.35);
     const fitDistance = outer / Math.tan(Math.min(Math.PI / 3, halfFov * 1.25));
     const distance = THREE.MathUtils.clamp(Math.max(outer * 1.55, fitDistance), outer * 1.55, outer * 2.8);
-    const pose = narrativeCameraPose(direction, distance, outer, 0.24);
+    const pose = narrativeCameraPose(direction, distance, outer);
     this.#startCameraTransition(
       pose.camera,
       pose.target,
       720,
+      cameraUpForDirection(direction),
     );
   }
 
@@ -773,8 +785,8 @@ export class SurveyLayerViewer {
     for (const pixel of pixels) for (const corner of sphericalCellBoundary(nside, pixel, 1)) angularRadius = Math.max(angularRadius, direction.angleTo(corner));
     const outer = this.#outerRadius;
     const distance = cameraDistanceForAngularRadius(angularRadius, outer);
-    const pose = narrativeCameraPose(direction, distance, outer, 0.24);
-    this.#startCameraTransition(pose.camera, pose.target, 720);
+    const pose = narrativeCameraPose(direction, distance, outer);
+    this.#startCameraTransition(pose.camera, pose.target, 720, cameraUpForDirection(direction));
   }
 
   focusAsset(assetId: string): void {
@@ -1003,10 +1015,14 @@ export class SurveyLayerViewer {
 
   focusData(): void {
     this.#cameraTransition = null;
+    this.#homeScrollProgress = 1;
     const radius = this.#outerRadius;
     const viewDirection = this.#dataViewDirection();
-    this.#camera.position.copy(viewDirection.multiplyScalar(radius * 3.35));
+    this.#camera.position.copy(viewDirection.multiplyScalar(this.#dataViewDistance()));
     this.#controls.target.set(0, 0, 0);
+    this.#camera.fov = 48;
+    this.#camera.updateProjectionMatrix();
+    this.#camera.up.set(0, 1, 0);
     this.#controls.enabled = true;
     this.#controls.minDistance = 0.002;
     this.#controls.update();
@@ -1016,21 +1032,28 @@ export class SurveyLayerViewer {
 
   setHomePresentation(): void {
     this.#cameraTransition = null;
-    const radius = this.#outerRadius;
-    const viewDirection = new THREE.Vector3(1.8, 0.34, 1.24).normalize();
-    this.#camera.position.copy(viewDirection.multiplyScalar(radius * 1.92));
-    this.#controls.target.copy(viewDirection).multiplyScalar(radius * 0.52);
-    this.#controls.enabled = true;
+    this.#homeScrollProgress = 0;
+    this.#applyHomeScrollPose();
     this.#controls.minDistance = 0.002;
-    this.#controls.update();
+    this.#emitState();
+    this.#requestRender();
+  }
+
+  setHomeScrollProgress(progress: number): void {
+    this.#homeScrollProgress = THREE.MathUtils.clamp(progress, 0, 1);
+    this.#cameraTransition = null;
+    this.#applyHomeScrollPose();
     this.#emitState();
     this.#requestRender();
   }
 
   transitionToDataPresentation(durationMs = 900): void {
+    this.#homeScrollProgress = 1;
+    this.#camera.fov = 48;
+    this.#camera.updateProjectionMatrix();
     const radius = this.#outerRadius;
     this.#startCameraTransition(
-      this.#dataViewDirection().multiplyScalar(radius * 3.35),
+      this.#dataViewDirection().multiplyScalar(this.#dataViewDistance()),
       new THREE.Vector3(),
       durationMs,
     );
@@ -1040,6 +1063,58 @@ export class SurveyLayerViewer {
     // Keep the complete layer stack inside the vertical FOV on desktop and
     // portrait viewports while retaining a readable three-quarter angle.
     return new THREE.Vector3(1.72, 1.48, 1.56).normalize();
+  }
+
+  #dataViewDistance(): number {
+    const bounds = this.#canvas.getBoundingClientRect();
+    const aspect = bounds.height > 0 ? bounds.width / bounds.height : 1.6;
+    return this.#outerRadius * (aspect < 1 ? 6.15 : 3.35);
+  }
+
+  #homePresentationPose(): CameraPose {
+    const radius = this.#outerRadius;
+    const bounds = this.#canvas.getBoundingClientRect();
+    const aspect = bounds.height > 0 ? bounds.width / bounds.height : 1.6;
+    const viewDirection = new THREE.Vector3(1.18, 0.78, 1.46).normalize();
+    // The hero is a partial, layered object rather than a centered globe. Keep
+    // enough distance for the shells to read as separate surfaces, then move
+    // the whole camera frame so the projected centre sits beyond the lower
+    // right edge without changing the three-quarter viewing direction.
+    const portrait = aspect < 1;
+    const distance = radius * (portrait ? 2.9 : 2.7);
+    const camera = viewDirection.clone().multiplyScalar(distance);
+    const forward = viewDirection.clone().negate();
+    const upReference = Math.abs(forward.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    const right = new THREE.Vector3().crossVectors(forward, upReference).normalize();
+    const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+    const fovTangent = Math.tan(THREE.MathUtils.degToRad(HOME_FOV_DEG) / 2);
+    const horizontalNdc = portrait
+      ? 1.85
+      : THREE.MathUtils.clamp(1.24 + (2.4 - aspect) * 0.1, 1.24, 1.38);
+    const verticalNdc = portrait ? 1.55 : 1.52;
+    const frameShift = right.clone()
+      .multiplyScalar(-distance * fovTangent * aspect * horizontalNdc)
+      .addScaledVector(up, distance * fovTangent * verticalNdc);
+    camera.add(frameShift);
+    const target = viewDirection.clone().multiplyScalar(radius * 0.12).add(frameShift);
+    return { camera, target };
+  }
+
+  #applyHomeScrollPose(): void {
+    const progress = this.#homeScrollProgress;
+    const home = this.#homePresentationPose();
+    const dataDirection = this.#dataViewDirection();
+    const data = {
+      camera: dataDirection.multiplyScalar(this.#dataViewDistance()),
+      target: new THREE.Vector3(),
+    };
+    this.#camera.position.lerpVectors(home.camera, data.camera, progress);
+    this.#controls.target.lerpVectors(home.target, data.target, progress);
+    this.#camera.fov = THREE.MathUtils.lerp(HOME_FOV_DEG, 48, progress);
+    this.#camera.updateProjectionMatrix();
+    this.#camera.up.copy(progress < 0.5 ? cameraUpForDirection(new THREE.Vector3(1.18, 0.78, 1.46).normalize()) : new THREE.Vector3(0, 1, 0));
+    this.#controls.enabled = progress >= 0.999;
+    this.#controls.update();
   }
 
   dispose(): void {
@@ -1834,8 +1909,9 @@ export class SurveyLayerViewer {
     return direction.lengthSq() > 0 ? direction.normalize() : new THREE.Vector3(1, 0, 0);
   }
 
-  #startCameraTransition(destination: THREE.Vector3, target: THREE.Vector3, durationMs: number): void {
+  #startCameraTransition(destination: THREE.Vector3, target: THREE.Vector3, durationMs: number, up?: THREE.Vector3): void {
     this.#controls.enabled = false;
+    if (up) this.#camera.up.copy(up);
     this.#cameraTransition = {
       startedAt: performance.now(),
       durationMs,
@@ -2099,6 +2175,7 @@ export class SurveyLayerViewer {
     this.#composer.setSize(width, height);
     this.#camera.aspect = width / height;
     this.#camera.updateProjectionMatrix();
+    if (this.#homeScrollProgress < 1 && !this.#cameraTransition) this.#applyHomeScrollPose();
     this.#requestRender();
   }
 

@@ -115,6 +115,7 @@ export class AtlasCoverageGlobe {
 
   loadCatalog(catalog: CoverageCatalog, blocks: ReadonlyMap<string, number[]>, surveys: CoverageSurvey[]): void {
     const manifest = footprintManifest(catalog, blocks);
+    const selectedSurveyIds = new Set(this.#visibleSurveyIds);
     this.#viewer?.dispose();
     this.#surveys = surveys;
     const cards = surveys.map(surveyCardFor);
@@ -131,7 +132,7 @@ export class AtlasCoverageGlobe {
       (component) => this.#onOverlapComponent(component),
     );
     this.#viewer.setLayoutMode("layers");
-    this.#visibleSurveyIds = new Set(catalog.layers.map((layer) => layer.surveyId));
+    this.#visibleSurveyIds = selectedSurveyIds;
     this.#viewer.setVisibleSurveys(this.#visibleSurveyIds);
     // The viewer is constructed before coverage is known. Reframe once the
     // loaded layers establish the actual outer radius of the globe.
@@ -163,6 +164,8 @@ export class AtlasCoverageGlobe {
   transitionToDataView(durationMs = 900): void { this.#viewer?.transitionToDataPresentation(durationMs); }
 
   setHomePresentation(): void { this.#viewer?.setHomePresentation(); }
+
+  setHomeScrollProgress(progress: number): void { this.#viewer?.setHomeScrollProgress(progress); }
 
   clearSelection(): void {
     this.#viewer?.clearRegionSelection();

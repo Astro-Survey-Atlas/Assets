@@ -11,7 +11,7 @@ import { loadSurveyIndex } from "./surveys.js";
 import { coverageBlock, loadCoverageCatalog } from "./coverage.js";
 import { overlapForLayers } from "./overlap.js";
 import { ProductStore, type ProductRecord } from "./products.js";
-import { SourceUnitWorkerStore } from "./source-units.js";
+import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
 import { CoverageEvidenceStore, EvidenceStoreError } from "./evidence-store.js";
 
 const port = Number(process.env.PORT ?? "4180");
@@ -37,6 +37,7 @@ const evidenceStore = new CoverageEvidenceStore({
   fileIndex: process.env.ASSETS_WAREHOUSE_FILE_INDEX,
 });
 let sourceUnitsPromise: Promise<SourceUnitWorkerStore> | null = null;
+let sourceUnitsFallbackPromise: Promise<SourceUnitStore> | null = null;
 function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
   if (!sourceUnitsPromise) {
     sourceUnitsPromise = SourceUnitWorkerStore.load(releaseRoot).catch((error) => {
@@ -47,13 +48,29 @@ function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
   return sourceUnitsPromise;
 }
 
-async function sourceUnitsReadyWithin(timeoutMs: number): Promise<SourceUnitWorkerStore | null> {
+function sourceUnitsFallbackStore(): Promise<SourceUnitStore> {
+  if (!sourceUnitsFallbackPromise) {
+    sourceUnitsFallbackPromise = SourceUnitStore.load(releaseRoot).catch((error) => {
+      sourceUnitsFallbackPromise = null;
+      throw error;
+    });
+  }
+  return sourceUnitsFallbackPromise;
+}
+
+async function sourceUnitsReadyWithin(timeoutMs: number): Promise<SourceUnitWorkerStore | SourceUnitStore | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<null>((resolve) => {
     timer = setTimeout(() => resolve(null), timeoutMs);
     timer.unref();
   });
-  try { return await Promise.race([sourceUnitsStore(), timeout]); }
+  try {
+    try {
+      const worker = await Promise.race([sourceUnitsStore(), timeout]);
+      if (worker) return worker;
+    } catch { /* fall through to the bounded main-thread index */ }
+    return await sourceUnitsFallbackStore();
+  } catch { return null; }
   finally { if (timer) clearTimeout(timer); }
 }
 
@@ -543,7 +560,7 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
   const selectedLayers = [...coverageCatalog.records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
   const evidenceLayers = selectedLayers.filter((layer) => layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "file");
   const needsSourceUnits = result.components.length > 0 && selectedLayers.some((layer) => layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "tile");
-  const sourceUnits = needsSourceUnits ? await sourceUnitsReadyWithin(1_000) : null;
+  const sourceUnits = needsSourceUnits ? await sourceUnitsReadyWithin(3_000) : null;
   const componentDetails = await Promise.all(result.components.map(async (component) => {
     const componentCells = new Set(component.cells);
     return { ...component,
@@ -563,7 +580,7 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
       product: layer.product,
       modality: layer.modality ?? "coverage",
       sourceUnitIndex: layer.sourceUnitIndex,
-      sourceUnits: sourceUnits ? await sourceUnits.match(layer.layerId, component.order, component.cells) : null,
+      sourceUnits: sourceUnits ? await Promise.resolve(sourceUnits.match(layer.layerId, component.order, component.cells)).catch(() => null) : null,
       downloadUrl: layer.recipe?.sourceUrl,
     }))) };
   }));
