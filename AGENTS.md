@@ -1,5 +1,10 @@
 # Astro Survey Atlas Assets rules
 
+## Session handoff
+
+Read `HANDOFF.md` at the start of a new session for the current implementation,
+verification baseline, known problems, dirty worktree, and next priorities.
+
 ## Coverage data boundary
 
 - Assets is the public release, MOC, preview, evidence and reverse-lookup owner.

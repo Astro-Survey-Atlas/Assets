@@ -90,3 +90,25 @@ input:disabled, select:disabled, textarea:disabled { background: #071017; color:
 .admin-product-search { flex: 1 1 280px; min-width: 180px; }
 .admin-product-search input { height: 40px; }
 @media (max-width: 560px) { .admin-command-strip { align-items: stretch; flex-direction: column; } .admin-product-search { width: 100%; } }
+
+.task-row-actions { display: flex; align-items: center; gap: 6px; min-width: 156px; }
+.task-row-actions button { min-height: 32px; padding: 0 8px; }
+.task-detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.task-detail-heading > div { display: flex; align-items: baseline; gap: 10px; }
+.task-detail-heading h4 { margin: 0; font-size: 18px; }
+.task-detail-content { padding-top: 18px; }
+.task-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; border-top: 1px solid var(--line); }
+.task-detail-field { min-width: 0; padding: 12px 12px 12px 0; border-bottom: 1px solid var(--line); }
+.task-detail-field dt { color: var(--muted); font: 700 9px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; }
+.task-detail-field dd { margin: 6px 0 0; overflow-wrap: anywhere; color: var(--ink); font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.modality-matrix { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+.modality-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 88px; padding: 14px 14px 14px 0; border-bottom: 1px solid var(--line); }
+.modality-row:nth-child(odd) { margin-right: 14px; }
+.modality-row strong, .modality-row span, .modality-row small { display: block; }
+.modality-row strong { font-size: 12px; }
+.modality-row > div:first-child span { margin-top: 5px; color: var(--teal); font: 9px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.modality-row > div:last-child { min-width: 0; text-align: right; }
+.modality-row > div:last-child .task-phase { margin-left: auto; }
+.modality-row small { max-width: 220px; margin-top: 7px; color: var(--muted); font: 9px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+@media (max-width: 560px) { .task-detail-grid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .modality-matrix { grid-template-columns: 1fr; } .modality-row:nth-child(odd) { margin-right: 0; } }

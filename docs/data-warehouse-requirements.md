@@ -106,10 +106,13 @@ spatial_error
 当前 Assets 可依赖的 scanner 模式：
 
 - FITS WCS coverage；
+- FITS header position coverage；
 - catalog RA/Dec coverage；
 - declared NESTED HEALPix coverage（ScanPlan 模式为 `catalog-healpix`）。
 
-这些模式需要在 Job/Flink 两条路径保持一致，并对非法坐标、缺少空间字段、
+Assets 管理页将这四种 extraction mode 映射到 image、spectrum、catalog、cube
+四种业务模态；cube 仍使用 FITS WCS，但只提取空间轴，spectrum 的 header
+position 结果必须标为 `entrypoint-only`。这些模式需要对非法坐标、缺少空间字段、
 空输入和解析失败返回明确的 `spatial_status`/`spatial_error`。
 
 Assets 计划使用但当前 scanner 尚未实现的模式：

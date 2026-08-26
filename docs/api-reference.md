@@ -121,6 +121,20 @@ GET /api/v1/products
 
 草稿和版本控制只在管理员认证边界内：`GET /api/v1/admin/products`、`GET /api/v1/admin/products?view=surveys`、`GET /api/v1/admin/products?surveyId=<surveyId>`、`GET /api/v1/admin/products/{productId}`、`PUT /api/v1/admin/products/{productId}/draft`、`POST /api/v1/admin/products/{productId}/publish` 和 `GET /api/v1/admin/products/{productId}/history`。产品 ID 固定由 `surveyId + releaseId + product name` 生成；流程图节点的实现引用由 recipe 固定，管理员只能修改解释文本和证据链接。产品记录包含已发布 coverage layer 的可用 HEALPix order。
 
+## Admin Scan Requests
+
+管理员控制面使用产品 recipe 生成 ScanPlan v2。任务接口为
+`GET|POST /api/v1/admin/tasks`、`GET /api/v1/admin/tasks/{name}` 和
+`POST /api/v1/admin/tasks/{name}/resubmit`。详情响应只包含 CRD plan、status
+summary、source snapshot hash 和 evidence path；不内嵌 manifest、normalized
+scan 或错误文件。重提创建新的不可变 ScanRequest、run ID 和 evidence path，原
+任务保持不变。
+
+`GET /api/v1/admin/catalog/status` 返回当前 coverage 的加载模式、时间和记录数；
+`POST /api/v1/admin/catalog/reload` 重新加载静态公开覆盖，并用 Warehouse ACTIVE
+layer 按 layer identity 覆盖或追加。Warehouse 不可用时保留静态 catalog，并将
+模式报告为 `degraded`。
+
 ## Download
 
 ```http

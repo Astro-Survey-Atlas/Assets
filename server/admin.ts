@@ -7,8 +7,24 @@ import { request as httpsRequest, type RequestOptions as HttpsRequestOptions } f
 const API_GROUP = "/apis/atlas.zhejianglab.org/v1alpha1";
 export const ASSETS_MANAGED_BY = "astro-survey-atlas-assets";
 export const PUBLIC_COVERAGE_KIND = "public-coverage";
-export const SUPPORTED_COVERAGE_MODES = ["fits-wcs", "catalog-radec", "nested-healpix"] as const;
+export const SUPPORTED_COVERAGE_MODES = ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix"] as const;
 export const CONNECTOR_TYPES = ["s3", "oss", "local"] as const;
+export const BUSINESS_MODALITIES = ["image", "spectrum", "catalog", "cube"] as const;
+export const BUSINESS_MODALITY_PROFILES = [
+  { id: "image-euclid-vis", label: "Euclid VIS image", modality: "image", mode: "fits-wcs", layerId: "assets-smoke-image-euclid-vis", surveyId: "euclid", releaseId: "q1-smoke", product: "Euclid VIS bounded image probe", coverageRole: "image_extent", dataOrigin: "observed", sourceTier: "official_inventory_derived", allowedSuffixes: ".fits", maxOrder: 8, expectedPrecision: "estimated", acceptance: "non-empty spatial coverage from image WCS" },
+  { id: "spectrum-sdss", label: "SDSS spectrum", modality: "spectrum", mode: "fits-header-position", layerId: "assets-smoke-spectrum-sdss", surveyId: "sdss", releaseId: "public-smoke", product: "SDSS public spectrum position probe", coverageRole: "footprint_extent", dataOrigin: "observed", sourceTier: "official_inventory_derived", allowedSuffixes: ".fits", maxOrder: 8, expectedPrecision: "entrypoint-only", acceptance: "one declared position cell without reading flux arrays" },
+  { id: "catalog-gaia", label: "Gaia DR3 catalog", modality: "catalog", mode: "catalog-radec", layerId: "assets-smoke-catalog-gaia", surveyId: "gaia", releaseId: "dr3-smoke", product: "Gaia DR3 bounded catalog probe", coverageRole: "object_presence", dataOrigin: "catalog", sourceTier: "official_inventory_derived", allowedSuffixes: ".csv", maxOrder: 8, raColumn: "ra", decColumn: "dec", expectedPrecision: "exact", acceptance: "deduplicated cells from declared catalog columns" },
+  { id: "cube-hi4pi", label: "HI4PI spectral cube", modality: "cube", mode: "fits-wcs", layerId: "assets-smoke-cube-hi4pi", surveyId: "hi4pi", releaseId: "public-2016-smoke", product: "HI4PI bounded spectral cube probe", coverageRole: "footprint_extent", dataOrigin: "observed", sourceTier: "official_inventory_derived", allowedSuffixes: ".fits", maxOrder: 8, expectedPrecision: "estimated", acceptance: "spatial WCS cells with non-spatial axes ignored" },
+] as const;
+
+export type BusinessModalityProfile = typeof BUSINESS_MODALITY_PROFILES[number];
+
+export function businessModalityProfile(id: unknown): BusinessModalityProfile {
+  const normalized = requireText(id, "profileId", 64);
+  const profile = BUSINESS_MODALITY_PROFILES.find((candidate) => candidate.id === normalized);
+  if (!profile) throw new AdminHttpError(404, "Business modality profile was not found");
+  return profile;
+}
 
 export type CoverageMode = typeof SUPPORTED_COVERAGE_MODES[number];
 export type ConnectorType = typeof CONNECTOR_TYPES[number];
@@ -115,15 +131,26 @@ export interface CoverageTaskInput {
 
 export interface TaskStatusView {
   phase: string;
+  reason?: string;
   backend?: string;
   runId?: string;
   discoveredFiles?: number;
   processedHdus?: number;
   coverageDocuments?: number;
   objectDocuments?: number;
+  errorCount?: number;
+  availableOrders?: number[];
+  evidencePath?: string;
+  sourceSnapshot?: { uri?: string; sha256: string; sizeBytes?: number };
   startedAt?: string;
   completedAt?: string;
   message?: string;
+}
+
+export interface CoverageTaskRecipeView {
+  mode?: string;
+  outputOrder?: number;
+  catalog?: Record<string, unknown>;
 }
 
 export interface CoverageTaskView {
@@ -134,6 +161,8 @@ export interface CoverageTaskView {
   surveyId?: string;
   releaseId?: string;
   product?: string;
+  productId?: string;
+  modality?: string;
   mode?: string;
   backend?: string;
   sourceConnector?: string;
@@ -142,6 +171,7 @@ export interface CoverageTaskView {
   fileNamePattern?: string;
   tags: string[];
   batchId?: string;
+  recipe?: CoverageTaskRecipeView;
   status: TaskStatusView;
 }
 
@@ -406,6 +436,7 @@ function statusView(status: Record<string, unknown> | undefined): TaskStatusView
   const value = status ?? {};
   const summary = value.summary && typeof value.summary === "object" ? value.summary as Record<string, unknown> : {};
   const result: TaskStatusView = { phase: typeof value.phase === "string" ? value.phase : "Pending" };
+  if (typeof value.reason === "string") result.reason = value.reason;
   for (const key of ["backend", "runId", "startedAt", "completedAt", "message"] as const) {
     if (typeof value[key] === "string") result[key] = value[key] as string;
   }
@@ -417,10 +448,29 @@ function statusView(status: Record<string, unknown> | undefined): TaskStatusView
     const count = typeof value[key] === "number" ? value[key] : summary[summaryKey];
     if (typeof count === "number") result[key] = count;
   }
-  if (typeof summary.runId === "string" && !result.runId) result.runId = summary.runId;
+  const summaryRunId = typeof summary.scanRunId === "string" ? summary.scanRunId : summary.runId;
+  if (typeof summaryRunId === "string" && !result.runId) result.runId = summaryRunId;
   if (typeof summary.startedAt === "string" && !result.startedAt) result.startedAt = summary.startedAt;
   if (typeof summary.completedAt === "string" && !result.completedAt) result.completedAt = summary.completedAt;
   if (typeof summary.errors === "number" && !result.message && summary.errors > 0) result.message = `${summary.errors} scan errors retained as evidence`;
+  const errorCount = typeof value.errorCount === "number" ? value.errorCount
+    : typeof summary.errorCount === "number" ? summary.errorCount
+      : typeof summary.errors === "number" ? summary.errors : undefined;
+  if (errorCount !== undefined) result.errorCount = errorCount;
+  const availableOrders = Array.isArray(value.availableOrders) ? value.availableOrders : summary.availableOrders;
+  if (Array.isArray(availableOrders)) result.availableOrders = availableOrders.filter((order): order is number => typeof order === "number");
+  const evidencePath = typeof value.evidencePath === "string" ? value.evidencePath : summary.evidencePath;
+  if (typeof evidencePath === "string") result.evidencePath = evidencePath;
+  const snapshot = value.sourceSnapshot && typeof value.sourceSnapshot === "object" ? value.sourceSnapshot
+    : summary.sourceSnapshot && typeof summary.sourceSnapshot === "object" ? summary.sourceSnapshot : undefined;
+  if (snapshot && !Array.isArray(snapshot)) {
+    const source = snapshot as Record<string, unknown>;
+    if (/^[a-f0-9]{64}$/.test(String(source.sha256 ?? ""))) {
+      result.sourceSnapshot = { sha256: String(source.sha256), ...(typeof source.uri === "string" ? { uri: source.uri } : {}), ...(typeof source.sizeBytes === "number" ? { sizeBytes: source.sizeBytes } : {}) };
+    }
+  }
+  const snapshotSha256 = typeof value.sourceSnapshotSha256 === "string" ? value.sourceSnapshotSha256 : summary.sourceSnapshotSha256;
+  if (!result.sourceSnapshot && typeof snapshotSha256 === "string" && /^[a-f0-9]{64}$/.test(snapshotSha256)) result.sourceSnapshot = { sha256: snapshotSha256 };
   return result;
 }
 
@@ -444,12 +494,19 @@ function taskView(resource: KubernetesResource): CoverageTaskView {
     surveyId: typeof layer.surveyId === "string" ? layer.surveyId : undefined,
     releaseId: typeof layer.releaseId === "string" ? layer.releaseId : undefined,
     product: typeof layer.productId === "string" ? layer.productId : undefined,
+    productId: typeof layer.productId === "string" ? layer.productId : undefined,
+    modality: typeof layer.modality === "string" ? layer.modality : undefined,
     mode: typeof extraction.mode === "string" ? extraction.mode : undefined,
     backend: "job",
     sourceConnector: labels["astro.zhejianglab.org/source-connector"],
     sourcePaths: sourcePath ? [sourcePath] : [],
     tags: [],
     batchId: typeof plan.scanRunId === "string" ? plan.scanRunId : undefined,
+    recipe: {
+      mode: typeof extraction.mode === "string" ? extraction.mode : undefined,
+      outputOrder: typeof extraction.outputOrder === "number" ? extraction.outputOrder : undefined,
+      catalog: extraction.catalog && typeof extraction.catalog === "object" && !Array.isArray(extraction.catalog) ? extraction.catalog as Record<string, unknown> : undefined,
+    },
     status: statusView(resource.status),
   };
 }
@@ -812,6 +869,8 @@ export class AssetsAdmin {
       kubernetesConfigured: Boolean(this.config.apiBaseUrl),
       capabilities: {
         coverageModes: [...SUPPORTED_COVERAGE_MODES],
+        businessModalities: [...BUSINESS_MODALITIES],
+        businessModalityProfiles: BUSINESS_MODALITY_PROFILES,
         connectorTypes: [...CONNECTOR_TYPES],
         backends: ["job"],
         scanRequestApiVersion: "atlas.zhejianglab.org/v1alpha1",
@@ -858,6 +917,58 @@ export class AssetsAdmin {
   async listTasks(): Promise<CoverageTaskView[]> {
     const resources = await this.kube.list("scanrequests", `app.kubernetes.io/managed-by=${ASSETS_MANAGED_BY},astro.zhejianglab.org/task-kind=${PUBLIC_COVERAGE_KIND}`);
     return resources.map(taskView).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  }
+
+  async getTask(name: string): Promise<CoverageTaskView> {
+    const normalized = dnsName(name, "task name");
+    const resource = await this.kube.get("scanrequests", normalized);
+    if (!resource || resource.metadata?.labels?.["app.kubernetes.io/managed-by"] !== ASSETS_MANAGED_BY
+      || resource.metadata?.labels?.["astro.zhejianglab.org/task-kind"] !== PUBLIC_COVERAGE_KIND) {
+      throw new AdminHttpError(404, `Coverage task ${normalized} was not found`);
+    }
+    return taskView(resource);
+  }
+
+  async resubmitTask(name: string): Promise<CoverageTaskView> {
+    const normalized = dnsName(name, "task name");
+    const resource = await this.kube.get("scanrequests", normalized);
+    if (!resource || resource.metadata?.labels?.["app.kubernetes.io/managed-by"] !== ASSETS_MANAGED_BY
+      || resource.metadata?.labels?.["astro.zhejianglab.org/task-kind"] !== PUBLIC_COVERAGE_KIND) {
+      throw new AdminHttpError(404, `Coverage task ${normalized} was not found`);
+    }
+    const originalSpec = resource.spec ?? {};
+    const originalPlan = originalSpec.plan && typeof originalSpec.plan === "object" ? originalSpec.plan as Record<string, unknown> : {};
+    const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+    const retryName = dnsName(`${normalized.slice(0, 45)}-retry-${timestamp}`, "retry task name");
+    const retryRunId = retryName;
+    const evidence = originalPlan.evidence && typeof originalPlan.evidence === "object" ? originalPlan.evidence as Record<string, unknown> : {};
+    const retryResource: KubernetesResource = {
+      apiVersion: resource.apiVersion ?? "atlas.zhejianglab.org/v1alpha1",
+      kind: resource.kind ?? "ScanRequest",
+      metadata: {
+        name: retryName,
+        namespace: resource.metadata?.namespace ?? this.config.namespace,
+        labels: {
+          ...(resource.metadata?.labels ?? {}),
+          "astro.zhejianglab.org/task-id": retryName,
+          "astro.zhejianglab.org/retry-of": normalized,
+        },
+      },
+      spec: {
+        ...structuredClone(originalSpec),
+        plan: {
+          ...structuredClone(originalPlan),
+          scanRunId: retryRunId,
+          evidence: { ...structuredClone(evidence), outputPath: `${this.config.evidenceMountPath.replace(/\/+$/, "")}/${retryRunId}` },
+        },
+      },
+    };
+    try {
+      return taskView(await this.kube.create("scanrequests", retryResource));
+    } catch (error) {
+      if (error instanceof KubernetesApiError && error.statusCode === 409) throw new AdminHttpError(409, `Coverage task ${retryName} already exists`);
+      throw error;
+    }
   }
 
   async createTask(input: CoverageTaskInput): Promise<CoverageTaskView> {

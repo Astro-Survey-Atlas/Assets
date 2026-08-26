@@ -253,7 +253,10 @@ const OVERLAP_COLOR = new THREE.Color("#ffd24a");
 const SELECTION_COLOR = new THREE.Color("#9fe7e0");
 const SELECTION_EDGE_COLOR = new THREE.Color("#e7fffb");
 const WORKSPACE_COLOR = new THREE.Color("#d69b4e");
-const HOME_FOV_DEG = 30;
+// The opening shot is a close, cropped glimpse of the layered globe. The
+// tighter field keeps the shell geometry legible while the pose below moves
+// its centre beyond the upper-left of the viewport.
+const HOME_FOV_DEG = 24;
 const COVERAGE_OPACITY = 0.17;
 const COVERAGE_EDGE_OPACITY = 0.22;
 // Keep surrounding layers subdued while the selected region remains readable.
@@ -1078,10 +1081,10 @@ export class SurveyLayerViewer {
     const viewDirection = new THREE.Vector3(1.18, 0.78, 1.46).normalize();
     // The hero is a partial, layered object rather than a centered globe. Keep
     // enough distance for the shells to read as separate surfaces, then move
-    // the whole camera frame so the projected centre sits beyond the lower
-    // right edge without changing the three-quarter viewing direction.
+    // the whole camera frame so the projected centre sits beyond the upper
+    // left edge without changing the three-quarter viewing direction.
     const portrait = aspect < 1;
-    const distance = radius * (portrait ? 2.9 : 2.7);
+    const distance = radius * (portrait ? 2.55 : 2.35);
     const camera = viewDirection.clone().multiplyScalar(distance);
     const forward = viewDirection.clone().negate();
     const upReference = Math.abs(forward.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
@@ -1089,12 +1092,12 @@ export class SurveyLayerViewer {
     const up = new THREE.Vector3().crossVectors(right, forward).normalize();
     const fovTangent = Math.tan(THREE.MathUtils.degToRad(HOME_FOV_DEG) / 2);
     const horizontalNdc = portrait
-      ? 1.85
-      : THREE.MathUtils.clamp(1.24 + (2.4 - aspect) * 0.1, 1.24, 1.38);
-    const verticalNdc = portrait ? 1.55 : 1.52;
+      ? 2.5
+      : THREE.MathUtils.clamp(1.92 + (2.4 - aspect) * 0.08, 1.92, 2.05);
+    const verticalNdc = portrait ? 2.35 : 1.92;
     const frameShift = right.clone()
-      .multiplyScalar(-distance * fovTangent * aspect * horizontalNdc)
-      .addScaledVector(up, distance * fovTangent * verticalNdc);
+      .multiplyScalar(distance * fovTangent * aspect * horizontalNdc)
+      .addScaledVector(up, -distance * fovTangent * verticalNdc);
     camera.add(frameShift);
     const target = viewDirection.clone().multiplyScalar(radius * 0.12).add(frameShift);
     return { camera, target };

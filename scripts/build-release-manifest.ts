@@ -203,6 +203,11 @@ async function build(): Promise<PublicAssetManifest> {
     filePath: path.join(root, "docs", "moc-core-contract.md"), downloadName: "moc-core-contract.md", mediaType: "text/markdown; charset=utf-8",
   });
   await push({
+    id: "documentation-resource-package-integration", kind: "documentation", label: "Resource Package v3 integration guide",
+    description: "Standalone trust, validation and installation workflow for projects that consume Assets coverage packages.",
+    filePath: path.join(root, "docs", "resource-package-integration.md"), downloadName: "resource-package-integration.md", mediaType: "text/markdown; charset=utf-8",
+  });
+  await push({
     id: "documentation-architecture-boundary", kind: "documentation", label: "Assets and Atlas architecture boundary",
     description: "Assets responsibilities, independent project boundaries and the one-shot data-warehouse handoff.",
     filePath: path.join(root, "docs", "architecture-boundary.md"), downloadName: "architecture-boundary.md", mediaType: "text/markdown; charset=utf-8",
@@ -226,6 +231,11 @@ async function build(): Promise<PublicAssetManifest> {
     id: "metadata-layer-registry", kind: "metadata", label: "Stable coverage layer registry",
     description: "Assets-owned stable layer IDs and scientific classifications for reviewed Core layers.",
     filePath: path.join(root, "src", "layers", "layer-registry.json"), downloadName: "layer-registry.json", mediaType: "application/json",
+  });
+  await push({
+    id: "metadata-moc-source-registry", kind: "metadata", label: "Public MOC source registry",
+    description: "Allowlisted MOC/HiPS discovery records, locked orders, coverage roles, provenance requirements and attribution status.",
+    filePath: path.join(root, "src", "moc-sources", "source-registry.json"), downloadName: "moc-source-registry.json", mediaType: "application/json",
   });
   await push({
     id: "sdk-moc-core-lock", kind: "sdk", label: "MOC Core dependency lock",

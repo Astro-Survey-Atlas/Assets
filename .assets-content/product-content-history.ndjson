@@ -42,3 +42,17 @@
 {"action":"recipe-migration","productId":"2415c4ce8e7c2307b676","revision":2,"at":"2026-08-24T02:27:45.536Z","recipeHash":"21fed3da89b4317b2553ec4e26ea58baaabb05c053f89463e1fe92350197b584"}
 {"action":"recipe-migration","productId":"8bad9526a39794a56eff","revision":2,"at":"2026-08-24T02:27:45.536Z","recipeHash":"0ff232de5a549d8b31e0a646fd56cb4968c12b909b27891290045ac959073c20"}
 {"action":"recipe-migration","productId":"3aaa0c8993d2f1f05de1","revision":2,"at":"2026-08-24T02:27:45.536Z","recipeHash":"327458e2c49cf5e72055d83021ef542d046f3714dd2f2694cc6312da665b6275"}
+{"action":"scan-defaults-migration","productId":"6e2c427ca3e3c8f1ef32","revision":3,"at":"2026-08-26T02:47:28.422Z","recipeHash":"db7d20ec715f207fa950cff8eb847b557eb19df9d8137cc7e0d3780792cc6443"}
+{"action":"scan-defaults-migration","productId":"bb743658cd44269d7675","revision":3,"at":"2026-08-26T02:47:28.423Z","recipeHash":"df5dd4aa4c75fe1c1ecb78515b1088eb155f4626c146453d7b3dae2642f2a9da"}
+{"action":"scan-defaults-migration","productId":"16149b2e666fb82eb634","revision":3,"at":"2026-08-26T02:47:28.423Z","recipeHash":"c41636c748bd9168e249218cd04e8db336cce1e21da8861fc28319f6c1967d70"}
+{"action":"scan-defaults-migration","productId":"292a7c733b0b0080613b","revision":3,"at":"2026-08-26T02:47:28.424Z","recipeHash":"e61b03ed8e09528e2f1fdf89c3ced03f0ee763cb27e16feb66725478afa43b8b"}
+{"action":"scan-defaults-migration","productId":"129184b8846da53da9f1","revision":2,"at":"2026-08-26T02:47:28.425Z"}
+{"action":"scan-defaults-migration","productId":"20ec1d3432cb0ce009a5","revision":2,"at":"2026-08-26T02:47:28.425Z"}
+{"action":"scan-defaults-migration","productId":"983ae21c23ee9fb4cf34","revision":2,"at":"2026-08-26T02:47:28.425Z"}
+{"action":"scan-defaults-migration","productId":"12cdebb0fe2ed7e2a202","revision":2,"at":"2026-08-26T02:47:28.425Z"}
+{"action":"scan-defaults-migration","productId":"253cf794f8624d11262b","revision":2,"at":"2026-08-26T02:47:28.426Z"}
+{"action":"scan-defaults-migration","productId":"e4b65ea44d0f5822dbf7","revision":2,"at":"2026-08-26T02:47:28.426Z"}
+{"action":"scan-defaults-migration","productId":"52b88ff85acf0117787c","revision":2,"at":"2026-08-26T02:47:28.426Z"}
+{"action":"scan-defaults-migration","productId":"71a7a1fa3ece582f8804","revision":2,"at":"2026-08-26T02:47:28.426Z"}
+{"action":"scan-defaults-migration","productId":"5160fb3a955f475b9b07","revision":2,"at":"2026-08-26T02:47:28.426Z"}
+{"action":"scan-defaults-migration","productId":"bd172b89744ccf02b451","revision":2,"at":"2026-08-26T02:47:28.426Z"}

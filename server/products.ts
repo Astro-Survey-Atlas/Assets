@@ -14,7 +14,8 @@ export interface ProductFlowNode {
 }
 export interface ProductFlowEdge { from: string; to: string; label?: string; }
 export interface ProductPresentation { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: ProductFlowNode[]; edges: ProductFlowEdge[] } }
-export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "catalog-radec" | "nested-healpix"; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; presentation: ProductPresentation }
+export interface ProductScanDefaults { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }
+export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; presentation: ProductPresentation }
 export interface ProductRecord { productId: string; draft: ProductContent; published: ProductContent | null; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; contentSha256: string; }
 
 const configuredContentRoot = process.env.ASSETS_CONTENT_ROOT ? path.resolve(process.env.ASSETS_CONTENT_ROOT) : "/var/lib/assets-content";
@@ -26,6 +27,7 @@ function productId(surveyId: string, releaseId: string, name: string): string {
 function defaultFlow(product: { name: string; modality: string }, mode = "catalog-radec", recipe: Record<string, unknown> = {}): ProductPresentation["flow"] {
   const definitions: Record<string, Array<[string, string]>> = {
     "fits-wcs": [["input", "输入来源"], ["filter", "文件筛选"], ["header", "FITS header / WCS 读取"], ["icrs", "ICRS 校验"], ["geometry", "几何边界计算"], ["rasterize", "HEALPix 栅格化"], ["union", "union / dedup"], ["outputs", "MOC、FITS、preview、statistics 输出"], ["evidence", "manifest、provenance、hash"]],
+    "fits-header-position": [["input", "输入来源"], ["filter", "文件筛选"], ["header", "FITS position header 读取"], ["icrs", "ICRS 校验"], ["rasterize", "HEALPix entrypoint 定位"], ["union", "union / dedup"], ["outputs", "coverage、statistics 输出"], ["evidence", "manifest、errors、provenance、hash"]],
     "tile-table": [["input", "官方 tile 表输入"], ["filter", "质量字段筛选"], ["geometry", "tile 几何包络计算"], ["rasterize", "HEALPix 栅格化"], ["union", "union / dedup"], ["outputs", "MOC、FITS、preview、statistics 输出"], ["evidence", "manifest、provenance、hash"]],
     "regions": [["input", "区域文件输入"], ["parse", "区域格式解析"], ["icrs", "ICRS 校验"], ["union", "区域 union / dedup"], ["rasterize", "HEALPix 栅格化"], ["outputs", "MOC、FITS、preview、statistics 输出"], ["evidence", "manifest、provenance、hash"]],
     "nested-healpix": [["input", "原生 HEALPix/IPix 输入"], ["validate", "order、NESTED 与坐标校验"], ["union", "cell union / dedup"], ["outputs", "MOC、FITS、preview、statistics 输出"], ["evidence", "manifest、provenance、hash"]],
@@ -157,19 +159,31 @@ export class ProductStore {
         recipeMode = coverageDefinition.recipe.mode;
         recipeHash = createHash("sha256").update(JSON.stringify(coverageDefinition.recipe)).digest("hex");
       }
-      const supportedMode = recipeMode && ["fits-wcs", "catalog-radec", "nested-healpix"].includes(recipeMode) ? recipeMode as ProductContent["mode"] : undefined;
-      const flowMode = recipeMode && ["fits-wcs", "catalog-radec", "nested-healpix", "regions", "tile-table", "native-moc"].includes(recipeMode) ? recipeMode : "catalog-radec";
+      const supportedMode = recipeMode && ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix"].includes(recipeMode) ? recipeMode as ProductContent["mode"] : undefined;
+      const flowMode = recipeMode && ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "regions", "tile-table", "native-moc"].includes(recipeMode) ? recipeMode : "catalog-radec";
       const coverageFlow = coverageDefinition?.recipe && !definition?.recipePath ? { nodes: coverageDefinition.recipe.steps.map((node) => ({ ...node, evidenceRefs: [] })), edges: coverageDefinition.recipe.steps.slice(1).map((node, index) => ({ from: coverageDefinition.recipe!.steps[index]!.id, to: node.id })) } : undefined;
-      const draft: ProductContent = { productId: id, surveyId: survey.id, releaseId: release.id, name: product.name, modality: product.modality, ...((definition || coverageDefinition) ? { layerId: definition?.layerId, coverageRole: definition?.coverageRole, dataOrigin: definition?.dataOrigin, sourceTier: definition?.sourceTier, ...(supportedMode ? { mode: supportedMode } : {}) } : {}), ...(recipeHash ? { recipeVersion: 1, recipeHash } : {}), presentation: { summaryMarkdown: "", methodologyMarkdown: "", limitationsMarkdown: "", flow: coverageFlow ?? defaultFlow(product, flowMode, recipe) } };
+      const scanDefaults: ProductScanDefaults = {
+        ...(typeof recipe.maxOrder === "number" ? { maxOrder: recipe.maxOrder } : definition?.maxOrder ? { maxOrder: definition.maxOrder } : {}),
+        ...(typeof recipe.raColumn === "string" ? { raColumn: recipe.raColumn } : {}),
+        ...(typeof recipe.decColumn === "string" ? { decColumn: recipe.decColumn } : {}),
+        ...(typeof recipe.values === "string" ? { healpixColumn: recipe.values } : {}),
+        ...(typeof recipe.order === "number" ? { healpixOrder: recipe.order } : {}),
+        ...(["fits-wcs", "fits-header-position"].includes(supportedMode ?? "") ? { allowedSuffixes: ".fits,.fit,.fits.gz" } : {}),
+        ...(supportedMode === "nested-healpix" ? { allowedSuffixes: ".json,.csv,.tsv,.fits" } : {}),
+        ...(supportedMode === "catalog-radec" ? { allowedSuffixes: ".csv,.tsv" } : {}),
+      };
+      const draft: ProductContent = { productId: id, surveyId: survey.id, releaseId: release.id, name: product.name, modality: product.modality, ...((definition || coverageDefinition) ? { layerId: definition?.layerId, coverageRole: definition?.coverageRole, dataOrigin: definition?.dataOrigin, sourceTier: definition?.sourceTier, ...(supportedMode ? { mode: supportedMode, scanDefaults } : {}) } : {}), ...(recipeHash ? { recipeVersion: 1, recipeHash } : {}), presentation: { summaryMarkdown: "", methodologyMarkdown: "", limitationsMarkdown: "", flow: coverageFlow ?? defaultFlow(product, flowMode, recipe) } };
       if (existing) {
-        if (recipeHash && existing.draft.recipeHash !== recipeHash) {
+        const recipeChanged = Boolean(recipeHash && existing.draft.recipeHash !== recipeHash);
+        const scanDefaultsMissing = Boolean(supportedMode && existing.draft.scanDefaults === undefined);
+        if (recipeChanged || scanDefaultsMissing) {
           existing.draft = migrateRecipeContent(existing.draft, draft);
           if (existing.published) existing.published = migrateRecipeContent(existing.published, draft);
           existing.revision += 1;
           if (existing.published) existing.publishedRevision = existing.revision;
           existing.updatedAt = new Date().toISOString();
           existing.contentSha256 = hashContent(existing.draft);
-          migrationHistory.push(JSON.stringify({ action: "recipe-migration", productId: id, revision: existing.revision, at: existing.updatedAt, recipeHash }));
+          migrationHistory.push(JSON.stringify({ action: recipeChanged ? "recipe-migration" : "scan-defaults-migration", productId: id, revision: existing.revision, at: existing.updatedAt, ...(recipeHash ? { recipeHash } : {}) }));
         }
         continue;
       }

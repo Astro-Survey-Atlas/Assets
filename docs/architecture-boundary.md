@@ -28,6 +28,12 @@ file/coverage 文档可供 Assets 按 `scanRunId` 读取，并由 warehouse
 `ScanRequest` 可以选择不同 sink，不能把 ES 当成 data-warehouse
 的全局输出约定。
 
+Assets 管理页固定展示 image、spectrum、catalog、cube 四种业务模态的集群任务
+验收状态。它只统计真实持久化的 ScanRequest，不把本地或内存 probe 当成已完成
+的集群扫描。对应 extraction mode 分别是 `fits-wcs`、
+`fits-header-position`、`catalog-radec`/`catalog-healpix`、`fits-wcs`（忽略
+非空间轴）。
+
 ## 任务生命周期
 
 ```text

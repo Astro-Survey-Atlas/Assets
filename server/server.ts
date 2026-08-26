@@ -4,7 +4,7 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 
-import { AdminHttpError, AssetsAdmin, KubernetesApiError, adminFromRequest, type ConnectorInput, type CoverageTaskInput } from "./admin.js";
+import { AdminHttpError, AssetsAdmin, KubernetesApiError, adminFromRequest, businessModalityProfile, type ConnectorInput, type CoverageTaskInput } from "./admin.js";
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
@@ -19,7 +19,7 @@ const host = process.env.HOST ?? "0.0.0.0";
 const releaseRoot = path.resolve(process.env.ASSET_RELEASE_ROOT ?? projectRoot);
 const siteRoot = path.resolve(process.env.PUBLIC_SITE_ROOT ?? path.join(projectRoot, "dist", "site"));
 const catalog = await loadCatalog(releaseRoot);
-const coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src", "footprints", "survey-footprints.json"), "utf8")) as {
+let coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src", "footprints", "survey-footprints.json"), "utf8")) as {
   schemaVersion: number;
   generatedAt: string;
   coordinateFrame: string;
@@ -32,36 +32,53 @@ const evidenceStore = new CoverageEvidenceStore({
   coverageIndex: process.env.ASSETS_WAREHOUSE_COVERAGE_INDEX,
   fileIndex: process.env.ASSETS_WAREHOUSE_FILE_INDEX,
 });
-const staticCoverageCatalog = await loadCoverageCatalog(releaseRoot, coverageManifest);
+let staticCoverageCatalog = await loadCoverageCatalog(releaseRoot, coverageManifest);
 let coverageCatalog = staticCoverageCatalog;
 let runtimeCoverageManifest = coverageManifest;
-if (evidenceStore.configured) {
-  try {
-    const warehouseSnapshot = await evidenceStore.loadCurrentCoverageCatalog();
-    if (warehouseSnapshot?.layers.length) {
-      coverageCatalog = coverageCatalogFromWarehouse(staticCoverageCatalog, warehouseSnapshot);
-      runtimeCoverageManifest = {
-        ...coverageManifest,
-        generatedAt: new Date().toISOString(),
-        nside: coverageCatalog.layers.length ? 2 ** Math.min(...coverageCatalog.layers.map((layer) => layer.overviewOrder)) : coverageManifest.nside,
-        footprints: [...coverageCatalog.records.values()].map((layer) => ({
-          surveyId: layer.surveyId,
-          releaseId: layer.releaseId,
-          product: layer.product,
-          nside: 2 ** layer.overviewOrder,
-          pixels: layer.cells.get(layer.overviewOrder) ?? [],
-          sourceUrl: layer.recipe?.sourceUrl,
-        })),
-      };
-      console.info(`Loaded ${coverageCatalog.layers.length} ACTIVE Warehouse coverage layers from ${evidenceStore.layerIndex}/${evidenceStore.coverageIndex}`);
-    } else {
-      console.warn("Warehouse ES is configured but has no ACTIVE layers; using the checked-in public geometry until a scan completes.");
+let coverageLoadMode: "warehouse" | "static" | "degraded" = "static";
+let coverageLoadedAt = new Date().toISOString();
+let surveyIndex: Awaited<ReturnType<typeof loadSurveyIndex>>;
+
+async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string; layers: number; footprints: number }> {
+  coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src", "footprints", "survey-footprints.json"), "utf8")) as typeof coverageManifest;
+  staticCoverageCatalog = await loadCoverageCatalog(releaseRoot, coverageManifest);
+  coverageCatalog = staticCoverageCatalog;
+  runtimeCoverageManifest = coverageManifest;
+  coverageLoadMode = "static";
+  if (evidenceStore.configured) {
+    try {
+      const warehouseSnapshot = await evidenceStore.loadCurrentCoverageCatalog();
+      if (warehouseSnapshot?.layers.length) {
+        coverageCatalog = coverageCatalogFromWarehouse(staticCoverageCatalog, warehouseSnapshot);
+        runtimeCoverageManifest = {
+          ...coverageManifest,
+          generatedAt: new Date().toISOString(),
+          nside: coverageCatalog.layers.length ? 2 ** Math.min(...coverageCatalog.layers.map((layer) => layer.overviewOrder)) : coverageManifest.nside,
+          footprints: [...coverageCatalog.records.values()].map((layer) => ({
+            surveyId: layer.surveyId,
+            releaseId: layer.releaseId,
+            product: layer.product,
+            nside: 2 ** layer.overviewOrder,
+            pixels: layer.cells.get(layer.overviewOrder) ?? [],
+            sourceUrl: layer.recipe?.sourceUrl,
+          })),
+        };
+        coverageLoadMode = "warehouse";
+        console.info(`Loaded ${coverageCatalog.layers.length} ACTIVE Warehouse coverage layers from ${evidenceStore.layerIndex}/${evidenceStore.coverageIndex}`);
+      } else {
+        console.warn("Warehouse ES is configured but has no ACTIVE layers; using the checked-in public geometry until a scan completes.");
+      }
+    } catch (error) {
+      coverageLoadMode = "degraded";
+      console.warn(`Warehouse coverage catalog unavailable; using checked-in geometry: ${error instanceof Error ? error.message : String(error)}`);
     }
-  } catch (error) {
-    console.warn(`Warehouse coverage catalog unavailable; using checked-in geometry: ${error instanceof Error ? error.message : String(error)}`);
   }
+  coverageLoadedAt = new Date().toISOString();
+  surveyIndex = await loadSurveyIndex(releaseRoot, catalog, runtimeCoverageManifest, coverageCatalog.layers);
+  return { mode: coverageLoadMode, loadedAt: coverageLoadedAt, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size };
 }
-const surveyIndex = await loadSurveyIndex(releaseRoot, catalog, runtimeCoverageManifest, coverageCatalog.layers);
+
+await reloadRuntimeCoverage();
 const admin = new AssetsAdmin();
 const products = new ProductStore();
 await products.initialize(releaseRoot, coverageCatalog.layers);
@@ -510,9 +527,37 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       const input = await requestJsonBody(request) as unknown as ConnectorInput;
       return json(response, 201, { connector: await admin.createConnector(input) });
     }
+    if (pathname === "/api/v1/admin/catalog/status" && request.method === "GET") {
+      return json(response, 200, { mode: coverageLoadMode, loadedAt: coverageLoadedAt, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size, warehouseConfigured: evidenceStore.configured });
+    }
+    if (pathname === "/api/v1/admin/catalog/reload" && request.method === "POST") {
+      return json(response, 200, { catalog: await reloadRuntimeCoverage() });
+    }
     if (pathname === "/api/v1/admin/tasks" && request.method === "GET") return json(response, 200, { tasks: await admin.listTasks() });
     if (pathname === "/api/v1/admin/tasks" && request.method === "POST") {
-      const input = await requestJsonBody(request) as unknown as CoverageTaskInput & { productId?: string };
+      const input = await requestJsonBody(request) as unknown as CoverageTaskInput & { productId?: string; profileId?: string };
+      if (input.profileId) {
+        const profile = businessModalityProfile(input.profileId);
+        const immutable = ["layerId", "surveyId", "releaseId", "product", "productId", "modality", "mode", "coverageRole", "dataOrigin", "sourceTier"] as const;
+        for (const key of immutable) if (input[key] !== undefined) return json(response, 400, { error: `${key} is defined by the selected business modality profile` });
+        return json(response, 201, { task: await admin.createTask({
+          ...input,
+          layerId: profile.layerId,
+          surveyId: profile.surveyId,
+          releaseId: profile.releaseId,
+          product: profile.product,
+          productId: profile.id,
+          modality: profile.modality,
+          mode: profile.mode,
+          coverageRole: profile.coverageRole,
+          dataOrigin: profile.dataOrigin,
+          sourceTier: profile.sourceTier,
+          allowedSuffixes: input.allowedSuffixes ?? profile.allowedSuffixes,
+          maxOrder: input.maxOrder ?? profile.maxOrder,
+          raColumn: input.raColumn ?? ("raColumn" in profile ? profile.raColumn : undefined),
+          decColumn: input.decColumn ?? ("decColumn" in profile ? profile.decColumn : undefined),
+        }) });
+      }
       if (input.productId) {
         const product = products.get(input.productId).draft;
         const immutable: Array<[keyof CoverageTaskInput, string | undefined]> = [["layerId", product.layerId], ["surveyId", product.surveyId], ["releaseId", product.releaseId], ["product", product.name], ["productId", product.productId], ["modality", product.modality], ["mode", product.mode], ["coverageRole", product.coverageRole], ["dataOrigin", product.dataOrigin], ["sourceTier", product.sourceTier]];
@@ -534,6 +579,14 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         return json(response, 201, { task: await admin.createTask(derived) });
       }
       return json(response, 201, { task: await admin.createTask(input) });
+    }
+    const taskMatch = /^\/api\/v1\/admin\/tasks\/([^/]+)$/.exec(pathname);
+    const retryMatch = /^\/api\/v1\/admin\/tasks\/([^/]+)\/resubmit$/.exec(pathname);
+    if (taskMatch?.[1] && request.method === "GET") {
+      return json(response, 200, { task: await admin.getTask(decodeURIComponent(taskMatch[1])) });
+    }
+    if (retryMatch?.[1] && request.method === "POST") {
+      return json(response, 201, { task: await admin.resubmitTask(decodeURIComponent(retryMatch[1])) });
     }
     if (pathname === "/api/v1/admin/products" && request.method === "GET") {
       const records = products.list();

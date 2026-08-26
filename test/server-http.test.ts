@@ -179,15 +179,23 @@ test("admin endpoints require a token and expose the configured control-plane bo
 
   const config = await fetch(`http://127.0.0.1:${port}/api/v1/admin/config`);
   assert.equal(config.status, 200);
-  const configBody = await config.json() as { enabled: boolean; authRequired: boolean; capabilities: { coverageModes: string[] } };
+  const configBody = await config.json() as { enabled: boolean; authRequired: boolean; capabilities: { coverageModes: string[]; businessModalityProfiles: Array<{ modality: string }> } };
   assert.equal(configBody.enabled, true);
   assert.equal(configBody.authRequired, true);
-  assert.deepEqual(configBody.capabilities.coverageModes, ["fits-wcs", "catalog-radec", "nested-healpix"]);
+  assert.deepEqual(configBody.capabilities.coverageModes, ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix"]);
+  assert.deepEqual(configBody.capabilities.businessModalityProfiles.map((profile) => profile.modality), ["image", "spectrum", "catalog", "cube"]);
 
   const denied = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tasks`);
   assert.equal(denied.status, 401);
   const malformed = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tasks`, { headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(malformed.status, 503);
+
+  const catalogStatus = await fetch(`http://127.0.0.1:${port}/api/v1/admin/catalog/status`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(catalogStatus.status, 200);
+  const catalogStatusBody = await catalogStatus.json() as { mode: string; layers: number; footprints: number };
+  assert.ok(["static", "warehouse", "degraded"].includes(catalogStatusBody.mode));
+  assert.ok(catalogStatusBody.layers > 0);
+  assert.ok(catalogStatusBody.footprints >= 44);
 
   const products = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products`, { headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(products.status, 200);

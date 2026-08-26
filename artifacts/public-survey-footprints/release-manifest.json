@@ -3,7 +3,7 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "e6cbb9dcca82d79ce6bd129634d4235a85d3185a4fe078c8d2aa2258b59c8134"
+    "sha256": "967b18d566a6500888f528cfadbcec3fc3e0789f1ace87398f99e9e85d444e5e"
   },
   "statistics": {
     "releases": 52,
@@ -14,8 +14,8 @@
     "footprints": 41,
     "packages": 14,
     "rawMocFiles": 41,
-    "totalBytes": 33302006,
-    "runtimeBytes": 6665609,
+    "totalBytes": 33313339,
+    "runtimeBytes": 6676942,
     "evidenceBytes": 26636397
   },
   "files": [
@@ -28,8 +28,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/architecture-boundary.md",
-      "sizeBytes": 3128,
-      "sha256": "88f4f76c857e9dee6b6682004d02edb2c27674a29bb291783ee45f589c9a9e42"
+      "sizeBytes": 3495,
+      "sha256": "1de60fb8ba2642625939a6420d7f1879da58793ad8d3fcc05c3317950d27ab8e"
     },
     {
       "id": "documentation-data-warehouse-requirements",
@@ -40,8 +40,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/data-warehouse-requirements.md",
-      "sizeBytes": 6605,
-      "sha256": "d63f6f662ef18ceda5557ab32648ae2f909991729a31453ccc90efaf5b9072bc"
+      "sizeBytes": 6824,
+      "sha256": "6d1abd8ecca19d2165acc9b9abfe6c8c1ab08ca09d588a8fff1fee0571a569db"
     },
     {
       "id": "documentation-moc-core-contract",
@@ -66,6 +66,18 @@
       "path": "docs/public-footprint-moc-method.md",
       "sizeBytes": 7438,
       "sha256": "71106a35d7fb3796d70fc818b1b703f6e9651c6170c24f86ee752d354fe72143"
+    },
+    {
+      "id": "documentation-resource-package-integration",
+      "kind": "documentation",
+      "label": "Resource Package v3 integration guide",
+      "description": "Standalone trust, validation and installation workflow for projects that consume Assets coverage packages.",
+      "downloadName": "resource-package-integration.md",
+      "mediaType": "text/markdown; charset=utf-8",
+      "deliveryClass": "runtime",
+      "path": "docs/resource-package-integration.md",
+      "sizeBytes": 2438,
+      "sha256": "f66a18b19d00ae53f98804fe4c4dbd85a85480389577cdfa55acc63a86590eb9"
     },
     {
       "id": "layer-csst-sim-w2-image-extent-preview-order4",
@@ -1515,6 +1527,18 @@
       "path": "contracts/coverage-task-v1.schema.json",
       "sizeBytes": 4037,
       "sha256": "f4d3a8bb9677543a5a1c4e6fb964c0b845ea7e357d6095c2d6413d98cdec16db"
+    },
+    {
+      "id": "metadata-moc-source-registry",
+      "kind": "metadata",
+      "label": "Public MOC source registry",
+      "description": "Allowlisted MOC/HiPS discovery records, locked orders, coverage roles, provenance requirements and attribution status.",
+      "downloadName": "moc-source-registry.json",
+      "mediaType": "application/json",
+      "deliveryClass": "runtime",
+      "path": "src/moc-sources/source-registry.json",
+      "sizeBytes": 8309,
+      "sha256": "ec46ac0aafbe8aec3ab7719e598dc77705e166456a1dbbcb0687cbcacfac7546"
     },
     {
       "id": "metadata-geometry-index",

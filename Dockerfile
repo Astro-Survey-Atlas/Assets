@@ -16,6 +16,7 @@ COPY contracts ./contracts
 COPY src/footprints ./src/footprints
 COPY src/surveys ./src/surveys
 COPY src/layers ./src/layers
+COPY src/moc-sources ./src/moc-sources
 COPY requirements ./requirements
 COPY docs ./docs
 RUN if [ "$FRONTEND_ONLY" = "true" ]; then \
@@ -46,6 +47,7 @@ COPY --from=build --chown=atlas:atlas /app/artifacts ./release/artifacts
 COPY --from=build --chown=atlas:atlas /app/src/footprints ./release/src/footprints
 COPY --from=build --chown=atlas:atlas /app/src/surveys ./release/src/surveys
 COPY --from=build --chown=atlas:atlas /app/src/layers ./release/src/layers
+COPY --from=build --chown=atlas:atlas /app/src/moc-sources ./release/src/moc-sources
 COPY --from=build --chown=atlas:atlas /app/requirements ./release/requirements
 COPY --from=build --chown=atlas:atlas /app/docs ./release/docs
 COPY --from=build --chown=atlas:atlas /app/contracts ./release/contracts

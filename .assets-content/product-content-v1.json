@@ -14,6 +14,10 @@
         "dataOrigin": "simulated",
         "sourceTier": "user_file_derived",
         "mode": "fits-wcs",
+        "scanDefaults": {
+          "maxOrder": 8,
+          "allowedSuffixes": ".fits,.fit,.fits.gz"
+        },
         "recipeVersion": 1,
         "recipeHash": "db7d20ec715f207fa950cff8eb847b557eb19df9d8137cc7e0d3780792cc6443",
         "presentation": {
@@ -142,11 +146,11 @@
         }
       },
       "published": null,
-      "revision": 2,
+      "revision": 3,
       "publishedRevision": null,
-      "updatedAt": "2026-08-24T02:27:45.530Z",
+      "updatedAt": "2026-08-26T02:47:28.422Z",
       "publishedAt": null,
-      "contentSha256": "99a4a013e9c454e9ab1d15480afc309c115cbfbdbc9fa068211127813fd860dc"
+      "contentSha256": "5065299355ea9d5161f0ac58cb4eb421f33b75ac8d5b849f6967acc256861458"
     },
     {
       "productId": "bb743658cd44269d7675",
@@ -161,6 +165,12 @@
         "dataOrigin": "simulated",
         "sourceTier": "user_file_derived",
         "mode": "nested-healpix",
+        "scanDefaults": {
+          "maxOrder": 8,
+          "healpixColumn": "ipix",
+          "healpixOrder": 8,
+          "allowedSuffixes": ".json,.csv,.tsv,.fits"
+        },
         "recipeVersion": 1,
         "recipeHash": "df5dd4aa4c75fe1c1ecb78515b1088eb155f4626c146453d7b3dae2642f2a9da",
         "presentation": {
@@ -315,11 +325,11 @@
         }
       },
       "published": null,
-      "revision": 2,
+      "revision": 3,
       "publishedRevision": null,
-      "updatedAt": "2026-08-24T02:27:45.531Z",
+      "updatedAt": "2026-08-26T02:47:28.423Z",
       "publishedAt": null,
-      "contentSha256": "e74b7b173c290754514e795fad1170f4e244403f0a5ab27f5e37a62b581e8bc2"
+      "contentSha256": "73e47c83796762023f08f7edac4c6a3bdad667cb0e3373e1bbc908bff0be1612"
     },
     {
       "productId": "16149b2e666fb82eb634",
@@ -334,6 +344,12 @@
         "dataOrigin": "simulated",
         "sourceTier": "user_file_derived",
         "mode": "nested-healpix",
+        "scanDefaults": {
+          "maxOrder": 8,
+          "healpixColumn": "ipix",
+          "healpixOrder": 8,
+          "allowedSuffixes": ".json,.csv,.tsv,.fits"
+        },
         "recipeVersion": 1,
         "recipeHash": "c41636c748bd9168e249218cd04e8db336cce1e21da8861fc28319f6c1967d70",
         "presentation": {
@@ -488,11 +504,11 @@
         }
       },
       "published": null,
-      "revision": 2,
+      "revision": 3,
       "publishedRevision": null,
-      "updatedAt": "2026-08-24T02:27:45.532Z",
+      "updatedAt": "2026-08-26T02:47:28.423Z",
       "publishedAt": null,
-      "contentSha256": "6bab98aeb166e2174559c70c056f2aa784b8a8162700ff0f750dfa4c5ce6a917"
+      "contentSha256": "f8f01db116f4d00403c536a6463c968eb71fcfbd64784c124a6d1cd75c545202"
     },
     {
       "productId": "292a7c733b0b0080613b",
@@ -507,6 +523,12 @@
         "dataOrigin": "simulated",
         "sourceTier": "user_file_derived",
         "mode": "nested-healpix",
+        "scanDefaults": {
+          "maxOrder": 8,
+          "healpixColumn": "ipix",
+          "healpixOrder": 8,
+          "allowedSuffixes": ".json,.csv,.tsv,.fits"
+        },
         "recipeVersion": 1,
         "recipeHash": "e61b03ed8e09528e2f1fdf89c3ced03f0ee763cb27e16feb66725478afa43b8b",
         "presentation": {
@@ -661,11 +683,11 @@
         }
       },
       "published": null,
-      "revision": 2,
+      "revision": 3,
       "publishedRevision": null,
-      "updatedAt": "2026-08-24T02:27:45.532Z",
+      "updatedAt": "2026-08-26T02:47:28.424Z",
       "publishedAt": null,
-      "contentSha256": "387d04972a0cef6dfc1986338de7d51ac03c2bb2258e2b8dbcd6cfff4b1ce66f"
+      "contentSha256": "b9fab49aeef615a3ee13f65122054c2270281ed0712922c2d6a87295619f0a36"
     },
     {
       "productId": "18e203dec1e31f1da357",
@@ -4453,11 +4475,16 @@
         "surveyId": "legacy-surveys",
         "releaseId": "legacy-dr1",
         "name": "Tractor catalog",
+        "modality": "catalog",
         "layerId": "legacy-dr1-tractor-object-presence",
         "coverageRole": "object_presence",
         "dataOrigin": "catalog",
         "sourceTier": "official_inventory_derived",
-        "mode": "fits-wcs",
+        "mode": "catalog-radec",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".csv,.tsv"
+        },
         "presentation": {
           "summaryMarkdown": "",
           "methodologyMarkdown": "",
@@ -4468,7 +4495,7 @@
                 "id": "input",
                 "kind": "input",
                 "title": "输入来源",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 0,
                 "implementationRef": "assets.coverage.input",
                 "evidenceRefs": []
@@ -4477,7 +4504,7 @@
                 "id": "filter",
                 "kind": "filter",
                 "title": "文件筛选",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 1,
                 "implementationRef": "assets.coverage.filter",
                 "evidenceRefs": []
@@ -4486,7 +4513,7 @@
                 "id": "geometry",
                 "kind": "geometry",
                 "title": "几何边界计算",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 2,
                 "implementationRef": "assets.coverage.geometry",
                 "evidenceRefs": []
@@ -4495,7 +4522,7 @@
                 "id": "rasterize",
                 "kind": "rasterize",
                 "title": "HEALPix 栅格化",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "maxOrder=locked; queryOrder=8; previewOrder=4; ICRS/NESTED",
                 "order": 3,
                 "implementationRef": "assets.coverage.rasterize",
                 "evidenceRefs": []
@@ -4504,7 +4531,7 @@
                 "id": "union",
                 "kind": "union",
                 "title": "union / dedup",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
                 "order": 4,
                 "implementationRef": "assets.coverage.union",
                 "evidenceRefs": []
@@ -4513,7 +4540,7 @@
                 "id": "outputs",
                 "kind": "outputs",
                 "title": "MOC、FITS、preview、statistics 输出",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
                 "order": 5,
                 "implementationRef": "assets.coverage.outputs",
                 "evidenceRefs": []
@@ -4522,7 +4549,7 @@
                 "id": "evidence",
                 "kind": "evidence",
                 "title": "manifest、provenance、hash",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
                 "order": 6,
                 "implementationRef": "assets.coverage.evidence",
                 "evidenceRefs": []
@@ -4558,11 +4585,11 @@
         }
       },
       "published": null,
-      "revision": 1,
+      "revision": 2,
       "publishedRevision": null,
-      "updatedAt": "2026-08-22T03:46:08.639Z",
+      "updatedAt": "2026-08-26T02:47:28.425Z",
       "publishedAt": null,
-      "contentSha256": "eae5637595b432557481454d9bb223307bd607897b66ccfc9610c39421788daf"
+      "contentSha256": "fea06aa72b99071f2c37da58e4d224a8bb1625a967dca774c99562f72037e2ea"
     },
     {
       "productId": "4f6c9a6ab458d57292ac",
@@ -4691,11 +4718,16 @@
         "surveyId": "legacy-surveys",
         "releaseId": "legacy-dr2",
         "name": "Tractor catalog",
+        "modality": "catalog",
         "layerId": "legacy-dr2-tractor-object-presence",
         "coverageRole": "object_presence",
         "dataOrigin": "catalog",
         "sourceTier": "official_inventory_derived",
-        "mode": "fits-wcs",
+        "mode": "catalog-radec",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".csv,.tsv"
+        },
         "presentation": {
           "summaryMarkdown": "",
           "methodologyMarkdown": "",
@@ -4706,7 +4738,7 @@
                 "id": "input",
                 "kind": "input",
                 "title": "输入来源",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 0,
                 "implementationRef": "assets.coverage.input",
                 "evidenceRefs": []
@@ -4715,7 +4747,7 @@
                 "id": "filter",
                 "kind": "filter",
                 "title": "文件筛选",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 1,
                 "implementationRef": "assets.coverage.filter",
                 "evidenceRefs": []
@@ -4724,7 +4756,7 @@
                 "id": "geometry",
                 "kind": "geometry",
                 "title": "几何边界计算",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 2,
                 "implementationRef": "assets.coverage.geometry",
                 "evidenceRefs": []
@@ -4733,7 +4765,7 @@
                 "id": "rasterize",
                 "kind": "rasterize",
                 "title": "HEALPix 栅格化",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "maxOrder=locked; queryOrder=8; previewOrder=4; ICRS/NESTED",
                 "order": 3,
                 "implementationRef": "assets.coverage.rasterize",
                 "evidenceRefs": []
@@ -4742,7 +4774,7 @@
                 "id": "union",
                 "kind": "union",
                 "title": "union / dedup",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
                 "order": 4,
                 "implementationRef": "assets.coverage.union",
                 "evidenceRefs": []
@@ -4751,7 +4783,7 @@
                 "id": "outputs",
                 "kind": "outputs",
                 "title": "MOC、FITS、preview、statistics 输出",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
                 "order": 5,
                 "implementationRef": "assets.coverage.outputs",
                 "evidenceRefs": []
@@ -4760,7 +4792,7 @@
                 "id": "evidence",
                 "kind": "evidence",
                 "title": "manifest、provenance、hash",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
                 "order": 6,
                 "implementationRef": "assets.coverage.evidence",
                 "evidenceRefs": []
@@ -4796,11 +4828,11 @@
         }
       },
       "published": null,
-      "revision": 1,
+      "revision": 2,
       "publishedRevision": null,
-      "updatedAt": "2026-08-22T03:46:08.639Z",
+      "updatedAt": "2026-08-26T02:47:28.425Z",
       "publishedAt": null,
-      "contentSha256": "ed495c685ab01c982a4cb7d419edd0df26f36477955bdfc582db07683ba50b2a"
+      "contentSha256": "5be34b8cb9eb2e37915f43ef48d86726ca14ab8be482fb3d5823113d3c36f303"
     },
     {
       "productId": "cd3eb2afb76c4eb42192",
@@ -4929,11 +4961,16 @@
         "surveyId": "legacy-surveys",
         "releaseId": "legacy-dr3",
         "name": "Tractor catalog",
+        "modality": "catalog",
         "layerId": "legacy-dr3-tractor-object-presence",
         "coverageRole": "object_presence",
         "dataOrigin": "catalog",
         "sourceTier": "official_inventory_derived",
-        "mode": "fits-wcs",
+        "mode": "catalog-radec",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".csv,.tsv"
+        },
         "presentation": {
           "summaryMarkdown": "",
           "methodologyMarkdown": "",
@@ -4944,7 +4981,7 @@
                 "id": "input",
                 "kind": "input",
                 "title": "输入来源",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 0,
                 "implementationRef": "assets.coverage.input",
                 "evidenceRefs": []
@@ -4953,7 +4990,7 @@
                 "id": "filter",
                 "kind": "filter",
                 "title": "文件筛选",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 1,
                 "implementationRef": "assets.coverage.filter",
                 "evidenceRefs": []
@@ -4962,7 +4999,7 @@
                 "id": "geometry",
                 "kind": "geometry",
                 "title": "几何边界计算",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 2,
                 "implementationRef": "assets.coverage.geometry",
                 "evidenceRefs": []
@@ -4971,7 +5008,7 @@
                 "id": "rasterize",
                 "kind": "rasterize",
                 "title": "HEALPix 栅格化",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "maxOrder=locked; queryOrder=8; previewOrder=4; ICRS/NESTED",
                 "order": 3,
                 "implementationRef": "assets.coverage.rasterize",
                 "evidenceRefs": []
@@ -4980,7 +5017,7 @@
                 "id": "union",
                 "kind": "union",
                 "title": "union / dedup",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
                 "order": 4,
                 "implementationRef": "assets.coverage.union",
                 "evidenceRefs": []
@@ -4989,7 +5026,7 @@
                 "id": "outputs",
                 "kind": "outputs",
                 "title": "MOC、FITS、preview、statistics 输出",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
                 "order": 5,
                 "implementationRef": "assets.coverage.outputs",
                 "evidenceRefs": []
@@ -4998,7 +5035,7 @@
                 "id": "evidence",
                 "kind": "evidence",
                 "title": "manifest、provenance、hash",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
                 "order": 6,
                 "implementationRef": "assets.coverage.evidence",
                 "evidenceRefs": []
@@ -5034,11 +5071,11 @@
         }
       },
       "published": null,
-      "revision": 1,
+      "revision": 2,
       "publishedRevision": null,
-      "updatedAt": "2026-08-22T03:46:08.639Z",
+      "updatedAt": "2026-08-26T02:47:28.425Z",
       "publishedAt": null,
-      "contentSha256": "59bd09b525e2aac7db70b8d03019c18e97564284e8c3455721efdb770e13629c"
+      "contentSha256": "4d54a9c76fa1ba39718e77fbaed44789be139403bd4a81df89b8327c9cf065b7"
     },
     {
       "productId": "ad94630876c5f1974dea",
@@ -5167,11 +5204,16 @@
         "surveyId": "legacy-surveys",
         "releaseId": "legacy-dr4",
         "name": "Tractor catalog",
+        "modality": "catalog",
         "layerId": "legacy-dr4-tractor-object-presence",
         "coverageRole": "object_presence",
         "dataOrigin": "catalog",
         "sourceTier": "official_inventory_derived",
-        "mode": "fits-wcs",
+        "mode": "catalog-radec",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".csv,.tsv"
+        },
         "presentation": {
           "summaryMarkdown": "",
           "methodologyMarkdown": "",
@@ -5182,7 +5224,7 @@
                 "id": "input",
                 "kind": "input",
                 "title": "输入来源",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 0,
                 "implementationRef": "assets.coverage.input",
                 "evidenceRefs": []
@@ -5191,7 +5233,7 @@
                 "id": "filter",
                 "kind": "filter",
                 "title": "文件筛选",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 1,
                 "implementationRef": "assets.coverage.filter",
                 "evidenceRefs": []
@@ -5200,7 +5242,7 @@
                 "id": "geometry",
                 "kind": "geometry",
                 "title": "几何边界计算",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 2,
                 "implementationRef": "assets.coverage.geometry",
                 "evidenceRefs": []
@@ -5209,7 +5251,7 @@
                 "id": "rasterize",
                 "kind": "rasterize",
                 "title": "HEALPix 栅格化",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "maxOrder=locked; queryOrder=8; previewOrder=4; ICRS/NESTED",
                 "order": 3,
                 "implementationRef": "assets.coverage.rasterize",
                 "evidenceRefs": []
@@ -5218,7 +5260,7 @@
                 "id": "union",
                 "kind": "union",
                 "title": "union / dedup",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
                 "order": 4,
                 "implementationRef": "assets.coverage.union",
                 "evidenceRefs": []
@@ -5227,7 +5269,7 @@
                 "id": "outputs",
                 "kind": "outputs",
                 "title": "MOC、FITS、preview、statistics 输出",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
                 "order": 5,
                 "implementationRef": "assets.coverage.outputs",
                 "evidenceRefs": []
@@ -5236,7 +5278,7 @@
                 "id": "evidence",
                 "kind": "evidence",
                 "title": "manifest、provenance、hash",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
                 "order": 6,
                 "implementationRef": "assets.coverage.evidence",
                 "evidenceRefs": []
@@ -5272,11 +5314,11 @@
         }
       },
       "published": null,
-      "revision": 1,
+      "revision": 2,
       "publishedRevision": null,
-      "updatedAt": "2026-08-22T03:46:08.640Z",
+      "updatedAt": "2026-08-26T02:47:28.425Z",
       "publishedAt": null,
-      "contentSha256": "c24ce2757acb6d135bff2255e51912176802f8786fd4b4ad193da75979f38923"
+      "contentSha256": "7d285a1cfdf01ff23efcd7adb48f66157c123104fac390519b9f12b652980e67"
     },
     {
       "productId": "8827c5a93f7ef8ec16d5",
@@ -5405,11 +5447,16 @@
         "surveyId": "legacy-surveys",
         "releaseId": "legacy-dr5",
         "name": "Tractor catalog",
+        "modality": "catalog",
         "layerId": "legacy-dr5-tractor-object-presence",
         "coverageRole": "object_presence",
         "dataOrigin": "catalog",
         "sourceTier": "official_inventory_derived",
-        "mode": "fits-wcs",
+        "mode": "catalog-radec",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".csv,.tsv"
+        },
         "presentation": {
           "summaryMarkdown": "",
           "methodologyMarkdown": "",
@@ -5420,7 +5467,7 @@
                 "id": "input",
                 "kind": "input",
                 "title": "输入来源",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 0,
                 "implementationRef": "assets.coverage.input",
                 "evidenceRefs": []
@@ -5429,7 +5476,7 @@
                 "id": "filter",
                 "kind": "filter",
                 "title": "文件筛选",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 1,
                 "implementationRef": "assets.coverage.filter",
                 "evidenceRefs": []
@@ -5438,7 +5485,7 @@
                 "id": "geometry",
                 "kind": "geometry",
                 "title": "几何边界计算",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 2,
                 "implementationRef": "assets.coverage.geometry",
                 "evidenceRefs": []
@@ -5447,7 +5494,7 @@
                 "id": "rasterize",
                 "kind": "rasterize",
                 "title": "HEALPix 栅格化",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "maxOrder=locked; queryOrder=8; previewOrder=4; ICRS/NESTED",
                 "order": 3,
                 "implementationRef": "assets.coverage.rasterize",
                 "evidenceRefs": []
@@ -5456,7 +5503,7 @@
                 "id": "union",
                 "kind": "union",
                 "title": "union / dedup",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
                 "order": 4,
                 "implementationRef": "assets.coverage.union",
                 "evidenceRefs": []
@@ -5465,7 +5512,7 @@
                 "id": "outputs",
                 "kind": "outputs",
                 "title": "MOC、FITS、preview、statistics 输出",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
                 "order": 5,
                 "implementationRef": "assets.coverage.outputs",
                 "evidenceRefs": []
@@ -5474,7 +5521,7 @@
                 "id": "evidence",
                 "kind": "evidence",
                 "title": "manifest、provenance、hash",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
                 "order": 6,
                 "implementationRef": "assets.coverage.evidence",
                 "evidenceRefs": []
@@ -5510,11 +5557,11 @@
         }
       },
       "published": null,
-      "revision": 1,
+      "revision": 2,
       "publishedRevision": null,
-      "updatedAt": "2026-08-22T03:46:08.640Z",
+      "updatedAt": "2026-08-26T02:47:28.426Z",
       "publishedAt": null,
-      "contentSha256": "636843c84a44940836371590dd239f4eb4c1d04159997de0f0027d508f143354"
+      "contentSha256": "477d62e5c40ad15bfe29b3106acf5081d55d2b76ec78092b8f0cf5433c16f8ed"
     },
     {
       "productId": "712d64b4858428da5319",
@@ -5643,11 +5690,16 @@
         "surveyId": "legacy-surveys",
         "releaseId": "legacy-dr6",
         "name": "Tractor catalog",
+        "modality": "catalog",
         "layerId": "legacy-dr6-tractor-object-presence",
         "coverageRole": "object_presence",
         "dataOrigin": "catalog",
         "sourceTier": "official_inventory_derived",
-        "mode": "fits-wcs",
+        "mode": "catalog-radec",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".csv,.tsv"
+        },
         "presentation": {
           "summaryMarkdown": "",
           "methodologyMarkdown": "",
@@ -5658,7 +5710,7 @@
                 "id": "input",
                 "kind": "input",
                 "title": "输入来源",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 0,
                 "implementationRef": "assets.coverage.input",
                 "evidenceRefs": []
@@ -5667,7 +5719,7 @@
                 "id": "filter",
                 "kind": "filter",
                 "title": "文件筛选",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 1,
                 "implementationRef": "assets.coverage.filter",
                 "evidenceRefs": []
@@ -5676,7 +5728,7 @@
                 "id": "geometry",
                 "kind": "geometry",
                 "title": "几何边界计算",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 2,
                 "implementationRef": "assets.coverage.geometry",
                 "evidenceRefs": []
@@ -5685,7 +5737,7 @@
                 "id": "rasterize",
                 "kind": "rasterize",
                 "title": "HEALPix 栅格化",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "maxOrder=locked; queryOrder=8; previewOrder=4; ICRS/NESTED",
                 "order": 3,
                 "implementationRef": "assets.coverage.rasterize",
                 "evidenceRefs": []
@@ -5694,7 +5746,7 @@
                 "id": "union",
                 "kind": "union",
                 "title": "union / dedup",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
                 "order": 4,
                 "implementationRef": "assets.coverage.union",
                 "evidenceRefs": []
@@ -5703,7 +5755,7 @@
                 "id": "outputs",
                 "kind": "outputs",
                 "title": "MOC、FITS、preview、statistics 输出",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
                 "order": 5,
                 "implementationRef": "assets.coverage.outputs",
                 "evidenceRefs": []
@@ -5712,7 +5764,7 @@
                 "id": "evidence",
                 "kind": "evidence",
                 "title": "manifest、provenance、hash",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
                 "order": 6,
                 "implementationRef": "assets.coverage.evidence",
                 "evidenceRefs": []
@@ -5748,11 +5800,11 @@
         }
       },
       "published": null,
-      "revision": 1,
+      "revision": 2,
       "publishedRevision": null,
-      "updatedAt": "2026-08-22T03:46:08.640Z",
+      "updatedAt": "2026-08-26T02:47:28.426Z",
       "publishedAt": null,
-      "contentSha256": "c533409677628329dda217be584073d9c32f5a300a24efb5e4bde8449728ddf9"
+      "contentSha256": "087f8bcf7cacb42923f2575d972102c79a4edba3854e1ed245fdabc8613a897a"
     },
     {
       "productId": "81eb972e983ecf221ca3",
@@ -5881,11 +5933,16 @@
         "surveyId": "legacy-surveys",
         "releaseId": "legacy-dr7",
         "name": "Tractor catalog",
+        "modality": "catalog",
         "layerId": "legacy-dr7-tractor-object-presence",
         "coverageRole": "object_presence",
         "dataOrigin": "catalog",
         "sourceTier": "official_inventory_derived",
-        "mode": "fits-wcs",
+        "mode": "catalog-radec",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".csv,.tsv"
+        },
         "presentation": {
           "summaryMarkdown": "",
           "methodologyMarkdown": "",
@@ -5896,7 +5953,7 @@
                 "id": "input",
                 "kind": "input",
                 "title": "输入来源",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 0,
                 "implementationRef": "assets.coverage.input",
                 "evidenceRefs": []
@@ -5905,7 +5962,7 @@
                 "id": "filter",
                 "kind": "filter",
                 "title": "文件筛选",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 1,
                 "implementationRef": "assets.coverage.filter",
                 "evidenceRefs": []
@@ -5914,7 +5971,7 @@
                 "id": "geometry",
                 "kind": "geometry",
                 "title": "几何边界计算",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 2,
                 "implementationRef": "assets.coverage.geometry",
                 "evidenceRefs": []
@@ -5923,7 +5980,7 @@
                 "id": "rasterize",
                 "kind": "rasterize",
                 "title": "HEALPix 栅格化",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "maxOrder=locked; queryOrder=8; previewOrder=4; ICRS/NESTED",
                 "order": 3,
                 "implementationRef": "assets.coverage.rasterize",
                 "evidenceRefs": []
@@ -5932,7 +5989,7 @@
                 "id": "union",
                 "kind": "union",
                 "title": "union / dedup",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
                 "order": 4,
                 "implementationRef": "assets.coverage.union",
                 "evidenceRefs": []
@@ -5941,7 +5998,7 @@
                 "id": "outputs",
                 "kind": "outputs",
                 "title": "MOC、FITS、preview、statistics 输出",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
                 "order": 5,
                 "implementationRef": "assets.coverage.outputs",
                 "evidenceRefs": []
@@ -5950,7 +6007,7 @@
                 "id": "evidence",
                 "kind": "evidence",
                 "title": "manifest、provenance、hash",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
                 "order": 6,
                 "implementationRef": "assets.coverage.evidence",
                 "evidenceRefs": []
@@ -5986,11 +6043,11 @@
         }
       },
       "published": null,
-      "revision": 1,
+      "revision": 2,
       "publishedRevision": null,
-      "updatedAt": "2026-08-22T03:46:08.640Z",
+      "updatedAt": "2026-08-26T02:47:28.426Z",
       "publishedAt": null,
-      "contentSha256": "f90db58ad81e6e47c0d5eecc74cc2a053b12daea27218f68f79825206d71fbb3"
+      "contentSha256": "77ae939243aff7231eebb0c7135725082632c2cec6cdbe96bad1093233739885"
     },
     {
       "productId": "73265f811922fa961354",
@@ -6119,11 +6176,16 @@
         "surveyId": "legacy-surveys",
         "releaseId": "legacy-dr8",
         "name": "Tractor catalog",
+        "modality": "catalog",
         "layerId": "legacy-dr8-tractor-object-presence",
         "coverageRole": "object_presence",
         "dataOrigin": "catalog",
         "sourceTier": "official_inventory_derived",
-        "mode": "fits-wcs",
+        "mode": "catalog-radec",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".csv,.tsv"
+        },
         "presentation": {
           "summaryMarkdown": "",
           "methodologyMarkdown": "",
@@ -6134,7 +6196,7 @@
                 "id": "input",
                 "kind": "input",
                 "title": "输入来源",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 0,
                 "implementationRef": "assets.coverage.input",
                 "evidenceRefs": []
@@ -6143,7 +6205,7 @@
                 "id": "filter",
                 "kind": "filter",
                 "title": "文件筛选",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 1,
                 "implementationRef": "assets.coverage.filter",
                 "evidenceRefs": []
@@ -6152,7 +6214,7 @@
                 "id": "geometry",
                 "kind": "geometry",
                 "title": "几何边界计算",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 2,
                 "implementationRef": "assets.coverage.geometry",
                 "evidenceRefs": []
@@ -6161,7 +6223,7 @@
                 "id": "rasterize",
                 "kind": "rasterize",
                 "title": "HEALPix 栅格化",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "maxOrder=locked; queryOrder=8; previewOrder=4; ICRS/NESTED",
                 "order": 3,
                 "implementationRef": "assets.coverage.rasterize",
                 "evidenceRefs": []
@@ -6170,7 +6232,7 @@
                 "id": "union",
                 "kind": "union",
                 "title": "union / dedup",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
                 "order": 4,
                 "implementationRef": "assets.coverage.union",
                 "evidenceRefs": []
@@ -6179,7 +6241,7 @@
                 "id": "outputs",
                 "kind": "outputs",
                 "title": "MOC、FITS、preview、statistics 输出",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
                 "order": 5,
                 "implementationRef": "assets.coverage.outputs",
                 "evidenceRefs": []
@@ -6188,7 +6250,7 @@
                 "id": "evidence",
                 "kind": "evidence",
                 "title": "manifest、provenance、hash",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
                 "order": 6,
                 "implementationRef": "assets.coverage.evidence",
                 "evidenceRefs": []
@@ -6224,11 +6286,11 @@
         }
       },
       "published": null,
-      "revision": 1,
+      "revision": 2,
       "publishedRevision": null,
-      "updatedAt": "2026-08-22T03:46:08.640Z",
+      "updatedAt": "2026-08-26T02:47:28.426Z",
       "publishedAt": null,
-      "contentSha256": "882b6fbb48c227019523f5e3c0e2577cde22aad919aaaf3778456f04e9c58e8f"
+      "contentSha256": "b9ac9d76f2a2d0d8ecbb4aae4c72150dbae5cf0b13e7290e20746ecbc10767a4"
     },
     {
       "productId": "fc4a0e7bf11b5a3f77f2",
@@ -6357,11 +6419,16 @@
         "surveyId": "legacy-surveys",
         "releaseId": "legacy-dr9",
         "name": "Tractor catalog",
+        "modality": "catalog",
         "layerId": "legacy-dr9-tractor-object-presence",
         "coverageRole": "object_presence",
         "dataOrigin": "catalog",
         "sourceTier": "official_inventory_derived",
-        "mode": "fits-wcs",
+        "mode": "catalog-radec",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".csv,.tsv"
+        },
         "presentation": {
           "summaryMarkdown": "",
           "methodologyMarkdown": "",
@@ -6372,7 +6439,7 @@
                 "id": "input",
                 "kind": "input",
                 "title": "输入来源",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 0,
                 "implementationRef": "assets.coverage.input",
                 "evidenceRefs": []
@@ -6381,7 +6448,7 @@
                 "id": "filter",
                 "kind": "filter",
                 "title": "文件筛选",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 1,
                 "implementationRef": "assets.coverage.filter",
                 "evidenceRefs": []
@@ -6390,7 +6457,7 @@
                 "id": "geometry",
                 "kind": "geometry",
                 "title": "几何边界计算",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 2,
                 "implementationRef": "assets.coverage.geometry",
                 "evidenceRefs": []
@@ -6399,7 +6466,7 @@
                 "id": "rasterize",
                 "kind": "rasterize",
                 "title": "HEALPix 栅格化",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "maxOrder=locked; queryOrder=8; previewOrder=4; ICRS/NESTED",
                 "order": 3,
                 "implementationRef": "assets.coverage.rasterize",
                 "evidenceRefs": []
@@ -6408,7 +6475,7 @@
                 "id": "union",
                 "kind": "union",
                 "title": "union / dedup",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
                 "order": 4,
                 "implementationRef": "assets.coverage.union",
                 "evidenceRefs": []
@@ -6417,7 +6484,7 @@
                 "id": "outputs",
                 "kind": "outputs",
                 "title": "MOC、FITS、preview、statistics 输出",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
                 "order": 5,
                 "implementationRef": "assets.coverage.outputs",
                 "evidenceRefs": []
@@ -6426,7 +6493,7 @@
                 "id": "evidence",
                 "kind": "evidence",
                 "title": "manifest、provenance、hash",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
                 "order": 6,
                 "implementationRef": "assets.coverage.evidence",
                 "evidenceRefs": []
@@ -6462,11 +6529,11 @@
         }
       },
       "published": null,
-      "revision": 1,
+      "revision": 2,
       "publishedRevision": null,
-      "updatedAt": "2026-08-22T03:46:08.640Z",
+      "updatedAt": "2026-08-26T02:47:28.426Z",
       "publishedAt": null,
-      "contentSha256": "167c1458c52650cf86dc31454b344811de8017f2518b60fa351272c48b16001c"
+      "contentSha256": "9c13f3cca0362377b6e7b180c747699cf08d6c3163836f9c2d73b7de4aee7861"
     },
     {
       "productId": "328302738b952219a6c2",
@@ -6619,11 +6686,16 @@
         "surveyId": "legacy-surveys",
         "releaseId": "legacy-dr10",
         "name": "Tractor catalog",
+        "modality": "catalog",
         "layerId": "legacy-dr10-tractor-object-presence",
         "coverageRole": "object_presence",
         "dataOrigin": "catalog",
         "sourceTier": "official_inventory_derived",
-        "mode": "fits-wcs",
+        "mode": "catalog-radec",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".csv,.tsv"
+        },
         "presentation": {
           "summaryMarkdown": "",
           "methodologyMarkdown": "",
@@ -6634,7 +6706,7 @@
                 "id": "input",
                 "kind": "input",
                 "title": "输入来源",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 0,
                 "implementationRef": "assets.coverage.input",
                 "evidenceRefs": []
@@ -6643,7 +6715,7 @@
                 "id": "filter",
                 "kind": "filter",
                 "title": "文件筛选",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 1,
                 "implementationRef": "assets.coverage.filter",
                 "evidenceRefs": []
@@ -6652,7 +6724,7 @@
                 "id": "geometry",
                 "kind": "geometry",
                 "title": "几何边界计算",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "由 Tractor catalog 的 catalog-radec recipe 驱动。",
                 "order": 2,
                 "implementationRef": "assets.coverage.geometry",
                 "evidenceRefs": []
@@ -6661,7 +6733,7 @@
                 "id": "rasterize",
                 "kind": "rasterize",
                 "title": "HEALPix 栅格化",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "maxOrder=locked; queryOrder=8; previewOrder=4; ICRS/NESTED",
                 "order": 3,
                 "implementationRef": "assets.coverage.rasterize",
                 "evidenceRefs": []
@@ -6670,7 +6742,7 @@
                 "id": "union",
                 "kind": "union",
                 "title": "union / dedup",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
                 "order": 4,
                 "implementationRef": "assets.coverage.union",
                 "evidenceRefs": []
@@ -6679,7 +6751,7 @@
                 "id": "outputs",
                 "kind": "outputs",
                 "title": "MOC、FITS、preview、statistics 输出",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
                 "order": 5,
                 "implementationRef": "assets.coverage.outputs",
                 "evidenceRefs": []
@@ -6688,7 +6760,7 @@
                 "id": "evidence",
                 "kind": "evidence",
                 "title": "manifest、provenance、hash",
-                "bodyMarkdown": "",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
                 "order": 6,
                 "implementationRef": "assets.coverage.evidence",
                 "evidenceRefs": []
@@ -6724,11 +6796,11 @@
         }
       },
       "published": null,
-      "revision": 1,
+      "revision": 2,
       "publishedRevision": null,
-      "updatedAt": "2026-08-22T03:46:08.640Z",
+      "updatedAt": "2026-08-26T02:47:28.426Z",
       "publishedAt": null,
-      "contentSha256": "98e15af46e9a32e73bd67d2b95c07529580c6599b3aa8c932bca629639fbfe16"
+      "contentSha256": "21756dc098a771f256ab5934c8a231524b98dff97bd89b4fcf5ec67ebb0734ab"
     },
     {
       "productId": "e3143d2e938dc85dc0c8",

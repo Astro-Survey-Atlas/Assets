@@ -199,13 +199,19 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
   return { schemaVersion: 1, coordinateFrame: "ICRS", ordering: "NESTED", tileScheme: "ipix-range-4096", layers, records };
 }
 
-/** Replace the checked-in geometry with current ACTIVE Warehouse coverage. */
+/**
+ * Merge current ACTIVE Warehouse coverage into the checked-in public catalog.
+ *
+ * The release geometry is the public baseline. A Warehouse layer replaces
+ * only the record with the same layer identity; newly observed layers are
+ * added alongside the remaining static records.
+ */
 export function coverageCatalogFromWarehouse(
   base: CoverageCatalog & { records: Map<string, CoverageCellLayer> },
   snapshot: WarehouseCoverageCatalogSnapshot,
 ): CoverageCatalog & { records: Map<string, CoverageCellLayer> } {
   const fallbackById = base.records;
-  const records = new Map<string, CoverageCellLayer>();
+  const records = new Map(base.records);
   for (const layer of snapshot.layers) {
     const fallback = fallbackById.get(layer.layerId);
     const cells = new Map<number, number[]>();

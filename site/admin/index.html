@@ -33,6 +33,7 @@
         <div class="admin-command-strip" aria-label="管理台快捷操作">
           <button id="connector-create-button" class="admin-primary" type="button"><i data-lucide="plus"></i><span>创建 Connector</span></button>
           <button id="task-create-button" class="admin-primary" type="button"><i data-lucide="send"></i><span>创建扫描任务</span></button>
+          <button id="catalog-reload-button" class="admin-quiet" type="button" title="重新读取静态 catalog 和 Warehouse ACTIVE layers"><i data-lucide="rotate-cw"></i><span>Reload coverage</span></button>
           <label class="admin-product-search"><span>公共产品搜索</span><input id="product-search" type="search" autocomplete="off" placeholder="巡天、Release、产品、模态或 O4/O8" /></label>
         </div>
         <div class="admin-grid">
@@ -60,28 +61,31 @@
             <div class="section-heading"><div><span class="section-index">02</span><h3 id="task-title">提交公共覆盖任务</h3></div><span class="section-note">Warehouse ScanRequest v1alpha1</span></div>
             <dialog id="task-dialog" class="admin-dialog">
             <form id="task-form" method="dialog" class="admin-form">
-              <label><span>Catalog 产品</span><select name="productId" id="task-product" required><option value="">加载中…</option></select></label>
-              <output id="task-derived-summary" class="derived-summary">选择产品后自动带出 survey、release、layer 和 ScanPlan v2 模式。</output>
+              <div class="form-row"><label><span>Catalog 产品</span><select name="productId" id="task-product"><option value="">加载中…</option></select></label><label><span>四模态验收 profile</span><select name="profileId" id="task-profile"><option value="">选择 admin-only profile</option></select></label></div>
+              <output id="task-derived-summary" class="derived-summary">选择产品后自动带出 survey、release、layer 和 ScanPlan v2 recipe。</output>
               <label><span>任务名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="csst-w2-coverage" /></label>
-              <div class="form-row"><label data-derived-field hidden><span>Layer ID</span><input name="layerId" disabled /></label><label data-derived-field hidden><span>Survey ID</span><input name="surveyId" disabled /></label><label data-derived-field hidden><span>Release ID</span><input name="releaseId" disabled /></label><label data-derived-field hidden><span>产品名称</span><input name="product" disabled /></label></div>
-              <div class="form-row"><label data-derived-field hidden><span>Coverage 模式</span><select name="mode" disabled><option value="fits-wcs">FITS WCS</option><option value="catalog-radec">Catalog RA/Dec</option><option value="nested-healpix">Nested HEALPix</option></select></label><label><span>Backend</span><select name="backend"><option value="job">Job</option></select></label></div>
-              <div class="form-row"><label data-derived-field hidden><span>Coverage role</span><select name="coverageRole" disabled><option value="image_extent">image_extent</option><option value="object_presence">object_presence</option><option value="footprint_extent">footprint_extent</option></select></label><label data-derived-field hidden><span>Data origin</span><select name="dataOrigin" disabled><option value="simulated">simulated</option><option value="observed">observed</option><option value="catalog">catalog</option></select></label></div>
               <label><span>Source Connector</span><select name="sourceConnector" id="source-connector" required><option value="">加载中…</option></select></label>
               <label><span>Source path <small>当前一个 ScanRequest 绑定一个前缀或文件</small></span><textarea name="sourcePaths" rows="3" required placeholder="oss://bucket/prefix"></textarea></label>
-              <div class="form-row"><label><span>允许后缀</span><input name="allowedSuffixes" placeholder=".fits" /></label><label><span>计算 HEALPix order</span><input name="maxOrder" type="number" min="1" max="12" value="8" /></label></div>
-              <div class="form-row"><label><span>RA 列名 <small>Catalog RA/Dec 模式填写</small></span><input name="raColumn" placeholder="ra" /></label><label><span>Dec 列名 <small>Catalog RA/Dec 模式填写</small></span><input name="decColumn" placeholder="dec" /></label></div>
-              <div class="form-row"><label><span>HEALPix 列名 <small>原生 HEALPix 模式填写</small></span><input name="healpixColumn" placeholder="healpix" /></label><label><span>HEALPix order 列名</span><input name="healpixOrderColumn" placeholder="order" /></label></div>
-              <label><span>固定 HEALPix order <small>与 order 列名二选一</small></span><input name="healpixOrder" type="number" min="1" max="29" placeholder="8" /></label>
-              <div class="form-row"><label><span>File index</span><input name="fileIndex" value="ast_file_index_v1" disabled /></label><label><span>Coverage index</span><input name="coverageIndex" value="ast_coverage_index_v1" disabled /></label></div>
+              <div class="form-row"><label><span>允许后缀</span><input name="allowedSuffixes" placeholder=".fits" /></label><label data-extraction-order><span>计算 HEALPix order</span><input name="maxOrder" type="number" min="1" max="12" value="8" /></label></div>
+              <div class="form-row" data-catalog-radec hidden><label><span>RA 列名</span><input name="raColumn" placeholder="ra" disabled /></label><label><span>Dec 列名</span><input name="decColumn" placeholder="dec" disabled /></label></div>
+              <div data-catalog-healpix hidden><div class="form-row"><label><span>HEALPix 列名</span><input name="healpixColumn" placeholder="healpix" disabled /></label><label><span>HEALPix order 列名</span><input name="healpixOrderColumn" placeholder="order" disabled /></label></div><label><span>固定 HEALPix order <small>与 order 列名二选一</small></span><input name="healpixOrder" type="number" min="1" max="29" placeholder="8" disabled /></label></div>
               <label><span>批次 ID <small>留空则自动生成</small></span><input name="batchId" placeholder="csst-w2-coverage-20260822" /></label>
               <div class="form-row"><button id="task-dialog-cancel" class="admin-quiet" type="button">取消</button><button class="admin-primary" type="submit"><i data-lucide="send"></i><span>提交 ScanRequest</span></button></div>
               <p class="form-message" data-form-message="task" role="status"></p>
             </form>
             </dialog>
-            <section aria-labelledby="records-title">
-              <div class="section-heading"><div><span class="section-index">02A</span><h3 id="records-title">执行记录</h3></div><span class="section-note">Assets tasks</span></div>
-              <div class="task-table-wrap"><table><thead><tr><th>任务</th><th>覆盖层</th><th>输入</th><th>状态</th><th>统计</th><th>时间</th></tr></thead><tbody id="task-list"><tr><td colspan="6" class="resource-empty">尚未读取任务</td></tr></tbody></table></div>
+            <section class="modality-section" aria-labelledby="modality-title">
+              <div class="section-heading"><div><span class="section-index">02A</span><h3 id="modality-title">四模态验收</h3></div><span class="section-note">image / spectrum / catalog / cube</span></div>
+              <div id="modality-matrix" class="modality-matrix"><div class="resource-empty">尚未读取验收状态</div></div>
             </section>
+            <section aria-labelledby="records-title">
+              <div class="section-heading"><div><span class="section-index">02B</span><h3 id="records-title">执行记录</h3></div><span class="section-note">Assets tasks</span></div>
+              <div class="task-table-wrap"><table><thead><tr><th>任务</th><th>覆盖层</th><th>输入</th><th>状态</th><th>统计</th><th>时间</th><th>操作</th></tr></thead><tbody id="task-list"><tr><td colspan="7" class="resource-empty">尚未读取任务</td></tr></tbody></table></div>
+            </section>
+            <dialog id="task-detail-dialog" class="admin-dialog">
+              <div class="task-detail-heading"><div><span class="section-index">TASK</span><h4 id="task-detail-title">任务详情</h4></div><button id="task-detail-close" class="admin-quiet" type="button">关闭</button></div>
+              <div id="task-detail-content" class="task-detail-content"></div>
+            </dialog>
           </section>
 
           <section class="admin-section product-section" aria-labelledby="product-title">

@@ -171,6 +171,14 @@ function isAtlasInteractive(): boolean {
   return document.body.dataset.homeState === "atlas";
 }
 
+function updateHomeScrollProgress(): void {
+  if (homeEntered) return;
+  const viewport = Math.max(1, window.innerHeight);
+  const progress = Math.min(1, Math.max(0, window.scrollY / (viewport * 0.82)));
+  document.body.style.setProperty("--home-scroll-progress", progress.toFixed(4));
+  coverageDots?.setHomeScrollProgress(progress);
+}
+
 async function fetchCoverageBlock(layer: CoverageCatalog["layers"][number], order: number, tile: number): Promise<number[]> {
   const key = `${layer.layerId}:${order}:${tile}`;
   const cached = coverageBlockCache.get(key);
@@ -1372,6 +1380,7 @@ async function initialize(): Promise<void> {
     if (coverageSelectionInitialized) coverageDots.setVisibleSurveys(queuedLayerIds);
     else coverageDots.setVisibleSurveys(new Set(coverageCatalog.layers.map((layer) => layer.surveyId)));
     if (homeEntered) coverageDots.transitionToDataView(1);
+    else updateHomeScrollProgress();
     renderCoverageLayers();
     updateCoverageReadout(null);
   } else if (coverageDots) {
@@ -1487,7 +1496,10 @@ byId("home-enter").addEventListener("click", () => enterAtlasExperience());
 window.addEventListener("resize", () => {
   positionSelectionQueue();
   positionOverlapPanel();
+  updateHomeScrollProgress();
 });
+
+window.addEventListener("scroll", updateHomeScrollProgress, { passive: true });
 
 document.addEventListener("keydown", (event) => {
   const target = event.target as HTMLElement | null;
