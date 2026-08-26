@@ -4,7 +4,7 @@ Updated: 2026-08-26
 
 Repository: `/home/aaron/Repo/Astro-Survey-Atlas-Assets`
 
-Starting commit: `49f434b`
+Starting commit: `49f434b`; current HEAD: `adc76f5`
 
 ## Start Here
 
@@ -13,17 +13,11 @@ Read `AGENTS.md`, `docs/coverage-workflow.md`, and
 MOC, evidence, overlap, or reverse-lookup behavior. The Warehouse handoff is
 `/home/aaron/Repo/Astro-Survey-Atlas-Warehouse/HANDOFF.md`.
 
-The working tree is not clean. At this checkpoint it contains unfinished UI
-work in:
-
-```text
- M site/src/atlas/survey-layer-viewer.ts
- M site/src/main.ts
- M site/src/styles.css
-```
-
-Treat these files as user work in progress. Inspect their diffs before editing
-them and preserve their behavior unless the next task explicitly supersedes it.
+The working tree is intentionally dirty. Preserve all current changes shown by
+`git status --short`, including the Warehouse endpoint integration, evidence
+and admin tests, Helm values, deployment values, and public MOC research notes.
+These are working changes, not disposable generated output; inspect overlapping
+diffs before editing them.
 
 ## Fixed Product Decisions
 
@@ -52,108 +46,145 @@ them and preserve their behavior unless the next task explicitly supersedes it.
 ## Current Implementation
 
 - `server/server.ts` constructs an `ElasticsearchEvidenceStore` from
-  `ASSETS_WAREHOUSE_ES_URL` and loads Warehouse coverage into the runtime
-  catalog.
-- Only Warehouse layers in `ACTIVE` state are read. Current code replaces the
-  checked-in coverage catalog when any ACTIVE layer exists; it does not yet
-  merge the Warehouse result with the remaining public footprint records.
+  `ASSETS_WAREHOUSE_ES_URL` and loads only Warehouse `ACTIVE` layers into the
+  runtime catalog. The checked-in public catalog remains the base: a Warehouse
+  layer replaces only the identical `layerId`; unrelated public footprints are
+  retained.
+- Warehouse coverage edges are loaded in bounded `search_after` pages with a
+  stable layer/file/order/cell/role sort. Layers larger than 10,000 edges now
+  load without relying on Elasticsearch's single-request hit limit; the
+  configured global document cap still protects process memory.
+- `POST /api/v1/admin/catalog/reload` refreshes the runtime catalog without a
+  process restart. `GET /api/v1/admin/catalog/status` reports the load mode,
+  timestamp, layer/footprint counts and Warehouse connectivity.
 - Overlap components use the highest order shared by all selected layers.
   File-level reverse lookup is deferred until a component/cell is requested
   and returns actual order, precision, source IDs, and source URIs.
-- If Warehouse Elasticsearch is unavailable during startup, the server falls
-  back to checked-in public geometry. This keeps the site usable but can hide
-  freshness/connectivity failures unless health and logs are checked.
-- The admin path emits Warehouse ScanPlan v2 requests; it does not scan data in
-  Assets itself.
+- If Warehouse Elasticsearch is unavailable during a reload/startup, the
+  server falls back to checked-in public geometry and reports degraded mode in
+  catalog status.
+- The admin path emits Warehouse ScanPlan v2 requests. It supports connector
+  registration, product/profile-driven task creation, task detail, evidence
+  summaries and immutable retry resources; it does not scan data in Assets.
+- `src/moc-sources/source-registry.json` records eight reviewed public MOC
+  candidates. Network probes are validation/evidence only; candidates remain
+  blocked from the public release until snapshot, attribution and license
+  gates are reviewed.
 
 ## Verification Baseline
 
-The last recorded end-to-end smoke on 2026-08-25 used the new `ast_*` indices.
+The final bounded end-to-end smoke on 2026-08-26 used the new `ast_*` indices.
 The deployed Assets health endpoint returned 200; CSST, DESI, and Euclid ACTIVE
 layers appeared in catalog and overlap requests; tile/file details included
 order and precision. Euclid order-8 cell `548925` reverse-resolved through the
 Assets API to its OSS FileAsset metadata.
 
-At the live cluster checkpoint on 2026-08-26, Warehouse held 5 layer documents,
-5 FileAssets, and 2,060 coverage edges. Four layers were ACTIVE:
-`csst-w1-phot-catalog` (5 edges), `desi-merger-catalog` (2,039),
-`desi-overlap-catalog` (5), and `euclid-q1-vis-tile102018212` (11). The current
-CSST image layer `csst-sim-w1-image-extent` is `FAILED` with one error
-(`FITS spatial header position is missing`) and is hidden from runtime reads.
-The five indexed files total 1,652,927,417 bytes (about 1.54 GiB), and the
-successful catalog probes report 26,134 valid rows. These are live observations,
-not permanent expected counts.
+At the live cluster checkpoint on 2026-08-26, Warehouse held 13 layer documents,
+11 FileAssets, and 2,109 coverage edges. The final bounded smoke layers were:
+
+| ScanRequest | Result |
+| --- | --- |
+| `final-csst-catalog-retry-20260826` | `SUCCEEDED`, 1 file, 5 edges, 0 errors |
+| `final-csst-image-20260826` | `FAILED`, missing FITS spatial header |
+| `final-desi-catalog-20260826` | `SUCCEEDED`, 1 file, 2,039 edges, 0 errors |
+| `final-desi-overlap-20260826` | `SUCCEEDED`, 1 file, 5 edges, 0 errors |
+| `final-euclid-vis-20260826` | `SUCCEEDED`, 1 file, 11 edges, 0 errors |
+
+The first CSST catalog attempt and the CSST image failure remain as
+ScanRequest/Job/evidence records; the retry is the authoritative current layer
+state. The failed image layer is hidden from runtime reads. These are live
+observations, not permanent expected counts.
 
 The checked-in public release is still present: `src/footprints/survey-
 footprints.json` contains 44 footprints across 14 surveys and 66,373 cells.
-However, the deployed Assets `/api/v1/coverage` returned only 4 Warehouse
-footprints across `csst`, `desi`, and `euclid`. The cause is
-`server.ts:40-55` calling `coverageCatalogFromWarehouse`, whose implementation
-creates a new record map from ACTIVE Warehouse layers instead of preserving
-static records that have no Warehouse layer. The public files were not deleted;
-the runtime response omitted them.
+The deployed Assets `/api/v1/coverage` now retains that public base and adds the
+ACTIVE layers from the current Warehouse endpoint; the live response contains
+53 footprints across the public surveys plus CSST, DESI, Euclid and the
+Assets-owned controlled smoke layers. The DESI/Euclid overlap smoke returns
+order 8, 489 cells, and one component. Euclid cell `548925` reverse-resolves to
+one `estimated` Warehouse edge and its FileAsset metadata.
 
 No bulk scan of the Euclid `MER/` root has occurred. Its 15,948 FITS objects
-(about 19 TiB) were listed only. Gaia, HI4PI, SDSS, and HST checks were local or
-in-memory contract probes and were not written to the current `ast_*` indices.
+(about 19 TiB) were listed only. The controlled Gaia and SDSS probes are
+persisted in the current `ast_*` indices, while the HI4PI probe is persisted as
+explicit failed evidence because its header declares `RADESYS=FK5`; HST
+multi-HDU checks remain local/in-memory contract probes.
 
 ## Live Deployment Layout
 
 Assets is a separate Helm release in namespace `astro-survey-atlas-assets`.
+The current dev rollout is Helm revision 74, image tag
+`0.1.0-20260826-164745`, and serves through:
+
+```text
+http://10.15.51.75:32083/
+http://astro.assets.dev.72602.space/
+```
+
 Its pod receives:
 
 ```text
-ASSETS_WAREHOUSE_ES_URL=http://warehouse-elasticsearch.warehouse.svc.cluster.local:9200
+ASSETS_WAREHOUSE_ES_URL=http://atlas-warehouse-elasticsearch.atlas-warehouse.svc.cluster.local:9200
 ASSETS_WAREHOUSE_LAYER_INDEX=ast_layer_index_v1
 ASSETS_WAREHOUSE_COVERAGE_INDEX=ast_coverage_index_v1
 ASSETS_WAREHOUSE_FILE_INDEX=ast_file_index_v1
 ```
 
 The public site serves through the `astro-survey-atlas-assets` Service/Ingress.
-The server loads Warehouse coverage once during process startup; the release
-PVC contains the static public bundle used for fallback and publication.
+The release PVC contains the static public bundle used for fallback and
+publication. The current runtime bundle is
+`public-survey-footprints-2026-08-20`, SHA-256
+`967b18d566a6500888f528cfadbcec3fc3e0789f1ace87398f99e9e85d444e5e`.
+
+The Gaia O8-only Warehouse layers are included in the globe's O4 visual
+overview by NESTED coarsening, while their API coverage remains explicitly O8.
+Euclid/SDSS overlap now tries the finest real common order first and falls back
+to O4 when O8 has no shared cells; the live bounded request returns six O4
+cells.
+
+The viewer also keeps a coverage-only slot for Warehouse survey IDs that are
+not yet registered in the public survey metadata. The live bounded Gaia probe
+therefore renders on the globe without promoting its smoke product to the
+public survey index. The current Euclid/SDSS/Gaia bounded probes have no
+three-way overlap at O8 or after Gaia's O4 visual coarsening.
 
 ## Known Problems
 
-1. Warehouse coverage is loaded once during server startup in
-   `server/server.ts`. A completed rescan does not appear until Assets restarts.
-2. When any ACTIVE Warehouse layer exists, the runtime replaces all static
-   public footprints. This is why public HST/SDSS/GALEX/Pan-STARRS/2MASS/
-   WISE/DES/KiDS/HSC and other releases are currently absent from the globe.
-   Merge static records with Warehouse overrides by layer identity, then verify
-   that the endpoint contains both sets.
-3. `server/evidence-store.ts` loads at most 10,000 coverage documents per layer
-   and does not paginate. A larger ACTIVE layer is rejected and the runtime can
-   fall back to static geometry.
-4. Startup fallback needs an observable degraded/freshness signal. A healthy
-   HTTP process is not proof that current Warehouse data was loaded.
-5. Historical import utilities such as `scripts/import_csst_w234.py` still
+1. Historical import utilities such as `scripts/import_csst_w234.py` still
    mention `astro_*`. Keep them explicitly migration-only; do not make them a
    runtime fallback.
-6. Warehouse currently has correctness issues that can publish partial scans
-   as ACTIVE. Do not treat a new large scan as authoritative until the
-   Warehouse issues in its `HANDOFF.md` are fixed and regression-tested.
+2. The current `atlas-warehouse` Assets-owned modality tasks are visible in the
+   admin list: image succeeded with 11 cells, catalog succeeded with 12 cells,
+   and spectrum succeeded with 1 entrypoint-only cell. The cube probe is kept as
+   a failed evidence task because its real HI4PI header declares `RADESYS=FK5`;
+   the current Warehouse scanner correctly rejects a non-explicit-ICRS WCS.
+   Do not rewrite that source header or treat the result as successful coverage.
+3. The old `warehouse` release and namespace are gone. Any retained old PV or
+   evidence material is migration/diagnostic state and is not Assets-owned.
+   Existing Warehouse-owned ScanRequests in `atlas-warehouse` are likewise
+   excluded from the Assets task list; do not relabel or mutate foreign
+   resources.
 
 ## Next Session
 
 Work in this order:
 
-1. Read both handoffs and inspect both worktrees. Preserve the three unfinished
-   Assets UI files and all Warehouse WIP.
-2. Fix the static-plus-Warehouse coverage merge first. Completion means
-   `/api/v1/coverage` retains all 44 checked-in public footprints while adding
-   every ACTIVE Warehouse layer, with Warehouse records overriding only an
-   identical layer identity.
-3. Fix Warehouse partial-scan failure semantics and evidence reliability;
-   Assets cannot compensate for an incorrectly ACTIVE layer.
-4. Add paginated/streamed Warehouse catalog loading in Assets. Completion means
-   a layer with more than 10,000 coverage edges loads without static fallback.
-5. Add a refresh mechanism or a documented restart/reload operation. Completion
-   means a successful layer rescan becomes visible without an unexplained stale
-   interval.
-6. Expose Warehouse connectivity, load time, source snapshot, and fallback mode
-   in readiness/diagnostics, then rerun the direct catalog, overlap, and reverse
-   lookup smoke against representative CSST, DESI, and Euclid layers.
+1. Preserve all dirty files in both repositories and keep the static-plus-
+   Warehouse merge, pagination, and admin reload/status behavior regression-
+   tested.
+2. After a successful Warehouse rescan, call
+   `POST /api/v1/admin/catalog/reload` and inspect
+   `GET /api/v1/admin/catalog/status`; the status must show the current load
+   mode, timestamp, counts, and Warehouse connectivity.
+3. Rerun direct catalog, overlap, and reverse-lookup smokes against bounded
+   CSST, DESI, and Euclid layers after future Warehouse image or mapping
+   changes. Keep failed ScanRequests and evidence for diagnosis.
+
+## Deferred Warehouse Work
+
+MOC discovery CRD/Operator/worker integration is paused while Warehouse runs a
+long task. See `docs/deferred-moc-discovery-plan.md`. Assets must not modify or
+deploy Warehouse resources until the owner explicitly resumes that work.
 
 ## Do Not Disturb
 

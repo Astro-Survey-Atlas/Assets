@@ -20,10 +20,18 @@ export interface CoverageCellMembership {
   artifacts: SurveyFootprint[];
 }
 
+export interface SurveySourceMembership {
+  identity: string;
+  label: string;
+  artifact: SurveyFootprint;
+}
+
 export interface SurveyLayerModel {
   slots: SurveyLayerSlot[];
   coverageByPixel: Map<number, CoverageCellMembership>;
   pixelsBySurvey: Map<string, number[]>;
+  sourceIdentitiesBySurvey: Map<string, string[]>;
+  sourcesBySurveyPixel: Map<string, Map<number, SurveySourceMembership[]>>;
 }
 
 export const SURVEY_LAYER_BASE_RADIUS = 1;
@@ -41,17 +49,31 @@ function healpix(nside: number): Healpix {
   return instance;
 }
 
+export function surveySourceIdentity(footprint: SurveyFootprint): string {
+  return footprint.layerId ?? footprint.sourceId ?? `${footprint.surveyId}:${footprint.releaseId}:${footprint.product}`;
+}
+
 export function buildSurveyLayerModel(
   surveys: readonly SurveyLayerIdentity[],
   manifest: SurveyFootprintManifest,
 ): SurveyLayerModel {
   const footprintSurveyIds = new Set(manifest.footprints.map((footprint) => footprint.surveyId));
+  // Warehouse may publish a current coverage layer before its survey metadata
+  // is registered in the public catalog. Keep that coverage selectable and
+  // renderable without promoting it to a public survey record.
+  const slotSurveyIds = [...new Set([...surveys.map((survey) => survey.id), ...footprintSurveyIds])];
   const pixelsBySurvey = new Map<string, Set<number>>();
+  const sourceIdentitiesBySurvey = new Map<string, Set<string>>();
+  const sourcesBySurveyPixel = new Map<string, Map<number, SurveySourceMembership[]>>();
   const coverageByPixel = new Map<number, { surveyIds: Set<string>; releaseIds: Set<string>; artifacts: SurveyFootprint[] }>();
 
   for (const footprint of manifest.footprints) {
+    const sourceIdentity = surveySourceIdentity(footprint);
     const pixels = pixelsBySurvey.get(footprint.surveyId) ?? new Set<number>();
     pixelsBySurvey.set(footprint.surveyId, pixels);
+    const sourceIdentities = sourceIdentitiesBySurvey.get(footprint.surveyId) ?? new Set<string>();
+    sourceIdentities.add(sourceIdentity);
+    sourceIdentitiesBySurvey.set(footprint.surveyId, sourceIdentities);
     for (const pixel of footprint.pixels) {
       pixels.add(pixel);
       const coverage = coverageByPixel.get(pixel) ?? { surveyIds: new Set<string>(), releaseIds: new Set<string>(), artifacts: [] };
@@ -59,21 +81,32 @@ export function buildSurveyLayerModel(
       coverage.releaseIds.add(footprint.releaseId);
       coverage.artifacts.push(footprint);
       coverageByPixel.set(pixel, coverage);
+      const byPixel = sourcesBySurveyPixel.get(footprint.surveyId) ?? new Map<number, SurveySourceMembership[]>();
+      const sources = byPixel.get(pixel) ?? [];
+      sources.push({
+        identity: sourceIdentity,
+        label: footprint.product,
+        artifact: footprint,
+      });
+      byPixel.set(pixel, sources);
+      sourcesBySurveyPixel.set(footprint.surveyId, byPixel);
     }
   }
 
   return {
-    slots: surveys.map((survey) => ({
-      surveyId: survey.id,
+    slots: slotSurveyIds.map((surveyId) => ({
+      surveyId,
       displayRadius: SURVEY_LAYER_BASE_RADIUS,
-      hasFootprint: footprintSurveyIds.has(survey.id),
+      hasFootprint: footprintSurveyIds.has(surveyId),
     })),
     pixelsBySurvey: new Map([...pixelsBySurvey].map(([surveyId, pixels]) => [surveyId, [...pixels].sort((left, right) => left - right)])),
+    sourceIdentitiesBySurvey: new Map([...sourceIdentitiesBySurvey].map(([surveyId, identities]) => [surveyId, [...identities].sort()])),
     coverageByPixel: new Map([...coverageByPixel].map(([pixel, coverage]) => [pixel, {
       surveyIds: [...coverage.surveyIds].sort(),
       releaseIds: [...coverage.releaseIds].sort(),
-      artifacts: [...coverage.artifacts].sort((left, right) => `${left.surveyId}:${left.releaseId}:${left.product}`.localeCompare(`${right.surveyId}:${right.releaseId}:${right.product}`)),
+      artifacts: [...coverage.artifacts].sort((left, right) => surveySourceIdentity(left).localeCompare(surveySourceIdentity(right))),
     }])),
+    sourcesBySurveyPixel: new Map([...sourcesBySurveyPixel].map(([surveyId, byPixel]) => [surveyId, new Map([...byPixel].map(([pixel, sources]) => [pixel, [...new Map(sources.map((source) => [source.identity, source])).values()].sort((left, right) => left.identity.localeCompare(right.identity))]))])),
   };
 }
 
@@ -107,7 +140,7 @@ export function visibleCoverageAtPixel(
   return {
     surveyIds: [...new Set(artifacts.map((artifact) => artifact.surveyId))].sort(),
     releaseIds: [...new Set(artifacts.map((artifact) => artifact.releaseId))].sort(),
-    artifacts,
+    artifacts: [...artifacts].sort((left, right) => surveySourceIdentity(left).localeCompare(surveySourceIdentity(right))),
   };
 }
 

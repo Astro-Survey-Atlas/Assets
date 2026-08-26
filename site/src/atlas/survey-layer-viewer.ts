@@ -9,6 +9,7 @@ import {
   buildSurveyLayerModel,
   overlapCountByPixel,
   sideNeighbours,
+  surveySourceIdentity,
   visibleCoverageAtPixel,
   visibleSurveySlots,
   type CoverageCellMembership,
@@ -23,6 +24,7 @@ import { buildOverlapHighlight } from "./overlap-highlight.js";
 import type { OverlapHighlight } from "./overlap-highlight.js";
 import {
   buildSphericalCellEdges,
+  buildSphericalCellSourceSectorGeometry,
   buildSphericalCellVolumeEdges,
   buildSphericalCellSheetGeometry,
   healpixPixelFromSceneDirection,
@@ -87,6 +89,18 @@ export interface SurveyLayerOverlapComponent {
   id: string;
   order: number;
   cells: number[];
+}
+
+/** Return the camera pose that keeps the celestial sphere at the orbit centre. */
+export function recenteredOrbitPose(
+  cameraPosition: THREE.Vector3,
+  orbitTarget: THREE.Vector3,
+): { cameraPosition: THREE.Vector3; orbitTarget: THREE.Vector3 } {
+  const offset = cameraPosition.clone().sub(orbitTarget);
+  return {
+    cameraPosition: offset.lengthSq() > 1e-9 ? offset : cameraPosition.clone(),
+    orbitTarget: new THREE.Vector3(),
+  };
 }
 
 export interface WorkspaceCoverageLayer {
@@ -353,7 +367,7 @@ function overlapComponentsForPixels(pixels: readonly number[], nside: number): S
 }
 
 function artifactKey(artifact: SurveyFootprint): string {
-  return `${artifact.surveyId}:${artifact.releaseId}:${artifact.product}:${artifact.label}`;
+  return `${surveySourceIdentity(artifact)}:${artifact.label}`;
 }
 
 function displayColor(source: string): THREE.Color {
@@ -362,6 +376,14 @@ function displayColor(source: string): THREE.Color {
   color.getHSL(hsl);
   color.setHSL(hsl.h, Math.min(0.92, Math.max(0.68, hsl.s)), 0.32);
   return color;
+}
+
+function sourceVariantColor(base: THREE.Color, index: number, count: number): THREE.Color {
+  if (count <= 1) return base.clone();
+  const hsl = { h: 0, s: 0, l: 0 };
+  base.getHSL(hsl);
+  const centered = (THREE.MathUtils.clamp(index, 0, count - 1) / (count - 1)) * 2 - 1;
+  return base.clone().setHSL(hsl.h, hsl.s, THREE.MathUtils.clamp(hsl.l + centered * 0.13, 0.18, 0.72));
 }
 
 export function workspaceAssetColor(key: string): string {
@@ -851,6 +873,7 @@ export class SurveyLayerViewer {
       this.#activeOverlapComponentId = null;
       clearGroup(this.#overlapSelectionGroup);
       this.#activeOverlapHighlight = null;
+      this.#restoreGlobeOrbitTarget();
     }
     this.#rebuildVisible(true);
   }
@@ -1033,6 +1056,15 @@ export class SurveyLayerViewer {
     this.#requestRender();
   }
 
+  #restoreGlobeOrbitTarget(): void {
+    // A cell focus changes both camera and orbit target. Rebase the camera
+    // position around the old target before restoring the globe centre so the
+    // next drag cannot keep orbiting the previously selected cell.
+    this.#cameraTransition = null;
+    const pose = recenteredOrbitPose(this.#camera.position, this.#controls.target);
+    this.#startCameraTransition(pose.cameraPosition, pose.orbitTarget, 520);
+  }
+
   setHomePresentation(): void {
     this.#cameraTransition = null;
     this.#homeScrollProgress = 0;
@@ -1171,7 +1203,37 @@ export class SurveyLayerViewer {
     if (!pixels.length) return;
     const color = this.#colorBySurvey.get(surveyId) ?? BASE_COLOR;
     const cells = pixels.map((pixel) => this.#cellInput(pixel, radius, color));
-    this.#addFragmentLayer(surveyId, pixels, cells, animated, renderOrder);
+    const visibleSurveyCount = [...this.#visibleSurveyIds]
+      .filter((visibleSurveyId) => (this.#model.pixelsBySurvey.get(visibleSurveyId)?.length ?? 0) > 0)
+      .length;
+    const singleSurveySourceMode = !this.#overlapMode && visibleSurveyCount === 1;
+    let sourceGeometry: THREE.BufferGeometry | undefined;
+    if (singleSurveySourceMode) {
+      const sourceIdentities = this.#model.sourceIdentitiesBySurvey.get(surveyId) ?? [];
+      const sourceIndexByIdentity = new Map(sourceIdentities.map((identity, index) => [identity, index]));
+      const sourceCells = pixels.flatMap((pixel) => {
+        const sources = (this.#model.sourcesBySurveyPixel.get(surveyId)?.get(pixel) ?? [])
+          .filter((source, index, values) => values.findIndex((candidate) => candidate.identity === source.identity) === index);
+        if (sources.length < 2) return [];
+        return [{
+          nside: this.#manifest.nside,
+          pixel,
+          radius: radius + 0.002,
+          colors: sources.map((source) => sourceVariantColor(color, sourceIndexByIdentity.get(source.identity) ?? 0, Math.max(1, sourceIdentities.length))),
+          inset: 0.004,
+        }];
+      });
+      if (sourceCells.length) sourceGeometry = buildSphericalCellSourceSectorGeometry(sourceCells);
+    }
+    this.#addFragmentLayer(
+      surveyId,
+      pixels,
+      cells,
+      animated,
+      renderOrder,
+      undefined,
+      sourceGeometry,
+    );
   }
 
   #buildOverlapLayer(animated: boolean): void {
@@ -1368,25 +1430,43 @@ export class SurveyLayerViewer {
       pixel,
       radius,
       color,
-      inset: 0.045,
+      // The base surface must remain continuous. Source variants are a
+      // separate, slightly lifted overlay and must never create holes.
+      inset: 0,
     };
   }
 
-  #addFragmentLayer(surveyId: string, pixels: number[], cells: SphericalCellSheetGeometryInput[], animated: boolean, renderOrder = 4): void {
+  #addFragmentLayer(
+    surveyId: string,
+    pixels: number[],
+    cells: SphericalCellSheetGeometryInput[],
+    animated: boolean,
+    renderOrder = 4,
+    customGeometry?: THREE.BufferGeometry,
+    overlayGeometry?: THREE.BufferGeometry,
+  ): void {
     const root = new THREE.Group();
     root.scale.setScalar(animated ? 0.94 : 1);
     const isOverlap = surveyId === "__overlap__";
     const meshOpacity = isOverlap ? 0.84 : COVERAGE_OPACITY;
     const lineOpacity = isOverlap ? 0.98 : COVERAGE_EDGE_OPACITY;
     let material: THREE.MeshBasicMaterial;
+    let overlayMaterial: THREE.MeshBasicMaterial | null = null;
     let mesh: LayerMesh;
     const transitionLineMaterials: THREE.LineBasicMaterial[] = [];
     if (!isOverlap) {
       material = fragmentMaterial();
       material.opacity = animated ? 0 : meshOpacity;
-      mesh = new THREE.Mesh(buildSphericalCellSheetGeometry(cells), material) as LayerMesh;
+      mesh = new THREE.Mesh(customGeometry ?? buildSphericalCellSheetGeometry(cells), material) as LayerMesh;
       mesh.userData = { surveyId, records: pixels.map((pixel) => ({ pixel })) };
       mesh.renderOrder = renderOrder;
+      overlayMaterial = overlayGeometry ? fragmentMaterial() : null;
+      if (overlayMaterial && overlayGeometry) {
+        overlayMaterial.opacity = animated ? 0 : meshOpacity;
+        const overlay = new THREE.Mesh(overlayGeometry, overlayMaterial);
+        overlay.renderOrder = renderOrder + 1;
+        root.add(overlay);
+      }
       const lineMaterial = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: animated ? 0 : lineOpacity, depthTest: true, depthWrite: false });
       this.#coverageEdgeMaterials.push(lineMaterial);
       const edges = new THREE.LineSegments(buildSphericalCellEdges(cells), lineMaterial);
@@ -1410,7 +1490,7 @@ export class SurveyLayerViewer {
         startedAt: performance.now(),
         durationMs: 430,
         direction: "in",
-        meshMaterials: [material],
+        meshMaterials: [material, ...(overlayMaterial ? [overlayMaterial] : [])],
         lineMaterials: transitionLineMaterials,
         meshOpacity,
         lineOpacity,

@@ -132,24 +132,38 @@ export function overlapForLayers(layers: CoverageCellLayer[], surveyIds: string[
   if (!availableCommonOrders.length) return null;
   const eligibleOrders = requestedOrder == null ? availableCommonOrders : availableCommonOrders.filter((candidate) => candidate <= requestedOrder);
   if (!eligibleOrders.length) return null;
+  // Prefer the finest common order, but do not report an empty high-order
+  // intersection when a lower, explicitly published order has real overlap.
+  // This is a coarser-order fallback only; no finer cells are manufactured.
+  for (const order of [...eligibleOrders].sort((left, right) => right - left)) {
+    const bySurvey = new Map<string, Set<number>>();
+    selected.forEach((layer) => {
+      const cells = bySurvey.get(layer.surveyId) ?? new Set<number>();
+      layer.cells.get(order)?.forEach((pixel) => cells.add(pixel));
+      bySurvey.set(layer.surveyId, cells);
+    });
+    const sets = uniqueSurveyIds.map((surveyId) => bySurvey.get(surveyId) ?? new Set<number>());
+    if (sets.some((set) => !set.size)) continue;
+    const [first, ...rest] = sets;
+    const pixels = [...first!].filter((pixel) => rest.every((set) => set.has(pixel))).sort((left, right) => left - right);
+    if (!pixels.length) continue;
+    const components = connectedComponents(pixels, order).map((cells, index) => ({ id: `C${String(index + 1).padStart(2, "0")}`, index, order, cells, bounds: boundsFor(cells, order) }));
+    return {
+      schemaVersion: 1,
+      surveyIds: uniqueSurveyIds,
+      commonOrder: order,
+      limitingLayers: selected.filter((layer) => !layer.availableOrders.includes(order)).map((layer) => ({ layerId: layer.layerId, availableOrders: layer.availableOrders })),
+      pixels,
+      components,
+    };
+  }
   const order = Math.max(...eligibleOrders);
-  const bySurvey = new Map<string, Set<number>>();
-  selected.forEach((layer) => {
-    const cells = bySurvey.get(layer.surveyId) ?? new Set<number>();
-    layer.cells.get(order)?.forEach((pixel) => cells.add(pixel));
-    bySurvey.set(layer.surveyId, cells);
-  });
-  const sets = uniqueSurveyIds.map((surveyId) => bySurvey.get(surveyId) ?? new Set<number>());
-  if (sets.some((set) => !set.size)) return { schemaVersion: 1, surveyIds, commonOrder: order, limitingLayers: selected.filter((layer) => !layer.availableOrders.includes(order)).map((layer) => ({ layerId: layer.layerId, availableOrders: layer.availableOrders })), pixels: [], components: [] };
-  const [first, ...rest] = sets;
-  const pixels = [...first!].filter((pixel) => rest.every((set) => set.has(pixel))).sort((left, right) => left - right);
-  const components = connectedComponents(pixels, order).map((cells, index) => ({ id: `C${String(index + 1).padStart(2, "0")}`, index, order, cells, bounds: boundsFor(cells, order) }));
   return {
     schemaVersion: 1,
     surveyIds: uniqueSurveyIds,
     commonOrder: order,
     limitingLayers: selected.filter((layer) => !layer.availableOrders.includes(order)).map((layer) => ({ layerId: layer.layerId, availableOrders: layer.availableOrders })),
-    pixels,
-    components,
+    pixels: [],
+    components: [],
   };
 }

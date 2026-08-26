@@ -9,22 +9,7 @@ export const ASSETS_MANAGED_BY = "astro-survey-atlas-assets";
 export const PUBLIC_COVERAGE_KIND = "public-coverage";
 export const SUPPORTED_COVERAGE_MODES = ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix"] as const;
 export const CONNECTOR_TYPES = ["s3", "oss", "local"] as const;
-export const BUSINESS_MODALITIES = ["image", "spectrum", "catalog", "cube"] as const;
-export const BUSINESS_MODALITY_PROFILES = [
-  { id: "image-euclid-vis", label: "Euclid VIS image", modality: "image", mode: "fits-wcs", layerId: "assets-smoke-image-euclid-vis", surveyId: "euclid", releaseId: "q1-smoke", product: "Euclid VIS bounded image probe", coverageRole: "image_extent", dataOrigin: "observed", sourceTier: "official_inventory_derived", allowedSuffixes: ".fits", maxOrder: 8, expectedPrecision: "estimated", acceptance: "non-empty spatial coverage from image WCS" },
-  { id: "spectrum-sdss", label: "SDSS spectrum", modality: "spectrum", mode: "fits-header-position", layerId: "assets-smoke-spectrum-sdss", surveyId: "sdss", releaseId: "public-smoke", product: "SDSS public spectrum position probe", coverageRole: "footprint_extent", dataOrigin: "observed", sourceTier: "official_inventory_derived", allowedSuffixes: ".fits", maxOrder: 8, expectedPrecision: "entrypoint-only", acceptance: "one declared position cell without reading flux arrays" },
-  { id: "catalog-gaia", label: "Gaia DR3 catalog", modality: "catalog", mode: "catalog-radec", layerId: "assets-smoke-catalog-gaia", surveyId: "gaia", releaseId: "dr3-smoke", product: "Gaia DR3 bounded catalog probe", coverageRole: "object_presence", dataOrigin: "catalog", sourceTier: "official_inventory_derived", allowedSuffixes: ".csv", maxOrder: 8, raColumn: "ra", decColumn: "dec", expectedPrecision: "exact", acceptance: "deduplicated cells from declared catalog columns" },
-  { id: "cube-hi4pi", label: "HI4PI spectral cube", modality: "cube", mode: "fits-wcs", layerId: "assets-smoke-cube-hi4pi", surveyId: "hi4pi", releaseId: "public-2016-smoke", product: "HI4PI bounded spectral cube probe", coverageRole: "footprint_extent", dataOrigin: "observed", sourceTier: "official_inventory_derived", allowedSuffixes: ".fits", maxOrder: 8, expectedPrecision: "estimated", acceptance: "spatial WCS cells with non-spatial axes ignored" },
-] as const;
-
-export type BusinessModalityProfile = typeof BUSINESS_MODALITY_PROFILES[number];
-
-export function businessModalityProfile(id: unknown): BusinessModalityProfile {
-  const normalized = requireText(id, "profileId", 64);
-  const profile = BUSINESS_MODALITY_PROFILES.find((candidate) => candidate.id === normalized);
-  if (!profile) throw new AdminHttpError(404, "Business modality profile was not found");
-  return profile;
-}
+export const SUPPORTED_MODALITIES = ["image", "spectrum", "cube", "catalog", "timeseries", "visibility", "event", "other"] as const;
 
 export type CoverageMode = typeof SUPPORTED_COVERAGE_MODES[number];
 export type ConnectorType = typeof CONNECTOR_TYPES[number];
@@ -199,15 +184,15 @@ export function loadAdminConfig(environment: NodeJS.ProcessEnv = process.env): A
   const port = environment.KUBERNETES_SERVICE_PORT_HTTPS ?? environment.KUBERNETES_SERVICE_PORT ?? "443";
   return {
     enabled: envBool(environment.ASSETS_ADMIN_ENABLED, true),
-    namespace: environment.ASSETS_WAREHOUSE_NAMESPACE?.trim() || "warehouse",
+    namespace: environment.ASSETS_WAREHOUSE_NAMESPACE?.trim() || "atlas-warehouse",
     adminToken: environment.ASSETS_ADMIN_TOKEN?.trim() || "",
     kubeToken: environment.ASSETS_KUBE_TOKEN?.trim() || "",
     apiBaseUrl: environment.ASSETS_KUBE_API_URL?.trim() || (host ? `https://${host}:${port}` : undefined),
     tokenFile: environment.ASSETS_KUBE_TOKEN_FILE?.trim() || "/var/run/secrets/kubernetes.io/serviceaccount/token",
     caFile: environment.ASSETS_KUBE_CA_FILE?.trim() || "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-    warehouseEsUrl: environment.ASSETS_WAREHOUSE_ES_URL?.trim() || "http://warehouse-elasticsearch.warehouse.svc.cluster.local:9200",
+    warehouseEsUrl: environment.ASSETS_WAREHOUSE_ES_URL?.trim() || "http://atlas-warehouse-elasticsearch.atlas-warehouse.svc.cluster.local:9200",
     scannerImage: environment.ASSETS_WAREHOUSE_SCANNER_IMAGE?.trim()
-      || "crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260825-fix3",
+      || "crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260826-cutover1",
     evidenceClaimName: environment.ASSETS_WAREHOUSE_EVIDENCE_CLAIM?.trim() || "atlas-evidence",
     evidenceMountPath: environment.ASSETS_WAREHOUSE_EVIDENCE_MOUNT_PATH?.trim() || "/var/lib/atlas-evidence",
   };
@@ -584,8 +569,12 @@ interface ConnectorDefinition {
 function validateEndpoint(value: string): string {
   try {
     const endpoint = new URL(value);
+    if (endpoint.hostname.toLowerCase().endsWith(".warehouse.svc.cluster.local")) {
+      throw new AdminHttpError(400, "legacy warehouse namespace endpoints are not supported");
+    }
     if (!(["http:", "https:"].includes(endpoint.protocol)) || !endpoint.hostname) throw new Error("invalid endpoint");
-  } catch {
+  } catch (error) {
+    if (error instanceof AdminHttpError) throw error;
     throw new AdminHttpError(400, "endpoint must be an http or https URL");
   }
   return value;
@@ -606,6 +595,28 @@ function connectorDefinition(resource: KubernetesResource): ConnectorDefinition 
     nodePath: data.nodePath,
     pvcName: data.pvcName,
     credentialSecretName: data.credentialSecretName,
+  };
+}
+
+function buildSourceConnectorPlan(connector: ConnectorDefinition): Record<string, unknown> {
+  if (connector.type !== "s3" && connector.type !== "oss" && connector.type !== "local") {
+    throw new AdminHttpError(400, "Source connector has an unsupported type");
+  }
+  if (connector.endpoint) validateEndpoint(connector.endpoint);
+  if (connector.type !== "local" && !connector.endpoint) {
+    throw new AdminHttpError(400, "source connector endpoint is missing");
+  }
+  if (connector.type !== "local" && !connector.bucket) {
+    throw new AdminHttpError(400, "source connector bucket is missing");
+  }
+  return {
+    type: connector.type,
+    ...(connector.endpoint ? { endpoint: connector.endpoint } : {}),
+    ...(connector.region ? { region: connector.region } : {}),
+    credentialRef: connector.credentialSecretName ? {
+      accessKeyEnv: "ATLAS_SOURCE_ACCESS_KEY",
+      secretKeyEnv: "ATLAS_SOURCE_SECRET_KEY",
+    } : {},
   };
 }
 
@@ -769,13 +780,11 @@ function buildTaskResource(
   const maxOrder = safePositiveInteger(input.maxOrder, "maxOrder", 8, 12);
   const allowedSuffixes = optionalText(input.allowedSuffixes, "allowedSuffixes", 128);
   const batchId = input.batchId ? dnsName(input.batchId, "batchId") : `${name}-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+  if (input.objectIndex !== undefined) throw new AdminHttpError(400, "objectIndex is not part of ScanPlan v2");
   const fileIndex = indexName(input.fileIndex || "ast_file_index_v1", "fileIndex");
   const coverageIndex = indexName(input.coverageIndex || "ast_coverage_index_v1", "coverageIndex");
-  const objectIndex = indexName(input.objectIndex || "astro_object_index_v1", "objectIndex");
   if (fileIndex !== "ast_file_index_v1" || coverageIndex !== "ast_coverage_index_v1") throw new AdminHttpError(400, "Warehouse v2 uses the fixed ast_* index contract");
-  if (objectIndex !== "astro_object_index_v1") throw new AdminHttpError(400, "objectIndex is not configurable in ScanPlan v2");
-  if (!connector.endpoint && connector.type !== "local") throw new AdminHttpError(400, "source connector endpoint is missing");
-  if (!connector.bucket && connector.type !== "local") throw new AdminHttpError(400, "source connector bucket is missing");
+  const sourceConnectorPlan = buildSourceConnectorPlan(connector);
 
   const extractionMode = mode === "nested-healpix" ? "catalog-healpix" : mode;
   const catalog: Record<string, unknown> = {};
@@ -795,15 +804,6 @@ function buildTaskResource(
   const location = connector.type === "local"
     ? { rootPath: "/data" }
     : objectLocation(sourcePaths[0]!, connector);
-  const sourceConnectorPlan: Record<string, unknown> = {
-    type: connector.type,
-    ...(connector.endpoint ? { endpoint: connector.endpoint } : {}),
-    ...(connector.region ? { region: connector.region } : {}),
-    credentialRef: connector.credentialSecretName ? {
-      accessKeyEnv: "ATLAS_SOURCE_ACCESS_KEY",
-      secretKeyEnv: "ATLAS_SOURCE_SECRET_KEY",
-    } : {},
-  };
   const plan = {
     version: 2,
     scanRunId: batchId,
@@ -869,8 +869,7 @@ export class AssetsAdmin {
       kubernetesConfigured: Boolean(this.config.apiBaseUrl),
       capabilities: {
         coverageModes: [...SUPPORTED_COVERAGE_MODES],
-        businessModalities: [...BUSINESS_MODALITIES],
-        businessModalityProfiles: BUSINESS_MODALITY_PROFILES,
+        modalities: [...SUPPORTED_MODALITIES],
         connectorTypes: [...CONNECTOR_TYPES],
         backends: ["job"],
         scanRequestApiVersion: "atlas.zhejianglab.org/v1alpha1",
@@ -938,10 +937,35 @@ export class AssetsAdmin {
     }
     const originalSpec = resource.spec ?? {};
     const originalPlan = originalSpec.plan && typeof originalSpec.plan === "object" ? originalSpec.plan as Record<string, unknown> : {};
+    const sourceLabel = resource.metadata?.labels?.["astro.zhejianglab.org/source-connector"];
+    if (!sourceLabel) throw new AdminHttpError(400, `Coverage task ${normalized} has no source connector label`);
+    const sourceName = dnsName(sourceLabel, "sourceConnector");
+    const source = await this.kube.getCore("configmaps", sourceName, this.config.namespace);
+    if (!source) throw new AdminHttpError(400, `Source connector ${sourceName} was not found`);
+    const sourceType = source.data?.type;
+    if (sourceType !== "s3" && sourceType !== "oss") {
+      throw new AdminHttpError(400, "Source connector must be S3 / OSS for Warehouse ScanRequest resubmission");
+    }
+    const definition = connectorDefinition(source);
+    if (!definition.credentialSecretName) throw new AdminHttpError(400, `Source connector ${sourceName} has no credential Secret reference`);
+    const credentialSecret = await this.kube.getCore("secrets", definition.credentialSecretName, this.config.namespace);
+    if (!credentialSecret) throw new AdminHttpError(400, `Source connector ${sourceName} credential Secret is missing`);
+    const originalSource = originalPlan.source && typeof originalPlan.source === "object"
+      ? originalPlan.source as Record<string, unknown> : {};
+    const refreshedSpec = structuredClone(originalSpec);
     const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
     const retryName = dnsName(`${normalized.slice(0, 45)}-retry-${timestamp}`, "retry task name");
     const retryRunId = retryName;
     const evidence = originalPlan.evidence && typeof originalPlan.evidence === "object" ? originalPlan.evidence as Record<string, unknown> : {};
+    refreshedSpec.credentials = {
+      source: { secretName: definition.credentialSecretName, accessKeyKey: "accessKey", secretKeyKey: "secretKey" },
+    };
+    refreshedSpec.plan = {
+      ...structuredClone(originalPlan),
+      source: { ...structuredClone(originalSource), connector: buildSourceConnectorPlan(definition) },
+      scanRunId: retryRunId,
+      evidence: { ...structuredClone(evidence), outputPath: `${this.config.evidenceMountPath.replace(/\/+$/, "")}/${retryRunId}` },
+    };
     const retryResource: KubernetesResource = {
       apiVersion: resource.apiVersion ?? "atlas.zhejianglab.org/v1alpha1",
       kind: resource.kind ?? "ScanRequest",
@@ -954,14 +978,7 @@ export class AssetsAdmin {
           "astro.zhejianglab.org/retry-of": normalized,
         },
       },
-      spec: {
-        ...structuredClone(originalSpec),
-        plan: {
-          ...structuredClone(originalPlan),
-          scanRunId: retryRunId,
-          evidence: { ...structuredClone(evidence), outputPath: `${this.config.evidenceMountPath.replace(/\/+$/, "")}/${retryRunId}` },
-        },
-      },
+      spec: refreshedSpec,
     };
     try {
       return taskView(await this.kube.create("scanrequests", retryResource));

@@ -1,12 +1,11 @@
-import { ArrowLeft, Eye, LogOut, Pencil, Plus, RefreshCw, RotateCw, RotateCcw, Send, ShieldCheck, Unlock, Upload, createIcons } from "lucide";
+import { Activity, ArrowLeft, AudioLines, Box, Database, Eye, Image, Layers3, LogOut, Pencil, Plus, RefreshCw, RotateCw, RotateCcw, Send, ShieldCheck, Table2, Unlock, Upload, createIcons } from "lucide";
 import "./styles.css";
 import { mountLocaleControls, t } from "../src/i18n.js";
 
 mountLocaleControls();
 
 type ConnectorType = "s3" | "oss" | "local";
-interface BusinessProfile { id: string; label: string; modality: string; mode: string; layerId: string; surveyId: string; releaseId: string; product: string; coverageRole: string; dataOrigin: string; sourceTier: string; allowedSuffixes: string; maxOrder: number; raColumn?: string; decColumn?: string; expectedPrecision: string; acceptance: string }
-interface AdminConfig { enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; businessModalities?: string[]; businessModalityProfiles?: BusinessProfile[]; connectorTypes: ConnectorType[]; backends: string[]; scanRequestApiVersion?: string } }
+interface AdminConfig { enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; modalities?: string[]; connectorTypes: ConnectorType[]; backends: string[]; scanRequestApiVersion?: string } }
 interface Connector { name: string; type: ConnectorType; endpoint?: string; region?: string; bucket?: string; prefix?: string; accessKeyConfigured?: boolean; pvcName?: string; localPath?: string; phase?: string; message?: string; createdAt?: string }
 interface TaskStatus { phase: string; reason?: string; backend?: string; runId?: string; discoveredFiles?: number; processedHdus?: number; coverageDocuments?: number; objectDocuments?: number; errorCount?: number; availableOrders?: number[]; evidencePath?: string; sourceSnapshot?: { uri?: string; sha256: string; sizeBytes?: number }; startedAt?: string; completedAt?: string; message?: string }
 interface Task { name: string; createdAt?: string; layerId?: string; surveyId?: string; releaseId?: string; product?: string; productId?: string; modality?: string; mode?: string; backend?: string; sourceConnector?: string; sourcePaths: string[]; tags: string[]; batchId?: string; recipe?: { mode?: string; outputOrder?: number; catalog?: Record<string, unknown> }; status: TaskStatus }
@@ -24,7 +23,38 @@ const byId = <T extends HTMLElement>(id: string): T => {
 };
 
 function renderIcons(): void {
-  createIcons({ icons: { ArrowLeft, Eye, LogOut, Pencil, Plus, RefreshCw, RotateCw, RotateCcw, Send, ShieldCheck, Unlock, Upload }, attrs: { "aria-hidden": "true" } });
+  createIcons({ icons: { Activity, ArrowLeft, AudioLines, Box, Database, Eye, Image, Layers3, LogOut, Pencil, Plus, RefreshCw, RotateCw, RotateCcw, Send, ShieldCheck, Table2, Unlock, Upload }, attrs: { "aria-hidden": "true" } });
+}
+
+type AdminStep = "sources" | "tasks" | "review";
+let activeStep: AdminStep = "sources";
+
+function setAdminStep(step: AdminStep, replace = false): void {
+  activeStep = step;
+  document.querySelectorAll<HTMLElement>("[data-admin-panel]").forEach((panel) => { panel.hidden = panel.dataset.adminPanel !== step; });
+  document.querySelectorAll<HTMLButtonElement>("[data-admin-step]").forEach((button) => {
+    const selected = button.dataset.adminStep === step;
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  });
+  const hash = `#${step}`;
+  if (replace) history.replaceState(null, "", hash);
+  else if (location.hash !== hash) history.pushState(null, "", hash);
+}
+
+function readAdminStep(): AdminStep {
+  const value = location.hash.slice(1);
+  return value === "tasks" || value === "review" ? value : "sources";
+}
+
+function modalityIcon(modality?: string): string {
+  const value = modality?.toLowerCase();
+  if (value === "image" || value === "imaging") return "image";
+  if (value === "spectrum" || value === "spectroscopy") return "audio-lines";
+  if (value === "catalog" || value === "photometry") return "table-2";
+  if (value === "cube" || value === "integral-field") return "box";
+  if (value === "timeseries" || value === "time-domain") return "activity";
+  return "layers-3";
 }
 
 function escapeText(value: unknown): string {
@@ -71,6 +101,7 @@ function showLogin(message = ""): void {
 function showWorkspace(): void {
   byId("login-panel").hidden = true;
   byId("admin-workspace").hidden = false;
+  setAdminStep(readAdminStep(), true);
 }
 
 function formatDate(value?: string): string {
@@ -83,19 +114,51 @@ function connectorLabel(connector: Connector): string {
   return `${connector.name} · ${connector.type.toUpperCase()}${connector.phase ? ` · ${connector.phase}` : ""}`;
 }
 
+let connectorRecords: Connector[] = [];
+let selectedConnectorName = "";
+
+function renderConnectorDetails(connector?: Connector): void {
+  const detail = byId("connector-detail");
+  if (!connector) {
+    detail.innerHTML = `<div class="resource-empty">选择一个 Connector 查看安全详情。</div>`;
+    return;
+  }
+  const location = connector.type === "local"
+    ? connector.localPath ?? connector.pvcName ?? "受管本地存储"
+    : [connector.endpoint, connector.region, connector.bucket, connector.prefix].filter(Boolean).join(" · ");
+  detail.innerHTML = `<div class="connector-detail-heading"><div><span class="section-note">SELECTED CONNECTOR</span><h4>${escapeText(connector.name)}</h4></div><button type="button" class="admin-quiet" data-use-connector="${escapeText(connector.name)}" title="用此 Connector 创建扫描"><i data-lucide="send"></i><span>用于新扫描</span></button></div><dl class="connector-detail-grid">${detailValue("type", connector.type.toUpperCase())}${detailValue("phase", connector.phase)}${detailValue("location", location)}${detailValue("node", connector.nodeName)}${detailValue("path", connector.nodePath)}${detailValue("credentials", connector.accessKeyConfigured ? "configured" : "not configured")}${detailValue("created", formatDate(connector.createdAt))}${detailValue("message", connector.message)}</dl>`;
+  detail.querySelector<HTMLButtonElement>("[data-use-connector]")?.addEventListener("click", () => {
+    setAdminStep("tasks");
+    byId<HTMLSelectElement>("source-connector").value = connector.name;
+    byId<HTMLDialogElement>("task-dialog").showModal();
+  });
+  renderIcons();
+}
+
 function renderConnectors(connectors: Connector[]): void {
+  connectorRecords = connectors;
   const list = byId("connector-list");
   const source = byId<HTMLSelectElement>("source-connector");
   source.replaceChildren(new Option(connectors.length ? "选择 source connector" : "暂无 source connector", ""), ...connectors.map((connector) => new Option(connectorLabel(connector), connector.name)));
   if (!connectors.length) {
     list.innerHTML = `<div class="resource-empty">暂无 Connector，请先定义一个。</div>`;
+    selectedConnectorName = "";
+    renderConnectorDetails();
     return;
   }
+  if (!connectors.some((connector) => connector.name === selectedConnectorName)) selectedConnectorName = connectors[0]!.name;
   list.innerHTML = connectors.map((connector) => {
     const type = connector.type === "local" ? "LOCAL" : connector.type.toUpperCase();
     const location = connector.type === "local" ? connector.localPath ?? connector.pvcName ?? "受管本地存储" : `${connector.endpoint ?? ""}${connector.region ? ` · ${connector.region}` : ""}${connector.bucket ? ` · ${connector.bucket}` : ""}${connector.prefix ? ` / ${connector.prefix}` : ""}`;
-    return `<article class="resource-row"><div><strong>${escapeText(connector.name)}</strong><span>${type} · ${escapeText(connector.phase ?? "UNKNOWN")}</span><p>${escapeText(location)}</p></div><code>${escapeText(connector.message ?? "")}</code></article>`;
+    const selected = connector.name === selectedConnectorName;
+    return `<button type="button" class="resource-row connector-row${selected ? " is-selected" : ""}" data-connector-name="${escapeText(connector.name)}"><span class="connector-row-copy"><strong>${escapeText(connector.name)}</strong><span>${type} · ${escapeText(connector.phase ?? "UNKNOWN")}</span><p>${escapeText(location)}</p></span><code>${escapeText(connector.message ?? "")}</code></button>`;
   }).join("");
+  list.querySelectorAll<HTMLButtonElement>("[data-connector-name]").forEach((button) => button.addEventListener("click", () => {
+    selectedConnectorName = button.dataset.connectorName ?? "";
+    renderConnectors(connectorRecords);
+    renderConnectorDetails(connectorRecords.find((connector) => connector.name === selectedConnectorName));
+  }));
+  renderConnectorDetails(connectorRecords.find((connector) => connector.name === selectedConnectorName));
 }
 
 function phaseClass(phase: string): string {
@@ -106,29 +169,45 @@ function renderTasks(tasks: Task[]): void {
   const body = byId("task-list");
   if (!tasks.length) {
     body.innerHTML = `<tr><td colspan="7" class="resource-empty">暂无 Assets coverage task</td></tr>`;
-    renderModalityMatrix([]);
+    renderModalityChart([]);
     return;
   }
   body.innerHTML = tasks.map((task) => {
     const status = task.status ?? { phase: "Pending" };
+    const modality = task.modality ?? "other";
     const stats = [status.discoveredFiles !== undefined ? `${status.discoveredFiles.toLocaleString()} files` : "--", status.coverageDocuments !== undefined ? `${status.coverageDocuments.toLocaleString()} coverage` : "--", status.errorCount !== undefined ? `${status.errorCount.toLocaleString()} errors` : "--"].join(" · ");
-    return `<tr><td><strong>${escapeText(task.name)}</strong><small>${escapeText(task.modality ?? "other")} · ${escapeText(task.recipe?.mode ?? task.mode ?? "--")} · ${escapeText(task.batchId ?? "")}</small></td><td><strong>${escapeText(task.layerId ?? "--")}</strong><small>${escapeText(task.surveyId ?? "")} / ${escapeText(task.releaseId ?? "")}</small></td><td><span>${escapeText(task.sourceConnector ?? "--")}</span><small>${escapeText(task.sourcePaths[0] ?? "")}</small></td><td><span class="task-phase task-phase-${phaseClass(status.phase)}">${escapeText(status.phase)}</span><small>${escapeText(status.reason ?? status.message ?? "")}</small></td><td><span>${escapeText(stats)}</span><small>${status.runId ? `run ${escapeText(status.runId)}` : "run --"}</small></td><td><span>${escapeText(formatDate(status.completedAt ?? status.startedAt ?? task.createdAt))}</span></td><td><div class="task-row-actions"><button type="button" class="admin-quiet" data-task-details="${escapeText(task.name)}" title="查看任务详情"><i data-lucide="eye"></i><span>详情</span></button><button type="button" class="admin-quiet" data-task-resubmit="${escapeText(task.name)}" title="重新提交任务"><i data-lucide="rotate-ccw"></i><span>重提</span></button></div></td></tr>`;
+    return `<tr><td><div class="task-identity"><i data-lucide="${modalityIcon(modality)}"></i><strong>${escapeText(task.name)}</strong></div><small>${escapeText(modality)} · ${escapeText(task.recipe?.mode ?? task.mode ?? "--")} · ${escapeText(task.batchId ?? "")}</small></td><td><strong>${escapeText(task.layerId ?? "--")}</strong><small>${escapeText(task.surveyId ?? "")} / ${escapeText(task.releaseId ?? "")}</small></td><td><span>${escapeText(task.sourceConnector ?? "--")}</span><small>${escapeText(task.sourcePaths[0] ?? "")}</small></td><td><span class="task-phase task-phase-${phaseClass(status.phase)}">${escapeText(status.phase)}</span><small>${escapeText(status.reason ?? status.message ?? "")}</small></td><td><span>${escapeText(stats)}</span><small>${status.runId ? `run ${escapeText(status.runId)}` : "run --"}</small></td><td><span>${escapeText(formatDate(status.completedAt ?? status.startedAt ?? task.createdAt))}</span></td><td><div class="task-row-actions"><button type="button" class="admin-quiet" data-task-details="${escapeText(task.name)}" title="查看任务详情"><i data-lucide="eye"></i><span>详情</span></button><button type="button" class="admin-quiet" data-task-resubmit="${escapeText(task.name)}" title="重新提交任务"><i data-lucide="rotate-ccw"></i><span>重提</span></button></div></td></tr>`;
   }).join("");
   body.querySelectorAll<HTMLButtonElement>("[data-task-details]").forEach((button) => button.addEventListener("click", () => void openTaskDetails(button.dataset.taskDetails ?? "")));
   body.querySelectorAll<HTMLButtonElement>("[data-task-resubmit]").forEach((button) => button.addEventListener("click", () => void resubmitTask(button.dataset.taskResubmit ?? "")));
   renderIcons();
-  renderModalityMatrix(tasks);
+  renderModalityChart(tasks);
 }
 
-function renderModalityMatrix(tasks: Task[]): void {
-  const profiles = adminConfig?.capabilities.businessModalityProfiles ?? [];
-  const container = byId("modality-matrix");
-  container.innerHTML = profiles.map((profile) => {
-    const matches = tasks.filter((task) => task.modality === profile.modality);
-    const latest = matches[0];
-    const phase = latest?.status.phase ?? "NOT RUN";
-    return `<article class="modality-row"><div><strong>${escapeText(profile.modality.toUpperCase())}</strong><span>${escapeText(profile.label)} · ${escapeText(profile.mode)}</span></div><div><span class="task-phase task-phase-${phaseClass(phase)}">${escapeText(phase)}</span><small>${escapeText(latest ? `${latest.name} · ${latest.status.coverageDocuments ?? 0} coverage · ${latest.status.errorCount ?? 0} errors` : `${profile.expectedPrecision} · ${profile.acceptance}`)}</small></div></article>`;
+function renderModalityChart(tasks: Task[]): void {
+  const container = byId("modality-chart");
+  const groups = new Map<string, { count: number; phases: Map<string, number> }>();
+  tasks.forEach((task) => {
+    const modality = task.modality ?? "other";
+    const group = groups.get(modality) ?? { count: 0, phases: new Map<string, number>() };
+    group.count += 1;
+    const phase = task.status?.phase ?? "Pending";
+    group.phases.set(phase, (group.phases.get(phase) ?? 0) + 1);
+    groups.set(modality, group);
+  });
+  if (!groups.size) {
+    container.innerHTML = `<div class="resource-empty">暂无任务产出</div>`;
+    return;
+  }
+  const records = [...groups.entries()].sort((left, right) => right[1].count - left[1].count || left[0].localeCompare(right[0]));
+  const total = tasks.length;
+  const bar = records.map(([modality, group]) => `<span class="modality-bar-segment modality-${phaseClass(modality)}" style="flex-basis:${(group.count / total) * 100}%" title="${escapeText(`${modality}: ${group.count}`)}"></span>`).join("");
+  const legend = records.map(([modality, group]) => {
+    const phases = [...group.phases.entries()].map(([phase, count]) => `${phase} ${count}`).join(" · ");
+    return `<li><span class="modality-legend-key"><i data-lucide="${modalityIcon(modality)}"></i><strong>${escapeText(modality)}</strong></span><small>${group.count} tasks · ${escapeText(phases)}</small></li>`;
   }).join("");
+  container.innerHTML = `<div class="modality-chart-bar" aria-label="任务 modality 分布">${bar}</div><ul class="modality-chart-legend">${legend}</ul>`;
+  renderIcons();
 }
 
 function detailValue(label: string, value: unknown): string {
@@ -183,12 +262,6 @@ function renderProductLoadError(message: string): void {
   productRecords = [];
 }
 
-function renderBusinessProfiles(): void {
-  const profiles = adminConfig?.capabilities.businessModalityProfiles ?? [];
-  const select = byId<HTMLSelectElement>("task-profile");
-  select.replaceChildren(new Option(profiles.length ? "选择 admin-only profile" : "暂无验收 profile", ""), ...profiles.map((profile) => new Option(`${profile.modality.toUpperCase()} · ${profile.label}`, profile.id)));
-}
-
 function setExtractionFields(mode?: string): void {
   for (const [selector, visible] of [["[data-catalog-radec]", mode === "catalog-radec"], ["[data-catalog-healpix]", mode === "nested-healpix"]] as const) {
     const section = document.querySelector<HTMLElement>(selector);
@@ -209,11 +282,10 @@ function setTaskSubmitEnabled(enabled: boolean): void {
 function setDerivedProduct(productId: string): void {
   const product = productRecords.find((entry) => entry.productId === productId);
   const output = byId("task-derived-summary");
-  if (product) byId<HTMLSelectElement>("task-profile").value = "";
   if (!product) {
-    output.textContent = "选择 Catalog 产品或四模态验收 profile。";
+    output.textContent = "选择 Catalog 产品后自动带出 survey、release、layer 和 ScanPlan v2 recipe。";
     setExtractionFields();
-    setTaskSubmitEnabled(Boolean(byId<HTMLSelectElement>("task-profile").value));
+    setTaskSubmitEnabled(false);
     return;
   }
   const executable = Boolean(product.draft.layerId && product.draft.mode && product.draft.coverageRole && product.draft.dataOrigin && product.draft.sourceTier);
@@ -227,23 +299,6 @@ function setDerivedProduct(productId: string): void {
     if (field instanceof HTMLInputElement && value !== undefined) field.value = String(value);
   }
   setTaskSubmitEnabled(executable);
-}
-
-function setDerivedProfile(profileId: string): void {
-  const profile = adminConfig?.capabilities.businessModalityProfiles?.find((entry) => entry.id === profileId);
-  if (profile) byId<HTMLSelectElement>("task-product").value = "";
-  if (!profile) {
-    setDerivedProduct(byId<HTMLSelectElement>("task-product").value);
-    return;
-  }
-  byId("task-derived-summary").textContent = `${profile.modality.toUpperCase()} · ${profile.surveyId.toUpperCase()} / ${profile.releaseId} · ${profile.layerId} · ${profile.mode} · ${profile.expectedPrecision} · READY`;
-  setExtractionFields(profile.mode);
-  const form = byId<HTMLFormElement>("task-form");
-  for (const [name, value] of Object.entries({ allowedSuffixes: profile.allowedSuffixes, maxOrder: profile.maxOrder, raColumn: profile.raColumn, decColumn: profile.decColumn })) {
-    const field = form.elements.namedItem(name);
-    if (field instanceof HTMLInputElement && value !== undefined) field.value = String(value);
-  }
-  setTaskSubmitEnabled(true);
 }
 
 function openProduct(productId: string): void {
@@ -298,6 +353,9 @@ async function refresh(): Promise<void> {
   const taskCount = tasks.status === "fulfilled" ? tasks.value.tasks.length : "--";
   const productCount = products.status === "fulfilled" ? products.value.products.length : "--";
   const coverageState = catalogStatus.status === "fulfilled" ? `${catalogStatus.value.mode.toUpperCase()} · ${catalogStatus.value.footprints} FOOTPRINTS` : "COVERAGE UNKNOWN";
+  byId("step-sources-count").textContent = String(connectorCount);
+  byId("step-tasks-count").textContent = String(taskCount);
+  byId("step-review-count").textContent = String(productCount);
   byId("admin-status").textContent = `${connectorCount} CONNECTORS · ${taskCount} TASKS · ${productCount} PRODUCTS · ${coverageState} · ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
   })().catch((error) => {
     toast(error instanceof Error ? error.message : "刷新失败", true);
@@ -348,7 +406,7 @@ async function submitTask(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   const form = event.currentTarget as HTMLFormElement;
   const input = {
-    name: formValue(form, "name"), productId: formValue(form, "productId") || undefined, profileId: formValue(form, "profileId") || undefined, sourceConnector: formValue(form, "sourceConnector"), sourcePaths: formValue(form, "sourcePaths").split(/\r?\n/).map((path) => path.trim()).filter(Boolean), allowedSuffixes: formValue(form, "allowedSuffixes") || undefined, maxOrder: Number(formValue(form, "maxOrder") || "8"), raColumn: formValue(form, "raColumn") || undefined, decColumn: formValue(form, "decColumn") || undefined, healpixColumn: formValue(form, "healpixColumn") || undefined, healpixOrderColumn: formValue(form, "healpixOrderColumn") || undefined, healpixOrder: formValue(form, "healpixOrder") ? Number(formValue(form, "healpixOrder")) : undefined, batchId: formValue(form, "batchId") || undefined,
+    name: formValue(form, "name"), productId: formValue(form, "productId") || undefined, sourceConnector: formValue(form, "sourceConnector"), sourcePaths: formValue(form, "sourcePaths").split(/\r?\n/).map((path) => path.trim()).filter(Boolean), allowedSuffixes: formValue(form, "allowedSuffixes") || undefined, maxOrder: Number(formValue(form, "maxOrder") || "8"), raColumn: formValue(form, "raColumn") || undefined, decColumn: formValue(form, "decColumn") || undefined, healpixColumn: formValue(form, "healpixColumn") || undefined, healpixOrderColumn: formValue(form, "healpixOrderColumn") || undefined, healpixOrder: formValue(form, "healpixOrder") ? Number(formValue(form, "healpixOrder")) : undefined, batchId: formValue(form, "batchId") || undefined,
   };
   setMessage("task", "正在提交 CRD…");
   try {
@@ -364,7 +422,6 @@ async function initialize(): Promise<void> {
   renderIcons();
   try {
     adminConfig = await api<AdminConfig>("/api/v1/admin/config", { headers: {} });
-    renderBusinessProfiles();
     setTaskSubmitEnabled(false);
     byId("admin-namespace").textContent = adminConfig.namespace;
     byId("admin-capability").textContent = adminConfig.enabled && adminConfig.kubernetesConfigured ? "ONLINE" : "NOT CONFIGURED";
@@ -409,16 +466,18 @@ byId<HTMLFormElement>("task-form").addEventListener("submit", (event) => void su
 byId<HTMLFormElement>("product-form").addEventListener("submit", (event) => void saveProduct(event));
 byId("product-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("product-dialog").close());
 byId("task-product").addEventListener("change", (event) => setDerivedProduct((event.currentTarget as HTMLSelectElement).value));
-byId("task-profile").addEventListener("change", (event) => setDerivedProfile((event.currentTarget as HTMLSelectElement).value));
 byId("connector-type").addEventListener("change", updateConnectorFields);
 byId("connector-create-button").addEventListener("click", () => byId<HTMLDialogElement>("connector-dialog").showModal());
 byId("connector-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("connector-dialog").close());
-byId("task-create-button").addEventListener("click", () => byId<HTMLDialogElement>("task-dialog").showModal());
+byId("task-create-button").addEventListener("click", () => { setAdminStep("tasks"); byId<HTMLDialogElement>("task-dialog").showModal(); });
 byId("task-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("task-dialog").close());
 byId("task-detail-close").addEventListener("click", () => byId<HTMLDialogElement>("task-detail-dialog").close());
 byId<HTMLInputElement>("product-search").addEventListener("input", (event) => {
   productQuery = (event.currentTarget as HTMLInputElement).value.trim().toLocaleLowerCase();
   renderProducts(productRecords);
 });
+document.querySelectorAll<HTMLButtonElement>("[data-admin-step]").forEach((button) => button.addEventListener("click", () => setAdminStep(button.dataset.adminStep as AdminStep)));
+window.addEventListener("popstate", () => setAdminStep(readAdminStep(), true));
+setAdminStep(readAdminStep(), true);
 updateConnectorFields();
 void initialize();

@@ -60,7 +60,7 @@ export interface ReverseLookupOptions {
   tolerateUnavailable?: boolean;
 }
 
-interface SearchHit { _id?: string; _source?: Record<string, unknown> }
+interface SearchHit { _id?: string; _source?: Record<string, unknown>; sort?: unknown[] }
 interface SearchResponse { hits?: { hits?: SearchHit[]; total?: number | { value?: number } } }
 
 export interface WarehouseLayerSnapshot {
@@ -255,26 +255,41 @@ export class CoverageEvidenceStore {
     const layers = (layerResponse.hits?.hits ?? []).map((hit) => this.normalizeLayer(hit)).filter((layer): layer is WarehouseLayerSnapshot => Boolean(layer));
     if (!layers.length) return { layers: [], coverages: [], truncated: false };
     const coverages: WarehouseCoverageSnapshot[] = [];
-    let truncated = false;
     for (const layer of layers) {
-      if (coverages.length >= maxDocuments) { truncated = true; break; }
-      const remaining = maxDocuments - coverages.length;
-      const response = await this.search(this.coverageIndex, {
-        size: Math.min(10_000, remaining + 1),
-        track_total_hits: true,
-        query: { bool: { filter: [{ term: { layer_id: layer.layerId } }] } },
-        sort: [{ healpix_order: "asc" }, { healpix_cell: "asc" }, { source_file_id: "asc" }],
-      });
-      const hits = response.hits?.hits ?? [];
-      const total = typeof response.hits?.total === "number" ? response.hits.total : response.hits?.total?.value ?? hits.length;
-      if (total > remaining || hits.length > remaining) truncated = true;
-      for (const hit of hits.slice(0, remaining)) {
-        const coverage = this.normalizeWarehouseCoverage(hit, layer.layerId);
-        if (coverage) coverages.push(coverage);
+      let searchAfter: unknown[] | undefined;
+      let loadedForLayer = 0;
+      while (true) {
+        const remaining = maxDocuments - coverages.length;
+        const response = await this.search(this.coverageIndex, {
+          // Elasticsearch caps a single search response at 10,000 hits. Keep
+          // the page bounded and advance with the explicit sort tuple below.
+          size: Math.min(10_000, Math.max(1, remaining + 1)),
+          track_total_hits: true,
+          query: { bool: { filter: [{ term: { layer_id: layer.layerId } }] } },
+          sort: [
+            { layer_id: "asc" },
+            { source_file_id: "asc" },
+            { healpix_order: "asc" },
+            { healpix_cell: "asc" },
+            { coverage_role: "asc" },
+          ],
+          ...(searchAfter ? { search_after: searchAfter } : {}),
+        });
+        const hits = response.hits?.hits ?? [];
+        const total = typeof response.hits?.total === "number" ? response.hits.total : response.hits?.total?.value;
+        if (hits.length > remaining) throw new EvidenceStoreError(`Warehouse coverage catalog exceeds the configured ${maxDocuments} document limit`, 503);
+        for (const hit of hits) {
+          const coverage = this.normalizeWarehouseCoverage(hit, layer.layerId);
+          if (coverage) coverages.push(coverage);
+        }
+        loadedForLayer += hits.length;
+        const hasMore = total !== undefined ? total > loadedForLayer : hits.length === Math.min(10_000, Math.max(1, remaining + 1));
+        if (!hasMore) break;
+        const lastSort = hits.at(-1)?.sort;
+        if (!lastSort?.length) throw new EvidenceStoreError(`Warehouse coverage page for ${layer.layerId} is missing a stable sort cursor`, 503);
+        searchAfter = lastSort;
       }
-      if (total > hits.length) truncated = true;
     }
-    if (truncated) throw new EvidenceStoreError(`Warehouse coverage catalog exceeds the configured ${maxDocuments} document limit`, 503);
     return { layers, coverages, truncated: false };
   }
 

@@ -25,10 +25,12 @@ still does not turn its spatial projection into a per-exposure boundary.
 
 All eight records were queried on 2026-08-26. A live fetch of each exact FITS
 URL below returned an IVOA MOC 2.0 binary table with `COORDSYS=C`,
-`ORDERING=NUNIQ`, `MOCDIM=SPACE`, a `UNIQ` column and `MOCORDER=10`. The order
-10 value is the requested export ceiling, not automatically the native or
-scientifically justified resolution. The native record order and effective
-precision must remain separately recorded.
+`ORDERING=NUNIQ`, `MOCDIM=SPACE` and a `UNIQ` column. The FITS `MOCORDER`
+reflects the requested export for each URL: Gaia, 4XMM, SkyMapper, KiDS,
+VIKING and DECaLS were requested at order 10, while eRASS1 and Planck were
+requested at order 8. A requested/export order is not automatically the native
+or scientifically justified resolution; the native record order and effective
+precision remain separately recorded.
 
 ## Candidate matrix
 

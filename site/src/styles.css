@@ -573,3 +573,53 @@ footer > span:last-child { margin-left: auto; color: var(--teal); text-align: ri
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Coverage detail surfaces share one readable geometry on the globe. */
+:root {
+  --coverage-panel-width: min(360px, calc(100vw - 56px));
+  --coverage-panel-height: min(50vh, 420px);
+}
+.coverage-detail-panel,
+.coverage-detail-panel.is-overlap-panel {
+  box-sizing: border-box;
+  width: var(--coverage-panel-width);
+  max-height: var(--coverage-panel-height);
+  text-align: left;
+}
+.coverage-detail-panel.is-overlap-panel {
+  top: 214px;
+  right: 28px;
+  left: auto;
+  padding: 14px 0 18px;
+  border-top: 1px solid rgba(70, 97, 107, .85);
+  background: transparent;
+}
+.coverage-detail-panel dl {
+  grid-template-columns: minmax(96px, .42fr) minmax(0, 1fr);
+  align-items: start;
+}
+.coverage-detail-panel dd { text-align: left; }
+@media (max-width: 820px) {
+  :root { --coverage-panel-width: calc(100vw - 28px); --coverage-panel-height: 42vh; }
+  .coverage-detail-panel,
+  .coverage-detail-panel.is-overlap-panel {
+    right: 14px;
+    left: 14px;
+    bottom: 54px;
+    top: auto;
+    width: var(--coverage-panel-width);
+    max-height: var(--coverage-panel-height);
+  }
+  .coverage-detail-panel.is-overlap-panel {
+    right: 14px;
+    left: auto;
+    top: 150px;
+    bottom: auto;
+    width: min(360px, calc(100vw - 28px));
+    max-height: 50vh;
+  }
+}
+@media (max-width: 540px) {
+  :root { --coverage-panel-width: calc(100vw - 24px); }
+  .coverage-detail-panel.is-overlap-panel { right: 12px; width: min(360px, calc(100vw - 24px)); }
+}

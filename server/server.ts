@@ -4,7 +4,7 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 
-import { AdminHttpError, AssetsAdmin, KubernetesApiError, adminFromRequest, businessModalityProfile, type ConnectorInput, type CoverageTaskInput } from "./admin.js";
+import { AdminHttpError, AssetsAdmin, KubernetesApiError, adminFromRequest, type ConnectorInput, type CoverageTaskInput } from "./admin.js";
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
@@ -12,7 +12,8 @@ import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog } from
 import { overlapForLayers } from "./overlap.js";
 import { ProductStore, type ProductRecord } from "./products.js";
 import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
-import { CoverageEvidenceStore, EvidenceStoreError } from "./evidence-store.js";
+import { CoverageEvidenceStore, EvidenceStoreError, type WarehouseLayerSnapshot } from "./evidence-store.js";
+import { buildOverlapDetails } from "./overlap-details.js";
 
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
@@ -38,6 +39,7 @@ let runtimeCoverageManifest = coverageManifest;
 let coverageLoadMode: "warehouse" | "static" | "degraded" = "static";
 let coverageLoadedAt = new Date().toISOString();
 let surveyIndex: Awaited<ReturnType<typeof loadSurveyIndex>>;
+let warehouseLayerSnapshots = new Map<string, WarehouseLayerSnapshot>();
 
 async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string; layers: number; footprints: number }> {
   coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src", "footprints", "survey-footprints.json"), "utf8")) as typeof coverageManifest;
@@ -45,10 +47,12 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
   coverageCatalog = staticCoverageCatalog;
   runtimeCoverageManifest = coverageManifest;
   coverageLoadMode = "static";
+  warehouseLayerSnapshots = new Map();
   if (evidenceStore.configured) {
     try {
       const warehouseSnapshot = await evidenceStore.loadCurrentCoverageCatalog();
       if (warehouseSnapshot?.layers.length) {
+        warehouseLayerSnapshots = new Map(warehouseSnapshot.layers.map((layer) => [layer.layerId, layer]));
         coverageCatalog = coverageCatalogFromWarehouse(staticCoverageCatalog, warehouseSnapshot);
         runtimeCoverageManifest = {
           ...coverageManifest,
@@ -535,29 +539,8 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     }
     if (pathname === "/api/v1/admin/tasks" && request.method === "GET") return json(response, 200, { tasks: await admin.listTasks() });
     if (pathname === "/api/v1/admin/tasks" && request.method === "POST") {
-      const input = await requestJsonBody(request) as unknown as CoverageTaskInput & { productId?: string; profileId?: string };
-      if (input.profileId) {
-        const profile = businessModalityProfile(input.profileId);
-        const immutable = ["layerId", "surveyId", "releaseId", "product", "productId", "modality", "mode", "coverageRole", "dataOrigin", "sourceTier"] as const;
-        for (const key of immutable) if (input[key] !== undefined) return json(response, 400, { error: `${key} is defined by the selected business modality profile` });
-        return json(response, 201, { task: await admin.createTask({
-          ...input,
-          layerId: profile.layerId,
-          surveyId: profile.surveyId,
-          releaseId: profile.releaseId,
-          product: profile.product,
-          productId: profile.id,
-          modality: profile.modality,
-          mode: profile.mode,
-          coverageRole: profile.coverageRole,
-          dataOrigin: profile.dataOrigin,
-          sourceTier: profile.sourceTier,
-          allowedSuffixes: input.allowedSuffixes ?? profile.allowedSuffixes,
-          maxOrder: input.maxOrder ?? profile.maxOrder,
-          raColumn: input.raColumn ?? ("raColumn" in profile ? profile.raColumn : undefined),
-          decColumn: input.decColumn ?? ("decColumn" in profile ? profile.decColumn : undefined),
-        }) });
-      }
+      const input = await requestJsonBody(request) as unknown as CoverageTaskInput & { productId?: string; profileId?: unknown };
+      if (input.profileId !== undefined) return json(response, 400, { error: "profileId is no longer supported; submit a product-driven ScanPlan" });
       if (input.productId) {
         const product = products.get(input.productId).draft;
         const immutable: Array<[keyof CoverageTaskInput, string | undefined]> = [["layerId", product.layerId], ["surveyId", product.surveyId], ["releaseId", product.releaseId], ["product", product.name], ["productId", product.productId], ["modality", product.modality], ["mode", product.mode], ["coverageRole", product.coverageRole], ["dataOrigin", product.dataOrigin], ["sourceTier", product.sourceTier]];
@@ -671,6 +654,20 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
   return compressedJson(request, response, 200, { ...result, components: componentDetails }, "public, max-age=60, stale-while-revalidate=120");
 }
 
+async function sendCoverageOverlapDetails(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
+  const surveyIds = Array.isArray(body.surveyIds) ? body.surveyIds.filter((value): value is string => typeof value === "string" && value.length > 0) : [];
+  const componentId = typeof body.componentId === "string" ? body.componentId : "";
+  const requestedOrder = typeof body.requestedOrder === "number" && Number.isInteger(body.requestedOrder) ? body.requestedOrder : undefined;
+  if (surveyIds.length < 2 || !componentId) return json(response, 400, { error: "surveyIds and componentId are required" });
+  const result = overlapForLayers([...coverageCatalog.records.values()], surveyIds, requestedOrder);
+  if (!result) return json(response, 400, { error: "No common coverage is available for the selected surveys" });
+  const component = result.components.find((candidate) => candidate.id === componentId);
+  if (!component) return json(response, 404, { error: "Overlap component not found for the current survey selection" });
+  const details = buildOverlapDetails({ result, component, layers: [...coverageCatalog.records.values()], surveyIndex, warehouseSnapshots: warehouseLayerSnapshots });
+  return compressedJson(request, response, 200, details, "public, max-age=60, stale-while-revalidate=120");
+}
+
 async function sendCoverageReverseLookup(request: IncomingMessage, response: ServerResponse): Promise<void> {
   const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
   const layerIds = Array.isArray(body.layerIds) ? body.layerIds.filter((value): value is string => typeof value === "string") : [];
@@ -687,6 +684,7 @@ const server = http.createServer((request, response) => {
     const pathname = requestPath(request);
     if (pathname.startsWith("/api/v1/admin/")) return sendAdmin(request, response, pathname);
     if (pathname === "/api/v1/coverage/overlap" && request.method === "POST") return sendCoverageOverlap(request, response);
+    if (pathname === "/api/v1/coverage/overlap/details" && request.method === "POST") return sendCoverageOverlapDetails(request, response);
     if (pathname === "/api/v1/coverage/reverse-lookup" && request.method === "POST") return sendCoverageReverseLookup(request, response);
     if (request.method !== "GET" && request.method !== "HEAD") return json(response, 405, { error: "Method not allowed" });
     if (pathname === "/healthz") return json(response, 200, {

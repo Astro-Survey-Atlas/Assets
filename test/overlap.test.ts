@@ -6,6 +6,7 @@ import type { CoverageCellLayer } from "../server/coverage.js";
 import { highestCommonOrder, overlapForLayers } from "../server/overlap.js";
 import { SourceUnitStore } from "../server/source-units.js";
 import { buildOverlapHighlight } from "../site/src/atlas/overlap-highlight.js";
+import { recenteredOrbitPose } from "../site/src/atlas/survey-layer-viewer.js";
 import { cameraDistanceForAngularRadius } from "../site/src/atlas/survey-layer-viewer.js";
 import * as THREE from "three";
 
@@ -25,6 +26,19 @@ test("overlap uses the highest order shared by surveys and unions products withi
   assert.deepEqual(overlapForLayers(layers, ["a", "b"], 4)?.pixels, [100, 101]);
   assert.deepEqual(overlapForLayers(layers, ["a", "b"], 7)?.pixels, [100, 101]);
   assert.deepEqual(overlapForLayers(layers, ["a", "b"], 8)?.pixels, [200]);
+});
+
+test("overlap falls back to a lower real common order when the highest order has no shared cells", () => {
+  const layers = [
+    layer("euclid-o4", "euclid", { 4: [637], 8: [548_923] }),
+    layer("euclid-o8", "euclid", { 8: [548_923] }),
+    layer("sdss-o4", "sdss", { 4: [637], 8: [283_791] }),
+    layer("sdss-o8", "sdss", { 8: [283_791] }),
+  ];
+  const result = overlapForLayers(layers, ["euclid", "sdss"]);
+  assert.equal(result?.commonOrder, 4);
+  assert.deepEqual(result?.pixels, [637]);
+  assert.equal(result?.components[0]?.order, 4);
 });
 
 test("overlap components use side neighbours and remain stable", () => {
@@ -64,6 +78,12 @@ test("overlap highlight builds solid cells and flow edges without a runtime erro
       child.material.dispose();
     }
   });
+});
+
+test("exiting overlap rebases the orbit around the celestial sphere", () => {
+  const pose = recenteredOrbitPose(new THREE.Vector3(7, 4, 2), new THREE.Vector3(2, 1, 0));
+  assert.deepEqual(pose.orbitTarget.toArray(), [0, 0, 0]);
+  assert.deepEqual(pose.cameraPosition.toArray(), [5, 3, 2]);
 });
 
 test("DESI source units are reconstructed from the locked TILE_COMPLETENESS snapshots", async () => {

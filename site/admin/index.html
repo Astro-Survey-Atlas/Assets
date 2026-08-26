@@ -29,83 +29,67 @@
       </section>
 
       <section id="admin-workspace" class="admin-workspace" hidden>
-        <div class="admin-toolbar"><div><p class="admin-eyebrow">OPERATOR RESOURCES</p><h2>Connector 与任务</h2></div><div class="admin-toolbar-actions"><button id="refresh-button" class="admin-quiet" type="button" title="刷新 Connector 和任务记录"><i data-lucide="refresh-cw"></i><span>刷新</span></button><output id="admin-status" aria-live="polite">READY</output></div></div>
-        <div class="admin-command-strip" aria-label="管理台快捷操作">
-          <button id="connector-create-button" class="admin-primary" type="button"><i data-lucide="plus"></i><span>创建 Connector</span></button>
-          <button id="task-create-button" class="admin-primary" type="button"><i data-lucide="send"></i><span>创建扫描任务</span></button>
-          <button id="catalog-reload-button" class="admin-quiet" type="button" title="重新读取静态 catalog 和 Warehouse ACTIVE layers"><i data-lucide="rotate-cw"></i><span>Reload coverage</span></button>
-          <label class="admin-product-search"><span>公共产品搜索</span><input id="product-search" type="search" autocomplete="off" placeholder="巡天、Release、产品、模态或 O4/O8" /></label>
-        </div>
-        <div class="admin-grid">
-          <section class="admin-section" aria-labelledby="connector-title">
-            <div class="section-heading"><div><span class="section-index">01</span><h3 id="connector-title">定义 Connector</h3></div><span class="section-note">ConfigMap + Secret</span></div>
-            <dialog id="connector-dialog" class="admin-dialog">
-            <form id="connector-form" method="dialog" class="admin-form">
-              <label><span>名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="csst-w2-source" /></label>
-              <label><span>类型</span><select name="type" id="connector-type"><option value="oss">OSS 对象存储</option><option value="s3">S3 兼容对象存储</option><option value="local">Local 本地存储</option></select></label>
-              <label data-connector-object><span>Endpoint</span><input name="endpoint" type="url" placeholder="https://object.example" /></label>
-              <label data-connector-object><span>Region</span><input name="region" placeholder="cn-hangzhou-zjy-d01" /></label>
-              <label data-connector-object><span>Bucket</span><input name="bucket" placeholder="data-and-computing" /></label>
-              <label data-connector-object><span>Prefix</span><input name="prefix" placeholder="projects/CSST/..." /></label>
-              <label data-connector-object><span>Access key</span><input name="accessKey" autocomplete="off" /></label>
-              <label data-connector-object><span>Secret key</span><input name="secretKey" type="password" autocomplete="new-password" /></label>
-              <label data-connector-local hidden><span>Local path</span><input name="localPath" placeholder="eva7028:/data/coverage-inputs" /></label>
-              <div class="form-row"><button id="connector-dialog-cancel" class="admin-quiet" type="button">取消</button><button class="admin-primary" type="submit"><i data-lucide="plus"></i><span>创建 Connector</span></button></div>
-              <p class="form-message" data-form-message="connector" role="status"></p>
-            </form>
-            </dialog>
-            <div class="resource-list" id="connector-list"><div class="resource-empty">尚未读取 Connector</div></div>
-          </section>
+        <div class="admin-toolbar"><div><p class="admin-eyebrow">OPERATOR RESOURCES</p><h2>任务工作区</h2></div><div class="admin-toolbar-actions"><button id="refresh-button" class="admin-quiet" type="button" title="刷新 Connector、任务和产品"><i data-lucide="refresh-cw"></i><span>刷新</span></button><output id="admin-status" aria-live="polite">READY</output></div></div>
+        <nav class="admin-step-nav" aria-label="管理步骤" role="tablist">
+          <button id="admin-step-sources-tab" type="button" role="tab" data-admin-step="sources" aria-controls="admin-step-sources"><span class="step-index">01</span><span>数据源</span><output id="step-sources-count">--</output></button>
+          <button id="admin-step-tasks-tab" type="button" role="tab" data-admin-step="tasks" aria-controls="admin-step-tasks"><span class="step-index">02</span><span>提交扫描</span><output id="step-tasks-count">--</output></button>
+          <button id="admin-step-review-tab" type="button" role="tab" data-admin-step="review" aria-controls="admin-step-review"><span class="step-index">03</span><span>审核产品</span><output id="step-review-count">--</output></button>
+        </nav>
 
-          <section class="admin-section admin-task-section" aria-labelledby="task-title">
-            <div class="section-heading"><div><span class="section-index">02</span><h3 id="task-title">提交公共覆盖任务</h3></div><span class="section-note">Warehouse ScanRequest v1alpha1</span></div>
-            <dialog id="task-dialog" class="admin-dialog">
-            <form id="task-form" method="dialog" class="admin-form">
-              <div class="form-row"><label><span>Catalog 产品</span><select name="productId" id="task-product"><option value="">加载中…</option></select></label><label><span>四模态验收 profile</span><select name="profileId" id="task-profile"><option value="">选择 admin-only profile</option></select></label></div>
-              <output id="task-derived-summary" class="derived-summary">选择产品后自动带出 survey、release、layer 和 ScanPlan v2 recipe。</output>
-              <label><span>任务名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="csst-w2-coverage" /></label>
-              <label><span>Source Connector</span><select name="sourceConnector" id="source-connector" required><option value="">加载中…</option></select></label>
-              <label><span>Source path <small>当前一个 ScanRequest 绑定一个前缀或文件</small></span><textarea name="sourcePaths" rows="3" required placeholder="oss://bucket/prefix"></textarea></label>
-              <div class="form-row"><label><span>允许后缀</span><input name="allowedSuffixes" placeholder=".fits" /></label><label data-extraction-order><span>计算 HEALPix order</span><input name="maxOrder" type="number" min="1" max="12" value="8" /></label></div>
-              <div class="form-row" data-catalog-radec hidden><label><span>RA 列名</span><input name="raColumn" placeholder="ra" disabled /></label><label><span>Dec 列名</span><input name="decColumn" placeholder="dec" disabled /></label></div>
-              <div data-catalog-healpix hidden><div class="form-row"><label><span>HEALPix 列名</span><input name="healpixColumn" placeholder="healpix" disabled /></label><label><span>HEALPix order 列名</span><input name="healpixOrderColumn" placeholder="order" disabled /></label></div><label><span>固定 HEALPix order <small>与 order 列名二选一</small></span><input name="healpixOrder" type="number" min="1" max="29" placeholder="8" disabled /></label></div>
-              <label><span>批次 ID <small>留空则自动生成</small></span><input name="batchId" placeholder="csst-w2-coverage-20260822" /></label>
-              <div class="form-row"><button id="task-dialog-cancel" class="admin-quiet" type="button">取消</button><button class="admin-primary" type="submit"><i data-lucide="send"></i><span>提交 ScanRequest</span></button></div>
-              <p class="form-message" data-form-message="task" role="status"></p>
-            </form>
-            </dialog>
-            <section class="modality-section" aria-labelledby="modality-title">
-              <div class="section-heading"><div><span class="section-index">02A</span><h3 id="modality-title">四模态验收</h3></div><span class="section-note">image / spectrum / catalog / cube</span></div>
-              <div id="modality-matrix" class="modality-matrix"><div class="resource-empty">尚未读取验收状态</div></div>
-            </section>
-            <section aria-labelledby="records-title">
-              <div class="section-heading"><div><span class="section-index">02B</span><h3 id="records-title">执行记录</h3></div><span class="section-note">Assets tasks</span></div>
-              <div class="task-table-wrap"><table><thead><tr><th>任务</th><th>覆盖层</th><th>输入</th><th>状态</th><th>统计</th><th>时间</th><th>操作</th></tr></thead><tbody id="task-list"><tr><td colspan="7" class="resource-empty">尚未读取任务</td></tr></tbody></table></div>
-            </section>
-            <dialog id="task-detail-dialog" class="admin-dialog">
-              <div class="task-detail-heading"><div><span class="section-index">TASK</span><h4 id="task-detail-title">任务详情</h4></div><button id="task-detail-close" class="admin-quiet" type="button">关闭</button></div>
-              <div id="task-detail-content" class="task-detail-content"></div>
-            </dialog>
-          </section>
-
-          <section class="admin-section product-section" aria-labelledby="product-title">
-            <div class="section-heading"><div><span class="section-index">03</span><h3 id="product-title">公共产品内容</h3></div><span class="section-note">draft / published</span></div>
-            <div class="resource-list" id="product-list"><div class="resource-empty">尚未读取产品</div></div>
-            <dialog id="product-dialog" class="product-dialog">
-              <form id="product-form" method="dialog" class="admin-form">
-                <h4 id="product-dialog-title">编辑产品</h4>
-                <input type="hidden" name="productId" />
-                <label><span>摘要 Markdown</span><textarea name="summaryMarkdown" rows="4"></textarea></label>
-                <label><span>方法 Markdown</span><textarea name="methodologyMarkdown" rows="6"></textarea></label>
-                <label><span>限制 Markdown</span><textarea name="limitationsMarkdown" rows="4"></textarea></label>
-                <label><span>流程节点 JSON</span><textarea name="flowNodes" rows="8"></textarea></label>
-                <div class="form-row"><button class="admin-quiet" id="product-dialog-cancel" type="button">取消</button><button class="admin-primary" type="submit">保存草稿</button></div>
-                <p class="form-message" data-form-message="product" role="status"></p>
+        <section id="admin-step-sources" class="admin-step-panel" data-admin-panel="sources" role="tabpanel" aria-labelledby="admin-step-sources-tab">
+          <div class="admin-panel-heading"><div><p class="admin-eyebrow">STEP 01</p><h3>数据源</h3><p>管理 Warehouse 扫描所使用的连接和路径。</p></div><button id="connector-create-button" class="admin-primary" type="button"><i data-lucide="plus"></i><span>创建 Connector</span></button></div>
+          <div class="admin-source-layout">
+            <section class="admin-section" aria-labelledby="connector-title">
+              <div class="section-heading"><div><span class="section-index">01</span><h4 id="connector-title">Connector 列表</h4></div><span class="section-note">ConfigMap + Secret</span></div>
+              <dialog id="connector-dialog" class="admin-dialog">
+              <form id="connector-form" method="dialog" class="admin-form">
+                <label><span>名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="csst-w2-source" /></label>
+                <label><span>类型</span><select name="type" id="connector-type"><option value="oss">OSS 对象存储</option><option value="s3">S3 兼容对象存储</option><option value="local">Local 本地存储</option></select></label>
+                <label data-connector-object><span>Endpoint</span><input name="endpoint" type="url" placeholder="https://object.example" /></label>
+                <label data-connector-object><span>Region</span><input name="region" placeholder="cn-hangzhou-zjy-d01" /></label>
+                <label data-connector-object><span>Bucket</span><input name="bucket" placeholder="data-and-computing" /></label>
+                <label data-connector-object><span>Prefix</span><input name="prefix" placeholder="projects/CSST/..." /></label>
+                <label data-connector-object><span>Access key</span><input name="accessKey" autocomplete="off" /></label>
+                <label data-connector-object><span>Secret key</span><input name="secretKey" type="password" autocomplete="new-password" /></label>
+                <label data-connector-local hidden><span>Local path</span><input name="localPath" placeholder="eva7028:/data/coverage-inputs" /></label>
+                <div class="form-row"><button id="connector-dialog-cancel" class="admin-quiet" type="button">取消</button><button class="admin-primary" type="submit"><i data-lucide="plus"></i><span>创建 Connector</span></button></div>
+                <p class="form-message" data-form-message="connector" role="status"></p>
               </form>
-            </dialog>
-          </section>
-        </div>
+              </dialog>
+              <div class="resource-list" id="connector-list"><div class="resource-empty">尚未读取 Connector</div></div>
+            </section>
+            <aside id="connector-detail" class="admin-section connector-detail-panel" aria-live="polite"><div class="resource-empty">选择一个 Connector 查看安全详情。</div></aside>
+          </div>
+        </section>
 
+        <section id="admin-step-tasks" class="admin-step-panel" data-admin-panel="tasks" role="tabpanel" hidden>
+          <div class="admin-panel-heading"><div><p class="admin-eyebrow">STEP 02</p><h3>提交扫描</h3><p>根据已登记产品的 recipe 创建一个 bounded ScanRequest。</p></div><button id="task-create-button" class="admin-primary" type="button"><i data-lucide="send"></i><span>创建扫描任务</span></button></div>
+          <dialog id="task-dialog" class="admin-dialog">
+          <form id="task-form" method="dialog" class="admin-form">
+            <label><span>Catalog 产品</span><select name="productId" id="task-product"><option value="">加载中…</option></select></label>
+            <output id="task-derived-summary" class="derived-summary">选择产品后自动带出 survey、release、layer 和 ScanPlan v2 recipe。</output>
+            <label><span>任务名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="csst-w2-coverage" /></label>
+            <label><span>Source Connector</span><select name="sourceConnector" id="source-connector" required><option value="">加载中…</option></select></label>
+            <label><span>Source path <small>当前一个 ScanRequest 绑定一个前缀或文件</small></span><textarea name="sourcePaths" rows="3" required placeholder="oss://bucket/prefix"></textarea></label>
+            <div class="form-row"><label><span>允许后缀</span><input name="allowedSuffixes" placeholder=".fits" /></label><label data-extraction-order><span>计算 HEALPix order</span><input name="maxOrder" type="number" min="1" max="12" value="8" /></label></div>
+            <div class="form-row" data-catalog-radec hidden><label><span>RA 列名</span><input name="raColumn" placeholder="ra" disabled /></label><label><span>Dec 列名</span><input name="decColumn" placeholder="dec" disabled /></label></div>
+            <div data-catalog-healpix hidden><div class="form-row"><label><span>HEALPix 列名</span><input name="healpixColumn" placeholder="healpix" disabled /></label><label><span>HEALPix order 列名</span><input name="healpixOrderColumn" placeholder="order" disabled /></label></div><label><span>固定 HEALPix order <small>与 order 列名二选一</small></span><input name="healpixOrder" type="number" min="1" max="29" placeholder="8" disabled /></label></div>
+            <label><span>批次 ID <small>留空则自动生成</small></span><input name="batchId" placeholder="csst-w2-coverage-20260822" /></label>
+            <div class="form-row"><button id="task-dialog-cancel" class="admin-quiet" type="button">取消</button><button class="admin-primary" type="submit"><i data-lucide="send"></i><span>提交 ScanRequest</span></button></div>
+            <p class="form-message" data-form-message="task" role="status"></p>
+          </form>
+          </dialog>
+          <section class="modality-output" aria-labelledby="modality-title"><div class="section-heading"><div><span class="section-index">02A</span><h4 id="modality-title">任务产出</h4></div><span class="section-note">modality / status</span></div><div id="modality-chart" class="modality-chart"><div class="resource-empty">尚未读取任务</div></div></section>
+          <section aria-labelledby="records-title"><div class="section-heading"><div><span class="section-index">02B</span><h4 id="records-title">执行记录</h4></div><span class="section-note">Assets tasks</span></div><div class="task-table-wrap"><table><thead><tr><th>任务</th><th>覆盖层</th><th>输入</th><th>状态</th><th>统计</th><th>时间</th><th>操作</th></tr></thead><tbody id="task-list"><tr><td colspan="7" class="resource-empty">尚未读取任务</td></tr></tbody></table></div></section>
+          <dialog id="task-detail-dialog" class="admin-dialog"><div class="task-detail-heading"><div><span class="section-index">TASK</span><h4 id="task-detail-title">任务详情</h4></div><button id="task-detail-close" class="admin-quiet" type="button">关闭</button></div><div id="task-detail-content" class="task-detail-content"></div></dialog>
+        </section>
+
+        <section id="admin-step-review" class="admin-step-panel" data-admin-panel="review" role="tabpanel" hidden>
+          <div class="admin-panel-heading"><div><p class="admin-eyebrow">STEP 03</p><h3>审核产品</h3><p>检查覆盖 recipe、发布内容和当前 catalog 状态。</p></div><div class="panel-actions"><button id="catalog-reload-button" class="admin-quiet" type="button" title="重新读取静态 catalog 和 Warehouse ACTIVE layers"><i data-lucide="rotate-cw"></i><span>Reload coverage</span></button><label class="admin-product-search"><span>公共产品搜索</span><input id="product-search" type="search" autocomplete="off" placeholder="巡天、Release、产品、模态或 O4/O8" /></label></div></div>
+          <section class="admin-section product-section" aria-labelledby="product-title"><div class="section-heading"><div><span class="section-index">03</span><h4 id="product-title">公共产品内容</h4></div><span class="section-note">draft / published</span></div><div class="resource-list" id="product-list"><div class="resource-empty">尚未读取产品</div></div>
+            <dialog id="product-dialog" class="product-dialog"><form id="product-form" method="dialog" class="admin-form"><h4 id="product-dialog-title">编辑产品</h4><input type="hidden" name="productId" /><label><span>摘要 Markdown</span><textarea name="summaryMarkdown" rows="4"></textarea></label><label><span>方法 Markdown</span><textarea name="methodologyMarkdown" rows="6"></textarea></label><label><span>限制 Markdown</span><textarea name="limitationsMarkdown" rows="4"></textarea></label><label><span>流程节点 JSON</span><textarea name="flowNodes" rows="8"></textarea></label><div class="form-row"><button class="admin-quiet" id="product-dialog-cancel" type="button">取消</button><button class="admin-primary" type="submit">保存草稿</button></div><p class="form-message" data-form-message="product" role="status"></p></form></dialog>
+          </section>
+        </section>
       </section>
     </main>
     <div id="admin-toast" class="admin-toast" role="status" aria-live="polite"></div>

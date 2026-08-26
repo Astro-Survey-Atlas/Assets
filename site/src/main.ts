@@ -1,4 +1,4 @@
-import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, RotateCcw, Search, ShieldCheck, Telescope, X, createIcons } from "lucide";
+import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Maximize2, Minimize2, RotateCcw, Search, ShieldCheck, Telescope, X, createIcons } from "lucide";
 import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 import type { SurveyLayerContextMenu, SurveyLayerInspection, SurveyLayerOverlapComponent, SurveyLayerState } from "./atlas/survey-layer-viewer.js";
@@ -156,11 +156,14 @@ let activeOverlapComponents: OverlapComponentView[] = [];
 const queuedLayerIds = new Set<string>();
 let selectedQueueComponent: OverlapComponentView | null = null;
 let renderedQueueComponentId: string | null = null;
+let overlapDrawerOpen = false;
+let overlapDrawerPreviousState: { layersHidden: boolean; queueHidden: boolean; panelHidden: boolean } | null = null;
 let layerCloseTimer: number | null = null;
 let layerCloseDeadline = 0;
 let layerCloseRemaining = 0;
 let layerClosePaused = false;
 const overlapEvidenceCache = new Map<string, OverlapEvidenceResult>();
+const overlapDetailsCache = new Map<string, OverlapDetailsResponse>();
 let lastEscapeAt = -Infinity;
 let homeEntered = false;
 let coverageSelectionInitialized = false;
@@ -219,7 +222,20 @@ function updateCoverageReadout(surveyId: string | null, product?: string): void 
   const meta = byId("coverage-selection-meta");
   const state = byId("coverage-state");
   const survey = surveyId ? surveyIndex?.surveys.find((entry) => entry.id === surveyId) : undefined;
+  const layers = surveyId ? (coverageCatalog?.layers.filter((layer) => layer.surveyId === surveyId) ?? []) : [];
+  const visualOrders = [...new Set(layers.map((layer) => layer.overviewOrder))].sort((left, right) => left - right);
+  const queryOrders = [...new Set(layers.flatMap((layer) => layer.availableOrders))].sort((left, right) => left - right);
+  const orderText = visualOrders.length
+    ? `VISUAL OVERVIEW · O${visualOrders.join("/O")} · QUERY O${queryOrders.join("/O")}`
+    : "NESTED HEALPIX · NSIDE 16";
   if (!survey) {
+    if (surveyId && layers.length) {
+      scene.style.setProperty("--coverage-color", layers[0]?.color ?? "#42d5c4");
+      title.textContent = product ? `${surveyId.toUpperCase()} · ${product.toUpperCase()}` : surveyId.toUpperCase();
+      meta.textContent = orderText;
+      state.textContent = `${layers.length} COVERAGE LAYERS · SELECTED`;
+      return;
+    }
     scene.style.removeProperty("--coverage-color");
     title.textContent = t("coverage.allSurveys");
     meta.textContent = "NESTED HEALPIX · NSIDE 16";
@@ -228,7 +244,7 @@ function updateCoverageReadout(surveyId: string | null, product?: string): void 
   }
   scene.style.setProperty("--coverage-color", survey.color);
   title.textContent = product ? `${survey.name.toUpperCase()} · ${product.toUpperCase()}` : survey.name.toUpperCase();
-  meta.textContent = `${survey.mission} · ${survey.statistics.footprintCells.toLocaleString("en-US")} HEALPIX CELLS`;
+  meta.textContent = `${orderText} · ${survey.statistics.footprintCells.toLocaleString("en-US")} CELLS`;
   state.textContent = `${survey.statistics.acquired}/${survey.statistics.publicProducts} PRODUCTS · SELECTED`;
 }
 
@@ -341,6 +357,14 @@ function overlapBounds(pixels: number[], order: number): { areaDeg2: number; raM
 interface OverlapEvidenceLookup { endpoint: string; layerIds: string[]; order: number; precision: "exact" | "estimated" | "entrypoint-only" | "truncated"; deferred: boolean }
 interface OverlapEvidenceResult { available: boolean; precision: string; truncated: boolean; edges: Array<{ layerId?: string; releaseId?: string; sourceFileId?: string; fileName?: string; sourceUri?: string; downloadUrl?: string; ipix: number; precision: string }>; sourceFiles: Array<Record<string, unknown>>; notes?: string[] }
 interface OverlapComponentView { id: string; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; evidenceLookup?: OverlapEvidenceLookup; surveys?: Array<{ surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; unitKind?: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }> }
+interface OverlapDetailsResponse {
+  schemaVersion: 1;
+  component: OverlapComponentView;
+  publicSources: Array<{ layerId: string; surveyId: string; surveyName: string; releaseId: string; releaseLabel?: string; product: string; modality?: string; description?: string; sourceUrl?: string; geometrySourceUrl?: string; coverageClaim?: { kind: string; url?: string; status?: string } }>;
+  warehouseEvidence: Array<{ layerId: string; surveyId: string; releaseId: string; productId: string; product?: string; modality?: string; state: string; scanRunId?: string; availableOrders: number[]; commonOrder: number; coverageCells: number; fileCount: number; coverageCount: number; precision: string; sourceSnapshotSha256?: string; connector: { status: string; name?: string; type?: string }; method: { summary: string; docsUrl?: string } }>;
+  method: { summary: string; docsUrl?: string };
+  reverseLookup: { endpoint: string; layerIds: string[]; order: number; precision: string; deferred: boolean };
+}
 
 function overlapComponents(pixels: number[], order: number): OverlapComponentView[] {
   const pending = new Set(pixels);

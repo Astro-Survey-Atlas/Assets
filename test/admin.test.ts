@@ -14,6 +14,7 @@ test("connector resources keep fields specific to their selected type", () => {
   assert.equal(local.persistentVolumeClaim?.metadata?.name, "assets-local-pvc");
   const objectStorage = buildConnectorResources({ name: "assets-s3", type: "s3", endpoint: "https://object.example", bucket: "data", accessKey: "key", secretKey: "secret" }, "warehouse");
   assert.deepEqual(objectStorage.configMap.data, { type: "s3", endpoint: "https://object.example", bucket: "data", credentialSecretName: "assets-s3-credentials", accessKeyKey: "accessKey", secretKeyKey: "secretKey" });
+  assert.throws(() => buildConnectorResource({ name: "assets-legacy-s3", type: "s3", endpoint: "http://warehouse-minio.warehouse.svc.cluster.local:9000", bucket: "data", accessKey: "key", secretKey: "secret" }, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400 && /legacy warehouse/.test(error.message));
   assert.deepEqual(objectStorage.secret?.stringData, { accessKey: "key", secretKey: "secret" });
   assert.throws(() => buildConnectorResource({ name: "assets-invalid-local", type: "local", localPath: "eva7028:/data/local", endpoint: "https://object.example" }, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400);
   assert.throws(() => buildConnectorResource({ name: "assets-invalid-node", type: "local", localPath: "eva7028:/data/../secrets" }, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400);
@@ -45,6 +46,20 @@ test("coverage task defaults use the standard Elasticsearch index names", () => 
   assert.equal((plan.extraction as Record<string, unknown>).mode, "fits-wcs");
   assert.deepEqual(resource.spec?.credentials, {});
   assert.equal((resource.spec?.scanner as Record<string, unknown>).evidence && ((resource.spec?.scanner as Record<string, unknown>).evidence as Record<string, unknown>).claimName, "atlas-evidence");
+  assert.throws(() => buildTaskResource({
+    name: "assets-legacy-index",
+    layerId: "csst-sim-w2-image-extent",
+    surveyId: "csst",
+    releaseId: "csst-sim-w2-20250731",
+    product: "CSST W2 simulated images",
+    mode: "fits-wcs",
+    coverageRole: "image_extent",
+    dataOrigin: "simulated",
+    sourceTier: "user_file_derived",
+    sourceConnector: "assets-dryrun-source",
+    sourcePaths: ["oss://example/projects/CSST"],
+    objectIndex: "legacy_object_index",
+  }, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400 && /objectIndex is not part/.test(error.message));
 });
 
 test("spectrum tasks render the Warehouse header-position extraction mode", () => {
@@ -88,13 +103,16 @@ test("task views expose summary evidence without embedding evidence payloads", (
 
 test("task resubmission preserves the plan and creates a fresh immutable identity", async () => {
   const original = {
-    metadata: { name: "image-probe", namespace: "warehouse", uid: "old-uid", resourceVersion: "42", generation: 3, managedFields: [{ manager: "operator" }], annotations: { old: "value" }, labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/task-kind": "public-coverage", "astro.zhejianglab.org/task-id": "image-probe" } },
+    metadata: { name: "image-probe", namespace: "warehouse", uid: "old-uid", resourceVersion: "42", generation: 3, managedFields: [{ manager: "operator" }], annotations: { old: "value" }, labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/task-kind": "public-coverage", "astro.zhejianglab.org/task-id": "image-probe", "astro.zhejianglab.org/source-connector": "image-source" } },
     spec: { plan: { scanRunId: "image-probe-run", layer: { layerId: "image-layer", surveyId: "euclid", releaseId: "q1", productId: "vis", modality: "image" }, source: { connector: { type: "oss" }, location: { bucket: "data", prefix: "vis.fits" } }, extraction: { mode: "fits-wcs", outputOrder: 8, catalog: {} }, evidence: { outputPath: "/old/evidence" } } },
     status: { phase: "FAILED" },
   };
   let created: Record<string, unknown> | undefined;
   const kube = {
     get: async () => original,
+    getCore: async (plural: string) => plural === "configmaps"
+      ? { data: { type: "oss", endpoint: "https://new-object.example", bucket: "data", region: "cn-hangzhou", credentialSecretName: "image-source-credentials" } }
+      : { data: {} },
     create: async (_plural: string, resource: Record<string, unknown>) => { created = resource; return resource; },
   };
   const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
@@ -107,6 +125,8 @@ test("task resubmission preserves the plan and creates a fresh immutable identit
   const plan = ((created?.spec as Record<string, unknown>).plan as Record<string, unknown>);
   assert.notEqual(plan.scanRunId, "image-probe-run");
   assert.match(((plan.evidence as Record<string, unknown>).outputPath as string), /^\/evidence\/image-probe-retry-/);
+  assert.equal(((plan.source as Record<string, unknown>).connector as Record<string, unknown>).endpoint, "https://new-object.example");
+  assert.deepEqual((created?.spec as Record<string, unknown>).credentials, { source: { secretName: "image-source-credentials", accessKeyKey: "accessKey", secretKeyKey: "secretKey" } });
 });
 
 test("coverage tasks reject unsupported sink connectors", () => {

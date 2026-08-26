@@ -129,6 +129,19 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   const tileMatches = csstDesiOverlapBody.components.flatMap((component) => component.surveys ?? []).filter((entry) => entry.sourceUnitIndex?.unitKind === "tile").map((entry) => entry.sourceUnits).filter((value): value is { units: Array<{ unitId: string }>; totalUnits: number } => Boolean(value));
   assert.ok(tileMatches.some((match) => match.totalUnits > 0 && match.units.some((unit) => unit.unitId)));
 
+  const componentId = csstDesiOverlapBody.components[0] ? "C01" : "C99";
+  const overlapDetails = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap/details`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["csst", "desi"], componentId }) });
+  assert.equal(overlapDetails.status, 200);
+  const overlapDetailsBody = await overlapDetails.json() as { schemaVersion: number; component: { id: string; order: number }; publicSources: Array<{ surveyId: string; coverageClaim?: { kind: string } }>; warehouseEvidence: Array<{ state: string; connector: { status: string } }>; method: { summary: string }; reverseLookup: { endpoint: string; order: number; deferred: boolean } };
+  assert.equal(overlapDetailsBody.schemaVersion, 1);
+  assert.equal(overlapDetailsBody.component.id, componentId);
+  assert.ok(overlapDetailsBody.method.summary.length > 0);
+  assert.equal(overlapDetailsBody.reverseLookup.endpoint, "/api/v1/coverage/reverse-lookup");
+  assert.equal(overlapDetailsBody.reverseLookup.order, overlapDetailsBody.component.order);
+  assert.equal(overlapDetailsBody.reverseLookup.deferred, true);
+  assert.ok(overlapDetailsBody.publicSources.every((source) => source.coverageClaim?.kind));
+  assert.ok(overlapDetailsBody.warehouseEvidence.every((entry) => entry.connector.status === "known" || entry.connector.status === "unavailable"));
+
   const reverseLookup = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/reverse-lookup`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ layerIds: ["desi-dr1-spectra-footprint"], order: 4, cells: [1087] }) });
   assert.equal(reverseLookup.status, 200);
   const reverseBody = await reverseLookup.json() as { available: boolean; precision: string };
@@ -179,11 +192,12 @@ test("admin endpoints require a token and expose the configured control-plane bo
 
   const config = await fetch(`http://127.0.0.1:${port}/api/v1/admin/config`);
   assert.equal(config.status, 200);
-  const configBody = await config.json() as { enabled: boolean; authRequired: boolean; capabilities: { coverageModes: string[]; businessModalityProfiles: Array<{ modality: string }> } };
+  const configBody = await config.json() as { enabled: boolean; authRequired: boolean; capabilities: { coverageModes: string[]; modalities: string[]; businessModalityProfiles?: unknown } };
   assert.equal(configBody.enabled, true);
   assert.equal(configBody.authRequired, true);
   assert.deepEqual(configBody.capabilities.coverageModes, ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix"]);
-  assert.deepEqual(configBody.capabilities.businessModalityProfiles.map((profile) => profile.modality), ["image", "spectrum", "catalog", "cube"]);
+  assert.deepEqual(configBody.capabilities.modalities, ["image", "spectrum", "cube", "catalog", "timeseries", "visibility", "event", "other"]);
+  assert.equal("businessModalityProfiles" in configBody.capabilities, false);
 
   const denied = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tasks`);
   assert.equal(denied.status, 401);

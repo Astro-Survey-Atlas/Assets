@@ -18,6 +18,14 @@ export interface SphericalCellSheetGeometryInput {
   inset?: number;
 }
 
+export interface SphericalCellSourceSectorGeometryInput {
+  nside: number;
+  pixel: number;
+  radius: number;
+  colors: readonly THREE.Color[];
+  inset?: number;
+}
+
 export const TRIANGLES_PER_SPHERICAL_CELL = 12;
 export const TRIANGLES_PER_SPHERICAL_CELL_SHEET = 2;
 
@@ -60,6 +68,73 @@ function insetBoundary(boundary: THREE.Vector3[], radius: number, inset: number)
   if (inset <= 0) return boundary;
   const center = boundary.reduce((sum, point) => sum.add(point), new THREE.Vector3()).normalize();
   return boundary.map((point) => point.clone().normalize().lerp(center, inset).normalize().multiplyScalar(radius));
+}
+
+function arcPoint(start: THREE.Vector3, end: THREE.Vector3, fraction: number, radius: number): THREE.Vector3 {
+  const left = start.clone().normalize();
+  const right = end.clone().normalize();
+  const angle = left.angleTo(right);
+  if (angle < 1e-7) return left.multiplyScalar(radius);
+  const sinAngle = Math.sin(angle);
+  return left.multiplyScalar(Math.sin((1 - fraction) * angle) / sinAngle)
+    .addScaledVector(right, Math.sin(fraction * angle) / sinAngle)
+    .normalize()
+    .multiplyScalar(radius);
+}
+
+function perimeterPoint(boundary: readonly THREE.Vector3[], fraction: number, radius: number): THREE.Vector3 {
+  const lengths: number[] = [];
+  let total = 0;
+  for (let index = 0; index < boundary.length; index += 1) {
+    const length = boundary[index]!.angleTo(boundary[(index + 1) % boundary.length]!);
+    lengths.push(length);
+    total += length;
+  }
+  if (!total) return boundary[0]!.clone().normalize().multiplyScalar(radius);
+  let distance = ((fraction % 1) + 1) % 1 * total;
+  for (let index = 0; index < lengths.length; index += 1) {
+    const length = lengths[index]!;
+    if (distance <= length || index === lengths.length - 1) {
+      return arcPoint(boundary[index]!, boundary[(index + 1) % boundary.length]!, length ? distance / length : 0, radius);
+    }
+    distance -= length;
+  }
+  return boundary[0]!.clone().normalize().multiplyScalar(radius);
+}
+
+/** Build equal perimeter sectors for multiple sources sharing one HEALPix cell. */
+export function buildSphericalCellSourceSectorGeometry(cells: readonly SphericalCellSourceSectorGeometryInput[]): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const colors: number[] = [];
+  cells.forEach((cell) => {
+    if (!cell.colors.length) return;
+    const boundary = insetBoundary(sphericalCellBoundary(cell.nside, cell.pixel, cell.radius), cell.radius, cell.inset ?? 0);
+    if (boundary.length !== 4) throw new Error("HEALPix cell boundary is not quadrilateral");
+    const center = boundary.reduce((sum, point) => sum.add(point), new THREE.Vector3()).normalize().multiplyScalar(cell.radius);
+    if (cell.colors.length === 1) {
+      boundary.forEach((start, index) => {
+        const end = boundary[(index + 1) % boundary.length]!;
+        [center, start, end].forEach((vertex) => {
+          positions.push(vertex.x, vertex.y, vertex.z);
+          colors.push(cell.colors[0]!.r, cell.colors[0]!.g, cell.colors[0]!.b);
+        });
+      });
+      return;
+    }
+    cell.colors.forEach((color, index) => {
+      const start = perimeterPoint(boundary, index / cell.colors.length, cell.radius);
+      const end = perimeterPoint(boundary, (index + 1) / cell.colors.length, cell.radius);
+      [center, start, end].forEach((vertex) => {
+        positions.push(vertex.x, vertex.y, vertex.z);
+        colors.push(color.r, color.g, color.b);
+      });
+    });
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.computeBoundingSphere();
+  return geometry;
 }
 
 export function buildSphericalCellGeometry(cells: readonly SphericalCellGeometryInput[]): THREE.BufferGeometry {

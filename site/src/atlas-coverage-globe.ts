@@ -67,24 +67,32 @@ function surveyCardFor(record: CoverageSurvey): SurveyCard {
   };
 }
 
-function footprintManifest(catalog: CoverageCatalog, blocks: ReadonlyMap<string, number[]>): SurveyFootprintManifest {
+function projectPixelsToOrder(pixels: readonly number[], sourceOrder: number, targetOrder: number): number[] {
+  if (sourceOrder < targetOrder) return [];
+  const divisor = 4 ** (sourceOrder - targetOrder);
+  return [...new Set(pixels.map((pixel) => Math.floor(pixel / divisor)))].sort((left, right) => left - right);
+}
+
+export function footprintManifest(catalog: CoverageCatalog, blocks: ReadonlyMap<string, number[]>): SurveyFootprintManifest {
   const overviewOrders = [...new Set(catalog.layers.map((layer) => layer.overviewOrder))];
   const order = overviewOrders.length ? Math.min(...overviewOrders) : 4;
   const nside = 2 ** order;
   const generatedAt = new Date().toISOString();
   const footprints = catalog.layers
-    .filter((layer) => layer.overviewOrder === order)
     .map((layer) => ({
       surveyId: layer.surveyId,
+      layerId: layer.layerId,
       releaseId: layer.releaseId,
       product: layer.product,
       label: layer.product,
       nside,
-      pixels: [...new Set(blocks.get(`${layer.layerId}:${order}`) ?? [])].sort((left, right) => left - right),
+      pixels: projectPixelsToOrder(blocks.get(`${layer.layerId}:${layer.overviewOrder}`) ?? [], layer.overviewOrder, order),
       quality: "official_overview" as const,
       sourceUrl: "https://assets.local/coverage/catalog",
       retrievedAt: generatedAt,
-      notes: `Overview HEALPix order ${order} loaded from the public coverage catalog.`,
+      notes: layer.overviewOrder === order
+        ? `Overview HEALPix order ${order} loaded from the public coverage catalog.`
+        : `Overview HEALPix order ${order} projected from explicit order ${layer.overviewOrder} coverage for the globe preview.`,
     }))
     .filter((footprint) => footprint.pixels.length > 0);
   return { schemaVersion: 1, generatedAt, coordinateFrame: "ICRS", nside, footprints };

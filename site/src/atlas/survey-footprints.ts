@@ -4,6 +4,8 @@ export type FootprintGeometryQuality = "moc" | "official_overview";
 
 export interface SurveyFootprint {
   surveyId: string;
+  /** Runtime layer identity. Public static footprints may omit this field. */
+  layerId?: string;
   /** A footprint belongs to exactly one registered data release. Survey coverage is its release union. */
   releaseId: string;
   product: string;

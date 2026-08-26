@@ -1,21 +1,21 @@
 image:
   repository: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets
-  tag: "1.0.0"
+  tag: "0.1.0-20260826-123500"
   pullPolicy: Always
 
 imagePullSecrets:
   - name: aliyun-registry
 
 warehouse:
-  elasticsearchUrl: http://warehouse-elasticsearch.warehouse.svc.cluster.local:9200
+  elasticsearchUrl: http://atlas-warehouse-elasticsearch.atlas-warehouse.svc.cluster.local:9200
   layerIndex: ast_layer_index_v1
   coverageIndex: ast_coverage_index_v1
   fileIndex: ast_file_index_v1
 
 admin:
   enabled: true
-  warehouseNamespace: warehouse
-  warehouseScannerImage: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260825-fix3
+  warehouseNamespace: atlas-warehouse
+  warehouseScannerImage: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260826-cutover1
   warehouseEvidenceClaim: atlas-evidence-smoke
   warehouseEvidenceMountPath: /var/lib/atlas-evidence
   adminTokenSecret:

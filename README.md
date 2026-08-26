@@ -69,9 +69,11 @@ For CSST, `files.parquet` stores source file/WCS/ETag metadata and
 source files. Parquet is for audit, rebuild and bulk export; online reverse
 lookup uses the warehouse indices:
 
-- `astro_file_index_v1`
-- `astro_coverage_index_v1`
-- `astro_object_index_v1` (when an object workflow is published)
+- `ast_file_index_v1`
+- `ast_coverage_index_v1`
+
+The v1 online contract has no object index; object-level workflows are outside
+the current product boundary.
 
 The Assets runtime only uses `ASSETS_WAREHOUSE_ES_URL`. The historical ES URL
 is accepted only by the explicit one-shot migration script.

@@ -75,15 +75,40 @@ GET /api/v1/coverage/blocks/{layerId}?order=4&tile=0
 
 ```http
 POST /api/v1/coverage/overlap
+POST /api/v1/coverage/overlap/details
 ```
 
-`overlap` selects the highest HEALPix order shared by all selected surveys and
-returns explicit cells plus connected components (`C01`, `C02`, ...). Every
-component includes the selected layer precision and an `evidence` object. When
-warehouse ES is unavailable, geometry still works and evidence is marked
-`entrypoint-only`.
+`overlap` first tries the highest HEALPix order shared by all selected surveys
+and returns explicit cells plus connected components (`C01`, `C02`, ...). If
+that order has no actual shared cells, it falls back to the next lower
+explicitly published common order; it never manufactures finer cells from a
+coarse overview. Every component includes the selected layer precision and an
+`evidence` object. When warehouse ES is unavailable, geometry still works and
+evidence is marked `entrypoint-only`.
 
 Content-Type: application/json
+
+`overlap/details` keeps the geometry response small and loads the selected
+connected component's metadata on demand:
+
+```json
+{
+  "surveyIds": ["euclid", "sdss"],
+  "componentId": "C01"
+}
+```
+
+The response contains the component bounds, `publicSources` (public survey,
+release, product, modality and public MOC/tile/archive claims), and
+`warehouseEvidence` (ACTIVE layer, scan run, source snapshot, file/coverage
+counts and connector status). Internal `s3://`, MinIO, Elasticsearch,
+Kubernetes, PVC and local paths are omitted. File-level reverse lookup remains
+bounded and deferred through `/api/v1/coverage/reverse-lookup`.
+
+All coverage cells remain explicit ICRS/NESTED `order/ipix` values. The
+`precision` field is one of `exact`, `estimated`, `entrypoint-only` or
+`truncated`; a visual overview order is never presented as a finer query
+measurement.
 
 ```json
 {"surveyIds":["desi","legacy-surveys"],"requestedOrder":8}

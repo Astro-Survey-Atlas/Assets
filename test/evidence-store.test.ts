@@ -62,3 +62,53 @@ test("overlap enrichment can preserve geometry when warehouse evidence is unavai
   assert.equal(result.precision, "entrypoint-only");
   assert.match(result.notes[0] ?? "", /temporarily unavailable/);
 });
+
+test("warehouse coverage catalog paginates an ACTIVE layer beyond the Elasticsearch 10,000-hit window", async () => {
+  const layerId = "large-layer";
+  const page = Array.from({ length: 10_000 }, (_, index) => {
+    const sourceFileId = `file-${String(index).padStart(5, "0")}`;
+    return {
+      _id: `edge-${index}`,
+      sort: [layerId, sourceFileId, 8, index, "footprint_extent"],
+      _source: {
+        layer_id: layerId,
+        source_file_id: sourceFileId,
+        source_uri: `s3://coverage/${sourceFileId}.fits`,
+        healpix_order: 8,
+        healpix_cell: index,
+        coverage_role: "footprint_extent",
+        precision: "exact",
+      },
+    };
+  });
+  const last = page.at(-1)!;
+  const requests: Array<{ body: any }> = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    const body = JSON.parse(String(init?.body));
+    requests.push({ body });
+    if (url.includes("ast_layer_index_v1")) {
+      return new Response(JSON.stringify({ hits: { total: { value: 1 }, hits: [{ _id: layerId, _source: {
+        layer_id: layerId, survey_id: "large-survey", release_id: "r1", product_id: "p1", state: "ACTIVE",
+        available_orders: [8], coverage_count: 10_001,
+      } }] } }), { status: 200 });
+    }
+    if (!body.search_after) {
+      return new Response(JSON.stringify({ hits: { total: { value: 10_001 }, hits: page } }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ hits: { total: { value: 10_001 }, hits: [{
+      _id: "edge-10000",
+      sort: [layerId, "file-10000", 8, 10_000, "footprint_extent"],
+      _source: { layer_id: layerId, source_file_id: "file-10000", source_uri: "s3://coverage/file-10000.fits", healpix_order: 8, healpix_cell: 10_000, coverage_role: "footprint_extent", precision: "exact" },
+    }] } }), { status: 200 });
+  };
+
+  const result = await new CoverageEvidenceStore({ url: "http://warehouse:9200", fetchImpl }).loadCurrentCoverageCatalog(10_001);
+  const coverageRequests = requests.filter(({ body }) => body.query?.bool?.filter?.some((clause: any) => clause.term?.layer_id === layerId));
+  assert.equal(coverageRequests.length, 2);
+  assert.equal(coverageRequests[0]?.body.size, 10_000);
+  assert.deepEqual(coverageRequests[1]?.body.search_after, last.sort);
+  assert.equal(result?.truncated, false);
+  assert.equal(result?.coverages.length, 10_001);
+  assert.equal(result?.coverages.at(-1)?.ipix, 10_000);
+});
