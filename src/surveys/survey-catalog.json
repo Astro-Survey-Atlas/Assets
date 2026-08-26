@@ -32,7 +32,12 @@
               "modality": "imaging",
               "description": "CSST W1 仿真宽场图像。覆盖仅匹配 W1_Phot 下 ^CSST_MSC_MS_WIDE_.*\\.fits$，由 178,055 张有效图像的 ICRS WCS 并集得到 354.759 平方度；名义 1000 平方度不是当前文件集合的实测 footprint。",
               "status": "acquired",
+              "dataOrigin": "simulated",
+              "sourceTier": "user_file_derived",
+              "originNote": "Simulation input; this is not a public observed-data release.",
+              "sourceLabel": "CSST simulation archive",
               "sourceUrl": "https://nadc.china-vo.org/data/",
+              "geometrySourceLabel": "OSS W1_Phot source prefix",
               "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W1_Phot"
             }
           ]
@@ -53,7 +58,12 @@
               "modality": "imaging",
               "description": "W2_Phot FITS-WCS 图像范围由 data-warehouse coverage task 扫描并由 Assets MOC Core 锁定；实际覆盖面积 8091.630033 平方度。",
               "status": "acquired",
+              "dataOrigin": "simulated",
+              "sourceTier": "user_file_derived",
+              "originNote": "Simulation input; this is not a public observed-data release.",
+              "sourceLabel": "CSST simulation archive",
               "sourceUrl": "https://nadc.china-vo.org/data/",
+              "geometrySourceLabel": "OSS W2_Phot source prefix",
               "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot"
             }
           ]
@@ -74,7 +84,12 @@
               "modality": "imaging",
               "description": "W3_Phot FITS-WCS 图像范围由 data-warehouse coverage task 扫描并由 Assets MOC Core 锁定；实际覆盖面积 397.038350 平方度。",
               "status": "acquired",
+              "dataOrigin": "simulated",
+              "sourceTier": "user_file_derived",
+              "originNote": "Simulation input; this is not a public observed-data release.",
+              "sourceLabel": "CSST simulation archive",
               "sourceUrl": "https://nadc.china-vo.org/data/",
+              "geometrySourceLabel": "OSS W3_Phot source prefix",
               "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot"
             }
           ]
@@ -95,7 +110,12 @@
               "modality": "imaging",
               "description": "W4_Phot FITS-WCS 图像范围由 data-warehouse coverage task 扫描并由 Assets MOC Core 锁定；实际覆盖面积 447.605792 平方度。",
               "status": "acquired",
+              "dataOrigin": "simulated",
+              "sourceTier": "user_file_derived",
+              "originNote": "Simulation input; this is not a public observed-data release.",
+              "sourceLabel": "CSST simulation archive",
               "sourceUrl": "https://nadc.china-vo.org/data/",
+              "geometrySourceLabel": "OSS W4_Phot source prefix",
               "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot"
             }
           ]

@@ -1,5 +1,4 @@
 model = "gpt-5.6-luna"
-review_model = "gpt-5.6-sol"
 model_reasoning_effort = "max"
 disable_response_storage = true
 network_access = "enabled"

@@ -72,7 +72,12 @@ export interface PublicSurveyProduct {
   description: string;
   status: PublicProductStatus;
   sourceUrl: string;
+  dataOrigin?: "observed" | "simulated" | "catalog";
+  sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived";
+  originNote?: string;
+  sourceLabel?: string;
   geometrySourceUrl?: string;
+  geometrySourceLabel?: string;
   reason?: string;
   manualStep?: string;
   coverage?: PublicCoverageOrders;

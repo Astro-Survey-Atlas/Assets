@@ -151,13 +151,15 @@ let overlapRequestSequence = 0;
 let overlapEvidenceSequence = 0;
 let overlapController: AbortController | null = null;
 let overlapEvidenceController: AbortController | null = null;
+let overlapDetailsController: AbortController | null = null;
 let activeOverlapSurveyIds: string[] = [];
 let activeOverlapComponents: OverlapComponentView[] = [];
 const queuedLayerIds = new Set<string>();
 let selectedQueueComponent: OverlapComponentView | null = null;
 let renderedQueueComponentId: string | null = null;
 let overlapDrawerOpen = false;
-let overlapDrawerPreviousState: { layersHidden: boolean; queueHidden: boolean; panelHidden: boolean } | null = null;
+let overlapDrawerPreviousState: { layersHidden: boolean; queueHidden: boolean; panelHidden: boolean; helpHidden: boolean; guideHidden: boolean } | null = null;
+let overlapDrawerPreviousFocus: HTMLElement | null = null;
 let layerCloseTimer: number | null = null;
 let layerCloseDeadline = 0;
 let layerCloseRemaining = 0;
@@ -293,6 +295,13 @@ function updateCoverageInspector(inspection: SurveyLayerInspection | null): void
   }));
 }
 
+function updateOverlapViewport(): void {
+  if (!coverageDots) return;
+  const drawer = byId("overlap-drawer");
+  const inset = overlapDrawerOpen && window.innerWidth > 820 && !drawer.hidden ? drawer.getBoundingClientRect().width : 0;
+  coverageDots.setViewportRightInset(inset);
+}
+
 function visibleSurveyIdsFromControls(): string[] {
   return [...byId("coverage-layers").querySelectorAll<HTMLInputElement>("input[type=checkbox]:checked")]
     .map((input) => input.dataset.surveyId)
@@ -355,12 +364,38 @@ function overlapBounds(pixels: number[], order: number): { areaDeg2: number; raM
 }
 
 interface OverlapEvidenceLookup { endpoint: string; layerIds: string[]; order: number; precision: "exact" | "estimated" | "entrypoint-only" | "truncated"; deferred: boolean }
-interface OverlapEvidenceResult { available: boolean; precision: string; truncated: boolean; edges: Array<{ layerId?: string; releaseId?: string; sourceFileId?: string; fileName?: string; sourceUri?: string; downloadUrl?: string; ipix: number; precision: string }>; sourceFiles: Array<Record<string, unknown>>; notes?: string[] }
+interface OverlapEvidenceResult {
+  available: boolean;
+  precision: string;
+  truncated: boolean;
+  edges: Array<{
+    layerId?: string;
+    surveyId?: string;
+    releaseId?: string;
+    productId?: string;
+    product?: string;
+    modality?: string;
+    sourceFileId?: string;
+    fileName?: string;
+    sourceUri?: string;
+    downloadUrl?: string;
+    raMin?: number;
+    raMax?: number;
+    decMin?: number;
+    decMax?: number;
+    sizeBytes?: number;
+    ipix: number;
+    precision: string;
+  }>;
+  sourceFiles: Array<Record<string, unknown>>;
+  notes?: string[];
+}
 interface OverlapComponentView { id: string; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; evidenceLookup?: OverlapEvidenceLookup; surveys?: Array<{ surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; unitKind?: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }> }
 interface OverlapDetailsResponse {
   schemaVersion: 1;
   component: OverlapComponentView;
-  publicSources: Array<{ layerId: string; surveyId: string; surveyName: string; releaseId: string; releaseLabel?: string; product: string; modality?: string; description?: string; sourceUrl?: string; geometrySourceUrl?: string; coverageClaim?: { kind: string; url?: string; status?: string } }>;
+  publicSources: Array<{ layerId: string; surveyId: string; surveyName: string; releaseId: string; releaseLabel?: string; product: string; modality?: string; description?: string; sourceUrl?: string; geometrySourceUrl?: string; coverageClaim?: { kind: string; url?: string; status?: string }; dataOrigin?: string; sourceTier?: string; sourceLabel?: string; geometrySourceLabel?: string; sourceUnits?: { status?: string; unitKind?: string; units?: Array<{ unitId: string; exposureCount?: number; lastNight?: number; downloadUrl?: string }>; totalUnits?: number; truncated?: boolean; notes?: string } }>;
+  assetsEvidence: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; artifacts: Array<{ id: string; kind: string; label: string; downloadUrl: string; previewUrl?: string; sha256: string; sizeBytes: number }> }>;
   warehouseEvidence: Array<{ layerId: string; surveyId: string; releaseId: string; productId: string; product?: string; modality?: string; state: string; scanRunId?: string; availableOrders: number[]; commonOrder: number; coverageCells: number; fileCount: number; coverageCount: number; precision: string; sourceSnapshotSha256?: string; connector: { status: string; name?: string; type?: string }; method: { summary: string; docsUrl?: string } }>;
   method: { summary: string; docsUrl?: string };
   reverseLookup: { endpoint: string; layerIds: string[]; order: number; precision: string; deferred: boolean };
@@ -565,6 +600,7 @@ function renderOverlapLoadingPanel(surveyIds: string[], order: number): void {
   label.textContent = t("coverage.queryingPlan");
   loading.append(spinner, label);
   content.replaceChildren(summary, loading);
+  setOverlapExpandVisible(false);
   positionOverlapPanel();
 }
 
@@ -579,6 +615,7 @@ function renderOverlapErrorPanel(surveyIds: string[]): void {
   message.className = "overlap-error";
   message.textContent = t("coverage.overlapFailed");
   content.replaceChildren(message);
+  setOverlapExpandVisible(false);
   positionOverlapPanel();
 }
 
@@ -587,6 +624,7 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
   const content = byId("coverage-detail-content");
   panel.classList.add("is-overlap-panel");
   panel.hidden = false;
+  setOverlapExpandVisible(Boolean(componentData?.length ?? activeOverlapComponents.length));
   byId("coverage-detail-kicker").textContent = t("coverage.overlapResult");
   byId("coverage-detail-title").textContent = `${scope} · ${surveyIds.length} SURVEYS`;
   content.replaceChildren();
@@ -624,6 +662,7 @@ function selectOverlapComponent(component: OverlapComponentView, surveyIds = act
   content.querySelectorAll<HTMLButtonElement>(".overlap-components button").forEach((entry) => entry.classList.toggle("is-active", entry.textContent === component.id));
   coverageDots?.setActiveOverlapComponent(component.id);
   updateOverlapHud(component);
+  updateOverlapViewport();
   coverageDots?.focusPixels(component.order, component.cells);
   renderOverlapComponent(component, surveyIds, content);
 }
@@ -659,6 +698,30 @@ function sourceValue(source: Record<string, unknown>, keys: string[]): string | 
   return undefined;
 }
 
+const PRIVATE_HOST = /^(?:localhost|127(?:\.|$)|0(?:\.|$)|10(?:\.|$)|192\.168(?:\.|$)|169\.254(?:\.|$)|172\.(?:1[6-9]|2\d|3[0-1])(?:\.|$)|\[?::1\]?$)/i;
+const INTERNAL_HOST = /(?:\.local$|\.internal$|\.svc(?:\.|$)|\.cluster\.local$|(?:^|[-.])(minio|elasticsearch|kubernetes)(?:[-.]|$))/i;
+
+/** Keep downloadable links in the public UI limited to browser-safe external URLs. */
+function publicExternalUrl(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  let parsed: URL;
+  try { parsed = new URL(value); } catch { return undefined; }
+  if (!/^https?:$/.test(parsed.protocol) || parsed.username || parsed.password || PRIVATE_HOST.test(parsed.hostname) || INTERNAL_HOST.test(parsed.hostname)) return undefined;
+  return parsed.toString();
+}
+
+function publicFileName(value: unknown): string {
+  const raw = typeof value === "string" ? value : "";
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    const name = parsed.pathname.split("/").filter(Boolean).at(-1);
+    return name ?? "";
+  } catch {
+    return raw.split(/[\\/]/).filter(Boolean).at(-1) ?? "";
+  }
+}
+
 async function fetchOverlapEvidence(component: OverlapComponentView, signal?: AbortSignal): Promise<OverlapEvidenceResult | null> {
   const lookup = component.evidenceLookup;
   if (!lookup) return null;
@@ -681,6 +744,26 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
+const OVERLAP_DOWNLOAD_HEADER = [
+  "component_id", "order", "nside", "ipix", "precision", "layer_id", "survey_id", "release_id", "product", "modality",
+  "source_file_id", "file_name", "external_source_url", "download_url", "ra_min_deg", "ra_max_deg", "dec_min_deg", "dec_max_deg", "area_deg2", "notes",
+] as const;
+
+function publicLayerEntry(layerId: string | undefined): { surveyId: string; releaseId: string; product: string; modality: string; sourceUrl?: string; geometrySourceUrl?: string } {
+  const layer = layerId ? coverageCatalog?.layers.find((entry) => entry.layerId === layerId) : undefined;
+  const survey = layer ? surveyIndex?.surveys.find((entry) => entry.id === layer.surveyId) : undefined;
+  const release = layer ? survey?.releases.find((entry) => entry.id === layer.releaseId) : undefined;
+  const product = layer ? release?.products.find((entry) => entry.name === layer.product) : undefined;
+  return {
+    surveyId: layer?.surveyId ?? "",
+    releaseId: layer?.releaseId ?? "",
+    product: product?.name ?? layer?.product ?? "",
+    modality: product?.modality ?? layer?.modality ?? "",
+    ...(publicExternalUrl(product?.sourceUrl ?? layer?.recipe?.sourceUrl) ? { sourceUrl: publicExternalUrl(product?.sourceUrl ?? layer?.recipe?.sourceUrl) } : {}),
+    ...(publicExternalUrl(product?.geometrySourceUrl) ? { geometrySourceUrl: publicExternalUrl(product?.geometrySourceUrl) } : {}),
+  };
+}
+
 function overlapCsvRows(component: OverlapComponentView, result: OverlapEvidenceResult | null): string[][] {
   const files = new Map<string, Record<string, unknown>>();
   result?.sourceFiles.forEach((source) => {
@@ -688,10 +771,24 @@ function overlapCsvRows(component: OverlapComponentView, result: OverlapEvidence
     files.set(id, source);
   });
   const edges = result?.edges ?? [];
-  if (!edges.length) return [[component.id, String(component.order), String(2 ** component.order), "", result?.precision ?? "entrypoint-only", "", "", "", "", "", "", "", "", String(component.bounds.raMin), String(component.bounds.raMax), String(component.bounds.decMin), String(component.bounds.decMax), String(component.bounds.areaDeg2)]];
+  const fallbackLayers = [...(coverageCatalog?.layers ?? [])].filter((layer) => layer.cells.get(component.order)?.some((cell) => component.cells.includes(cell)));
+  if (!edges.length) {
+    const layers = fallbackLayers.length ? fallbackLayers : [{ layerId: "", surveyId: "", releaseId: "", product: "", modality: "" }];
+    return layers.map((layer) => {
+      const entry = publicLayerEntry(layer.layerId);
+      return [component.id, String(component.order), String(2 ** component.order), "", result?.precision ?? "entrypoint-only", layer.layerId, entry.surveyId, entry.releaseId, entry.product, entry.modality, "", "", entry.geometrySourceUrl ?? entry.sourceUrl ?? "", entry.sourceUrl ?? "", String(component.bounds.raMin), String(component.bounds.raMax), String(component.bounds.decMin), String(component.bounds.decMax), String(component.bounds.areaDeg2), entry.sourceUrl || entry.geometrySourceUrl ? "" : "no-public-download-entrypoint"];
+    });
+  }
   return edges.map((edge) => {
     const sourceId = edge.sourceFileId ?? "";
     const source = files.get(sourceId) ?? {};
+    const layer = publicLayerEntry(edge.layerId ?? sourceValue(source, ["layerId", "layer_id"]));
+    const sourceUrl = publicExternalUrl(edge.sourceUri ?? sourceValue(source, ["sourceUri", "source_uri", "sourceUrl", "source_url", "uri", "urn"])) ?? layer.geometrySourceUrl ?? layer.sourceUrl;
+    const downloadUrl = publicExternalUrl(edge.downloadUrl ?? sourceValue(source, ["downloadUrl", "download_url"])) ?? layer.sourceUrl;
+    const raMin = Number.isFinite(edge.raMin) ? edge.raMin : component.bounds.raMin;
+    const raMax = Number.isFinite(edge.raMax) ? edge.raMax : component.bounds.raMax;
+    const decMin = Number.isFinite(edge.decMin) ? edge.decMin : component.bounds.decMin;
+    const decMax = Number.isFinite(edge.decMax) ? edge.decMax : component.bounds.decMax;
     return [
       component.id,
       String(component.order),
@@ -699,18 +796,20 @@ function overlapCsvRows(component: OverlapComponentView, result: OverlapEvidence
       String(edge.ipix ?? ""),
       edge.precision ?? result?.precision ?? "",
       edge.layerId ?? sourceValue(source, ["layerId", "layer_id"]) ?? "",
-      sourceValue(source, ["surveyId", "survey_id"]) ?? "",
-      sourceValue(source, ["releaseId", "release_id"]) ?? "",
-      sourceValue(source, ["product", "productName", "product_name"]) ?? "",
+      edge.surveyId ?? sourceValue(source, ["surveyId", "survey_id"]) ?? layer.surveyId,
+      edge.releaseId ?? sourceValue(source, ["releaseId", "release_id"]) ?? layer.releaseId,
+      edge.product ?? sourceValue(source, ["product", "productName", "product_name"]) ?? layer.product,
+      edge.modality ?? sourceValue(source, ["modality", "data_modality"]) ?? layer.modality,
       sourceId,
-      edge.fileName ?? sourceValue(source, ["name", "fileName", "file_name"]) ?? "",
-      edge.sourceUri ?? sourceValue(source, ["sourceUri", "source_uri", "uri", "urn"]) ?? "",
-      edge.downloadUrl ?? sourceValue(source, ["downloadUrl", "download_url"]) ?? "",
-      String(component.bounds.raMin),
-      String(component.bounds.raMax),
-      String(component.bounds.decMin),
-      String(component.bounds.decMax),
+      publicFileName(edge.fileName ?? sourceValue(source, ["name", "fileName", "file_name"])),
+      sourceUrl ?? "",
+      downloadUrl ?? "",
+      String(raMin),
+      String(raMax),
+      String(decMin),
+      String(decMax),
       String(component.bounds.areaDeg2),
+      sourceUrl || downloadUrl ? "" : "no-public-download-entrypoint",
     ];
   });
 }
@@ -721,9 +820,8 @@ async function downloadOverlapCsv(components: OverlapComponentView[], filename: 
   button.textContent = t("coverage.downloadLoading");
   try {
     const results = await Promise.all(components.map((component) => fetchOverlapEvidence(component)));
-    const header = ["component_id", "order", "nside", "ipix", "precision", "layer_id", "survey_id", "release_id", "product", "source_file_id", "file_name", "source_uri", "download_url", "ra_min_deg", "ra_max_deg", "dec_min_deg", "dec_max_deg", "area_deg2"];
     const rows = components.flatMap((component, index) => overlapCsvRows(component, results[index]));
-    const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
+    const csv = [OVERLAP_DOWNLOAD_HEADER, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
     const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
@@ -736,6 +834,46 @@ async function downloadOverlapCsv(components: OverlapComponentView[], filename: 
   } finally {
     button.disabled = false;
     button.replaceChildren(icon("download"), document.createTextNode(original));
+    renderIcons();
+  }
+}
+
+function overlapJsonRows(component: OverlapComponentView, result: OverlapEvidenceResult | null): Array<Record<string, string>> {
+  return overlapCsvRows(component, result).map((row) => Object.fromEntries(OVERLAP_DOWNLOAD_HEADER.map((key, index) => [key, row[index] ?? ""])));
+}
+
+async function downloadOverlapJson(components: OverlapComponentView[], filename: string, button: HTMLButtonElement): Promise<void> {
+  const original = button.textContent ?? "Download JSON";
+  button.disabled = true;
+  button.textContent = t("coverage.downloadLoading");
+  try {
+    const results = await Promise.all(components.map((component) => fetchOverlapEvidence(component)));
+    const payload = {
+      schemaVersion: 1,
+      coordinateFrame: "ICRS",
+      ordering: "NESTED",
+      generatedAt: new Date().toISOString(),
+      components: components.map((component, index) => ({
+        componentId: component.id,
+        order: component.order,
+        nside: 2 ** component.order,
+        cells: component.cells,
+        bounds: component.bounds,
+        rows: overlapJsonRows(component, results[index]),
+      })),
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast(t("coverage.downloadReady"));
+  } catch {
+    toast(t("coverage.downloadUnavailable"));
+  } finally {
+    button.disabled = false;
+    button.replaceChildren(icon("file-json-2"), document.createTextNode(original));
     renderIcons();
   }
 }
@@ -763,7 +901,7 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): v
   files.forEach((source) => {
     const row = document.createElement("div");
     row.className = "overlap-evidence-file";
-    const name = sourceValue(source, ["name", "fileName", "file_name", "uri", "source_uri", "urn"]) ?? "source file";
+    const name = publicFileName(sourceValue(source, ["name", "fileName", "file_name"])) || "source file";
     const title = document.createElement("strong");
     title.textContent = name;
     row.append(title);
@@ -776,7 +914,7 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): v
       const decMax = Number(summary.dec_max_deg);
       if ([raMin, raMax, decMin, decMax].every(Number.isFinite)) row.append(Object.assign(document.createElement("small"), { textContent: `RA ${raMin.toFixed(3)}°–${raMax.toFixed(3)}° · DEC ${decMin.toFixed(3)}°–${decMax.toFixed(3)}°` }));
     }
-    const uri = sourceValue(source, ["downloadUrl", "download_url", "sourceUrl", "source_url", "uri", "source_uri", "urn"]);
+    const uri = publicExternalUrl(sourceValue(source, ["downloadUrl", "download_url", "sourceUrl", "source_url", "uri", "source_uri", "urn"]));
     if (uri) {
       if (/^https?:\/\//i.test(uri)) {
         const link = document.createElement("a");
@@ -785,8 +923,8 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): v
         link.rel = "noreferrer";
         link.textContent = t("coverage.downloadOfficial");
         row.append(link);
-      } else row.append(Object.assign(document.createElement("code"), { textContent: uri }));
-    }
+      }
+    } else row.append(Object.assign(document.createElement("small"), { textContent: "no-public-download-entrypoint" }));
     list.append(row);
   });
   node.append(list);
@@ -857,7 +995,9 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
           tileCopy.className = "overlap-tile-copy";
           const link = document.createElement("a");
           link.className = "overlap-tile-link";
-          link.href = unit.downloadUrl;
+          const unitUrl = publicExternalUrl(unit.downloadUrl);
+          if (!unitUrl) return;
+          link.href = unitUrl;
           link.target = "_blank";
           link.rel = "noreferrer";
           link.textContent = `TILE ${unit.unitId}`;
@@ -872,7 +1012,8 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
       }
       row.append(tilePlan);
     }
-    if (entry.downloadUrl) { const link = document.createElement("a"); link.href = entry.downloadUrl; link.target = "_blank"; link.rel = "noreferrer"; link.textContent = t("coverage.releaseEntry"); row.append(link); }
+    const entryUrl = publicExternalUrl(entry.downloadUrl);
+    if (entryUrl) { const link = document.createElement("a"); link.href = entryUrl; link.target = "_blank"; link.rel = "noreferrer"; link.textContent = t("coverage.releaseEntry"); row.append(link); }
     products.append(row);
   });
   if (!entries.length) products.append(Object.assign(document.createElement("p"), { className: "overlap-empty", textContent: t("coverage.noProducts") }));
@@ -887,6 +1028,12 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
   currentDownload.append(icon("download"), document.createTextNode(t("coverage.downloadCurrent")));
   currentDownload.addEventListener("click", () => void downloadOverlapCsv([component], `atlas-overlap-${component.id}-download-plan.csv`, currentDownload));
   downloads.append(currentDownload);
+  const currentJson = document.createElement("button");
+  currentJson.type = "button";
+  currentJson.className = "command-button overlap-download-button";
+  currentJson.append(icon("file-json-2"), document.createTextNode(t("coverage.downloadJson")));
+  currentJson.addEventListener("click", () => void downloadOverlapJson([component], `atlas-overlap-${component.id}-download-plan.json`, currentJson));
+  downloads.append(currentJson);
   if (activeOverlapComponents.length > 1) {
     const allDownload = document.createElement("button");
     allDownload.type = "button";
@@ -894,6 +1041,12 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
     allDownload.append(icon("download"), document.createTextNode(t("coverage.downloadAll")));
     allDownload.addEventListener("click", () => void downloadOverlapCsv(activeOverlapComponents, "atlas-overlap-all-download-plan.csv", allDownload));
     downloads.append(allDownload);
+    const allJson = document.createElement("button");
+    allJson.type = "button";
+    allJson.className = "command-button overlap-download-button";
+    allJson.append(icon("file-json-2"), document.createTextNode(t("coverage.downloadJson")));
+    allJson.addEventListener("click", () => void downloadOverlapJson(activeOverlapComponents, "atlas-overlap-all-download-plan.json", allJson));
+    downloads.append(allJson);
   }
   list.append(downloads);
   if (component.evidenceLookup) {
@@ -903,6 +1056,307 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
     void loadOverlapEvidence(component, evidence);
   }
   content.append(list);
+}
+
+function setOverlapExpandVisible(visible: boolean): void {
+  const button = byId<HTMLButtonElement>("overlap-expand");
+  button.hidden = !visible;
+}
+
+function overlapDetailsCacheKey(component: OverlapComponentView): string {
+  return `${activeOverlapSurveyIds.slice().sort().join(",")}:${component.id}:${component.order}`;
+}
+
+async function fetchOverlapDetails(component: OverlapComponentView, signal?: AbortSignal): Promise<OverlapDetailsResponse> {
+  const key = overlapDetailsCacheKey(component);
+  const cached = overlapDetailsCache.get(key);
+  if (cached) return cached;
+  const response = await fetch("/api/v1/coverage/overlap/details", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ surveyIds: activeOverlapSurveyIds, componentId: component.id, requestedOrder: component.order }),
+    signal,
+  });
+  if (!response.ok) throw new Error(`overlap details HTTP ${response.status}`);
+  const details = await response.json() as OverlapDetailsResponse;
+  overlapDetailsCache.set(key, details);
+  return details;
+}
+
+function drawerSection(title: string): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "overlap-drawer-section";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  section.append(heading);
+  return section;
+}
+
+function drawerText(value: unknown, fallback = "--"): string {
+  return typeof value === "string" && value.length ? value : fallback;
+}
+
+function drawerExternalLink(url: unknown, label: string): HTMLAnchorElement | null {
+  const href = publicExternalUrl(url);
+  if (!href) return null;
+  const link = document.createElement("a");
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = label;
+  return link;
+}
+
+function drawerDocLink(url: unknown, label: string): HTMLAnchorElement | null {
+  if (typeof url !== "string" || !url.trim()) return null;
+  if (url.startsWith("/") && !url.startsWith("//")) {
+    const link = document.createElement("a");
+    link.href = url;
+    link.textContent = label;
+    return link;
+  }
+  return drawerExternalLink(url, label);
+}
+
+function renderOverlapDrawerComponents(): void {
+  const host = byId("overlap-drawer-components");
+  host.replaceChildren();
+  const heading = document.createElement("strong");
+  heading.textContent = t("coverage.connectedRegions");
+  host.append(heading);
+  activeOverlapComponents.forEach((component) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `overlap-drawer-component-button${selectedQueueComponent?.id === component.id ? " is-active" : ""}`;
+    button.setAttribute("aria-pressed", String(selectedQueueComponent?.id === component.id));
+    const id = document.createElement("span");
+    id.textContent = component.id;
+    const summary = document.createElement("small");
+    summary.textContent = `O${component.order} · ${component.cells.length.toLocaleString("en-US")} cells`;
+    button.append(id, summary);
+    button.addEventListener("click", () => selectOverlapDrawerComponent(component));
+    host.append(button);
+  });
+}
+
+function renderOverlapDrawerLoading(component: OverlapComponentView): void {
+  const drawer = byId("overlap-drawer");
+  byId("overlap-drawer-title").textContent = `${component.id} · O${component.order}`;
+  const content = byId("overlap-drawer-content");
+  const loading = document.createElement("div");
+  loading.className = "overlap-drawer-loading";
+  const spinner = document.createElement("span");
+  spinner.setAttribute("aria-hidden", "true");
+  const label = document.createElement("strong");
+  label.textContent = t("coverage.queryingPlan");
+  loading.append(spinner, label);
+  content.replaceChildren(loading);
+  drawer.setAttribute("aria-busy", "true");
+}
+
+function renderOverlapDrawerError(message: string): void {
+  byId("overlap-drawer").removeAttribute("aria-busy");
+  const content = byId("overlap-drawer-content");
+  const error = document.createElement("p");
+  error.className = "overlap-drawer-error";
+  error.textContent = message;
+  content.replaceChildren(error);
+}
+
+function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
+  const drawer = byId("overlap-drawer");
+  drawer.removeAttribute("aria-busy");
+  const component = details.component;
+  byId("overlap-drawer-title").textContent = `${component.id} · O${component.order} · ${component.cells.length.toLocaleString("en-US")} cells`;
+  const content = byId("overlap-drawer-content");
+  content.replaceChildren();
+
+  const geometry = drawerSection("REGION");
+  const geometrySummary = document.createElement("p");
+  geometrySummary.className = "overlap-drawer-summary";
+  geometrySummary.textContent = `${component.id} · O${component.order} · NSIDE ${2 ** component.order} · ${component.cells.length.toLocaleString("en-US")} cells · ${component.bounds.areaDeg2.toFixed(2)} deg²`;
+  const geometryGrid = document.createElement("dl");
+  geometryGrid.className = "overlap-drawer-grid";
+  const geometryRows: Array<[string, string]> = [
+    ["RA", `${component.bounds.raMin.toFixed(4)}°${component.bounds.raWraps ? " ↷ " : " – "}${component.bounds.raMax.toFixed(4)}°`],
+    ["DEC", `${component.bounds.decMin.toFixed(4)}° – ${component.bounds.decMax.toFixed(4)}°`],
+    ["CELLS", component.cells.length.toLocaleString("en-US")],
+    ["AREA", `${component.bounds.areaDeg2.toFixed(3)} deg²`],
+  ];
+  geometryRows.forEach(([label, value]) => {
+    const cell = document.createElement("div");
+    const dt = document.createElement("dt"); dt.textContent = label;
+    const dd = document.createElement("dd"); dd.textContent = value;
+    cell.append(dt, dd); geometryGrid.append(cell);
+  });
+  geometry.append(geometrySummary, geometryGrid);
+  content.append(geometry);
+
+  const publicSection = drawerSection(t("coverage.publicSources"));
+  const publicList = document.createElement("div");
+  publicList.className = "overlap-drawer-list";
+  if (!details.publicSources.length) {
+    const empty = document.createElement("p"); empty.className = "overlap-drawer-copy"; empty.textContent = t("coverage.publicUnavailable"); publicList.append(empty);
+  } else details.publicSources.forEach((source) => {
+    const card = document.createElement("article"); card.className = "overlap-drawer-card";
+    const title = document.createElement("strong"); title.textContent = `${drawerText(source.surveyName, source.surveyId)} · ${drawerText(source.releaseLabel ?? source.releaseId)} · ${drawerText(source.product)}`;
+    card.append(title);
+    const metadata = document.createElement("small"); metadata.textContent = `${source.modality ? `${source.modality} · ` : ""}${source.dataOrigin ? `${source.dataOrigin} · ` : ""}${source.coverageClaim?.kind?.toUpperCase() ?? "OVERVIEW"}`; card.append(metadata);
+    if (source.sourceLabel || source.sourceTier || source.geometrySourceLabel) {
+      const provenance = document.createElement("small"); provenance.textContent = `${source.sourceLabel ?? "Source"}${source.sourceTier ? ` · ${source.sourceTier}` : ""}${source.geometrySourceLabel ? ` · ${source.geometrySourceLabel}` : ""}`; card.append(provenance);
+    }
+    if (source.description) card.append(Object.assign(document.createElement("p"), { className: "overlap-drawer-copy", textContent: source.description }));
+    const links = document.createElement("div"); links.className = "overlap-unit-links";
+    const sourceLink = drawerExternalLink(source.sourceUrl, source.sourceLabel ?? "Source / release page"); if (sourceLink) links.append(sourceLink);
+    const geometryLink = drawerExternalLink(source.geometrySourceUrl ?? source.coverageClaim?.url, source.geometrySourceLabel ?? "Geometry / inventory input"); if (geometryLink) links.append(geometryLink);
+    if (links.childElementCount) card.append(links);
+    if (source.sourceUnits) {
+      const units = document.createElement("small"); units.textContent = `${source.sourceUnits.unitKind ?? "source units"} · ${source.sourceUnits.totalUnits ?? source.sourceUnits.units?.length ?? 0}${source.sourceUnits.truncated ? " · truncated" : ""}`; card.append(units);
+      source.sourceUnits.units?.slice(0, 12).forEach((unit) => {
+      const unitLink = drawerExternalLink(unit.downloadUrl, unit.unitId);
+        if (unitLink) links.append(unitLink);
+      });
+    }
+    publicList.append(card);
+  });
+  publicSection.append(publicList);
+  content.append(publicSection);
+
+  const assetsSection = drawerSection("ASSETS RELEASE EVIDENCE");
+  const assetsList = document.createElement("div"); assetsList.className = "overlap-drawer-list";
+  if (!details.assetsEvidence.length) assetsList.append(Object.assign(document.createElement("p"), { className: "overlap-drawer-copy", textContent: "No Assets release artifacts are linked to this layer." }));
+  details.assetsEvidence.forEach((entry) => {
+    const card = document.createElement("article"); card.className = "overlap-drawer-card is-assets";
+    const title = document.createElement("strong"); title.textContent = `${entry.product} · ${entry.artifacts.length} artifacts`; card.append(title);
+    entry.artifacts.forEach((artifact) => {
+      const row = document.createElement("div"); row.className = "overlap-unit-links";
+      const link = drawerDocLink(artifact.downloadUrl, `${artifact.kind.toUpperCase()} · ${artifact.label}`); if (link) row.append(link);
+      row.append(Object.assign(document.createElement("small"), { textContent: `${bytes(artifact.sizeBytes)} · SHA-256 ${artifact.sha256.slice(0, 12)}…` }));
+      card.append(row);
+    });
+    assetsList.append(card);
+  });
+  assetsSection.append(assetsList); content.append(assetsSection);
+
+  const warehouseSection = drawerSection(t("coverage.warehouseEvidence"));
+  const warehouseList = document.createElement("div");
+  warehouseList.className = "overlap-drawer-list";
+  if (!details.warehouseEvidence.length) {
+    const empty = document.createElement("p"); empty.className = "overlap-drawer-copy"; empty.textContent = t("coverage.warehouseUnavailable"); warehouseList.append(empty);
+  } else details.warehouseEvidence.forEach((evidence) => {
+    const card = document.createElement("article"); card.className = "overlap-drawer-card is-warehouse";
+    const title = document.createElement("strong"); title.textContent = `${drawerText(evidence.product, evidence.productId)} · ${drawerText(evidence.releaseId)} `;
+    const status = document.createElement("span"); status.className = "overlap-drawer-card-status"; status.dataset.state = evidence.state; status.textContent = evidence.state; title.append(status); card.append(title);
+    const counts = document.createElement("small"); counts.textContent = `${evidence.modality ?? "coverage"} · ${evidence.coverageCells} cells · ${evidence.fileCount} files · ${evidence.coverageCount} edges · ${evidence.precision} · O${evidence.commonOrder}`; card.append(counts);
+    if (evidence.scanRunId) card.append(Object.assign(document.createElement("small"), { textContent: `SCAN RUN ${evidence.scanRunId}` }));
+    if (evidence.sourceSnapshotSha256) card.append(Object.assign(document.createElement("code"), { textContent: `SNAPSHOT SHA-256 ${evidence.sourceSnapshotSha256}` }));
+    const connector = document.createElement("small"); connector.textContent = `${t("coverage.connector")}: ${evidence.connector.status}${evidence.connector.name ? ` · ${evidence.connector.name}` : ""}${evidence.connector.type ? ` · ${evidence.connector.type}` : ""}`; card.append(connector);
+    warehouseList.append(card);
+  });
+  warehouseSection.append(warehouseList);
+  content.append(warehouseSection);
+
+  const methodSection = drawerSection(t("coverage.method"));
+  const methodCopy = document.createElement("p"); methodCopy.className = "overlap-drawer-copy"; methodCopy.textContent = details.method.summary; methodSection.append(methodCopy);
+  const methodLink = drawerDocLink(details.method.docsUrl, "Coverage method documentation"); if (methodLink) methodSection.append(methodLink);
+  const reverse = document.createElement("p"); reverse.className = "overlap-drawer-copy"; reverse.textContent = `${t("coverage.reverseLookup")}: ${details.reverseLookup.endpoint} · O${details.reverseLookup.order} · ${details.reverseLookup.precision}${details.reverseLookup.deferred ? " · deferred" : ""}`; methodSection.append(reverse);
+  content.append(methodSection);
+
+  const actionsSection = drawerSection("DOWNLOAD PLAN");
+  const actions = document.createElement("div"); actions.className = "overlap-drawer-actions";
+  const currentCsv = document.createElement("button"); currentCsv.type = "button"; currentCsv.className = "command-button overlap-download-button"; currentCsv.append(icon("download"), document.createTextNode(t("coverage.downloadCurrent"))); currentCsv.addEventListener("click", () => void downloadOverlapCsv([component], `atlas-overlap-${component.id}-download-plan.csv`, currentCsv)); actions.append(currentCsv);
+  const currentJson = document.createElement("button"); currentJson.type = "button"; currentJson.className = "command-button overlap-download-button"; currentJson.append(icon("file-json-2"), document.createTextNode(t("coverage.downloadJson"))); currentJson.addEventListener("click", () => void downloadOverlapJson([component], `atlas-overlap-${component.id}-download-plan.json`, currentJson)); actions.append(currentJson);
+  if (activeOverlapComponents.length > 1) {
+    const allCsv = document.createElement("button"); allCsv.type = "button"; allCsv.className = "command-button overlap-download-button"; allCsv.append(icon("download"), document.createTextNode(t("coverage.downloadAll"))); allCsv.addEventListener("click", () => void downloadOverlapCsv(activeOverlapComponents, "atlas-overlap-all-download-plan.csv", allCsv)); actions.append(allCsv);
+    const allJson = document.createElement("button"); allJson.type = "button"; allJson.className = "command-button overlap-download-button"; allJson.append(icon("file-json-2"), document.createTextNode(t("coverage.downloadJson"))); allJson.addEventListener("click", () => void downloadOverlapJson(activeOverlapComponents, "atlas-overlap-all-download-plan.json", allJson)); actions.append(allJson);
+  }
+  actionsSection.append(actions);
+  content.append(actionsSection);
+  renderIcons();
+}
+
+function renderOverlapDrawerDetails(component: OverlapComponentView): void {
+  renderOverlapDrawerLoading(component);
+  overlapDetailsController?.abort();
+  const controller = new AbortController();
+  overlapDetailsController = controller;
+  void fetchOverlapDetails(component, controller.signal).then((details) => {
+    if (!overlapDrawerOpen || controller.signal.aborted || selectedQueueComponent?.id !== component.id) return;
+    renderOverlapDrawerResponse(details);
+  }).catch((error: unknown) => {
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    if (overlapDrawerOpen && !controller.signal.aborted && selectedQueueComponent?.id === component.id) renderOverlapDrawerError(t("coverage.overlapFailed"));
+  }).finally(() => {
+    if (overlapDetailsController === controller) overlapDetailsController = null;
+  });
+}
+
+function selectOverlapDrawerComponent(component: OverlapComponentView): void {
+  if (!overlapDrawerOpen) return;
+  selectedQueueComponent = component;
+  coverageDots?.setActiveOverlapComponent(component.id);
+  updateOverlapViewport();
+  coverageDots?.focusPixels(component.order, component.cells);
+  renderSelectionQueue();
+  renderOverlapDrawerComponents();
+  renderOverlapDrawerDetails(component);
+}
+
+function openOverlapDrawer(): void {
+  if (!overlapMode || !activeOverlapComponents.length) return;
+  const drawer = byId("overlap-drawer");
+  if (!overlapDrawerPreviousState) {
+    overlapDrawerPreviousState = {
+      layersHidden: byId("coverage-layers").hidden,
+      queueHidden: byId("selection-queue").hidden,
+      panelHidden: byId("coverage-detail-panel").hidden,
+      helpHidden: byId("coverage-help").hidden,
+      guideHidden: byId("coverage-empty-guide").hidden,
+    };
+    overlapDrawerPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
+  byId("coverage-layers").hidden = true;
+  byId("selection-queue").hidden = true;
+  byId("coverage-detail-panel").hidden = true;
+  byId("coverage-help").hidden = true;
+  byId("coverage-empty-guide").hidden = true;
+  overlapDrawerOpen = true;
+  document.body.dataset.overlapDrawer = "open";
+  drawer.hidden = false;
+  drawer.setAttribute("aria-hidden", "false");
+  updateOverlapViewport();
+  const component = activeOverlapComponents.find((entry) => entry.id === selectedQueueComponent?.id) ?? activeOverlapComponents[0]!;
+  renderOverlapDrawerComponents();
+  selectOverlapDrawerComponent(component);
+  byId<HTMLButtonElement>("overlap-drawer-close").focus();
+}
+
+function closeOverlapDrawer(): void {
+  if (!overlapDrawerOpen && !overlapDrawerPreviousState) return;
+  overlapDetailsController?.abort();
+  overlapDetailsController = null;
+  overlapDrawerOpen = false;
+  document.body.removeAttribute("data-overlap-drawer");
+  const drawer = byId("overlap-drawer");
+  drawer.hidden = true;
+  drawer.setAttribute("aria-hidden", "true");
+  updateOverlapViewport();
+  const previous = overlapDrawerPreviousState;
+  overlapDrawerPreviousState = null;
+  if (previous) {
+    byId("coverage-layers").hidden = previous.layersHidden;
+    byId("selection-queue").hidden = previous.queueHidden;
+    byId("coverage-detail-panel").hidden = previous.panelHidden;
+    byId("coverage-help").hidden = previous.helpHidden;
+    byId("coverage-empty-guide").hidden = previous.guideHidden;
+    if (!previous.panelHidden && overlapMode && selectedQueueComponent) {
+      renderOverlapPanel(activeOverlapSurveyIds, [...new Set(activeOverlapComponents.flatMap((entry) => entry.cells))], selectedQueueComponent.order, "GLOBAL", activeOverlapComponents);
+    }
+  }
+  positionSelectionQueue();
+  positionOverlapPanel();
+  overlapDrawerPreviousFocus?.focus();
+  overlapDrawerPreviousFocus = null;
 }
 
 async function activateOverlap(forceActive?: boolean): Promise<void> {
@@ -917,6 +1371,9 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
   const requestSequence = ++overlapRequestSequence;
   overlapMode = activate;
   if (!activate) {
+    clearLayerCloseTimer();
+    coverageDots?.setViewportRightInset(0);
+    closeOverlapDrawer();
     overlapController?.abort();
     overlapController = null;
     overlapEvidenceController?.abort();
@@ -924,6 +1381,7 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
     activeOverlapSurveyIds = [];
     activeOverlapComponents = [];
     overlapEvidenceCache.clear();
+    overlapDetailsCache.clear();
     coverageDots?.setOverlapMode(false);
     coverageDots?.setActiveOverlapComponent(null);
     updateOverlapHud(null);
@@ -934,10 +1392,18 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
     panel.style.removeProperty("top");
     panel.style.removeProperty("right");
     panel.style.removeProperty("width");
+    setOverlapExpandVisible(false);
     return;
+  }
+  if (activate) {
+    clearLayerCloseTimer();
+    byId("coverage-layers").hidden = true;
+    positionSelectionQueue();
+    updateCoverageEmptyGuide();
   }
   coverageDots?.setOverlapMode(true);
   activeOverlapComponents = [];
+  overlapDetailsCache.clear();
   updateOverlapHud(null);
   overlapController?.abort();
   const controller = new AbortController();
@@ -1047,6 +1513,7 @@ function renderCoverageLayers(): void {
     handle.setAttribute("aria-label", "拖动把手");
     handle.title = "拖动排序";
     input.addEventListener("change", () => {
+      if (overlapDrawerOpen) closeOverlapDrawer();
       const enabled = [...host.querySelectorAll<HTMLInputElement>("input:checked")]
         .map((entry) => entry.dataset.surveyId)
         .filter((value): value is string => Boolean(value));
@@ -1107,7 +1574,7 @@ async function copy(value: string): Promise<void> {
 
 function renderIcons(): void {
     createIcons({
-    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, RotateCcw, Search, ShieldCheck, Telescope, X },
+    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Maximize2, Minimize2, RotateCcw, Search, ShieldCheck, Telescope, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -1447,6 +1914,7 @@ byId("preview-close").addEventListener("click", () => byId<HTMLDialogElement>("p
 byId<HTMLDialogElement>("preview-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("preview-dialog").close(); });
 function resetCoverageExperience(): void {
   closeCoverageContextMenu();
+  closeOverlapDrawer();
   applyCoverageSelection([]);
   clearLayerCloseTimer();
   overlapMode = false;
@@ -1455,6 +1923,7 @@ function resetCoverageExperience(): void {
   activeOverlapSurveyIds = [];
   activeOverlapComponents = [];
   overlapEvidenceCache.clear();
+  overlapDetailsCache.clear();
   coverageDots?.setOverlapMode(false);
   coverageDots?.setActiveOverlapComponent(null);
   updateOverlapHud(null);
@@ -1467,14 +1936,21 @@ function resetCoverageExperience(): void {
   panel.style.removeProperty("top");
   panel.style.removeProperty("right");
   panel.style.removeProperty("width");
+  setOverlapExpandVisible(false);
   updateCoverageInspector(null);
 }
 
 byId("coverage-reset").addEventListener("click", () => {
   if (isAtlasInteractive()) resetCoverageExperience();
 });
+byId("overlap-expand").addEventListener("click", () => openOverlapDrawer());
+byId("overlap-drawer-close").addEventListener("click", () => closeOverlapDrawer());
 byId("coverage-layers-toggle").addEventListener("click", () => {
   if (!isAtlasInteractive()) return;
+  if (overlapDrawerOpen) {
+    closeOverlapDrawer();
+    return;
+  }
   const layers = byId("coverage-layers");
   layers.hidden = !layers.hidden;
   positionSelectionQueue();
@@ -1520,6 +1996,7 @@ byId("home-enter").addEventListener("click", () => enterAtlasExperience());
 window.addEventListener("resize", () => {
   positionSelectionQueue();
   positionOverlapPanel();
+  updateOverlapViewport();
   updateHomeScrollProgress();
 });
 
@@ -1531,6 +2008,11 @@ document.addEventListener("keydown", (event) => {
   if (!isAtlasInteractive()) return;
   if (event.key === "Escape") {
     const now = performance.now();
+    if (overlapDrawerOpen) {
+      closeOverlapDrawer();
+      lastEscapeAt = -Infinity;
+      return;
+    }
     const doubleEscape = now - lastEscapeAt < 500;
     lastEscapeAt = now;
     closeCoverageContextMenu();
@@ -1540,6 +2022,7 @@ document.addEventListener("keydown", (event) => {
     activeOverlapSurveyIds = [];
     activeOverlapComponents = [];
     overlapEvidenceCache.clear();
+    overlapDetailsCache.clear();
     coverageDots?.setOverlapMode(false);
     coverageDots?.setActiveOverlapComponent(null);
     updateOverlapHud(null);
@@ -1550,6 +2033,7 @@ document.addEventListener("keydown", (event) => {
     panel.style.removeProperty("top");
     panel.style.removeProperty("right");
     panel.style.removeProperty("width");
+    setOverlapExpandVisible(false);
     coverageDots?.clearSelection();
     updateCoverageInspector(null);
     if (doubleEscape) resetCoverageExperience();
@@ -1580,7 +2064,13 @@ window.addEventListener("atlas:locale-change", () => {
   if (surveyIndex) renderSurveys();
   if (overlapMode && activeOverlapComponents.length) {
     const component = activeOverlapComponents.find((entry) => entry.id === selectedQueueComponent?.id) ?? activeOverlapComponents[0];
-    if (component) renderOverlapPanel(activeOverlapSurveyIds, [...new Set(activeOverlapComponents.flatMap((entry) => entry.cells))], component.order, "GLOBAL", activeOverlapComponents);
+    if (component && overlapDrawerOpen) {
+      selectedQueueComponent = component;
+      renderOverlapDrawerComponents();
+      renderOverlapDrawerDetails(component);
+    } else if (component) {
+      renderOverlapPanel(activeOverlapSurveyIds, [...new Set(activeOverlapComponents.flatMap((entry) => entry.cells))], component.order, "GLOBAL", activeOverlapComponents);
+    }
   }
   if (surveyIndex) renderSurveyFilterOptions();
   renderSelectionQueue();

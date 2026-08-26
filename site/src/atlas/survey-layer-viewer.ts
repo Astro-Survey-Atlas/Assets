@@ -378,12 +378,13 @@ function displayColor(source: string): THREE.Color {
   return color;
 }
 
-function sourceVariantColor(base: THREE.Color, index: number, count: number): THREE.Color {
+export function sourceVariantColor(base: THREE.Color, index: number, count: number): THREE.Color {
   if (count <= 1) return base.clone();
   const hsl = { h: 0, s: 0, l: 0 };
   base.getHSL(hsl);
-  const centered = (THREE.MathUtils.clamp(index, 0, count - 1) / (count - 1)) * 2 - 1;
-  return base.clone().setHSL(hsl.h, hsl.s, THREE.MathUtils.clamp(hsl.l + centered * 0.13, 0.18, 0.72));
+  const position = THREE.MathUtils.clamp(index, 0, count - 1) / (count - 1);
+  const lightness = THREE.MathUtils.lerp(0.2, 0.7, position);
+  return base.clone().setHSL(hsl.h, Math.max(0.78, hsl.s), lightness);
 }
 
 export function workspaceAssetColor(key: string): string {
@@ -523,6 +524,7 @@ export class SurveyLayerViewer {
   #overlapComponents: SurveyLayerOverlapComponent[] = [];
   #activeOverlapComponentId: string | null = null;
   #activeOverlapHighlight: OverlapHighlight | null = null;
+  #viewportRightInset = 0;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -596,6 +598,16 @@ export class SurveyLayerViewer {
     this.#renderer.setClearColor(this.#backgroundColor ?? (theme === "light" ? 0xaebbc1 : 0x000000), 1);
     (this.#starField.material as THREE.PointsMaterial).color.setHex(theme === "light" ? 0x879ca8 : 0x71808b);
     (this.#starField.material as THREE.PointsMaterial).opacity = theme === "light" ? 0.34 : 0.28;
+    this.#requestRender();
+  }
+
+  /** Shift the projection so focused sky remains centred beside a right drawer. */
+  setViewportRightInset(insetPixels: number): void {
+    const width = Math.max(1, Math.round(this.#canvas.getBoundingClientRect().width));
+    const next = THREE.MathUtils.clamp(Number.isFinite(insetPixels) ? insetPixels : 0, 0, width * 0.8);
+    if (Math.abs(next - this.#viewportRightInset) < 0.5) return;
+    this.#viewportRightInset = next;
+    this.#applyProjection(width, Math.max(1, Math.round(this.#canvas.getBoundingClientRect().height)));
     this.#requestRender();
   }
 
@@ -1202,15 +1214,19 @@ export class SurveyLayerViewer {
     const pixels = this.#model.pixelsBySurvey.get(surveyId) ?? [];
     if (!pixels.length) return;
     const color = this.#colorBySurvey.get(surveyId) ?? BASE_COLOR;
-    const cells = pixels.map((pixel) => this.#cellInput(pixel, radius, color));
     const visibleSurveyCount = [...this.#visibleSurveyIds]
       .filter((visibleSurveyId) => (this.#model.pixelsBySurvey.get(visibleSurveyId)?.length ?? 0) > 0)
       .length;
     const singleSurveySourceMode = !this.#overlapMode && visibleSurveyCount === 1;
+    const sourceIdentities = singleSurveySourceMode ? this.#model.sourceIdentitiesBySurvey.get(surveyId) ?? [] : [];
+    const sourceIndexByIdentity = new Map(sourceIdentities.map((identity, index) => [identity, index]));
+    const sourceColor = (identity: string): THREE.Color => sourceVariantColor(color, sourceIndexByIdentity.get(identity) ?? 0, Math.max(1, sourceIdentities.length));
+    const cells = pixels.map((pixel) => {
+      const sources = this.#model.sourcesBySurveyPixel.get(surveyId)?.get(pixel) ?? [];
+      return this.#cellInput(pixel, radius, singleSurveySourceMode && sources.length ? sourceColor(sources[0]!.identity) : color);
+    });
     let sourceGeometry: THREE.BufferGeometry | undefined;
     if (singleSurveySourceMode) {
-      const sourceIdentities = this.#model.sourceIdentitiesBySurvey.get(surveyId) ?? [];
-      const sourceIndexByIdentity = new Map(sourceIdentities.map((identity, index) => [identity, index]));
       const sourceCells = pixels.flatMap((pixel) => {
         const sources = (this.#model.sourcesBySurveyPixel.get(surveyId)?.get(pixel) ?? [])
           .filter((source, index, values) => values.findIndex((candidate) => candidate.identity === source.identity) === index);
@@ -1219,8 +1235,8 @@ export class SurveyLayerViewer {
           nside: this.#manifest.nside,
           pixel,
           radius: radius + 0.002,
-          colors: sources.map((source) => sourceVariantColor(color, sourceIndexByIdentity.get(source.identity) ?? 0, Math.max(1, sourceIdentities.length))),
-          inset: 0.004,
+          colors: sources.map((source) => sourceColor(source.identity)),
+          inset: 0,
         }];
       });
       if (sourceCells.length) sourceGeometry = buildSphericalCellSourceSectorGeometry(sourceCells);
@@ -2256,10 +2272,19 @@ export class SurveyLayerViewer {
     this.#basePixelRatio = Math.min(window.devicePixelRatio, 1.35);
     this.#renderer.setPixelRatio(this.#interactionQualityActive ? Math.min(1, this.#basePixelRatio) : this.#basePixelRatio);
     this.#composer.setSize(width, height);
-    this.#camera.aspect = width / height;
-    this.#camera.updateProjectionMatrix();
+    this.#applyProjection(width, height);
     if (this.#homeScrollProgress < 1 && !this.#cameraTransition) this.#applyHomeScrollPose();
     this.#requestRender();
+  }
+
+  #applyProjection(width: number, height: number): void {
+    this.#camera.aspect = width / height;
+    if (this.#viewportRightInset > 0) {
+      this.#camera.setViewOffset(width, height, this.#viewportRightInset / 2, 0, width, height);
+    } else {
+      this.#camera.clearViewOffset();
+      this.#camera.updateProjectionMatrix();
+    }
   }
 
   #requestRender(): void {

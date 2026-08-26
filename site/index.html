@@ -68,9 +68,21 @@
         <aside id="coverage-detail-panel" class="coverage-detail-panel" hidden aria-live="polite" aria-label="区块覆盖信息">
           <div id="coverage-detail-kicker" class="coverage-detail-kicker" data-i18n="coverage.cellInspector">CELL INSPECTOR</div>
           <strong id="coverage-detail-title" data-i18n="coverage.healpixCell">HEALPIX CELL</strong>
+          <button id="overlap-expand" class="icon-button overlap-expand-button" type="button" data-i18n-title="coverage.overlapExpand" data-i18n-aria-label="coverage.overlapExpand" title="展开重合详情" aria-label="展开重合详情" hidden><i data-lucide="maximize-2"></i></button>
           <div id="coverage-detail-content"></div>
         </aside>
         <aside id="selection-queue" class="selection-queue" hidden aria-live="polite" aria-label="当前选择"></aside>
+        <aside id="overlap-drawer" class="overlap-drawer" hidden role="dialog" aria-modal="true" aria-labelledby="overlap-drawer-title" aria-label="重合详情">
+          <div class="overlap-drawer-header">
+            <div class="overlap-drawer-heading">
+              <span class="coverage-detail-kicker" data-i18n="coverage.overlapDrawer">OVERLAP DETAILS</span>
+              <strong id="overlap-drawer-title">--</strong>
+            </div>
+            <button id="overlap-drawer-close" class="icon-button" type="button" data-i18n-title="coverage.overlapCollapse" data-i18n-aria-label="coverage.overlapCollapse" title="关闭重合详情" aria-label="关闭重合详情"><i data-lucide="x"></i></button>
+          </div>
+          <div id="overlap-drawer-components" class="overlap-drawer-components" aria-label="连通区域"></div>
+          <div id="overlap-drawer-content" class="overlap-drawer-content" aria-live="polite"></div>
+        </aside>
         <div id="coverage-context-menu" class="coverage-context-menu" hidden role="menu" aria-label="覆盖区域操作"></div>
       <div id="coverage-status" class="coverage-status" aria-live="polite">
           <span>NSIDE <output id="coverage-status-nside">--</output></span>

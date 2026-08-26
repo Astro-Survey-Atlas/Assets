@@ -86,6 +86,34 @@ await reloadRuntimeCoverage();
 const admin = new AssetsAdmin();
 const products = new ProductStore();
 await products.initialize(releaseRoot, coverageCatalog.layers);
+
+function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurveyIndex>>): Awaited<ReturnType<typeof loadSurveyIndex>> {
+  const records = new Map(products.list().filter((record) => record.published).map((record) => [record.productId, record.published!]));
+  if (!records.size) return index;
+  return {
+    ...index,
+    surveys: index.surveys.map((survey) => ({
+      ...survey,
+      releases: survey.releases.map((release) => ({
+        ...release,
+        products: release.products.map((product) => {
+          const override = records.get(product.productId ?? "");
+          if (!override) return product;
+          return {
+            ...product,
+            ...(override.dataOrigin ? { dataOrigin: override.dataOrigin } : {}),
+            ...(override.sourceTier ? { sourceTier: override.sourceTier } : {}),
+            ...(override.originNote ? { originNote: override.originNote } : {}),
+            ...(override.sourceLabel ? { sourceLabel: override.sourceLabel } : {}),
+            ...(override.sourceUrl ? { sourceUrl: override.sourceUrl } : {}),
+            ...(override.geometrySourceLabel ? { geometrySourceLabel: override.geometrySourceLabel } : {}),
+            ...(override.geometrySourceUrl ? { geometrySourceUrl: override.geometrySourceUrl } : {}),
+          };
+        }),
+      })),
+    })),
+  };
+}
 let sourceUnitsPromise: Promise<SourceUnitWorkerStore> | null = null;
 let sourceUnitsFallbackPromise: Promise<SourceUnitStore> | null = null;
 function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
@@ -535,7 +563,9 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       return json(response, 200, { mode: coverageLoadMode, loadedAt: coverageLoadedAt, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size, warehouseConfigured: evidenceStore.configured });
     }
     if (pathname === "/api/v1/admin/catalog/reload" && request.method === "POST") {
-      return json(response, 200, { catalog: await reloadRuntimeCoverage() });
+      const catalogState = await reloadRuntimeCoverage();
+      surveyIndex = applyPublishedProductMetadata(surveyIndex);
+      return json(response, 200, { catalog: catalogState });
     }
     if (pathname === "/api/v1/admin/tasks" && request.method === "GET") return json(response, 200, { tasks: await admin.listTasks() });
     if (pathname === "/api/v1/admin/tasks" && request.method === "POST") {
@@ -664,7 +694,16 @@ async function sendCoverageOverlapDetails(request: IncomingMessage, response: Se
   if (!result) return json(response, 400, { error: "No common coverage is available for the selected surveys" });
   const component = result.components.find((candidate) => candidate.id === componentId);
   if (!component) return json(response, 404, { error: "Overlap component not found for the current survey selection" });
-  const details = buildOverlapDetails({ result, component, layers: [...coverageCatalog.records.values()], surveyIndex, warehouseSnapshots: warehouseLayerSnapshots });
+  const selectedLayers = [...coverageCatalog.records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
+  const sourceUnitsByLayer = new Map<string, unknown>();
+  if (selectedLayers.some((layer) => layer.sourceUnitIndex?.unitKind === "tile")) {
+    const sourceUnits = await sourceUnitsReadyWithin(3_000);
+    if (sourceUnits) for (const layer of selectedLayers) {
+      if (layer.sourceUnitIndex?.unitKind !== "tile") continue;
+      try { sourceUnitsByLayer.set(layer.layerId, await Promise.resolve(sourceUnits.match(layer.layerId, component.order, component.cells))); } catch { /* keep source index metadata only */ }
+    }
+  }
+  const details = buildOverlapDetails({ result, component, layers: selectedLayers, surveyIndex, catalog, sourceUnitsByLayer, warehouseSnapshots: warehouseLayerSnapshots });
   return compressedJson(request, response, 200, details, "public, max-age=60, stale-while-revalidate=120");
 }
 

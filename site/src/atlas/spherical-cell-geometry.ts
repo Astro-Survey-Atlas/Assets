@@ -102,6 +102,17 @@ function perimeterPoint(boundary: readonly THREE.Vector3[], fraction: number, ra
   return boundary[0]!.clone().normalize().multiplyScalar(radius);
 }
 
+function perimeterVertexFractions(boundary: readonly THREE.Vector3[]): number[] {
+  const lengths = boundary.map((point, index) => point.angleTo(boundary[(index + 1) % boundary.length]!));
+  const total = lengths.reduce((sum, length) => sum + length, 0);
+  if (!total) return boundary.map((_, index) => index / boundary.length);
+  let cumulative = 0;
+  return boundary.map((_, index) => {
+    if (index > 0) cumulative += lengths[index - 1]!;
+    return cumulative / total;
+  });
+}
+
 /** Build equal perimeter sectors for multiple sources sharing one HEALPix cell. */
 export function buildSphericalCellSourceSectorGeometry(cells: readonly SphericalCellSourceSectorGeometryInput[]): THREE.BufferGeometry {
   const positions: number[] = [];
@@ -121,13 +132,23 @@ export function buildSphericalCellSourceSectorGeometry(cells: readonly Spherical
       });
       return;
     }
+    const vertexFractions = perimeterVertexFractions(boundary);
     cell.colors.forEach((color, index) => {
-      const start = perimeterPoint(boundary, index / cell.colors.length, cell.radius);
-      const end = perimeterPoint(boundary, (index + 1) / cell.colors.length, cell.radius);
-      [center, start, end].forEach((vertex) => {
-        positions.push(vertex.x, vertex.y, vertex.z);
-        colors.push(color.r, color.g, color.b);
-      });
+      const startFraction = index / cell.colors.length;
+      const endFraction = (index + 1) / cell.colors.length;
+      const perimeter = [
+        perimeterPoint(boundary, startFraction, cell.radius),
+        ...vertexFractions
+          .filter((fraction) => fraction > startFraction && fraction < endFraction)
+          .map((fraction) => perimeterPoint(boundary, fraction, cell.radius)),
+        perimeterPoint(boundary, endFraction, cell.radius),
+      ];
+      for (let pointIndex = 0; pointIndex < perimeter.length - 1; pointIndex += 1) {
+        [center, perimeter[pointIndex]!, perimeter[pointIndex + 1]!].forEach((vertex) => {
+          positions.push(vertex.x, vertex.y, vertex.z);
+          colors.push(color.r, color.g, color.b);
+        });
+      }
     });
   });
   const geometry = new THREE.BufferGeometry();

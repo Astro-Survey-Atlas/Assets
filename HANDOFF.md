@@ -57,6 +57,8 @@ diffs before editing them.
 - `POST /api/v1/admin/catalog/reload` refreshes the runtime catalog without a
   process restart. `GET /api/v1/admin/catalog/status` reports the load mode,
   timestamp, layer/footprint counts and Warehouse connectivity.
+- `server/overlap-details.ts` keeps the public overlap-details response
+  type-safe; the live route is available as `POST /api/v1/coverage/overlap/details`.
 - Overlap components use the highest order shared by all selected layers.
   File-level reverse lookup is deferred until a component/cell is requested
   and returns actual order, precision, source IDs, and source URIs.
@@ -79,8 +81,9 @@ layers appeared in catalog and overlap requests; tile/file details included
 order and precision. Euclid order-8 cell `548925` reverse-resolved through the
 Assets API to its OSS FileAsset metadata.
 
-At the live cluster checkpoint on 2026-08-26, Warehouse held 13 layer documents,
-11 FileAssets, and 2,109 coverage edges. The final bounded smoke layers were:
+At the earlier live cluster checkpoint on 2026-08-26, Warehouse held 13 layer
+documents, 11 FileAssets, and 2,109 coverage edges. The final bounded smoke
+layers were:
 
 | ScanRequest | Result |
 | --- | --- |
@@ -91,18 +94,19 @@ At the live cluster checkpoint on 2026-08-26, Warehouse held 13 layer documents,
 | `final-euclid-vis-20260826` | `SUCCEEDED`, 1 file, 11 edges, 0 errors |
 
 The first CSST catalog attempt and the CSST image failure remain as
-ScanRequest/Job/evidence records; the retry is the authoritative current layer
-state. The failed image layer is hidden from runtime reads. These are live
-observations, not permanent expected counts.
+ScanRequest/Job/evidence records. The current full-prefix CSST catalog retry is
+still `UPDATING`; its partial edges are hidden from runtime reads until a
+successful final summary makes the layer `ACTIVE`. These are live observations,
+not permanent expected counts.
 
 The checked-in public release is still present: `src/footprints/survey-
 footprints.json` contains 44 footprints across 14 surveys and 66,373 cells.
 The deployed Assets `/api/v1/coverage` now retains that public base and adds the
-ACTIVE layers from the current Warehouse endpoint; the live response contains
-53 footprints across the public surveys plus CSST, DESI, Euclid and the
-Assets-owned controlled smoke layers. The DESI/Euclid overlap smoke returns
-order 8, 489 cells, and one component. Euclid cell `548925` reverse-resolves to
-one `estimated` Warehouse edge and its FileAsset metadata.
+ACTIVE layers from the current Warehouse endpoint; while the CSST retry is
+`UPDATING`, the live response contains 53 footprints across the public surveys
+plus the ACTIVE CSST, DESI, Euclid and Assets-owned controlled smoke layers.
+The current bounded smoke covers catalog/block reads, CSST/DESI and
+DESI/Euclid overlap, overlap details, reverse lookup, and FITS Range reads.
 
 No bulk scan of the Euclid `MER/` root has occurred. Its 15,948 FITS objects
 (about 19 TiB) were listed only. The controlled Gaia and SDSS probes are
@@ -113,8 +117,8 @@ multi-HDU checks remain local/in-memory contract probes.
 ## Live Deployment Layout
 
 Assets is a separate Helm release in namespace `astro-survey-atlas-assets`.
-The current dev rollout is Helm revision 74, image tag
-`0.1.0-20260826-164745`, and serves through:
+The current dev rollout is Helm revision 76, image tag
+`0.1.0-20260826-184451`, and serves through:
 
 ```text
 http://10.15.51.75:32083/
@@ -153,12 +157,11 @@ three-way overlap at O8 or after Gaia's O4 visual coarsening.
 1. Historical import utilities such as `scripts/import_csst_w234.py` still
    mention `astro_*`. Keep them explicitly migration-only; do not make them a
    runtime fallback.
-2. The current `atlas-warehouse` Assets-owned modality tasks are visible in the
-   admin list: image succeeded with 11 cells, catalog succeeded with 12 cells,
-   and spectrum succeeded with 1 entrypoint-only cell. The cube probe is kept as
-   a failed evidence task because its real HI4PI header declares `RADESYS=FK5`;
-   the current Warehouse scanner correctly rejects a non-explicit-ICRS WCS.
-   Do not rewrite that source header or treat the result as successful coverage.
+2. The successful Assets-owned modality CRs were deleted after their ES state
+   and evidence were verified; the failed cube probe remains for diagnosis
+   because its real HI4PI header declares `RADESYS=FK5`. The current Warehouse
+   scanner correctly rejects a non-explicit-ICRS WCS. Do not rewrite that source
+   header or treat the result as successful coverage.
 3. The old `warehouse` release and namespace are gone. Any retained old PV or
    evidence material is migration/diagnostic state and is not Assets-owned.
    Existing Warehouse-owned ScanRequests in `atlas-warehouse` are likewise
@@ -172,8 +175,8 @@ Work in this order:
 1. Preserve all dirty files in both repositories and keep the static-plus-
    Warehouse merge, pagination, and admin reload/status behavior regression-
    tested.
-2. After a successful Warehouse rescan, call
-   `POST /api/v1/admin/catalog/reload` and inspect
+2. After the in-flight CSST Warehouse rescan completes, call
+   `POST /api/v1/admin/catalog/reload` with the admin token and inspect
    `GET /api/v1/admin/catalog/status`; the status must show the current load
    mode, timestamp, counts, and Warehouse connectivity.
 3. Rerun direct catalog, overlap, and reverse-lookup smokes against bounded
