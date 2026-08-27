@@ -3,7 +3,7 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "967b18d566a6500888f528cfadbcec3fc3e0789f1ace87398f99e9e85d444e5e"
+    "sha256": "cfd5af3c429c11e3d19afcd14eae3d9e59facc561c0f1be4dbbef121daf64722"
   },
   "statistics": {
     "releases": 52,
@@ -14,9 +14,9 @@
     "footprints": 41,
     "packages": 14,
     "rawMocFiles": 41,
-    "totalBytes": 33313339,
-    "runtimeBytes": 6676942,
-    "evidenceBytes": 26636397
+    "totalBytes": 33696261,
+    "runtimeBytes": 7059862,
+    "evidenceBytes": 26636399
   },
   "files": [
     {
@@ -28,8 +28,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/architecture-boundary.md",
-      "sizeBytes": 3495,
-      "sha256": "1de60fb8ba2642625939a6420d7f1879da58793ad8d3fcc05c3317950d27ab8e"
+      "sizeBytes": 4392,
+      "sha256": "15e3e78038e4fcf24c060ef8966aa7fc1e29ca0fbf9ea830472c88e7d31d7a1f"
     },
     {
       "id": "documentation-data-warehouse-requirements",
@@ -76,8 +76,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/resource-package-integration.md",
-      "sizeBytes": 2438,
-      "sha256": "f66a18b19d00ae53f98804fe4c4dbd85a85480389577cdfa55acc63a86590eb9"
+      "sizeBytes": 2914,
+      "sha256": "4e03a6ae9e579ff2e271bdaad56859feaa47685710f73675a7467629672a9d5b"
     },
     {
       "id": "layer-csst-sim-w2-image-extent-preview-order4",
@@ -529,8 +529,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "src/surveys/survey-catalog.json",
-      "sizeBytes": 77763,
-      "sha256": "28ca8f6725692555b6f3e83a68a0805bffd1a92335fd9ce2a81fc3ce9dddd820"
+      "sizeBytes": 78983,
+      "sha256": "87a9f52ab439a254dd929d190fc680ec2a3773f275ab2b986c25ae0a571057d3"
     },
     {
       "id": "moc-2mass-2mass-all-sky-h-band-imaging-cds-p-2mass-h-record",
@@ -1561,8 +1561,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/catalog.json",
-      "sizeBytes": 22241,
-      "sha256": "43a808ab8b9f25bdb88d776604dc06ea142829d09b66adf95b730ac664b15e24"
+      "sizeBytes": 22243,
+      "sha256": "81703242918a55f45935029440686b4c04d0d28c17031643b71cd6c8218fefc9"
     },
     {
       "id": "metadata-resource-package-v3-schema",
@@ -2397,8 +2397,8 @@
       "sourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
       "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-desi-footprints-3.0.0.zip",
-      "sizeBytes": 8410,
-      "sha256": "f49fd738150b820fe35745a61dd8f813abb768b46bdba4a890d0bdcdd3bb447c"
+      "sizeBytes": 385410,
+      "sha256": "5da8651a6e43ffae1428d3edacff2e033a71aee276834c10f79829c9ed6d3f18"
     },
     {
       "id": "package-public-euclid-footprints-3-0-0",
@@ -2413,8 +2413,8 @@
       "sourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
       "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/public-euclid-footprints-3.0.0.zip",
-      "sizeBytes": 2488,
-      "sha256": "08fb40f850fd8972fe32d9b518cbc8b0ae796895caf181fcfa548e9dd7bedc7f"
+      "sizeBytes": 5813,
+      "sha256": "f3edf15c133cbc92797821e253208d540f382b77c4fa4cef33a7db472325e872"
     },
     {
       "id": "package-public-galex-footprints-3-0-0",
@@ -2738,8 +2738,8 @@
       "mediaType": "application/json",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/provenance.json",
-      "sizeBytes": 5692,
-      "sha256": "f1652d9f7643872c98dd048c98014a5f7a9d28e90b38f37d272aab44970ceaaa"
+      "sizeBytes": 5694,
+      "sha256": "61416295e27a73224da12c776d6c222e81ecec75f37b2034c3593559b2825bbe"
     },
     {
       "id": "sdk-moc-core-wheel-1-0-0",

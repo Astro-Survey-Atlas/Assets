@@ -121,7 +121,16 @@ export class AtlasCoverageGlobe {
     canvas.dataset.renderer = "three";
   }
 
-  loadCatalog(catalog: CoverageCatalog, blocks: ReadonlyMap<string, number[]>, surveys: CoverageSurvey[]): void {
+  async loadCatalog(catalog: CoverageCatalog, blocks: ReadonlyMap<string, number[]>, surveys: CoverageSurvey[]): Promise<void> {
+    // Canvas text is rasterized at creation time, so wait for the bundled
+    // faces before constructing labels used by the Three.js viewer.
+    try {
+      await Promise.all([
+        document.fonts.load('700 24px "Atlas Sans CJK"'),
+        document.fonts.load('700 12px "Atlas Mono"'),
+        document.fonts.ready,
+      ]);
+    } catch { /* browsers without Font Loading API use the declared fallback */ }
     const manifest = footprintManifest(catalog, blocks);
     const selectedSurveyIds = new Set(this.#visibleSurveyIds);
     this.#viewer?.dispose();
@@ -154,6 +163,8 @@ export class AtlasCoverageGlobe {
   }
 
   setOverlapMode(active: boolean): void { this.#viewer?.setOverlapMode(active); }
+
+  setViewportRightInset(insetPixels: number): void { this.#viewer?.setViewportRightInset(insetPixels); }
 
   setOverlapCells(order: number, pixels: readonly number[]): void { this.#viewer?.setOverlapCells(2 ** order, pixels); }
 

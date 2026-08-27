@@ -12,6 +12,7 @@
     "preview:build": "tsx scripts/generate-coverage-preview.ts",
     "moc:validate": "tsx scripts/validate-moc-source-registry.ts",
     "moc:probe": "tsx scripts/validate-moc-source-registry.ts --probe --output=artifacts/moc-source-probe.json",
+    "packages:rebuild": "SOURCE_DATE_EPOCH=1787184000 python3 scripts/rebuild_resource_packages.py && python3 scripts/update_provenance_hashes.py && npm run catalog:build",
     "core:wheel": "SOURCE_DATE_EPOCH=1787184000 python3 -m pip wheel --no-deps --no-build-isolation . --wheel-dir artifacts/public-survey-footprints/moc-core",
     "core:rebuild-public": "SOURCE_DATE_EPOCH=1787184000 python3 -m astro_survey_moc_core.cli rebuild-public --base-dir .",
     "assets:build": "npm run artifacts:validate && npm run catalog:build && npm run preview:build",

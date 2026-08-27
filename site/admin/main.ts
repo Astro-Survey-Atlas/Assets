@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, AudioLines, Box, Database, Eye, Image, Layers3, LogOut, Pencil, Plus, RefreshCw, RotateCw, RotateCcw, Send, ShieldCheck, Table2, Unlock, Upload, createIcons } from "lucide";
+import { Activity, ArrowLeft, AudioLines, Box, Database, Eye, Image, Layers3, LogOut, Pencil, Plus, RefreshCw, RotateCw, RotateCcw, Search, Send, ShieldCheck, Table2, Unlock, Upload, createIcons } from "lucide";
 import "./styles.css";
 import { mountLocaleControls, t } from "../src/i18n.js";
 
@@ -11,6 +11,9 @@ interface TaskStatus { phase: string; reason?: string; backend?: string; runId?:
 interface Task { name: string; createdAt?: string; layerId?: string; surveyId?: string; releaseId?: string; product?: string; productId?: string; modality?: string; mode?: string; backend?: string; sourceConnector?: string; sourcePaths: string[]; tags: string[]; batchId?: string; recipe?: { mode?: string; outputOrder?: number; catalog?: Record<string, unknown> }; status: TaskStatus }
 interface Product { productId: string; draft: { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; sourceUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; scanDefaults?: { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }; recipeVersion?: number; recipeHash?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } } }; published: unknown; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number } }
 interface CatalogStatus { mode: string; loadedAt: string; layers: number; footprints: number; warehouseConfigured: boolean }
+interface MocDiscoveryStatus { phase: string; jobName?: string; reason?: string; message?: string; evidencePath?: string; candidateCount?: number; probeCount?: number; lastTransitionTime?: string }
+interface MocDiscoveryRequest { name: string; namespace?: string; createdAt?: string; surveyName: string; releaseHint?: string; productHint?: string; policyRef: string; status: MocDiscoveryStatus }
+interface MocDiscoveryReview { provider: string; requestName: string; candidateId: string; sourceSnapshotSha256: string; decision: "pending" | "ready-for-build" | "rejected"; sourceUrl?: string; mocUrl?: string; hipsUrl?: string; notes?: string; revision: number; reviewedAt: string }
 
 const tokenKey = "astro-survey-atlas-assets.admin-token";
 let adminConfig: AdminConfig | null = null;
@@ -23,7 +26,7 @@ const byId = <T extends HTMLElement>(id: string): T => {
 };
 
 function renderIcons(): void {
-  createIcons({ icons: { Activity, ArrowLeft, AudioLines, Box, Database, Eye, Image, Layers3, LogOut, Pencil, Plus, RefreshCw, RotateCw, RotateCcw, Send, ShieldCheck, Table2, Unlock, Upload }, attrs: { "aria-hidden": "true" } });
+  createIcons({ icons: { Activity, ArrowLeft, AudioLines, Box, Database, Eye, Image, Layers3, LogOut, Pencil, Plus, RefreshCw, RotateCw, RotateCcw, Search, Send, ShieldCheck, Table2, Unlock, Upload }, attrs: { "aria-hidden": "true" } });
 }
 
 type AdminStep = "sources" | "tasks" | "review";
@@ -69,7 +72,7 @@ function toast(message: string, error = false): void {
   window.setTimeout(() => { element.dataset.visible = "false"; }, 2400);
 }
 
-function setMessage(kind: "connector" | "task" | "product", message: string, error = false): void {
+function setMessage(kind: "connector" | "task" | "product" | "moc-discovery" | "moc-review", message: string, error = false): void {
   const element = document.querySelector<HTMLElement>(`[data-form-message="${kind}"]`);
   if (!element) return;
   element.textContent = message;
@@ -182,6 +185,91 @@ function renderTasks(tasks: Task[]): void {
   body.querySelectorAll<HTMLButtonElement>("[data-task-resubmit]").forEach((button) => button.addEventListener("click", () => void resubmitTask(button.dataset.taskResubmit ?? "")));
   renderIcons();
   renderModalityChart(tasks);
+}
+
+let mocDiscoveryRecords: MocDiscoveryRequest[] = [];
+
+function renderMocDiscoveryRequests(requests: MocDiscoveryRequest[]): void {
+  mocDiscoveryRecords = requests;
+  byId("moc-discovery-count").textContent = `${requests.length} REQUEST${requests.length === 1 ? "" : "S"}`;
+  const list = byId("moc-discovery-list");
+  if (!requests.length) {
+    list.innerHTML = `<div class="resource-empty">暂无 MOC 探测请求</div>`;
+    return;
+  }
+  list.innerHTML = requests.map((request) => {
+    const status = request.status ?? { phase: "PENDING" };
+    const hints = [request.releaseHint, request.productHint].filter(Boolean).join(" · ");
+    const counts = [status.candidateCount !== undefined ? `${status.candidateCount} candidates` : "-- candidates", status.probeCount !== undefined ? `${status.probeCount} probes` : "-- probes"].join(" · ");
+    return `<article class="resource-row moc-discovery-row"><div><div class="task-identity"><i data-lucide="search"></i><strong>${escapeText(request.surveyName)}</strong></div><span>${escapeText(request.name)}${hints ? ` · ${escapeText(hints)}` : ""}</span><p>${escapeText(counts)}${status.evidencePath ? ` · evidence ${escapeText(status.evidencePath)}` : ""}</p></div><div class="moc-discovery-row-actions"><span class="task-phase task-phase-${phaseClass(status.phase)}">${escapeText(status.phase)}</span><button type="button" class="admin-quiet" data-moc-review="${escapeText(request.name)}" title="查看请求并记录候选审核"><i data-lucide="shield-check"></i><span>审核</span></button></div></article>`;
+  }).join("");
+  list.querySelectorAll<HTMLButtonElement>("[data-moc-review]").forEach((button) => button.addEventListener("click", () => void openMocReview(button.dataset.mocReview ?? "")));
+  renderIcons();
+}
+
+function reviewField(form: HTMLFormElement, name: string): HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {
+  const field = form.elements.namedItem(name);
+  if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLSelectElement) && !(field instanceof HTMLTextAreaElement)) throw new Error(`Missing review field: ${name}`);
+  return field;
+}
+
+function renderMocReviewHistory(reviews: MocDiscoveryReview[]): void {
+  const container = byId("moc-review-history");
+  if (!reviews.length) {
+    container.innerHTML = `<div class="resource-empty">尚无审核记录</div>`;
+    return;
+  }
+  container.innerHTML = `<div class="section-heading"><div><span class="section-index">HISTORY</span><h4>审核记录</h4></div></div>${reviews.slice().reverse().map((review) => `<article class="resource-row moc-review-history-row"><div><strong>${escapeText(review.candidateId)}</strong><span>${escapeText(review.decision)} · rev ${review.revision} · ${escapeText(formatDate(review.reviewedAt))}</span><p>${escapeText(review.notes ?? "")}</p></div><code>${escapeText(review.sourceSnapshotSha256)}</code></article>`).join("")}`;
+}
+
+async function openMocReview(name: string): Promise<void> {
+  try {
+    const [requestResponse, reviewResponse] = await Promise.all([
+      api<{ request: MocDiscoveryRequest }>(`/api/v1/admin/moc-discovery/${encodeURIComponent(name)}`),
+      api<{ reviews: MocDiscoveryReview[] }>(`/api/v1/admin/moc-discovery/${encodeURIComponent(name)}/reviews`),
+    ]);
+    const form = byId<HTMLFormElement>("moc-review-form");
+    form.reset();
+    (reviewField(form, "requestName") as HTMLInputElement).value = requestResponse.request.name;
+    const latest = reviewResponse.reviews.at(-1);
+    if (latest) {
+      for (const [fieldName, value] of Object.entries({ candidateId: latest.candidateId, sourceSnapshotSha256: latest.sourceSnapshotSha256, decision: latest.decision, sourceUrl: latest.sourceUrl, mocUrl: latest.mocUrl, hipsUrl: latest.hipsUrl, notes: latest.notes })) {
+        const field = reviewField(form, fieldName);
+        if (value !== undefined) field.value = value;
+      }
+    }
+    byId("moc-review-title").textContent = `${requestResponse.request.surveyName} · ${requestResponse.request.name}`;
+    renderMocReviewHistory(reviewResponse.reviews);
+    byId<HTMLDialogElement>("moc-review-dialog").showModal();
+  } catch (error) { toast(error instanceof Error ? error.message : "审核请求加载失败", true); }
+}
+
+async function submitMocDiscovery(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const form = event.currentTarget as HTMLFormElement;
+  setMessage("moc-discovery", "正在提交…");
+  try {
+    await api("/api/v1/admin/moc-discovery", { method: "POST", body: JSON.stringify({ surveyName: formValue(form, "surveyName"), releaseHint: formValue(form, "releaseHint") || undefined, productHint: formValue(form, "productHint") || undefined }) });
+    form.reset();
+    byId<HTMLDialogElement>("moc-discovery-dialog").close();
+    toast("MOC 探测请求已提交");
+    await refresh();
+  } catch (error) { setMessage("moc-discovery", error instanceof Error ? error.message : "提交失败", true); }
+}
+
+async function submitMocReview(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const form = event.currentTarget as HTMLFormElement;
+  const requestName = formValue(form, "requestName");
+  setMessage("moc-review", "正在保存…");
+  try {
+    await api(`/api/v1/admin/moc-discovery/${encodeURIComponent(requestName)}/reviews`, { method: "POST", body: JSON.stringify({ provider: "cds", candidateId: formValue(form, "candidateId"), sourceSnapshotSha256: formValue(form, "sourceSnapshotSha256"), decision: formValue(form, "decision"), sourceUrl: formValue(form, "sourceUrl") || undefined, mocUrl: formValue(form, "mocUrl") || undefined, hipsUrl: formValue(form, "hipsUrl") || undefined, notes: formValue(form, "notes") || undefined }) });
+    toast("审核记录已保存");
+    const response = await api<{ reviews: MocDiscoveryReview[] }>(`/api/v1/admin/moc-discovery/${encodeURIComponent(requestName)}/reviews`);
+    renderMocReviewHistory(response.reviews);
+    setMessage("moc-review", "已保存");
+    await refresh();
+  } catch (error) { setMessage("moc-review", error instanceof Error ? error.message : "保存失败", true); }
 }
 
 function renderModalityChart(tasks: Task[]): void {
@@ -341,11 +429,12 @@ async function refresh(): Promise<void> {
   button.disabled = true;
   byId("admin-status").textContent = "REFRESHING…";
   refreshInFlight = (async () => {
-  const [connectors, tasks, products, catalogStatus] = await Promise.allSettled([
+  const [connectors, tasks, products, catalogStatus, mocDiscovery] = await Promise.allSettled([
     api<{ connectors: Connector[] }>("/api/v1/admin/connectors"),
     api<{ tasks: Task[] }>("/api/v1/admin/tasks"),
     api<{ products: Product[] }>("/api/v1/admin/products"),
     api<CatalogStatus>("/api/v1/admin/catalog/status"),
+    api<{ requests: MocDiscoveryRequest[] }>("/api/v1/admin/moc-discovery"),
   ]);
   if (connectors.status === "fulfilled") renderConnectors(connectors.value.connectors);
   else toast(connectors.reason instanceof Error ? connectors.reason.message : "Connector 刷新失败", true);
@@ -353,14 +442,17 @@ async function refresh(): Promise<void> {
   else toast(tasks.reason instanceof Error ? tasks.reason.message : "任务刷新失败", true);
   if (products.status === "fulfilled") renderProducts(Array.isArray(products.value.products) ? products.value.products : []);
   else renderProductLoadError(products.reason instanceof Error ? products.reason.message : "产品刷新失败");
+  if (mocDiscovery.status === "fulfilled") renderMocDiscoveryRequests(Array.isArray(mocDiscovery.value.requests) ? mocDiscovery.value.requests : []);
+  else renderMocDiscoveryRequests([]);
   const connectorCount = connectors.status === "fulfilled" ? connectors.value.connectors.length : "--";
   const taskCount = tasks.status === "fulfilled" ? tasks.value.tasks.length : "--";
   const productCount = products.status === "fulfilled" ? products.value.products.length : "--";
+  const mocCount = mocDiscovery.status === "fulfilled" ? mocDiscovery.value.requests.length : "--";
   const coverageState = catalogStatus.status === "fulfilled" ? `${catalogStatus.value.mode.toUpperCase()} · ${catalogStatus.value.footprints} FOOTPRINTS` : "COVERAGE UNKNOWN";
   byId("step-sources-count").textContent = String(connectorCount);
   byId("step-tasks-count").textContent = String(taskCount);
   byId("step-review-count").textContent = String(productCount);
-  byId("admin-status").textContent = `${connectorCount} CONNECTORS · ${taskCount} TASKS · ${productCount} PRODUCTS · ${coverageState} · ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+  byId("admin-status").textContent = `${connectorCount} CONNECTORS · ${taskCount} TASKS · ${mocCount} MOC REQUESTS · ${productCount} PRODUCTS · ${coverageState} · ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
   })().catch((error) => {
     toast(error instanceof Error ? error.message : "刷新失败", true);
     byId("admin-status").textContent = "REFRESH FAILED";
@@ -467,6 +559,8 @@ byId("catalog-reload-button").addEventListener("click", async () => {
 });
 byId<HTMLFormElement>("connector-form").addEventListener("submit", (event) => void submitConnector(event));
 byId<HTMLFormElement>("task-form").addEventListener("submit", (event) => void submitTask(event));
+byId<HTMLFormElement>("moc-discovery-form").addEventListener("submit", (event) => void submitMocDiscovery(event));
+byId<HTMLFormElement>("moc-review-form").addEventListener("submit", (event) => void submitMocReview(event));
 byId<HTMLFormElement>("product-form").addEventListener("submit", (event) => void saveProduct(event));
 byId("product-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("product-dialog").close());
 byId("task-product").addEventListener("change", (event) => setDerivedProduct((event.currentTarget as HTMLSelectElement).value));
@@ -476,6 +570,9 @@ byId("connector-dialog-cancel").addEventListener("click", () => byId<HTMLDialogE
 byId("task-create-button").addEventListener("click", () => { setAdminStep("tasks"); byId<HTMLDialogElement>("task-dialog").showModal(); });
 byId("task-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("task-dialog").close());
 byId("task-detail-close").addEventListener("click", () => byId<HTMLDialogElement>("task-detail-dialog").close());
+byId("moc-discovery-create-button").addEventListener("click", () => { setAdminStep("tasks"); byId<HTMLDialogElement>("moc-discovery-dialog").showModal(); });
+byId("moc-discovery-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("moc-discovery-dialog").close());
+byId("moc-review-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("moc-review-dialog").close());
 byId<HTMLInputElement>("product-search").addEventListener("input", (event) => {
   productQuery = (event.currentTarget as HTMLInputElement).value.trim().toLocaleLowerCase();
   renderProducts(productRecords);

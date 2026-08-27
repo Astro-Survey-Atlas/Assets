@@ -4,16 +4,19 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 
-import { AdminHttpError, AssetsAdmin, KubernetesApiError, adminFromRequest, type ConnectorInput, type CoverageTaskInput } from "./admin.js";
+import { AdminHttpError, AssetsAdmin, KubernetesApiError, SUPPORTED_COVERAGE_MODES, adminFromRequest, type ConnectorInput, type CoverageTaskInput, type MocDiscoveryInput } from "./admin.js";
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
-import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog } from "./coverage.js";
+import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog, type CoverageCellLayer } from "./coverage.js";
 import { overlapForLayers } from "./overlap.js";
 import { ProductStore, type ProductRecord } from "./products.js";
 import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
 import { CoverageEvidenceStore, EvidenceStoreError, type WarehouseLayerSnapshot } from "./evidence-store.js";
 import { buildOverlapDetails } from "./overlap-details.js";
+import { MocDiscoveryReviewStore, type MocDiscoveryReviewInput } from "./moc-discovery.js";
+import { buildPublicProductEvidence } from "./public-product-evidence.js";
+import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductVerificationStatus } from "./types.js";
 
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
@@ -38,7 +41,7 @@ let coverageCatalog = staticCoverageCatalog;
 let runtimeCoverageManifest = coverageManifest;
 let coverageLoadMode: "warehouse" | "static" | "degraded" = "static";
 let coverageLoadedAt = new Date().toISOString();
-let surveyIndex: Awaited<ReturnType<typeof loadSurveyIndex>>;
+let surveyIndex!: Awaited<ReturnType<typeof loadSurveyIndex>>;
 let warehouseLayerSnapshots = new Map<string, WarehouseLayerSnapshot>();
 
 async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string; layers: number; footprints: number }> {
@@ -106,6 +109,10 @@ function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurv
             ...(override.originNote ? { originNote: override.originNote } : {}),
             ...(override.sourceLabel ? { sourceLabel: override.sourceLabel } : {}),
             ...(override.sourceUrl ? { sourceUrl: override.sourceUrl } : {}),
+            ...(override.officialDataLabel ? { officialDataLabel: override.officialDataLabel } : {}),
+            ...(override.officialDataUrl ? { officialDataUrl: override.officialDataUrl } : {}),
+            ...(override.officialQueryLabel ? { officialQueryLabel: override.officialQueryLabel } : {}),
+            ...(override.officialQueryUrl ? { officialQueryUrl: override.officialQueryUrl } : {}),
             ...(override.geometrySourceLabel ? { geometrySourceLabel: override.geometrySourceLabel } : {}),
             ...(override.geometrySourceUrl ? { geometrySourceUrl: override.geometrySourceUrl } : {}),
           };
@@ -114,6 +121,8 @@ function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurv
     })),
   };
 }
+const mocDiscoveryReviews = new MocDiscoveryReviewStore();
+surveyIndex = applyPublishedProductMetadata(surveyIndex);
 let sourceUnitsPromise: Promise<SourceUnitWorkerStore> | null = null;
 let sourceUnitsFallbackPromise: Promise<SourceUnitStore> | null = null;
 function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
@@ -153,11 +162,184 @@ async function sourceUnitsReadyWithin(timeoutMs: number): Promise<SourceUnitWork
 }
 
 function productCoverage(record: ProductRecord): Record<string, unknown> | undefined {
-  const layer = coverageCatalog.layers.find((candidate) => candidate.surveyId === record.draft.surveyId
-    && candidate.releaseId === record.draft.releaseId
-    && candidate.product === record.draft.name);
+  const content = record.published ?? record.draft;
+  const layer = coverageCatalog.layers.find((candidate) => candidate.surveyId === content.surveyId
+    && candidate.releaseId === content.releaseId
+    && candidate.product === content.name);
   if (!layer) return undefined;
-  return { layerId: layer.layerId, availableOrders: layer.availableOrders, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder };
+  return { layerId: layer.layerId, availableOrders: layer.availableOrders, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder, coverageRole: layer.coverageRole, areaDeg2: layer.areaDeg2 };
+}
+
+function productCoverageLayer(record: ProductRecord): CoverageCellLayer | undefined {
+  const content = record.published ?? record.draft;
+  return coverageCatalog.records.get(content.layerId ?? "")
+    ?? [...coverageCatalog.records.values()].find((candidate) => candidate.surveyId === content.surveyId
+      && candidate.releaseId === content.releaseId
+      && candidate.product === content.name);
+}
+
+function productAssets(record: ProductRecord): Array<{ record: PublicAssetRecord; id: string }> {
+  const content = record.published ?? record.draft;
+  const layer = productCoverageLayer(record);
+  return [...catalog.files.entries()]
+    .filter(([, entry]) => {
+      const asset = entry.record;
+      if (asset.surveyId !== content.surveyId) return false;
+      if (asset.kind !== "package" && asset.releaseId && asset.releaseId !== content.releaseId) return false;
+      if (asset.product && asset.product !== content.name) return false;
+      if (layer && (asset.kind === "moc" || asset.kind === "geometry" || asset.kind === "provenance" || asset.kind === "metadata")) {
+        return asset.path.includes(`/layers/${layer.layerId}/`)
+          || asset.id.includes(layer.layerId)
+          // Legacy W1 artifacts predate layer-directory naming. Their
+          // survey/release/product identity is still unambiguous.
+          || (asset.releaseId === content.releaseId && asset.product === content.name);
+      }
+      return asset.kind === "package" || asset.kind === "moc" || asset.kind === "geometry" || asset.kind === "provenance" || asset.kind === "metadata";
+    })
+    .map(([id, entry]) => ({ id, record: entry.record }));
+}
+
+function localAssetLink(kind: PublicProductLink["kind"], label: string, id: string, asset: { mediaType?: string; sizeBytes?: number; sha256?: string }): PublicProductLink {
+  return {
+    kind,
+    label,
+    url: `/api/v1/assets/${encodeURIComponent(id)}/download`,
+    ...(asset.mediaType ? { mediaType: asset.mediaType } : {}),
+    ...(typeof asset.sizeBytes === "number" ? { sizeBytes: asset.sizeBytes } : {}),
+    ...(asset.sha256 ? { sha256: asset.sha256 } : {}),
+  };
+}
+
+function externalLink(kind: PublicProductLink["kind"], label: string, url: string): PublicProductLink | undefined {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const privateHost = host === "localhost" || host.endsWith(".local") || host === "::1"
+      || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+    if (!/^https?:$/.test(parsed.protocol) || parsed.username || parsed.password || privateHost) return undefined;
+    return { kind, label, url: parsed.toString() };
+  } catch { return undefined; }
+}
+
+function dedupeLinks(links: Array<PublicProductLink | undefined>): PublicProductLink[] {
+  const seen = new Set<string>();
+  return links.filter((link): link is PublicProductLink => Boolean(link)).filter((link) => {
+    const key = `${link.kind}:${link.url}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function productCatalogEntry(record: ProductRecord): { status?: string; reason?: string; sourceUrl?: string; geometrySourceUrl?: string; sourceLabel?: string; geometrySourceLabel?: string; officialDataUrl?: string; officialDataLabel?: string; officialQueryUrl?: string; officialQueryLabel?: string } | undefined {
+  const content = record.published ?? record.draft;
+  const survey = surveyIndex.surveys.find((candidate) => candidate.id === content.surveyId);
+  const release = survey?.releases.find((candidate) => candidate.id === content.releaseId);
+  return release?.products.find((candidate) => candidate.productId === record.productId || candidate.name === content.name);
+}
+
+function sanitizeSummary(value: string | undefined, fallback: string): string {
+  const text = value?.trim();
+  if (!text) return fallback;
+  // Editorial markdown is intentionally kept as plain text in the API. Avoid
+  // leaking implementation paths if an old draft contains one.
+  return sanitizePublicText(text) || fallback;
+}
+
+function sanitizePublicText(value: string): string {
+  return value
+    .replace(/(?:^|[;\s])(input|scannerRunId|taskSnapshot|evidencePath|normalizedScan|manifestPath)=[^;\n]+/gi, " ")
+    .replace(/(?:s3:\/\/|gs:\/\/|minio:\/\/|\/var\/lib\/|\/mnt\/|\/tmp\/)[^\s,;]+/gi, "[redacted path]")
+    .replace(/\s{2,}/g, " ").trim();
+}
+
+function buildPublicProductDossier(record: ProductRecord): PublicProductDossier {
+  // A catalog record can be useful before editorial copy is published. Build
+  // the public projection from that record, while keeping draft prose and
+  // internal fields out of the response.
+  const product = record.published ?? record.draft;
+  const layer = productCoverageLayer(record);
+  const assets = productAssets(record);
+  const catalogEntry = productCatalogEntry(record);
+  const mocAsset = assets.find((asset) => asset.record.kind === "moc" && (!layer || asset.record.path.includes(`/layers/${layer.layerId}/`) || asset.record.id.includes(layer.layerId) || (asset.record.releaseId === product.releaseId && asset.record.product === product.name)));
+  const previewAsset = assets.find((asset) => asset.record.kind === "geometry" && /preview/i.test(asset.record.id));
+  const packageAsset = assets.find((asset) => asset.record.kind === "package");
+  const provenanceAsset = assets.find((asset) => asset.record.kind === "provenance" && (!layer || asset.record.path.includes(`/layers/${layer.layerId}/`) || asset.record.id.includes(layer.layerId)));
+  const geometryAsset = assets.find((asset) => asset.record.kind === "geometry" && !/preview|query/i.test(asset.record.id));
+  const statisticsAsset = assets.find((asset) => asset.record.kind === "metadata" && /statistics/i.test(asset.record.id));
+  const precision: PublicProductDossier["coverage"]["precision"] = !layer
+    ? "entrypoint-only"
+    : layer.sourceUnitIndex?.status === "estimated" ? "estimated" : "exact";
+  const hasCoverage = Boolean(layer);
+  const hasSnapshot = Boolean(layer?.recipe?.sourceSnapshotSha256);
+  const status: PublicProductVerificationStatus = !hasCoverage
+    ? (product.sourceUrl || catalogEntry?.sourceUrl ? "entrypoint-only" : "partial")
+    : mocAsset && hasSnapshot ? "complete" : "partial";
+  const summary = sanitizeSummary(product.presentation.summaryMarkdown, hasCoverage
+    ? `${product.name} has a published ${precision} ICRS/NESTED coverage layer.`
+    : `${product.name} has an official data entrypoint; a verified coverage layer is not published yet.`);
+  const availableOrders = layer?.availableOrders ?? [];
+  const cellCounts = layer ? Object.fromEntries([...layer.cells.entries()].map(([order, cells]) => [String(order), cells.length])) : {};
+  const officialDataUrl = product.officialDataUrl ?? catalogEntry?.officialDataUrl;
+  const officialQueryUrl = product.officialQueryUrl ?? catalogEntry?.officialQueryUrl;
+  const links = dedupeLinks([
+    externalLink("official-release", product.sourceLabel ?? catalogEntry?.sourceLabel ?? "Official release", product.sourceUrl ?? catalogEntry?.sourceUrl ?? ""),
+    officialDataUrl ? externalLink("official-data", product.officialDataLabel ?? catalogEntry?.officialDataLabel ?? "Official data", officialDataUrl) : undefined,
+    officialQueryUrl ? externalLink("official-query", product.officialQueryLabel ?? catalogEntry?.officialQueryLabel ?? "Official query", officialQueryUrl) : undefined,
+    externalLink("geometry-source", product.geometrySourceLabel ?? catalogEntry?.geometrySourceLabel ?? "Coverage input", product.geometrySourceUrl ?? catalogEntry?.geometrySourceUrl ?? ""),
+    mocAsset && layer && { kind: "fits-moc", label: "FITS MOC", url: `/api/v1/coverage/layers/${encodeURIComponent(layer.layerId)}/moc.fits`, ...(mocAsset.record.mediaType ? { mediaType: mocAsset.record.mediaType } : {}), ...(typeof mocAsset.record.sizeBytes === "number" ? { sizeBytes: mocAsset.record.sizeBytes } : {}), ...(mocAsset.record.sha256 ? { sha256: mocAsset.record.sha256 } : {}) },
+    mocAsset && !layer ? localAssetLink("fits-moc", "FITS MOC", mocAsset.id, mocAsset.record) : undefined,
+    previewAsset && localAssetLink("coverage-preview", "Coverage preview", previewAsset.id, previewAsset.record),
+    geometryAsset && localAssetLink("geometry-source", "Geometry artifact", geometryAsset.id, geometryAsset.record),
+    packageAsset && localAssetLink("resource-package", "Resource Package v3", packageAsset.id, packageAsset.record),
+    provenanceAsset && localAssetLink("provenance", "Provenance", provenanceAsset.id, provenanceAsset.record),
+  ]);
+  const technicalDownloads = links.filter((link) => ["fits-moc", "coverage-preview", "geometry-source", "resource-package", "provenance"].includes(link.kind));
+  const official = links.find((link) => link.kind === "official-release");
+  const query = links.find((link) => link.kind === "official-query");
+  const data = links.find((link) => link.kind === "official-data");
+  const geometry = links.find((link) => link.kind === "geometry-source");
+  const view: PublicProductLink = { kind: "coverage-preview", label: "View in sky", url: `/surveys/#product=${encodeURIComponent(product.productId)}`, description: "在 Atlas 天球视图中定位这个产品的公开覆盖。" };
+  const checks: PublicProductDossier["verification"]["checks"] = [
+    { id: "coverage", label: "Published coverage", status: hasCoverage ? "passed" : "unavailable", ...(hasCoverage ? { detail: `${availableOrders.length} HEALPix order(s) are published.` } : { detail: "Only an official entrypoint is available." }) },
+    { id: "moc", label: "FITS MOC artifact", status: mocAsset ? "passed" : hasCoverage ? "warning" : "unavailable", ...(mocAsset ? { detail: "The downloadable artifact is allowlisted and hash-addressed." } : {}) },
+    { id: "coordinates", label: "Coordinate frame and ordering", status: hasCoverage ? "passed" : "unavailable", ...(hasCoverage ? { detail: "ICRS / NESTED" } : {}) },
+    { id: "source-snapshot", label: "Input snapshot hash", status: layer?.recipe?.sourceSnapshotSha256 ? "passed" : "unavailable", ...(layer?.recipe?.sourceSnapshotSha256 ? { detail: layer.recipe.sourceSnapshotSha256 } : {}) },
+  ];
+  const outputHashes = [
+    ...technicalDownloads.filter((link) => link.sha256).map((link) => ({ kind: link.kind, sha256: link.sha256!, url: link.url })),
+    ...(statisticsAsset ? [{ kind: "statistics", sha256: statisticsAsset.record.sha256, url: `/api/v1/assets/${encodeURIComponent(statisticsAsset.id)}/download` }] : []),
+  ];
+  const limitations = [
+    ...(product.presentation.limitationsMarkdown?.split(/\n+/).map((line) => sanitizePublicText(line.replace(/^[-*]\s*/, "").trim())).filter(Boolean) ?? []),
+    ...(layer?.sourceUnitIndex?.status === "entrypoint-only" ? [sanitizePublicText(layer.sourceUnitIndex.notes)] : []),
+    ...(catalogEntry?.reason ? [sanitizePublicText(catalogEntry.reason)] : []),
+  ];
+  const evidence = buildPublicProductEvidence({ product, catalogEntry, layer, assets });
+  const snapshot = layer?.recipe?.sourceSnapshotSha256 ? { sha256: layer.recipe.sourceSnapshotSha256, ...(layer.recipe.sourceSnapshotSizeBytes !== undefined ? { sizeBytes: layer.recipe.sourceSnapshotSizeBytes } : {}) } : undefined;
+  const dossier: PublicProductDossier = {
+    schemaVersion: 1,
+    identity: { productId: product.productId, surveyId: product.surveyId, releaseId: product.releaseId, name: product.name, ...(product.modality ? { modality: product.modality } : {}), ...(product.dataOrigin ? { dataOrigin: product.dataOrigin } : {}), ...(product.sourceTier ? { sourceTier: product.sourceTier } : {}) },
+    conclusion: { status, summary, coverageAvailable: hasCoverage },
+    coverage: { available: hasCoverage, ...(layer ? { layerId: layer.layerId, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder, cellCount: layer.cellCount, cellCounts, areaDeg2: layer.areaDeg2, ...(layer.coverageRole ?? product.coverageRole ? { coverageRole: layer.coverageRole ?? product.coverageRole } : {}), ...(mocAsset ? { mocUrl: `/api/v1/coverage/layers/${encodeURIComponent(layer.layerId)}/moc.fits` } : {}), ...(previewAsset ? { previewUrl: `/api/v1/assets/${encodeURIComponent(previewAsset.id)}/preview` } : {}) } : {}), coordinateFrame: "ICRS", ordering: "NESTED", availableOrders, precision },
+    source: { ...(product.sourceLabel || catalogEntry?.sourceLabel ? { label: product.sourceLabel ?? catalogEntry?.sourceLabel } : {}), ...(official?.url ? { url: official.url } : {}), ...(product.geometrySourceLabel || catalogEntry?.geometrySourceLabel ? { geometryLabel: product.geometrySourceLabel ?? catalogEntry?.geometrySourceLabel } : {}), ...(geometry?.url ? { geometryUrl: geometry.url } : {}), ...(snapshot ? { snapshot } : {}), references: evidence.sourceReferences },
+    derivation: { ...(layer?.recipe?.mode ? { mode: layer.recipe.mode } : product.mode ? { mode: product.mode } : {}), coordinateFrame: "ICRS", ordering: "NESTED", ...(layer?.coverageRole ?? product.coverageRole ? { coverageRole: layer?.coverageRole ?? product.coverageRole } : {}), availableOrders, steps: evidence.steps },
+    verification: { status, checks, outputHashes },
+    limitations,
+    actions: { ...(official ? { official } : {}), ...(query ? { query } : {}), ...(data ? { data } : {}), view },
+    technicalDownloads,
+    links,
+    evidenceUrl: `/api/v1/products/${encodeURIComponent(product.productId)}/evidence`,
+  };
+  return dossier;
+}
+
+function publicProductListView(record: ProductRecord): Record<string, unknown> {
+  const published = structuredClone(record.published!);
+  const coverage = productCoverage(record);
+  const dossier = buildPublicProductDossier(record);
+  return { ...published, ...(coverage ? { coverage } : {}), detailUrl: `/api/v1/products/${encodeURIComponent(record.productId)}`, evidenceUrl: dossier.evidenceUrl, links: dossier.links };
 }
 
 function adminProductView(record: ProductRecord): Record<string, unknown> {
@@ -196,9 +378,14 @@ const staticTypes: Record<string, string> = {
   ".ico": "image/x-icon",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".otf": "font/otf",
   ".png": "image/png",
   ".svg": "image/svg+xml",
+  ".ttc": "font/collection",
+  ".ttf": "font/ttf",
   ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
 };
 
 function securityHeaders(response: ServerResponse): void {
@@ -573,6 +760,9 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       if (input.profileId !== undefined) return json(response, 400, { error: "profileId is no longer supported; submit a product-driven ScanPlan" });
       if (input.productId) {
         const product = products.get(input.productId).draft;
+        const executableMode: CoverageTaskInput["mode"] | undefined = product.mode && (SUPPORTED_COVERAGE_MODES as readonly string[]).includes(product.mode)
+          ? product.mode as CoverageTaskInput["mode"]
+          : undefined;
         const immutable: Array<[keyof CoverageTaskInput, string | undefined]> = [["layerId", product.layerId], ["surveyId", product.surveyId], ["releaseId", product.releaseId], ["product", product.name], ["productId", product.productId], ["modality", product.modality], ["mode", product.mode], ["coverageRole", product.coverageRole], ["dataOrigin", product.dataOrigin], ["sourceTier", product.sourceTier]];
         for (const [key, expected] of immutable) if (input[key] !== undefined && input[key] !== expected) return json(response, 400, { error: `${String(key)} is defined by the selected product` });
         const derived = {
@@ -583,7 +773,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
           product: product.name,
           productId: product.productId,
           modality: product.modality,
-          mode: product.mode ?? input.mode,
+          mode: executableMode ?? input.mode,
           coverageRole: product.coverageRole ?? input.coverageRole,
           dataOrigin: product.dataOrigin ?? input.dataOrigin,
           sourceTier: product.sourceTier ?? input.sourceTier,
@@ -592,6 +782,30 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         return json(response, 201, { task: await admin.createTask(derived) });
       }
       return json(response, 201, { task: await admin.createTask(input) });
+    }
+    if (pathname === "/api/v1/admin/moc-discovery" && request.method === "GET") {
+      return json(response, 200, { requests: await admin.listMocDiscoveryRequests() });
+    }
+    if (pathname === "/api/v1/admin/moc-discovery" && request.method === "POST") {
+      const body = await requestJsonBody(request);
+      const input: MocDiscoveryInput = {
+        surveyName: body.surveyName as string,
+        ...(typeof body.releaseHint === "string" ? { releaseHint: body.releaseHint } : {}),
+        ...(typeof body.productHint === "string" ? { productHint: body.productHint } : {}),
+      };
+      return json(response, 201, { request: await admin.createMocDiscoveryRequest(input) });
+    }
+    const mocReviewMatch = /^\/api\/v1\/admin\/moc-discovery\/([^/]+)\/reviews$/.exec(pathname);
+    if (mocReviewMatch?.[1] && (request.method === "GET" || request.method === "POST")) {
+      const name = decodeURIComponent(mocReviewMatch[1]);
+      await admin.getMocDiscoveryRequest(name);
+      if (request.method === "GET") return json(response, 200, { reviews: await mocDiscoveryReviews.list(name) });
+      const body = await requestJsonBody(request) as unknown as MocDiscoveryReviewInput;
+      return json(response, 201, { review: await mocDiscoveryReviews.add(name, body) });
+    }
+    const mocMatch = /^\/api\/v1\/admin\/moc-discovery\/([^/]+)$/.exec(pathname);
+    if (mocMatch?.[1] && request.method === "GET") {
+      return json(response, 200, { request: await admin.getMocDiscoveryRequest(decodeURIComponent(mocMatch[1])) });
     }
     const taskMatch = /^\/api\/v1\/admin\/tasks\/([^/]+)$/.exec(pathname);
     const retryMatch = /^\/api\/v1\/admin\/tasks\/([^/]+)\/resubmit$/.exec(pathname);
@@ -623,7 +837,9 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     const publishMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/publish$/.exec(pathname);
     if (publishMatch?.[1] && request.method === "POST") {
       const body = await requestJsonBody(request).catch(() => ({}));
-      return json(response, 200, { product: await products.publish(decodeURIComponent(publishMatch[1]), expectedRevision(request, body)) });
+      const product = await products.publish(decodeURIComponent(publishMatch[1]), expectedRevision(request, body));
+      surveyIndex = applyPublishedProductMetadata(surveyIndex);
+      return json(response, 200, { product });
     }
     const historyMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/history$/.exec(pathname);
     if (historyMatch?.[1] && request.method === "GET") return json(response, 200, { history: await products.history(decodeURIComponent(historyMatch[1])) });
@@ -703,7 +919,7 @@ async function sendCoverageOverlapDetails(request: IncomingMessage, response: Se
       try { sourceUnitsByLayer.set(layer.layerId, await Promise.resolve(sourceUnits.match(layer.layerId, component.order, component.cells))); } catch { /* keep source index metadata only */ }
     }
   }
-  const details = buildOverlapDetails({ result, component, layers: selectedLayers, surveyIndex, catalog, sourceUnitsByLayer, warehouseSnapshots: warehouseLayerSnapshots });
+  const details = buildOverlapDetails({ result, component, layers: selectedLayers, surveyIndex: applyPublishedProductMetadata(surveyIndex), catalog, sourceUnitsByLayer, warehouseSnapshots: warehouseLayerSnapshots });
   return compressedJson(request, response, 200, details, "public, max-age=60, stale-while-revalidate=120");
 }
 
@@ -741,12 +957,66 @@ const server = http.createServer((request, response) => {
     }
     if (pathname.startsWith("/api/v1/coverage/blocks/")) return sendCoverageBlock(request, response, pathname);
     if (pathname === "/api/v1/coverage") return json(response, 200, runtimeCoverageManifest);
-    if (pathname === "/api/v1/surveys") return json(response, 200, surveyIndex);
-    if (pathname === "/api/v1/products") return json(response, 200, { products: products.list().filter((record) => record.published).map((record) => {
-      const published = structuredClone(record.published!);
-      const coverage = productCoverage(record);
-      return coverage ? { ...published, coverage } : published;
-    }) });
+    if (pathname === "/api/v1/surveys") return json(response, 200, applyPublishedProductMetadata(surveyIndex));
+    if (pathname === "/api/v1/products") return json(response, 200, { products: products.list().filter((record) => record.published).map(publicProductListView) });
+    const productEvidence = /^\/api\/v1\/products\/([^/]+)\/evidence$/.exec(pathname);
+    if (productEvidence?.[1]) {
+      const record = products.list().find((candidate) => candidate.productId === decodeURIComponent(productEvidence[1]!));
+      if (!record) return json(response, 404, { error: "Product not found" });
+      const dossier = buildPublicProductDossier(record);
+      // Evidence is deliberately a projection of the dossier. It contains
+      // public hashes and checks, never manifests, task snapshots, storage
+      // paths or Warehouse documents.
+      return json(response, 200, {
+        schemaVersion: 1,
+        productId: dossier.identity.productId,
+        surveyId: dossier.identity.surveyId,
+        releaseId: dossier.identity.releaseId,
+        product: dossier.identity.name,
+        status: dossier.verification.status,
+        precision: dossier.coverage.precision,
+        source: dossier.source,
+        sourceSnapshot: dossier.source.snapshot,
+        sourceSnapshotSha256: dossier.source.snapshot?.sha256,
+        method: dossier.derivation,
+        coordinateFrame: dossier.coverage.coordinateFrame,
+        ordering: dossier.coverage.ordering,
+        availableOrders: dossier.coverage.availableOrders,
+        overviewOrder: dossier.coverage.overviewOrder,
+        maxOrder: dossier.coverage.maxOrder,
+        areaDeg2: dossier.coverage.areaDeg2,
+        coverageRole: dossier.coverage.coverageRole,
+        cellCount: dossier.coverage.cellCount,
+        cellCounts: dossier.coverage.cellCounts,
+        mocUrl: dossier.coverage.mocUrl,
+        previewUrl: dossier.coverage.previewUrl,
+        checks: dossier.verification.checks,
+        limitations: dossier.limitations,
+        outputs: dossier.verification.outputHashes,
+        outputHashes: dossier.verification.outputHashes,
+        steps: dossier.derivation.steps,
+        sourceReferences: dossier.source.references,
+        next: dossier.actions.data ?? dossier.actions.official,
+      });
+    }
+    const productDetail = /^\/api\/v1\/products\/([^/]+)$/.exec(pathname);
+    if (productDetail?.[1]) {
+      const record = products.list().find((candidate) => candidate.productId === decodeURIComponent(productDetail[1]!));
+      if (!record) return json(response, 404, { error: "Product not found" });
+      return json(response, 200, buildPublicProductDossier(record));
+    }
+    const layerMoc = /^\/api\/v1\/coverage\/layers\/([a-z0-9-]+)\/moc\.fits$/.exec(pathname);
+    if (layerMoc?.[1]) {
+      const layerId = layerMoc[1]!;
+      const layer = coverageCatalog.records.get(layerId);
+      const asset = [...catalog.files.entries()].find(([, entry]) => {
+        if (entry.record.kind !== "moc") return false;
+        if (entry.record.path.includes(`/layers/${layerId}/`) || entry.record.id === `layer-${layerId}-moc` || entry.record.id === layerId) return true;
+        return Boolean(layer && entry.record.surveyId === layer.surveyId && entry.record.releaseId === layer.releaseId && entry.record.product === layer.product);
+      });
+      if (!asset) return json(response, 404, { error: "Coverage MOC not found" });
+      return sendDownload(request, response, catalog, asset[0]);
+    }
     const download = /^\/api\/v1\/assets\/([a-z0-9-]+)\/download$/.exec(pathname);
     if (download?.[1]) return sendDownload(request, response, catalog, download[1]);
     const preview = /^\/api\/v1\/assets\/([a-z0-9-]+)\/preview$/.exec(pathname);

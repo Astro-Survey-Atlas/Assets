@@ -24,6 +24,18 @@ sha256sum package.zip
 The catalog's `packages[].sha256` is the trust anchor. HTTP `ETag` and object
 storage multipart ETags are not substitutes for the content hash.
 
+Assets rebuilds packages from the acquired/frozen layer registry. For the
+current DESI and Euclid refresh, the reproducible local command is:
+
+```bash
+npm run packages:rebuild
+```
+
+It reads the registry and locked recipe snapshots, keeps the v3 archive
+structure unchanged, rewrites the package catalog hashes, refreshes release
+provenance, and rebuilds `release-manifest.json`. Source manifests and
+normalized scans are evidence inputs and are deliberately not ZIP members.
+
 ## Validate before installation
 
 Install the pinned MOC Core wheel published by `/api/v1/assets`, then validate

@@ -57,6 +57,8 @@ export interface PublicCoverageOrders {
   overviewOrder: number;
   maxOrder: number;
   layerId?: string;
+  coverageRole?: "image_extent" | "object_presence" | "footprint_extent";
+  areaDeg2?: number;
 }
 
 export interface PublicCoverageOrderSummary {
@@ -78,9 +80,138 @@ export interface PublicSurveyProduct {
   sourceLabel?: string;
   geometrySourceUrl?: string;
   geometrySourceLabel?: string;
+  officialDataUrl?: string;
+  officialDataLabel?: string;
+  officialQueryUrl?: string;
+  officialQueryLabel?: string;
   reason?: string;
   manualStep?: string;
   coverage?: PublicCoverageOrders;
+  detailUrl?: string;
+  evidenceUrl?: string;
+  links?: PublicProductLink[];
+}
+
+export type PublicProductLinkKind = "official-release" | "official-query" | "official-data" | "geometry-source" | "fits-moc" | "coverage-preview" | "resource-package" | "provenance";
+
+export interface PublicProductLink {
+  kind: PublicProductLinkKind;
+  label: string;
+  url: string;
+  description?: string;
+  mediaType?: string;
+  sizeBytes?: number;
+  sha256?: string;
+}
+
+/**
+ * Human-facing aggregate for a published product.  The product list keeps its
+ * historical fields for existing clients; this shape is used by the detail
+ * and evidence endpoints so consumers do not need to join several JSON
+ * documents themselves.
+ */
+export type PublicProductVerificationStatus = "complete" | "partial" | "entrypoint-only";
+
+export type PublicEvidenceItemKind = "official-release" | "official-data" | "official-query" | "coverage-input" | "raw-moc" | "snapshot" | "code" | "artifact" | "note";
+export type PublicEvidenceItemVisibility = "public" | "evidence-only" | "unavailable";
+export type PublicDerivationStepStatus = "available" | "partial" | "unavailable";
+
+export interface PublicProductEvidenceItem {
+  kind: PublicEvidenceItemKind;
+  label: string;
+  description: string;
+  visibility: PublicEvidenceItemVisibility;
+  url?: string;
+  filename?: string;
+  mediaType?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  reason?: string;
+}
+
+export interface PublicProductCodeEvidence {
+  language: "python" | "typescript";
+  snippet: string;
+  implementationRef: string;
+}
+
+export interface PublicProductDerivationStep {
+  sequence: number;
+  id: string;
+  title: string;
+  purpose: string;
+  inputs: PublicProductEvidenceItem[];
+  method: { libraries: string[]; implementationRef: string };
+  code?: PublicProductCodeEvidence;
+  outputs: PublicProductEvidenceItem[];
+  status: PublicDerivationStepStatus;
+  reason?: string;
+}
+
+export interface PublicProductDossier {
+  schemaVersion: 1;
+  identity: {
+    productId: string;
+    surveyId: string;
+    releaseId: string;
+    name: string;
+    modality?: string;
+    dataOrigin?: "observed" | "simulated" | "catalog";
+    sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived";
+  };
+  conclusion: {
+    status: PublicProductVerificationStatus;
+    summary: string;
+    coverageAvailable: boolean;
+  };
+  coverage: {
+    available: boolean;
+    layerId?: string;
+    coordinateFrame: "ICRS";
+    ordering: "NESTED";
+    coverageRole?: "image_extent" | "object_presence" | "footprint_extent";
+    availableOrders: number[];
+    overviewOrder?: number;
+    maxOrder?: number;
+    cellCount?: number;
+    cellCounts?: Record<string, number>;
+    areaDeg2?: number;
+    precision: "exact" | "estimated" | "entrypoint-only" | "truncated";
+    mocUrl?: string;
+    previewUrl?: string;
+  };
+  source: {
+    label?: string;
+    url?: string;
+    geometryLabel?: string;
+    geometryUrl?: string;
+    snapshot?: { uri?: string; sha256?: string; sizeBytes?: number };
+    references?: PublicProductEvidenceItem[];
+  };
+  derivation: {
+    mode?: string;
+    coordinateFrame: "ICRS";
+    ordering: "NESTED";
+    coverageRole?: "image_extent" | "object_presence" | "footprint_extent";
+    availableOrders: number[];
+    steps: PublicProductDerivationStep[];
+  };
+  verification: {
+    status: PublicProductVerificationStatus;
+    checks: Array<{ id: string; label: string; status: "passed" | "warning" | "unavailable"; detail?: string }>;
+    outputHashes: Array<{ kind: string; sha256: string; url?: string }>;
+  };
+  limitations: string[];
+  actions: {
+    official?: PublicProductLink;
+    query?: PublicProductLink;
+    data?: PublicProductLink;
+    view?: PublicProductLink;
+  };
+  technicalDownloads: PublicProductLink[];
+  /** Stable links are repeated here for clients that do not inspect actions. */
+  links: PublicProductLink[];
+  evidenceUrl: string;
 }
 
 export interface PublicSurveyRelease {

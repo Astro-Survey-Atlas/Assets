@@ -160,6 +160,32 @@ export interface CoverageTaskView {
   status: TaskStatusView;
 }
 
+export interface MocDiscoveryInput {
+  surveyName: string;
+  releaseHint?: string;
+  productHint?: string;
+}
+
+export interface MocDiscoveryView {
+  name: string;
+  namespace?: string;
+  createdAt?: string;
+  surveyName: string;
+  releaseHint?: string;
+  productHint?: string;
+  policyRef: string;
+  status: {
+    phase: string;
+    jobName?: string;
+    reason?: string;
+    message?: string;
+    evidencePath?: string;
+    candidateCount?: number;
+    probeCount?: number;
+    lastTransitionTime?: string;
+  };
+}
+
 export class AdminHttpError extends Error {
   constructor(readonly statusCode: number, message: string) {
     super(message);
@@ -192,7 +218,7 @@ export function loadAdminConfig(environment: NodeJS.ProcessEnv = process.env): A
     caFile: environment.ASSETS_KUBE_CA_FILE?.trim() || "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
     warehouseEsUrl: environment.ASSETS_WAREHOUSE_ES_URL?.trim() || "http://atlas-warehouse-elasticsearch.atlas-warehouse.svc.cluster.local:9200",
     scannerImage: environment.ASSETS_WAREHOUSE_SCANNER_IMAGE?.trim()
-      || "crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260826-cutover1",
+      || "crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260826-shutdownfix1",
     evidenceClaimName: environment.ASSETS_WAREHOUSE_EVIDENCE_CLAIM?.trim() || "atlas-evidence",
     evidenceMountPath: environment.ASSETS_WAREHOUSE_EVIDENCE_MOUNT_PATH?.trim() || "/var/lib/atlas-evidence",
   };
@@ -493,6 +519,70 @@ function taskView(resource: KubernetesResource): CoverageTaskView {
       catalog: extraction.catalog && typeof extraction.catalog === "object" && !Array.isArray(extraction.catalog) ? extraction.catalog as Record<string, unknown> : undefined,
     },
     status: statusView(resource.status),
+  };
+}
+
+function mocDiscoveryView(resource: KubernetesResource): MocDiscoveryView {
+  const spec = resource.spec ?? {};
+  const query = spec.query && typeof spec.query === "object" ? spec.query as Record<string, unknown> : {};
+  const rawStatus = resource.status ?? {};
+  const status = rawStatus.status && typeof rawStatus.status === "object" && !Array.isArray(rawStatus.status)
+    ? rawStatus.status as Record<string, unknown>
+    : rawStatus;
+  const value = (key: string): string | undefined => typeof status[key] === "string" ? status[key] as string : undefined;
+  const number = (key: string): number | undefined => typeof status[key] === "number" ? status[key] as number : undefined;
+  return {
+    name: resource.metadata?.name ?? "",
+    namespace: resource.metadata?.namespace,
+    createdAt: resource.metadata?.creationTimestamp,
+    surveyName: typeof query.surveyName === "string" ? query.surveyName : "",
+    ...(typeof query.releaseHint === "string" ? { releaseHint: query.releaseHint } : {}),
+    ...(typeof query.productHint === "string" ? { productHint: query.productHint } : {}),
+    policyRef: typeof spec.policyRef === "string" ? spec.policyRef : "",
+    status: {
+      phase: value("phase") ?? "PENDING",
+      ...(value("jobName") ? { jobName: value("jobName") } : {}),
+      ...(value("reason") ? { reason: value("reason") } : {}),
+      ...(value("message") ? { message: value("message") } : {}),
+      ...(value("evidencePath") ? { evidencePath: value("evidencePath") } : {}),
+      ...(number("candidateCount") !== undefined ? { candidateCount: number("candidateCount") } : {}),
+      ...(number("probeCount") !== undefined ? { probeCount: number("probeCount") } : {}),
+      ...(value("lastTransitionTime") ? { lastTransitionTime: value("lastTransitionTime") } : {}),
+    },
+  };
+}
+
+function discoveryText(value: unknown, field: string, maxLength = 200): string {
+  return requireText(value, field, maxLength);
+}
+
+function discoveryOptionalText(value: unknown, field: string, maxLength = 200): string | undefined {
+  return optionalText(value, field, maxLength);
+}
+
+function buildMocDiscoveryResource(input: MocDiscoveryInput, namespace: string): KubernetesResource {
+  const surveyName = discoveryText(input.surveyName, "surveyName");
+  const releaseHint = discoveryOptionalText(input.releaseHint, "releaseHint");
+  const productHint = discoveryOptionalText(input.productHint, "productHint");
+  const base = `${productSlug(surveyName)}-moc-discovery`;
+  const suffix = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  const name = dnsName(`${base.slice(0, Math.max(1, 63 - suffix.length - 1))}-${suffix}`, "name");
+  return {
+    apiVersion: "atlas.zhejianglab.org/v1alpha1",
+    kind: "MocDiscoveryRequest",
+    metadata: {
+      name,
+      namespace,
+      labels: {
+        "app.kubernetes.io/managed-by": ASSETS_MANAGED_BY,
+        "astro.zhejianglab.org/resource-kind": "moc-discovery",
+        "astro.zhejianglab.org/task-kind": "public-moc-discovery",
+      },
+    },
+    spec: {
+      query: { surveyName, ...(releaseHint ? { releaseHint } : {}), ...(productHint ? { productHint } : {}) },
+      policyRef: "cds-public-moc-v1",
+    },
   };
 }
 
@@ -829,6 +919,8 @@ function buildTaskResource(
       namespace,
       labels: {
         "app.kubernetes.io/managed-by": ASSETS_MANAGED_BY,
+        "atlas.zhejianglab.org/track-caller": "assets",
+        "atlas.zhejianglab.org/track-task-kind": PUBLIC_COVERAGE_KIND,
         "astro.zhejianglab.org/task-kind": PUBLIC_COVERAGE_KIND,
         "astro.zhejianglab.org/task-id": name,
         "astro.zhejianglab.org/layer-id": layerId,
@@ -873,6 +965,7 @@ export class AssetsAdmin {
         connectorTypes: [...CONNECTOR_TYPES],
         backends: ["job"],
         scanRequestApiVersion: "atlas.zhejianglab.org/v1alpha1",
+        mocDiscovery: { provider: "cds", policyRef: "cds-public-moc-v1" },
       },
     };
   }
@@ -916,6 +1009,33 @@ export class AssetsAdmin {
   async listTasks(): Promise<CoverageTaskView[]> {
     const resources = await this.kube.list("scanrequests", `app.kubernetes.io/managed-by=${ASSETS_MANAGED_BY},astro.zhejianglab.org/task-kind=${PUBLIC_COVERAGE_KIND}`);
     return resources.map(taskView).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  }
+
+  async listMocDiscoveryRequests(): Promise<MocDiscoveryView[]> {
+    const resources = await this.kube.list("mocdiscoveryrequests", "app.kubernetes.io/managed-by=" + ASSETS_MANAGED_BY + ",astro.zhejianglab.org/resource-kind=moc-discovery");
+    return resources.map(mocDiscoveryView).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  }
+
+  async getMocDiscoveryRequest(name: string): Promise<MocDiscoveryView> {
+    const normalized = dnsName(name, "MOC discovery request name");
+    const resource = await this.kube.get("mocdiscoveryrequests", normalized);
+    if (!resource || resource.metadata?.labels?.["app.kubernetes.io/managed-by"] !== ASSETS_MANAGED_BY
+      || resource.metadata?.labels?.["astro.zhejianglab.org/resource-kind"] !== "moc-discovery") {
+      throw new AdminHttpError(404, `MOC discovery request ${normalized} was not found`);
+    }
+    return mocDiscoveryView(resource);
+  }
+
+  async createMocDiscoveryRequest(input: MocDiscoveryInput): Promise<MocDiscoveryView> {
+    const resource = buildMocDiscoveryResource(input, this.config.namespace);
+    try {
+      return mocDiscoveryView(await this.kube.create("mocdiscoveryrequests", resource));
+    } catch (error) {
+      if (error instanceof KubernetesApiError && error.statusCode === 409) {
+        throw new AdminHttpError(409, `MOC discovery request ${String(resource.metadata?.name)} already exists`);
+      }
+      throw error;
+    }
   }
 
   async getTask(name: string): Promise<CoverageTaskView> {

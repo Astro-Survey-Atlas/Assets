@@ -13,6 +13,16 @@
     </header>
     <main class="resources-main">
       <section class="resources-hero"><p class="eyebrow">PUBLIC SKY COVERAGE / DEVELOPER RESOURCES</p><h1 data-i18n="page.resources.title">Public resources</h1><p data-i18n="page.resources.lead">Published documentation, packages, provenance, and survey assets.</p></section>
+      <section class="resource-explainer" aria-labelledby="resource-explainer-title">
+        <div><p class="eyebrow" data-i18n="page.resources.explainerKicker">HOW TO READ A PRODUCT</p><h2 id="resource-explainer-title" data-i18n="page.resources.explainerTitle">From sky position to official data</h2><p class="resource-explainer-lead" data-i18n="page.resources.explainerLead">Every product page answers five questions in order, so a coverage map is a usable conclusion rather than a pile of files.</p></div>
+        <ol class="resource-explainer-steps">
+          <li><b>01</b><strong data-i18n="page.resources.explainer1Title">Choose a sky area</strong><span data-i18n="page.resources.explainer1Body">Start with a survey, release, or point on the sky.</span></li>
+          <li><b>02</b><strong data-i18n="page.resources.explainer2Title">See what is covered</strong><span data-i18n="page.resources.explainer2Body">The MOC and preview show where the published layer reaches.</span></li>
+          <li><b>03</b><strong data-i18n="page.resources.explainer3Title">Read the precision</strong><span data-i18n="page.resources.explainer3Body">ICRS, NESTED, order, area, and exact or estimated are stated.</span></li>
+          <li><b>04</b><strong data-i18n="page.resources.explainer4Title">Check the evidence</strong><span data-i18n="page.resources.explainer4Body">Source snapshots, checks, and hashes explain how the result was made.</span></li>
+          <li><b>05</b><strong data-i18n="page.resources.explainer5Title">Go to the archive</strong><span data-i18n="page.resources.explainer5Body">The final link takes you to the official query or data service.</span></li>
+        </ol>
+      </section>
       <section class="resources-grid">
         <article id="github" class="resource-band"><p class="eyebrow">SOURCE REPOSITORY</p><h2>GitHub</h2><p data-i18n="page.resources.githubBody">Snapshots, release manifests, resource packages, and the Assets service are maintained together in one auditable repository.</p><a class="resource-link" href="https://github.com/AaronYang0628/Astro-Survey-Atlas-Assets" target="_blank" rel="noreferrer">github.com/AaronYang0628/Astro-Survey-Atlas-Assets <i data-lucide="external-link"></i></a></article>
         <article id="sdk" class="resource-band"><p class="eyebrow">OFFLINE TOOLCHAIN</p><h2>astro-survey-moc-core</h2><p data-i18n="page.resources.sdkBody">The Python package and CLI generate deterministic IVOA FITS MOCs, order-8 query indexes, order-4 previews, and Resource Package v3.</p><pre><code>python3 -m pip wheel --no-deps --no-build-isolation . -w wheelhouse

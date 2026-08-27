@@ -146,6 +146,46 @@ GET /api/v1/products
 
 草稿和版本控制只在管理员认证边界内：`GET /api/v1/admin/products`、`GET /api/v1/admin/products?view=surveys`、`GET /api/v1/admin/products?surveyId=<surveyId>`、`GET /api/v1/admin/products/{productId}`、`PUT /api/v1/admin/products/{productId}/draft`、`POST /api/v1/admin/products/{productId}/publish` 和 `GET /api/v1/admin/products/{productId}/history`。产品 ID 固定由 `surveyId + releaseId + product name` 生成；流程图节点的实现引用由 recipe 固定，管理员只能修改解释文本和证据链接。产品记录包含已发布 coverage layer 的可用 HEALPix order。
 
+### Public product dossier and evidence
+
+```http
+GET /api/v1/products/{productId}
+GET /api/v1/products/{productId}/evidence
+```
+
+`/api/v1/products` retains the historical published product fields and adds
+`detailUrl`, `evidenceUrl` and typed `links[]`. The detail endpoint groups the
+same product into an identity, plain-language conclusion, real coverage
+orders/area, source, derivation steps, verification checks, limitations and
+actions. Its `technicalDownloads` entries point to allowlisted artifacts and
+include SHA-256 values where available.
+
+The evidence endpoint is loaded on demand and is safe to expose in a browser.
+It reports `status` (`complete`, `partial` or `entrypoint-only`) separately from
+coverage `precision` (`exact`, `estimated`, `entrypoint-only` or `truncated`),
+along with ICRS/NESTED orders, source snapshot hash, output hashes and the
+official next destination. Input manifests, normalized scans, task snapshots,
+PVC/object-store paths and Elasticsearch documents are never included.
+
+Every layer with an allowlisted FITS MOC also has a predictable download URL:
+
+```http
+GET|HEAD /api/v1/coverage/layers/{layerId}/moc.fits
+Range: bytes=0-1023
+```
+
+This route uses the same media type, byte-range, immutable cache, ETag and
+`X-Content-SHA256` semantics as `/api/v1/assets/{assetId}/download`. The
+Resource Package v3 archive remains the immutable multi-file boundary for
+Workspace consumers.
+
+The list endpoint intentionally remains published-only for backward
+compatibility. Detail and evidence routes are catalog-backed: a registered
+product can have a safe `entrypoint-only` or `partial` dossier before its
+editorial copy is published. Draft text is never returned verbatim; the server
+builds a structured projection from the catalog, current layer registry and
+allowlisted release assets.
+
 ## Admin Scan Requests
 
 管理员控制面使用产品 recipe 生成 ScanPlan v2。任务接口为

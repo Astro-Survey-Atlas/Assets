@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtemp } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
+import os from "node:os";
 import test from "node:test";
 
 function freePort(): Promise<number> {
@@ -29,11 +31,17 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   const port = await freePort();
   const child = spawn(process.execPath, [path.resolve("node_modules/tsx/dist/cli.mjs"), "server/server.ts"], {
     cwd: process.cwd(),
-    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), PUBLIC_SITE_ROOT: path.resolve("site") },
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), PUBLIC_SITE_ROOT: path.resolve("site/public") },
     stdio: ["ignore", "pipe", "pipe"],
   });
   context.after(() => { child.kill("SIGTERM"); });
   await waitFor(`http://127.0.0.1:${port}/healthz`, child);
+
+  for (const [font, mediaType] of [["NotoSans-Regular.ttf", "font/ttf"], ["NotoSansCJK-Regular.ttc", "font/collection"]] as const) {
+    const fontResponse = await fetch(`http://127.0.0.1:${port}/fonts/${font}`);
+    assert.equal(fontResponse.status, 200);
+    assert.equal(fontResponse.headers.get("content-type"), mediaType);
+  }
 
   const catalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/assets`);
   assert.equal(catalogResponse.status, 200);
@@ -215,4 +223,83 @@ test("admin endpoints require a token and expose the configured control-plane bo
   assert.equal(products.status, 200);
   const productBody = await products.json() as { products: Array<{ productId: string }> };
   assert.ok(productBody.products.length > 0);
+});
+
+test("public product dossier, evidence projection and predictable MOC URL are hash-addressed", async (context) => {
+  const port = await freePort();
+  const contentRoot = await mkdtemp(path.join(os.tmpdir(), "assets-product-dossier-"));
+  const child = spawn(process.execPath, [path.resolve("node_modules/tsx/dist/cli.mjs"), "server/server.ts"], {
+    cwd: process.cwd(),
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), PUBLIC_SITE_ROOT: path.resolve("site"), ASSETS_CONTENT_ROOT: contentRoot, ASSETS_ADMIN_ENABLED: "true", ASSETS_ADMIN_TOKEN: "test-admin-token" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  context.after(() => { child.kill("SIGTERM"); });
+  await waitFor(`http://127.0.0.1:${port}/healthz`, child);
+
+  const adminResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(adminResponse.status, 200);
+  const adminBody = await adminResponse.json() as { products: Array<{ productId: string; draft: { layerId?: string } }> };
+  const candidate = adminBody.products.find((product) => product.draft.layerId === "euclid-q1-deep-fields-image-extent");
+  assert.ok(candidate);
+  const adminProductResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(adminProductResponse.status, 200);
+  const adminProductBody = await adminProductResponse.json() as { product: { draft: Record<string, unknown> } };
+  const unsafeDraft = { ...adminProductBody.product.draft, sourceUrl: "http://10.42.0.7/private", geometrySourceUrl: "http://192.168.0.4/geometry" };
+  const updateResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}`, {
+    method: "PUT",
+    headers: { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ content: unsafeDraft }),
+  });
+  assert.equal(updateResponse.status, 200);
+  const catalogDetail = await fetch(`http://127.0.0.1:${port}/api/v1/products/${candidate.productId}`);
+  assert.equal(catalogDetail.status, 200);
+  const catalogDossier = await catalogDetail.json() as { identity: { productId: string }; coverage: { layerId?: string }; conclusion: { summary: string }; source?: { url?: string; geometryUrl?: string } };
+  assert.equal(catalogDossier.identity.productId, candidate.productId);
+  assert.equal(catalogDossier.coverage.layerId, "euclid-q1-deep-fields-image-extent");
+  assert.equal(catalogDossier.source?.url, undefined);
+  assert.ok(catalogDossier.source?.geometryUrl?.startsWith("/api/v1/assets/"));
+  assert.doesNotMatch(JSON.stringify(catalogDossier), /10\.42\.0\.7|192\.168\.0\.4/);
+  assert.doesNotMatch(catalogDossier.conclusion.summary, /scannerRunId|taskSnapshot|normalized-scan|\/var\/lib|elasticsearch/i);
+  const publishResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}/publish`, { method: "POST", headers: { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" }, body: "{}" });
+  assert.equal(publishResponse.status, 200);
+
+  const listResponse = await fetch(`http://127.0.0.1:${port}/api/v1/products`);
+  assert.equal(listResponse.status, 200);
+  const listBody = await listResponse.json() as { products: Array<{ productId: string; detailUrl: string; evidenceUrl: string; links: Array<{ kind: string; url: string }> }> };
+  const listed = listBody.products.find((product) => product.productId === candidate.productId);
+  assert.ok(listed);
+  assert.equal(listed.detailUrl, `/api/v1/products/${candidate.productId}`);
+  assert.equal(listed.evidenceUrl, `/api/v1/products/${candidate.productId}/evidence`);
+  assert.ok(listed.links.some((link) => link.kind === "fits-moc"));
+
+  const detailResponse = await fetch(`http://127.0.0.1:${port}${listed.detailUrl}`);
+  assert.equal(detailResponse.status, 200);
+  const detail = await detailResponse.json() as { schemaVersion: number; identity: { productId: string }; coverage: { layerId?: string; ordering: string; precision: string }; verification: { status: string }; evidenceUrl: string };
+  assert.equal(detail.schemaVersion, 1);
+  assert.equal(detail.identity.productId, candidate.productId);
+  assert.equal(detail.coverage.ordering, "NESTED");
+  assert.equal(detail.coverage.precision, "exact");
+  assert.equal(detail.verification.status, "complete");
+
+  const evidenceResponse = await fetch(`http://127.0.0.1:${port}${detail.evidenceUrl}`);
+  assert.equal(evidenceResponse.status, 200);
+  const evidenceText = await evidenceResponse.text();
+  const evidence = JSON.parse(evidenceText) as { status: string; precision: string; coordinateFrame: string; ordering: string; checks: unknown[]; outputHashes: unknown[] };
+  assert.equal(evidence.status, "complete");
+  assert.equal(evidence.precision, "exact");
+  assert.equal(evidence.coordinateFrame, "ICRS");
+  assert.equal(evidence.ordering, "NESTED");
+  assert.ok(evidence.checks.length > 0 && evidence.outputHashes.length > 0);
+  assert.doesNotMatch(evidenceText, /scannerRunId|taskSnapshot|normalized-scan|\/var\/lib|elasticsearch/i);
+
+  const mocUrl = listed.links.find((link) => link.kind === "fits-moc")?.url;
+  assert.ok(mocUrl);
+  const moc = await fetch(`http://127.0.0.1:${port}${mocUrl}`, { headers: { Range: "bytes=0-15" } });
+  assert.equal(moc.status, 206);
+  assert.equal(moc.headers.get("content-length"), "16");
+  assert.equal(moc.headers.get("content-type"), "application/fits");
+  assert.match(moc.headers.get("etag") ?? "", /^\"sha256-[a-f0-9]{64}\"$/);
+  const mocHead = await fetch(`http://127.0.0.1:${port}${mocUrl}`, { method: "HEAD" });
+  assert.equal(mocHead.status, 200);
+  assert.ok(Number(mocHead.headers.get("content-length")) > 0);
 });

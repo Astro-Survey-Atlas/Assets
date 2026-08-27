@@ -3,6 +3,8 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AdminHttpError } from "./admin.js";
 
+export type { PublicProductDossier, PublicProductLink, PublicProductLinkKind, PublicProductVerificationStatus } from "./types.js";
+
 export interface ProductFlowNode {
   id: string;
   kind: string;
@@ -15,7 +17,7 @@ export interface ProductFlowNode {
 export interface ProductFlowEdge { from: string; to: string; label?: string; }
 export interface ProductPresentation { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: ProductFlowNode[]; edges: ProductFlowEdge[] } }
 export interface ProductScanDefaults { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }
-export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; presentation: ProductPresentation }
+export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix" | "regions" | "tile-table" | "native-moc"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; presentation: ProductPresentation }
 export interface ProductRecord { productId: string; draft: ProductContent; published: ProductContent | null; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; contentSha256: string; }
 
 const configuredContentRoot = process.env.ASSETS_CONTENT_ROOT ? path.resolve(process.env.ASSETS_CONTENT_ROOT) : "/var/lib/assets-content";
@@ -142,6 +144,10 @@ function validateContent(value: unknown, existing: ProductRecord): ProductConten
     ...optionalField("originNote", optionalText("originNote", 2000)),
     ...optionalField("sourceLabel", optionalText("sourceLabel", 200)),
     ...optionalField("sourceUrl", optionalUrl("sourceUrl")),
+    ...optionalField("officialDataLabel", optionalText("officialDataLabel", 200)),
+    ...optionalField("officialDataUrl", optionalUrl("officialDataUrl")),
+    ...optionalField("officialQueryLabel", optionalText("officialQueryLabel", 200)),
+    ...optionalField("officialQueryUrl", optionalUrl("officialQueryUrl")),
     ...optionalField("geometrySourceLabel", optionalText("geometrySourceLabel", 200)),
     ...optionalField("geometrySourceUrl", optionalUrl("geometrySourceUrl")),
     presentation: { summaryMarkdown: text("summaryMarkdown"), methodologyMarkdown: text("methodologyMarkdown"), limitationsMarkdown: text("limitationsMarkdown"), flow: { nodes, edges } },
@@ -165,7 +171,7 @@ export class ProductStore {
       const data = JSON.parse(await readFile(this.#contentFile(), "utf8")) as { products?: ProductRecord[] };
       for (const record of data.products ?? []) this.#records.set(record.productId, record);
     } catch { /* first boot */ }
-    const catalog = JSON.parse(await readFile(path.join(root, "src", "surveys", "survey-catalog.json"), "utf8")) as { surveys?: Array<{ id: string; releases: Array<{ id: string; products: Array<{ name: string; modality: string; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; originNote?: string; sourceLabel?: string; sourceUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string }> }> }> };
+    const catalog = JSON.parse(await readFile(path.join(root, "src", "surveys", "survey-catalog.json"), "utf8")) as { surveys?: Array<{ id: string; releases: Array<{ id: string; products: Array<{ name: string; modality: string; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string }> }> }> };
     const registry = JSON.parse(await readFile(path.join(root, "src", "layers", "layer-registry.json"), "utf8")) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; coverageRole?: ProductContent["coverageRole"]; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; plannedMode?: string; mode?: string; recipePath?: string; status?: string; maxOrder?: number }> };
     const definitions = new Map((registry.layers ?? []).map((layer) => [`${layer.surveyId}:${layer.releaseId}:${layer.product}`, layer]));
     for (const survey of catalog.surveys ?? []) for (const release of survey.releases ?? []) for (const product of release.products ?? []) {
@@ -190,7 +196,7 @@ export class ProductStore {
         recipeMode = coverageDefinition.recipe.mode;
         recipeHash = createHash("sha256").update(JSON.stringify(coverageDefinition.recipe)).digest("hex");
       }
-      const supportedMode = recipeMode && ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix"].includes(recipeMode) ? recipeMode as ProductContent["mode"] : undefined;
+      const supportedMode = recipeMode && ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "regions", "tile-table", "native-moc"].includes(recipeMode) ? recipeMode as ProductContent["mode"] : undefined;
       const flowMode = recipeMode && ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "regions", "tile-table", "native-moc"].includes(recipeMode) ? recipeMode : "catalog-radec";
       const coverageFlow = coverageDefinition?.recipe && !definition?.recipePath ? { nodes: coverageDefinition.recipe.steps.map((node) => ({ ...node, evidenceRefs: [] })), edges: coverageDefinition.recipe.steps.slice(1).map((node, index) => ({ from: coverageDefinition.recipe!.steps[index]!.id, to: node.id })) } : undefined;
       const scanDefaults: ProductScanDefaults = {
@@ -203,11 +209,11 @@ export class ProductStore {
         ...(supportedMode === "nested-healpix" ? { allowedSuffixes: ".json,.csv,.tsv,.fits" } : {}),
         ...(supportedMode === "catalog-radec" ? { allowedSuffixes: ".csv,.tsv" } : {}),
       };
-      const draft: ProductContent = { productId: id, surveyId: survey.id, releaseId: release.id, name: product.name, modality: product.modality, ...((definition || coverageDefinition) ? { layerId: definition?.layerId, coverageRole: definition?.coverageRole, dataOrigin: definition?.dataOrigin ?? product.dataOrigin, sourceTier: definition?.sourceTier ?? product.sourceTier, ...(supportedMode ? { mode: supportedMode, scanDefaults } : {}) } : { dataOrigin: product.dataOrigin, sourceTier: product.sourceTier }), ...(product.originNote ? { originNote: product.originNote } : {}), ...(product.sourceLabel ? { sourceLabel: product.sourceLabel } : {}), ...(product.sourceUrl ? { sourceUrl: product.sourceUrl } : {}), ...(product.geometrySourceLabel ? { geometrySourceLabel: product.geometrySourceLabel } : {}), ...(product.geometrySourceUrl ? { geometrySourceUrl: product.geometrySourceUrl } : {}), ...(recipeHash ? { recipeVersion: 1, recipeHash } : {}), presentation: { summaryMarkdown: "", methodologyMarkdown: "", limitationsMarkdown: "", flow: coverageFlow ?? defaultFlow(product, flowMode, recipe) } };
+      const draft: ProductContent = { productId: id, surveyId: survey.id, releaseId: release.id, name: product.name, modality: product.modality, ...((definition || coverageDefinition) ? { layerId: definition?.layerId, coverageRole: definition?.coverageRole, dataOrigin: definition?.dataOrigin ?? product.dataOrigin, sourceTier: definition?.sourceTier ?? product.sourceTier, ...(supportedMode ? { mode: supportedMode, scanDefaults } : {}) } : { dataOrigin: product.dataOrigin, sourceTier: product.sourceTier }), ...(product.originNote ? { originNote: product.originNote } : {}), ...(product.sourceLabel ? { sourceLabel: product.sourceLabel } : {}), ...(product.sourceUrl ? { sourceUrl: product.sourceUrl } : {}), ...(product.officialDataLabel ? { officialDataLabel: product.officialDataLabel } : {}), ...(product.officialDataUrl ? { officialDataUrl: product.officialDataUrl } : {}), ...(product.officialQueryLabel ? { officialQueryLabel: product.officialQueryLabel } : {}), ...(product.officialQueryUrl ? { officialQueryUrl: product.officialQueryUrl } : {}), ...(product.geometrySourceLabel ? { geometrySourceLabel: product.geometrySourceLabel } : {}), ...(product.geometrySourceUrl ? { geometrySourceUrl: product.geometrySourceUrl } : {}), ...(recipeHash ? { recipeVersion: 1, recipeHash } : {}), presentation: { summaryMarkdown: "", methodologyMarkdown: "", limitationsMarkdown: "", flow: coverageFlow ?? defaultFlow(product, flowMode, recipe) } };
       if (existing) {
         const recipeChanged = Boolean(recipeHash && existing.draft.recipeHash !== recipeHash);
         const scanDefaultsMissing = Boolean(supportedMode && existing.draft.scanDefaults === undefined);
-        const sourceMetadataMissing = ["dataOrigin", "sourceTier", "sourceUrl", "sourceLabel", "geometrySourceUrl", "geometrySourceLabel", "originNote"]
+        const sourceMetadataMissing = ["dataOrigin", "sourceTier", "sourceUrl", "sourceLabel", "officialDataUrl", "officialDataLabel", "officialQueryUrl", "officialQueryLabel", "geometrySourceUrl", "geometrySourceLabel", "originNote"]
           .some((key) => existing.draft[key as keyof ProductContent] === undefined && draft[key as keyof ProductContent] !== undefined);
         if (recipeChanged || scanDefaultsMissing || sourceMetadataMissing) {
           existing.draft = migrateRecipeContent(existing.draft, draft);

@@ -2,6 +2,7 @@ import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, Extern
 import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 import type { SurveyLayerContextMenu, SurveyLayerInspection, SurveyLayerOverlapComponent, SurveyLayerState } from "./atlas/survey-layer-viewer.js";
+import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-layout.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
 
 import "./styles.css";
@@ -158,6 +159,7 @@ const queuedLayerIds = new Set<string>();
 let selectedQueueComponent: OverlapComponentView | null = null;
 let renderedQueueComponentId: string | null = null;
 let overlapDrawerOpen = false;
+let overlapPanelResizeObserver: ResizeObserver | null = null;
 let overlapDrawerPreviousState: { layersHidden: boolean; queueHidden: boolean; panelHidden: boolean; helpHidden: boolean; guideHidden: boolean } | null = null;
 let overlapDrawerPreviousFocus: HTMLElement | null = null;
 let layerCloseTimer: number | null = null;
@@ -296,10 +298,46 @@ function updateCoverageInspector(inspection: SurveyLayerInspection | null): void
 }
 
 function updateOverlapViewport(): void {
-  if (!coverageDots) return;
   const drawer = byId("overlap-drawer");
   const inset = overlapDrawerOpen && window.innerWidth > 820 && !drawer.hidden ? drawer.getBoundingClientRect().width : 0;
-  coverageDots.setViewportRightInset(inset);
+  coverageDots?.setViewportRightInset(inset);
+  updateOverlapPanelLayout();
+}
+
+function setOverlapPanelInteraction(element: HTMLElement, dismissed: boolean): void {
+  element.inert = dismissed;
+  if (dismissed) {
+    element.setAttribute("aria-hidden", "true");
+    element.dataset.overlapDismissed = "true";
+  } else if (element.dataset.overlapDismissed === "true") {
+    element.inert = false;
+    element.removeAttribute("aria-hidden");
+    delete element.dataset.overlapDismissed;
+  }
+}
+
+function updateOverlapPanelLayout(): void {
+  const drawer = byId("overlap-drawer");
+  const panel = byId("coverage-detail-panel");
+  const queue = byId("selection-queue");
+  if (!overlapPanelResizeObserver && typeof ResizeObserver !== "undefined") {
+    overlapPanelResizeObserver = new ResizeObserver(() => updateOverlapPanelLayout());
+    overlapPanelResizeObserver.observe(drawer);
+  }
+  const crowded = overlapDrawerOpen && !drawer.hidden
+    && overlapPanelsShouldExit(window.innerWidth, drawer.getBoundingClientRect().width);
+  if (crowded) {
+    document.body.dataset.overlapPanels = "dismissed";
+    document.body.style.setProperty("--overlap-panel-exit-transform", overlapPanelExitTransform(window.innerWidth));
+  } else if (overlapDrawerOpen && !drawer.hidden) {
+    document.body.dataset.overlapPanels = "visible";
+    document.body.style.removeProperty("--overlap-panel-exit-transform");
+  } else {
+    document.body.removeAttribute("data-overlap-panels");
+    document.body.style.removeProperty("--overlap-panel-exit-transform");
+  }
+  setOverlapPanelInteraction(panel, crowded);
+  setOverlapPanelInteraction(queue, crowded);
 }
 
 function visibleSurveyIdsFromControls(): string[] {
@@ -1316,8 +1354,6 @@ function openOverlapDrawer(): void {
     overlapDrawerPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
   byId("coverage-layers").hidden = true;
-  byId("selection-queue").hidden = true;
-  byId("coverage-detail-panel").hidden = true;
   byId("coverage-help").hidden = true;
   byId("coverage-empty-guide").hidden = true;
   overlapDrawerOpen = true;
@@ -1337,6 +1373,7 @@ function closeOverlapDrawer(): void {
   overlapDetailsController = null;
   overlapDrawerOpen = false;
   document.body.removeAttribute("data-overlap-drawer");
+  document.body.removeAttribute("data-overlap-panels");
   const drawer = byId("overlap-drawer");
   drawer.hidden = true;
   drawer.setAttribute("aria-hidden", "true");
@@ -1393,6 +1430,9 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
     panel.style.removeProperty("right");
     panel.style.removeProperty("width");
     setOverlapExpandVisible(false);
+    byId("coverage-layers").hidden = false;
+    positionSelectionQueue();
+    updateCoverageEmptyGuide();
     return;
   }
   if (activate) {
@@ -1867,7 +1907,7 @@ async function initialize(): Promise<void> {
       const cells = await fetchCoverageOverview(layer);
       if (cells.length) blocks.set(`${layer.layerId}:${layer.overviewOrder}`, cells);
     }));
-    coverageDots.loadCatalog(coverageCatalog, blocks, surveyIndex.surveys);
+    await coverageDots.loadCatalog(coverageCatalog, blocks, surveyIndex.surveys);
     if (coverageSelectionInitialized) coverageDots.setVisibleSurveys(queuedLayerIds);
     else coverageDots.setVisibleSurveys(new Set(coverageCatalog.layers.map((layer) => layer.surveyId)));
     if (homeEntered) coverageDots.transitionToDataView(1);
@@ -2034,6 +2074,9 @@ document.addEventListener("keydown", (event) => {
     panel.style.removeProperty("right");
     panel.style.removeProperty("width");
     setOverlapExpandVisible(false);
+    byId("coverage-layers").hidden = false;
+    positionSelectionQueue();
+    updateCoverageEmptyGuide();
     coverageDots?.clearSelection();
     updateCoverageInspector(null);
     if (doubleEscape) resetCoverageExperience();

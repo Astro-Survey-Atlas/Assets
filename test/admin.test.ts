@@ -22,6 +22,34 @@ test("connector resources keep fields specific to their selected type", () => {
   assert.throws(() => buildConnectorResource({ name: "assets-invalid-s3", type: "s3", endpoint: "https://object.example", bucket: "data", credentialSecretName: "user-secret" } as never, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400);
 });
 
+test("MOC discovery requests keep execution policy inside Warehouse", async () => {
+  let created: Record<string, unknown> | undefined;
+  const kube = {
+    create: async (_plural: string, resource: Record<string, unknown>) => { created = resource; return resource; },
+  };
+  const config = {
+    enabled: true,
+    namespace: "atlas-warehouse",
+    adminToken: "token",
+    kubeToken: "token",
+    apiBaseUrl: "https://kube",
+    tokenFile: "",
+    caFile: "",
+    warehouseEsUrl: "http://es",
+    scannerImage: "scanner",
+    evidenceClaimName: "atlas-evidence-smoke",
+    evidenceMountPath: "/var/lib/atlas-evidence",
+  };
+  const request = await new AssetsAdmin(config, kube as never).createMocDiscoveryRequest({ surveyName: "Gaia", releaseHint: "DR3" });
+  assert.match(request.name, /^gaia-moc-discovery-/);
+  assert.equal(request.surveyName, "Gaia");
+  assert.equal(request.releaseHint, "DR3");
+  assert.equal(request.policyRef, "cds-public-moc-v1");
+  assert.deepEqual(created?.spec, { query: { surveyName: "Gaia", releaseHint: "DR3" }, policyRef: "cds-public-moc-v1" });
+  assert.equal((created?.metadata as Record<string, unknown>).namespace, "atlas-warehouse");
+  assert.equal((created?.metadata as Record<string, unknown>).labels && ((created?.metadata as Record<string, unknown>).labels as Record<string, string>)["astro.zhejianglab.org/resource-kind"], "moc-discovery");
+});
+
 test("coverage task defaults use the standard Elasticsearch index names", () => {
   const resource = buildTaskResource({
     name: "assets-dryrun-coverage",
@@ -39,6 +67,10 @@ test("coverage task defaults use the standard Elasticsearch index names", () => 
 
   assert.equal(resource.apiVersion, "atlas.zhejianglab.org/v1alpha1");
   assert.equal(resource.kind, "ScanRequest");
+  const labels = resource.metadata?.labels as Record<string, string>;
+  assert.equal(labels["atlas.zhejianglab.org/track-caller"], "assets");
+  assert.equal(labels["atlas.zhejianglab.org/track-task-kind"], "public-coverage");
+  assert.equal(labels["astro.zhejianglab.org/task-kind"], "public-coverage");
   const plan = resource.spec?.plan as Record<string, unknown>;
   const sink = (plan.sink as Record<string, unknown>).connector as Record<string, unknown>;
   assert.equal(sink.type, "elasticsearch");

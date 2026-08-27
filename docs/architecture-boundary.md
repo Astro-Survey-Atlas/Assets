@@ -9,7 +9,7 @@
 
 | 组件 | 负责 | 不负责 |
 | --- | --- | --- |
-| Assets | 公共 survey/release/product/layer 注册；用 ConfigMap + Secret 管理远程 Connector；提交一次性 `ScanRequest`；读取任务状态；MOC Core 的生成、合并、锁定；Resource Package、manifest、provenance、catalog 和只读下载 API | Atlas 用户资产、Atlas 任务历史和 Atlas API；data-warehouse 的内部实现 |
+| Assets | 公共 survey/release/product/layer 注册；用 ConfigMap + Secret 管理远程 Connector；提交一次性 `ScanRequest`；读取任务状态；MOC Core 的生成、合并、锁定；Resource Package、manifest、provenance、catalog、产品 dossier、证据摘要和只读下载 API | Atlas 用户资产、Atlas 任务历史和 Atlas API；data-warehouse 的内部实现；TAP/ObsCore/SIA 服务实现 |
 | data-warehouse | 接收 `atlas.zhejianglab.org/v1alpha1/ScanRequest`；校验并执行嵌入的 ScanPlan v2；维护 operator status；提供 scanner 的执行合同 | Assets 的 catalog 激活、MOC Core、Resource Package 发布；不规定所有任务的统一 sink |
 | Atlas | 独立的用户资产、任务历史、查询索引和前端；可独立向 data-warehouse 提交自己的任务；安装并验证 Assets 公共资源包 | Assets 的 Connector、任务状态、数据库、worker 或计算实现 |
 
@@ -22,6 +22,12 @@ data-warehouse 的公开执行合同，不是 Assets 或 Atlas 的数据库模�
 Assets 管理页只读取自己提交的 CRD status。status 是 data-warehouse operator
 对单个 CRD 的运行观测，不是三方共享的任务历史或业务状态。
 
+公共产品有两层出口：`/api/v1/products` 是保持兼容的已发布列表；产品详情和
+`/evidence` 是按需加载的面向人的 dossier。详情把覆盖结论、真实 order、来源、
+推导步骤、检查、限制和官方下一站放在同一响应中。输入 manifest、normalized
+scan、任务快照和内部存储路径仍属于 evidence 边界，不会进入首页或 dossier
+初始请求。
+
 当 Assets 的任务选择 Elasticsearch sink 时，scanner 输出的 normalized
 file/coverage 文档可供 Assets 按 `scanRunId` 读取，并由 warehouse
 `ast_file_index_v1` / `ast_coverage_index_v1` 提供反查。其他
@@ -33,6 +39,11 @@ Assets 管理页固定展示 image、spectrum、catalog、cube 四种业务模�
 的集群扫描。对应 extraction mode 分别是 `fits-wcs`、
 `fits-header-position`、`catalog-radec`/`catalog-healpix`、`fits-wcs`（忽略
 非空间轴）。
+
+Assets 的公开分发遵循成熟巡天的组合模式：页面负责发现和解释，FITS MOC 与
+order 投影负责空间计算，Resource Package v3 负责离线安装，官方 archive/query
+负责科学文件获取。Assets 当前不宣称 TAP、ObsCore 或 SIA 兼容，也不代理巡天
+科学文件；相关标准和实践见 [公开巡天分发调研](public-survey-distribution-research-20260827.md)。
 
 ## 任务生命周期
 

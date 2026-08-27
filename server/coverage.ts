@@ -11,6 +11,7 @@ export interface CoverageCellLayer {
   releaseId: string;
   product: string;
   modality?: string;
+  coverageRole?: "image_extent" | "object_presence" | "footprint_extent";
   color: string;
   availableOrders: number[];
   overviewOrder: number;
@@ -32,6 +33,9 @@ export interface CoverageRecipeSummary {
   queryOrder: number;
   previewOrder: number;
   sourceUrl?: string;
+  /** Hash/size of the immutable input snapshot; never expose its local path. */
+  sourceSnapshotSha256?: string;
+  sourceSnapshotSizeBytes?: number;
   steps: Array<{ id: string; kind: string; title: string; bodyMarkdown: string; order: number; implementationRef: string }>;
 }
 
@@ -96,7 +100,7 @@ function recipeSteps(mode: string, recipe: Record<string, unknown>): CoverageRec
 
 export async function loadCoverageCatalog(root: string, manifest: { footprints: Array<{ surveyId: string; releaseId: string; product: string; nside: number; pixels: number[]; sourceUrl?: string; sourceId?: string; notes?: string }> }): Promise<CoverageCatalog & { records: Map<string, CoverageCellLayer> }> {
   const registryPath = path.join(root, "src", "layers", "layer-registry.json");
-  const registry = JSON.parse(await readFile(registryPath, "utf8")) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; modality?: string; maxOrder?: number; mode?: string; plannedMode?: string; recipePath?: string; sourceTier?: string; status?: string }> };
+  const registry = JSON.parse(await readFile(registryPath, "utf8")) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; modality?: string; coverageRole?: CoverageCellLayer["coverageRole"]; maxOrder?: number; mode?: string; plannedMode?: string; recipePath?: string; sourceTier?: string; status?: string }> };
   const registryByIdentity = new Map((registry.layers ?? []).map((entry) => [identity(entry.surveyId, entry.releaseId, entry.product), entry]));
   const colors = new Map<string, string>();
   const surveyCatalog = JSON.parse(await readFile(path.join(root, "src", "surveys", "survey-catalog.json"), "utf8")) as { surveys?: Array<{ id: string; color: string }> };
@@ -151,6 +155,8 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
       queryOrder: registeredQueryOrder,
       previewOrder: registeredPreviewOrder,
       ...(registeredSourceUrl ? { sourceUrl: registeredSourceUrl } : {}),
+      ...(typeof registeredRecipe.snapshotSha256 === "string" ? { sourceSnapshotSha256: registeredRecipe.snapshotSha256 } : {}),
+      ...(typeof registeredRecipe.snapshotSizeBytes === "number" ? { sourceSnapshotSizeBytes: registeredRecipe.snapshotSizeBytes } : {}),
       steps: recipeSteps(mode, registeredRecipe),
     };
     const hasWarehouseFileEvidence = registered?.sourceTier === "user_file_derived"
@@ -167,6 +173,7 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
       releaseId: footprint.releaseId,
       product: footprint.product,
       modality: registered?.modality,
+      coverageRole: registered?.coverageRole,
       color: colors.get(footprint.surveyId) ?? colorFor(footprint.surveyId),
       availableOrders: [order],
       overviewOrder: order,
@@ -245,6 +252,7 @@ export function coverageCatalogFromWarehouse(
       releaseId: layer.releaseId,
       product: fallback?.product ?? layer.productId,
       modality,
+      coverageRole: (layer.coverageRole as CoverageCellLayer["coverageRole"]) ?? fallback?.coverageRole,
       color: fallback?.color ?? colorFor(layer.surveyId),
       availableOrders,
       overviewOrder,

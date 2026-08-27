@@ -440,7 +440,7 @@ function countLabelSprite(text: string, position: THREE.Vector3, depthTest = tru
   context.fill();
   context.stroke();
   context.fillStyle = "#ffffff";
-  context.font = "700 24px Inter, Arial, sans-serif";
+  context.font = '700 24px "Atlas Sans CJK", "Atlas Sans", sans-serif';
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillText(text, canvas.width / 2, canvas.height / 2 + 1);

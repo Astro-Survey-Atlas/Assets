@@ -106,8 +106,8 @@
       },
       "version": "3.0.0",
       "archiveUrl": "public-euclid-footprints-3.0.0.zip",
-      "sizeBytes": 2488,
-      "sha256": "08fb40f850fd8972fe32d9b518cbc8b0ae796895caf181fcfa548e9dd7bedc7f",
+      "sizeBytes": 5813,
+      "sha256": "f3edf15c133cbc92797821e253208d540f382b77c4fa4cef33a7db472325e872",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -207,8 +207,8 @@
         "desi-dr1": "DR1"
       },
       "archiveUrl": "public-desi-footprints-3.0.0.zip",
-      "sizeBytes": 8410,
-      "sha256": "f49fd738150b820fe35745a61dd8f813abb768b46bdba4a890d0bdcdd3bb447c",
+      "sizeBytes": 385410,
+      "sha256": "5da8651a6e43ffae1428d3edacff2e033a71aee276834c10f79829c9ed6d3f18",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {

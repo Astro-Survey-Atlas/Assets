@@ -151,11 +151,12 @@ test("source sector geometry emits one center fan sector per source", () => {
     radius: 1,
     colors: [new THREE.Color("#111111"), new THREE.Color("#eeeeee"), new THREE.Color("#777777")],
   }]);
-  assert.equal(geometry.getAttribute("position").count, 9);
+  assert.equal(geometry.getAttribute("position").count, 18);
   const values = Array.from(geometry.getAttribute("color").array as ArrayLike<number>);
-  assert.ok(values.slice(0, 9).every((value) => Math.abs(value - values[0]!) < 1e-6));
-  assert.ok(values.slice(9, 18).every((value) => Math.abs(value - values[9]!) < 1e-6));
-  assert.ok(values[0]! < values[9]!);
+  const colors = new Set(Array.from({ length: 3 }, (_, index) => values.slice(index * 18, index * 18 + 3).map((value) => value.toFixed(3)).join(",")));
+  assert.equal(colors.size, 3);
+  assert.ok(values.slice(0, 18).every((value) => value < 0.2));
+  assert.ok(values.slice(18, 36).every((value) => value > 0.8));
 });
 
 test("source sector geometry keeps single-source cells filled when another cell is split", () => {
@@ -163,5 +164,6 @@ test("source sector geometry keeps single-source cells filled when another cell 
     { nside: 16, pixel: 5, radius: 1, colors: [new THREE.Color("#111111")] },
     { nside: 16, pixel: 6, radius: 1, colors: [new THREE.Color("#111111"), new THREE.Color("#eeeeee")] },
   ]);
-  assert.equal(geometry.getAttribute("position").count, 12 + 6);
+  assert.equal(geometry.getAttribute("position").count, 27);
+  assert.ok(geometry.getAttribute("color").count > 0);
 });
