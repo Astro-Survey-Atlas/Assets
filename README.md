@@ -1,142 +1,100 @@
-# Astro Survey Atlas Assets
+# Astro Survey Atlas
 
-Astro Survey Atlas Assets is the public, reproducible coverage service for
-astronomical surveys. It publishes ICRS/NESTED HEALPix footprints, lets users
-compare selected surveys at their highest common precision, and turns an
-overlap into a reviewable download plan: survey/release/modality, RA/DEC
-extent, source files, tile/brick identifiers and download entrypoints.
+Astro Survey Atlas is an open infrastructure project for discovering where
+public astronomical surveys cover the sky and how to reach the official data.
+The `Assets` repository is the public front door: it publishes reviewed survey
+metadata, ICRS/NESTED HEALPix coverage, overlap results, provenance and
+versioned Resource Package v3 releases.
 
-This repository is the Assets boundary. It owns release manifests, MOC/query
-blocks, previews, product presentation, evidence hashes and the public API.
-`data-warehouse` owns scan execution and operator status. Assets submits the
-standard scan task and consumes normalized file and coverage documents.
-Atlas is the user-facing visualization/client layer. Assets never depends on
-Atlas internals.
+This repository is one part of the [Astro Survey Atlas organization](https://github.com/Astro-Survey-Atlas):
 
-## Processing model
+| Project | Role | Start here |
+| --- | --- | --- |
+| [Assets](https://github.com/Astro-Survey-Atlas/Assets) | Public survey directory, coverage maps, MOCs, overlap and release artifacts | [Live directory](https://astro.assets.dev.72602.space:32443/surveys/) |
+| [Warehouse](https://github.com/Astro-Survey-Atlas/Warehouse) | Scanner, ScanPlan/ScanRequest execution, current file/coverage indices and evidence | [Warehouse README](https://github.com/Astro-Survey-Atlas/Warehouse) |
+| [Workspace](https://github.com/Astro-Survey-Atlas/Workspace) | User assets, connectors, local workflows, user MOCs and private exploration | [Workspace README](https://github.com/Astro-Survey-Atlas/Workspace) |
 
-Every survey recipe follows the same auditable forward path. The recipe lock
-records the actual source snapshot, scanner run, implementation reference,
-available HEALPix orders and output hashes.
+## How the projects work together
+
+```mermaid
+flowchart TB
+  U[Researchers and data users] --> A[Assets\npublic catalog and sky UI]
+  A -->|public coverage task\nScanPlan v2| W[Warehouse\nscanner and current state]
+  W -->|ACTIVE ast_*\nfile/coverage evidence| A
+  A -->|Resource Package v3\nMOCs and provenance| X[Workspace\nuser data workspace]
+  X -->|optional user ScanRequest\nnamespace-local| W
+  X -->|local assets, MOCs,\nworkflows and history| X
+```
+
+The boundaries are deliberate. Assets decides what becomes a public release
+and presents the result. Warehouse enumerates configured local/S3/OSS sources,
+extracts file-level spatial metadata and reports the current `ast_*` index
+state. Workspace keeps user data and task history in its own data plane; it
+can consume verified public packages and optionally use Warehouse for a user
+scan, but it never publishes user records back to Assets.
 
 ```mermaid
 flowchart LR
-  A[Source inventory snapshot] --> B[File/catalog filter]
-  B --> C[Metadata or FITS-WCS read]
-  C --> D[ICRS validation]
-  D --> E[Geometry extraction]
-  E --> F[NESTED HEALPix rasterization]
-  F --> G[Normalize order/ipix]
-  G --> H[Union and deduplicate]
-  H --> I[MOC query preview statistics]
-  I --> J[Manifest and coverage edges]
-  J --> K[Warehouse Elasticsearch]
-  J --> L[Evidence PVC Parquet]
-  I --> M[SHA-256 release]
+  S[Source inventory snapshot] --> F[Filter and metadata read]
+  F --> I[ICRS validation]
+  I --> H[NESTED HEALPix cells]
+  H --> M[MOC, preview, query blocks]
+  M --> P[Manifest + SHA-256]
+  P --> R[Public Resource Package v3]
+  P -. audit-only .-> E[Evidence object storage]
 ```
 
-The reverse path is equally fixed. It never mixes orders: an order-4-only
-layer limits the result to order 4/NSIDE 16, while a layer with an order-8
-scan can participate at order 8. Every response states `exact`, `estimated`,
-`entrypoint-only` or `truncated` precision.
+Assets never treats a preview as a finer measurement. Each response reports
+the real order and one of `exact`, `estimated`, `entrypoint-only` or
+`truncated` precision. The online reverse lookup is bounded and reads only the
+configured Warehouse endpoint (`ASSETS_WAREHOUSE_ES_URL`).
 
-```mermaid
-flowchart LR
-  A[Select surveys/layers] --> B[Highest common available order]
-  B --> C[Intersect explicit order/ipix cells]
-  C --> D[Connected components C01 C02]
-  D --> E[Warehouse coverage-edge lookup]
-  E --> F[File WCS tile/brick metadata]
-  F --> G[Download plan and limits]
-```
+## What Assets publishes
 
-The detailed contract is in [`docs/coverage-workflow.md`](docs/coverage-workflow.md)
-and [`contracts/coverage-evidence-v1.schema.json`](contracts/coverage-evidence-v1.schema.json).
-The repository workflow is enforced by [`AGENTS.md`](AGENTS.md) and the
-`skills/astro-survey-atlas-coverage-workflow` skill.
+- `GET /api/v1/surveys` and `GET /api/v1/products` for reviewed metadata and
+  product dossiers.
+- `GET /api/v1/coverage/catalog` and immutable coverage blocks for the sky UI.
+- `POST /api/v1/coverage/overlap` and `/overlap/details` for common-order
+  intersections and connected regions.
+- `POST /api/v1/coverage/reverse-lookup` for bounded file, tile and download
+  entrypoint matches.
+- Resource Package v3 archives containing MOCs, a public footprint projection,
+  provenance and a package README.
 
-## Runtime and evidence
+The [coverage workflow](docs/coverage-workflow.md),
+[API reference](docs/api-reference.md) and [Resource Package integration guide](docs/resource-package-integration.md)
+define the stable contracts. The [MOC Core contract](docs/moc-core-contract.md)
+documents the existing offline `astro-survey-moc-core` implementation; the
+organization does not currently promise a general-purpose online SDK.
 
-Runtime delivery is deliberately small: coverage catalog, visible HEALPix
-blocks, survey catalog, published product content, previews and lightweight
-metadata. Evidence delivery contains input manifests, normalized scans, task
-snapshots, raw MOCs and complete provenance. Evidence is retained on the
-evidence PVC/object store, downloadable and hash-verifiable, but is never an
-initial browser request.
+## Public release and evidence storage
 
-For CSST, `files.parquet` stores source file/WCS/ETag metadata and
-`coverage_edges.parquet` stores the mapping from `layerId + order + ipix` to
-source files. Parquet is for audit, rebuild and bulk export; online reverse
-lookup uses the warehouse indices:
+Git is the source of truth for small, reviewable release metadata: survey and
+layer registries, recipe locks, schemas, catalog projections, provenance
+summaries and hashes. Versioned MOCs, packages and large evidence are intended
+for an object-storage release bucket. The repository currently contains the
+working artifact set while this migration is designed; no artifact is deleted
+as part of the design work.
 
-- `ast_file_index_v1`
-- `ast_coverage_index_v1`
-
-The v1 online contract has no object index; object-level workflows are outside
-the current product boundary.
-
-The Assets runtime only uses `ASSETS_WAREHOUSE_ES_URL`. The historical ES URL
-is accepted only by the explicit one-shot migration script.
-
-## Public API
-
-- `GET /api/v1/coverage/catalog` and `GET /api/v1/coverage/blocks/:layerId`
-  expose catalog metadata and cached blocks.
-- `POST /api/v1/coverage/overlap` computes common-order cells and C01/C02
-  components.
-- `POST /api/v1/coverage/reverse-lookup` returns source files, WCS bounds,
-  download entrypoints and precision/limit metadata for selected cells.
-- `GET /api/v1/surveys` and `GET /api/v1/products` expose the public catalog
-  and published product content. Draft product content is admin-only.
-- `GET /github/`, `/surveys/` and `/sdk/` are separate documentation/catalog
-  pages; `/resources/` is intentionally not a route.
+See [Public artifact storage and migration](docs/public-artifact-storage.md)
+for the bucket layout, immutable URL/hash contract, evidence boundary and
+cutover procedure. In particular, input manifests and normalized scans remain
+evidence and are never part of the browser's initial request or the public
+release allowlist.
 
 ## Local development
 
 ```bash
 npm ci
-npm run build
-npm test
+npm run validate
 npm start
 ```
 
 The service listens on `http://127.0.0.1:4180`. Set
-`ASSETS_WAREHOUSE_ES_URL` when testing file-level reverse lookup locally; the
-public geometry API remains usable without it.
+`ASSETS_WAREHOUSE_ES_URL` when testing Warehouse-backed reverse lookup; the
+static public geometry catalog remains usable without it.
 
-## Evidence migration
+The site has separate entry points for the [project overview](/github/),
+[survey directory](/surveys/) and [integration/SDK status](/sdk/).
 
-The source must be explicit and the target defaults to the warehouse service.
-Run a dry run before importing any records:
-
-```bash
-python3 scripts/migrate_csst_evidence.py \
-  --source-es-url http://legacy-es:9200 \
-  --run W1=workspace-coverage-04a0be5dc49c \
-  --run W2=workspace-coverage-ec9448e73ced-retry4 \
-  --run W3=workspace-coverage-ee904e0f11af-retry3 \
-  --run W4=workspace-coverage-dbf269d0f221-retry3 \
-  --dry-run
-```
-
-Add `--evidence-dir /var/lib/assets-evidence/csst` with the `evidence` Python
-extra installed to write compressed Parquet tables. The importer never copies
-the historical 205 MB W1 manifest into runtime delivery.
-
-## Build and deploy
-
-```bash
-npm run assets:build
-npm run build:server
-npm run build:site
-helm lint charts/astro-survey-atlas-assets
-helm template astro-survey-atlas-assets charts/astro-survey-atlas-assets \
-  -f deploy/k3s-values.yaml
-helm upgrade --install astro-survey-atlas-assets \
-  charts/astro-survey-atlas-assets --namespace astro-survey-atlas-assets \
-  --create-namespace -f deploy/k3s-values.yaml
-```
-
-The chart configures the warehouse Elasticsearch URL, the Assets content PVC
-and the release PVC. The large CSST input manifest remains evidence storage,
-not a Git-tracked homepage/runtime asset.
+中文说明见 [README.cn.md](README.cn.md)。

@@ -1648,6 +1648,102 @@
       ]
     },
     {
+      "id": "skymapper",
+      "name": "SkyMapper",
+      "mission": "Australian National University SkyMapper",
+      "color": "#f08a5d",
+      "description": "Southern-sky optical imaging. The bundled DR4 footprint is the CDS g/r/i color HiPS spatial extent; STMOC time metadata is evidence only.",
+      "modalities": ["imaging", "photometry", "catalog"],
+      "releases": [
+        {
+          "id": "skymapper-dr4",
+          "label": "DR4",
+          "kind": "public_release",
+          "releasedYear": 2024,
+          "modalities": ["imaging", "photometry", "catalog"],
+          "products": [
+            {
+              "name": "DR4 g/r/i color footprint",
+              "modality": "imaging",
+              "description": "CDS-hosted DR4 g/r/i color HiPS availability extent. This is an estimated spatial projection, not a time-window query or accepted-CCD mask.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "originNote": "CDS spatial projection of an STMOC; temporal metadata remains evidence.",
+              "sourceLabel": "ANU SkyMapper DR4",
+              "sourceUrl": "https://skymapper.anu.edu.au/data-release/dr4/",
+              "geometrySourceLabel": "CDS DR4 color SMOC order 10",
+              "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FSkymapper%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vista",
+      "name": "VISTA VIKING",
+      "mission": "ESO Visible and Infrared Survey Telescope",
+      "color": "#8e7dbe",
+      "description": "ESO near-infrared VIKING products. The bundled J-band footprint is a CDS HiPS spatial extent with estimated precision.",
+      "modalities": ["imaging", "photometry", "infrared"],
+      "releases": [
+        {
+          "id": "viking",
+          "label": "VIKING",
+          "kind": "public_release",
+          "releasedYear": 2019,
+          "modalities": ["imaging", "photometry", "infrared"],
+          "products": [
+            {
+              "name": "VIKING J footprint",
+              "modality": "imaging",
+              "description": "CDS-hosted VIKING J-band HiPS availability extent. J remains separate from H, Ks, Y and Z products.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "originNote": "CDS spatial projection of an STMOC; temporal metadata remains evidence.",
+              "sourceLabel": "ESO VISTA Phase 3",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS VIKING J SMOC order 10",
+              "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "decals",
+      "name": "DECaLS",
+      "mission": "Dark Energy Camera Legacy Survey",
+      "color": "#4ea8de",
+      "description": "Legacy Survey optical imaging. The bundled DR5 g/r/z footprint represents CDS color HiPS availability, not DESI spectroscopy or Tractor selection.",
+      "modalities": ["imaging", "photometry", "catalog"],
+      "releases": [
+        {
+          "id": "decals-dr5",
+          "label": "DR5",
+          "kind": "public_release",
+          "releasedYear": 2017,
+          "modalities": ["imaging", "photometry", "catalog"],
+          "products": [
+            {
+              "name": "DR5 g/r/z color footprint",
+              "modality": "imaging",
+              "description": "CDS-hosted DECaLS DR5 g/r/z color HiPS availability extent. This is an estimated spatial projection, not accepted-CCD geometry.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "originNote": "CDS spatial projection of an STMOC; temporal metadata remains evidence.",
+              "sourceLabel": "DECam Legacy Survey DR5",
+              "sourceUrl": "https://www.legacysurvey.org/dr5/",
+              "geometrySourceLabel": "CDS DECaLS DR5 color SMOC order 10",
+              "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "nvss",
       "name": "NVSS",
       "mission": "NRAO VLA Sky Survey",

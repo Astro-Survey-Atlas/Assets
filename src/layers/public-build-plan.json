@@ -18,6 +18,11 @@
       "expectedSha256": "f7796308322935b1f304b33e4d8429680290e15744c7a95246259f70ff4046db"
     },
     {
+      "spec": "src/layers/recipes/decals-dr5-color-footprint.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/decals-dr5-color-footprint",
+      "expectedSha256": "eba092ee08b30e986bae089e72c0ff8a6bc27eb91d2d7e314376565c64f8b4fa"
+    },
+    {
       "spec": "src/layers/recipes/desi-dr1-spectra-footprint.lock.json",
       "output": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint",
       "expectedSha256": "e3fb86b871d2e24e3fd40724ea241d222988d8fd7262fa6b3855f59b3aae9c40"
@@ -31,6 +36,21 @@
       "spec": "src/layers/recipes/euclid-q1-deep-fields-image-extent.lock.json",
       "output": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent",
       "expectedSha256": "e1c38cd2abe21035deae79efdf13f003fb0421f14a780d3061dbc8a52d2da75e"
+    },
+    {
+      "spec": "src/layers/recipes/kids-dr5-color-footprint.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/kids-dr5-color-footprint",
+      "expectedSha256": "0e4db99b72bf0b6f4478d099c7b7e008e2ec90c04f997f67b4a88880da1d8cb9"
+    },
+    {
+      "spec": "src/layers/recipes/skymapper-dr4-color-footprint.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/skymapper-dr4-color-footprint",
+      "expectedSha256": "fd815fc5e90d8e3b851bee763202cb4725ec0d45d91a9b763fa9bed025d9fd1d"
+    },
+    {
+      "spec": "src/layers/recipes/vista-viking-j-footprint.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vista-viking-j-footprint",
+      "expectedSha256": "36a195db1280fc27271cf562aab951a80cd7bef2db5cb5f943fbeda393017411"
     }
   ]
 }

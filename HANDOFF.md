@@ -1,6 +1,6 @@
 # Assets Session Handoff
 
-Updated: 2026-08-27
+Updated: 2026-08-28
 
 Repository: `/home/aaron/Repo/Astro-Survey-Atlas-Assets`
 
@@ -70,9 +70,10 @@ diffs before editing them.
   registration, product/profile-driven task creation, task detail, evidence
   summaries and immutable retry resources; it does not scan data in Assets.
 - `src/moc-sources/source-registry.json` records eight reviewed public MOC
-  candidates. Network probes are validation/evidence only; candidates remain
-  blocked from the public release until snapshot, attribution and license
-  gates are reviewed.
+  sources. Four (SkyMapper DR4, KiDS DR5, VISTA VIKING J, and DECaLS DR5)
+  now have locked CDS snapshots and generated Core layers; Gaia, eRASS1,
+  4XMM, and Planck remain candidates pending terms review. Network discovery
+  probes remain validation/evidence only.
 - The overlap UI forwards the right-drawer viewport inset through
   `AtlasCoverageGlobe` to the Three.js viewer, so a successful overlap response
   can be rendered without a post-response runtime exception.
@@ -115,11 +116,17 @@ hidden from Assets runtime reads. These are live observations, not permanent
 expected counts.
 
 The checked-in public release is still present: `src/footprints/survey-
-footprints.json` contains 44 footprints across 14 surveys and 66,373 cells.
+footprints.json` now contains 47 footprints across 17 surveys. Its generated
+catalog reports 90 products (38 acquired, 11 overview-only, and 41 awaiting
+geometry), and the offline Core build plan contains 10 layers. The four new
+layers are derived from reviewed CDS spatial projections and retain estimated
+precision; their STMOC time metadata stays in provenance evidence.
 The deployed Assets `/api/v1/coverage` now retains that public base and adds the
 ACTIVE layers from the current Warehouse endpoint; while the CSST retry is
 `UPDATING`, the live response contains 53 footprints across the public surveys
 plus the ACTIVE CSST, DESI, Euclid and Assets-owned controlled smoke layers.
+The deployed response is intentionally unchanged until an explicit release or
+admin reload; the new four-layer bundle is currently offline in this worktree.
 The current bounded smoke covers catalog/block reads, CSST/DESI,
 Euclid/DESI and 2MASS/SDSS overlap, overlap details, reverse lookup, and FITS
 Range reads.
@@ -228,9 +235,10 @@ Work in this order:
    `POST /api/v1/admin/catalog/reload` with the admin token and inspect
    `GET /api/v1/admin/catalog/status`; the status must show the current load
    mode, timestamp, counts and Warehouse connectivity.
-4. The long Warehouse task is no longer active. Coordinate the pending
-   `mocdiscovery` Operator rollout and verify its evidence/status path; Assets
-   continues to submit intent-only discovery requests.
+4. The long Warehouse task is no longer active. The `mocdiscovery` Operator
+   rollout and evidence/status path are verified; retain the completed Gaia,
+   SkyMapper, KiDS, VISTA VIKING, and DECaLS discovery evidence while Assets
+   continues to submit intent-only requests.
 5. Rerun direct catalog, overlap, details and reverse-lookup smokes against
    bounded CSST, DESI and Euclid layers after future Warehouse image or
    mapping changes. Keep failed ScanRequests and evidence for diagnosis.
@@ -238,13 +246,17 @@ Work in this order:
 ## Warehouse MOC Discovery Rollout
 
 MOC discovery CRD/Operator/worker integration is implemented and validated.
-The CRD is installed. The previously blocking CSST long task has now reached a
-terminal deadline failure, but the live Operator is still on the existing
-`operatorfix3` image; coordinate a separate rollout of the pushed
-`mocdiscovery` image before creating discovery Jobs. See
-`docs/deferred-moc-discovery-plan.md`. Assets only submits intent-only requests
-and records review decisions; it does not execute discovery or own the
-Operator.
+The 2026-08-28 SkyMapper, KiDS, VISTA VIKING, and DECaLS requests all reached
+`SUCCEEDED`; their CDS ObsCore searches returned HTTP 200 with empty bodies
+(`candidateCount=0`, `probeCount=0`). The empty candidate result is retained as
+bounded evidence and does not invalidate the separately reviewed CDS records
+used for the four acquired Assets layers.
+The CRD is installed and the live Operator runs the pushed
+`mocdiscovery` image. The previously blocking CSST long task has reached a
+terminal deadline failure and remains separate from the evidence-only
+discovery Jobs. See `docs/deferred-moc-discovery-plan.md`. Assets only submits
+intent-only requests and records review decisions; it does not execute
+discovery or own the Operator.
 
 ## Do Not Disturb
 

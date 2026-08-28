@@ -5,23 +5,23 @@
     "name": "scripts/public_footprint_artifacts.ts"
   },
   "statistics": {
-    "releases": 52,
-    "products": 87,
-    "acquired": 35,
+    "releases": 55,
+    "products": 90,
+    "acquired": 38,
     "overview_only": 11,
     "awaiting_geometry": 41,
     "not_applicable": 0,
-    "manifestFootprints": 41,
+    "manifestFootprints": 47,
     "packages": 16
   },
   "inputs": {
     "canonicalManifest": {
       "path": "../../src/footprints/survey-footprints.json",
-      "sha256": "e214787d981e71505b6f46661aa39baf209333b90ec3b2dde3e674707889fc1b"
+      "sha256": "1e89ac66f6c03c3710fbb6e75eb2295d4868c26170b622c8c2922e1a27977d68"
     },
     "sources": {
       "path": "sources.json",
-      "sha256": "f4473f94f7fb4d2ab9be9dbfc96d5c4a848b01768c8acc7db0382bd2b2e4d685"
+      "sha256": "eb2bd2d469991a9d4e5d4c1ed45426890cc57ac7506efaf1cf3a48cbc1b5e010"
     },
     "manual": {
       "path": "manual/footprints.json",
@@ -29,7 +29,7 @@
     },
     "rawMocIndex": {
       "path": "raw/moc/index.json",
-      "sha256": "054d61542a27136df8bc6e35499192cf4b33db298ff07406ef1d96e1f951207c"
+      "sha256": "2a07d31bbe626d11b949fef271df686a561547971f367cc1109b937309702f26"
     },
     "rawGeometryIndex": {
       "path": "raw/geometry/index.json",
@@ -54,8 +54,8 @@
   "files": {
     "manifest": {
       "path": "normalized/survey-footprints.json",
-      "sha256": "e214787d981e71505b6f46661aa39baf209333b90ec3b2dde3e674707889fc1b",
-      "sizeBytes": 930773
+      "sha256": "1e89ac66f6c03c3710fbb6e75eb2295d4868c26170b622c8c2922e1a27977d68",
+      "sizeBytes": 976560
     },
     "catalog": {
       "path": "packages/catalog.json",

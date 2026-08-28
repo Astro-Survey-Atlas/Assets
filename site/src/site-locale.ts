@@ -1,5 +1,5 @@
-import { FileCode2, GitBranch, Home, Telescope, createIcons } from "lucide";
+import { ArrowDown, ArrowDownUp, ArrowRight, ArrowUp, Database, ExternalLink, FileCode2, GitBranch, Globe2, Home, PanelsTopLeft, Signpost, Telescope, Users, createIcons } from "lucide";
 import { mountLocaleControls } from "./i18n.js";
 
 mountLocaleControls();
-createIcons({ icons: { FileCode2, GitBranch, Home, Telescope }, attrs: { "aria-hidden": "true" } });
+createIcons({ icons: { ArrowDown, ArrowDownUp, ArrowRight, ArrowUp, Database, ExternalLink, FileCode2, GitBranch, Globe2, Home, PanelsTopLeft, Signpost, Telescope, Users }, attrs: { "aria-hidden": "true" } });

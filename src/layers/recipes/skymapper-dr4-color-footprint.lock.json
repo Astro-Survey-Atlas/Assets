@@ -1,0 +1,39 @@
+{
+  "layerId": "skymapper-dr4-color-footprint",
+  "surveyId": "skymapper",
+  "releaseId": "skymapper-dr4",
+  "product": "DR4 g/r/i color footprint",
+  "modality": "imaging",
+  "mode": "nested-healpix",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://skymapper.anu.edu.au/data-release/dr4/",
+  "input": "artifacts/public-survey-footprints/raw/moc/skymapper-skymapper-dr4-dr4-gri-color-footprint.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/Skymapper/DR4/color",
+    "sourceRecordUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FSkymapper%2FDR4%2Fcolor&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FSkymapper%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "6bbcdeb4f9b278f7a87fee185f850a10dced55eea23b1bf4423d7a0aab6e4cf3",
+    "nativeSpatialOrder": 10,
+    "nativeTimeOrder": 25,
+    "exportOrder": 10,
+    "availableOrders": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "precision": "estimated",
+    "precisionJustification": "CDS spatial projection of the DR4 color HiPS STMOC; requested export order does not increase native product precision.",
+    "limitations": ["Temporal coverage is retained only as evidence; this spatial projection cannot answer time-window queries.", "Selected color HiPS images are not a complete CCD-level selection mask."]
+  },
+  "snapshot": {
+    "sha256": "d89b39f1036dbad020b0a472e05aa6e7442e0552e27255b81fabd6991cf02f20",
+    "sizeBytes": 129600,
+    "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FSkymapper%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits",
+    "recordSha256": "6bbcdeb4f9b278f7a87fee185f850a10dced55eea23b1bf4423d7a0aab6e4cf3",
+    "retrievedAt": "2026-08-28T03:53:18.820Z"
+  }
+}

@@ -5,7 +5,11 @@
   "sourcePolicy": {
     "discovery": "official-allowlist-and-cds-record",
     "previewOrder": 4,
-    "releaseRequires": ["sourceSnapshotSha256", "nativeMocValidation", "attribution"]
+    "releaseRequires": [
+      "sourceSnapshotSha256",
+      "nativeMocValidation",
+      "attribution"
+    ]
   },
   "sources": [
     {
@@ -89,7 +93,10 @@
       "sourceTier": "third_party_moc",
       "precision": "estimated",
       "licenseStatus": "ODbL-1.0-with-ANU-attribution",
-      "status": "candidate",
+      "status": "acquired",
+      "acquiredAt": "2026-08-28T03:53:18.820Z",
+      "sourceSnapshotSha256": "d89b39f1036dbad020b0a472e05aa6e7442e0552e27255b81fabd6991cf02f20",
+      "sourceRecordSha256": "6bbcdeb4f9b278f7a87fee185f850a10dced55eea23b1bf4423d7a0aab6e4cf3",
       "notes": "STMOC is explicitly projected to spatial SMOC; temporal metadata remains evidence."
     },
     {
@@ -110,7 +117,10 @@
       "sourceTier": "third_party_moc",
       "precision": "estimated",
       "licenseStatus": "CC-BY-4.0-ESO-attribution",
-      "status": "candidate",
+      "status": "acquired",
+      "acquiredAt": "2026-08-28T03:53:18.820Z",
+      "sourceSnapshotSha256": "05814db03135f15e36228c4c3b743ef4da12857d0fedc645f66d2ca43a20fabd",
+      "sourceRecordSha256": "617b8cea873c021ec7c5839cb6af03aa5560290769002340e2840d1844d9ffe1",
       "notes": "HiPS product footprint; keep band products separate from catalog object presence."
     },
     {
@@ -131,7 +141,10 @@
       "sourceTier": "third_party_moc",
       "precision": "estimated",
       "licenseStatus": "ODbL-1.0-with-ESO-attribution",
-      "status": "candidate",
+      "status": "acquired",
+      "acquiredAt": "2026-08-28T03:53:18.820Z",
+      "sourceSnapshotSha256": "90981ae15adb2f018775e98948780fa5dd18afc719366f638194f880e1526ca3",
+      "sourceRecordSha256": "2a516175fcb6750319534b71be7719ff4ba8b71674c8e77a61480ace5495d1a5",
       "notes": "Publish derived MOC and metadata only; do not redistribute raw VISTA files."
     },
     {
@@ -152,7 +165,10 @@
       "sourceTier": "third_party_moc",
       "precision": "estimated",
       "licenseStatus": "ODbL-1.0-with-survey-attribution",
-      "status": "candidate",
+      "status": "acquired",
+      "acquiredAt": "2026-08-28T03:53:18.820Z",
+      "sourceSnapshotSha256": "592fbf29361a7de3efc29b4b2d904cbd80525224da7cbb60a3d23b3e4845d677",
+      "sourceRecordSha256": "c2733e37d872f763ba17900d284feeabb09ca99b43fdca31c6656f584981f4fd",
       "notes": "Keep distinct from DESI spectroscopy and Legacy Surveys catalog layers."
     },
     {

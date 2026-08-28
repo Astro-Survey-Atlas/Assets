@@ -22,7 +22,6 @@ test("MOC source registry separates catalog presence from image footprints", asy
     assert.equal(Number(url.searchParams.get("order")), source.maxOrder);
     assert.ok(source.overviewOrder <= source.maxOrder);
     assert.equal(source.sourceTier, "third_party_moc");
-    assert.notEqual(source.status, "acquired", "unlocked research candidates must not enter the public release");
     assert.ok(source.licenseStatus);
     if (source.sourceKind === "catalog-moc") {
       assert.equal(source.coverageRole, "object_presence");
@@ -32,6 +31,12 @@ test("MOC source registry separates catalog presence from image footprints", asy
       assert.equal(source.coverageRole, "footprint_extent");
       assert.equal(source.dataOrigin, "observed");
     }
+  }
+  for (const id of ["skymapper-dr4-color-footprint", "kids-dr5-color-footprint", "vista-viking-j-footprint", "decals-dr5-color-footprint"]) {
+    assert.equal(registry.sources.find((source) => source.id === id)?.status, "acquired", `${id} must have a locked snapshot before release`);
+  }
+  for (const id of ["gaia-dr3-main-source", "erass1-main-source-presence", "xmm-4xmm-dr13-source-presence", "planck-hfi-857-footprint"]) {
+    assert.equal(registry.sources.find((source) => source.id === id)?.status, "candidate", `${id} remains blocked pending terms review`);
   }
   for (const id of ["erass1-main-source-presence", "planck-hfi-857-footprint"]) {
     const source = registry.sources.find((entry) => entry.id === id);

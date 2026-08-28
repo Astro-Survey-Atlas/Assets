@@ -162,7 +162,7 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
     surveys: Array<{ id: string; modalities: string[]; statistics: { publicProducts: number; acquired: number }; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; releases: Array<{ coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; products: Array<{ status: string; reason?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number } }> }>; assets: Array<{ surveyId?: string; downloadUrl: string }> }>;
     sharedAssets: Array<{ surveyId?: string; downloadUrl: string }>;
   };
-  assert.equal(surveys.surveys.length, 14);
+  assert.equal(surveys.surveys.length, 17);
   const csst = surveys.surveys.find((survey) => survey.id === "csst");
   assert.ok(csst);
   assert.deepEqual(csst.modalities.sort(), ["catalog", "imaging", "photometry", "simulation"]);

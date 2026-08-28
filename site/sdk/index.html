@@ -4,14 +4,42 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#050a10" />
+    <meta name="description" content="Astro Survey Atlas integration contracts and SDK status" />
     <link rel="stylesheet" href="../src/styles.css" />
-    <title>Astro Survey Atlas Assets · SDK</title>
+    <title>Astro Survey Atlas · Integration</title>
   </head>
   <body class="resources-page sdk-page">
-    <header class="site-header resources-header"><a class="brand" href="/" aria-label="Astro Survey Atlas Assets"><span><strong>ASTRO SURVEY ATLAS ASSETS</strong><small>SDK DOCUMENTATION</small></span></a><nav class="site-nav" aria-label="Site navigation"><a class="site-nav-link" href="/"><i data-lucide="home"></i><span data-i18n="nav.home">Home</span></a><a class="site-nav-link" href="/github/"><i data-lucide="git-branch"></i><span data-i18n="nav.github">GitHub</span></a><a class="site-nav-link" href="/surveys/"><i data-lucide="telescope"></i><span data-i18n="nav.surveys">Survey Directory</span></a><a class="site-nav-link" href="/sdk/" aria-current="page"><i data-lucide="file-code-2"></i><span data-i18n="nav.sdk">SDK</span></a><button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button></nav></header>
-    <main class="resources-main"><section class="resources-hero"><p class="eyebrow" data-i18n="page.sdk.eyebrow">OFFLINE TOOLCHAIN / PYTHON + CLI</p><h1>astro-survey-moc-core</h1><p data-i18n="page.sdk.lead">A deterministic toolchain for reading coverage inputs, generating IVOA FITS MOCs, building query orders and Resource Packages, and validating every result.</p></section><section class="resources-grid"><article class="resource-band"><p class="eyebrow">INSTALL</p><h2 data-i18n="page.sdk.install">Build a local wheel</h2><pre><code>python3 -m pip wheel --no-deps --no-build-isolation . -w wheelhouse
-python3 -m pip install wheelhouse/*.whl</code></pre></article><article class="resource-band"><p class="eyebrow">CLI</p><h2 data-i18n="page.sdk.cli">Check versions and build indexes</h2><pre><code>python3 -m astro_survey_moc_core.cli --version
-astro-survey-moc-core project --moc merged.fits --order 8 --output query-order8.json</code></pre></article><article class="resource-band"><p class="eyebrow">CONTRACT</p><h2 data-i18n="page.sdk.contract">Output contract</h2><p data-i18n="page.sdk.contractBody">Use ICRS coordinates and NESTED HEALPix throughout. Order 4 is reserved for the home preview; order 8 or higher is published only when the input provides that precision. Missing precision is never inferred.</p><a class="resource-link" href="https://github.com/AaronYang0628/Astro-Survey-Atlas-Assets/blob/main/docs/moc-core-contract.md" target="_blank" rel="noreferrer" data-i18n="page.sdk.contractLink">View Core contract</a></article></section></main><footer><span>ICRS / NESTED HEALPIX / SHA-256</span><span>ASTRO SURVEY ATLAS ASSETS</span></footer>
+    <header class="site-header resources-header"><a class="brand" href="/" aria-label="Astro Survey Atlas Assets"><span><strong>ASTRO SURVEY ATLAS</strong><small>INTEGRATION CONTRACTS</small></span></a><nav class="site-nav" aria-label="Site navigation"><a class="site-nav-link" href="/"><i data-lucide="home"></i><span data-i18n="nav.home">Home</span></a><a class="site-nav-link" href="/github/"><i data-lucide="git-branch"></i><span data-i18n="nav.github">GitHub</span></a><a class="site-nav-link" href="/surveys/"><i data-lucide="telescope"></i><span data-i18n="nav.surveys">Survey Directory</span></a><a class="site-nav-link" href="/sdk/" aria-current="page"><i data-lucide="file-code-2"></i><span data-i18n="nav.sdk">SDK</span></a><button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button></nav></header>
+
+    <main class="resources-main sdk-main">
+      <section class="resources-hero">
+        <p class="eyebrow" data-i18n="page.sdk.eyebrow">INTEGRATION STATUS / VERSIONED CONTRACTS</p>
+        <h1 data-i18n="page.sdk.title">Choose a contract, not a catch-all SDK</h1>
+        <p data-i18n="page.sdk.lead">Astro Survey Atlas currently exposes stable HTTP, package and scan contracts. A single cross-project SDK and its long-term owner have not been defined.</p>
+      </section>
+
+      <section class="sdk-status-band" aria-labelledby="sdk-status-title">
+        <i data-lucide="signpost"></i>
+        <div><p class="eyebrow" data-i18n="page.sdk.statusEyebrow">CURRENT DECISION</p><h2 id="sdk-status-title" data-i18n="page.sdk.statusTitle">No fourth SDK repository yet</h2><p data-i18n="page.sdk.statusBody">The existing MOC Core remains an Assets-owned offline implementation. Warehouse owns execution contracts, and Workspace owns user-facing integration. A dedicated SDK project should be created only after a shared client surface, version policy and real consumers are agreed.</p></div>
+      </section>
+
+      <section class="sdk-paths" aria-labelledby="sdk-paths-title">
+        <div class="resource-heading"><div><p class="eyebrow" data-i18n="page.sdk.pathsEyebrow">SUPPORTED PATHS</p><h2 id="sdk-paths-title" data-i18n="page.sdk.pathsTitle">Start from what you need to integrate</h2></div></div>
+        <div class="sdk-path-list">
+          <article class="sdk-path"><i data-lucide="globe-2"></i><div><p class="eyebrow" data-i18n="page.sdk.publicEyebrow">PUBLIC DATA CONSUMERS</p><h3 data-i18n="page.sdk.publicTitle">Assets HTTP API and Resource Package v3</h3><p data-i18n="page.sdk.publicBody">Use the read-only API for catalogs, coverage blocks, overlap and bounded reverse lookup. Use Resource Package v3 when you need verified MOCs and provenance offline.</p><div class="sdk-path-actions"><a href="https://github.com/Astro-Survey-Atlas/Assets/blob/main/docs/api-reference.md" target="_blank" rel="noreferrer"><span data-i18n="page.sdk.apiLink">API reference</span><i data-lucide="external-link"></i></a><a href="https://github.com/Astro-Survey-Atlas/Assets/blob/main/docs/resource-package-integration.md" target="_blank" rel="noreferrer"><span>Resource Package v3</span><i data-lucide="external-link"></i></a></div></div></article>
+          <article class="sdk-path"><i data-lucide="database"></i><div><p class="eyebrow" data-i18n="page.sdk.warehouseEyebrow">SCAN AND EXECUTION DEVELOPERS</p><h3 data-i18n="page.sdk.warehouseTitle">Warehouse ScanPlan v2 and ScanRequest</h3><p data-i18n="page.sdk.warehouseBody">Use Warehouse when you need bounded local, S3 or OSS enumeration, spatial extraction, Kubernetes execution status, current file/coverage indices or scan evidence.</p><div class="sdk-path-actions"><a href="https://github.com/Astro-Survey-Atlas/Warehouse/blob/main/docs/scan-plan.md" target="_blank" rel="noreferrer"><span>ScanPlan v2</span><i data-lucide="external-link"></i></a><a href="https://github.com/Astro-Survey-Atlas/Warehouse/blob/main/docs/operator.md" target="_blank" rel="noreferrer"><span data-i18n="page.sdk.operatorLink">Operator contract</span><i data-lucide="external-link"></i></a></div></div></article>
+          <article class="sdk-path"><i data-lucide="panels-top-left"></i><div><p class="eyebrow" data-i18n="page.sdk.workspaceEyebrow">USER DATA AND WORKFLOWS</p><h3 data-i18n="page.sdk.workspaceTitle">Workspace API and installed public packages</h3><p data-i18n="page.sdk.workspaceBody">Use Workspace for user assets, connectors, local scans, workflows and user MOCs. It installs verified Assets packages and can optionally submit a namespace-local Warehouse scan.</p><div class="sdk-path-actions"><a href="https://github.com/Astro-Survey-Atlas/Workspace/blob/main/docs/api-reference.md" target="_blank" rel="noreferrer"><span data-i18n="page.sdk.workspaceLink">Workspace API</span><i data-lucide="external-link"></i></a></div></div></article>
+        </div>
+      </section>
+
+      <section class="sdk-core-band" aria-labelledby="sdk-core-title">
+        <div><p class="eyebrow" data-i18n="page.sdk.coreEyebrow">EXISTING OFFLINE CORE</p><h2 id="sdk-core-title">astro-survey-moc-core 1.0.0</h2><p data-i18n="page.sdk.coreBody">MOC Core deterministically builds and validates IVOA FITS MOCs, fixed-order projections and Resource Package v3 archives from locked local inputs. It is an implementation and compatibility contract, not a hosted service or a general client for all three projects.</p></div>
+        <pre><code>python3 -m astro_survey_moc_core.cli --version
+astro-survey-moc-core project --moc merged.fits --order 8 --output query-order8.json</code></pre>
+        <a class="resource-link" href="https://github.com/Astro-Survey-Atlas/Assets/blob/main/docs/moc-core-contract.md" target="_blank" rel="noreferrer"><span data-i18n="page.sdk.contractLink">Read the MOC Core contract</span><i data-lucide="external-link"></i></a>
+      </section>
+    </main>
+    <footer><span>HTTP API / RESOURCE PACKAGE V3 / SCANPLAN V2</span><span data-i18n="page.sdk.footer">SDK OWNERSHIP NOT YET FROZEN</span></footer>
     <script type="module" src="/src/site-locale.ts"></script>
   </body>
 </html>

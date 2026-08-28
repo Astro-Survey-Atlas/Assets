@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-28T03:53:18.820Z",
+  "entries": [
+    {
+      "id": "gaia-dr3-main-source",
+      "status": "candidate",
+      "mocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits",
+      "maxOrder": 10,
+      "recordSha256": "c928c72396503ef5af55fdb0ded78a6426e44ca8e2468f361f3cc78750f4893e",
+      "sourceSnapshotSha256": "ea7f15e3e2c54daf034a99caf754147d35f0c7353e2925d1dd02c1664f6562f9",
+      "sourceSnapshotSizeBytes": 25920,
+      "validation": {
+        "mocOrder": 10,
+        "ordering": "NUNIQ",
+        "coordinateSystem": "C",
+        "uniqColumn": true
+      }
+    },
+    {
+      "id": "erass1-main-source-presence",
+      "status": "candidate",
+      "mocUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FJ%2FA%2BA%2F682%2FA34%2Ferass1-m&get=smoc&order=8&fmt=fits",
+      "maxOrder": 8,
+      "recordSha256": "f5987a87d7f25d626a8ab38bad94cc009e0bc3cd2cac5c4cda5b8c13dd0a1199",
+      "sourceSnapshotSha256": "c7feb53500c18b9aa77ed8a166c616ffb2c9eaeb10c82ab0c15ffeb60d8da29a",
+      "sourceSnapshotSizeBytes": 613440,
+      "validation": {
+        "mocOrder": 8,
+        "ordering": "NUNIQ",
+        "coordinateSystem": "C",
+        "uniqColumn": true
+      }
+    },
+    {
+      "id": "xmm-4xmm-dr13-source-presence",
+      "status": "candidate",
+      "mocUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FIX%2F69%2Fxmm4d13s&get=smoc&order=10&fmt=fits",
+      "maxOrder": 10,
+      "recordSha256": "37673c978cb4cbae3b1ea1fe7dc30e577db9e031be3392feb14a91a63bf9f7fe",
+      "sourceSnapshotSha256": "dc556986589366ee3acce555dbef2f316d5f221506d5c5253ec5d4324b332e0b",
+      "sourceSnapshotSizeBytes": 725760,
+      "validation": {
+        "mocOrder": 10,
+        "ordering": "NUNIQ",
+        "coordinateSystem": "C",
+        "uniqColumn": true
+      }
+    },
+    {
+      "id": "skymapper-dr4-color-footprint",
+      "status": "candidate",
+      "mocUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FSkymapper%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits",
+      "maxOrder": 10,
+      "recordSha256": "6bbcdeb4f9b278f7a87fee185f850a10dced55eea23b1bf4423d7a0aab6e4cf3",
+      "sourceSnapshotSha256": "d89b39f1036dbad020b0a472e05aa6e7442e0552e27255b81fabd6991cf02f20",
+      "sourceSnapshotSizeBytes": 129600,
+      "validation": {
+        "mocOrder": 10,
+        "ordering": "NUNIQ",
+        "coordinateSystem": "C",
+        "uniqColumn": true
+      }
+    },
+    {
+      "id": "kids-dr5-color-footprint",
+      "status": "candidate",
+      "mocUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=10&fmt=fits",
+      "maxOrder": 10,
+      "recordSha256": "617b8cea873c021ec7c5839cb6af03aa5560290769002340e2840d1844d9ffe1",
+      "sourceSnapshotSha256": "05814db03135f15e36228c4c3b743ef4da12857d0fedc645f66d2ca43a20fabd",
+      "sourceSnapshotSizeBytes": 34560,
+      "validation": {
+        "mocOrder": 10,
+        "ordering": "NUNIQ",
+        "coordinateSystem": "C",
+        "uniqColumn": true
+      }
+    },
+    {
+      "id": "vista-viking-j-footprint",
+      "status": "candidate",
+      "mocUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=smoc&order=10&fmt=fits",
+      "maxOrder": 10,
+      "recordSha256": "2a516175fcb6750319534b71be7719ff4ba8b71674c8e77a61480ace5495d1a5",
+      "sourceSnapshotSha256": "90981ae15adb2f018775e98948780fa5dd18afc719366f638194f880e1526ca3",
+      "sourceSnapshotSizeBytes": 51840,
+      "validation": {
+        "mocOrder": 10,
+        "ordering": "NUNIQ",
+        "coordinateSystem": "C",
+        "uniqColumn": true
+      }
+    },
+    {
+      "id": "decals-dr5-color-footprint",
+      "status": "candidate",
+      "mocUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=smoc&order=10&fmt=fits",
+      "maxOrder": 10,
+      "recordSha256": "c2733e37d872f763ba17900d284feeabb09ca99b43fdca31c6656f584981f4fd",
+      "sourceSnapshotSha256": "592fbf29361a7de3efc29b4b2d904cbd80525224da7cbb60a3d23b3e4845d677",
+      "sourceSnapshotSizeBytes": 192960,
+      "validation": {
+        "mocOrder": 10,
+        "ordering": "NUNIQ",
+        "coordinateSystem": "C",
+        "uniqColumn": true
+      }
+    },
+    {
+      "id": "planck-hfi-857-footprint",
+      "status": "candidate",
+      "mocUrl": "https://alasky.unistra.fr/MocServer/query?ID=ESAVO%2FP%2FPLANCK%2FHFI-857&get=smoc&order=8&fmt=fits",
+      "maxOrder": 8,
+      "recordSha256": "d1d7e0a2457ab4a7dec2f32974a30d132df76cb749bf22d73daaaad9d3b1ec75",
+      "sourceSnapshotSha256": "485d1017cf537055503134e14b22683d398478bd4c853871bc7e9b3f7d7cf3f2",
+      "sourceSnapshotSizeBytes": 8640,
+      "validation": {
+        "mocOrder": 8,
+        "ordering": "NUNIQ",
+        "coordinateSystem": "C",
+        "uniqColumn": true
+      }
+    }
+  ]
+}

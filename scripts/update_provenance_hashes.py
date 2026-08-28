@@ -20,6 +20,8 @@ def main() -> None:
     for key, relative in {
         "sources": "sources.json",
         "canonicalManifest": "normalized/survey-footprints.json",
+        "rawMocIndex": "raw/moc/index.json",
+        "rawGeometryIndex": "raw/geometry/index.json",
     }.items():
         if key in value.get("inputs", {}):
             value["inputs"][key]["sha256"] = sha(ARTIFACT_ROOT / relative)
@@ -38,6 +40,7 @@ def main() -> None:
         for entry in json.loads((ARTIFACT_ROOT / "packages/catalog.json").read_text(encoding="utf-8"))["packages"]
     ]
     source = json.loads((ARTIFACT_ROOT / "sources.json").read_text(encoding="utf-8"))
+    manifest = json.loads((ROOT / "src/footprints/survey-footprints.json").read_text(encoding="utf-8"))
     products = [product for release in source["releases"] for product in release.get("products", [])]
     value["statistics"].update({
         "releases": len(source["releases"]),
@@ -46,6 +49,7 @@ def main() -> None:
         "overview_only": sum(product.get("status") == "overview_only" for product in products),
         "awaiting_geometry": sum(product.get("status") == "awaiting_geometry" for product in products),
         "not_applicable": sum(product.get("status") == "not_applicable" for product in products),
+        "manifestFootprints": len(manifest.get("footprints", [])),
     })
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

@@ -1,0 +1,39 @@
+{
+  "layerId": "decals-dr5-color-footprint",
+  "surveyId": "decals",
+  "releaseId": "decals-dr5",
+  "product": "DR5 g/r/z color footprint",
+  "modality": "imaging",
+  "mode": "nested-healpix",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.legacysurvey.org/dr5/",
+  "input": "artifacts/public-survey-footprints/raw/moc/decals-decals-dr5-dr5-grz-color-footprint.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/DECaLS/DR5/color",
+    "sourceRecordUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "c2733e37d872f763ba17900d284feeabb09ca99b43fdca31c6656f584981f4fd",
+    "nativeSpatialOrder": 11,
+    "nativeTimeOrder": 25,
+    "exportOrder": 10,
+    "availableOrders": [2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "precision": "estimated",
+    "precisionJustification": "CDS order-10 spatial projection of the DR5 g/r/z color HiPS STMOC; the export cannot manufacture finer accepted-CCD geometry.",
+    "limitations": ["Temporal coverage is retained only as evidence; this spatial projection cannot answer time-window queries.", "This is a color HiPS availability extent, not DESI spectroscopy, Tractor selection, or accepted-CCD polygons."]
+  },
+  "snapshot": {
+    "sha256": "592fbf29361a7de3efc29b4b2d904cbd80525224da7cbb60a3d23b3e4845d677",
+    "sizeBytes": 192960,
+    "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=smoc&order=10&fmt=fits",
+    "recordSha256": "c2733e37d872f763ba17900d284feeabb09ca99b43fdca31c6656f584981f4fd",
+    "retrievedAt": "2026-08-28T03:53:18.820Z"
+  }
+}

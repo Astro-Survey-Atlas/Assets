@@ -457,14 +457,14 @@
       "releaseId": "kids-dr5",
       "product": "DR5 gri imaging",
       "sourceId": "CDS/P/KiDS/DR5/color-gri",
-      "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&fmt=fits",
-      "metadataUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=record&fmt=json",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=10&fmt=fits",
+      "metadataUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=record&fmt=json",
       "fitsPath": "kids-kids-dr5-dr5-gri-imaging.fits",
       "metadataPath": "kids-kids-dr5-dr5-gri-imaging.record.json",
-      "retrievedAt": "2026-08-18T08:58:51.095Z",
+      "retrievedAt": "2026-08-28T03:53:18.820Z",
       "mediaType": "application/fits",
-      "byteLength": 97920,
-      "sha256": "fc92888b974f743c8357af12cfb4a65637182adc5b8b65bbc2d528ce74d63b90"
+      "byteLength": 34560,
+      "sha256": "05814db03135f15e36228c4c3b743ef4da12857d0fedc645f66d2ca43a20fabd"
     },
     {
       "surveyId": "nvss",
@@ -479,6 +479,48 @@
       "mediaType": "application/fits",
       "byteLength": 14400,
       "sha256": "aca99dfcbcf13d6717060a48efd192389a244dee6261aa3f53583d1bd6144e13"
+    },
+    {
+      "surveyId": "skymapper",
+      "releaseId": "skymapper-dr4",
+      "product": "DR4 g/r/i color footprint",
+      "sourceId": "CDS/P/Skymapper/DR4/color",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FSkymapper%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits",
+      "metadataUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FSkymapper%2FDR4%2Fcolor&get=record&fmt=json",
+      "fitsPath": "skymapper-skymapper-dr4-dr4-gri-color-footprint.fits",
+      "metadataPath": "skymapper-skymapper-dr4-dr4-gri-color-footprint.record.json",
+      "retrievedAt": "2026-08-28T03:53:18.820Z",
+      "mediaType": "application/fits",
+      "byteLength": 129600,
+      "sha256": "d89b39f1036dbad020b0a472e05aa6e7442e0552e27255b81fabd6991cf02f20"
+    },
+    {
+      "surveyId": "vista",
+      "releaseId": "viking",
+      "product": "VIKING J footprint",
+      "sourceId": "CDS/P/VISTA/VIKING/J",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=smoc&order=10&fmt=fits",
+      "metadataUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=record&fmt=json",
+      "fitsPath": "vista-vista-viking-viking-j-footprint.fits",
+      "metadataPath": "vista-vista-viking-viking-j-footprint.record.json",
+      "retrievedAt": "2026-08-28T03:53:18.820Z",
+      "mediaType": "application/fits",
+      "byteLength": 51840,
+      "sha256": "90981ae15adb2f018775e98948780fa5dd18afc719366f638194f880e1526ca3"
+    },
+    {
+      "surveyId": "decals",
+      "releaseId": "decals-dr5",
+      "product": "DR5 g/r/z color footprint",
+      "sourceId": "CDS/P/DECaLS/DR5/color",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=smoc&order=10&fmt=fits",
+      "metadataUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=record&fmt=json",
+      "fitsPath": "decals-decals-dr5-dr5-grz-color-footprint.fits",
+      "metadataPath": "decals-decals-dr5-dr5-grz-color-footprint.record.json",
+      "retrievedAt": "2026-08-28T03:53:18.820Z",
+      "mediaType": "application/fits",
+      "byteLength": 192960,
+      "sha256": "592fbf29361a7de3efc29b4b2d904cbd80525224da7cbb60a3d23b3e4845d677"
     }
   ]
 }

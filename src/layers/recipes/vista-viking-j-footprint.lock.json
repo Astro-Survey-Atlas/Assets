@@ -1,0 +1,39 @@
+{
+  "layerId": "vista-viking-j-footprint",
+  "surveyId": "vista",
+  "releaseId": "viking",
+  "product": "VIKING J footprint",
+  "modality": "imaging",
+  "mode": "nested-healpix",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+  "input": "artifacts/public-survey-footprints/raw/moc/vista-vista-viking-viking-j-footprint.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/VISTA/VIKING/J",
+    "sourceRecordUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "2a516175fcb6750319534b71be7719ff4ba8b71674c8e77a61480ace5495d1a5",
+    "nativeSpatialOrder": 16,
+    "nativeTimeOrder": 25,
+    "exportOrder": 10,
+    "availableOrders": [4, 5, 6, 7, 8, 9, 10],
+    "precision": "estimated",
+    "precisionJustification": "CDS order-10 spatial projection of the single-band VIKING J HiPS STMOC; it does not claim order-16 detail after down-projection.",
+    "limitations": ["Temporal coverage is retained only as evidence; this spatial projection cannot answer time-window queries.", "J is a single-band layer and is not a union of the other VIKING bands."]
+  },
+  "snapshot": {
+    "sha256": "90981ae15adb2f018775e98948780fa5dd18afc719366f638194f880e1526ca3",
+    "sizeBytes": 51840,
+    "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=smoc&order=10&fmt=fits",
+    "recordSha256": "2a516175fcb6750319534b71be7719ff4ba8b71674c8e77a61480ace5495d1a5",
+    "retrievedAt": "2026-08-28T03:53:18.820Z"
+  }
+}

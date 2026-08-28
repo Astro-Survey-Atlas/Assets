@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "auditedAt": "2026-08-20",
+  "auditedAt": "2026-08-28",
   "auditPolicy": "Acquired denotes an exact product MOC; overview_only denotes an official or artifact-backed overview; awaiting_geometry denotes a product requiring exact geometry.",
   "releases": [
     {
@@ -872,7 +872,9 @@
           "product": "DR5 gri imaging",
           "status": "acquired",
           "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=4&fmt=json"
+          "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed CDS ICRS/NUNIQ order-10 spatial MOC; native STMOC time metadata is evidence-only and precision is estimated."
         }
       ]
     },
@@ -927,6 +929,48 @@
           "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
           "coverageRole": "image_extent",
           "notes": "data-warehouse run workspace-coverage-dbf269d0f221-retry3 matched 211824 files and processed 211824 FITS-WCS documents; Core MOC area 447.605792 deg2."
+        }
+      ]
+    },
+    {
+      "surveyId": "decals",
+      "releaseId": "decals-dr5",
+      "products": [
+        {
+          "product": "DR5 g/r/z color footprint",
+          "status": "acquired",
+          "sourceUrl": "https://www.legacysurvey.org/dr5/",
+          "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed CDS ICRS/NUNIQ order-10 spatial MOC; native STMOC time metadata is evidence-only and precision is estimated."
+        }
+      ]
+    },
+    {
+      "surveyId": "skymapper",
+      "releaseId": "skymapper-dr4",
+      "products": [
+        {
+          "product": "DR4 g/r/i color footprint",
+          "status": "acquired",
+          "sourceUrl": "https://skymapper.anu.edu.au/data-release/dr4/",
+          "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FSkymapper%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed CDS ICRS/NUNIQ order-10 spatial MOC; native STMOC time metadata is evidence-only and precision is estimated."
+        }
+      ]
+    },
+    {
+      "surveyId": "vista",
+      "releaseId": "viking",
+      "products": [
+        {
+          "product": "VIKING J footprint",
+          "status": "acquired",
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed CDS ICRS/NUNIQ order-10 spatial MOC; native STMOC time metadata is evidence-only and precision is estimated."
         }
       ]
     }

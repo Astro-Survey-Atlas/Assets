@@ -3,20 +3,20 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "cfd5af3c429c11e3d19afcd14eae3d9e59facc561c0f1be4dbbef121daf64722"
+    "sha256": "50dd5d9c6415512cef57023d4ebfdde605d82b1128e7478b3580915f5204aadc"
   },
   "statistics": {
-    "releases": 52,
-    "products": 87,
-    "acquired": 35,
+    "releases": 55,
+    "products": 90,
+    "acquired": 38,
     "overviewOnly": 11,
     "awaitingGeometry": 41,
-    "footprints": 41,
+    "footprints": 47,
     "packages": 14,
-    "rawMocFiles": 41,
-    "totalBytes": 33696261,
-    "runtimeBytes": 7059862,
-    "evidenceBytes": 26636399
+    "rawMocFiles": 48,
+    "totalBytes": 40248328,
+    "runtimeBytes": 12488592,
+    "evidenceBytes": 27759736
   },
   "files": [
     {
@@ -28,8 +28,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/architecture-boundary.md",
-      "sizeBytes": 4392,
-      "sha256": "15e3e78038e4fcf24c060ef8966aa7fc1e29ca0fbf9ea830472c88e7d31d7a1f"
+      "sizeBytes": 4825,
+      "sha256": "110992e0e3cc772d3527ef49f8b519fac52f639c33b038eaad7b3aa2405c2f3f"
     },
     {
       "id": "documentation-data-warehouse-requirements",
@@ -66,6 +66,18 @@
       "path": "docs/public-footprint-moc-method.md",
       "sizeBytes": 7438,
       "sha256": "71106a35d7fb3796d70fc818b1b703f6e9651c6170c24f86ee752d354fe72143"
+    },
+    {
+      "id": "documentation-public-artifact-storage",
+      "kind": "documentation",
+      "label": "Public artifact storage and migration",
+      "description": "Versioned object-storage publication, evidence boundaries, migration steps and runtime compatibility requirements.",
+      "downloadName": "public-artifact-storage.md",
+      "mediaType": "text/markdown; charset=utf-8",
+      "deliveryClass": "runtime",
+      "path": "docs/public-artifact-storage.md",
+      "sizeBytes": 5383,
+      "sha256": "d461f8ea3ef845aacf0a194a794d3894151a9aa7985c0beee485e205b39021df"
     },
     {
       "id": "documentation-resource-package-integration",
@@ -296,6 +308,38 @@
       "sha256": "217b57dcf3eafa22927437422981d60f0348629f1c3549365205b67c3593bd54"
     },
     {
+      "id": "layer-decals-dr5-color-footprint-preview-order4",
+      "kind": "geometry",
+      "label": "DECALS · DR5 g/r/z color footprint order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "decals-dr5-color-footprint-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "decals",
+      "releaseId": "decals-dr5",
+      "product": "DR5 g/r/z color footprint",
+      "sourceUrl": "https://www.legacysurvey.org/dr5/",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/decals-dr5-color-footprint/preview-order4.json",
+      "sizeBytes": 4785,
+      "sha256": "9719bfa24d496ebc12daaec725201677856b794484407c596baa65ea15992dcb"
+    },
+    {
+      "id": "layer-decals-dr5-color-footprint-query-order8",
+      "kind": "geometry",
+      "label": "DECALS · DR5 g/r/z color footprint order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "decals-dr5-color-footprint-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "decals",
+      "releaseId": "decals-dr5",
+      "product": "DR5 g/r/z color footprint",
+      "sourceUrl": "https://www.legacysurvey.org/dr5/",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/decals-dr5-color-footprint/query-order8.json",
+      "sizeBytes": 1482284,
+      "sha256": "4433fe19f6578b9a8e5b04e8dba01ce3b8f0c97190031a314ac318a05a8be0b6"
+    },
+    {
       "id": "layer-desi-dr1-spectra-footprint-preview-order4",
       "kind": "geometry",
       "label": "DESI · DR1 spectra and redshifts order-4 preview projection",
@@ -440,6 +484,102 @@
       "sha256": "1cf306fab4995179219fbefd32b9648ce0455b65c48cab9246138cc72eff20ef"
     },
     {
+      "id": "layer-kids-dr5-color-footprint-preview-order4",
+      "kind": "geometry",
+      "label": "KIDS · DR5 gri imaging order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "kids-dr5-color-footprint-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "kids",
+      "releaseId": "kids-dr5",
+      "product": "DR5 gri imaging",
+      "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/kids-dr5-color-footprint/preview-order4.json",
+      "sizeBytes": 895,
+      "sha256": "afbd1791a5a0e77c6c8df321da25d8153c3db71923518363f9b4f672a4904051"
+    },
+    {
+      "id": "layer-kids-dr5-color-footprint-query-order8",
+      "kind": "geometry",
+      "label": "KIDS · DR5 gri imaging order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "kids-dr5-color-footprint-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "kids",
+      "releaseId": "kids-dr5",
+      "product": "DR5 gri imaging",
+      "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/kids-dr5-color-footprint/query-order8.json",
+      "sizeBytes": 186282,
+      "sha256": "e595d36a1195c508b8087ad605a1d579c8e7726c295f244c6e62eef8048e74ac"
+    },
+    {
+      "id": "layer-skymapper-dr4-color-footprint-preview-order4",
+      "kind": "geometry",
+      "label": "SKYMAPPER · DR4 g/r/i color footprint order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "skymapper-dr4-color-footprint-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "skymapper",
+      "releaseId": "skymapper-dr4",
+      "product": "DR4 g/r/i color footprint",
+      "sourceUrl": "https://skymapper.anu.edu.au/data-release/dr4/",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/skymapper-dr4-color-footprint/preview-order4.json",
+      "sizeBytes": 9977,
+      "sha256": "2840384c5a8ea48d73d22c097248b3a36d63ff52f8f3cbfc11ee52f81acc199c"
+    },
+    {
+      "id": "layer-skymapper-dr4-color-footprint-query-order8",
+      "kind": "geometry",
+      "label": "SKYMAPPER · DR4 g/r/i color footprint order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "skymapper-dr4-color-footprint-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "skymapper",
+      "releaseId": "skymapper-dr4",
+      "product": "DR4 g/r/i color footprint",
+      "sourceUrl": "https://skymapper.anu.edu.au/data-release/dr4/",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/skymapper-dr4-color-footprint/query-order8.json",
+      "sizeBytes": 3482847,
+      "sha256": "dba848626612cd433076bc11f86e4e2640972780b66e945f4d53b573fc55a79e"
+    },
+    {
+      "id": "layer-vista-viking-j-footprint-preview-order4",
+      "kind": "geometry",
+      "label": "VISTA · VIKING J footprint order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "vista-viking-j-footprint-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "vista",
+      "releaseId": "viking",
+      "product": "VIKING J footprint",
+      "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/vista-viking-j-footprint/preview-order4.json",
+      "sizeBytes": 826,
+      "sha256": "10470477a6cf1d3d215aa36e712c93c0d93b864997b3878171427ca580c5337b"
+    },
+    {
+      "id": "layer-vista-viking-j-footprint-query-order8",
+      "kind": "geometry",
+      "label": "VISTA · VIKING J footprint order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "vista-viking-j-footprint-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "vista",
+      "releaseId": "viking",
+      "product": "VIKING J footprint",
+      "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/vista-viking-j-footprint/query-order8.json",
+      "sizeBytes": 145017,
+      "sha256": "cfdca4bbc6494c093b5a571cf1ba030c0e20a3972223d54d1cc214b14807dfe1"
+    },
+    {
       "id": "ledger-products",
       "kind": "ledger",
       "label": "Product coverage status ledger",
@@ -448,8 +588,8 @@
       "mediaType": "application/json",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/sources.json",
-      "sizeBytes": 49987,
-      "sha256": "f4473f94f7fb4d2ab9be9dbfc96d5c4a848b01768c8acc7db0382bd2b2e4d685"
+      "sizeBytes": 51962,
+      "sha256": "eb2bd2d469991a9d4e5d4c1ed45426890cc57ac7506efaf1cf3a48cbc1b5e010"
     },
     {
       "id": "manifest-canonical",
@@ -460,8 +600,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "src/footprints/survey-footprints.json",
-      "sizeBytes": 930773,
-      "sha256": "e214787d981e71505b6f46661aa39baf209333b90ec3b2dde3e674707889fc1b"
+      "sizeBytes": 976560,
+      "sha256": "1e89ac66f6c03c3710fbb6e75eb2295d4868c26170b622c8c2922e1a27977d68"
     },
     {
       "id": "csst-w2-normalized-scan",
@@ -517,8 +657,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/normalized/survey-footprints.json",
-      "sizeBytes": 930773,
-      "sha256": "e214787d981e71505b6f46661aa39baf209333b90ec3b2dde3e674707889fc1b"
+      "sizeBytes": 976560,
+      "sha256": "1e89ac66f6c03c3710fbb6e75eb2295d4868c26170b622c8c2922e1a27977d68"
     },
     {
       "id": "manifest-survey-catalog",
@@ -529,8 +669,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "src/surveys/survey-catalog.json",
-      "sizeBytes": 78983,
-      "sha256": "87a9f52ab439a254dd929d190fc680ec2a3773f275ab2b986c25ae0a571057d3"
+      "sizeBytes": 83390,
+      "sha256": "1aef9397e4f2c14e858bb01ca1fad7eeed25021d853b739297a06bd8697b3cd5"
     },
     {
       "id": "moc-2mass-2mass-all-sky-h-band-imaging-cds-p-2mass-h-record",
@@ -981,6 +1121,54 @@
       "sha256": "902b7239b27b5a9ec32ded282a8fa292bcb24aefa5b0cea44a35180cdbcfe860"
     },
     {
+      "id": "layer-decals-dr5-color-footprint-lock",
+      "kind": "metadata",
+      "label": "DECALS · DR5 g/r/z color footprint locked recipe",
+      "description": "Offline recipe and input snapshot lock used to build this public layer.",
+      "downloadName": "decals-dr5-color-footprint.lock.json",
+      "mediaType": "application/json",
+      "surveyId": "decals",
+      "releaseId": "decals-dr5",
+      "product": "DR5 g/r/z color footprint",
+      "sourceUrl": "https://www.legacysurvey.org/dr5/",
+      "deliveryClass": "runtime",
+      "path": "src/layers/recipes/decals-dr5-color-footprint.lock.json",
+      "sizeBytes": 1947,
+      "sha256": "349acb5c10acb404d37b17cdbfe1aebf0d86c4c7e71c2828eceb176de7107a39"
+    },
+    {
+      "id": "moc-decals-decals-dr5-dr5-g-r-z-color-footprint-cds-p-decals-dr5-color-record",
+      "kind": "metadata",
+      "label": "DECALS · DR5 g/r/z color footprint source record",
+      "description": "CDS/HiPS source metadata accompanying decals-decals-dr5-dr5-grz-color-footprint.fits.",
+      "downloadName": "decals-decals-dr5-dr5-grz-color-footprint.record.json",
+      "mediaType": "application/json",
+      "surveyId": "decals",
+      "releaseId": "decals-dr5",
+      "product": "DR5 g/r/z color footprint",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=record&fmt=json",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/raw/moc/decals-decals-dr5-dr5-grz-color-footprint.record.json",
+      "sizeBytes": 3242,
+      "sha256": "c2733e37d872f763ba17900d284feeabb09ca99b43fdca31c6656f584981f4fd"
+    },
+    {
+      "id": "layer-decals-dr5-color-footprint-statistics",
+      "kind": "metadata",
+      "label": "DECALS · DR5 g/r/z color footprint statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "decals-dr5-color-footprint-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "decals",
+      "releaseId": "decals-dr5",
+      "product": "DR5 g/r/z color footprint",
+      "sourceUrl": "https://www.legacysurvey.org/dr5/",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/decals-dr5-color-footprint/statistics.json",
+      "sizeBytes": 211,
+      "sha256": "eb90da0b0c7b9b6f0fbea002337716fc6e910afb2dbf14d485459d5da07cd5b9"
+    },
+    {
       "id": "moc-des-des-dr2-dr2-color-imaging-cds-p-des-dr2-colorirg-record",
       "kind": "metadata",
       "label": "DES · DR2 color imaging source record",
@@ -1349,6 +1537,22 @@
       "sha256": "f9908c61d85a42735eac642f9ceecbc4a7f92230db526c2833b2e08d9fd3fd1b"
     },
     {
+      "id": "layer-kids-dr5-color-footprint-lock",
+      "kind": "metadata",
+      "label": "KIDS · DR5 gri imaging locked recipe",
+      "description": "Offline recipe and input snapshot lock used to build this public layer.",
+      "downloadName": "kids-dr5-color-footprint.lock.json",
+      "mediaType": "application/json",
+      "surveyId": "kids",
+      "releaseId": "kids-dr5",
+      "product": "DR5 gri imaging",
+      "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
+      "deliveryClass": "runtime",
+      "path": "src/layers/recipes/kids-dr5-color-footprint.lock.json",
+      "sizeBytes": 1914,
+      "sha256": "25a4bcb550c61bca8ce377f88bfa07615f3c0c8bc149fa6fb3be327b82d40074"
+    },
+    {
       "id": "moc-kids-kids-dr5-dr5-gri-imaging-cds-p-kids-dr5-color-gri-record",
       "kind": "metadata",
       "label": "KIDS · DR5 gri imaging source record",
@@ -1358,11 +1562,27 @@
       "surveyId": "kids",
       "releaseId": "kids-dr5",
       "product": "DR5 gri imaging",
-      "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=record&fmt=json",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=record&fmt=json",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/kids-kids-dr5-dr5-gri-imaging.record.json",
-      "sizeBytes": 3078,
-      "sha256": "95e3531a8dfbc63a09e12b251380032a857273d8381b4af223a4648958a8eb04"
+      "sizeBytes": 2803,
+      "sha256": "617b8cea873c021ec7c5839cb6af03aa5560290769002340e2840d1844d9ffe1"
+    },
+    {
+      "id": "layer-kids-dr5-color-footprint-statistics",
+      "kind": "metadata",
+      "label": "KIDS · DR5 gri imaging statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "kids-dr5-color-footprint-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "kids",
+      "releaseId": "kids-dr5",
+      "product": "DR5 gri imaging",
+      "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/kids-dr5-color-footprint/statistics.json",
+      "sizeBytes": 208,
+      "sha256": "4c21f0b44ce8cdf795ca6839860d14b6be4bad923d8a0e08b2628ef7512be904"
     },
     {
       "id": "moc-legacy-surveys-legacy-dr10-dr10-color-imaging-cds-p-desi-legacy-surveys-dr10-color-record",
@@ -1389,8 +1609,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "src/layers/public-build-plan.json",
-      "sizeBytes": 1670,
-      "sha256": "7a89fde5833232b48c152717cce4beb657e62f89f099dc87d2973958e5c2adfd"
+      "sizeBytes": 2728,
+      "sha256": "6b76528435fa786042368b114a9ca5ee52708a31e25cdf43c182806f71255a9f"
     },
     {
       "id": "metadata-moc-index",
@@ -1401,8 +1621,8 @@
       "mediaType": "application/json",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/index.json",
-      "sizeBytes": 25160,
-      "sha256": "054d61542a27136df8bc6e35499192cf4b33db298ff07406ef1d96e1f951207c"
+      "sizeBytes": 27426,
+      "sha256": "2a07d31bbe626d11b949fef271df686a561547971f367cc1109b937309702f26"
     },
     {
       "id": "moc-nvss-nvss-final-1-4-ghz-radio-imaging-cds-p-nvss-record",
@@ -1537,8 +1757,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "src/moc-sources/source-registry.json",
-      "sizeBytes": 8309,
-      "sha256": "ec46ac0aafbe8aec3ab7719e598dc77705e166456a1dbbcb0687cbcacfac7546"
+      "sizeBytes": 9297,
+      "sha256": "22b2f755bd744d159f5b290701e3bf28ad13bfb6ec9dfea48f9c221a704fb198"
     },
     {
       "id": "metadata-geometry-index",
@@ -1593,6 +1813,54 @@
       "sha256": "fbbcbb0da5eecf0047d1b71e6950f630288e5305256a2f82a473dff132241316"
     },
     {
+      "id": "layer-skymapper-dr4-color-footprint-lock",
+      "kind": "metadata",
+      "label": "SKYMAPPER · DR4 g/r/i color footprint locked recipe",
+      "description": "Offline recipe and input snapshot lock used to build this public layer.",
+      "downloadName": "skymapper-dr4-color-footprint.lock.json",
+      "mediaType": "application/json",
+      "surveyId": "skymapper",
+      "releaseId": "skymapper-dr4",
+      "product": "DR4 g/r/i color footprint",
+      "sourceUrl": "https://skymapper.anu.edu.au/data-release/dr4/",
+      "deliveryClass": "runtime",
+      "path": "src/layers/recipes/skymapper-dr4-color-footprint.lock.json",
+      "sizeBytes": 1948,
+      "sha256": "c0b6f91cbf11967d417e471cbdf4b480ae57d3eff6beba929a05c499e244d521"
+    },
+    {
+      "id": "moc-skymapper-skymapper-dr4-dr4-g-r-i-color-footprint-cds-p-skymapper-dr4-color-record",
+      "kind": "metadata",
+      "label": "SKYMAPPER · DR4 g/r/i color footprint source record",
+      "description": "CDS/HiPS source metadata accompanying skymapper-skymapper-dr4-dr4-gri-color-footprint.fits.",
+      "downloadName": "skymapper-skymapper-dr4-dr4-gri-color-footprint.record.json",
+      "mediaType": "application/json",
+      "surveyId": "skymapper",
+      "releaseId": "skymapper-dr4",
+      "product": "DR4 g/r/i color footprint",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FSkymapper%2FDR4%2Fcolor&get=record&fmt=json",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/raw/moc/skymapper-skymapper-dr4-dr4-gri-color-footprint.record.json",
+      "sizeBytes": 4292,
+      "sha256": "6bbcdeb4f9b278f7a87fee185f850a10dced55eea23b1bf4423d7a0aab6e4cf3"
+    },
+    {
+      "id": "layer-skymapper-dr4-color-footprint-statistics",
+      "kind": "metadata",
+      "label": "SKYMAPPER · DR4 g/r/i color footprint statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "skymapper-dr4-color-footprint-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "skymapper",
+      "releaseId": "skymapper-dr4",
+      "product": "DR4 g/r/i color footprint",
+      "sourceUrl": "https://skymapper.anu.edu.au/data-release/dr4/",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/skymapper-dr4-color-footprint/statistics.json",
+      "sizeBytes": 211,
+      "sha256": "8bac5ae7efe4e4dee18697cae9bf35af558ef605557d002d8de425b9df97c05d"
+    },
+    {
       "id": "metadata-layer-registry",
       "kind": "metadata",
       "label": "Stable coverage layer registry",
@@ -1601,8 +1869,56 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "src/layers/layer-registry.json",
-      "sizeBytes": 20722,
-      "sha256": "65c2a8357e4dc9256bf0f6d1dde7a8087d8a19e29e855ce890576672af125434"
+      "sizeBytes": 24144,
+      "sha256": "1144f14086c7ae3611f0d5e5f11b809d22d74061d2549b57df4614a719440349"
+    },
+    {
+      "id": "layer-vista-viking-j-footprint-lock",
+      "kind": "metadata",
+      "label": "VISTA · VIKING J footprint locked recipe",
+      "description": "Offline recipe and input snapshot lock used to build this public layer.",
+      "downloadName": "vista-viking-j-footprint.lock.json",
+      "mediaType": "application/json",
+      "surveyId": "vista",
+      "releaseId": "viking",
+      "product": "VIKING J footprint",
+      "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+      "deliveryClass": "runtime",
+      "path": "src/layers/recipes/vista-viking-j-footprint.lock.json",
+      "sizeBytes": 1904,
+      "sha256": "270e2690e727996fa6180a2ffc877e41117740bd9c39c9d3a0ace2d8a8a87000"
+    },
+    {
+      "id": "moc-vista-viking-viking-j-footprint-cds-p-vista-viking-j-record",
+      "kind": "metadata",
+      "label": "VISTA · VIKING J footprint source record",
+      "description": "CDS/HiPS source metadata accompanying vista-vista-viking-viking-j-footprint.fits.",
+      "downloadName": "vista-vista-viking-viking-j-footprint.record.json",
+      "mediaType": "application/json",
+      "surveyId": "vista",
+      "releaseId": "viking",
+      "product": "VIKING J footprint",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=record&fmt=json",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/raw/moc/vista-vista-viking-viking-j-footprint.record.json",
+      "sizeBytes": 3448,
+      "sha256": "2a516175fcb6750319534b71be7719ff4ba8b71674c8e77a61480ace5495d1a5"
+    },
+    {
+      "id": "layer-vista-viking-j-footprint-statistics",
+      "kind": "metadata",
+      "label": "VISTA · VIKING J footprint statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "vista-viking-j-footprint-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "vista",
+      "releaseId": "viking",
+      "product": "VIKING J footprint",
+      "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/vista-viking-j-footprint/statistics.json",
+      "sizeBytes": 209,
+      "sha256": "ec5bded1fd80ac6801a19611d890ed646d9a2b4c5aba279f7831c54607203bac"
     },
     {
       "id": "moc-2mass-2mass-all-sky-h-band-imaging-cds-p-2mass-h",
@@ -1823,6 +2139,38 @@
       "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/csst-sim-w4-image-extent.moc.fits",
       "sizeBytes": 11520,
       "sha256": "f7796308322935b1f304b33e4d8429680290e15744c7a95246259f70ff4046db"
+    },
+    {
+      "id": "moc-decals-decals-dr5-dr5-g-r-z-color-footprint-cds-p-decals-dr5-color",
+      "kind": "moc",
+      "label": "DECALS · DR5 g/r/z color footprint",
+      "description": "Native FITS MOC for decals-dr5.",
+      "downloadName": "decals-decals-dr5-dr5-grz-color-footprint.fits",
+      "mediaType": "application/fits",
+      "surveyId": "decals",
+      "releaseId": "decals-dr5",
+      "product": "DR5 g/r/z color footprint",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=smoc&order=10&fmt=fits",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/raw/moc/decals-decals-dr5-dr5-grz-color-footprint.fits",
+      "sizeBytes": 192960,
+      "sha256": "592fbf29361a7de3efc29b4b2d904cbd80525224da7cbb60a3d23b3e4845d677"
+    },
+    {
+      "id": "layer-decals-dr5-color-footprint-moc",
+      "kind": "moc",
+      "label": "DECALS · DR5 g/r/z color footprint authoritative MOC",
+      "description": "footprint_extent (observed, third_party_moc) generated by Assets MOC Core 1.0.0.",
+      "downloadName": "decals-dr5-color-footprint.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "decals",
+      "releaseId": "decals-dr5",
+      "product": "DR5 g/r/z color footprint",
+      "sourceUrl": "https://www.legacysurvey.org/dr5/",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/decals-dr5-color-footprint/decals-dr5-color-footprint.moc.fits",
+      "sizeBytes": 377280,
+      "sha256": "eba092ee08b30e986bae089e72c0ff8a6bc27eb91d2d7e314376565c64f8b4fa"
     },
     {
       "id": "moc-des-des-dr2-dr2-color-imaging-cds-p-des-dr2-colorirg",
@@ -2154,11 +2502,27 @@
       "surveyId": "kids",
       "releaseId": "kids-dr5",
       "product": "DR5 gri imaging",
-      "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&fmt=fits",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=10&fmt=fits",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/kids-kids-dr5-dr5-gri-imaging.fits",
-      "sizeBytes": 97920,
-      "sha256": "fc92888b974f743c8357af12cfb4a65637182adc5b8b65bbc2d528ce74d63b90"
+      "sizeBytes": 34560,
+      "sha256": "05814db03135f15e36228c4c3b743ef4da12857d0fedc645f66d2ca43a20fabd"
+    },
+    {
+      "id": "layer-kids-dr5-color-footprint-moc",
+      "kind": "moc",
+      "label": "KIDS · DR5 gri imaging authoritative MOC",
+      "description": "footprint_extent (observed, third_party_moc) generated by Assets MOC Core 1.0.0.",
+      "downloadName": "kids-dr5-color-footprint.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "kids",
+      "releaseId": "kids-dr5",
+      "product": "DR5 gri imaging",
+      "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/kids-dr5-color-footprint/kids-dr5-color-footprint.moc.fits",
+      "sizeBytes": 63360,
+      "sha256": "0e4db99b72bf0b6f4478d099c7b7e008e2ec90c04f997f67b4a88880da1d8cb9"
     },
     {
       "id": "moc-legacy-surveys-legacy-dr10-dr10-color-imaging-cds-p-desi-legacy-surveys-dr10-color",
@@ -2303,6 +2667,70 @@
       "path": "artifacts/public-survey-footprints/raw/moc/sdss-sdss-dr09-dr9-color-imaging.fits",
       "sizeBytes": 2998080,
       "sha256": "33eeaeb394e3049c3109358c56d9a3ac2e1d0e6e7fdde76d695c707176a695c3"
+    },
+    {
+      "id": "moc-skymapper-skymapper-dr4-dr4-g-r-i-color-footprint-cds-p-skymapper-dr4-color",
+      "kind": "moc",
+      "label": "SKYMAPPER · DR4 g/r/i color footprint",
+      "description": "Native FITS MOC for skymapper-dr4.",
+      "downloadName": "skymapper-skymapper-dr4-dr4-gri-color-footprint.fits",
+      "mediaType": "application/fits",
+      "surveyId": "skymapper",
+      "releaseId": "skymapper-dr4",
+      "product": "DR4 g/r/i color footprint",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FSkymapper%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/raw/moc/skymapper-skymapper-dr4-dr4-gri-color-footprint.fits",
+      "sizeBytes": 129600,
+      "sha256": "d89b39f1036dbad020b0a472e05aa6e7442e0552e27255b81fabd6991cf02f20"
+    },
+    {
+      "id": "layer-skymapper-dr4-color-footprint-moc",
+      "kind": "moc",
+      "label": "SKYMAPPER · DR4 g/r/i color footprint authoritative MOC",
+      "description": "footprint_extent (observed, third_party_moc) generated by Assets MOC Core 1.0.0.",
+      "downloadName": "skymapper-dr4-color-footprint.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "skymapper",
+      "releaseId": "skymapper-dr4",
+      "product": "DR4 g/r/i color footprint",
+      "sourceUrl": "https://skymapper.anu.edu.au/data-release/dr4/",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/skymapper-dr4-color-footprint/skymapper-dr4-color-footprint.moc.fits",
+      "sizeBytes": 250560,
+      "sha256": "fd815fc5e90d8e3b851bee763202cb4725ec0d45d91a9b763fa9bed025d9fd1d"
+    },
+    {
+      "id": "moc-vista-viking-viking-j-footprint-cds-p-vista-viking-j",
+      "kind": "moc",
+      "label": "VISTA · VIKING J footprint",
+      "description": "Native FITS MOC for viking.",
+      "downloadName": "vista-vista-viking-viking-j-footprint.fits",
+      "mediaType": "application/fits",
+      "surveyId": "vista",
+      "releaseId": "viking",
+      "product": "VIKING J footprint",
+      "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=smoc&order=10&fmt=fits",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/raw/moc/vista-vista-viking-viking-j-footprint.fits",
+      "sizeBytes": 51840,
+      "sha256": "90981ae15adb2f018775e98948780fa5dd18afc719366f638194f880e1526ca3"
+    },
+    {
+      "id": "layer-vista-viking-j-footprint-moc",
+      "kind": "moc",
+      "label": "VISTA · VIKING J footprint authoritative MOC",
+      "description": "footprint_extent (observed, third_party_moc) generated by Assets MOC Core 1.0.0.",
+      "downloadName": "vista-viking-j-footprint.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "vista",
+      "releaseId": "viking",
+      "product": "VIKING J footprint",
+      "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/vista-viking-j-footprint/vista-viking-j-footprint.moc.fits",
+      "sizeBytes": 97920,
+      "sha256": "36a195db1280fc27271cf562aab951a80cd7bef2db5cb5f943fbeda393017411"
     },
     {
       "id": "package-public-2mass-footprints-3-0-0",
@@ -2541,8 +2969,8 @@
       "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/provenance.json",
-      "sizeBytes": 1383,
-      "sha256": "07bec245e138a611827bd11b5236753a8c67d3898df4aee9a33200064d9b889b"
+      "sizeBytes": 1376,
+      "sha256": "d6b02b96e2e8d8abe3193576ffbbdd0d0da13a42d2dfb36a8d94c3aa6e70d972"
     },
     {
       "id": "layer-csst-sim-w3-image-extent-provenance",
@@ -2557,8 +2985,8 @@
       "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/provenance.json",
-      "sizeBytes": 1379,
-      "sha256": "ae6567a62a7b12e3c7cd66d0bcceb62a7365c57d7deadaae0f7cd6706943c30c"
+      "sizeBytes": 1372,
+      "sha256": "485a11ce02336ff3ad803079c78340927dd08135b7731f488c737f57036debaf"
     },
     {
       "id": "layer-csst-sim-w4-image-extent-provenance",
@@ -2573,8 +3001,8 @@
       "sourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/provenance.json",
-      "sizeBytes": 1379,
-      "sha256": "e6efc76641c4a33b6187b6d541de80ba100894e381b086a160c7cbc3aa2cfde6"
+      "sizeBytes": 1372,
+      "sha256": "8e572a982a43d076150e1523157477722196ee30e4efc7876fa5b032e7e2a7f2"
     },
     {
       "id": "csst-provenance",
@@ -2603,8 +3031,8 @@
       "product": "W2 simulated wide-field images",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent/provenance.json",
-      "sizeBytes": 1383,
-      "sha256": "07bec245e138a611827bd11b5236753a8c67d3898df4aee9a33200064d9b889b"
+      "sizeBytes": 1376,
+      "sha256": "d6b02b96e2e8d8abe3193576ffbbdd0d0da13a42d2dfb36a8d94c3aa6e70d972"
     },
     {
       "id": "csst-w2-provenance",
@@ -2633,8 +3061,8 @@
       "product": "W3 simulated wide-field images",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent/provenance.json",
-      "sizeBytes": 1379,
-      "sha256": "ae6567a62a7b12e3c7cd66d0bcceb62a7365c57d7deadaae0f7cd6706943c30c"
+      "sizeBytes": 1372,
+      "sha256": "485a11ce02336ff3ad803079c78340927dd08135b7731f488c737f57036debaf"
     },
     {
       "id": "csst-w3-provenance",
@@ -2663,8 +3091,8 @@
       "product": "W4 simulated wide-field images",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent/provenance.json",
-      "sizeBytes": 1379,
-      "sha256": "e6efc76641c4a33b6187b6d541de80ba100894e381b086a160c7cbc3aa2cfde6"
+      "sizeBytes": 1372,
+      "sha256": "8e572a982a43d076150e1523157477722196ee30e4efc7876fa5b032e7e2a7f2"
     },
     {
       "id": "csst-w4-provenance",
@@ -2680,6 +3108,22 @@
       "path": "artifacts/public-survey-footprints/csst/w4-provenance.json",
       "sizeBytes": 1325,
       "sha256": "2f2b30b1f19a1299923917e79023fa551d7985d5edc351c0bf83d544db113260"
+    },
+    {
+      "id": "layer-decals-dr5-color-footprint-provenance",
+      "kind": "provenance",
+      "label": "DECALS · DR5 g/r/z color footprint provenance",
+      "description": "Locked input, Core version, scientific classification and output hashes for this public layer.",
+      "downloadName": "decals-dr5-color-footprint-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "decals",
+      "releaseId": "decals-dr5",
+      "product": "DR5 g/r/z color footprint",
+      "sourceUrl": "https://www.legacysurvey.org/dr5/",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/decals-dr5-color-footprint/provenance.json",
+      "sizeBytes": 2085,
+      "sha256": "51ae72403c7a7eb0eb43c09afee4053eb02baec4e110a8c5444d1b14f45decea"
     },
     {
       "id": "layer-desi-dr1-spectra-footprint-provenance",
@@ -2730,6 +3174,22 @@
       "sha256": "d49db62d46eee15e6d52da289ef9bd7eb5a7b31e712ca5cf91c563d85dee00d9"
     },
     {
+      "id": "layer-kids-dr5-color-footprint-provenance",
+      "kind": "provenance",
+      "label": "KIDS · DR5 gri imaging provenance",
+      "description": "Locked input, Core version, scientific classification and output hashes for this public layer.",
+      "downloadName": "kids-dr5-color-footprint-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "kids",
+      "releaseId": "kids-dr5",
+      "product": "DR5 gri imaging",
+      "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/kids-dr5-color-footprint/provenance.json",
+      "sizeBytes": 2057,
+      "sha256": "fd1cb4242ed84d5d367d250d0012b382c47d57f9251e37b912c5cf3c990e6604"
+    },
+    {
       "id": "provenance-release",
       "kind": "provenance",
       "label": "Release provenance and hashes",
@@ -2739,7 +3199,39 @@
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/provenance.json",
       "sizeBytes": 5694,
-      "sha256": "61416295e27a73224da12c776d6c222e81ecec75f37b2034c3593559b2825bbe"
+      "sha256": "63f8d72b2dd8635b2c28fc0a333ebd548860e827e10a4e1cea581695afefb370"
+    },
+    {
+      "id": "layer-skymapper-dr4-color-footprint-provenance",
+      "kind": "provenance",
+      "label": "SKYMAPPER · DR4 g/r/i color footprint provenance",
+      "description": "Locked input, Core version, scientific classification and output hashes for this public layer.",
+      "downloadName": "skymapper-dr4-color-footprint-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "skymapper",
+      "releaseId": "skymapper-dr4",
+      "product": "DR4 g/r/i color footprint",
+      "sourceUrl": "https://skymapper.anu.edu.au/data-release/dr4/",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/skymapper-dr4-color-footprint/provenance.json",
+      "sizeBytes": 2072,
+      "sha256": "8dbdf33e9fbf8146d70314693d45a5255dd20beff3fe9221a530b459c75823d3"
+    },
+    {
+      "id": "layer-vista-viking-j-footprint-provenance",
+      "kind": "provenance",
+      "label": "VISTA · VIKING J footprint provenance",
+      "description": "Locked input, Core version, scientific classification and output hashes for this public layer.",
+      "downloadName": "vista-viking-j-footprint-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "vista",
+      "releaseId": "viking",
+      "product": "VIKING J footprint",
+      "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/vista-viking-j-footprint/provenance.json",
+      "sizeBytes": 2057,
+      "sha256": "7db2d52881938471204ee98b05f6c12c7d68f4dd1a8c9b52497ee09e8b4b200e"
     },
     {
       "id": "sdk-moc-core-wheel-1-0-0",

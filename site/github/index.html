@@ -4,24 +4,68 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#050a10" />
+    <meta name="description" content="Astro Survey Atlas organization and project architecture" />
     <link rel="stylesheet" href="../src/styles.css" />
-    <title>Astro Survey Atlas Assets · GitHub</title>
+    <title>Astro Survey Atlas · GitHub</title>
   </head>
   <body class="resources-page github-page">
     <header class="site-header resources-header">
-      <a class="brand" href="/" aria-label="Astro Survey Atlas Assets"><span><strong>ASTRO SURVEY ATLAS ASSETS</strong><small>PROJECT NOTES</small></span></a>
+      <a class="brand" href="/" aria-label="Astro Survey Atlas Assets"><span><strong>ASTRO SURVEY ATLAS</strong><small>ORGANIZATION OVERVIEW</small></span></a>
       <nav class="site-nav" aria-label="Site navigation"><a class="site-nav-link" href="/"><i data-lucide="home"></i><span data-i18n="nav.home">Home</span></a><a class="site-nav-link" href="/github/" aria-current="page"><i data-lucide="git-branch"></i><span data-i18n="nav.github">GitHub</span></a><a class="site-nav-link" href="/surveys/"><i data-lucide="telescope"></i><span data-i18n="nav.surveys">Survey Directory</span></a><a class="site-nav-link" href="/sdk/"><i data-lucide="file-code-2"></i><span data-i18n="nav.sdk">SDK</span></a><button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button></nav>
     </header>
+
     <main class="resources-main github-main">
-      <section class="resources-hero"><p class="eyebrow" data-i18n="page.github.eyebrow">PROJECT / OPEN SCIENCE INFRASTRUCTURE</p><h1>Astro Survey Atlas Assets</h1><p data-i18n="page.github.lead">A public, reproducible spatial asset layer for survey coverage, releases, and evidence.</p><a class="command-button" href="https://github.com/AaronYang0628/Astro-Survey-Atlas-Assets" target="_blank" rel="noreferrer" data-i18n="page.github.open">Open GitHub repository</a></section>
+      <section class="resources-hero organization-hero">
+        <p class="eyebrow" data-i18n="page.github.eyebrow">PUBLIC SKY DATA / THREE PROJECTS, ONE SYSTEM</p>
+        <h1>Astro Survey Atlas</h1>
+        <p data-i18n="page.github.lead">Start with public survey coverage, trace every result to its evidence, and move into a private workspace only when your own data and workflows require it.</p>
+        <div class="organization-hero-actions">
+          <a class="command-button" href="https://github.com/Astro-Survey-Atlas" target="_blank" rel="noreferrer"><i data-lucide="git-branch"></i><span data-i18n="page.github.openOrg">Open the GitHub organization</span></a>
+          <a class="resource-link" href="https://github.com/Astro-Survey-Atlas/Assets" target="_blank" rel="noreferrer"><span data-i18n="page.github.openAssets">View the Assets repository</span><i data-lucide="external-link"></i></a>
+        </div>
+      </section>
+
+      <section class="project-system" aria-labelledby="project-system-title">
+        <div class="project-system-heading">
+          <p class="eyebrow" data-i18n="page.github.systemEyebrow">SYSTEM MAP</p>
+          <h2 id="project-system-title" data-i18n="page.github.systemTitle">A public front door with separate execution and user data planes</h2>
+          <p data-i18n="page.github.systemLead">The projects cooperate through versioned contracts. They do not share user records, task history, credentials, or Elasticsearch ownership.</p>
+        </div>
+
+        <div class="project-primary-flow" aria-label="Primary user and package flow">
+          <div class="project-audience-node"><i data-lucide="users"></i><strong data-i18n="page.github.users">RESEARCHERS</strong><small data-i18n="page.github.usersBody">Browse public coverage and official data entry points</small></div>
+          <div class="project-flow-arrow"><i data-lucide="arrow-right"></i><span data-i18n="page.github.publicEntry">PUBLIC ENTRY</span></div>
+          <a class="project-node project-node-assets" href="https://github.com/Astro-Survey-Atlas/Assets" target="_blank" rel="noreferrer"><i data-lucide="telescope"></i><span><strong>ASSETS</strong><small data-i18n="page.github.assetsRole">Public catalog, MOCs, overlap, reverse lookup and releases</small></span></a>
+          <div class="project-flow-arrow"><i data-lucide="arrow-right"></i><span>RESOURCE PACKAGE V3</span></div>
+          <a class="project-node project-node-workspace" href="https://github.com/Astro-Survey-Atlas/Workspace" target="_blank" rel="noreferrer"><i data-lucide="panels-top-left"></i><span><strong>WORKSPACE</strong><small data-i18n="page.github.workspaceRole">User assets, connectors, local workflows and user MOCs</small></span></a>
+        </div>
+
+        <div class="project-execution-flow" aria-label="Warehouse execution relationships">
+          <div class="project-contract"><i data-lucide="arrow-down"></i><strong>SCANPLAN V2</strong><small data-i18n="page.github.assetsToWarehouse">Assets submits bounded public coverage tasks</small></div>
+          <a class="project-node project-node-warehouse" href="https://github.com/Astro-Survey-Atlas/Warehouse" target="_blank" rel="noreferrer"><i data-lucide="database"></i><span><strong>WAREHOUSE</strong><small data-i18n="page.github.warehouseRole">Scanner, operator, current file/coverage indices and evidence</small></span></a>
+          <div class="project-contract"><i data-lucide="arrow-up"></i><strong>ACTIVE AST_*</strong><small data-i18n="page.github.warehouseToAssets">Assets reads current coverage and file evidence</small></div>
+          <div class="project-contract project-contract-optional"><i data-lucide="arrow-down-up"></i><strong data-i18n="page.github.optionalScan">OPTIONAL USER SCAN</strong><small data-i18n="page.github.workspaceToWarehouse">Workspace may submit a namespace-local ScanRequest</small></div>
+        </div>
+      </section>
+
+      <section class="project-repositories" aria-labelledby="project-repositories-title">
+        <div class="resource-heading">
+          <div><p class="eyebrow" data-i18n="page.github.repositoriesEyebrow">PROJECT RESPONSIBILITIES</p><h2 id="project-repositories-title" data-i18n="page.github.repositoriesTitle">Choose the repository that owns your work</h2></div>
+        </div>
+        <div class="project-repository-list">
+          <article class="project-repository-row is-assets"><i data-lucide="telescope"></i><div><h3>Assets</h3><p data-i18n="page.github.assetsDetail">Use Assets to add or review a public survey, publish a MOC or Resource Package, improve public overlap and reverse lookup, or work on the public website.</p></div><a href="https://github.com/Astro-Survey-Atlas/Assets" target="_blank" rel="noreferrer" aria-label="Open Assets repository"><i data-lucide="external-link"></i></a></article>
+          <article class="project-repository-row is-warehouse"><i data-lucide="database"></i><div><h3>Warehouse</h3><p data-i18n="page.github.warehouseDetail">Use Warehouse for source enumeration, spatial extraction, ScanPlan execution, the Kubernetes operator, current-state indices and scan evidence production.</p></div><a href="https://github.com/Astro-Survey-Atlas/Warehouse" target="_blank" rel="noreferrer" aria-label="Open Warehouse repository"><i data-lucide="external-link"></i></a></article>
+          <article class="project-repository-row is-workspace"><i data-lucide="panels-top-left"></i><div><h3>Workspace</h3><p data-i18n="page.github.workspaceDetail">Use Workspace for private or local assets, connectors, workflows, user task history, user MOCs and exploration that combines user data with verified public packages.</p></div><a href="https://github.com/Astro-Survey-Atlas/Workspace" target="_blank" rel="noreferrer" aria-label="Open Workspace repository"><i data-lucide="external-link"></i></a></article>
+        </div>
+      </section>
+
       <section class="github-notes">
-        <article class="resource-band"><p class="eyebrow" data-i18n="page.github.problemEyebrow">WHY THIS EXISTS</p><h2 data-i18n="page.github.problemTitle">The problem we are solving</h2><p data-i18n="page.github.problem">Survey coverage is often scattered across papers, web pages, FITS files, and temporary scripts. Assets normalizes these sources into ICRS and NESTED HEALPix so researchers can compare overlap before deciding what to download.</p></article>
-        <article class="resource-band"><p class="eyebrow" data-i18n="page.github.promiseEyebrow">DATA PROMISE</p><h2 data-i18n="page.github.promiseTitle">Every result is traceable</h2><p data-i18n="page.github.promise">Runtime coverage, native FITS MOCs, geometry sources, manifests, provenance, and SHA-256 form one release record. The home page loads lightweight runtime blocks while full evidence remains in the release directory.</p></article>
-        <article class="resource-band"><p class="eyebrow" data-i18n="page.github.noteEyebrow">CUSTOM PROJECT NOTE</p><h2 data-i18n="page.github.noteTitle">A note for collaborators</h2><p data-i18n="page.github.note">Use this stable project entry point to add research goals, inclusion criteria, contribution guidance, citation information, contact details, or survey review status.</p></article>
-        <article class="resource-band"><p class="eyebrow" data-i18n="page.github.contributeEyebrow">CONTRIBUTE</p><h2 data-i18n="page.github.contributeTitle">How to contribute</h2><p data-i18n="page.github.contribute">When submitting a public release, geometry revision, MOC improvement, or evidence link, include the source, coordinate frame, HEALPix order, file hash, and reproducible verification steps.</p></article>
+        <article class="resource-band"><p class="eyebrow" data-i18n="page.github.promiseEyebrow">PUBLIC DATA PROMISE</p><h2 data-i18n="page.github.promiseTitle">Every public result states its source and precision</h2><p data-i18n="page.github.promise">ICRS/NESTED order, exact or estimated precision, source snapshots, output hashes and official archive links stay attached to the published result. Preview cells are never promoted into finer coverage.</p></article>
+        <article class="resource-band"><p class="eyebrow" data-i18n="page.github.boundaryEyebrow">INDEPENDENT DATA PLANES</p><h2 data-i18n="page.github.boundaryTitle">Contracts connect the projects; databases do not</h2><p data-i18n="page.github.boundary">Assets owns public publication, Warehouse owns execution and current scan state, and Workspace owns user data. Credentials, task history and user records remain in their owning project.</p></article>
+        <article class="resource-band"><p class="eyebrow" data-i18n="page.github.contributeEyebrow">CONTRIBUTE</p><h2 data-i18n="page.github.contributeTitle">Public coverage changes begin in Assets</h2><p data-i18n="page.github.contribute">Include the survey and release identity, source snapshot, coordinate frame, real HEALPix orders, precision, output hashes and reproducible verification steps. Scanner or operator changes belong in Warehouse; user workflow changes belong in Workspace.</p></article>
       </section>
     </main>
-    <footer><span>ICRS / NESTED HEALPIX / SHA-256</span><span>ASTRO SURVEY ATLAS ASSETS</span></footer>
+    <footer><span>ICRS / NESTED HEALPIX / SHA-256</span><span>ASTRO SURVEY ATLAS</span></footer>
     <script type="module" src="/src/site-locale.ts"></script>
   </body>
 </html>

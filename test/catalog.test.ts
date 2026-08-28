@@ -8,8 +8,8 @@ test("release catalog verifies every public file and bundle digest", async () =>
   const catalog = await loadCatalog(projectRoot);
   assert.equal(catalog.manifest.schemaVersion, 1);
   assert.equal(catalog.manifest.statistics.packages, 14);
-  assert.equal(catalog.manifest.statistics.rawMocFiles, 41);
-  assert.equal(catalog.manifest.statistics.acquired, 35);
+  assert.equal(catalog.manifest.statistics.rawMocFiles, 48);
+  assert.equal(catalog.manifest.statistics.acquired, 38);
   assert.equal(catalog.files.size, catalog.manifest.files.length);
   assert.ok(catalog.manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)));
 });

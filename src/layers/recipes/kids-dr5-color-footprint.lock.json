@@ -1,0 +1,39 @@
+{
+  "layerId": "kids-dr5-color-footprint",
+  "surveyId": "kids",
+  "releaseId": "kids-dr5",
+  "product": "DR5 gri imaging",
+  "modality": "imaging",
+  "mode": "nested-healpix",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
+  "input": "artifacts/public-survey-footprints/raw/moc/kids-kids-dr5-dr5-gri-imaging.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/KiDS/DR5/color-gri",
+    "sourceRecordUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "617b8cea873c021ec7c5839cb6af03aa5560290769002340e2840d1844d9ffe1",
+    "nativeSpatialOrder": 11,
+    "nativeTimeOrder": 25,
+    "exportOrder": 10,
+    "availableOrders": [4, 5, 6, 7, 8, 9, 10],
+    "precision": "estimated",
+    "precisionJustification": "CDS spatial projection of the survey-endorsed DR5 gri HiPS STMOC; down-projecting from native order 11 preserves a conservative product extent.",
+    "limitations": ["Temporal coverage is retained only as evidence; this spatial projection cannot answer time-window queries.", "The color HiPS is not a per-band mask or weak-lensing selection function."]
+  },
+  "snapshot": {
+    "sha256": "05814db03135f15e36228c4c3b743ef4da12857d0fedc645f66d2ca43a20fabd",
+    "sizeBytes": 34560,
+    "sourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=10&fmt=fits",
+    "recordSha256": "617b8cea873c021ec7c5839cb6af03aa5560290769002340e2840d1844d9ffe1",
+    "retrievedAt": "2026-08-28T03:53:18.820Z"
+  }
+}

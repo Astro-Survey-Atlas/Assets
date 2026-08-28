@@ -213,6 +213,11 @@ async function build(): Promise<PublicAssetManifest> {
     filePath: path.join(root, "docs", "architecture-boundary.md"), downloadName: "architecture-boundary.md", mediaType: "text/markdown; charset=utf-8",
   });
   await push({
+    id: "documentation-public-artifact-storage", kind: "documentation", label: "Public artifact storage and migration",
+    description: "Versioned object-storage publication, evidence boundaries, migration steps and runtime compatibility requirements.",
+    filePath: path.join(root, "docs", "public-artifact-storage.md"), downloadName: "public-artifact-storage.md", mediaType: "text/markdown; charset=utf-8",
+  });
+  await push({
     id: "documentation-data-warehouse-requirements", kind: "documentation", label: "Assets data-warehouse requirements",
     description: "Assets-owned CRD handoff, status, sink and coverage scanner requirements for data-warehouse.",
     filePath: path.join(root, "docs", "data-warehouse-requirements.md"), downloadName: "data-warehouse-requirements.md", mediaType: "text/markdown; charset=utf-8",

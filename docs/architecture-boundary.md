@@ -1,17 +1,17 @@
-# Assets / data-warehouse / Atlas 边界
+# Assets / Warehouse / Workspace 边界
 
-这份文档只定义 Assets 自己的职责，以及 Assets 调用 data-warehouse 时
-需要遵守的边界。Assets、data-warehouse 和 Atlas 是三个独立项目；任何一个
-项目都可以独立提交自己的任务。Assets 不依赖旧 Assets ES；覆盖反查只依赖
-明确配置的 data-warehouse Elasticsearch 索引合同。
+这份文档定义 Astro Survey Atlas 组织内三个独立项目的职责，以及 Assets
+调用 Warehouse 时需要遵守的边界。任何一个项目都可以独立运行自己的数据面和
+任务历史；跨项目连接使用版本化契约。Assets 不依赖旧 Assets ES；覆盖反查只
+依赖明确配置的 Warehouse Elasticsearch 索引合同。
 
 ## 职责
 
 | 组件 | 负责 | 不负责 |
 | --- | --- | --- |
 | Assets | 公共 survey/release/product/layer 注册；用 ConfigMap + Secret 管理远程 Connector；提交一次性 `ScanRequest`；读取任务状态；MOC Core 的生成、合并、锁定；Resource Package、manifest、provenance、catalog、产品 dossier、证据摘要和只读下载 API | Atlas 用户资产、Atlas 任务历史和 Atlas API；data-warehouse 的内部实现；TAP/ObsCore/SIA 服务实现 |
-| data-warehouse | 接收 `atlas.zhejianglab.org/v1alpha1/ScanRequest`；校验并执行嵌入的 ScanPlan v2；维护 operator status；提供 scanner 的执行合同 | Assets 的 catalog 激活、MOC Core、Resource Package 发布；不规定所有任务的统一 sink |
-| Atlas | 独立的用户资产、任务历史、查询索引和前端；可独立向 data-warehouse 提交自己的任务；安装并验证 Assets 公共资源包 | Assets 的 Connector、任务状态、数据库、worker 或计算实现 |
+| Warehouse | 接收 `atlas.zhejianglab.org/v1alpha1/ScanRequest`；校验并执行嵌入的 ScanPlan v2；维护 Operator status；提供 scanner 的执行合同和当前 `ast_*` 索引 | Assets 的 catalog 激活、MOC Core、Resource Package 发布；不规定所有任务的统一 sink |
+| Workspace | 独立的用户资产、Connector、任务历史、查询索引和前端；可独立向 Warehouse 提交用户任务；安装并验证 Assets 公共资源包 | Assets 的公共发布、Warehouse scanner/operator、把用户记录写回 Assets |
 
 Assets 管理输入是产品/layer、Connector 名称、源前缀和 ScanPlan 参数。服务端
 从 Connector ConfigMap 读取非敏感元数据，从同名 Secret 只引用
@@ -46,6 +46,11 @@ order 投影负责空间计算，Resource Package v3 负责离线安装，官方
 科学文件；相关标准和实践见 [公开巡天分发调研](public-survey-distribution-research-20260827.md)。
 
 ## 任务生命周期
+
+公共 MOC、Resource Package 和大型 query projection 的目标发布位置是版本化
+对象存储；Git 保留 catalog、recipe lock、provenance 摘要和 hash。输入 manifest、
+normalized scan、任务快照和错误继续留在 evidence PVC/object store。迁移契约见
+[公共制品存储与迁移](public-artifact-storage.md)，本轮不执行上传或删除。
 
 ```text
 Assets 管理页面

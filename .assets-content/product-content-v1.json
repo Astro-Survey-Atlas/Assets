@@ -10098,12 +10098,19 @@
         "releaseId": "kids-dr5",
         "name": "DR5 gri imaging",
         "modality": "imaging",
-        "mode": "native-moc",
-        "scanDefaults": {},
+        "layerId": "kids-dr5-color-footprint",
+        "coverageRole": "footprint_extent",
+        "dataOrigin": "observed",
+        "sourceTier": "third_party_moc",
+        "mode": "nested-healpix",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".json,.csv,.tsv,.fits"
+        },
         "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
         "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=4&fmt=json",
         "recipeVersion": 1,
-        "recipeHash": "0ff232de5a549d8b31e0a646fd56cb4968c12b909b27891290045ac959073c20",
+        "recipeHash": "c0bc7f4202f675406f3ac163c961e19a51274687df1fbb7c2be2474f6be95161",
         "presentation": {
           "summaryMarkdown": "",
           "methodologyMarkdown": "",
@@ -10112,7 +10119,7 @@
             "nodes": [
               {
                 "id": "input",
-                "kind": "native-moc-source",
+                "kind": "input",
                 "title": "输入来源",
                 "bodyMarkdown": "sourceUrl=https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=4&fmt=json; sourceId=CDS/P/KiDS/DR5/color-gri; sourceNotes=KiDS survey-endorsed CDS-hosted DR5 gri HiPS MOC. Per-band masks and weak-lensing selections have different valid regions.",
                 "order": 0,
@@ -10121,28 +10128,19 @@
               },
               {
                 "id": "validate",
-                "kind": "moc-validation",
+                "kind": "validate",
                 "title": "IVOA MOC / ICRS / NUNIQ 校验",
                 "bodyMarkdown": "coordinateFrame=ICRS; ordering=NESTED",
                 "order": 1,
-                "implementationRef": "assets.coverage.validate-moc",
-                "evidenceRefs": []
-              },
-              {
-                "id": "project",
-                "kind": "order-projection",
-                "title": "发布 order 投影",
-                "bodyMarkdown": "将已校验 MOC 投影为真实发布的 overview O4；不伪造更高精度。",
-                "order": 2,
-                "implementationRef": "assets.coverage.project",
+                "implementationRef": "assets.coverage.validate",
                 "evidenceRefs": []
               },
               {
                 "id": "union",
-                "kind": "union-dedup",
+                "kind": "union",
                 "title": "union / dedup",
                 "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
-                "order": 3,
+                "order": 2,
                 "implementationRef": "assets.coverage.union",
                 "evidenceRefs": []
               },
@@ -10151,7 +10149,7 @@
                 "kind": "outputs",
                 "title": "MOC、FITS、preview、statistics 输出",
                 "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
-                "order": 4,
+                "order": 3,
                 "implementationRef": "assets.coverage.outputs",
                 "evidenceRefs": []
               },
@@ -10160,7 +10158,7 @@
                 "kind": "evidence",
                 "title": "manifest、provenance、hash",
                 "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
-                "order": 5,
+                "order": 4,
                 "implementationRef": "assets.coverage.evidence",
                 "evidenceRefs": []
               }
@@ -10172,10 +10170,6 @@
               },
               {
                 "from": "validate",
-                "to": "project"
-              },
-              {
-                "from": "project",
                 "to": "union"
               },
               {
@@ -10191,11 +10185,11 @@
         }
       },
       "published": null,
-      "revision": 4,
+      "revision": 5,
       "publishedRevision": null,
-      "updatedAt": "2026-08-27T06:25:20.755Z",
+      "updatedAt": "2026-08-28T04:22:23.685Z",
       "publishedAt": null,
-      "contentSha256": "6067250cbc1ec39599b10a54909812cc916fea6f4650889a0f3c19892f12ef17"
+      "contentSha256": "7de2877b79382e352edb5b312910cf167a43ead02999022bf2e48de611544bb0"
     },
     {
       "productId": "3aaa0c8993d2f1f05de1",
@@ -10303,6 +10297,318 @@
       "updatedAt": "2026-08-27T06:25:20.755Z",
       "publishedAt": null,
       "contentSha256": "4451eeb2216dd55f16c64646196855533e0d9ec58c26966a48b01240c59510c9"
+    },
+    {
+      "productId": "590ec4ea0e47d3b8413a",
+      "draft": {
+        "productId": "590ec4ea0e47d3b8413a",
+        "surveyId": "skymapper",
+        "releaseId": "skymapper-dr4",
+        "name": "DR4 g/r/i color footprint",
+        "modality": "imaging",
+        "layerId": "skymapper-dr4-color-footprint",
+        "coverageRole": "footprint_extent",
+        "dataOrigin": "observed",
+        "sourceTier": "third_party_moc",
+        "mode": "nested-healpix",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".json,.csv,.tsv,.fits"
+        },
+        "originNote": "CDS spatial projection of an STMOC; temporal metadata remains evidence.",
+        "sourceLabel": "ANU SkyMapper DR4",
+        "sourceUrl": "https://skymapper.anu.edu.au/data-release/dr4/",
+        "geometrySourceLabel": "CDS DR4 color SMOC order 10",
+        "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FSkymapper%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits",
+        "recipeVersion": 1,
+        "recipeHash": "5e0ed3c1032a88e5e14891fa35393ac13cf2bacdabadaa99ffa6b64e74293e01",
+        "presentation": {
+          "summaryMarkdown": "",
+          "methodologyMarkdown": "",
+          "limitationsMarkdown": "",
+          "flow": {
+            "nodes": [
+              {
+                "id": "input",
+                "kind": "input",
+                "title": "原生 HEALPix/IPix 输入",
+                "bodyMarkdown": "input=artifacts/public-survey-footprints/raw/moc/skymapper-skymapper-dr4-dr4-gri-color-footprint.fits; sourceUrl=https://skymapper.anu.edu.au/data-release/dr4/; snapshotSha256=d89b39f1036dbad020b0a472e05aa6e7442e0552e27255b81fabd6991cf02f20; snapshotSizeBytes=129600",
+                "order": 0,
+                "implementationRef": "assets.coverage.input",
+                "evidenceRefs": []
+              },
+              {
+                "id": "validate",
+                "kind": "validate",
+                "title": "order、NESTED 与坐标校验",
+                "bodyMarkdown": "coordinateFrame=ICRS; ordering=NESTED",
+                "order": 1,
+                "implementationRef": "assets.coverage.validate",
+                "evidenceRefs": []
+              },
+              {
+                "id": "union",
+                "kind": "union",
+                "title": "cell union / dedup",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
+                "order": 2,
+                "implementationRef": "assets.coverage.union",
+                "evidenceRefs": []
+              },
+              {
+                "id": "outputs",
+                "kind": "outputs",
+                "title": "MOC、FITS、preview、statistics 输出",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
+                "order": 3,
+                "implementationRef": "assets.coverage.outputs",
+                "evidenceRefs": []
+              },
+              {
+                "id": "evidence",
+                "kind": "evidence",
+                "title": "manifest、provenance、hash",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
+                "order": 4,
+                "implementationRef": "assets.coverage.evidence",
+                "evidenceRefs": []
+              }
+            ],
+            "edges": [
+              {
+                "from": "input",
+                "to": "validate"
+              },
+              {
+                "from": "validate",
+                "to": "union"
+              },
+              {
+                "from": "union",
+                "to": "outputs"
+              },
+              {
+                "from": "outputs",
+                "to": "evidence"
+              }
+            ]
+          }
+        }
+      },
+      "published": null,
+      "revision": 1,
+      "publishedRevision": null,
+      "updatedAt": "2026-08-28T04:22:23.686Z",
+      "publishedAt": null,
+      "contentSha256": "8512c54ffe8dffb68390af016627088a5ee2ca65f38e66217d5c94226b610809"
+    },
+    {
+      "productId": "8cdeedbe0a9dbfe93f5d",
+      "draft": {
+        "productId": "8cdeedbe0a9dbfe93f5d",
+        "surveyId": "vista",
+        "releaseId": "viking",
+        "name": "VIKING J footprint",
+        "modality": "imaging",
+        "layerId": "vista-viking-j-footprint",
+        "coverageRole": "footprint_extent",
+        "dataOrigin": "observed",
+        "sourceTier": "third_party_moc",
+        "mode": "nested-healpix",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".json,.csv,.tsv,.fits"
+        },
+        "originNote": "CDS spatial projection of an STMOC; temporal metadata remains evidence.",
+        "sourceLabel": "ESO VISTA Phase 3",
+        "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+        "geometrySourceLabel": "CDS VIKING J SMOC order 10",
+        "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=smoc&order=10&fmt=fits",
+        "recipeVersion": 1,
+        "recipeHash": "15bfe9bf56b9c684d02d7e89d1cd8c4045708a6bf41a8171fde5bb4205110c20",
+        "presentation": {
+          "summaryMarkdown": "",
+          "methodologyMarkdown": "",
+          "limitationsMarkdown": "",
+          "flow": {
+            "nodes": [
+              {
+                "id": "input",
+                "kind": "input",
+                "title": "原生 HEALPix/IPix 输入",
+                "bodyMarkdown": "input=artifacts/public-survey-footprints/raw/moc/vista-vista-viking-viking-j-footprint.fits; sourceUrl=https://www.eso.org/sci/observing/phase3/data_releases.html; snapshotSha256=90981ae15adb2f018775e98948780fa5dd18afc719366f638194f880e1526ca3; snapshotSizeBytes=51840",
+                "order": 0,
+                "implementationRef": "assets.coverage.input",
+                "evidenceRefs": []
+              },
+              {
+                "id": "validate",
+                "kind": "validate",
+                "title": "order、NESTED 与坐标校验",
+                "bodyMarkdown": "coordinateFrame=ICRS; ordering=NESTED",
+                "order": 1,
+                "implementationRef": "assets.coverage.validate",
+                "evidenceRefs": []
+              },
+              {
+                "id": "union",
+                "kind": "union",
+                "title": "cell union / dedup",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
+                "order": 2,
+                "implementationRef": "assets.coverage.union",
+                "evidenceRefs": []
+              },
+              {
+                "id": "outputs",
+                "kind": "outputs",
+                "title": "MOC、FITS、preview、statistics 输出",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
+                "order": 3,
+                "implementationRef": "assets.coverage.outputs",
+                "evidenceRefs": []
+              },
+              {
+                "id": "evidence",
+                "kind": "evidence",
+                "title": "manifest、provenance、hash",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
+                "order": 4,
+                "implementationRef": "assets.coverage.evidence",
+                "evidenceRefs": []
+              }
+            ],
+            "edges": [
+              {
+                "from": "input",
+                "to": "validate"
+              },
+              {
+                "from": "validate",
+                "to": "union"
+              },
+              {
+                "from": "union",
+                "to": "outputs"
+              },
+              {
+                "from": "outputs",
+                "to": "evidence"
+              }
+            ]
+          }
+        }
+      },
+      "published": null,
+      "revision": 1,
+      "publishedRevision": null,
+      "updatedAt": "2026-08-28T04:22:23.686Z",
+      "publishedAt": null,
+      "contentSha256": "076b56edb16fb279c3f0d79867208227fe1fd06c9f5a16c11862d829d417c0cf"
+    },
+    {
+      "productId": "bd6574b77e120d049660",
+      "draft": {
+        "productId": "bd6574b77e120d049660",
+        "surveyId": "decals",
+        "releaseId": "decals-dr5",
+        "name": "DR5 g/r/z color footprint",
+        "modality": "imaging",
+        "layerId": "decals-dr5-color-footprint",
+        "coverageRole": "footprint_extent",
+        "dataOrigin": "observed",
+        "sourceTier": "third_party_moc",
+        "mode": "nested-healpix",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".json,.csv,.tsv,.fits"
+        },
+        "originNote": "CDS spatial projection of an STMOC; temporal metadata remains evidence.",
+        "sourceLabel": "DECam Legacy Survey DR5",
+        "sourceUrl": "https://www.legacysurvey.org/dr5/",
+        "geometrySourceLabel": "CDS DECaLS DR5 color SMOC order 10",
+        "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=smoc&order=10&fmt=fits",
+        "recipeVersion": 1,
+        "recipeHash": "428ecd0de6f70abcada61bd2b8e876b4661b4090ce58f11f9f784447a977e70c",
+        "presentation": {
+          "summaryMarkdown": "",
+          "methodologyMarkdown": "",
+          "limitationsMarkdown": "",
+          "flow": {
+            "nodes": [
+              {
+                "id": "input",
+                "kind": "input",
+                "title": "原生 HEALPix/IPix 输入",
+                "bodyMarkdown": "input=artifacts/public-survey-footprints/raw/moc/decals-decals-dr5-dr5-grz-color-footprint.fits; sourceUrl=https://www.legacysurvey.org/dr5/; snapshotSha256=592fbf29361a7de3efc29b4b2d904cbd80525224da7cbb60a3d23b3e4845d677; snapshotSizeBytes=192960",
+                "order": 0,
+                "implementationRef": "assets.coverage.input",
+                "evidenceRefs": []
+              },
+              {
+                "id": "validate",
+                "kind": "validate",
+                "title": "order、NESTED 与坐标校验",
+                "bodyMarkdown": "coordinateFrame=ICRS; ordering=NESTED",
+                "order": 1,
+                "implementationRef": "assets.coverage.validate",
+                "evidenceRefs": []
+              },
+              {
+                "id": "union",
+                "kind": "union",
+                "title": "cell union / dedup",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
+                "order": 2,
+                "implementationRef": "assets.coverage.union",
+                "evidenceRefs": []
+              },
+              {
+                "id": "outputs",
+                "kind": "outputs",
+                "title": "MOC、FITS、preview、statistics 输出",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
+                "order": 3,
+                "implementationRef": "assets.coverage.outputs",
+                "evidenceRefs": []
+              },
+              {
+                "id": "evidence",
+                "kind": "evidence",
+                "title": "manifest、provenance、hash",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
+                "order": 4,
+                "implementationRef": "assets.coverage.evidence",
+                "evidenceRefs": []
+              }
+            ],
+            "edges": [
+              {
+                "from": "input",
+                "to": "validate"
+              },
+              {
+                "from": "validate",
+                "to": "union"
+              },
+              {
+                "from": "union",
+                "to": "outputs"
+              },
+              {
+                "from": "outputs",
+                "to": "evidence"
+              }
+            ]
+          }
+        }
+      },
+      "published": null,
+      "revision": 1,
+      "publishedRevision": null,
+      "updatedAt": "2026-08-28T04:22:23.686Z",
+      "publishedAt": null,
+      "contentSha256": "f9ab082b462cb1b4251d50a80fa038d718af58e6780c6914399f00c68b8217e3"
     }
   ]
 }
