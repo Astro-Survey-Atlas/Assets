@@ -292,6 +292,35 @@ Operator.
   and selected-component queue move off the left edge while the sky remains
   visible; at 3840 they remain alongside the drawer.
 
+## 2026-08-27 Deployment Checkpoint
+
+- The current source was gated with `npm run build`, `npm test`, and
+  `helm lint charts/astro-survey-atlas-assets`; all passed. The three existing
+  scientific-dependency Python tests remain skipped.
+- Image
+  `crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:0.1.0-20260827-163611`
+  was pushed successfully. Helm revision 83 is `deployed`; the running Pod is
+  `1/1 Running`, and the `publish-assets` init container exited 0 after
+  synchronizing the release PVC.
+- The verified Ingress URLs are
+  `http://astro.assets.dev.72602.space:32080/` and
+  `https://astro.assets.dev.72602.space:32443/`. The application Service
+  NodePort `32083` is a direct-service fallback, not the Ingress path. The
+  hostname's port 80 is not mapped in this cluster network.
+- Ingress smoke checks returned 200 for `/healthz`, the W1 product detail
+  (`6e2c427ca3e3c8f1ef32`), its `/evidence` response, and the predictable
+  `csst-sim-w1-image-extent/moc.fits` route. The MOC response preserves FITS
+  media type, ETag, `X-Content-SHA256`, and byte-range behavior.
+- The active bundle is
+  `public-survey-footprints-2026-08-20` with SHA-256
+  `cfd5af3c429c11e3d19afcd14eae3d9e59facc561c0f1be4dbbef121daf64722` and 179
+  published files. `/api/v1/products` is intentionally the published-only
+  compatibility list and may currently be empty; `/api/v1/surveys` is the
+  catalog-backed directory used by the page, and its product detail routes are
+  available on demand.
+- No old ReplicaSets or release PVC directories were deleted. The temporary
+  `.tmp-ui` Chromium profile was removed after local QA.
+
 The next release should run the Workspace Resource Package consumer tests
 against the refreshed catalog and archive hashes. Any future visual QA that
 requires the in-app browser still needs a connected browser instance.
