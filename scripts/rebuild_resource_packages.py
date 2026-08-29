@@ -16,10 +16,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from astro_survey_moc_core.resource_package import build_resource_package
-
 ROOT = Path(__file__).resolve().parents[1]
+CORE_ROOT = Path(os.environ.get("MOC_CORE_ROOT", ROOT.parent / "MOC-Core-SDK")).resolve()
+sys.path.insert(0, str(CORE_ROOT))
+from astro_survey_moc_core.resource_package import build_resource_package
 ARTIFACT_ROOT = ROOT / "artifacts/public-survey-footprints"
 REGISTRY_PATH = ROOT / "src/layers/layer-registry.json"
 FOOTPRINT_PATH = ROOT / "src/footprints/survey-footprints.json"

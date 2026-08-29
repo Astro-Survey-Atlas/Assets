@@ -20,7 +20,7 @@
 
       <section class="sdk-status-band" aria-labelledby="sdk-status-title">
         <i data-lucide="signpost"></i>
-        <div><p class="eyebrow" data-i18n="page.sdk.statusEyebrow">CURRENT DECISION</p><h2 id="sdk-status-title" data-i18n="page.sdk.statusTitle">No fourth SDK repository yet</h2><p data-i18n="page.sdk.statusBody">The existing MOC Core remains an Assets-owned offline implementation. Warehouse owns execution contracts, and Workspace owns user-facing integration. A dedicated SDK project should be created only after a shared client surface, version policy and real consumers are agreed.</p></div>
+        <div><p class="eyebrow" data-i18n="page.sdk.statusEyebrow">CURRENT DECISION</p><h2 id="sdk-status-title" data-i18n="page.sdk.statusTitle">Shared scientific Core is established; client SDK ownership remains open</h2><p data-i18n="page.sdk.statusBody">MOC-Core-SDK is now the organization-level home for the offline scientific implementation. Assets publishes the verified Python wheel, Workspace consumes it, and Warehouse keeps its Java scanner compatible through conformance fixtures. A hosted cross-project client should be assigned only after its surface, version policy and real consumers are agreed.</p></div>
       </section>
 
       <section class="sdk-paths" aria-labelledby="sdk-paths-title">
@@ -33,13 +33,13 @@
       </section>
 
       <section class="sdk-core-band" aria-labelledby="sdk-core-title">
-        <div><p class="eyebrow" data-i18n="page.sdk.coreEyebrow">EXISTING OFFLINE CORE</p><h2 id="sdk-core-title">astro-survey-moc-core 1.0.0</h2><p data-i18n="page.sdk.coreBody">MOC Core deterministically builds and validates IVOA FITS MOCs, fixed-order projections and Resource Package v3 archives from locked local inputs. It is an implementation and compatibility contract, not a hosted service or a general client for all three projects.</p></div>
+        <div><p class="eyebrow" data-i18n="page.sdk.coreEyebrow">SHARED SCIENTIFIC LIBRARY</p><h2 id="sdk-core-title">astro-survey-moc-core 1.0.0</h2><p data-i18n="page.sdk.coreBody">MOC-Core-SDK deterministically builds and validates IVOA FITS MOCs, fixed-order projections and Resource Package v3 archives from locked local inputs. Assets owns the public release workflow, Workspace installs the wheel, and Warehouse uses shared fixtures to keep its Java implementation compatible. It is not a hosted service or a general client for all three projects.</p></div>
         <pre><code>python3 -m astro_survey_moc_core.cli --version
 astro-survey-moc-core project --moc merged.fits --order 8 --output query-order8.json</code></pre>
-        <a class="resource-link" href="https://github.com/Astro-Survey-Atlas/Assets/blob/main/docs/moc-core-contract.md" target="_blank" rel="noreferrer"><span data-i18n="page.sdk.contractLink">Read the MOC Core contract</span><i data-lucide="external-link"></i></a>
+        <a class="resource-link" href="https://github.com/Astro-Survey-Atlas/MOC-Core-SDK" target="_blank" rel="noreferrer"><span data-i18n="page.sdk.contractLink">Open the MOC-Core-SDK repository</span><i data-lucide="external-link"></i></a>
       </section>
     </main>
-    <footer><span>HTTP API / RESOURCE PACKAGE V3 / SCANPLAN V2</span><span data-i18n="page.sdk.footer">SDK OWNERSHIP NOT YET FROZEN</span></footer>
+    <footer><span>HTTP API / RESOURCE PACKAGE V3 / SCANPLAN V2</span><span data-i18n="page.sdk.footer">HOSTED CLIENT SDK OWNERSHIP OPEN</span></footer>
     <script type="module" src="/src/site-locale.ts"></script>
   </body>
 </html>

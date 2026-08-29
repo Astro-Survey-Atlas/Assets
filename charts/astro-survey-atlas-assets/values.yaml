@@ -83,6 +83,23 @@ syncResources:
     cpu: 250m
     memory: 256Mi
 
+# Optional publication backend for the sync init container. When disabled,
+# release activation remains PVC-backed and uses the filesystem adapter.
+objectStore:
+  enabled: false
+  endpoint: ""
+  bucket: ""
+  prefix: ""
+  region: us-east-1
+  forcePathStyle: true
+  publicBaseUrl: ""
+  root: /data/object-store
+  credentialsSecret:
+    name: ""
+    accessKeyIdKey: access-key-id
+    secretAccessKeyKey: secret-access-key
+    sessionTokenKey: session-token
+
 podSecurityContext:
   fsGroup: 10001
   fsGroupChangePolicy: OnRootMismatch

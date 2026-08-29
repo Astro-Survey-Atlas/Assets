@@ -87,11 +87,35 @@
     "ingress": { "type": "object" },
     "resources": { "type": "object" },
     "syncResources": { "type": "object" },
+    "objectStore": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "endpoint": { "type": "string" },
+        "bucket": { "type": "string" },
+        "prefix": { "type": "string" },
+        "region": { "type": "string", "minLength": 1 },
+        "forcePathStyle": { "type": "boolean" },
+        "publicBaseUrl": { "type": "string" },
+        "root": { "type": "string", "minLength": 1 },
+        "credentialsSecret": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "accessKeyIdKey": { "type": "string", "minLength": 1 },
+            "secretAccessKeyKey": { "type": "string", "minLength": 1 },
+            "sessionTokenKey": { "type": "string" }
+          },
+          "required": ["name", "accessKeyIdKey", "secretAccessKeyKey", "sessionTokenKey"]
+        }
+      },
+      "required": ["enabled", "endpoint", "bucket", "prefix", "region", "forcePathStyle", "publicBaseUrl", "root", "credentialsSecret"]
+    },
     "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
     "tolerations": { "type": "array" },
     "affinity": { "type": "object" },
     "podSecurityContext": { "type": "object" },
     "containerSecurityContext": { "type": "object" }
   },
-  "required": ["replicaCount", "image", "service", "persistence", "contentPersistence", "evidencePersistence", "admin", "warehouse"]
+  "required": ["replicaCount", "image", "service", "persistence", "contentPersistence", "evidencePersistence", "admin", "warehouse", "objectStore"]
 }

@@ -16,7 +16,7 @@
 
     <main class="resources-main github-main">
       <section class="resources-hero organization-hero">
-        <p class="eyebrow" data-i18n="page.github.eyebrow">PUBLIC SKY DATA / THREE PROJECTS, ONE SYSTEM</p>
+        <p class="eyebrow" data-i18n="page.github.eyebrow">PUBLIC SKY DATA / THREE PRODUCT PROJECTS + SHARED CORE</p>
         <h1>Astro Survey Atlas</h1>
         <p data-i18n="page.github.lead">Start with public survey coverage, trace every result to its evidence, and move into a private workspace only when your own data and workflows require it.</p>
         <div class="organization-hero-actions">
@@ -46,6 +46,19 @@
           <div class="project-contract"><i data-lucide="arrow-up"></i><strong>ACTIVE AST_*</strong><small data-i18n="page.github.warehouseToAssets">Assets reads current coverage and file evidence</small></div>
           <div class="project-contract project-contract-optional"><i data-lucide="arrow-down-up"></i><strong data-i18n="page.github.optionalScan">OPTIONAL USER SCAN</strong><small data-i18n="page.github.workspaceToWarehouse">Workspace may submit a namespace-local ScanRequest</small></div>
         </div>
+
+        <div class="project-core-flow" aria-label="Shared MOC Core dependencies">
+          <div class="project-core-heading"><p class="eyebrow" data-i18n="page.github.coreEyebrow">SHARED SCIENTIFIC LIBRARY</p><p data-i18n="page.github.coreRole">Deterministic MOC, HEALPix projection and Resource Package builder</p></div>
+          <div class="project-core-map">
+            <a class="project-node project-node-core" href="https://github.com/Astro-Survey-Atlas/MOC-Core-SDK" target="_blank" rel="noreferrer"><i data-lucide="boxes"></i><span><strong>MOC-CORE-SDK</strong><small>astro-survey-moc-core 1.0.0</small></span></a>
+            <div class="project-flow-arrow"><i data-lucide="arrow-right"></i><span data-i18n="page.github.coreContract">PYTHON WHEEL + CONFORMANCE FIXTURES</span></div>
+            <div class="project-core-consumers">
+              <div class="project-core-consumer"><strong>ASSETS</strong><small data-i18n="page.github.coreToAssets">Assets publishes reviewed public layers</small></div>
+              <div class="project-core-consumer"><strong>WORKSPACE</strong><small data-i18n="page.github.coreToWorkspace">Workspace installs the verified wheel</small></div>
+              <div class="project-core-consumer"><strong>WAREHOUSE</strong><small data-i18n="page.github.coreToWarehouse">Warehouse keeps Java extraction numerically compatible</small></div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="project-repositories" aria-labelledby="project-repositories-title">
@@ -56,6 +69,7 @@
           <article class="project-repository-row is-assets"><i data-lucide="telescope"></i><div><h3>Assets</h3><p data-i18n="page.github.assetsDetail">Use Assets to add or review a public survey, publish a MOC or Resource Package, improve public overlap and reverse lookup, or work on the public website.</p></div><a href="https://github.com/Astro-Survey-Atlas/Assets" target="_blank" rel="noreferrer" aria-label="Open Assets repository"><i data-lucide="external-link"></i></a></article>
           <article class="project-repository-row is-warehouse"><i data-lucide="database"></i><div><h3>Warehouse</h3><p data-i18n="page.github.warehouseDetail">Use Warehouse for source enumeration, spatial extraction, ScanPlan execution, the Kubernetes operator, current-state indices and scan evidence production.</p></div><a href="https://github.com/Astro-Survey-Atlas/Warehouse" target="_blank" rel="noreferrer" aria-label="Open Warehouse repository"><i data-lucide="external-link"></i></a></article>
           <article class="project-repository-row is-workspace"><i data-lucide="panels-top-left"></i><div><h3>Workspace</h3><p data-i18n="page.github.workspaceDetail">Use Workspace for private or local assets, connectors, workflows, user task history, user MOCs and exploration that combines user data with verified public packages.</p></div><a href="https://github.com/Astro-Survey-Atlas/Workspace" target="_blank" rel="noreferrer" aria-label="Open Workspace repository"><i data-lucide="external-link"></i></a></article>
+          <article class="project-repository-row is-core"><i data-lucide="boxes"></i><div><h3>MOC-Core-SDK</h3><p data-i18n="page.github.coreDetail">Use MOC-Core-SDK for the shared offline scientific implementation: canonical ICRS/NESTED cells, FITS MOCs, fixed-order projections, provenance and Resource Package v3. Assets maintains the public wheel; Warehouse verifies Java parity with the same fixtures.</p></div><a href="https://github.com/Astro-Survey-Atlas/MOC-Core-SDK" target="_blank" rel="noreferrer" aria-label="Open MOC-Core-SDK repository"><i data-lucide="external-link"></i></a></article>
         </div>
       </section>
 

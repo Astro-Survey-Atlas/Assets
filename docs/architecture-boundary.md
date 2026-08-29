@@ -1,6 +1,6 @@
 # Assets / Warehouse / Workspace 边界
 
-这份文档定义 Astro Survey Atlas 组织内三个独立项目的职责，以及 Assets
+这份文档定义 Astro Survey Atlas 组织内三个产品项目和共享 Core 的职责，以及 Assets
 调用 Warehouse 时需要遵守的边界。任何一个项目都可以独立运行自己的数据面和
 任务历史；跨项目连接使用版本化契约。Assets 不依赖旧 Assets ES；覆盖反查只
 依赖明确配置的 Warehouse Elasticsearch 索引合同。
@@ -9,9 +9,10 @@
 
 | 组件 | 负责 | 不负责 |
 | --- | --- | --- |
-| Assets | 公共 survey/release/product/layer 注册；用 ConfigMap + Secret 管理远程 Connector；提交一次性 `ScanRequest`；读取任务状态；MOC Core 的生成、合并、锁定；Resource Package、manifest、provenance、catalog、产品 dossier、证据摘要和只读下载 API | Atlas 用户资产、Atlas 任务历史和 Atlas API；data-warehouse 的内部实现；TAP/ObsCore/SIA 服务实现 |
+| Assets | 公共 survey/release/product/layer 注册；用 ConfigMap + Secret 管理远程 Connector；提交一次性 `ScanRequest`；读取任务状态；调用并发布 MOC-Core-SDK 产物；Resource Package、manifest、provenance、catalog、产品 dossier、证据摘要和只读下载 API | Atlas 用户资产、Atlas 任务历史和 Atlas API；Warehouse 的内部实现；TAP/ObsCore/SIA 服务实现 |
 | Warehouse | 接收 `atlas.zhejianglab.org/v1alpha1/ScanRequest`；校验并执行嵌入的 ScanPlan v2；维护 Operator status；提供 scanner 的执行合同和当前 `ast_*` 索引 | Assets 的 catalog 激活、MOC Core、Resource Package 发布；不规定所有任务的统一 sink |
 | Workspace | 独立的用户资产、Connector、任务历史、查询索引和前端；可独立向 Warehouse 提交用户任务；安装并验证 Assets 公共资源包 | Assets 的公共发布、Warehouse scanner/operator、把用户记录写回 Assets |
+| MOC-Core-SDK | 共享离线科学实现、ICRS/NESTED 规范化、FITS MOC、固定 order 投影、provenance 和 Resource Package v3；发布 Python wheel 与跨语言 fixture | 在线 API、远程 connector、Kubernetes 执行、用户数据或公共 release 决策 |
 
 Assets 管理输入是产品/layer、Connector 名称、源前缀和 ScanPlan 参数。服务端
 从 Connector ConfigMap 读取非敏感元数据，从同名 Secret 只引用

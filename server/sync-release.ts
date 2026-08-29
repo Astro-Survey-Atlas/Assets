@@ -1,6 +1,7 @@
 import { cp, lstat, mkdir, readlink, rename, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 
+import { createArtifactStoreFromProcess, publishReleaseBundle } from "./artifact-store.js";
 import { loadCatalog } from "./catalog.js";
 
 const sourceRoot = path.resolve(process.env.ASSET_SOURCE_ROOT ?? "/app/release");
@@ -47,3 +48,12 @@ await rename(nextPath, currentPath).catch(async (error: NodeJS.ErrnoException) =
 });
 const installedTarget = await readlink(currentPath);
 console.log(`Published ${source.manifest.bundle.id} at ${installedTarget}`);
+
+const objectStoreEnabled = /^(1|true|yes|on)$/i.test(process.env.ASSETS_OBJECT_STORE_PUBLISH ?? "")
+  || Boolean(process.env.ASSETS_OBJECT_STORE_ENDPOINT || process.env.ASSETS_OBJECT_STORE_BUCKET);
+if (objectStoreEnabled) {
+  const fallbackRoot = path.resolve(process.env.ASSETS_OBJECT_STORE_ROOT ?? path.join(targetRoot, "object-store"));
+  const objectStore = createArtifactStoreFromProcess(process.env, fallbackRoot);
+  const published = await publishReleaseBundle(sourceRoot, objectStore);
+  console.log(`Published object-store bundle ${published.bundle.id} (${published.bundle.sha256}) via ${objectStore.kind}: ${published.runtimeCount} runtime objects, ${published.evidenceCount} evidence objects`);
+}

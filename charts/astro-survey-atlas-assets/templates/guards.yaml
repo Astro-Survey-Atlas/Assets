@@ -3,3 +3,6 @@
 {{- if and (not .Values.persistence.enabled) (not .Values.persistence.existingClaim) }}{{ fail "verified public assets require persistence.enabled or persistence.existingClaim" }}{{- end }}
 {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}{{ fail "persistence.enabled and persistence.existingClaim cannot both provision storage" }}{{- end }}
 {{- if and .Values.admin.enabled (not .Values.admin.warehouseNamespace) }}{{ fail "admin.warehouseNamespace is required when admin.enabled is true" }}{{- end }}
+{{- if and .Values.objectStore.enabled (not .Values.objectStore.endpoint) }}{{ fail "objectStore.endpoint is required when objectStore.enabled is true" }}{{- end }}
+{{- if and .Values.objectStore.enabled (not .Values.objectStore.bucket) }}{{ fail "objectStore.bucket is required when objectStore.enabled is true" }}{{- end }}
+{{- if and .Values.objectStore.enabled (not .Values.objectStore.credentialsSecret.name) }}{{ fail "objectStore.credentialsSecret.name is required when objectStore.enabled is true" }}{{- end }}

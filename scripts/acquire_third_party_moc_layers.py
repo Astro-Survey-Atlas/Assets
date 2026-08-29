@@ -10,14 +10,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+CORE_ROOT = Path(os.environ.get("MOC_CORE_ROOT", ROOT.parent / "MOC-Core-SDK")).resolve()
+sys.path.insert(0, str(CORE_ROOT))
 from astro_survey_moc_core.core import project_cells, read_moc_fits
 
-ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "artifacts/public-survey-footprints/raw/moc"
 FOOTPRINTS = ROOT / "src/footprints/survey-footprints.json"
 CATALOG = ROOT / "src/surveys/survey-catalog.json"

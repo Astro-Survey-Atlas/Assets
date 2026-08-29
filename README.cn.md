@@ -68,6 +68,10 @@ catalog 投影、provenance 摘要和 hash。版本化 MOC、资源包和大型 
 不可变 URL/hash 契约、evidence 边界和切换流程。输入 manifest、normalized scan 等
 始终属于 evidence，不会进入浏览器初始请求或公共 release allowlist。
 
+发布同步任务现在包含 filesystem fallback，也提供可选的 S3-compatible 发布适配器。
+只有在配置 endpoint、bucket 和 credential Secret 后才启用；在明确批准对象存储切换
+之前，线上服务仍从经过校验的 PVC bundle 读取。配置说明见[存储契约](docs/public-artifact-storage.md)。
+
 ## 本地开发
 
 ```bash

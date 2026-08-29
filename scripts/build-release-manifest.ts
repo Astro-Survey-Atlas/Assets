@@ -244,15 +244,20 @@ async function build(): Promise<PublicAssetManifest> {
   });
   await push({
     id: "sdk-moc-core-lock", kind: "sdk", label: "MOC Core dependency lock",
-    description: "Pinned scientific dependencies for the Assets MOC Core build environment.",
-    filePath: path.join(root, "requirements", "moc-core.lock"), downloadName: "moc-core.lock", mediaType: "text/plain; charset=utf-8", version: "1.0.0",
+    description: "Pinned scientific dependencies for the shared Astro Survey MOC Core build environment.",
+    filePath: path.join(root, "requirements", "requirements.lock"), downloadName: "requirements.lock", mediaType: "text/plain; charset=utf-8", version: "1.0.0",
   });
   await push({
-    id: "sdk-moc-core-wheel-1-0-0", kind: "sdk", label: "Assets MOC Core Python wheel",
-    description: "Pinned offline Astro Survey MOC Core SDK wheel for deterministic Assets layer builds and validation.",
+    id: "sdk-moc-core-source", kind: "sdk", label: "MOC Core source provenance",
+    description: "Repository commit and wheel hash for the organization-level Astro Survey MOC Core.",
+    filePath: path.join(root, "requirements", "moc-core-source.json"), downloadName: "moc-core-source.json", mediaType: "application/json", version: "1.0.0",
+  });
+  await push({
+    id: "sdk-moc-core-wheel-1-0-0", kind: "sdk", label: "Astro Survey MOC Core Python wheel",
+    description: "Pinned offline shared MOC Core wheel for deterministic Assets and Workspace layer builds and validation.",
     filePath: path.join(artifactRoot, "moc-core", "astro_survey_moc_core-1.0.0-py3-none-any.whl"),
     downloadName: "astro_survey_moc_core-1.0.0-py3-none-any.whl", mediaType: "application/zip", version: "1.0.0",
-    expectedSha256: "dd8a3a538cc3b9501a3207a427c97372d2118f9b0cdc4e41e1b2f4fe5fe1dc9a",
+    expectedSha256: "66d0d07c3afaf74141f967c80eaf359180d06a07f6805494a4aea086d6339642",
   });
   await push({
     id: "metadata-public-build-plan", kind: "metadata", label: "Locked public Core build plan",

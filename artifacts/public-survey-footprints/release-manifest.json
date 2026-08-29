@@ -3,7 +3,7 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "50dd5d9c6415512cef57023d4ebfdde605d82b1128e7478b3580915f5204aadc"
+    "sha256": "25e7cce23e1ffe5dc25fe37204002b099e573d82646d1c2524fe24802390f5c7"
   },
   "statistics": {
     "releases": 55,
@@ -14,8 +14,8 @@
     "footprints": 47,
     "packages": 14,
     "rawMocFiles": 48,
-    "totalBytes": 40248328,
-    "runtimeBytes": 12488592,
+    "totalBytes": 40254671,
+    "runtimeBytes": 12494935,
     "evidenceBytes": 27759736
   },
   "files": [
@@ -28,8 +28,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/architecture-boundary.md",
-      "sizeBytes": 4825,
-      "sha256": "110992e0e3cc772d3527ef49f8b519fac52f639c33b038eaad7b3aa2405c2f3f"
+      "sizeBytes": 5106,
+      "sha256": "f241332abf386bc53fabf4bc8d6e9ec835033c4f3886c3f5e990797846274eee"
     },
     {
       "id": "documentation-data-warehouse-requirements",
@@ -52,8 +52,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/moc-core-contract.md",
-      "sizeBytes": 4015,
-      "sha256": "aded7b654362489d428206bf11dad09b8f02dd07368ba915655f3609de108114"
+      "sizeBytes": 4238,
+      "sha256": "fdf46d82b7335b6672bbb72bd0af17a89a6625392f033b2299b5b09bb479ee23"
     },
     {
       "id": "documentation-moc-method",
@@ -76,8 +76,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/public-artifact-storage.md",
-      "sizeBytes": 5383,
-      "sha256": "d461f8ea3ef845aacf0a194a794d3894151a9aa7985c0beee485e205b39021df"
+      "sizeBytes": 7176,
+      "sha256": "9f7bafe0253118867d65ceac062a6e0ded69cb814af53ff82205b57a52222d97"
     },
     {
       "id": "documentation-resource-package-integration",
@@ -3236,28 +3236,41 @@
     {
       "id": "sdk-moc-core-wheel-1-0-0",
       "kind": "sdk",
-      "label": "Assets MOC Core Python wheel",
-      "description": "Pinned offline Astro Survey MOC Core SDK wheel for deterministic Assets layer builds and validation.",
+      "label": "Astro Survey MOC Core Python wheel",
+      "description": "Pinned offline shared MOC Core wheel for deterministic Assets and Workspace layer builds and validation.",
       "downloadName": "astro_survey_moc_core-1.0.0-py3-none-any.whl",
       "mediaType": "application/zip",
       "version": "1.0.0",
       "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.0.0-py3-none-any.whl",
-      "sizeBytes": 22610,
-      "sha256": "dd8a3a538cc3b9501a3207a427c97372d2118f9b0cdc4e41e1b2f4fe5fe1dc9a"
+      "sizeBytes": 26329,
+      "sha256": "66d0d07c3afaf74141f967c80eaf359180d06a07f6805494a4aea086d6339642"
     },
     {
       "id": "sdk-moc-core-lock",
       "kind": "sdk",
       "label": "MOC Core dependency lock",
-      "description": "Pinned scientific dependencies for the Assets MOC Core build environment.",
-      "downloadName": "moc-core.lock",
+      "description": "Pinned scientific dependencies for the shared Astro Survey MOC Core build environment.",
+      "downloadName": "requirements.lock",
       "mediaType": "text/plain; charset=utf-8",
       "version": "1.0.0",
       "deliveryClass": "runtime",
-      "path": "requirements/moc-core.lock",
-      "sizeBytes": 224,
-      "sha256": "2985f7ce248d7427501e710fee57db7953ce6cd80888ae334262c9191b3dc222"
+      "path": "requirements/requirements.lock",
+      "sizeBytes": 229,
+      "sha256": "1566af8792021e40833ee023cc8b3e03c857656d4f5e21f571a203ffaa0b9bfd"
+    },
+    {
+      "id": "sdk-moc-core-source",
+      "kind": "sdk",
+      "label": "MOC Core source provenance",
+      "description": "Repository commit and wheel hash for the organization-level Astro Survey MOC Core.",
+      "downloadName": "moc-core-source.json",
+      "mediaType": "application/json",
+      "version": "1.0.0",
+      "deliveryClass": "runtime",
+      "path": "requirements/moc-core-source.json",
+      "sizeBytes": 322,
+      "sha256": "920517a191b4f8ebbdf33aa37a58fadd2ce53f3020b194c592e95cc3635dd761"
     }
   ]
 }

@@ -75,3 +75,13 @@ test("admin page is included as a separate deployable entry point", async () => 
   assert.match(html, /ScanRequest/);
   assert.match(html, /\/admin\/main\.ts/);
 });
+
+test("organization and SDK pages expose the shared Core repository", async () => {
+  const fs = await import("node:fs/promises");
+  const github = await fs.readFile("site/github/index.html", "utf8");
+  const sdk = await fs.readFile("site/sdk/index.html", "utf8");
+  assert.match(github, /Astro-Survey-Atlas\/MOC-Core-SDK/);
+  assert.match(github, /MOC-CORE-SDK/);
+  assert.match(sdk, /Astro-Survey-Atlas\/MOC-Core-SDK/);
+  assert.doesNotMatch(sdk, /No fourth SDK repository yet/);
+});

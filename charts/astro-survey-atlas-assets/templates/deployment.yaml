@@ -37,6 +37,42 @@ spec:
               value: /app/release
             - name: ASSET_TARGET_ROOT
               value: /data
+            - name: ASSETS_OBJECT_STORE_PUBLISH
+              value: {{ .Values.objectStore.enabled | quote }}
+            - name: ASSETS_OBJECT_STORE_ENDPOINT
+              value: {{ .Values.objectStore.endpoint | quote }}
+            - name: ASSETS_OBJECT_STORE_BUCKET
+              value: {{ .Values.objectStore.bucket | quote }}
+            - name: ASSETS_OBJECT_STORE_PREFIX
+              value: {{ .Values.objectStore.prefix | quote }}
+            - name: ASSETS_OBJECT_STORE_REGION
+              value: {{ .Values.objectStore.region | quote }}
+            - name: ASSETS_OBJECT_STORE_FORCE_PATH_STYLE
+              value: {{ .Values.objectStore.forcePathStyle | quote }}
+            - name: ASSETS_OBJECT_STORE_PUBLIC_BASE_URL
+              value: {{ .Values.objectStore.publicBaseUrl | quote }}
+            - name: ASSETS_OBJECT_STORE_ROOT
+              value: {{ .Values.objectStore.root | quote }}
+            {{- if .Values.objectStore.credentialsSecret.name }}
+            - name: ASSETS_OBJECT_STORE_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.objectStore.credentialsSecret.name }}
+                  key: {{ .Values.objectStore.credentialsSecret.accessKeyIdKey | quote }}
+            - name: ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.objectStore.credentialsSecret.name }}
+                  key: {{ .Values.objectStore.credentialsSecret.secretAccessKeyKey | quote }}
+            {{- if .Values.objectStore.credentialsSecret.sessionTokenKey }}
+            - name: ASSETS_OBJECT_STORE_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.objectStore.credentialsSecret.name }}
+                  key: {{ .Values.objectStore.credentialsSecret.sessionTokenKey | quote }}
+                  optional: true
+            {{- end }}
+            {{- end }}
           resources: {{ toYaml .Values.syncResources | nindent 12 }}
           securityContext: {{ toYaml .Values.containerSecurityContext | nindent 12 }}
           volumeMounts:

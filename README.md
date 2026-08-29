@@ -82,6 +82,12 @@ cutover procedure. In particular, input manifests and normalized scans remain
 evidence and are never part of the browser's initial request or the public
 release allowlist.
 
+The release sync job includes a filesystem fallback and an optional
+S3-compatible publication adapter. Enable it only after configuring the
+endpoint, bucket and credential Secret described in the storage contract; the
+active service continues to read the verified PVC bundle until an object-backed
+cutover is explicitly approved.
+
 ## Local development
 
 ```bash

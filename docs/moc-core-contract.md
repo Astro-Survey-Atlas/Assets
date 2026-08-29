@@ -1,10 +1,15 @@
 # Assets MOC Core contract
 
-Assets owns the scientific coverage contract and the offline implementation.
-Other projects consume the published Resource Package contract; they do not
-depend on an Assets computation service at runtime. A task runner may use the
-MOC Core wheel when building a compatible environment, but that is an
-implementation choice rather than a cross-project runtime dependency.
+`MOC-Core-SDK` owns the organization-level scientific contract and offline
+implementation. Assets maintains the public release workflow and publishes the
+verified wheel; Workspace installs the same wheel for local/user MOCs; Warehouse
+keeps its Java implementation compatible through the shared conformance
+fixtures. None of the projects depends on an Assets computation service at
+runtime.
+
+Source repository: [Astro-Survey-Atlas/MOC-Core-SDK](https://github.com/Astro-Survey-Atlas/MOC-Core-SDK).
+Consumers record the exact Core commit and wheel SHA-256 in their release or
+vendor provenance.
 
 ## Scientific representation
 

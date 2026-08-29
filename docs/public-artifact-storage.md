@@ -1,8 +1,9 @@
 # Public artifact storage and migration
 
-This document records the intended distribution boundary for the complete
-public survey footprint collection. It is a design and migration contract; the
-current working tree is not migrated by this document.
+This document records the distribution boundary for the complete public survey
+footprint collection. The publication adapter is now implemented, while the
+running service still uses the PVC-backed release as its active read path until
+an object-backed bundle has passed dual-read validation.
 
 ## Ownership and delivery classes
 
@@ -64,6 +65,41 @@ in browser responses.
 
 Rollback means changing the selected bundle pointer back to a previously
 verified immutable bundle. It does not delete the newer bundle.
+
+## Adapter and configuration
+
+`server/artifact-store.ts` provides the same contract for a local filesystem
+and an S3-compatible service. `FilesystemArtifactStore` writes through a
+temporary file and refuses a different byte sequence at an existing immutable
+key. `S3ArtifactStore` uses conditional `If-None-Match: *` writes, stores the
+SHA-256 as object metadata, and verifies a concurrent writer before accepting
+an existing key. `publishReleaseBundle()` uploads runtime objects under
+`public/releases/<bundle-id>/<bundle-sha256>/` and evidence under a separate
+`evidence/<bundle-id>/<bundle-sha256>/` prefix, then atomically updates
+`public/current.json`.
+
+The sync init container enables this publisher only when
+`objectStore.enabled=true` (or the endpoint/bucket environment variables are
+set). The default remains the filesystem adapter and the existing `current`
+symlink on the release PVC. Configure an S3-compatible backend with:
+
+```text
+ASSETS_OBJECT_STORE_ENDPOINT
+ASSETS_OBJECT_STORE_BUCKET
+ASSETS_OBJECT_STORE_PREFIX             # optional key prefix
+ASSETS_OBJECT_STORE_REGION             # defaults to us-east-1
+ASSETS_OBJECT_STORE_FORCE_PATH_STYLE   # defaults to true for MinIO/OSS
+ASSETS_OBJECT_STORE_PUBLIC_BASE_URL    # optional public URL base
+ASSETS_OBJECT_STORE_ACCESS_KEY_ID
+ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY
+ASSETS_OBJECT_STORE_SESSION_TOKEN      # optional
+```
+
+Credentials may instead be supplied as JSON through
+`ASSETS_OBJECT_STORE_SECRET_JSON` or a mounted
+`ASSETS_OBJECT_STORE_SECRET_FILE`; the Helm chart maps the three key fields
+from `objectStore.credentialsSecret`. No credentials, evidence payloads or
+PVC paths are added to the release manifest or browser responses.
 
 ## Migration procedure
 

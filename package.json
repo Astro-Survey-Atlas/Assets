@@ -12,9 +12,9 @@
     "preview:build": "tsx scripts/generate-coverage-preview.ts",
     "moc:validate": "tsx scripts/validate-moc-source-registry.ts",
     "moc:probe": "tsx scripts/validate-moc-source-registry.ts --probe --output=artifacts/moc-source-probe.json",
-    "packages:rebuild": "SOURCE_DATE_EPOCH=1787184000 python3 scripts/rebuild_resource_packages.py && python3 scripts/update_provenance_hashes.py && npm run catalog:build",
-    "core:wheel": "SOURCE_DATE_EPOCH=1787184000 python3 -m pip wheel --no-deps --no-build-isolation . --wheel-dir artifacts/public-survey-footprints/moc-core",
-    "core:rebuild-public": "SOURCE_DATE_EPOCH=1787184000 python3 -m astro_survey_moc_core.cli rebuild-public --base-dir .",
+    "packages:rebuild": "PYTHONPATH=${MOC_CORE_ROOT:-../MOC-Core-SDK} SOURCE_DATE_EPOCH=1787184000 python3 scripts/rebuild_resource_packages.py && python3 scripts/update_provenance_hashes.py && npm run catalog:build",
+    "core:wheel": "SOURCE_DATE_EPOCH=1787184000 python3 -m pip wheel --no-deps --no-build-isolation ${MOC_CORE_ROOT:-../MOC-Core-SDK} --wheel-dir artifacts/public-survey-footprints/moc-core",
+    "core:rebuild-public": "PYTHONPATH=${MOC_CORE_ROOT:-../MOC-Core-SDK} SOURCE_DATE_EPOCH=1787184000 python3 -m astro_survey_moc_core.cli rebuild-public --base-dir .",
     "assets:build": "npm run artifacts:validate && npm run catalog:build && npm run preview:build",
     "build:server": "tsc -p tsconfig.server.json",
     "build:site": "vite build",
@@ -24,11 +24,12 @@
     "start": "node dist/server/server.js",
     "sync": "node dist/server/sync-release.js",
     "test:node": "tsx --test test/*.test.ts",
-    "test:python": "python3 -m unittest discover -s python-tests -v",
-    "test": "npm run test:node && npm run test:python",
+    "test:core": "python3 scripts/verify_core_wheel.py",
+    "test": "npm run test:node && npm run test:core",
     "validate": "npm run build && npm test"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1120.0",
     "healpixjs": "^2.0.0",
     "lucide": "^1.25.0",
     "three": "^0.185.1"

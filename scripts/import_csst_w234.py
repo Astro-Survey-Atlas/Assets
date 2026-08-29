@@ -9,16 +9,20 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import sys
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[1]
+CORE_ROOT = Path(os.environ.get("MOC_CORE_ROOT", ROOT.parent / "MOC-Core-SDK")).resolve()
+sys.path.insert(0, str(CORE_ROOT))
 from astro_survey_moc_core.core import build_layer
 from astro_survey_moc_core.resource_package import build_resource_package
 
-ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT_ROOT = ROOT / "artifacts/public-survey-footprints"
 CSST_ROOT = ARTIFACT_ROOT / "csst"
 SOURCE_URL = "https://nadc.china-vo.org/data/"

@@ -4,7 +4,7 @@ Updated: 2026-08-28
 
 Repository: `/home/aaron/Repo/Astro-Survey-Atlas-Assets`
 
-Starting commit: `49f434b`; current HEAD: `c5beceb`
+Starting commit: `49f434b`; current HEAD: `b1cc340`
 
 ## Start Here
 
@@ -77,6 +77,14 @@ diffs before editing them.
 - The overlap UI forwards the right-drawer viewport inset through
   `AtlasCoverageGlobe` to the Three.js viewer, so a successful overlap response
   can be rendered without a post-response runtime exception.
+- `server/artifact-store.ts` provides an immutable filesystem fallback and an
+  optional S3-compatible publication adapter. `sync-release.ts` keeps the PVC
+  symlink as the active read path and only publishes to object storage when it
+  is explicitly configured; runtime and evidence prefixes remain separate.
+- The GitHub organization page now presents Assets as the public front door,
+  explains Warehouse and Workspace responsibilities, and shows the shared
+  MOC-Core-SDK dependency and conformance-fixture flow. `/sdk/` documents the
+  Core wheel ownership and leaves a future hosted client SDK decision open.
 
 ## Verification Baseline
 
@@ -86,9 +94,9 @@ Euclid ACTIVE layers appeared in catalog and overlap requests; tile/file
 details included order and precision. Euclid order-8 cell `548925`
 reverse-resolved through the Assets API to its OSS FileAsset metadata.
 
-The Assets gate on 2026-08-27 was green: `npm run validate`, 40 Node tests and
-16 Python tests passed (the same three scientific-dependency tests remain
-skipped), and `git diff --check` was clean. The five-step plain-language
+The Assets gate on 2026-08-28 is green: `npm run validate`, all 47 Node tests,
+and the Core wheel verification passed; `helm lint` and `git diff --check` are
+also clean. The five-step plain-language
 product explanation is present on the actual `/surveys/` directory entry
 point (and kept in the shared resources template). A browser smoke
 loaded the deployed bundle, entered G mode with CSST/DESI, rendered
@@ -123,10 +131,10 @@ layers are derived from reviewed CDS spatial projections and retain estimated
 precision; their STMOC time metadata stays in provenance evidence.
 The deployed Assets `/api/v1/coverage` now retains that public base and adds the
 ACTIVE layers from the current Warehouse endpoint; while the CSST retry is
-`UPDATING`, the live response contains 53 footprints across the public surveys
+`UPDATING`, the live response contains 56 footprints across the public surveys
 plus the ACTIVE CSST, DESI, Euclid and Assets-owned controlled smoke layers.
-The deployed response is intentionally unchanged until an explicit release or
-admin reload; the new four-layer bundle is currently offline in this worktree.
+The 2026-08-28 rollout activated the rebuilt bundle; object-store publication
+remains disabled, so the service still reads the verified PVC release.
 The current bounded smoke covers catalog/block reads, CSST/DESI,
 Euclid/DESI and 2MASS/SDSS overlap, overlap details, reverse lookup, and FITS
 Range reads.
@@ -135,7 +143,7 @@ The current Warehouse ES observation has 13 live layer documents (the index
 also reports 2 deleted Lucene documents), 22,842 FileAsset documents and
 92,787 coverage documents. The latter two counts include evidence from failed
 or incomplete executions and are not public Assets counts. The runtime API
-currently exposes 53 footprints and 53 catalog layers: the 44 static public
+currently exposes 56 footprints and 56 catalog layers: the 47 static public
 footprint records plus ACTIVE Warehouse
 layers. The `csst-w1-phot-catalog` `UPDATING` layer is excluded.
 
@@ -154,11 +162,17 @@ persisted in the current `ast_*` indices, while the HI4PI probe is persisted as
 explicit failed evidence because its header declares `RADESYS=FK5`; HST
 multi-HDU checks remain local/in-memory contract probes.
 
+The sibling Workspace gate also passes after updating its expected Core
+distribution identifier: `npm run validate` completes with 184 tests (one
+PostgreSQL integration case skipped when its database URL is unset). Warehouse
+passes both `mvn -B -q test` and `mvn -B -q verify`; the shared Core conformance
+fixture remains pinned to MOC-Core-SDK commit `2ebc395`.
+
 ## Live Deployment Layout
 
 Assets is a separate Helm release in namespace `astro-survey-atlas-assets`.
-The current dev rollout is Helm revision 83, image tag
-`0.1.0-20260827-163611`, and serves through:
+The current dev rollout is Helm revision 84, image tag
+`0.1.0-20260828-215713`, and serves through:
 
 ```text
 http://10.15.51.75:32083/
@@ -183,7 +197,9 @@ The public site serves through the `astro-survey-atlas-assets` Service/Ingress.
 The release PVC contains the static public bundle used for fallback and
 publication. The current runtime bundle is
 `public-survey-footprints-2026-08-20`, SHA-256
-`cfd5af3c429c11e3d19afcd14eae3d9e59facc561c0f1be4dbbef121daf64722`.
+`25e7cce23e1ffe5dc25fe37204002b099e573d82646d1c2524fe24802390f5c7`, with
+211 manifest files. The init container completed successfully; the image
+digest is `sha256:51316b282ce0082dd81654ee4aa74f3679d26493dd70391b426b907a6f6d7904`.
 
 The Gaia O8-only Warehouse layers are included in the globe's O4 visual
 overview by NESTED coarsening, while their API coverage remains explicitly O8.
@@ -225,21 +241,23 @@ three-way overlap at O8 or after Gaia's O4 visual coarsening.
 
 Work in this order:
 
-1. Preserve all dirty files in both repositories and keep the static-plus-
-   Warehouse merge, pagination, admin reload/status behavior and overlap
-   viewport forwarding regression-tested.
-2. Coordinate with Warehouse on the terminal CSST retry: inspect its evidence
+1. Preserve all dirty files in all repositories and keep the static-plus-
+   Warehouse merge, pagination, admin reload/status behavior, object-store
+   publication and overlap viewport forwarding regression-tested.
+2. If an object-backed release is desired, run a staged dual-read validation
+   against a non-production bucket before changing the active PVC read path.
+3. Coordinate with Warehouse on the terminal CSST retry: inspect its evidence
    and layer state, then submit a new bounded retry only after choosing the
    scanner plan. Do not treat the current `UPDATING` layer as public coverage.
-3. Once a successful CSST layer is genuinely `ACTIVE`, call
+4. Once a successful CSST layer is genuinely `ACTIVE`, call
    `POST /api/v1/admin/catalog/reload` with the admin token and inspect
    `GET /api/v1/admin/catalog/status`; the status must show the current load
    mode, timestamp, counts and Warehouse connectivity.
-4. The long Warehouse task is no longer active. The `mocdiscovery` Operator
+5. The long Warehouse task is no longer active. The `mocdiscovery` Operator
    rollout and evidence/status path are verified; retain the completed Gaia,
    SkyMapper, KiDS, VISTA VIKING, and DECaLS discovery evidence while Assets
    continues to submit intent-only requests.
-5. Rerun direct catalog, overlap, details and reverse-lookup smokes against
+6. Rerun direct catalog, overlap, details and reverse-lookup smokes against
    bounded CSST, DESI and Euclid layers after future Warehouse image or
    mapping changes. Keep failed ScanRequests and evidence for diagnosis.
 
