@@ -6,14 +6,23 @@
 ## 1. 调用边界
 
 Assets 通过 Kubernetes API 提交 `atlas.zhejianglab.org/v1alpha1` 的
-`ScanRequest`。Connector 在 Assets 管理的 ConfigMap 中保存 endpoint、region、
+`ScanRequest`。远程 Connector 在 Assets 管理的 ConfigMap 中保存 endpoint、region、
 bucket、prefix 和 Secret 引用名；远程对象存储的 access key/secret key 只存
-在同 namespace 的 Secret 中。ScanRequest 的 `spec.plan` 是一个 ScanPlan v2，
+在同 namespace 的 Secret 中。本地 Connector 只保存 Warehouse Infra 创建并标记
+`atlas.zhejianglab.org/scanner-source=true` 的 PVC 名称，以及可选的 PVC 内相对
+`basePath`；Assets 不创建 PV/PVC，也不接受节点名、hostPath、NFS 服务器或导出路径。
+ScanRequest 的 `spec.plan` 是一个 ScanPlan v2，
 `spec.credentials` 只声明 Secret 名称和键名，不携带值。
 
 Assets 自己负责 Connector、Secret、任务标签、任务名称、幂等键和页面展示。
 data-warehouse 不需要知道 Assets 的数据库或页面模型。Assets 不调用 Atlas API，
 Atlas 也不需要调用 Assets 的计算接口。
+
+本地扫描使用固定的只读卷契约：Connector 的 `basePath` 映射为
+`scanner.sourceVolume.subPath`，任务的 `sourcePaths[0]` 必须是相对于该目录的
+POSIX 路径，计划中的 `source.location.rootPath` 位于 `/data` 挂载点下。Warehouse
+Operator 在创建 Job 前检查 PVC 存在、授权标签和 `Bound` 状态；Assets 会在提交前
+执行同样的检查并返回可操作的错误。
 
 data-warehouse 只需要校验并执行 ScanPlan v2；调用方不能再指定旧的
 `handlers`、`userProperties` 或任意 sink 参数。
@@ -60,6 +69,13 @@ spec:
 - 任务名称冲突、重复提交和幂等行为必须返回明确结果；
 - Job、Pod 或 FlinkSessionJob 保留调用方提供的追踪 labels。
 
+Assets 同时为 ScanRequest 和 MOC discovery request 写入
+`assets.atlas.zhejianglab.org/work-ref` annotation。其 JSON 至少包含稳定的
+`key` 与面向人的 `title`，并可包含 `surveyId`、`releaseId`、`productId`。
+Warehouse 创建 Job 时应保留这组追踪信息，不能用新的 attempt ID 覆盖 work
+identity；Assets 会据此把 retry 聚合到同一个 02A work item，并只展示最新 attempt
+的统计。
+
 ## 3. Status 读取
 
 Assets 管理页只读取自己标签下的 CRD。data-warehouse 不需要保存 Assets 的
@@ -74,6 +90,20 @@ summary.availableOrders, summary.evidencePath
 status 只描述对应 CRD 的执行观测。它不是 Assets 与 data-warehouse 的共享
 业务状态，也不是 Atlas 的任务状态。失败必须有明确 `phase` 和 `message`；
 不能因为 operator 没有及时刷新 status 就把失败任务报告为成功。
+
+Connector 的连接探测不属于 Warehouse `ScanRequest` status。Assets 管理页按需对
+单个 Connector 做只读对象存储请求，或检查 Warehouse Infra 授权源 PVC；结果只在
+页面内存中显示，不能要求 Warehouse 将 `READY`、`PENDING` 或 `ERROR` 写入
+Connector ConfigMap。
+
+MOC discovery request 的成功 status 如果支持审核投影，应提供有界的
+`reviewSummary`：`schemaVersion=1`、`truncated`、`summaryTruncated`、候选数组和
+probe 数组。每个候选至少有 `candidateId`，每个 probe 至少有稳定的
+`probeId`（SHA-256）、`candidateId`、kind、URL 和 `ok`，并在可用时提供响应哈希和
+`validation.acceptedSpatialMoc`。合法的空数组必须保留为可审核的零结果；没有摘要
+与零结果不是同一种状态。完整响应、原始响应和 evidence 仍留在 Warehouse evidence，
+不能塞入 CRD status 或 Assets 初始页面 payload。Assets 只提交候选/probe ID、决定和
+备注，服务端会以当前 status 重新解析 URL 与哈希。
 
 ## 4. Sink 语义
 

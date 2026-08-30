@@ -14,7 +14,7 @@ import { ProductStore, type ProductRecord } from "./products.js";
 import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
 import { CoverageEvidenceStore, EvidenceStoreError, type WarehouseLayerSnapshot } from "./evidence-store.js";
 import { buildOverlapDetails } from "./overlap-details.js";
-import { MocDiscoveryReviewStore, type MocDiscoveryReviewInput } from "./moc-discovery.js";
+import { MocDiscoveryReviewStore, resolveMocDiscoveryReview, type MocDiscoveryReviewInput } from "./moc-discovery.js";
 import { buildPublicProductEvidence } from "./public-product-evidence.js";
 import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductVerificationStatus } from "./types.js";
 
@@ -367,6 +367,64 @@ function adminProductSummaries(records: ProductRecord[]): Array<Record<string, u
     availableOrders: [...summary.availableOrders].sort((a, b) => a - b),
     maxOrder: summary.maxOrder,
   }));
+}
+
+function adminProductSurveys(records: ProductRecord[], index: typeof surveyIndex): Array<Record<string, unknown>> {
+  const byProductId = new Map(records.map((record) => [record.productId, record]));
+  const seen = new Set<string>();
+  const surveys = index.surveys.map((survey) => ({
+    id: survey.id,
+    surveyId: survey.id,
+    name: survey.name,
+    mission: survey.mission,
+    color: survey.color,
+    description: survey.description,
+    modalities: survey.modalities,
+    imageUrl: survey.imageUrl,
+    statistics: survey.statistics,
+    coverageOrders: survey.coverageOrders,
+    releases: survey.releases.map((release) => ({
+      id: release.id,
+      label: release.label,
+      kind: release.kind,
+      ...(release.releasedYear !== undefined ? { releasedYear: release.releasedYear } : {}),
+      modalities: release.modalities,
+      coverageOrders: release.coverageOrders,
+      products: release.products.map((product) => {
+        const productId = product.productId ?? `${survey.id}:${release.id}:${product.name}`;
+        const record = byProductId.get(productId);
+        if (record) seen.add(productId);
+        const coverage = record ? productCoverage(record) : product.coverage;
+        return {
+          ...product,
+          productId,
+          ...(coverage ? { coverage } : {}),
+          review: record ? {
+            state: record.published ? "published" : "draft",
+            draftRevision: record.revision,
+            publishedRevision: record.publishedRevision,
+            updatedAt: record.updatedAt,
+            publishedAt: record.publishedAt,
+          } : { state: "unmatched" },
+        };
+      }),
+    })),
+  }));
+  const unmatchedProducts = records.filter((record) => !seen.has(record.productId)).map((record) => ({
+    productId: record.productId,
+    surveyId: record.draft.surveyId,
+    releaseId: record.draft.releaseId,
+    name: record.draft.name,
+    modality: record.draft.modality,
+    review: {
+      state: record.published ? "unmatched-published" : "unmatched-draft",
+      draftRevision: record.revision,
+      publishedRevision: record.publishedRevision,
+      updatedAt: record.updatedAt,
+      publishedAt: record.publishedAt,
+    },
+  }));
+  return unmatchedProducts.length ? [...surveys, { id: "__unmatched__", surveyId: "__unmatched__", name: "未匹配公共 Catalog 的产品", mission: "Assets editorial queue", color: "#82979e", description: "这些产品存在于 Assets 编辑存储，但没有对应的公共 survey/release/product 记录。", modalities: [], imageUrl: "", statistics: { publicProducts: unmatchedProducts.length, acquired: 0, overviewOnly: 0, awaitingGeometry: unmatchedProducts.length, notApplicable: 0, footprintCells: 0 }, releases: [], unmatchedProducts }] : surveys;
 }
 const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
 const MAX_FITS_HEADER_BYTES = 256 * 1024;
@@ -741,6 +799,10 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
   if (!admin.config.enabled) return json(response, 404, { error: "Assets administration is disabled" });
   try {
     admin.authorize(adminFromRequest(request));
+    const connectorProbeMatch = /^\/api\/v1\/admin\/connectors\/([^/]+)\/probe$/.exec(pathname);
+    if (connectorProbeMatch?.[1] && request.method === "POST") {
+      return json(response, 200, { connector: await admin.probeConnector(decodeURIComponent(connectorProbeMatch[1])) });
+    }
     if (pathname === "/api/v1/admin/connectors" && request.method === "GET") return json(response, 200, { connectors: await admin.listConnectors() });
     if (pathname === "/api/v1/admin/connectors" && request.method === "POST") {
       const input = await requestJsonBody(request) as unknown as ConnectorInput;
@@ -792,6 +854,11 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         surveyName: body.surveyName as string,
         ...(typeof body.releaseHint === "string" ? { releaseHint: body.releaseHint } : {}),
         ...(typeof body.productHint === "string" ? { productHint: body.productHint } : {}),
+        ...(typeof body.surveyId === "string" ? { surveyId: body.surveyId } : {}),
+        ...(typeof body.releaseId === "string" ? { releaseId: body.releaseId } : {}),
+        ...(typeof body.productId === "string" ? { productId: body.productId } : {}),
+        ...(typeof body.workTitle === "string" ? { workTitle: body.workTitle } : {}),
+        ...(body.workContext && typeof body.workContext === "object" && !Array.isArray(body.workContext) ? { workContext: body.workContext as MocDiscoveryInput["workContext"] } : {}),
       };
       return json(response, 201, { request: await admin.createMocDiscoveryRequest(input) });
     }
@@ -801,7 +868,13 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       await admin.getMocDiscoveryRequest(name);
       if (request.method === "GET") return json(response, 200, { reviews: await mocDiscoveryReviews.list(name) });
       const body = await requestJsonBody(request) as unknown as MocDiscoveryReviewInput;
-      return json(response, 201, { review: await mocDiscoveryReviews.add(name, body) });
+      const requestView = await admin.getMocDiscoveryRequest(name);
+      const resolved = resolveMocDiscoveryReview(requestView, body);
+      return json(response, 201, { review: await mocDiscoveryReviews.add(name, resolved) });
+    }
+    const mocRetryMatch = /^\/api\/v1\/admin\/moc-discovery\/([^/]+)\/resubmit$/.exec(pathname);
+    if (mocRetryMatch?.[1] && request.method === "POST") {
+      return json(response, 201, { request: await admin.resubmitMocDiscoveryRequest(decodeURIComponent(mocRetryMatch[1])) });
     }
     const mocMatch = /^\/api\/v1\/admin\/moc-discovery\/([^/]+)$/.exec(pathname);
     if (mocMatch?.[1] && request.method === "GET") {
@@ -818,7 +891,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     if (pathname === "/api/v1/admin/products" && request.method === "GET") {
       const records = products.list();
       const query = requestQuery(request);
-      if (query.get("view") === "surveys") return json(response, 200, { surveys: adminProductSummaries(records) });
+      if (query.get("view") === "surveys") return json(response, 200, { surveys: adminProductSurveys(records, applyPublishedProductMetadata(surveyIndex)) });
       const surveyId = query.get("surveyId")?.trim();
       const filtered = surveyId ? records.filter((record) => record.draft.surveyId === surveyId) : records;
       return json(response, 200, { products: filtered.map(adminProductView) });

@@ -38,6 +38,8 @@ Package v3 JSON Schema，作为普通 allowlisted metadata/documentation 制品�
 data-warehouse task schema 是 Assets 用来生成标准 CRD 的公开输入约束；该公开
 API 本身保持只读，不创建或执行任务。认证后的管理端点另有明确的
 `POST`/`PUT` 路由，用于创建 Connector、提交 ScanRequest 和编辑产品。
+远程 Connector 由 ConfigMap + Secret 保存；本地 Connector 只引用 Warehouse
+Infra 已授权的源 PVC 和可选相对 base path，Assets 不创建 PV/PVC 或接受 hostPath。
 
 可在线预览的制品额外包含：
 
@@ -146,6 +148,8 @@ GET /api/v1/products
 
 草稿和版本控制只在管理员认证边界内：`GET /api/v1/admin/products`、`GET /api/v1/admin/products?view=surveys`、`GET /api/v1/admin/products?surveyId=<surveyId>`、`GET /api/v1/admin/products/{productId}`、`PUT /api/v1/admin/products/{productId}/draft`、`POST /api/v1/admin/products/{productId}/publish` 和 `GET /api/v1/admin/products/{productId}/history`。产品 ID 固定由 `surveyId + releaseId + product name` 生成；流程图节点的实现引用由 recipe 固定，管理员只能修改解释文本和证据链接。产品记录包含已发布 coverage layer 的可用 HEALPix order。
 
+`GET /api/v1/admin/products?view=surveys` 是管理页审核入口。它按公共 `survey -> release -> product` 返回与 `/api/v1/surveys` 同源的名称、mission、描述、图片、modalities、统计、coverage orders 和产品状态；每个产品只附加 `review.state`、草稿/发布 revision、时间戳和当前 coverage 投影。它不会返回 input manifest、normalized scan、task snapshot、evidence 内容或内部路径。存在于 Assets 编辑存储但不再匹配公共 catalog 的产品会放在 `unmatchedProducts` 中，不会静默丢失。
+
 ### Public product dossier and evidence
 
 ```http
@@ -187,6 +191,53 @@ builds a structured projection from the catalog, current layer registry and
 allowlisted release assets.
 
 ## Admin Scan Requests
+
+### MOC Discovery And Review
+
+管理员 MOC 接口需要同样的令牌：
+
+```http
+GET  /api/v1/admin/moc-discovery
+POST /api/v1/admin/moc-discovery
+GET  /api/v1/admin/moc-discovery/{name}
+POST /api/v1/admin/moc-discovery/{name}/resubmit
+GET  /api/v1/admin/moc-discovery/{name}/reviews
+POST /api/v1/admin/moc-discovery/{name}/reviews
+```
+
+创建请求只提交巡天、Release/产品提示，或可选的 `productId`/`workContext`。
+Assets 为 MOC 探查和文件扫描写入同一个稳定的 work identity/title annotation，
+因此 02A 可以把不同 attempt 聚合到同一产品工作项。列表响应只包含 phase、计数和
+evidence 引用；单项详情才包含 Warehouse 投影的有界 `status.reviewSummary`：候选、
+probe、URL、响应哈希和空间 MOC 校验摘要。完整响应仍在 Warehouse evidence 中。
+
+审核 POST 只允许提交 `candidateId`、可选 `probeId`、决定和备注。服务端会重新从
+当前 Warehouse status 解析 URL/哈希并拒绝不存在或被篡改的 candidate/probe；
+`ready-for-build` 必须是成功 request 中 `ok=true` 且 `validation.acceptedSpatialMoc=true`
+的 probe。旧版成功但没有 `reviewSummary` 的请求会明确返回缺失状态，需通过
+`resubmit` 创建新的不可变探查 attempt；原请求和 evidence 保留。合法的零候选/零 probe
+结果与摘要缺失是两种不同状态，截断也会单独标明。
+
+### Admin Connectors
+
+管理员 Connector 接口需要 `Authorization: Bearer <admin-token>`：
+
+```http
+GET  /api/v1/admin/connectors
+POST /api/v1/admin/connectors
+POST /api/v1/admin/connectors/{name}/probe
+```
+
+Connector 是 Assets 管理的配置对象，不是 Warehouse `ScanRequest`。列表和创建
+响应的 `phase` 初始为 `NOT_CHECKED`，因为 ConfigMap 不保存连接状态。只有点击
+单个 Connector 后才执行一次按需探测；对象存储使用引用 Secret 中的凭据发送
+`ListObjectsV2`，本地 Connector 检查同 namespace 的授权源 PVC 是否存在、带有
+`atlas.zhejianglab.org/scanner-source=true` 标签且为 `Bound`。探测结果的
+`phase` 为 `READY`、`PENDING` 或 `ERROR`，并带有脱敏 `message` 和 `checkedAt`。
+
+探测结果只在当前浏览器页面内存中展示，不写入 ConfigMap、Secret、ScanRequest、
+日志或 evidence；刷新页面后会重新显示 `NOT_CHECKED`。错误响应不会返回凭据、签名
+或 Authorization header。
 
 管理员控制面使用产品 recipe 生成 ScanPlan v2。任务接口为
 `GET|POST /api/v1/admin/tasks`、`GET /api/v1/admin/tasks/{name}` 和

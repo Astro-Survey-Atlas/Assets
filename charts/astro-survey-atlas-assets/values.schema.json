@@ -59,7 +59,6 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "warehouseNamespace": { "type": "string", "minLength": 1 },
-        "localPathRoot": { "type": "string", "minLength": 1 },
         "warehouseScannerImage": { "type": "string", "minLength": 1 },
         "warehouseEvidenceClaim": { "type": "string", "minLength": 1 },
         "warehouseEvidenceMountPath": { "type": "string", "pattern": "^/[^\\s]*$" },
@@ -72,7 +71,7 @@
           "required": ["name", "key"]
         }
       },
-      "required": ["enabled", "warehouseNamespace", "localPathRoot", "warehouseScannerImage", "warehouseEvidenceClaim", "warehouseEvidenceMountPath", "adminTokenSecret"]
+      "required": ["enabled", "warehouseNamespace", "warehouseScannerImage", "warehouseEvidenceClaim", "warehouseEvidenceMountPath", "adminTokenSecret"]
     },
     "warehouse": {
       "type": "object",

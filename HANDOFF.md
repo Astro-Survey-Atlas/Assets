@@ -1,6 +1,6 @@
 # Assets Session Handoff
 
-Updated: 2026-08-28
+Updated: 2026-08-30
 
 Repository: `/home/aaron/Repo/Astro-Survey-Atlas-Assets`
 
@@ -66,9 +66,24 @@ diffs before editing them.
 - If Warehouse Elasticsearch is unavailable during a reload/startup, the
   server falls back to checked-in public geometry and reports degraded mode in
   catalog status.
-- The admin path emits Warehouse ScanPlan v2 requests. It supports connector
-  registration, product/profile-driven task creation, task detail, evidence
-  summaries and immutable retry resources; it does not scan data in Assets.
+- The admin path emits Warehouse ScanPlan v2 requests. It supports remote S3/OSS
+  connectors plus local connectors that reference a Warehouse Infra-managed,
+  scanner-authorized PVC and optional relative base path. Local task paths are
+  translated under the read-only `/data` mount; Assets never creates hostPath
+  PV/PVC resources. The admin path supports product/profile-driven task
+  creation, task detail, evidence summaries and immutable retry resources; it
+  does not scan data in Assets.
+- The admin workspace groups task and MOC attempts by the shared work identity:
+  02A shows one latest-result summary, 02B is the public MOC discovery/review
+  queue, and 02C is the file-scan execution history with task creation beside
+  its heading. Product review is grouped as survey cards that expand to
+  release/product rows sourced from the same public survey index; unmatched
+  editor records remain visible in an editorial queue.
+- Connector ConfigMaps do not carry runtime status. The admin list therefore
+  reports `NOT_CHECKED`; clicking one Connector runs a bounded, read-only
+  object-store or authorized-PVC probe and returns transient `READY`, `PENDING`
+  or `ERROR` data with a redacted message and `checkedAt`. Probe results stay
+  in the current page only and are never written to Kubernetes or evidence.
 - `src/moc-sources/source-registry.json` records eight reviewed public MOC
   sources. Four (SkyMapper DR4, KiDS DR5, VISTA VIKING J, and DECaLS DR5)
   now have locked CDS snapshots and generated Core layers; Gaia, eRASS1,
@@ -103,6 +118,31 @@ loaded the deployed bundle, entered G mode with CSST/DESI, rendered
 `COMMON ORDER O8 · 11,119 CELLS`, and opened the overlap drawer without new
 runtime exceptions.
 
+The 2026-08-30 admin review/work-identity change is green locally: `npm run validate`
+passes 67 Node tests and the Core wheel verification, with `helm lint` and
+`git diff --check` clean. The admin API now exposes the transient
+`POST /api/v1/admin/connectors/{name}/probe` result. A standalone Chromium smoke
+checked the admin workspace at 1440x900 and 390x844; no horizontal overflow was
+observed, and the product public-facts block remains inside its dialog form.
+
+The same build was deployed as Helm revision 88 with image tag
+`0.1.0-20260830-100849`. Rollout completed with one healthy Pod; direct Service
+and Ingress `/healthz` checks returned 200 with bundle
+`b8fef8f5306f1419a683c7b4dc8041577820a8e1e819d8da3692fc93ca08c461`. The
+live `/api/v1/assets` response contains 211 files, `/api/v1/coverage` contains
+56 footprints, and a DESI FITS asset returned `206 Partial Content` with a
+correct `Content-Range` and `X-Content-SHA256`.
+
+On 2026-08-30 the Warehouse MOC discovery status path was repaired and Assets
+was redeployed as Helm revision 89 with image tag `0.1.0-20260830-110326`.
+The Warehouse discovery worker now uses the CDS MOCServer filter API instead of
+the unsupported ADQL request. The verified JWST request
+`jwst-moc-discovery-fix-20260830114238` is `SUCCEEDED` with 16 candidates, 10
+probes, and 10 accepted spatial MOCs. Assets now normalizes empty arrays
+omitted by Kubernetes serialization while still treating a missing summary
+object as unreviewable; the earlier ADQL 0/0 attempts remain visible as
+historical records.
+
 At the earlier live cluster checkpoint on 2026-08-26, Warehouse held 13 layer
 documents, 11 FileAssets, and 2,109 coverage edges. The final bounded smoke
 layers were:
@@ -135,6 +175,24 @@ ACTIVE layers from the current Warehouse endpoint; while the CSST retry is
 plus the ACTIVE CSST, DESI, Euclid and Assets-owned controlled smoke layers.
 The 2026-08-28 rollout activated the rebuilt bundle; object-store publication
 remains disabled, so the service still reads the verified PVC release.
+
+On 2026-08-29 the local-source contract was completed and verified in the
+development cluster. Warehouse Infra revision 2 now owns the scanner source
+PVC `atlas-source-catalogs` (1800Gi, ReadOnlyMany, static NFS export
+`10.15.49.212:/mnt/data/catalogs`) with the scanner authorization label. Assets
+revision 87 uses the PVC-aware scanner image and no longer creates PV/PVC or
+accepts node-specific host paths. The local Connector
+`cosmos-parameter-prediction-source` references that claim with base path
+`cosmos-parameter-prediction`.
+
+The bounded COSMOS CSV task `cosmos-parameter-prediction-catalog-20260829`
+completed successfully through the Assets admin API: one discovered file,
+298,232 valid catalog rows, 19 explicit order-8 coverage records and zero
+errors. Its read-only source mount was `/data` with subPath
+`cosmos-parameter-prediction`; evidence includes source inventory, normalized
+scan, errors and summary on `atlas-evidence-smoke`. Operator image
+`0.2.0-20260829-pvc2` also protects terminal ScanRequests from being recreated
+when an Operator rollout changes the execution hash.
 The current bounded smoke covers catalog/block reads, CSST/DESI,
 Euclid/DESI and 2MASS/SDSS overlap, overlap details, reverse lookup, and FITS
 Range reads.
@@ -171,8 +229,8 @@ fixture remains pinned to MOC-Core-SDK commit `2ebc395`.
 ## Live Deployment Layout
 
 Assets is a separate Helm release in namespace `astro-survey-atlas-assets`.
-The current dev rollout is Helm revision 84, image tag
-`0.1.0-20260828-215713`, and serves through:
+The current dev rollout is Helm revision 89, image tag
+`0.1.0-20260830-110326`, and serves through:
 
 ```text
 http://10.15.51.75:32083/
@@ -197,9 +255,9 @@ The public site serves through the `astro-survey-atlas-assets` Service/Ingress.
 The release PVC contains the static public bundle used for fallback and
 publication. The current runtime bundle is
 `public-survey-footprints-2026-08-20`, SHA-256
-`25e7cce23e1ffe5dc25fe37204002b099e573d82646d1c2524fe24802390f5c7`, with
+`b8fef8f5306f1419a683c7b4dc8041577820a8e1e819d8da3692fc93ca08c461`, with
 211 manifest files. The init container completed successfully; the image
-digest is `sha256:51316b282ce0082dd81654ee4aa74f3679d26493dd70391b426b907a6f6d7904`.
+digest is `sha256:1dd5a2b478a451895b5d0ed17c401b75744a246ea4f1980867e2c9bbbf91adaf`.
 
 The Gaia O8-only Warehouse layers are included in the globe's O4 visual
 overview by NESTED coarsening, while their API coverage remains explicitly O8.
@@ -255,8 +313,8 @@ Work in this order:
    mode, timestamp, counts and Warehouse connectivity.
 5. The long Warehouse task is no longer active. The `mocdiscovery` Operator
    rollout and evidence/status path are verified; retain the completed Gaia,
-   SkyMapper, KiDS, VISTA VIKING, and DECaLS discovery evidence while Assets
-   continues to submit intent-only requests.
+   SkyMapper, KiDS, VISTA VIKING, DECaLS, and JWST discovery evidence while
+   Assets continues to submit intent-only requests.
 6. Rerun direct catalog, overlap, details and reverse-lookup smokes against
    bounded CSST, DESI and Euclid layers after future Warehouse image or
    mapping changes. Keep failed ScanRequests and evidence for diagnosis.
@@ -264,11 +322,14 @@ Work in this order:
 ## Warehouse MOC Discovery Rollout
 
 MOC discovery CRD/Operator/worker integration is implemented and validated.
-The 2026-08-28 SkyMapper, KiDS, VISTA VIKING, and DECaLS requests all reached
-`SUCCEEDED`; their CDS ObsCore searches returned HTTP 200 with empty bodies
-(`candidateCount=0`, `probeCount=0`). The empty candidate result is retained as
-bounded evidence and does not invalidate the separately reviewed CDS records
-used for the four acquired Assets layers.
+The 2026-08-28 SkyMapper, KiDS, VISTA VIKING, and DECaLS requests used the old
+CDS ObsCore ADQL endpoint and returned HTTP 200 with empty bodies
+(`candidateCount=0`, `probeCount=0`); those results are retained as historical
+evidence, not as proof that the surveys lack public MOCs. The corrected JWST
+request `jwst-moc-discovery-fix-20260830114238` uses the CDS MOCServer filter
+API and returned 16 candidates plus 10 accepted spatial probes. Empty or
+malformed responses are now recorded as protocol evidence, while a parsed,
+non-truncated empty record set remains a valid zero-result query.
 The CRD is installed and the live Operator runs the pushed
 `mocdiscovery` image. The previously blocking CSST long task has reached a
 terminal deadline failure and remains separate from the evidence-only

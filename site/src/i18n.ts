@@ -211,7 +211,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "home.enter": "进入天球",
     "home.directory": "巡天目录",
     "home.why": "WHY THIS EXISTS",
-    "home.reason": "找到数据不该意味着在 archive、MOC 和文件命名之间反复猜测。Atlas 先回答“哪里重合”，再把你带到真实的 Release、源文件和下载入口。",
+    "home.reason": "找到数据不该意味着在 archive、MOC 和文件命名之间反复猜测。Assets 先回答“哪里重合”，再把你带到真实的 Release、源文件和下载入口。",
     "home.coordinates": "COORDINATES",
     "home.pixelOrder": "PIXEL ORDER",
     "home.releases": "RELEASES",

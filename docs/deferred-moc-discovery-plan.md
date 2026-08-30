@@ -1,12 +1,13 @@
 # Deferred Warehouse MOC Discovery
 
-Status: implementation resumed on 2026-08-26; live Operator rollout waits for
-the Warehouse long task to reach a terminal state.
+Status: implemented and verified on 2026-08-30; the live Operator and discovery
+worker are deployed with the CDS MOCServer filter API.
 
 The implementation is intentionally outside the Assets runtime boundary.
-Assets does not execute discovery or own the Operator. The Warehouse CRD,
-worker, RBAC and deployment changes are prepared and validated, but the live
-Operator is not restarted while the current long scan is active.
+Assets does not execute discovery or own the Operator. Warehouse owns the CRD,
+worker, RBAC and deployment; the bounded JWST verification request returned 16
+candidates and 10 accepted spatial probes. Empty or malformed upstream bodies
+are retained as protocol evidence and are not reported as a valid empty query.
 
 When resumed, Warehouse will own a typed `MocDiscoveryRequest` for `search` and
 `probe` against the allowlisted CDS MocServer. Its Operator and a dedicated

@@ -10,7 +10,8 @@ export type MocDiscoveryDecision = "pending" | "ready-for-build" | "rejected";
 export interface MocDiscoveryReviewInput {
   provider?: string;
   candidateId: string;
-  sourceSnapshotSha256: string;
+  probeId?: string;
+  sourceSnapshotSha256?: string;
   decision: MocDiscoveryDecision;
   sourceUrl?: string;
   mocUrl?: string;
@@ -24,6 +25,56 @@ export interface MocDiscoveryReview extends MocDiscoveryReviewInput {
   revision: number;
   reviewedAt: string;
 }
+
+export interface MocCandidateSummary {
+  candidateId: string;
+  title?: string;
+  recordUrl?: string;
+  mocUrl?: string;
+  hipsUrl?: string;
+  [key: string]: unknown;
+}
+
+export interface MocProbeValidationSummary {
+  format?: string;
+  timeLoss?: string;
+  icrs?: boolean;
+  nested?: boolean;
+  mocDimension?: boolean;
+  stmoc?: boolean;
+  acceptedSpatialMoc?: boolean;
+  maxOrder?: number;
+  [key: string]: unknown;
+}
+
+export interface MocProbeSummary {
+  probeId: string;
+  candidateId: string;
+  kind: string;
+  url: string;
+  status?: number;
+  bytes?: number;
+  ok: boolean;
+  sha256?: string;
+  evidenceRef?: string;
+  contentType?: string;
+  error?: string;
+  validation?: MocProbeValidationSummary;
+  [key: string]: unknown;
+}
+
+export interface MocReviewSummary {
+  schemaVersion: 1;
+  truncated: boolean;
+  summaryTruncated: boolean;
+  candidates: MocCandidateSummary[];
+  probes: MocProbeSummary[];
+}
+
+type MocDiscoveryRequestLike = {
+  name?: string;
+  status?: Record<string, unknown> & { reviewSummary?: unknown };
+};
 
 const configuredContentRoot = process.env.ASSETS_CONTENT_ROOT
   ? path.resolve(process.env.ASSETS_CONTENT_ROOT)
@@ -56,8 +107,11 @@ function reviewInput(value: unknown): MocDiscoveryReviewInput {
   const provider = optionalText(input.provider, "provider", 32) ?? MOC_DISCOVERY_PROVIDER;
   if (provider !== MOC_DISCOVERY_PROVIDER) throw new AdminHttpError(400, "provider is unsupported");
   const candidateId = text(input.candidateId, "candidateId", 512);
-  const sourceSnapshotSha256 = text(input.sourceSnapshotSha256, "sourceSnapshotSha256", 128).toLowerCase();
-  if (!/^[a-f0-9]{64}$/.test(sourceSnapshotSha256)) throw new AdminHttpError(400, "sourceSnapshotSha256 must be a 64-character SHA-256");
+  const probeId = optionalText(input.probeId, "probeId", 128)?.toLowerCase();
+  if (probeId && !/^[a-f0-9]{64}$/.test(probeId)) throw new AdminHttpError(400, "probeId must be a 64-character SHA-256");
+  const rawSnapshot = optionalText(input.sourceSnapshotSha256, "sourceSnapshotSha256", 128);
+  const sourceSnapshotSha256 = rawSnapshot?.toLowerCase();
+  if (sourceSnapshotSha256 && !/^[a-f0-9]{64}$/.test(sourceSnapshotSha256)) throw new AdminHttpError(400, "sourceSnapshotSha256 must be a 64-character SHA-256");
   const decision = text(input.decision, "decision", 32) as MocDiscoveryDecision;
   if (!["pending", "ready-for-build", "rejected"].includes(decision)) throw new AdminHttpError(400, "decision is unsupported");
   const sourceUrl = publicUrl(input.sourceUrl, "sourceUrl");
@@ -67,7 +121,8 @@ function reviewInput(value: unknown): MocDiscoveryReviewInput {
   return {
     provider,
     candidateId,
-    sourceSnapshotSha256,
+    ...(probeId ? { probeId } : {}),
+    ...(sourceSnapshotSha256 ? { sourceSnapshotSha256 } : {}),
     decision,
     ...(sourceUrl ? { sourceUrl } : {}),
     ...(mocUrl ? { mocUrl } : {}),
@@ -98,10 +153,11 @@ export class MocDiscoveryReviewStore {
 
   async add(requestName: string, value: unknown): Promise<MocDiscoveryReview> {
     const input = reviewInput(value);
+    if (input.decision === "ready-for-build" && !input.sourceSnapshotSha256) throw new AdminHttpError(400, "ready-for-build requires a verified source snapshot");
     const append = async (): Promise<MocDiscoveryReview> => {
       const previous = await this.list(requestName);
-      const key = `${input.provider}:${input.candidateId}:${input.sourceSnapshotSha256}`;
-      const revision = previous.filter((entry) => `${entry.provider}:${entry.candidateId}:${entry.sourceSnapshotSha256}` === key).length + 1;
+      const key = `${input.provider}:${input.candidateId}:${input.sourceSnapshotSha256 ?? "no-snapshot"}`;
+      const revision = previous.filter((entry) => `${entry.provider}:${entry.candidateId}:${entry.sourceSnapshotSha256 ?? "no-snapshot"}` === key).length + 1;
       const record: MocDiscoveryReview = { ...input, provider: input.provider ?? MOC_DISCOVERY_PROVIDER, requestName, revision, reviewedAt: new Date().toISOString() };
       await mkdir(this.#root, { recursive: true });
       await appendFile(this.#file(), `${JSON.stringify(record)}\n`, "utf8");
@@ -111,6 +167,73 @@ export class MocDiscoveryReviewStore {
     this.#writeQueue = result.then(() => undefined, () => undefined);
     return result;
   }
+}
+
+function summaryFromRequest(request: MocDiscoveryRequestLike): MocReviewSummary | undefined {
+  const rawStatus = request.status ?? {};
+  const rawSummary = rawStatus.reviewSummary;
+  if (!rawSummary || typeof rawSummary !== "object" || Array.isArray(rawSummary)) return undefined;
+  const value = rawSummary as Record<string, unknown>;
+  if (value.schemaVersion !== 1 || typeof value.truncated !== "boolean" || typeof value.summaryTruncated !== "boolean") return undefined;
+  if (!Array.isArray(value.candidates) || !Array.isArray(value.probes)) return undefined;
+  const candidates = value.candidates.filter((entry): entry is MocCandidateSummary => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const item = entry as Record<string, unknown>;
+    return typeof item.candidateId === "string" && item.candidateId.length > 0;
+  });
+  const probes = value.probes.filter((entry): entry is MocProbeSummary => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const item = entry as Record<string, unknown>;
+    return typeof item.probeId === "string" && /^[a-f0-9]{64}$/.test(item.probeId)
+      && typeof item.candidateId === "string" && typeof item.kind === "string"
+      && typeof item.url === "string" && typeof item.ok === "boolean";
+  });
+  if (candidates.length !== value.candidates.length || probes.length !== value.probes.length) return undefined;
+  return { schemaVersion: 1, truncated: value.truncated, summaryTruncated: value.summaryTruncated, candidates, probes };
+}
+
+function sameOptional(left: string | undefined, right: string | undefined): boolean {
+  return left === undefined || left === right;
+}
+
+/** Resolve a review against the authoritative, bounded summary projected by Warehouse. */
+export function resolveMocDiscoveryReview(request: MocDiscoveryRequestLike, value: unknown): MocDiscoveryReviewInput {
+  const input = reviewInput(value);
+  const summary = summaryFromRequest(request);
+  if (!summary) throw new AdminHttpError(409, "MOC discovery review summary is unavailable; resubmit the discovery request");
+  const candidate = summary.candidates.find((entry) => entry.candidateId === input.candidateId);
+  if (!candidate) throw new AdminHttpError(400, "candidateId is not present in the discovery result");
+  const probes = summary.probes.filter((entry) => entry.candidateId === candidate.candidateId);
+  const probe = input.probeId ? probes.find((entry) => entry.probeId === input.probeId) : undefined;
+  if (input.probeId && !probe) throw new AdminHttpError(400, "probeId is not present for the selected candidate");
+  const phase = String(request.status?.phase ?? "").toUpperCase();
+  const probeHash = probe && typeof probe.sha256 === "string" && /^[a-f0-9]{64}$/.test(probe.sha256) ? probe.sha256 : undefined;
+  if (input.sourceSnapshotSha256 && input.sourceSnapshotSha256 !== probeHash) throw new AdminHttpError(400, "sourceSnapshotSha256 does not match the selected Warehouse probe");
+  if (input.decision === "ready-for-build") {
+    const accepted = probe?.ok === true && probeHash && probe.validation?.acceptedSpatialMoc === true;
+    if (phase !== "SUCCEEDED" || !accepted) throw new AdminHttpError(409, "ready-for-build requires a successful probe with acceptedSpatialMoc=true");
+  }
+
+  const sourceUrl = candidate.recordUrl;
+  const candidateMocUrl = candidate.mocUrl;
+  const candidateHipsUrl = candidate.hipsUrl;
+  const mocUrl = probe?.kind === "mocUrl" ? probe.url : candidateMocUrl;
+  const hipsUrl = probe?.kind === "hipsUrl" ? probe.url : candidateHipsUrl;
+  const authoritativeProbeUrl = probe?.kind === "recordUrl" ? probe.url : undefined;
+  if (!sameOptional(input.sourceUrl, sourceUrl) || !sameOptional(input.mocUrl, mocUrl) || !sameOptional(input.hipsUrl, hipsUrl)) {
+    throw new AdminHttpError(400, "review URLs must match the selected Warehouse candidate/probe");
+  }
+  return {
+    provider: input.provider,
+    candidateId: candidate.candidateId,
+    ...(probe ? { probeId: probe.probeId } : {}),
+    ...(probeHash ? { sourceSnapshotSha256: probeHash } : {}),
+    decision: input.decision,
+    ...(sourceUrl ? { sourceUrl } : {}),
+    ...(mocUrl ?? authoritativeProbeUrl ? { mocUrl: mocUrl ?? authoritativeProbeUrl } : {}),
+    ...(hipsUrl ? { hipsUrl } : {}),
+    ...(input.notes ? { notes: input.notes } : {}),
+  };
 }
 
 export function validateMocDiscoveryRequestName(value: string): string {

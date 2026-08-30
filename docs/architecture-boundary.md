@@ -9,19 +9,29 @@
 
 | 组件 | 负责 | 不负责 |
 | --- | --- | --- |
-| Assets | 公共 survey/release/product/layer 注册；用 ConfigMap + Secret 管理远程 Connector；提交一次性 `ScanRequest`；读取任务状态；调用并发布 MOC-Core-SDK 产物；Resource Package、manifest、provenance、catalog、产品 dossier、证据摘要和只读下载 API | Atlas 用户资产、Atlas 任务历史和 Atlas API；Warehouse 的内部实现；TAP/ObsCore/SIA 服务实现 |
+| Assets | 公共 survey/release/product/layer 注册；用 ConfigMap + Secret 管理远程 Connector，用 ConfigMap 只引用 Warehouse Infra 提供的授权源 PVC；提交一次性 `ScanRequest`；读取任务状态；调用并发布 MOC-Core-SDK 产物；Resource Package、manifest、provenance、catalog、产品 dossier、证据摘要和只读下载 API | Atlas 用户资产、Atlas 任务历史和 Atlas API；Warehouse 的内部实现；TAP/ObsCore/SIA 服务实现；创建 PV/PVC 或接受任意 hostPath/NFS 配置 |
 | Warehouse | 接收 `atlas.zhejianglab.org/v1alpha1/ScanRequest`；校验并执行嵌入的 ScanPlan v2；维护 Operator status；提供 scanner 的执行合同和当前 `ast_*` 索引 | Assets 的 catalog 激活、MOC Core、Resource Package 发布；不规定所有任务的统一 sink |
 | Workspace | 独立的用户资产、Connector、任务历史、查询索引和前端；可独立向 Warehouse 提交用户任务；安装并验证 Assets 公共资源包 | Assets 的公共发布、Warehouse scanner/operator、把用户记录写回 Assets |
 | MOC-Core-SDK | 共享离线科学实现、ICRS/NESTED 规范化、FITS MOC、固定 order 投影、provenance 和 Resource Package v3；发布 Python wheel 与跨语言 fixture | 在线 API、远程 connector、Kubernetes 执行、用户数据或公共 release 决策 |
 
 Assets 管理输入是产品/layer、Connector 名称、源前缀和 ScanPlan 参数。服务端
 从 Connector ConfigMap 读取非敏感元数据，从同名 Secret 只引用
-`accessKey`/`secretKey`，然后生成标准 `ScanRequest`。ScanPlan v2 是
+`accessKey`/`secretKey`，或者读取 Warehouse Infra 已授权源 PVC 的名称和相对
+`basePath`，然后生成标准 `ScanRequest`。ScanPlan v2 是
 data-warehouse 的公开执行合同，不是 Assets 或 Atlas 的数据库模型；凭据值永远
 不进入 plan、ConfigMap、日志或响应。
 
+本地扫描的 `sourcePaths[0]` 必须是相对于 Connector `basePath` 的 POSIX 路径；
+Assets 将其映射为 `/data/<relative-path>`，并设置只读
+`scanner.sourceVolume`。Assets 不创建 PV/PVC，也不接受节点名、hostPath、NFS
+服务器或导出路径。Warehouse Operator 和 Assets 都会在执行前确认 PVC 存在、带有
+`atlas.zhejianglab.org/scanner-source=true` 标签且处于 `Bound` 状态。
+
 Assets 管理页只读取自己提交的 CRD status。status 是 data-warehouse operator
-对单个 CRD 的运行观测，不是三方共享的任务历史或业务状态。
+对单个 CRD 的运行观测，不是三方共享的任务历史或业务状态。Connector ConfigMap
+本身没有运行 status：列表显示 `NOT_CHECKED`，用户点击单个 Connector 时，Assets
+才临时探测对象存储或授权源 PVC。探测使用 Secret 的凭据但不把凭据写入响应、日志
+或 evidence；结果只保留在当前页面内存，刷新后重新探测。
 
 公共产品有两层出口：`/api/v1/products` 是保持兼容的已发布列表；产品详情和
 `/evidence` 是按需加载的面向人的 dossier。详情把覆盖结论、真实 order、来源、

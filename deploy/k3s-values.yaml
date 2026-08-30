@@ -15,7 +15,7 @@ warehouse:
 admin:
   enabled: true
   warehouseNamespace: atlas-warehouse
-  warehouseScannerImage: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260826-shutdownfix1
+  warehouseScannerImage: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260829-pvc1
   warehouseEvidenceClaim: atlas-evidence-smoke
   warehouseEvidenceMountPath: /var/lib/atlas-evidence
   adminTokenSecret:

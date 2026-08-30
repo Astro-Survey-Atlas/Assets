@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
+import { createServer } from "node:http";
 import { mkdtemp } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
@@ -223,6 +224,174 @@ test("admin endpoints require a token and expose the configured control-plane bo
   assert.equal(products.status, 200);
   const productBody = await products.json() as { products: Array<{ productId: string }> };
   assert.ok(productBody.products.length > 0);
+
+  const surveyView = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products?view=surveys`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(surveyView.status, 200);
+  const surveyViewText = await surveyView.text();
+  const surveyViewBody = JSON.parse(surveyViewText) as { surveys: Array<{ id: string; releases: Array<{ id: string; products: Array<{ productId: string; review?: { state: string } }> }>; unmatchedProducts?: unknown[] }> };
+  assert.ok(surveyViewBody.surveys.length > 0);
+  const csst = surveyViewBody.surveys.find((survey) => survey.id === "csst");
+  assert.ok(csst);
+  assert.ok(csst.releases.length > 0 && csst.releases.every((release) => release.products.length > 0));
+  assert.ok(csst.releases.flatMap((release) => release.products).every((product) => product.productId && product.review?.state));
+  assert.doesNotMatch(surveyViewText, /normalized-scan|taskSnapshot|\/var\/lib|elasticsearch|input-manifest/i);
+});
+
+test("MOC discovery HTTP routes expose review summaries, reject forged choices and require explicit retry", async (context) => {
+  const kubePort = await freePort();
+  const probeId = "a".repeat(64);
+  const sourceHash = "b".repeat(64);
+  const resource = {
+    apiVersion: "atlas.zhejianglab.org/v1alpha1",
+    kind: "MocDiscoveryRequest",
+    metadata: {
+      name: "jwst-moc-discovery",
+      namespace: "atlas-warehouse",
+      creationTimestamp: "2026-08-30T01:00:00.000Z",
+      labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" },
+      annotations: { "assets.atlas.zhejianglab.org/work-ref": JSON.stringify({ key: "product:jwst-dr1", title: "JWST · DR1 · Public MOC", surveyId: "jwst", releaseId: "dr1", productId: "jwst-dr1" }) },
+    },
+    spec: { query: { surveyName: "JWST", releaseHint: "DR1" }, policyRef: "cds-public-moc-v1" },
+    status: {
+      phase: "SUCCEEDED",
+      candidateCount: 1,
+      probeCount: 1,
+      reviewSummary: {
+        schemaVersion: 1,
+        truncated: false,
+        summaryTruncated: false,
+        candidates: [{ candidateId: "jwst-dr1", title: "JWST DR1", recordUrl: "https://alasky.cds.unistra.fr/jwst" }],
+        probes: [{ probeId, candidateId: "jwst-dr1", kind: "mocUrl", url: "https://alasky.cds.unistra.fr/jwst/moc.fits", ok: true, sha256: sourceHash, validation: { acceptedSpatialMoc: true, icrs: true, nested: true } }],
+      },
+    },
+  };
+  let retryResource: Record<string, unknown> | undefined;
+  const kubeServer = createServer(async (request, response) => {
+    const pathname = new URL(request.url ?? "/", "http://kubernetes").pathname;
+    response.setHeader("Content-Type", "application/json");
+    if (pathname.endsWith("/mocdiscoveryrequests") && request.method === "GET") {
+      response.writeHead(200);
+      response.end(JSON.stringify({ items: [resource] }));
+      return;
+    }
+    if (pathname.endsWith("/mocdiscoveryrequests/jwst-moc-discovery") && request.method === "GET") {
+      response.writeHead(200);
+      response.end(JSON.stringify(resource));
+      return;
+    }
+    if (pathname.endsWith("/mocdiscoveryrequests") && request.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      retryResource = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+      response.writeHead(201);
+      response.end(JSON.stringify({ ...retryResource, metadata: { ...(retryResource.metadata as Record<string, unknown>), creationTimestamp: "2026-08-30T01:01:00.000Z" } }));
+      return;
+    }
+    response.writeHead(404);
+    response.end(JSON.stringify({ message: "not found" }));
+  });
+  await new Promise<void>((resolve, reject) => { kubeServer.once("error", reject); kubeServer.listen(kubePort, "127.0.0.1", () => resolve()); });
+  context.after(() => { kubeServer.close(); });
+
+  const contentRoot = await mkdtemp(path.join(os.tmpdir(), "assets-moc-http-"));
+  const port = await freePort();
+  const child = spawn(process.execPath, [path.resolve("node_modules/tsx/dist/cli.mjs"), "server/server.ts"], {
+    cwd: process.cwd(),
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), PUBLIC_SITE_ROOT: path.resolve("site"), ASSETS_CONTENT_ROOT: contentRoot, ASSETS_ADMIN_ENABLED: "true", ASSETS_ADMIN_TOKEN: "test-admin-token", ASSETS_KUBE_API_URL: `http://127.0.0.1:${kubePort}`, ASSETS_KUBE_TOKEN: "kube-token", ASSETS_WAREHOUSE_NAMESPACE: "atlas-warehouse" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  context.after(() => { child.kill("SIGTERM"); });
+  await waitFor(`http://127.0.0.1:${port}/healthz`, child);
+
+  const list = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-discovery`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(list.status, 200);
+  const listText = await list.text();
+  assert.doesNotMatch(listText, /candidates|probes|https:\/\/alasky/);
+  const detail = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-discovery/jwst-moc-discovery`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(detail.status, 200);
+  const detailBody = await detail.json() as { request: { workKey?: string; workTitle?: string; status: { reviewSummary?: { candidates: unknown[]; probes: unknown[] } } } };
+  assert.equal(detailBody.request.workKey, "product:jwst-dr1");
+  assert.equal(detailBody.request.workTitle, "JWST · DR1 · Public MOC");
+  assert.equal(detailBody.request.status.reviewSummary?.candidates.length, 1);
+  assert.equal(detailBody.request.status.reviewSummary?.probes.length, 1);
+
+  const forged = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-discovery/jwst-moc-discovery/reviews`, { method: "POST", headers: { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" }, body: JSON.stringify({ candidateId: "invented", decision: "rejected" }) });
+  assert.equal(forged.status, 400);
+  const review = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-discovery/jwst-moc-discovery/reviews`, { method: "POST", headers: { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" }, body: JSON.stringify({ candidateId: "jwst-dr1", probeId, decision: "ready-for-build" }) });
+  assert.equal(review.status, 201);
+  const reviewBody = await review.json() as { review: { sourceSnapshotSha256?: string; mocUrl?: string; sourceUrl?: string } };
+  assert.equal(reviewBody.review.sourceSnapshotSha256, sourceHash);
+  assert.equal(reviewBody.review.sourceUrl, "https://alasky.cds.unistra.fr/jwst");
+  assert.equal(reviewBody.review.mocUrl, "https://alasky.cds.unistra.fr/jwst/moc.fits");
+
+  const retry = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-discovery/jwst-moc-discovery/resubmit`, { method: "POST", headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(retry.status, 201);
+  const retryBody = await retry.json() as { request: { name: string; status: Record<string, unknown> } };
+  assert.match(retryBody.request.name, /^jwst-moc-discovery-retry-/);
+  assert.equal(retryBody.request.status.phase, "PENDING");
+  assert.equal(retryBody.request.status.reviewSummaryState, "missing");
+  assert.ok(retryResource);
+  assert.equal((retryResource!.metadata as Record<string, unknown>).annotations && ((retryResource!.metadata as Record<string, unknown>).annotations as Record<string, string>)["assets.atlas.zhejianglab.org/work-ref"], resource.metadata.annotations["assets.atlas.zhejianglab.org/work-ref"]);
+  assert.equal((retryResource!.spec as Record<string, unknown>).policyRef, "cds-public-moc-v1");
+});
+
+test("admin connector probe route checks an authorized PVC without persisting its phase", async (context) => {
+  const kubePort = await freePort();
+  const kubeServer = createServer((request, response) => {
+    const pathname = new URL(request.url ?? "/", "http://kubernetes").pathname;
+    response.setHeader("Content-Type", "application/json");
+    if (pathname.endsWith("/configmaps/connector-local")) {
+      response.writeHead(200);
+      response.end(JSON.stringify({
+        apiVersion: "v1",
+        kind: "ConfigMap",
+        metadata: { name: "connector-local", namespace: "atlas-warehouse", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "connector" } },
+        data: { type: "local", pvcName: "atlas-source-catalogs", basePath: "catalogs" },
+      }));
+      return;
+    }
+    if (pathname.endsWith("/configmaps")) {
+      response.writeHead(200);
+      response.end(JSON.stringify({ items: [{ metadata: { name: "connector-local", namespace: "atlas-warehouse", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "connector" } }, data: { type: "local", pvcName: "atlas-source-catalogs", basePath: "catalogs" } }] }));
+      return;
+    }
+    if (pathname.endsWith("/persistentvolumeclaims/atlas-source-catalogs")) {
+      response.writeHead(200);
+      response.end(JSON.stringify({ metadata: { name: "atlas-source-catalogs", labels: { "atlas.zhejianglab.org/scanner-source": "true" } }, status: { phase: "Bound" } }));
+      return;
+    }
+    response.writeHead(404);
+    response.end(JSON.stringify({ message: "not found" }));
+  });
+  await new Promise<void>((resolve, reject) => { kubeServer.once("error", reject); kubeServer.listen(kubePort, "127.0.0.1", () => resolve()); });
+  context.after(() => { kubeServer.close(); });
+
+  const port = await freePort();
+  const child = spawn(process.execPath, [path.resolve("node_modules/tsx/dist/cli.mjs"), "server/server.ts"], {
+    cwd: process.cwd(),
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), PUBLIC_SITE_ROOT: path.resolve("site"), ASSETS_ADMIN_ENABLED: "true", ASSETS_ADMIN_TOKEN: "test-admin-token", ASSETS_KUBE_API_URL: `http://127.0.0.1:${kubePort}`, ASSETS_KUBE_TOKEN: "kube-token", ASSETS_WAREHOUSE_NAMESPACE: "atlas-warehouse" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  context.after(() => { child.kill("SIGTERM"); });
+  await waitFor(`http://127.0.0.1:${port}/healthz`, child);
+
+  const denied = await fetch(`http://127.0.0.1:${port}/api/v1/admin/connectors/connector-local/probe`, { method: "POST" });
+  assert.equal(denied.status, 401);
+  const probe = await fetch(`http://127.0.0.1:${port}/api/v1/admin/connectors/connector-local/probe`, { method: "POST", headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(probe.status, 200);
+  const probeBody = await probe.json() as { connector: { name: string; phase: string; checkedAt?: string; message?: string } };
+  assert.equal(probeBody.connector.name, "connector-local");
+  assert.equal(probeBody.connector.phase, "READY");
+  assert.match(probeBody.connector.checkedAt ?? "", /^20\d\d-/);
+  assert.match(probeBody.connector.message ?? "", /Bound/);
+
+  const listed = await fetch(`http://127.0.0.1:${port}/api/v1/admin/connectors`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(listed.status, 200);
+  const listedBody = await listed.json() as { connectors: Array<{ name: string; phase: string; checkedAt?: string }> };
+  assert.equal(listedBody.connectors[0]?.phase, "NOT_CHECKED");
+  assert.equal(listedBody.connectors[0]?.checkedAt, undefined);
+  const missing = await fetch(`http://127.0.0.1:${port}/api/v1/admin/connectors/missing/probe`, { method: "POST", headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(missing.status, 404);
 });
 
 test("public product dossier, evidence projection and predictable MOC URL are hash-addressed", async (context) => {

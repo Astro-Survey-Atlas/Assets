@@ -102,8 +102,6 @@ spec:
               value: {{ .Values.admin.enabled | quote }}
             - name: ASSETS_WAREHOUSE_NAMESPACE
               value: {{ .Values.admin.warehouseNamespace | quote }}
-            - name: ASSETS_LOCAL_PATH_ROOT
-              value: {{ .Values.admin.localPathRoot | quote }}
             - name: ASSETS_WAREHOUSE_SCANNER_IMAGE
               value: {{ .Values.admin.warehouseScannerImage | quote }}
             - name: ASSETS_WAREHOUSE_EVIDENCE_CLAIM
