@@ -10,13 +10,14 @@ import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
 import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog, type CoverageCellLayer } from "./coverage.js";
 import { overlapForLayers } from "./overlap.js";
-import { ProductStore, type ProductRecord } from "./products.js";
+import { ProductStore, type MocProductRegistrationInput, type ProductRecord } from "./products.js";
 import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
 import { CoverageEvidenceStore, EvidenceStoreError, type WarehouseLayerSnapshot } from "./evidence-store.js";
 import { buildOverlapDetails } from "./overlap-details.js";
-import { MocDiscoveryReviewStore, resolveMocDiscoveryReview, type MocDiscoveryReviewInput } from "./moc-discovery.js";
+import { resolveMocDiscoveryCandidate } from "./moc-discovery.js";
+import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
 import { buildPublicProductEvidence } from "./public-product-evidence.js";
-import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductVerificationStatus } from "./types.js";
+import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductVerificationStatus, PublicSurveyModality } from "./types.js";
 
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
@@ -36,6 +37,14 @@ const evidenceStore = new CoverageEvidenceStore({
   coverageIndex: process.env.ASSETS_WAREHOUSE_COVERAGE_INDEX,
   fileIndex: process.env.ASSETS_WAREHOUSE_FILE_INDEX,
 });
+const contentRoot = path.resolve(process.env.ASSETS_CONTENT_ROOT ?? "/var/lib/assets-content");
+const evidenceRoot = path.resolve(process.env.ASSETS_EVIDENCE_ROOT ?? "/var/lib/assets-evidence");
+const mocBuildStore = new MocBuildStore(contentRoot);
+await mocBuildStore.initialize();
+const mocPublicationStore = new MocPublicationStore(contentRoot, evidenceRoot);
+await mocPublicationStore.initialize();
+const publishedPublicAssets = new Map<string, { record: PublicAssetRecord; absolutePath: string }>();
+const publishedAssetIds = new Set<string>();
 let staticCoverageCatalog = await loadCoverageCatalog(releaseRoot, coverageManifest);
 let coverageCatalog = staticCoverageCatalog;
 let runtimeCoverageManifest = coverageManifest;
@@ -43,6 +52,130 @@ let coverageLoadMode: "warehouse" | "static" | "degraded" = "static";
 let coverageLoadedAt = new Date().toISOString();
 let surveyIndex!: Awaited<ReturnType<typeof loadSurveyIndex>>;
 let warehouseLayerSnapshots = new Map<string, WarehouseLayerSnapshot>();
+
+function clearPublishedAssets(): void {
+  for (const id of publishedAssetIds) catalog.files.delete(id);
+  publishedAssetIds.clear();
+  publishedPublicAssets.clear();
+}
+
+function publicationAsset(id: string, publication: MocPublication, file: MocPublicationFile, kind: PublicAssetRecord["kind"], label: string, downloadName: string): { record: PublicAssetRecord; absolutePath: string } {
+  const record: PublicAssetRecord = {
+    id,
+    kind,
+    label,
+    description: `Published MOC build ${publication.buildName}`,
+    path: file.path,
+    downloadName,
+    mediaType: file.mediaType,
+    sizeBytes: file.sizeBytes,
+    sha256: file.sha256,
+    surveyId: publication.surveyId,
+    releaseId: publication.releaseId,
+    product: publication.product,
+    deliveryClass: "runtime",
+  };
+  const entry = { record, absolutePath: mocPublicationStore.absolutePath(file) };
+  catalog.files.set(id, entry);
+  publishedAssetIds.add(id);
+  publishedPublicAssets.set(id, entry);
+  return entry;
+}
+
+async function registerPublicationAssets(publication: MocPublication): Promise<void> {
+  publicationAsset(`layer-${publication.layerId}-moc`, publication, publication.files.moc, "moc", `${publication.product} FITS MOC`, `${publication.layerId}.moc.fits`);
+  if (publication.files.query) publicationAsset(`layer-${publication.layerId}-query`, publication, publication.files.query, "geometry", `${publication.product} query projection`, `${publication.layerId}.query.json`);
+  if (publication.files.preview) publicationAsset(`layer-${publication.layerId}-preview`, publication, publication.files.preview, "geometry", `${publication.product} coverage preview`, `${publication.layerId}.preview.json`);
+  if (publication.files.statistics) publicationAsset(`layer-${publication.layerId}-statistics`, publication, publication.files.statistics, "metadata", `${publication.product} coverage statistics`, `${publication.layerId}.statistics.json`);
+  if (publication.files.manifest) publicationAsset(`layer-${publication.layerId}-manifest`, publication, publication.files.manifest, "provenance", `${publication.product} MOC build manifest`, `${publication.layerId}.build-manifest.json`);
+}
+
+async function readProjection(file: MocPublicationFile | undefined): Promise<{ order: number; pixels: number[] } | undefined> {
+  if (!file) return undefined;
+  try {
+    const value = JSON.parse(await readFile(mocPublicationStore.absolutePath(file), "utf8")) as Record<string, unknown>;
+    const order = typeof value.order === "number" && Number.isSafeInteger(value.order) && value.order >= 0 && value.order <= 29 ? value.order : Number.NaN;
+    const pixels = Array.isArray(value.pixels) ? value.pixels.filter((pixel): pixel is number => typeof pixel === "number" && Number.isSafeInteger(pixel) && pixel >= 0) : [];
+    if (!Number.isSafeInteger(order) || !pixels.length) return undefined;
+    return { order, pixels: [...new Set(pixels)].sort((a, b) => a - b) };
+  } catch { return undefined; }
+}
+
+async function publicationLayer(publication: MocPublication): Promise<CoverageCellLayer | undefined> {
+  const query = await readProjection(publication.files.query);
+  const preview = await readProjection(publication.files.preview);
+  const projections = [preview, query].filter((value): value is { order: number; pixels: number[] } => Boolean(value));
+  if (!projections.length) return undefined;
+  const cellMap = new Map<number, number[]>();
+  for (const projection of projections) if (!cellMap.has(projection.order)) cellMap.set(projection.order, projection.pixels);
+  const availableOrders = [...cellMap.keys()].sort((a, b) => a - b);
+  const overviewOrder = availableOrders[0]!;
+  const maxOrder = availableOrders[availableOrders.length - 1]!;
+  const overviewCells = cellMap.get(overviewOrder) ?? [];
+  const areaDeg2 = overviewCells.length * (41252.96124941927 / (12 * 2 ** (2 * overviewOrder)));
+  return {
+    layerId: publication.layerId,
+    productId: publication.productId,
+    surveyId: publication.surveyId,
+    releaseId: publication.releaseId,
+    product: publication.product,
+    color: "#42d5c4",
+    availableOrders,
+    overviewOrder,
+    maxOrder,
+    cellCount: cellMap.get(maxOrder)?.length ?? overviewCells.length,
+    areaDeg2,
+    tileScheme: "ipix-range-4096",
+    cells: cellMap,
+    recipe: {
+      recipeVersion: 1,
+      mode: "native-moc",
+      coordinateFrame: "ICRS",
+      ordering: "NESTED",
+      maxOrder,
+      queryOrder: query?.order ?? maxOrder,
+      previewOrder: preview?.order ?? overviewOrder,
+      steps: [
+        { id: "input", kind: "native-moc-source", title: "原生 FITS MOC 来源", bodyMarkdown: `sourceUrl=${publication.buildName}`, order: 0, implementationRef: "assets.moc.discovery" },
+        { id: "validate", kind: "moc-validation", title: "IVOA MOC / ICRS / NUNIQ 校验", bodyMarkdown: "coordinateFrame=ICRS; ordering=NESTED", order: 1, implementationRef: "astro_survey_moc_core.core:validate_moc_fits" },
+        { id: "project", kind: "order-projection", title: "发布 order 投影", bodyMarkdown: `queryOrder=${query?.order ?? maxOrder}; previewOrder=${preview?.order ?? overviewOrder}`, order: 2, implementationRef: "astro_survey_moc_core.core:project_cells" },
+        { id: "outputs", kind: "outputs", title: "MOC、query、preview 输出", bodyMarkdown: "输出已校验的不可变发布制品。", order: 3, implementationRef: "assets.moc.publication" },
+        { id: "evidence", kind: "evidence", title: "manifest、provenance、hash", bodyMarkdown: `build=${publication.buildName}`, order: 4, implementationRef: "assets.moc.publication" },
+      ],
+      sourceUrl: publication.sourceUrl,
+      ...(publication.sourceSnapshotSha256 ? { sourceSnapshotSha256: publication.sourceSnapshotSha256 } : {}),
+      ...(publication.sourceSnapshotSizeBytes !== undefined ? { sourceSnapshotSizeBytes: publication.sourceSnapshotSizeBytes } : {}),
+    },
+    sourceUnitIndex: { status: "entrypoint-only", notes: "这是公开 CDS MOC 的覆盖层；没有源文件级反向索引。" },
+  };
+}
+
+async function activatePublishedMocs(): Promise<void> {
+  clearPublishedAssets();
+  const layers = (await Promise.all(mocPublicationStore.list().map(async (publication) => {
+    const integrity = await mocPublicationStore.verify(publication);
+    if (!integrity.valid) {
+      console.warn(`Skipping MOC publication ${publication.id}: ${integrity.reason}`);
+      return undefined;
+    }
+    await registerPublicationAssets(publication);
+    return publicationLayer(publication);
+  }))).filter((layer): layer is CoverageCellLayer => Boolean(layer));
+  if (!layers.length) return;
+  const records = new Map(coverageCatalog.records);
+  for (const layer of layers) records.set(layer.layerId, layer);
+  coverageCatalog = {
+    ...coverageCatalog,
+    records,
+    layers: [...records.values()].map(({ cells, ...layer }) => ({ ...layer, tileIdsByOrder: Object.fromEntries([...cells.entries()].map(([order, values]) => [String(order), [...new Set(values.map((cell) => Math.floor(cell / 4096)))].sort((a, b) => a - b)])) })),
+  };
+  runtimeCoverageManifest = {
+    ...runtimeCoverageManifest,
+    generatedAt: new Date().toISOString(),
+    nside: coverageCatalog.layers.length ? 2 ** Math.min(...coverageCatalog.layers.map((layer) => layer.overviewOrder)) : runtimeCoverageManifest.nside,
+    footprints: [...records.values()].map((layer) => ({ surveyId: layer.surveyId, releaseId: layer.releaseId, product: layer.product, nside: 2 ** layer.overviewOrder, pixels: layer.cells.get(layer.overviewOrder) ?? [], sourceUrl: layer.recipe?.sourceUrl })),
+  };
+}
 
 async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string; layers: number; footprints: number }> {
   coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src", "footprints", "survey-footprints.json"), "utf8")) as typeof coverageManifest;
@@ -81,7 +214,8 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
     }
   }
   coverageLoadedAt = new Date().toISOString();
-  surveyIndex = await loadSurveyIndex(releaseRoot, catalog, runtimeCoverageManifest, coverageCatalog.layers);
+  await activatePublishedMocs();
+  surveyIndex = await loadSurveyIndex(releaseRoot, catalog, runtimeCoverageManifest, coverageCatalog.layers, [...publishedPublicAssets.values()].map(({ record }) => record));
   return { mode: coverageLoadMode, loadedAt: coverageLoadedAt, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size };
 }
 
@@ -89,39 +223,133 @@ await reloadRuntimeCoverage();
 const admin = new AssetsAdmin();
 const products = new ProductStore();
 await products.initialize(releaseRoot, coverageCatalog.layers);
+const mocBuildService = new MocBuildService({
+  store: mocBuildStore,
+  evidenceRoot,
+  maxOrder: Number(process.env.ASSETS_MOC_MAX_ORDER ?? "12"),
+  queryOrder: Number(process.env.ASSETS_MOC_QUERY_ORDER ?? "8"),
+  previewOrder: Number(process.env.ASSETS_MOC_PREVIEW_ORDER ?? "4"),
+});
+
+async function resumeMocBuilds(): Promise<void> {
+  for (const request of mocBuildStore.list()) {
+    if (["STAGED", "FAILED", "DUPLICATE"].includes(request.phase)) continue;
+    try {
+      const discovery = await admin.getMocDiscoveryRequest(request.discoveryRequestName);
+      const candidate = resolveMocDiscoveryCandidate(discovery, request.candidateId);
+      mocBuildService.enqueue(request, candidate);
+    } catch (error) {
+      console.warn(`Unable to resume MOC build ${request.name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+await resumeMocBuilds();
 
 function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurveyIndex>>): Awaited<ReturnType<typeof loadSurveyIndex>> {
-  const records = new Map(products.list().filter((record) => record.published).map((record) => [record.productId, record.published!]));
-  if (!records.size) return index;
+  const published = products.list().filter((record): record is ProductRecord & { published: NonNullable<ProductRecord["published"]> } => Boolean(record.published));
+  if (!published.length) return index;
+  const records = new Map(published.map((record) => [record.productId, record.published]));
+  const publicModality = (value: string | undefined): PublicSurveyModality => {
+    const allowed: PublicSurveyModality[] = ["imaging", "spectroscopy", "photometry", "time-domain", "integral-field", "ultraviolet", "infrared", "catalog", "simulation"];
+    return value && allowed.includes(value as PublicSurveyModality) ? value as PublicSurveyModality : "catalog";
+  };
+  const applyOverride = <T extends object>(product: T, override: ProductRecord["published"]): T => ({
+    ...product,
+    ...(override?.dataOrigin ? { dataOrigin: override.dataOrigin } : {}),
+    ...(override?.sourceTier ? { sourceTier: override.sourceTier } : {}),
+    ...(override?.originNote ? { originNote: override.originNote } : {}),
+    ...(override?.sourceLabel ? { sourceLabel: override.sourceLabel } : {}),
+    ...(override?.sourceUrl ? { sourceUrl: override.sourceUrl } : {}),
+    ...(override?.officialDataLabel ? { officialDataLabel: override.officialDataLabel } : {}),
+    ...(override?.officialDataUrl ? { officialDataUrl: override.officialDataUrl } : {}),
+    ...(override?.officialQueryLabel ? { officialQueryLabel: override.officialQueryLabel } : {}),
+    ...(override?.officialQueryUrl ? { officialQueryUrl: override.officialQueryUrl } : {}),
+    ...(override?.geometrySourceLabel ? { geometrySourceLabel: override.geometrySourceLabel } : {}),
+    ...(override?.geometrySourceUrl ? { geometrySourceUrl: override.geometrySourceUrl } : {}),
+  } as T);
+  const surveys = index.surveys.map((survey) => ({
+    ...survey,
+    releases: survey.releases.map((release) => ({
+      ...release,
+      products: release.products.map((product) => {
+        const override = records.get(product.productId ?? "");
+        return override ? applyOverride(product, override) : product;
+      }),
+    })),
+  }));
+  const additionalAssets = [...publishedPublicAssets.values()].map(({ record }) => record);
+  const allAssets = publicManifest(catalog, additionalAssets).files;
+  const dynamicPublished = published.filter((record) => {
+    const content = record.published;
+    return Boolean(content.publicSurvey && content.publicRelease && content.publicDescription)
+      && !surveys.some((survey) => survey.releases.some((release) => release.products.some((product) => product.productId === record.productId)));
+  });
+  for (const record of dynamicPublished) {
+    const content = record.published;
+    if (!content.publicSurvey || !content.publicRelease || !content.publicDescription) continue;
+    const layer = coverageCatalog.layers.find((candidate) => candidate.surveyId === content.surveyId && candidate.releaseId === content.releaseId && candidate.product === content.name);
+    const product = {
+      productId: content.productId,
+      name: content.name,
+      modality: publicModality(content.modality ?? content.publicSurvey.modalities[0]),
+      description: content.publicDescription,
+      status: content.publicStatus ?? (layer ? "acquired" : "awaiting_geometry"),
+      sourceUrl: content.sourceUrl ?? content.geometrySourceUrl ?? "",
+      ...(content.dataOrigin ? { dataOrigin: content.dataOrigin } : {}),
+      ...(content.sourceTier ? { sourceTier: content.sourceTier } : {}),
+      ...(content.originNote ? { originNote: content.originNote } : {}),
+      ...(content.sourceLabel ? { sourceLabel: content.sourceLabel } : {}),
+      ...(content.geometrySourceUrl ? { geometrySourceUrl: content.geometrySourceUrl } : {}),
+      ...(content.geometrySourceLabel ? { geometrySourceLabel: content.geometrySourceLabel } : {}),
+      ...(layer ? { coverage: { layerId: layer.layerId, availableOrders: layer.availableOrders, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder } } : {}),
+    };
+    const survey = surveys.find((candidate) => candidate.id === content.surveyId);
+    if (!survey) {
+      surveys.push({
+        id: content.surveyId,
+        name: content.publicSurvey.name,
+        mission: content.publicSurvey.mission,
+        color: content.publicSurvey.color,
+        description: content.publicSurvey.description,
+        modalities: content.publicSurvey.modalities.map(publicModality),
+        releases: [{ id: content.releaseId, label: content.publicRelease.label, kind: content.publicRelease.kind, ...(content.publicRelease.releasedYear !== undefined ? { releasedYear: content.publicRelease.releasedYear } : {}), modalities: [product.modality], products: [product] }],
+        imageUrl: "",
+        statistics: { publicProducts: 1, acquired: product.status === "acquired" ? 1 : 0, overviewOnly: product.status === "overview_only" ? 1 : 0, awaitingGeometry: product.status === "awaiting_geometry" ? 1 : 0, notApplicable: product.status === "not_applicable" ? 1 : 0, footprintCells: new Set(runtimeCoverageManifest.footprints.filter((footprint) => footprint.surveyId === content.surveyId).flatMap((footprint) => footprint.pixels)).size },
+        assets: allAssets.filter((asset) => asset.surveyId === content.surveyId),
+      });
+      continue;
+    }
+    const release = survey.releases.find((candidate) => candidate.id === content.releaseId);
+    if (release) {
+      release.products.push(product);
+      if (!release.modalities.includes(product.modality)) release.modalities.push(product.modality);
+    } else {
+      survey.releases.push({ id: content.releaseId, label: content.publicRelease.label, kind: content.publicRelease.kind, ...(content.publicRelease.releasedYear !== undefined ? { releasedYear: content.publicRelease.releasedYear } : {}), modalities: [product.modality], products: [product] });
+    }
+    if (!survey.modalities.includes(product.modality)) survey.modalities.push(product.modality);
+    survey.assets = allAssets.filter((asset) => asset.surveyId === survey.id);
+  }
+  const orderSummary = (layers: typeof coverageCatalog.layers) => {
+    if (!layers.length) return undefined;
+    const availableOrders = [...new Set(layers.flatMap((layer) => layer.availableOrders))].sort((a, b) => a - b);
+    const overviewOrders = [...new Set(layers.map((layer) => layer.overviewOrder))].sort((a, b) => a - b);
+    return { availableOrders, overviewOrders, maxOrder: Math.max(...layers.map((layer) => layer.maxOrder)) };
+  };
   return {
     ...index,
-    surveys: index.surveys.map((survey) => ({
-      ...survey,
-      releases: survey.releases.map((release) => ({
-        ...release,
-        products: release.products.map((product) => {
-          const override = records.get(product.productId ?? "");
-          if (!override) return product;
-          return {
-            ...product,
-            ...(override.dataOrigin ? { dataOrigin: override.dataOrigin } : {}),
-            ...(override.sourceTier ? { sourceTier: override.sourceTier } : {}),
-            ...(override.originNote ? { originNote: override.originNote } : {}),
-            ...(override.sourceLabel ? { sourceLabel: override.sourceLabel } : {}),
-            ...(override.sourceUrl ? { sourceUrl: override.sourceUrl } : {}),
-            ...(override.officialDataLabel ? { officialDataLabel: override.officialDataLabel } : {}),
-            ...(override.officialDataUrl ? { officialDataUrl: override.officialDataUrl } : {}),
-            ...(override.officialQueryLabel ? { officialQueryLabel: override.officialQueryLabel } : {}),
-            ...(override.officialQueryUrl ? { officialQueryUrl: override.officialQueryUrl } : {}),
-            ...(override.geometrySourceLabel ? { geometrySourceLabel: override.geometrySourceLabel } : {}),
-            ...(override.geometrySourceUrl ? { geometrySourceUrl: override.geometrySourceUrl } : {}),
-          };
-        }),
-      })),
-    })),
+    surveys: surveys.map((survey) => {
+      const surveyLayers = coverageCatalog.layers.filter((layer) => layer.surveyId === survey.id);
+      const productsForSurvey = survey.releases.flatMap((release) => release.products);
+      return {
+        ...survey,
+        coverageOrders: orderSummary(surveyLayers) ?? survey.coverageOrders,
+        releases: survey.releases.map((release) => ({ ...release, coverageOrders: orderSummary(surveyLayers.filter((layer) => layer.releaseId === release.id)) ?? release.coverageOrders })),
+        statistics: { publicProducts: productsForSurvey.length, acquired: productsForSurvey.filter((product) => product.status === "acquired").length, overviewOnly: productsForSurvey.filter((product) => product.status === "overview_only").length, awaitingGeometry: productsForSurvey.filter((product) => product.status === "awaiting_geometry").length, notApplicable: productsForSurvey.filter((product) => product.status === "not_applicable").length, footprintCells: new Set(runtimeCoverageManifest.footprints.filter((footprint) => footprint.surveyId === survey.id).flatMap((footprint) => footprint.pixels)).size },
+        assets: allAssets.filter((asset) => asset.surveyId === survey.id),
+      };
+    }),
   };
 }
-const mocDiscoveryReviews = new MocDiscoveryReviewStore();
 surveyIndex = applyPublishedProductMetadata(surveyIndex);
 let sourceUnitsPromise: Promise<SourceUnitWorkerStore> | null = null;
 let sourceUnitsFallbackPromise: Promise<SourceUnitStore> | null = null;
@@ -176,6 +404,45 @@ function productCoverageLayer(record: ProductRecord): CoverageCellLayer | undefi
     ?? [...coverageCatalog.records.values()].find((candidate) => candidate.surveyId === content.surveyId
       && candidate.releaseId === content.releaseId
       && candidate.product === content.name);
+}
+
+function adminMocBuildSummaryForBuild(build: ReturnType<MocBuildStore["get"]>): Record<string, unknown> {
+  const outputs = build.outputs;
+  return {
+    name: build.name,
+    discoveryRequestName: build.discoveryRequestName,
+    candidateId: build.candidateId,
+    ...(build.candidateTitle ? { candidateTitle: build.candidateTitle } : {}),
+    ...(build.surveyId ? { surveyId: build.surveyId } : {}),
+    ...(build.releaseId ? { releaseId: build.releaseId } : {}),
+    ...(build.productId ? { productId: build.productId } : {}),
+    sourceUrl: build.source.url,
+    phase: build.phase,
+    progress: build.progress,
+    createdAt: build.createdAt,
+    updatedAt: build.updatedAt,
+    ...(outputs ? {
+      outputs: {
+        ...(outputs.cellCount !== undefined ? { cellCount: outputs.cellCount } : {}),
+        ...(outputs.availableOrders ? { availableOrders: outputs.availableOrders } : {}),
+        ...(outputs.maxOrder !== undefined ? { maxOrder: outputs.maxOrder } : {}),
+      },
+    } : {}),
+    ...(build.error ? { error: build.error } : {}),
+    ...(build.publishedAt ? { publishedAt: build.publishedAt } : {}),
+    ...(build.publicationId ? { publicationId: build.publicationId } : {}),
+  };
+}
+
+function adminMocBuildSummary(productId: string): Record<string, unknown> | undefined {
+  const build = mocBuildStore.list().find((candidate) => candidate.productId === productId);
+  return build ? adminMocBuildSummaryForBuild(build) : undefined;
+}
+
+function adminUnmatchedMocBuilds(): Array<Record<string, unknown>> {
+  return mocBuildStore.list()
+    .filter((build) => build.phase === "STAGED" && !build.productId && !build.publishedAt && !build.publicationId)
+    .map(adminMocBuildSummaryForBuild);
 }
 
 function productAssets(record: ProductRecord): Array<{ record: PublicAssetRecord; id: string }> {
@@ -343,7 +610,8 @@ function publicProductListView(record: ProductRecord): Record<string, unknown> {
 }
 
 function adminProductView(record: ProductRecord): Record<string, unknown> {
-  return { ...record, ...(productCoverage(record) ? { coverage: productCoverage(record) } : {}) };
+  const mocBuild = adminMocBuildSummary(record.productId);
+  return { ...record, ...(productCoverage(record) ? { coverage: productCoverage(record) } : {}), ...(mocBuild ? { mocBuild } : {}) };
 }
 
 function adminProductSummaries(records: ProductRecord[]): Array<Record<string, unknown>> {
@@ -395,10 +663,12 @@ function adminProductSurveys(records: ProductRecord[], index: typeof surveyIndex
         const record = byProductId.get(productId);
         if (record) seen.add(productId);
         const coverage = record ? productCoverage(record) : product.coverage;
+        const mocBuild = record ? adminMocBuildSummary(record.productId) : undefined;
         return {
           ...product,
           productId,
           ...(coverage ? { coverage } : {}),
+          ...(mocBuild ? { mocBuild } : {}),
           review: record ? {
             state: record.published ? "published" : "draft",
             draftRevision: record.revision,
@@ -424,7 +694,10 @@ function adminProductSurveys(records: ProductRecord[], index: typeof surveyIndex
       publishedAt: record.publishedAt,
     },
   }));
-  return unmatchedProducts.length ? [...surveys, { id: "__unmatched__", surveyId: "__unmatched__", name: "未匹配公共 Catalog 的产品", mission: "Assets editorial queue", color: "#82979e", description: "这些产品存在于 Assets 编辑存储，但没有对应的公共 survey/release/product 记录。", modalities: [], imageUrl: "", statistics: { publicProducts: unmatchedProducts.length, acquired: 0, overviewOnly: 0, awaitingGeometry: unmatchedProducts.length, notApplicable: 0, footprintCells: 0 }, releases: [], unmatchedProducts }] : surveys;
+  const unmatchedBuilds = adminUnmatchedMocBuilds();
+  const result: Array<Record<string, unknown>> = unmatchedProducts.length ? [...surveys, { id: "__unmatched__", surveyId: "__unmatched__", name: "未匹配公共 Catalog 的产品", mission: "Assets editorial queue", color: "#82979e", description: "这些产品存在于 Assets 编辑存储，但没有对应的公共 survey/release/product 记录。", modalities: [], imageUrl: "", statistics: { publicProducts: unmatchedProducts.length, acquired: 0, overviewOnly: 0, awaitingGeometry: unmatchedProducts.length, notApplicable: 0, footprintCells: 0 }, releases: [], unmatchedProducts }] : [...surveys];
+  if (unmatchedBuilds.length) result.push({ id: "__moc-builds__", surveyId: "__moc-builds__", name: "待登记 MOC 构建", mission: "Assets editorial queue", color: "#42d5c4", description: "这些 MOC 已完成构建但尚未绑定到公共 survey / release / product。登记后才能进入产品文稿审核与发布。", modalities: [], imageUrl: "", statistics: { publicProducts: 0, acquired: 0, overviewOnly: 0, awaitingGeometry: unmatchedBuilds.length, notApplicable: 0, footprintCells: 0 }, releases: [], unmatchedBuilds });
+  return result;
 }
 const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
 const MAX_FITS_HEADER_BYTES = 256 * 1024;
@@ -792,6 +1065,107 @@ function expectedRevision(request: IncomingMessage, body: Record<string, unknown
   return value === undefined || value === "" ? undefined : Number.isSafeInteger(Number(value)) ? Number(value) : undefined;
 }
 
+function buildProductContext(productId: unknown): { productId?: string; surveyId?: string; releaseId?: string; workKey?: string; workTitle?: string } {
+  if (productId === undefined || productId === null || productId === "") return {};
+  if (typeof productId !== "string" || productId.length > 128) throw new AdminHttpError(400, "productId is invalid");
+  const product = products.get(productId).draft;
+  return {
+    productId: product.productId,
+    surveyId: product.surveyId,
+    releaseId: product.releaseId,
+    workKey: `product:${product.productId}`,
+    workTitle: `${product.surveyId.toUpperCase()} · ${product.releaseId} · ${product.name}`.slice(0, 255),
+  };
+}
+
+async function createMocBuild(body: Record<string, unknown>): Promise<ReturnType<MocBuildStore["get"]>> {
+  const discoveryRequestName = typeof body.discoveryRequestName === "string" ? body.discoveryRequestName : typeof body.requestName === "string" ? body.requestName : "";
+  if (!discoveryRequestName.trim()) throw new AdminHttpError(400, "discoveryRequestName is required");
+  const candidateId = typeof body.candidateId === "string" ? body.candidateId : "";
+  if (!candidateId.trim()) throw new AdminHttpError(400, "candidateId is required");
+  const discovery = await admin.getMocDiscoveryRequest(discoveryRequestName);
+  const candidate = resolveMocDiscoveryCandidate(discovery, candidateId);
+  const requestedProductId = typeof body.productId === "string" && body.productId.trim() ? body.productId.trim() : undefined;
+  if (discovery.productId && requestedProductId && discovery.productId !== requestedProductId) {
+    throw new AdminHttpError(400, "productId does not match the discovery work item");
+  }
+  const product = buildProductContext(discovery.productId ?? requestedProductId);
+  const request = await mocBuildStore.create({
+    discoveryRequestName: discovery.name,
+    candidate,
+    ...product,
+    ...(discovery.workKey && !product.workKey ? { workKey: discovery.workKey } : {}),
+    ...(discovery.workTitle && !product.workTitle ? { workTitle: discovery.workTitle } : {}),
+  });
+  mocBuildService.enqueue(request, candidate);
+  return request;
+}
+
+async function retryMocBuild(name: string): Promise<ReturnType<MocBuildStore["get"]>> {
+  const existing = mocBuildStore.get(name);
+  if (!(existing.phase === "FAILED" || existing.phase === "DUPLICATE")) throw new AdminHttpError(409, `MOC build ${name} is not retryable`);
+  const discovery = await admin.getMocDiscoveryRequest(existing.discoveryRequestName);
+  const candidate = resolveMocDiscoveryCandidate(discovery, existing.candidateId);
+  const request = await mocBuildStore.create({
+    discoveryRequestName: discovery.name,
+    candidate,
+    ...(existing.surveyId ? { surveyId: existing.surveyId } : {}),
+    ...(existing.releaseId ? { releaseId: existing.releaseId } : {}),
+    ...(existing.productId ? { productId: existing.productId } : {}),
+    ...(existing.workKey ? { workKey: existing.workKey } : {}),
+    ...(existing.workTitle ? { workTitle: existing.workTitle } : {}),
+    name: `${existing.name}-retry`,
+  });
+  mocBuildService.enqueue(request, candidate);
+  return request;
+}
+
+async function registerMocBuildProduct(name: string, body: Record<string, unknown>): Promise<{ request: ReturnType<MocBuildStore["get"]>; product: Record<string, unknown> }> {
+  const build = mocBuildStore.get(name);
+  if (build.phase !== "STAGED") throw new AdminHttpError(409, `MOC build ${name} is not staged`);
+  if (build.productId) {
+    const existing = products.get(build.productId);
+    return { request: build, product: adminProductView(existing) };
+  }
+  const discovery = await admin.getMocDiscoveryRequest(build.discoveryRequestName);
+  const candidate = resolveMocDiscoveryCandidate(discovery, build.candidateId);
+  const requestedProductId = typeof body.productId === "string" && body.productId.trim() ? body.productId.trim() : undefined;
+  let product: ProductRecord;
+  if (requestedProductId) {
+    product = products.get(requestedProductId);
+    if (product.published) throw new AdminHttpError(409, `Product ${requestedProductId} is already published`);
+  } else {
+    const modalities = Array.isArray(body.surveyModalities)
+      ? body.surveyModalities.filter((value): value is string => typeof value === "string")
+      : typeof body.surveyModalities === "string" ? body.surveyModalities.split(",").map((value) => value.trim()).filter(Boolean) : [];
+    const input: MocProductRegistrationInput = {
+      surveyId: typeof body.surveyId === "string" ? body.surveyId : "",
+      surveyName: typeof body.surveyName === "string" ? body.surveyName : "",
+      mission: typeof body.mission === "string" ? body.mission : "",
+      surveyDescription: typeof body.surveyDescription === "string" ? body.surveyDescription : "",
+      surveyColor: typeof body.surveyColor === "string" ? body.surveyColor : "#42d5c4",
+      surveyModalities: modalities,
+      releaseId: typeof body.releaseId === "string" ? body.releaseId : "",
+      releaseLabel: typeof body.releaseLabel === "string" ? body.releaseLabel : "",
+      releaseKind: typeof body.releaseKind === "string" ? body.releaseKind : "release",
+      ...(typeof body.releasedYear === "number" ? { releasedYear: body.releasedYear } : {}),
+      productName: typeof body.productName === "string" ? body.productName : candidate.candidate.title ?? candidate.candidate.candidateId,
+      productDescription: typeof body.productDescription === "string" ? body.productDescription : "",
+      ...(typeof body.productStatus === "string" ? { productStatus: body.productStatus as MocProductRegistrationInput["productStatus"] } : {}),
+      modality: typeof body.modality === "string" ? body.modality : "infrared",
+      sourceUrl: typeof body.sourceUrl === "string" && body.sourceUrl.trim() ? body.sourceUrl : candidate.candidate.recordUrl ?? candidate.sourceUrl,
+      geometrySourceUrl: typeof body.geometrySourceUrl === "string" && body.geometrySourceUrl.trim() ? body.geometrySourceUrl : candidate.mocUrl ?? candidate.sourceUrl,
+      ...(typeof body.geometrySourceLabel === "string" ? { geometrySourceLabel: body.geometrySourceLabel } : {}),
+      ...(typeof body.dataOrigin === "string" ? { dataOrigin: body.dataOrigin as MocProductRegistrationInput["dataOrigin"] } : {}),
+    };
+    product = await products.createMocProduct(input);
+    if (product.published) throw new AdminHttpError(409, `Product ${product.productId} is already published`);
+  }
+  const workTitle = `${product.draft.surveyId.toUpperCase()} · ${product.draft.releaseId} · ${product.draft.name}`.slice(0, 255);
+  const request = await mocBuildStore.bindProduct(name, { productId: product.productId, surveyId: product.draft.surveyId, releaseId: product.draft.releaseId, workKey: `product:${product.productId}`, workTitle });
+  return { request, product: adminProductView(product) };
+}
+
 async function sendAdmin(request: IncomingMessage, response: ServerResponse, pathname: string): Promise<void> {
   if (pathname === "/api/v1/admin/config" && request.method === "GET") {
     return json(response, 200, admin.publicConfig());
@@ -862,16 +1236,6 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       };
       return json(response, 201, { request: await admin.createMocDiscoveryRequest(input) });
     }
-    const mocReviewMatch = /^\/api\/v1\/admin\/moc-discovery\/([^/]+)\/reviews$/.exec(pathname);
-    if (mocReviewMatch?.[1] && (request.method === "GET" || request.method === "POST")) {
-      const name = decodeURIComponent(mocReviewMatch[1]);
-      await admin.getMocDiscoveryRequest(name);
-      if (request.method === "GET") return json(response, 200, { reviews: await mocDiscoveryReviews.list(name) });
-      const body = await requestJsonBody(request) as unknown as MocDiscoveryReviewInput;
-      const requestView = await admin.getMocDiscoveryRequest(name);
-      const resolved = resolveMocDiscoveryReview(requestView, body);
-      return json(response, 201, { review: await mocDiscoveryReviews.add(name, resolved) });
-    }
     const mocRetryMatch = /^\/api\/v1\/admin\/moc-discovery\/([^/]+)\/resubmit$/.exec(pathname);
     if (mocRetryMatch?.[1] && request.method === "POST") {
       return json(response, 201, { request: await admin.resubmitMocDiscoveryRequest(decodeURIComponent(mocRetryMatch[1])) });
@@ -879,6 +1243,24 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     const mocMatch = /^\/api\/v1\/admin\/moc-discovery\/([^/]+)$/.exec(pathname);
     if (mocMatch?.[1] && request.method === "GET") {
       return json(response, 200, { request: await admin.getMocDiscoveryRequest(decodeURIComponent(mocMatch[1])) });
+    }
+    if (pathname === "/api/v1/admin/moc-builds" && request.method === "GET") {
+      return json(response, 200, { requests: mocBuildStore.list() });
+    }
+    if (pathname === "/api/v1/admin/moc-builds" && request.method === "POST") {
+      return json(response, 201, { request: await createMocBuild(await requestJsonBody(request)) });
+    }
+    const mocBuildRetryMatch = /^\/api\/v1\/admin\/moc-builds\/([^/]+)\/retry$/.exec(pathname);
+    if (mocBuildRetryMatch?.[1] && request.method === "POST") {
+      return json(response, 201, { request: await retryMocBuild(decodeURIComponent(mocBuildRetryMatch[1])) });
+    }
+    const mocBuildRegisterMatch = /^\/api\/v1\/admin\/moc-builds\/([^/]+)\/register-product$/.exec(pathname);
+    if (mocBuildRegisterMatch?.[1] && request.method === "POST") {
+      return json(response, 201, await registerMocBuildProduct(decodeURIComponent(mocBuildRegisterMatch[1]), await requestJsonBody(request)));
+    }
+    const mocBuildMatch = /^\/api\/v1\/admin\/moc-builds\/([^/]+)$/.exec(pathname);
+    if (mocBuildMatch?.[1] && request.method === "GET") {
+      return json(response, 200, { request: mocBuildStore.get(decodeURIComponent(mocBuildMatch[1])) });
     }
     const taskMatch = /^\/api\/v1\/admin\/tasks\/([^/]+)$/.exec(pathname);
     const retryMatch = /^\/api\/v1\/admin\/tasks\/([^/]+)\/resubmit$/.exec(pathname);
@@ -910,7 +1292,22 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     const publishMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/publish$/.exec(pathname);
     if (publishMatch?.[1] && request.method === "POST") {
       const body = await requestJsonBody(request).catch(() => ({}));
-      const product = await products.publish(decodeURIComponent(publishMatch[1]), expectedRevision(request, body));
+      const productId = decodeURIComponent(publishMatch[1]);
+      const existing = products.get(productId);
+      const revision = expectedRevision(request, body);
+      if (revision !== undefined && revision !== existing.revision) throw new AdminHttpError(409, "Product revision conflict");
+      const staged = mocBuildStore.list().find((build) => build.productId === productId && build.phase === "STAGED");
+      const publication = staged ? await mocPublicationStore.publish(staged, {
+        productId,
+        surveyId: existing.draft.surveyId,
+        releaseId: existing.draft.releaseId,
+        name: existing.draft.name,
+      }) : undefined;
+      const product = await products.publish(productId, revision);
+      if (staged && publication) {
+        await mocBuildStore.markPublished(staged.name, publication.id);
+        await reloadRuntimeCoverage();
+      }
       surveyIndex = applyPublishedProductMetadata(surveyIndex);
       return json(response, 200, { product });
     }
@@ -1022,7 +1419,7 @@ const server = http.createServer((request, response) => {
       bundle: catalog.manifest.bundle,
       files: catalog.files.size,
     });
-    if (pathname === "/api/v1/assets") return json(response, 200, publicManifest(catalog));
+    if (pathname === "/api/v1/assets") return json(response, 200, publicManifest(catalog, [...publishedPublicAssets.values()].map(({ record }) => record)));
     if (pathname === "/api/v1/resource-packages/catalog.json") return json(response, 200, await resourcePackageCatalog(catalog));
     if (pathname === "/api/v1/coverage/catalog") {
       const { records: _records, ...publicCoverageCatalog } = coverageCatalog;

@@ -1,25 +1,37 @@
-# Deferred Warehouse MOC Discovery
+# Warehouse MOC Discovery
 
-Status: implemented and verified on 2026-08-30; the live Operator and discovery
-worker are deployed with the CDS MOCServer filter API.
+Status: implemented and verified on 2026-08-30. The live Warehouse Operator and
+discovery worker use the `cds-public-moc-v2` CDS MocServer filter API.
 
-The implementation is intentionally outside the Assets runtime boundary.
-Assets does not execute discovery or own the Operator. Warehouse owns the CRD,
-worker, RBAC and deployment; the bounded JWST verification request returned 16
-candidates and 10 accepted spatial probes. Empty or malformed upstream bodies
-are retained as protocol evidence and are not reported as a valid empty query.
+Warehouse owns the namespaced `MocDiscoveryRequest` CRD, its evidence-only Job,
+RBAC, and bounded status projection. The worker performs one allowlisted search;
+it does not download candidate MOCs, run probes, write `ast_*`, create a
+`CoverageLayer`, or publish coverage. The verified JWST request returned 16
+candidates and 10 accepted spatial MOCs in the later source-validation record;
+discovery itself only returned candidates. Empty candidate results and malformed
+or empty upstream bodies remain distinct evidence states.
 
-When resumed, Warehouse will own a typed `MocDiscoveryRequest` for `search` and
-`probe` against the allowlisted CDS MocServer. Its Operator and a dedicated
-`moc-discovery-cli` will perform bounded HTTP/FITS validation and write full
-records, MOCs, headers, hashes, and errors to Warehouse evidence. Discovery
-must never write `ast_*`, create a `CoverageLayer`, or publish coverage.
+The policy reads at most 51 search records and keeps at most the first 50 in
+`status.reviewSummary`. The extra record is a sentinel that makes
+`truncated=true` reliable without putting an unbounded result set in a CRD or
+browser payload. `reviewSummary` is schema version 2 and contains
+`truncated`, `summaryTruncated`, optional `searchRecordCount`, and candidate
+records with public IDs and URLs. A valid summary with an empty candidate array
+is a reviewable zero-result search; a missing summary means the request is not
+ready for review. Existing v1 CRs and evidence are read-only historical records,
+not a compatibility path for v2.
 
-Assets will only submit and read that request, expose bounded results on the
-Admin task workspace, and perform scientific review. Candidate approval is a
-versioned `ready-for-build` record keyed by provider, candidate ID, and source
-snapshot SHA-256; it does not edit Git, build, or publish automatically.
+Assets submits and reads discovery, presents the bounded candidate summary, and
+creates an independent Assets-owned `MocBuildRequest` after an operator selects
+a candidate. The build downloads and locks the source snapshot, invokes
+MOC-Core-SDK, and writes outputs/evidence through
+`QUEUED → FETCHING → SNAPSHOT_LOCKED → VALIDATING → BUILDING → PROJECTING → BUNDLING → STAGED`.
+It is independent of `ScanRequest → Warehouse scanner → ast_*` and never changes
+that connector scanning workflow. Product publication is a separate explicit
+step: only a staged build associated with the product is copied to the content
+volume and registered in the public Assets catalog after file/size/SHA-256
+verification.
 
-The existing eight entries in `src/moc-sources/source-registry.json` remain
-reviewed fixtures. No new public MOC candidate is promoted automatically;
-candidate approval remains an explicit Admin review.
+The eight reviewed entries in `src/moc-sources/source-registry.json` remain
+reviewed fixtures. No discovery candidate is promoted automatically; source
+terms, product copy, and publication remain explicit Assets admin decisions.

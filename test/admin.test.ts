@@ -214,17 +214,17 @@ test("MOC discovery requests keep execution policy inside Warehouse", async () =
   assert.match(request.name, /^gaia-moc-discovery-/);
   assert.equal(request.surveyName, "Gaia");
   assert.equal(request.releaseHint, "DR3");
-  assert.equal(request.policyRef, "cds-public-moc-v1");
-  assert.deepEqual(created?.spec, { query: { surveyName: "Gaia", releaseHint: "DR3" }, policyRef: "cds-public-moc-v1" });
+  assert.equal(request.policyRef, "cds-public-moc-v2");
+  assert.deepEqual(created?.spec, { query: { surveyName: "Gaia", releaseHint: "DR3" }, policyRef: "cds-public-moc-v2" });
   assert.equal((created?.metadata as Record<string, unknown>).namespace, "atlas-warehouse");
   assert.equal((created?.metadata as Record<string, unknown>).labels && ((created?.metadata as Record<string, unknown>).labels as Record<string, string>)["astro.zhejianglab.org/resource-kind"], "moc-discovery");
 });
 
 test("MOC discovery lists stay compact while details expose review summaries", async () => {
   const resource = {
-    metadata: { name: "jwst-moc-discovery", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" } },
-    spec: { query: { surveyName: "JWST" }, policyRef: "cds-public-moc-v1" },
-    status: { phase: "SUCCEEDED", candidateCount: 1, probeCount: 1, reviewSummary: { schemaVersion: 1, truncated: false, summaryTruncated: false, candidates: [{ candidateId: "jwst" }], probes: [{ probeId: "a".repeat(64), candidateId: "jwst", kind: "mocUrl", url: "https://alasky.cds.unistra.fr/jwst/moc.fits", ok: true, sha256: "b".repeat(64), validation: { acceptedSpatialMoc: true } }] } },
+    metadata: { name: "jwst-moc-discovery", annotations: { "assets.atlas.zhejianglab.org/work-ref": JSON.stringify({ key: "product:jwst-dr1", title: "JWST · DR1 · Public MOC", surveyId: "jwst", releaseId: "dr1", productId: "jwst-dr1" }) }, labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" } },
+    spec: { query: { surveyName: "JWST" }, policyRef: "cds-public-moc-v2" },
+    status: { phase: "SUCCEEDED", candidateCount: 1, reviewSummary: { schemaVersion: 2, truncated: false, summaryTruncated: false, searchRecordCount: 1, candidates: [{ candidateId: "jwst", mocUrl: "https://alasky.cds.unistra.fr/jwst/moc.fits" }] } },
   };
   const kube = { list: async () => [resource], get: async () => resource };
   const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
@@ -234,15 +234,18 @@ test("MOC discovery lists stay compact while details expose review summaries", a
   const detail = await admin.getMocDiscoveryRequest("jwst-moc-discovery");
 
   assert.equal(list[0]?.status.reviewSummary, undefined);
+  assert.equal(detail.surveyId, "jwst");
+  assert.equal(detail.releaseId, "dr1");
+  assert.equal(detail.productId, "jwst-dr1");
   assert.equal(detail.status.reviewSummary?.candidates[0]?.candidateId, "jwst");
-  assert.equal(detail.status.reviewSummary?.probes[0]?.sha256, "b".repeat(64));
+  assert.equal(detail.status.reviewSummary?.candidates[0]?.mocUrl, "https://alasky.cds.unistra.fr/jwst/moc.fits");
 });
 
 test("MOC views preserve a legitimate zero-result summary separately from a missing summary", async () => {
   const empty = {
     metadata: { name: "empty-moc-discovery", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" } },
-    spec: { query: { surveyName: "Unknown survey" }, policyRef: "cds-public-moc-v1" },
-    status: { phase: "SUCCEEDED", candidateCount: 0, probeCount: 0, reviewSummary: { schemaVersion: 1, truncated: false, summaryTruncated: false, candidates: [], probes: [] } },
+    spec: { query: { surveyName: "Unknown survey" }, policyRef: "cds-public-moc-v2" },
+    status: { phase: "SUCCEEDED", candidateCount: 0, reviewSummary: { schemaVersion: 2, truncated: false, summaryTruncated: false, searchRecordCount: 0, candidates: [] } },
   };
   const legacy = {
     metadata: { name: "legacy-moc-discovery", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" } },
@@ -264,8 +267,8 @@ test("MOC views preserve a legitimate zero-result summary separately from a miss
 test("MOC views accept zero-result summaries when Kubernetes omits empty arrays", async () => {
   const resource = {
     metadata: { name: "serialized-empty-moc", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" } },
-    spec: { query: { surveyName: "JWST" }, policyRef: "cds-public-moc-v1" },
-    status: { phase: "SUCCEEDED", candidateCount: 0, probeCount: 0, reviewSummary: { schemaVersion: 1, truncated: false, summaryTruncated: false } },
+    spec: { query: { surveyName: "JWST" }, policyRef: "cds-public-moc-v2" },
+    status: { phase: "SUCCEEDED", candidateCount: 0, reviewSummary: { schemaVersion: 2, truncated: false, summaryTruncated: false } },
   };
   const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
   const admin = new AssetsAdmin(config, { get: async () => resource } as never);
@@ -274,7 +277,7 @@ test("MOC views accept zero-result summaries when Kubernetes omits empty arrays"
 
   assert.equal(view.status.reviewSummaryState, "available");
   assert.deepEqual(view.status.reviewSummary?.candidates, []);
-  assert.deepEqual(view.status.reviewSummary?.probes, []);
+  assert.equal(view.status.reviewSummary?.searchRecordCount, undefined);
 });
 
 test("MOC discovery resubmission creates an immutable retry and preserves work context", async () => {
@@ -282,7 +285,7 @@ test("MOC discovery resubmission creates an immutable retry and preserves work c
     apiVersion: "atlas.zhejianglab.org/v1alpha1",
     kind: "MocDiscoveryRequest",
     metadata: { name: "jwst-moc-discovery", namespace: "warehouse", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" }, annotations: { "assets.atlas.zhejianglab.org/work-ref": "{\"key\":\"product:jwst-dr1\",\"surveyId\":\"jwst\",\"releaseId\":\"dr1\",\"productId\":\"jwst-dr1\"}" } },
-    spec: { query: { surveyName: "JWST", releaseHint: "DR1" }, policyRef: "cds-public-moc-v1" },
+    spec: { query: { surveyName: "JWST", releaseHint: "DR1" }, policyRef: "cds-public-moc-v2" },
     status: { phase: "SUCCEEDED" },
   };
   let created: Record<string, unknown> | undefined;
@@ -297,6 +300,23 @@ test("MOC discovery resubmission creates an immutable retry and preserves work c
   assert.equal(metadata.labels["astro.zhejianglab.org/retry-of"], "jwst-moc-discovery");
   assert.equal(metadata.annotations["assets.atlas.zhejianglab.org/work-ref"], original.metadata.annotations["assets.atlas.zhejianglab.org/work-ref"]);
   assert.deepEqual(created?.spec, original.spec);
+});
+
+test("MOC discovery resubmission upgrades legacy v1 intent to a v2 request", async () => {
+  const original = {
+    apiVersion: "atlas.zhejianglab.org/v1alpha1",
+    kind: "MocDiscoveryRequest",
+    metadata: { name: "legacy-jwst-moc", namespace: "warehouse", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" } },
+    spec: { query: { surveyName: "JWST", releaseHint: "DR1" }, policyRef: "cds-public-moc-v1" },
+    status: { phase: "SUCCEEDED" },
+  };
+  let created: Record<string, unknown> | undefined;
+  const kube = { get: async () => original, create: async (_plural: string, resource: Record<string, unknown>) => { created = resource; return resource; } };
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+
+  await new AssetsAdmin(config, kube as never).resubmitMocDiscoveryRequest(original.metadata.name);
+
+  assert.deepEqual(created?.spec, { query: { surveyName: "JWST", releaseHint: "DR1" }, policyRef: "cds-public-moc-v2" });
 });
 
 test("coverage task defaults use the standard Elasticsearch index names", () => {

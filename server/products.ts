@@ -17,8 +17,32 @@ export interface ProductFlowNode {
 export interface ProductFlowEdge { from: string; to: string; label?: string; }
 export interface ProductPresentation { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: ProductFlowNode[]; edges: ProductFlowEdge[] } }
 export interface ProductScanDefaults { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }
-export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix" | "regions" | "tile-table" | "native-moc"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; presentation: ProductPresentation }
+export type ProductPublicStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
+export interface ProductPublicSurvey { name: string; mission: string; description: string; color: string; modalities: string[] }
+export interface ProductPublicRelease { label: string; kind: string; releasedYear?: number }
+export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix" | "regions" | "tile-table" | "native-moc"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: ProductPublicSurvey; publicRelease?: ProductPublicRelease; publicDescription?: string; publicStatus?: ProductPublicStatus; presentation: ProductPresentation }
 export interface ProductRecord { productId: string; draft: ProductContent; published: ProductContent | null; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; contentSha256: string; }
+
+export interface MocProductRegistrationInput {
+  surveyId: string;
+  surveyName: string;
+  mission: string;
+  surveyDescription: string;
+  surveyColor: string;
+  surveyModalities: string[];
+  releaseId: string;
+  releaseLabel: string;
+  releaseKind: string;
+  releasedYear?: number;
+  productName: string;
+  productDescription: string;
+  productStatus?: ProductPublicStatus;
+  modality: string;
+  sourceUrl: string;
+  geometrySourceUrl: string;
+  geometrySourceLabel?: string;
+  dataOrigin?: ProductContent["dataOrigin"];
+}
 
 const configuredContentRoot = process.env.ASSETS_CONTENT_ROOT ? path.resolve(process.env.ASSETS_CONTENT_ROOT) : "/var/lib/assets-content";
 
@@ -236,6 +260,81 @@ export class ProductStore {
   async persist(): Promise<void> { await writeFile(this.#contentFile(), `${JSON.stringify({ schemaVersion: 1, products: [...this.#records.values()] }, null, 2)}\n`, "utf8"); }
   list(): ProductRecord[] { return [...this.#records.values()].sort((a, b) => `${a.draft.surveyId}:${a.draft.releaseId}:${a.draft.name}`.localeCompare(`${b.draft.surveyId}:${b.draft.releaseId}:${b.draft.name}`)); }
   get(id: string): ProductRecord { const record = this.#records.get(id); if (!record) throw new AdminHttpError(404, "Product not found"); return record; }
+
+  async createMocProduct(input: MocProductRegistrationInput): Promise<ProductRecord> {
+    if (!this.#initialized) throw new AdminHttpError(503, "Product store is not initialized");
+    const normalizeId = (value: string, label: string): string => {
+      const normalized = value.trim().toLowerCase();
+      if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(normalized)) throw new AdminHttpError(400, `${label} must be a lowercase identifier`);
+      return normalized;
+    };
+    const text = (value: string, label: string, maxLength: number): string => {
+      const normalized = value.trim();
+      if (!normalized || normalized.length > maxLength) throw new AdminHttpError(400, `${label} is required`);
+      return normalized;
+    };
+    const publicUrl = (value: string, label: string): string => {
+      const normalized = text(value, label, 2048);
+      let parsed: URL;
+      try { parsed = new URL(normalized); } catch { throw new AdminHttpError(400, `${label} must be an http or https URL`); }
+      if (!/^https?:$/.test(parsed.protocol) || parsed.username || parsed.password) throw new AdminHttpError(400, `${label} must be a public http or https URL without credentials`);
+      return parsed.toString();
+    };
+    const surveyId = normalizeId(input.surveyId, "surveyId");
+    const releaseId = normalizeId(input.releaseId, "releaseId");
+    const productName = text(input.productName, "productName", 200);
+    const id = productId(surveyId, releaseId, productName);
+    const existing = this.#records.get(id);
+    if (existing) return existing;
+    const modalities = input.surveyModalities.map((modality) => text(modality, "surveyModalities", 64)).slice(0, 16);
+    if (!modalities.length) throw new AdminHttpError(400, "surveyModalities must contain at least one modality");
+    const surveyColor = text(input.surveyColor, "surveyColor", 32);
+    if (!/^#[0-9a-f]{6}$/i.test(surveyColor)) throw new AdminHttpError(400, "surveyColor must be a six-digit hex color");
+    const releasedYear = input.releasedYear;
+    if (releasedYear !== undefined && (!Number.isSafeInteger(releasedYear) || releasedYear < 1900 || releasedYear > 2200)) throw new AdminHttpError(400, "releasedYear is invalid");
+    const modality = text(input.modality, "modality", 64);
+    const sourceUrl = publicUrl(input.sourceUrl, "sourceUrl");
+    const geometrySourceUrl = publicUrl(input.geometrySourceUrl, "geometrySourceUrl");
+    const publicSurvey: ProductPublicSurvey = {
+      name: text(input.surveyName, "surveyName", 200),
+      mission: text(input.mission, "mission", 200),
+      description: text(input.surveyDescription, "surveyDescription", 4000),
+      color: surveyColor,
+      modalities,
+    };
+    const publicRelease: ProductPublicRelease = {
+      label: text(input.releaseLabel, "releaseLabel", 200),
+      kind: text(input.releaseKind, "releaseKind", 64),
+      ...(releasedYear !== undefined ? { releasedYear } : {}),
+    };
+    const draft: ProductContent = {
+      productId: id,
+      surveyId,
+      releaseId,
+      name: productName,
+      modality,
+      mode: "native-moc",
+      coverageRole: "footprint_extent",
+      dataOrigin: input.dataOrigin ?? "observed",
+      sourceTier: "third_party_moc",
+      sourceUrl,
+      geometrySourceLabel: input.geometrySourceLabel?.trim() || "CDS MOC source",
+      geometrySourceUrl,
+      publicSurvey,
+      publicRelease,
+      publicDescription: text(input.productDescription, "productDescription", 4000),
+      publicStatus: input.productStatus ?? "acquired",
+      recipeVersion: 1,
+      presentation: { summaryMarkdown: "", methodologyMarkdown: "", limitationsMarkdown: "", flow: defaultFlow({ name: productName, modality }, "native-moc", { sourceUrl, geometrySourceUrl }) },
+    };
+    const now = new Date().toISOString();
+    const record: ProductRecord = { productId: id, draft, published: null, revision: 1, publishedRevision: null, updatedAt: now, publishedAt: null, contentSha256: hashContent(draft) };
+    this.#records.set(id, record);
+    await this.persist();
+    await appendFile(this.#historyFile(), `${JSON.stringify({ action: "moc-registration", productId: id, revision: record.revision, at: now, content: draft })}\n`);
+    return record;
+  }
+
   async updateDraft(id: string, content: unknown, expectedRevision?: number): Promise<ProductRecord> {
     const record = this.get(id);
     if (expectedRevision !== undefined && expectedRevision !== record.revision) throw new AdminHttpError(409, "Product revision conflict");

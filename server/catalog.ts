@@ -54,7 +54,7 @@ export function assetPreviewMode(mediaType: string): PublicAssetPreviewMode | un
   return undefined;
 }
 
-export function publicManifest(catalog: LoadedCatalog): Omit<PublicAssetManifest, "files"> & { files: PublicAssetProjection[] } {
+export function publicManifest(catalog: LoadedCatalog, additionalRecords: PublicAssetRecord[] = []): Omit<PublicAssetManifest, "files"> & { files: PublicAssetProjection[] } {
   const classify = (record: PublicAssetRecord): "runtime" | "evidence" => {
     // Runtime contains only the catalog, projections, previews and lightweight
     // metadata needed by the public page. Raw inputs and audit snapshots stay
@@ -63,12 +63,14 @@ export function publicManifest(catalog: LoadedCatalog): Omit<PublicAssetManifest
     if (record.kind === "moc") return "evidence";
     return "runtime";
   };
-  const files = catalog.manifest.files.map((record) => ({ ...record, deliveryClass: record.deliveryClass ?? classify(record) }));
+  const known = new Set(catalog.manifest.files.map((record) => record.id));
+  const files = [...catalog.manifest.files, ...additionalRecords.filter((record) => !known.has(record.id))]
+    .map((record) => ({ ...record, deliveryClass: record.deliveryClass ?? classify(record) }));
   const runtimeBytes = files.filter((record) => record.deliveryClass === "runtime").reduce((sum, record) => sum + record.sizeBytes, 0);
   const evidenceBytes = files.filter((record) => record.deliveryClass === "evidence").reduce((sum, record) => sum + record.sizeBytes, 0);
   return {
     ...catalog.manifest,
-    statistics: { ...catalog.manifest.statistics, runtimeBytes, evidenceBytes },
+    statistics: { ...catalog.manifest.statistics, totalBytes: files.reduce((sum, record) => sum + record.sizeBytes, 0), rawMocFiles: files.filter((record) => record.kind === "moc").length, runtimeBytes, evidenceBytes },
     files: files.map(({ path: _path, ...record }) => {
       const previewMode = assetPreviewMode(record.mediaType);
       return {

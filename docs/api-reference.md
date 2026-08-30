@@ -3,7 +3,8 @@
 这是 Astro Survey Atlas Assets 的公开只读 API 维护入口。路由、响应字段、媒体类型、缓存、Range 或预览能力变更时，必须在同一变更中更新本文、`README.md` 的入口和对应 HTTP 测试。
 
 公开 catalog、block、下载和预览只读取已经构建并通过
-`release-manifest.json` allowlist 校验的静态制品。覆盖反查是一个明确的
+`release-manifest.json` allowlist 校验的静态制品，或已经审核发布并通过
+SHA-256 校验的动态 MOC 制品。覆盖反查是一个明确的
 warehouse Elasticsearch 读路径（`ASSETS_WAREHOUSE_ES_URL`），不会访问 OSS
 或旧 Assets ES，也不处理或暴露原始远程凭据。这里描述的是公开只读服务
 边界，不限制 Assets 项目自行管理 ConfigMap、Secret 和 ScanRequest。
@@ -31,7 +32,7 @@ GET /healthz
 GET /api/v1/assets
 ```
 
-返回当前 release manifest 的公开投影。每个 `files[]` 条目包含稳定 `id`、标签、媒体类型、下载名、大小、SHA-256、巡天/发布/产品关联和来源说明；服务器内部 `path` 不会返回。
+返回当前 release manifest 与已发布 MOC publication 的公开投影。每个 `files[]` 条目包含稳定 `id`、标签、媒体类型、下载名、大小、SHA-256、巡天/发布/产品关联和来源说明；服务器内部 `path` 不会返回。动态 MOC 只有在对应产品发布成功后才会加入；输入快照和构建证据不会因为发布而进入初始页面 payload。
 
 当前 release 也包含架构边界、Assets 对 data-warehouse 的需求和 Resource
 Package v3 JSON Schema，作为普通 allowlisted metadata/documentation 制品下载。
@@ -62,7 +63,7 @@ coverage layer exists: `availableOrders`, `overviewOrder`, `maxOrder`, and
 `layerId`. Survey and release records also include aggregated `coverageOrders`.
 ```
 
-返回公开巡天、Release 和产品状态的只读索引，供 Assets 网站渲染卡片和详情。它只反映审核后进入当前公开 release 的内容；尚未审核的登记或 coverage task 不会出现在这里。
+返回公开巡天、Release 和产品状态的只读索引，供 Assets 网站渲染卡片和详情。它只反映已进入当前公开目录的内容；尚未审核的登记、未发布的 MOC build 或 coverage task 不会出现在这里。
 
 ## Coverage Catalog And Blocks
 
@@ -192,7 +193,7 @@ allowlisted release assets.
 
 ## Admin Scan Requests
 
-### MOC Discovery And Review
+### MOC Discovery And Build
 
 管理员 MOC 接口需要同样的令牌：
 
@@ -201,22 +202,59 @@ GET  /api/v1/admin/moc-discovery
 POST /api/v1/admin/moc-discovery
 GET  /api/v1/admin/moc-discovery/{name}
 POST /api/v1/admin/moc-discovery/{name}/resubmit
-GET  /api/v1/admin/moc-discovery/{name}/reviews
-POST /api/v1/admin/moc-discovery/{name}/reviews
+GET  /api/v1/admin/moc-builds
+POST /api/v1/admin/moc-builds
+GET  /api/v1/admin/moc-builds/{name}
+POST /api/v1/admin/moc-builds/{name}/retry
+POST /api/v1/admin/moc-builds/{name}/register-product
 ```
 
-创建请求只提交巡天、Release/产品提示，或可选的 `productId`/`workContext`。
-Assets 为 MOC 探查和文件扫描写入同一个稳定的 work identity/title annotation，
+创建 discovery 只提交巡天、Release/产品提示，或可选的 `productId`/`workContext`。
+Assets 为 discovery 和文件扫描写入同一个稳定的 work identity/title annotation，
 因此 02A 可以把不同 attempt 聚合到同一产品工作项。列表响应只包含 phase、计数和
-evidence 引用；单项详情才包含 Warehouse 投影的有界 `status.reviewSummary`：候选、
-probe、URL、响应哈希和空间 MOC 校验摘要。完整响应仍在 Warehouse evidence 中。
+evidence 引用；单项详情才包含 Warehouse 投影的有界 `status.reviewSummary`。
 
-审核 POST 只允许提交 `candidateId`、可选 `probeId`、决定和备注。服务端会重新从
-当前 Warehouse status 解析 URL/哈希并拒绝不存在或被篡改的 candidate/probe；
-`ready-for-build` 必须是成功 request 中 `ok=true` 且 `validation.acceptedSpatialMoc=true`
-的 probe。旧版成功但没有 `reviewSummary` 的请求会明确返回缺失状态，需通过
-`resubmit` 创建新的不可变探查 attempt；原请求和 evidence 保留。合法的零候选/零 probe
-结果与摘要缺失是两种不同状态，截断也会单独标明。
+`cds-public-moc-v2` 只做一次 CDS MocServer 搜索，不下载候选 MOC，也不执行 probe，
+不写 `ast_*`。搜索最多读取 51 条记录，状态最多保存前 50 条；第 51 条只是可靠的
+truncation sentinel，因此 `truncated=true` 表示还有候选没有进入审核摘要。摘要
+`schemaVersion=2` 包含 `truncated`、`summaryTruncated`、可选的 `searchRecordCount`
+和候选的 `candidateId`/公共 URL。一个带合法摘要但候选为空的结果是可审核的零结果；
+没有摘要则表示 discovery 尚未产生可审核结果。v1 CR/evidence 仅保留为只读历史，
+不会被 v2 operator 重写，也不被 Assets 当作可构建结果。
+对旧 v1 记录执行“重新探查”会复制其查询意图并创建新的 v2 retry；旧对象和证据仍不变。
+
+选择候选后提交构建请求：
+
+```json
+{
+  "discoveryRequestName": "jwst-moc-discovery-20260830",
+  "candidateId": "jwst-dr1",
+  "productId": "<product-id>"
+}
+```
+
+服务端只从当前 Warehouse 摘要解析并校验 CDS URL，浏览器不能提交来源地址或哈希。
+如果 discovery 已通过 `productId` 绑定产品，详情响应会保留该工作上下文，build
+会自动继承它；请求中若提交了不同的 `productId` 会被拒绝。未绑定的 discovery
+仍可在创建 build 时显式选择一个已登记产品。
+独立的 Assets-owned `MocBuildRequest` 按
+`QUEUED → FETCHING → SNAPSHOT_LOCKED → VALIDATING → BUILDING → PROJECTING → BUNDLING → STAGED`
+执行；它调用 MOC-Core-SDK，证据和构建输出先留在 evidence。失败或重复快照分别为
+`FAILED`、`DUPLICATE`，retry 会创建新的不可变 build attempt，不会触碰 ScanRequest。
+
+如果创建时没有绑定产品，`STAGED` build 会出现在
+`GET /api/v1/admin/products?view=surveys` 返回的 `__moc-builds__` 编辑队列中，
+即使它的 survey 还不在静态公共 catalog 里也不会丢失。管理员提交
+`POST /api/v1/admin/moc-builds/{name}/register-product`，填写 survey、release、
+产品公共事实和来源 URL；Assets 会创建一个未发布的草稿产品并一次性绑定该 build。
+之后在同一个产品审核页面编辑说明，最后调用 publish。登记不会把 discovery 候选
+直接变成公开产品，也不会修改原始 build attempt 或正常 Connector/ScanRequest 流程。
+
+产品审核发布时，`POST /api/v1/admin/products/{productId}/publish` 才会把对应的
+`STAGED` build 复制到内容卷并登记 publication。登记前每个输出都会重新检查文件、
+大小和 SHA-256；publication 文件缺失或被篡改时不会进入 `/api/v1/assets`、
+`/api/v1/coverage` 或 `/api/v1/surveys`。发布成功后动态 layer 同时出现在这些接口，
+并可通过下列 MOC URL 下载。
 
 ### Admin Connectors
 

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage, type RequestOptions as HttpRequestOptions } from "node:http";
 import { request as httpsRequest, type RequestOptions as HttpsRequestOptions } from "node:https";
 import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
-import type { MocCandidateSummary, MocProbeSummary, MocReviewSummary } from "./moc-discovery.js";
+import type { MocCandidateSummary, MocReviewSummary } from "./moc-discovery.js";
 
 const API_GROUP = "/apis/atlas.zhejianglab.org/v1alpha1";
 export const ASSETS_MANAGED_BY = "astro-survey-atlas-assets";
@@ -218,6 +218,9 @@ export interface MocDiscoveryView {
   policyRef: string;
   workKey?: string;
   workTitle?: string;
+  surveyId?: string;
+  releaseId?: string;
+  productId?: string;
   status: {
     phase: string;
     jobName?: string;
@@ -225,7 +228,6 @@ export interface MocDiscoveryView {
     message?: string;
     evidencePath?: string;
     candidateCount?: number;
-    probeCount?: number;
     lastTransitionTime?: string;
     reviewSummary?: MocReviewSummary;
     reviewSummaryState?: "available" | "missing";
@@ -592,6 +594,9 @@ function taskView(resource: KubernetesResource): CoverageTaskView {
     batchId: typeof plan.scanRunId === "string" ? plan.scanRunId : undefined,
     ...(work?.key ? { workKey: work.key } : {}),
     ...(work?.title ? { workTitle: work.title } : {}),
+    ...(work?.surveyId ? { surveyId: work.surveyId } : {}),
+    ...(work?.releaseId ? { releaseId: work.releaseId } : {}),
+    ...(work?.productId ? { productId: work.productId } : {}),
     recipe: {
       mode: typeof extraction.mode === "string" ? extraction.mode : undefined,
       outputOrder: typeof extraction.outputOrder === "number" ? extraction.outputOrder : undefined,
@@ -619,24 +624,17 @@ function parseWorkContext(value: string | undefined): WorkContextView | undefine
 function reviewSummaryView(value: unknown): MocReviewSummary | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const item = value as Record<string, unknown>;
-  if (item.schemaVersion !== 1 || typeof item.truncated !== "boolean" || typeof item.summaryTruncated !== "boolean") return undefined;
+  if (item.schemaVersion !== 2 || typeof item.truncated !== "boolean" || typeof item.summaryTruncated !== "boolean") return undefined;
   if (item.candidates !== undefined && !Array.isArray(item.candidates)) return undefined;
-  if (item.probes !== undefined && !Array.isArray(item.probes)) return undefined;
   const candidateItems = Array.isArray(item.candidates) ? item.candidates : [];
-  const probeItems = Array.isArray(item.probes) ? item.probes : [];
   const candidates = candidateItems.filter((candidate): candidate is MocCandidateSummary => {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return false;
     return typeof (candidate as Record<string, unknown>).candidateId === "string";
   });
-  const probes = probeItems.filter((probe): probe is MocProbeSummary => {
-    if (!probe || typeof probe !== "object" || Array.isArray(probe)) return false;
-    const value = probe as Record<string, unknown>;
-    return typeof value.probeId === "string" && /^[a-f0-9]{64}$/.test(value.probeId)
-      && typeof value.candidateId === "string" && typeof value.kind === "string"
-      && typeof value.url === "string" && typeof value.ok === "boolean";
-  });
-  if (candidates.length !== candidateItems.length || probes.length !== probeItems.length) return undefined;
-  return { schemaVersion: 1, truncated: item.truncated, summaryTruncated: item.summaryTruncated, candidates, probes };
+  if (candidates.length !== candidateItems.length || candidates.length > 50) return undefined;
+  const searchRecordCount = typeof item.searchRecordCount === "number" && Number.isSafeInteger(item.searchRecordCount) && item.searchRecordCount >= 0
+    ? item.searchRecordCount : undefined;
+  return { schemaVersion: 2, truncated: item.truncated, summaryTruncated: item.summaryTruncated, ...(searchRecordCount !== undefined ? { searchRecordCount } : {}), candidates };
 }
 
 function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = false): MocDiscoveryView {
@@ -651,7 +649,6 @@ function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = f
   const summary = reviewSummaryView(status.reviewSummary);
   const work = parseWorkContext(resource.metadata?.annotations?.["assets.atlas.zhejianglab.org/work-ref"]);
   const candidateCount = number("candidateCount") ?? summary?.candidates.length;
-  const probeCount = number("probeCount") ?? summary?.probes.length;
   return {
     name: resource.metadata?.name ?? "",
     namespace: resource.metadata?.namespace,
@@ -662,6 +659,9 @@ function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = f
     policyRef: typeof spec.policyRef === "string" ? spec.policyRef : "",
     ...(work?.key ? { workKey: work.key } : {}),
     ...(work?.title ? { workTitle: work.title } : {}),
+    ...(work?.surveyId ? { surveyId: work.surveyId } : {}),
+    ...(work?.releaseId ? { releaseId: work.releaseId } : {}),
+    ...(work?.productId ? { productId: work.productId } : {}),
     status: {
       phase: (value("phase") ?? "PENDING").toUpperCase(),
       ...(value("jobName") ? { jobName: value("jobName") } : {}),
@@ -669,7 +669,6 @@ function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = f
       ...(value("message") ? { message: value("message") } : {}),
       ...(value("evidencePath") ? { evidencePath: value("evidencePath") } : {}),
       ...(candidateCount !== undefined ? { candidateCount } : {}),
-      ...(probeCount !== undefined ? { probeCount } : {}),
       ...(value("lastTransitionTime") ? { lastTransitionTime: value("lastTransitionTime") } : {}),
       reviewSummaryState: summary ? "available" as const : "missing" as const,
       ...(includeReviewSummary && summary ? { reviewSummary: summary } : {}),
@@ -732,7 +731,7 @@ function buildMocDiscoveryResource(input: MocDiscoveryInput, namespace: string):
     },
     spec: {
       query: { surveyName, ...(releaseHint ? { releaseHint } : {}), ...(productHint ? { productHint } : {}) },
-      policyRef: "cds-public-moc-v1",
+      policyRef: "cds-public-moc-v2",
     },
   };
 }
@@ -1142,7 +1141,8 @@ export class AssetsAdmin {
         connectorTypes: [...CONNECTOR_TYPES],
         backends: ["job"],
         scanRequestApiVersion: "atlas.zhejianglab.org/v1alpha1",
-        mocDiscovery: { provider: "cds", policyRef: "cds-public-moc-v1" },
+        mocDiscovery: { provider: "cds", policyRef: "cds-public-moc-v2", candidateStatusLimit: 50, searchRecordLimit: 51 },
+        mocBuild: { resourceKind: "MocBuildRequest", phases: ["QUEUED", "FETCHING", "SNAPSHOT_LOCKED", "VALIDATING", "BUILDING", "PROJECTING", "BUNDLING", "STAGED", "FAILED", "DUPLICATE"] },
       },
     };
   }
@@ -1322,7 +1322,9 @@ export class AssetsAdmin {
       apiVersion: resource.apiVersion ?? "atlas.zhejianglab.org/v1alpha1",
       kind: resource.kind ?? "MocDiscoveryRequest",
       metadata,
-      spec: structuredClone(resource.spec ?? {}),
+      // A retry is a new v2 intent even when the source record is a legacy
+      // v1 request. The historical object and its evidence remain immutable.
+      spec: { ...structuredClone(resource.spec ?? {}), policyRef: "cds-public-moc-v2" },
     };
     try {
       return mocDiscoveryView(await this.kube.create("mocdiscoveryrequests", retryResource));

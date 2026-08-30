@@ -96,14 +96,16 @@ Connector 的连接探测不属于 Warehouse `ScanRequest` status。Assets 管�
 页面内存中显示，不能要求 Warehouse 将 `READY`、`PENDING` 或 `ERROR` 写入
 Connector ConfigMap。
 
-MOC discovery request 的成功 status 如果支持审核投影，应提供有界的
-`reviewSummary`：`schemaVersion=1`、`truncated`、`summaryTruncated`、候选数组和
-probe 数组。每个候选至少有 `candidateId`，每个 probe 至少有稳定的
-`probeId`（SHA-256）、`candidateId`、kind、URL 和 `ok`，并在可用时提供响应哈希和
-`validation.acceptedSpatialMoc`。合法的空数组必须保留为可审核的零结果；没有摘要
-与零结果不是同一种状态。完整响应、原始响应和 evidence 仍留在 Warehouse evidence，
-不能塞入 CRD status 或 Assets 初始页面 payload。Assets 只提交候选/probe ID、决定和
-备注，服务端会以当前 status 重新解析 URL 与哈希。
+MOC discovery request 使用固定的 `cds-public-moc-v2` policy，只查询 allowlisted
+CDS MocServer，写入 evidence，不下载候选 MOC、不执行 probe，也不写 `ast_*`。成功
+status 的审核投影为有界 `reviewSummary`：`schemaVersion=2`、`truncated`、
+`summaryTruncated`、可选 `searchRecordCount` 和候选数组。搜索最多读取 51 条记录，
+状态最多保存前 50 条；第 51 条是判断 `truncated` 的 sentinel，不进入状态。候选至少
+有 `candidateId`，并在可用时提供 `title`、`recordUrl`、`mocUrl`、`hipsUrl`。合法的
+空候选数组必须保留为可审核的零结果；没有摘要与零结果不是同一种状态。完整响应、
+原始响应和 evidence 仍留在 Warehouse evidence，不能塞入 Assets 初始页面 payload。
+Assets 只提交候选 ID 创建独立的 MOC build，服务端会以当前 status 重新解析并校验
+来源 URL。旧 v1 CR/evidence 只作为只读历史保留，不由 v2 operator 重写或重新执行。
 
 ## 4. Sink 语义
 

@@ -74,6 +74,7 @@ test("admin page is included as a separate deployable entry point", async () => 
   const html = await (await import("node:fs/promises")).readFile("site/admin/index.html", "utf8");
   assert.match(html, /ScanRequest/);
   assert.match(html, /\/admin\/main\.ts/);
+  assert.match(html, /product-dialog-publish/);
 });
 
 test("organization and SDK pages expose the shared Core repository", async () => {

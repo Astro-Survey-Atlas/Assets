@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
 import os from "node:os";
@@ -16,6 +17,18 @@ function freePort(): Promise<number> {
       server.close(() => resolve(address.port));
     });
     server.on("error", reject);
+  });
+}
+
+function sha256(value: Uint8Array): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function stopChild(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null) return;
+  await new Promise<void>((resolve) => {
+    child.once("exit", () => resolve());
+    child.kill("SIGTERM");
   });
 }
 
@@ -237,10 +250,8 @@ test("admin endpoints require a token and expose the configured control-plane bo
   assert.doesNotMatch(surveyViewText, /normalized-scan|taskSnapshot|\/var\/lib|elasticsearch|input-manifest/i);
 });
 
-test("MOC discovery HTTP routes expose review summaries, reject forged choices and require explicit retry", async (context) => {
+test("MOC discovery HTTP routes expose v2 summaries, reject forged choices and require explicit retry", async (context) => {
   const kubePort = await freePort();
-  const probeId = "a".repeat(64);
-  const sourceHash = "b".repeat(64);
   const resource = {
     apiVersion: "atlas.zhejianglab.org/v1alpha1",
     kind: "MocDiscoveryRequest",
@@ -251,17 +262,16 @@ test("MOC discovery HTTP routes expose review summaries, reject forged choices a
       labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" },
       annotations: { "assets.atlas.zhejianglab.org/work-ref": JSON.stringify({ key: "product:jwst-dr1", title: "JWST · DR1 · Public MOC", surveyId: "jwst", releaseId: "dr1", productId: "jwst-dr1" }) },
     },
-    spec: { query: { surveyName: "JWST", releaseHint: "DR1" }, policyRef: "cds-public-moc-v1" },
+    spec: { query: { surveyName: "JWST", releaseHint: "DR1" }, policyRef: "cds-public-moc-v2" },
     status: {
       phase: "SUCCEEDED",
       candidateCount: 1,
-      probeCount: 1,
       reviewSummary: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         truncated: false,
         summaryTruncated: false,
-        candidates: [{ candidateId: "jwst-dr1", title: "JWST DR1", recordUrl: "https://alasky.cds.unistra.fr/jwst" }],
-        probes: [{ probeId, candidateId: "jwst-dr1", kind: "mocUrl", url: "https://alasky.cds.unistra.fr/jwst/moc.fits", ok: true, sha256: sourceHash, validation: { acceptedSpatialMoc: true, icrs: true, nested: true } }],
+        searchRecordCount: 1,
+        candidates: [{ candidateId: "jwst-dr1", title: "JWST DR1", mocUrl: "https://alasky.cds.unistra.fr/jwst/moc.fits" }],
       },
     },
   };
@@ -309,20 +319,19 @@ test("MOC discovery HTTP routes expose review summaries, reject forged choices a
   assert.doesNotMatch(listText, /candidates|probes|https:\/\/alasky/);
   const detail = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-discovery/jwst-moc-discovery`, { headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(detail.status, 200);
-  const detailBody = await detail.json() as { request: { workKey?: string; workTitle?: string; status: { reviewSummary?: { candidates: unknown[]; probes: unknown[] } } } };
+  const detailBody = await detail.json() as { request: { workKey?: string; workTitle?: string; surveyId?: string; releaseId?: string; productId?: string; status: { reviewSummary?: { candidates: unknown[]; searchRecordCount?: number } } } };
   assert.equal(detailBody.request.workKey, "product:jwst-dr1");
   assert.equal(detailBody.request.workTitle, "JWST · DR1 · Public MOC");
+  assert.equal(detailBody.request.surveyId, "jwst");
+  assert.equal(detailBody.request.releaseId, "dr1");
+  assert.equal(detailBody.request.productId, "jwst-dr1");
   assert.equal(detailBody.request.status.reviewSummary?.candidates.length, 1);
-  assert.equal(detailBody.request.status.reviewSummary?.probes.length, 1);
+  assert.equal(detailBody.request.status.reviewSummary?.searchRecordCount, 1);
 
-  const forged = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-discovery/jwst-moc-discovery/reviews`, { method: "POST", headers: { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" }, body: JSON.stringify({ candidateId: "invented", decision: "rejected" }) });
+  const forged = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-builds`, { method: "POST", headers: { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" }, body: JSON.stringify({ discoveryRequestName: "jwst-moc-discovery", candidateId: "invented" }) });
   assert.equal(forged.status, 400);
-  const review = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-discovery/jwst-moc-discovery/reviews`, { method: "POST", headers: { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" }, body: JSON.stringify({ candidateId: "jwst-dr1", probeId, decision: "ready-for-build" }) });
-  assert.equal(review.status, 201);
-  const reviewBody = await review.json() as { review: { sourceSnapshotSha256?: string; mocUrl?: string; sourceUrl?: string } };
-  assert.equal(reviewBody.review.sourceSnapshotSha256, sourceHash);
-  assert.equal(reviewBody.review.sourceUrl, "https://alasky.cds.unistra.fr/jwst");
-  assert.equal(reviewBody.review.mocUrl, "https://alasky.cds.unistra.fr/jwst/moc.fits");
+  const mismatchedProduct = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-builds`, { method: "POST", headers: { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" }, body: JSON.stringify({ discoveryRequestName: "jwst-moc-discovery", candidateId: "jwst-dr1", productId: "other-product" }) });
+  assert.equal(mismatchedProduct.status, 400);
 
   const retry = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-discovery/jwst-moc-discovery/resubmit`, { method: "POST", headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(retry.status, 201);
@@ -332,7 +341,112 @@ test("MOC discovery HTTP routes expose review summaries, reject forged choices a
   assert.equal(retryBody.request.status.reviewSummaryState, "missing");
   assert.ok(retryResource);
   assert.equal((retryResource!.metadata as Record<string, unknown>).annotations && ((retryResource!.metadata as Record<string, unknown>).annotations as Record<string, string>)["assets.atlas.zhejianglab.org/work-ref"], resource.metadata.annotations["assets.atlas.zhejianglab.org/work-ref"]);
-  assert.equal((retryResource!.spec as Record<string, unknown>).policyRef, "cds-public-moc-v1");
+  assert.equal((retryResource!.spec as Record<string, unknown>).policyRef, "cds-public-moc-v2");
+});
+
+test("product review exposes staged MOC builds that are not bound to a product", async (context) => {
+  const contentRoot = await mkdtemp(path.join(os.tmpdir(), "assets-unbound-moc-review-"));
+  const evidenceRoot = await mkdtemp(path.join(os.tmpdir(), "assets-unbound-moc-evidence-"));
+  await writeFile(path.join(contentRoot, "moc-build-requests-v1.json"), `${JSON.stringify({
+    schemaVersion: 1,
+    requests: [{
+      schemaVersion: 1,
+      kind: "MocBuildRequest",
+      name: "jwst-moc-build-staged",
+      createdAt: "2026-08-30T04:00:00.000Z",
+      updatedAt: "2026-08-30T04:00:00.000Z",
+      discoveryRequestName: "jwst-moc-discovery",
+      provider: "cds",
+      candidateId: "cds-p-jwst-deep-field",
+      candidateTitle: "JWST deep field",
+      source: { url: "https://alasky.cds.unistra.fr/jwst/moc.fits" },
+      phase: "STAGED",
+      progress: { phase: "STAGED", step: 7, totalSteps: 7, percent: 100, message: "构建完成，等待产品审核与发布" },
+    }],
+  }, null, 2)}\n`);
+  const port = await freePort();
+  const child = spawn(process.execPath, [path.resolve("node_modules/tsx/dist/cli.mjs"), "server/server.ts"], {
+    cwd: process.cwd(),
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), PUBLIC_SITE_ROOT: path.resolve("site"), ASSETS_CONTENT_ROOT: contentRoot, ASSETS_EVIDENCE_ROOT: evidenceRoot, ASSETS_WAREHOUSE_ES_URL: "", ASSETS_ADMIN_ENABLED: "true", ASSETS_ADMIN_TOKEN: "test-admin-token" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  context.after(() => { child.kill("SIGTERM"); });
+  await waitFor(`http://127.0.0.1:${port}/healthz`, child);
+
+  const response = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products?view=surveys`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(response.status, 200);
+  const body = await response.json() as { surveys: Array<{ id: string; unmatchedBuilds?: Array<{ name: string; candidateId: string; candidateTitle?: string }> }> };
+  const queue = body.surveys.find((survey) => survey.id === "__moc-builds__");
+  assert.ok(queue);
+  assert.equal(queue.unmatchedBuilds?.[0]?.name, "jwst-moc-build-staged");
+  assert.equal(queue.unmatchedBuilds?.[0]?.candidateId, "cds-p-jwst-deep-field");
+  assert.equal(queue.unmatchedBuilds?.[0]?.candidateTitle, "JWST deep field");
+});
+
+test("staged MOC builds can be registered, reviewed and published as a dynamic survey", async (context) => {
+  const kubePort = await freePort();
+  const discovery = {
+    apiVersion: "atlas.zhejianglab.org/v1alpha1",
+    kind: "MocDiscoveryRequest",
+    metadata: { name: "jwst-moc-discovery", namespace: "atlas-warehouse", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" } },
+    spec: { query: { surveyName: "JWST", releaseHint: "DR1" }, policyRef: "cds-public-moc-v2" },
+    status: { phase: "SUCCEEDED", reviewSummary: { schemaVersion: 2, truncated: false, summaryTruncated: false, candidates: [{ candidateId: "jwst-dr1", title: "JWST DR1", recordUrl: "https://alasky.cds.unistra.fr/jwst/dr1", mocUrl: "https://alasky.cds.unistra.fr/jwst/dr1/moc.fits" }] } },
+  };
+  const kubeServer = createServer((request, response) => {
+    const pathname = new URL(request.url ?? "/", "http://kubernetes").pathname;
+    response.setHeader("Content-Type", "application/json");
+    if (pathname.endsWith("/mocdiscoveryrequests/jwst-moc-discovery")) {
+      response.writeHead(200);
+      response.end(JSON.stringify(discovery));
+      return;
+    }
+    response.writeHead(404);
+    response.end(JSON.stringify({ message: "not found" }));
+  });
+  await new Promise<void>((resolve, reject) => { kubeServer.once("error", reject); kubeServer.listen(kubePort, "127.0.0.1", () => resolve()); });
+  context.after(() => { kubeServer.close(); });
+
+  const contentRoot = await mkdtemp(path.join(os.tmpdir(), "assets-moc-register-content-"));
+  const evidenceRoot = await mkdtemp(path.join(os.tmpdir(), "assets-moc-register-evidence-"));
+  const buildName = "jwst-moc-build-staged";
+  const buildRoot = path.join(evidenceRoot, "moc-build", buildName);
+  await mkdir(buildRoot, { recursive: true });
+  const outputBytes = { moc: Buffer.from("jwst-moc-fits"), query: Buffer.from(JSON.stringify({ order: 8, ordering: "NESTED", pixels: [1, 2] })), preview: Buffer.from(JSON.stringify({ order: 4, ordering: "NESTED", pixels: [0] })) };
+  await writeFile(path.join(buildRoot, "moc.fits"), outputBytes.moc);
+  await writeFile(path.join(buildRoot, "query-order8.json"), outputBytes.query);
+  await writeFile(path.join(buildRoot, "preview-order4.json"), outputBytes.preview);
+  const outputRef = (key: keyof typeof outputBytes, ref: string) => ({ ref: `moc-build/${buildName}/${ref}`, sha256: sha256(outputBytes[key]), sizeBytes: outputBytes[key].length });
+  await writeFile(path.join(contentRoot, "moc-build-requests-v1.json"), `${JSON.stringify({ schemaVersion: 1, requests: [{ schemaVersion: 1, kind: "MocBuildRequest", name: buildName, createdAt: "2026-08-30T04:00:00.000Z", updatedAt: "2026-08-30T04:00:00.000Z", discoveryRequestName: "jwst-moc-discovery", provider: "cds", candidateId: "jwst-dr1", candidateTitle: "JWST DR1", source: { url: "https://alasky.cds.unistra.fr/jwst/dr1/moc.fits" }, phase: "STAGED", progress: { phase: "STAGED", step: 7, totalSteps: 7, percent: 100, message: "构建完成，等待产品审核与发布" }, outputs: { moc: outputRef("moc", "moc.fits"), query: { ...outputRef("query", "query-order8.json"), order: 8 }, preview: { ...outputRef("preview", "preview-order4.json"), order: 4 }, availableOrders: [4, 8], maxOrder: 8, cellCount: 2 } }] }, null, 2)}\n`);
+  const port = await freePort();
+  const child = spawn(process.execPath, [path.resolve("node_modules/tsx/dist/cli.mjs"), "server/server.ts"], {
+    cwd: process.cwd(),
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), PUBLIC_SITE_ROOT: path.resolve("site"), ASSETS_CONTENT_ROOT: contentRoot, ASSETS_EVIDENCE_ROOT: evidenceRoot, ASSETS_WAREHOUSE_ES_URL: "", ASSETS_ADMIN_ENABLED: "true", ASSETS_ADMIN_TOKEN: "test-admin-token", ASSETS_KUBE_API_URL: `http://127.0.0.1:${kubePort}`, ASSETS_KUBE_TOKEN: "kube-token", ASSETS_WAREHOUSE_NAMESPACE: "atlas-warehouse" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  context.after(() => { child.kill("SIGTERM"); });
+  await waitFor(`http://127.0.0.1:${port}/healthz`, child);
+  const headers = { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" };
+  const register = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-builds/${buildName}/register-product`, { method: "POST", headers, body: JSON.stringify({ surveyId: "jwst", surveyName: "JWST", mission: "James Webb Space Telescope", surveyDescription: "Public JWST coverage products.", surveyColor: "#42d5c4", surveyModalities: ["infrared", "imaging"], releaseId: "dr1", releaseLabel: "DR1", releaseKind: "release", productName: "JWST DR1 public MOC", productDescription: "JWST DR1 public MOC coverage.", productStatus: "acquired", modality: "infrared", sourceUrl: "https://alasky.cds.unistra.fr/jwst/dr1", geometrySourceUrl: "https://alasky.cds.unistra.fr/jwst/dr1/moc.fits", geometrySourceLabel: "CDS MOC source" }) });
+  assert.equal(register.status, 201);
+  const registered = await register.json() as { product: { productId: string; draft: { surveyId: string; releaseId: string; publicSurvey?: { name: string } } }; request: { productId?: string; workKey?: string } };
+  assert.equal(registered.product.draft.surveyId, "jwst");
+  assert.equal(registered.product.draft.publicSurvey?.name, "JWST");
+  assert.equal(registered.request.productId, registered.product.productId);
+  assert.equal(registered.request.workKey, `product:${registered.product.productId}`);
+
+  const review = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products?view=surveys`, { headers });
+  const reviewBody = await review.json() as { surveys: Array<{ id: string; unmatchedBuilds?: unknown[]; unmatchedProducts?: Array<{ productId: string }> }> };
+  assert.equal(reviewBody.surveys.some((survey) => survey.id === "__moc-builds__"), false);
+  assert.ok(reviewBody.surveys.find((survey) => survey.id === "__unmatched__")?.unmatchedProducts?.some((product) => product.productId === registered.product.productId));
+
+  const publish = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${registered.product.productId}/publish`, { method: "POST", headers, body: JSON.stringify({ revision: 1 }) });
+  assert.equal(publish.status, 200);
+  const surveysResponse = await fetch(`http://127.0.0.1:${port}/api/v1/surveys`);
+  assert.equal(surveysResponse.status, 200);
+  const surveys = await surveysResponse.json() as { surveys: Array<{ id: string; releases: Array<{ id: string; products: Array<{ productId?: string; name: string; sourceUrl: string }> }> }> };
+  const dynamic = surveys.surveys.find((survey) => survey.id === "jwst");
+  assert.ok(dynamic);
+  assert.equal(dynamic.releases.find((release) => release.id === "dr1")?.products[0]?.productId, registered.product.productId);
 });
 
 test("admin connector probe route checks an authorized PVC without persisting its phase", async (context) => {
@@ -471,4 +585,135 @@ test("public product dossier, evidence projection and predictable MOC URL are ha
   const mocHead = await fetch(`http://127.0.0.1:${port}${mocUrl}`, { method: "HEAD" });
   assert.equal(mocHead.status, 200);
   assert.ok(Number(mocHead.headers.get("content-length")) > 0);
+});
+
+test("HTTP publication activates dynamic MOC assets and restores them after restart", async (context) => {
+  const contentRoot = await mkdtemp(path.join(os.tmpdir(), "assets-dynamic-moc-content-"));
+  const evidenceRoot = await mkdtemp(path.join(os.tmpdir(), "assets-dynamic-moc-evidence-"));
+  const buildName = "euclid-ero-moc-build-20260830";
+  const buildRoot = path.join(evidenceRoot, "moc-build", buildName);
+  await mkdir(buildRoot, { recursive: true });
+  const outputBytes = {
+    moc: Buffer.from("dynamic-moc-fits"),
+    query: Buffer.from(JSON.stringify({ order: 8, ordering: "NESTED", pixels: [1, 2] })),
+    preview: Buffer.from(JSON.stringify({ order: 4, ordering: "NESTED", pixels: [0] })),
+    statistics: Buffer.from(JSON.stringify({ cells: 2 })),
+    manifest: Buffer.from(JSON.stringify({ schemaVersion: 1, kind: "moc-build-evidence", requestName: buildName })),
+  };
+  for (const [name, bytes] of Object.entries(outputBytes)) await writeFile(path.join(buildRoot, name === "query" ? "query-order8.json" : name === "preview" ? "preview-order4.json" : name === "manifest" ? "build-manifest.json" : `${name}.json`.replace("moc.json", "moc.fits")), bytes);
+  const outputRef = (name: keyof typeof outputBytes, fileName: string) => ({ ref: `moc-build/${buildName}/${fileName}`, sha256: sha256(outputBytes[name]), sizeBytes: outputBytes[name].length });
+  const productId = "18e203dec1e31f1da357";
+  await writeFile(path.join(contentRoot, "moc-build-requests-v1.json"), `${JSON.stringify({
+    schemaVersion: 1,
+    requests: [{
+      schemaVersion: 1,
+      kind: "MocBuildRequest",
+      name: buildName,
+      createdAt: "2026-08-30T01:00:00.000Z",
+      updatedAt: "2026-08-30T01:00:00.000Z",
+      discoveryRequestName: "euclid-ero-moc-discovery",
+      provider: "cds",
+      candidateId: "euclid-ero",
+      surveyId: "euclid",
+      releaseId: "euclid-ero",
+      productId,
+      workKey: `product:${productId}`,
+      workTitle: "EUCLID · ERO · Early Release Observations",
+      source: { url: "https://alasky.cds.unistra.fr/euclid-ero/moc.fits", snapshotSha256: "b".repeat(64), sizeBytes: 11, evidenceRef: `moc-build/${buildName}/source.moc` },
+      phase: "STAGED",
+      progress: { phase: "STAGED", step: 7, totalSteps: 7, percent: 100, message: "构建完成" },
+      outputs: {
+        moc: outputRef("moc", "moc.fits"),
+        query: { ...outputRef("query", "query-order8.json"), order: 8 },
+        preview: { ...outputRef("preview", "preview-order4.json"), order: 4 },
+        statistics: outputRef("statistics", "statistics.json"),
+        manifest: outputRef("manifest", "build-manifest.json"),
+        cellCount: 2,
+        availableOrders: [4, 8],
+        maxOrder: 8,
+      },
+    }],
+  }, null, 2)}\n`);
+
+  const baseEnv = {
+    ...process.env,
+    HOST: "127.0.0.1",
+    PUBLIC_SITE_ROOT: path.resolve("site"),
+    ASSETS_CONTENT_ROOT: contentRoot,
+    ASSETS_EVIDENCE_ROOT: evidenceRoot,
+    ASSETS_WAREHOUSE_ES_URL: "",
+    ASSETS_ADMIN_ENABLED: "true",
+    ASSETS_ADMIN_TOKEN: "test-admin-token",
+  };
+  let child: ChildProcess | undefined;
+  context.after(async () => { if (child) await stopChild(child); });
+  const start = async (): Promise<number> => {
+    const port = await freePort();
+    child = spawn(process.execPath, [path.resolve("node_modules/tsx/dist/cli.mjs"), "server/server.ts"], {
+      cwd: process.cwd(),
+      env: { ...baseEnv, PORT: String(port) },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    await waitFor(`http://127.0.0.1:${port}/healthz`, child);
+    return port;
+  };
+
+  let port = await start();
+  const adminHeaders = { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" };
+  const adminProducts = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products?view=surveys`, { headers: adminHeaders });
+  assert.equal(adminProducts.status, 200);
+  const adminProductBody = await adminProducts.json() as { surveys: Array<{ releases: Array<{ products: Array<{ productId: string; mocBuild?: { name: string; phase: string; progress?: { percent?: number } } }> }> }> };
+  const stagedAdminProduct = adminProductBody.surveys.flatMap((survey) => survey.releases.flatMap((release) => release.products)).find((product) => product.productId === productId);
+  assert.equal(stagedAdminProduct?.mocBuild?.name, buildName);
+  assert.equal(stagedAdminProduct?.mocBuild?.phase, "STAGED");
+  const publish = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${productId}/publish`, { method: "POST", headers: adminHeaders, body: "{}" });
+  assert.equal(publish.status, 200);
+
+  const assetsResponse = await fetch(`http://127.0.0.1:${port}/api/v1/assets`);
+  assert.equal(assetsResponse.status, 200);
+  const assets = await assetsResponse.json() as { files: Array<{ id: string; sha256: string; downloadUrl: string }> };
+  const dynamicAsset = assets.files.find((asset) => asset.id.startsWith("layer-moc-euclid-euclid-ero-") && asset.id.endsWith("-moc"));
+  assert.ok(dynamicAsset);
+  assert.equal(dynamicAsset.sha256, sha256(outputBytes.moc));
+
+  const coverageCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`);
+  assert.equal(coverageCatalogResponse.status, 200);
+  const coverageCatalog = await coverageCatalogResponse.json() as { layers: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; availableOrders: number[] }> };
+  const dynamicLayer = coverageCatalog.layers.find((layer) => layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" && layer.product === "Early Release Observations");
+  assert.ok(dynamicLayer);
+  assert.deepEqual(dynamicLayer.availableOrders, [4, 8]);
+
+  const coverageResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage`);
+  const coverage = await coverageResponse.json() as { footprints: Array<{ surveyId: string; releaseId: string; product: string }> };
+  assert.ok(coverage.footprints.some((footprint) => footprint.surveyId === "euclid" && footprint.releaseId === "euclid-ero" && footprint.product === "Early Release Observations"));
+
+  const surveysResponse = await fetch(`http://127.0.0.1:${port}/api/v1/surveys`);
+  const surveys = await surveysResponse.json() as { surveys: Array<{ id: string; releases: Array<{ id: string; products: Array<{ productId: string; coverage?: { layerId?: string } }> }> }> };
+  const publishedProduct = surveys.surveys.find((survey) => survey.id === "euclid")?.releases.find((release) => release.id === "euclid-ero")?.products.find((product) => product.productId === productId);
+  assert.equal(publishedProduct?.coverage?.layerId, dynamicLayer.layerId);
+
+  const mocResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/layers/${dynamicLayer.layerId}/moc.fits`, { headers: { Range: "bytes=0-6" } });
+  assert.equal(mocResponse.status, 206);
+  assert.equal(mocResponse.headers.get("x-content-sha256"), dynamicAsset.sha256);
+  assert.equal((await mocResponse.arrayBuffer()).byteLength, 7);
+
+  await stopChild(child!);
+  port = await start();
+  const restoredAssetsResponse = await fetch(`http://127.0.0.1:${port}/api/v1/assets`);
+  const restoredAssets = await restoredAssetsResponse.json() as { files: Array<{ id: string }> };
+  assert.ok(restoredAssets.files.some((asset) => asset.id === dynamicAsset.id));
+  const restoredCoverageResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`);
+  const restoredCoverage = await restoredCoverageResponse.json() as { layers: Array<{ layerId: string }> };
+  assert.ok(restoredCoverage.layers.some((layer) => layer.layerId === dynamicLayer.layerId));
+
+  const publicationDocument = JSON.parse(await readFile(path.join(contentRoot, "moc-publications-v1.json"), "utf8")) as { publications: Array<{ files: { moc: { path: string } } }> };
+  await writeFile(path.join(contentRoot, publicationDocument.publications[0]!.files.moc.path), "tampered dynamic MOC");
+  await stopChild(child!);
+  port = await start();
+  const rejectedAssetsResponse = await fetch(`http://127.0.0.1:${port}/api/v1/assets`);
+  const rejectedAssets = await rejectedAssetsResponse.json() as { files: Array<{ id: string }> };
+  assert.equal(rejectedAssets.files.some((asset) => asset.id === dynamicAsset.id), false);
+  const rejectedCoverageResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`);
+  const rejectedCoverage = await rejectedCoverageResponse.json() as { layers: Array<{ layerId: string }> };
+  assert.equal(rejectedCoverage.layers.some((layer) => layer.layerId === dynamicLayer.layerId), false);
 });

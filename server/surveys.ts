@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { publicManifest, type LoadedCatalog } from "./catalog.js";
-import type { PublicAssetProjection, PublicCoverageOrderSummary, PublicSurveyCatalog, PublicSurveyRecord } from "./types.js";
+import type { PublicAssetProjection, PublicAssetRecord, PublicCoverageOrderSummary, PublicSurveyCatalog, PublicSurveyRecord } from "./types.js";
 import { productId } from "./products.js";
 
 type DownloadableAsset = PublicAssetProjection;
@@ -47,10 +47,11 @@ export async function loadSurveyIndex(
   catalog: LoadedCatalog,
   coverage: { footprints: Array<{ surveyId: string; pixels: number[] }> },
   coverageLayers: CoverageLayerMeta[] = [],
+  additionalAssets: PublicAssetRecord[] = [],
 ): Promise<PublicSurveyIndex> {
   const source = JSON.parse(await readFile(path.join(root, "src", "surveys", "survey-catalog.json"), "utf8")) as PublicSurveyCatalog;
   if (source.schemaVersion !== 1 || !Array.isArray(source.surveys)) throw new Error("Unsupported public survey catalog");
-  const assets = publicManifest(catalog).files;
+  const assets = publicManifest(catalog, additionalAssets).files;
   const sharedAssets = assets.filter((asset) => !asset.surveyId);
   const surveys = source.surveys.map((survey) => {
     const products = survey.releases.flatMap((release) => release.products);

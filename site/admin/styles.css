@@ -37,6 +37,18 @@
 .admin-dialog { width: min(700px, calc(100vw - 32px)); max-height: min(850px, calc(100vh - 32px)); overflow: auto; border: 1px solid var(--line-strong); padding: 24px; background: var(--bright); color: var(--ink); }
 .admin-dialog::backdrop { background: rgba(0, 0, 0, .72); }
 .admin-dialog .admin-form { padding: 0; }
+.work-build-output { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(110px, .6fr) auto; align-items: center; gap: 8px; margin-top: 10px; padding: 9px 10px; border-left: 2px solid var(--teal); background: rgba(30,133,123,.07); color: var(--muted); font: 10px/1.35 var(--font-mono), monospace; }
+.work-build-output progress { width: 100%; height: 6px; accent-color: var(--teal); }
+.work-build-output small { color: var(--teal); }
+.work-build-output button { min-height: 29px; padding: 0 8px; }
+.work-build-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.build-progress-summary { display: grid; gap: 10px; margin-bottom: 18px; padding: 12px; border-left: 3px solid var(--teal); background: var(--teal-soft); color: var(--ink); font: 10px/1.4 var(--font-mono), monospace; }
+.build-progress-summary > div { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.build-progress-summary strong { font-weight: 600; }
+.build-progress-summary progress { width: 100%; height: 8px; accent-color: var(--teal); }
+.build-progress-summary > span { color: var(--teal); }
+.build-detail-subheading { margin: 20px 0 8px; color: var(--teal); font: 700 10px/1.2 var(--font-mono), monospace; text-transform: uppercase; }
+@media (max-width: 560px) { .work-build-output { grid-template-columns: 1fr auto; } .work-build-output progress { grid-column: 1 / -1; } }
 .admin-product-survey { border-top: 1px solid var(--line); }
 .admin-product-survey h4 { margin: 14px 0 4px; color: var(--teal); font: 700 11px/1.2 var(--font-mono), monospace; }
 .admin-product-survey h4 small { color: var(--muted); font-size: 9px; font-weight: 500; }
@@ -199,12 +211,14 @@ input:disabled, select:disabled, textarea:disabled { background: #071017; color:
 .review-product-row span { margin-top: 4px; color: var(--teal); font: 9px/1.2 var(--font-mono), monospace; }
 .review-product-row p { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .review-product-row small { margin-top: 5px; color: var(--ochre); font: 9px/1.35 var(--font-mono), monospace; }
+.review-product-row small.moc-build-status { color: var(--teal); }
 .review-product-row > .product-row-actions { flex: 0 0 auto; align-items: center; }
 .review-state { width: max-content; padding: 4px 6px; border: 1px solid var(--line-strong); color: var(--muted) !important; }
 .review-state-published { border-color: rgba(114,216,141,.65); color: var(--green) !important; }
 .product-public-facts { margin-bottom: 22px; }
+.product-dialog-actions { grid-template-columns: 1fr auto auto; }
 .product-fact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; border-top: 1px solid var(--line); }
 .product-fact-grid .task-detail-field { padding: 10px 10px 10px 0; }
 .product-fact-grid .task-detail-field:nth-child(even) { padding-left: 10px; border-left: 1px solid var(--line); }
 @media (max-width: 900px) { .admin-source-layout { grid-template-columns: 1fr; } .admin-panel-heading { align-items: flex-start; flex-direction: column; } .panel-actions { width: 100%; min-width: 0; } }
-@media (max-width: 560px) { .admin-step-nav button { grid-template-columns: 1fr; gap: 6px; min-height: 72px; padding: 10px 9px; } .admin-step-nav output { justify-self: start; } .panel-actions { align-items: stretch; flex-direction: column; } .connector-detail-heading { align-items: flex-start; flex-direction: column; } .connector-detail-actions { width: 100%; justify-content: flex-start; } .connector-detail-grid, .product-fact-grid { grid-template-columns: 1fr; } .connector-detail-grid .task-detail-field:nth-child(even), .product-fact-grid .task-detail-field:nth-child(even) { padding-left: 0; border-left: 0; } .modality-chart-legend { grid-template-columns: 1fr; } .section-heading-actions { align-items: flex-start; flex-direction: column; gap: 8px; } .moc-discovery-row, .review-product-row { align-items: flex-start; flex-direction: column; } .moc-discovery-row-actions, .review-product-row > .product-row-actions { width: 100%; justify-content: space-between; } .moc-review-history-row code { max-width: none; text-align: left; } .work-output-row { grid-template-columns: 1fr; gap: 10px; } .work-output-status { justify-content: flex-start; } .work-output-actions { justify-content: flex-start; } .review-survey-body { padding-left: 0; } .review-survey-meta { grid-template-columns: 1fr 1fr; } .review-survey-meta img { display: none; } .review-release-heading { align-items: flex-start; flex-direction: column; gap: 5px; } .review-release-heading small { text-align: left; } }
+@media (max-width: 560px) { .admin-step-nav button { grid-template-columns: 1fr; gap: 6px; min-height: 72px; padding: 10px 9px; } .admin-step-nav output { justify-self: start; } .panel-actions { align-items: stretch; flex-direction: column; } .connector-detail-heading { align-items: flex-start; flex-direction: column; } .connector-detail-actions { width: 100%; justify-content: flex-start; } .connector-detail-grid, .product-fact-grid { grid-template-columns: 1fr; } .connector-detail-grid .task-detail-field:nth-child(even), .product-fact-grid .task-detail-field:nth-child(even) { padding-left: 0; border-left: 0; } .modality-chart-legend { grid-template-columns: 1fr; } .section-heading-actions { align-items: flex-start; flex-direction: column; gap: 8px; } .moc-discovery-row, .review-product-row { align-items: flex-start; flex-direction: column; } .moc-discovery-row-actions, .review-product-row > .product-row-actions { width: 100%; justify-content: space-between; } .moc-review-history-row code { max-width: none; text-align: left; } .work-output-row { grid-template-columns: 1fr; gap: 10px; } .work-output-status { justify-content: flex-start; } .work-output-actions { justify-content: flex-start; } .review-survey-body { padding-left: 0; } .review-survey-meta { grid-template-columns: 1fr 1fr; } .review-survey-meta img { display: none; } .review-release-heading { align-items: flex-start; flex-direction: column; gap: 5px; } .review-release-heading small { text-align: left; } .product-dialog-actions { grid-template-columns: 1fr; } }

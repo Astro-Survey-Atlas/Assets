@@ -3,7 +3,7 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "b8fef8f5306f1419a683c7b4dc8041577820a8e1e819d8da3692fc93ca08c461"
+    "sha256": "00804a3ce33a8cbd5ab5e65250e4c5315d1e54ce6e82f9d6a3399c3ca8be9ad2"
   },
   "statistics": {
     "releases": 55,
@@ -14,8 +14,8 @@
     "footprints": 47,
     "packages": 14,
     "rawMocFiles": 48,
-    "totalBytes": 40257779,
-    "runtimeBytes": 12498043,
+    "totalBytes": 40258051,
+    "runtimeBytes": 12498315,
     "evidenceBytes": 27759736
   },
   "files": [
@@ -40,8 +40,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/data-warehouse-requirements.md",
-      "sizeBytes": 8999,
-      "sha256": "58f8eac163e0f6d2a7ec130606818f6fce2e916760ab4b6e889430b4d5ec7a18"
+      "sizeBytes": 9271,
+      "sha256": "2d55b4d740fb8ca2b6ee8042a0e434aa77f1b7300879b09723c31b23bc8fab68"
     },
     {
       "id": "documentation-moc-core-contract",

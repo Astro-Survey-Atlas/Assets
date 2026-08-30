@@ -98,6 +98,10 @@ spec:
               value: /app/site
             - name: ASSETS_CONTENT_ROOT
               value: /var/lib/assets-content
+            - name: ASSETS_EVIDENCE_ROOT
+              value: /var/lib/assets-evidence
+            - name: MOC_BUILDER_SCRIPT
+              value: /app/scripts/moc_build_worker.py
             - name: ASSETS_ADMIN_ENABLED
               value: {{ .Values.admin.enabled | quote }}
             - name: ASSETS_WAREHOUSE_NAMESPACE
@@ -150,7 +154,7 @@ spec:
               readOnly: false
             - name: evidence
               mountPath: /var/lib/assets-evidence
-              readOnly: true
+              readOnly: false
             - name: tmp
               mountPath: /tmp
       volumes:

@@ -78,7 +78,10 @@ diffs before editing them.
   queue, and 02C is the file-scan execution history with task creation beside
   its heading. Product review is grouped as survey cards that expand to
   release/product rows sourced from the same public survey index; unmatched
-  editor records remain visible in an editorial queue.
+  editor records remain visible in an editorial queue. A staged MOC build that
+  was created without a product appears in the product-review `__moc-builds__`
+  queue; the one-time registration action creates an Assets-owned draft product
+  and binds the existing build before normal copy review and publication.
 - Connector ConfigMaps do not carry runtime status. The admin list therefore
   reports `NOT_CHECKED`; clicking one Connector runs a bounded, read-only
   object-store or authorized-PVC probe and returns transient `READY`, `PENDING`
@@ -96,6 +99,26 @@ diffs before editing them.
   optional S3-compatible publication adapter. `sync-release.ts` keeps the PVC
   symlink as the active read path and only publishes to object storage when it
   is explicitly configured; runtime and evidence prefixes remain separate.
+- MOC discovery is v2 and evidence-only: Warehouse returns at most 50 candidate
+  summaries from a 51-record bounded search, while Assets performs the separate
+  `MocBuildRequest` acquisition/build flow. Discovery has no probe or review
+  POST endpoint; selecting a candidate creates a build. Discovery work-context
+  identifiers are preserved through the Assets API, so product-bound builds
+  remain attached to the same review item; product publication is the explicit
+  public-release gate. The admin workspace exposes build phase/progress and
+  output summaries while polling active work. Unbound staged builds are not
+  silently discarded: `POST /api/v1/admin/moc-builds/{name}/register-product`
+  records the public survey/release/product facts, binds the build once, and
+  leaves publication behind the existing product-review gate.
+- `MocPublicationStore` persists dynamic publication records on the content
+  volume, verifies every referenced file/size/SHA-256 before activation, and
+  skips missing or tampered publications on startup/reload. Published MOCs are
+  added to `/api/v1/assets`, `/api/v1/coverage`, `/api/v1/surveys` and the
+  predictable FITS route only after that check.
+- The runtime image now includes Python, the locked scientific dependencies and
+  the pinned MOC-Core-SDK wheel so the local build runner has the same contract
+  as the development environment. The image is built with the PEP 427 wheel
+  filename intact so pip accepts the local Core package.
 - The GitHub organization page now presents Assets as the public front door,
   explains Warehouse and Workspace responsibilities, and shows the shared
   MOC-Core-SDK dependency and conformance-fixture flow. `/sdk/` documents the
@@ -119,7 +142,7 @@ loaded the deployed bundle, entered G mode with CSST/DESI, rendered
 runtime exceptions.
 
 The 2026-08-30 admin review/work-identity change is green locally: `npm run validate`
-passes 67 Node tests and the Core wheel verification, with `helm lint` and
+passes 72 Node tests and the Core wheel verification, with `helm lint` and
 `git diff --check` clean. The admin API now exposes the transient
 `POST /api/v1/admin/connectors/{name}/probe` result. A standalone Chromium smoke
 checked the admin workspace at 1440x900 and 390x844; no horizontal overflow was
@@ -142,6 +165,53 @@ probes, and 10 accepted spatial MOCs. Assets now normalizes empty arrays
 omitted by Kubernetes serialization while still treating a missing summary
 object as unreviewable; the earlier ADQL 0/0 attempts remain visible as
 historical records.
+
+The MOC build runtime was deployed as Helm revision 91 with image tag
+`0.1.0-20260830-144338`. Rollout completed with one healthy Pod. The init
+container published bundle SHA-256
+`00804a3ce33a8cbd5ab5e65250e4c5315d1e54ce6e82f9d6a3399c3ca8be9ad2`; the
+service loaded 56 ACTIVE Warehouse layers, exposed 211 assets, and passed a
+FITS `206 Partial Content` / `Content-Range` / `X-Content-SHA256` check. The
+container imports Python `astropy 7.2.0`, `astropy-healpix 1.1.2`, `mocpy 0.20.0`,
+and `astro_survey_moc_core` successfully. A real v2 retry produced a staged
+MOC build with source hash
+`2b2337d63f69f2bd6a292b81416f0f70a87f4c4b6e0a53ef0dd49c86152c5919`, 20 cells, query order 8 and preview
+order 4; it remains unpublished until a product release is approved.
+
+The follow-up MOC discovery/build UI and publication-boundary changes were
+deployed as Helm revision 92 with image tag
+`0.1.0-20260830-153231`. The rollout completed with one healthy Pod on
+`eva7028`; the `publish-assets` init container activated bundle SHA-256
+`00804a3ce33a8cbd5ab5e65250e4c5315d1e54ce6e82f9d6a3399c3ca8be9ad2` and loaded
+56 ACTIVE Warehouse layers. Direct NodePort smoke checks returned 200 for
+`/healthz`, `/api/v1/assets` (211 files), and `/api/v1/coverage` (56
+footprints). A DESI FITS download returned `206 Partial Content` with the
+expected `Content-Range` and `X-Content-SHA256`; the admin API returned 7
+discovery records, 1 staged MOC build, 4 connectors, and 90 products. The
+image manifest digest is
+`sha256:7b32810b8a77c7db0ccc323813a23d29e102fc5a042f9ce6d84babb60ca478df`.
+
+The staged-build action follow-up was deployed as Helm revision 94 with image
+tag `0.1.0-20260830-175732`. The rollout completed with one healthy Pod. In
+addition to the product-review `__moc-builds__` queue, 02A now places a direct
+`登记产品` action beside every unbound `BUILD STAGED` result. Browser smoke
+against the NodePort confirmed two JWST staged builds are visible both from
+that action and after searching `jwst` in 03 产品审核. The product remains a
+draft until its public facts and editorial copy are reviewed and explicitly
+published.
+
+The unmatched-product publishing gap was deployed as Helm revision 95 with
+image tag `0.1.0-20260830-200223`. Unmatched draft rows in 03 产品审核 now
+provide both `编辑` and `发布`; the live JWST record remains `unmatched-draft`
+until that explicit action is taken. Browser smoke confirmed the `jwst`
+search result exposes both actions without changing the product-publication
+boundary.
+
+The product-editor publishing affordance was deployed as Helm revision 96 with
+image tag `0.1.0-20260830-202758`. Draft product dialogs now expose an explicit
+`发布产品` action alongside save; publishing closes the dialog and refreshes
+the review queue. The live JWST draft remains `unmatched-draft` until the
+operator chooses that action.
 
 At the earlier live cluster checkpoint on 2026-08-26, Warehouse held 13 layer
 documents, 11 FileAssets, and 2,109 coverage edges. The final bounded smoke
@@ -229,8 +299,8 @@ fixture remains pinned to MOC-Core-SDK commit `2ebc395`.
 ## Live Deployment Layout
 
 Assets is a separate Helm release in namespace `astro-survey-atlas-assets`.
-The current dev rollout is Helm revision 89, image tag
-`0.1.0-20260830-110326`, and serves through:
+The current dev rollout is Helm revision 94, image tag
+`0.1.0-20260830-175732`, and serves through:
 
 ```text
 http://10.15.51.75:32083/
@@ -255,9 +325,10 @@ The public site serves through the `astro-survey-atlas-assets` Service/Ingress.
 The release PVC contains the static public bundle used for fallback and
 publication. The current runtime bundle is
 `public-survey-footprints-2026-08-20`, SHA-256
-`b8fef8f5306f1419a683c7b4dc8041577820a8e1e819d8da3692fc93ca08c461`, with
+`00804a3ce33a8cbd5ab5e65250e4c5315d1e54ce6e82f9d6a3399c3ca8be9ad2`, with
 211 manifest files. The init container completed successfully; the image
-digest is `sha256:1dd5a2b478a451895b5d0ed17c401b75744a246ea4f1980867e2c9bbbf91adaf`.
+manifest digest is
+`sha256:7b32810b8a77c7db0ccc323813a23d29e102fc5a042f9ce6d84babb60ca478df`.
 
 The Gaia O8-only Warehouse layers are included in the globe's O4 visual
 overview by NESTED coarsening, while their API coverage remains explicitly O8.
@@ -323,19 +394,18 @@ Work in this order:
 
 MOC discovery CRD/Operator/worker integration is implemented and validated.
 The 2026-08-28 SkyMapper, KiDS, VISTA VIKING, and DECaLS requests used the old
-CDS ObsCore ADQL endpoint and returned HTTP 200 with empty bodies
-(`candidateCount=0`, `probeCount=0`); those results are retained as historical
-evidence, not as proof that the surveys lack public MOCs. The corrected JWST
-request `jwst-moc-discovery-fix-20260830114238` uses the CDS MOCServer filter
-API and returned 16 candidates plus 10 accepted spatial probes. Empty or
-malformed responses are now recorded as protocol evidence, while a parsed,
-non-truncated empty record set remains a valid zero-result query.
-The CRD is installed and the live Operator runs the pushed
-`mocdiscovery` image. The previously blocking CSST long task has reached a
-terminal deadline failure and remains separate from the evidence-only
-discovery Jobs. See `docs/deferred-moc-discovery-plan.md`. Assets only submits
-intent-only requests and records review decisions; it does not execute
-discovery or own the Operator.
+CDS ObsCore ADQL endpoint and returned HTTP 200 with empty bodies; those
+requests remain read-only historical evidence, not proof that the surveys lack
+public MOCs. The corrected JWST request
+`jwst-moc-discovery-fix-20260830114238` uses the CDS MOCServer filter API and
+returned 16 candidates in the bounded v2 summary. The policy reads at most 51
+records and stores at most 50 candidate summaries so truncation is reliable.
+Empty or malformed responses remain protocol evidence, while a parsed,
+non-truncated empty record set is a valid zero-result query. See
+`docs/deferred-moc-discovery-plan.md`. Assets submits intent-only discovery,
+then owns candidate selection, the independent MOC build and explicit product
+publication; it does not execute the Warehouse discovery Job or alter the
+Connector ScanRequest workflow.
 
 ## Do Not Disturb
 

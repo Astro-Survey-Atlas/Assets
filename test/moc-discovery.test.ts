@@ -1,83 +1,123 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { AdminHttpError } from "../server/admin.js";
-import { MocDiscoveryReviewStore, resolveMocDiscoveryReview } from "../server/moc-discovery.js";
+import { MocBuildService, MocBuildStore, MocPublicationStore } from "../server/moc-build.js";
+import { resolveMocDiscoveryCandidate } from "../server/moc-discovery.js";
 
-test("MOC discovery reviews are versioned by provider, candidate, and snapshot", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "atlas-moc-review-"));
-  const store = new MocDiscoveryReviewStore(root);
-  const sourceSnapshotSha256 = "a".repeat(64);
-  const first = await store.add("gaia-moc-discovery-20260826", {
-    provider: "cds",
-    candidateId: "ivo://cds.example/gaia-dr3",
-    sourceSnapshotSha256,
-    decision: "pending",
-    sourceUrl: "https://alasky.cds.unistra.fr/gaia",
-  });
-  const second = await store.add("gaia-moc-discovery-20260826", {
-    provider: "cds",
-    candidateId: "ivo://cds.example/gaia-dr3",
-    sourceSnapshotSha256,
-    decision: "ready-for-build",
-    notes: "MOC header and attribution reviewed",
-  });
-  assert.equal(first.revision, 1);
-  assert.equal(second.revision, 2);
-  assert.equal((await store.list(first.requestName)).length, 2);
-  await assert.rejects(() => store.add(first.requestName, {
-    candidateId: "candidate",
-    sourceSnapshotSha256: "not-a-hash",
-    decision: "ready-for-build",
-  }), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400);
-  const raw = await readFile(path.join(root, "moc-discovery-reviews-v1.ndjson"), "utf8");
-  assert.equal(raw.trim().split("\n").length, 2);
+function request(summary: unknown, phase = "SUCCEEDED") {
+  return { name: "jwst-moc-discovery", status: { phase, reviewSummary: summary } };
+}
+
+test("MOC v2 candidate resolution uses the Warehouse summary as authority", () => {
+  const result = resolveMocDiscoveryCandidate(request({
+    schemaVersion: 2,
+    truncated: false,
+    summaryTruncated: false,
+    candidates: [{ candidateId: "jwst", title: "JWST", recordUrl: "https://alasky.cds.unistra.fr/jwst", mocUrl: "https://alasky.cds.unistra.fr/jwst/moc.fits" }],
+  }), "jwst");
+  assert.equal(result.sourceUrl, "https://alasky.cds.unistra.fr/jwst/moc.fits");
+  assert.equal(result.candidate.title, "JWST");
+  assert.throws(() => resolveMocDiscoveryCandidate(request({ schemaVersion: 1, truncated: false, summaryTruncated: false, candidates: [] }), "jwst"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 409);
+  assert.throws(() => resolveMocDiscoveryCandidate(request({ schemaVersion: 2, truncated: false, summaryTruncated: false, candidates: [{ candidateId: "jwst", mocUrl: "https://example.org/jwst.fits" }] }), "jwst"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 409);
 });
 
-test("MOC reviews resolve authoritative candidate URLs and hashes from Warehouse status", () => {
-  const request = {
-    name: "jwst-moc-discovery",
-    status: {
-      phase: "SUCCEEDED",
-      reviewSummary: {
-        schemaVersion: 1,
-        truncated: false,
-        summaryTruncated: false,
-        candidates: [{ candidateId: "jwst", title: "JWST", recordUrl: "https://alasky.cds.unistra.fr/jwst" }],
-        probes: [{ probeId: "a".repeat(64), candidateId: "jwst", kind: "mocUrl", url: "https://alasky.cds.unistra.fr/jwst/moc.fits", ok: true, sha256: "b".repeat(64), validation: { acceptedSpatialMoc: true } }],
-      },
-    },
-  };
-
-  const review = resolveMocDiscoveryReview(request, { candidateId: "jwst", probeId: "a".repeat(64), decision: "ready-for-build", notes: "verified" });
-
-  assert.equal(review.sourceSnapshotSha256, "b".repeat(64));
-  assert.equal(review.sourceUrl, "https://alasky.cds.unistra.fr/jwst");
-  assert.equal(review.mocUrl, "https://alasky.cds.unistra.fr/jwst/moc.fits");
-  assert.throws(() => resolveMocDiscoveryReview(request, { candidateId: "invented", decision: "rejected" }), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400);
+test("MOC build requests persist phases and deduplicate a locked source snapshot", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "atlas-moc-build-"));
+  const store = new MocBuildStore(root);
+  const candidate = resolveMocDiscoveryCandidate(request({ schemaVersion: 2, truncated: false, summaryTruncated: false, candidates: [{ candidateId: "jwst", mocUrl: "https://alasky.cds.unistra.fr/jwst/moc.fits" }] }), "jwst");
+  const first = await store.create({ discoveryRequestName: candidate.requestName, candidate, productId: "jwst-dr1" });
+  const second = await store.create({ discoveryRequestName: candidate.requestName, candidate, productId: "jwst-dr1" });
+  const locked = await store.lockSnapshot(first.name, "a".repeat(64), 10, "moc-build/source.moc");
+  assert.equal(locked.request.phase, "SNAPSHOT_LOCKED");
+  const duplicate = await store.lockSnapshot(second.name, "a".repeat(64), 10, "moc-build/source.moc");
+  assert.equal(duplicate.duplicateOf, first.name);
+  assert.equal(store.get(second.name).phase, "DUPLICATE");
+  const persisted = JSON.parse(await readFile(path.join(root, "moc-build-requests-v1.json"), "utf8")) as { requests: Array<{ name: string }> };
+  assert.equal(persisted.requests.length, 2);
 });
 
-test("MOC review resolution distinguishes failed probes and missing summaries", () => {
-  const failedProbeRequest = {
-    name: "gaia-moc-discovery",
-    status: {
-      phase: "SUCCEEDED",
-      reviewSummary: {
-        schemaVersion: 1,
-        truncated: false,
-        summaryTruncated: false,
-        candidates: [{ candidateId: "gaia" }],
-        probes: [{ probeId: "c".repeat(64), candidateId: "gaia", kind: "mocUrl", url: "https://example.invalid/gaia.fits", ok: false, error: "HTTP 404" }],
-      },
+test("MOC build service locks bytes and reaches STAGED with an injected Core runner", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "atlas-moc-service-"));
+  const evidence = await mkdtemp(path.join(os.tmpdir(), "atlas-moc-evidence-"));
+  const store = new MocBuildStore(root);
+  const candidate = resolveMocDiscoveryCandidate(request({ schemaVersion: 2, truncated: false, summaryTruncated: false, candidates: [{ candidateId: "jwst", mocUrl: "https://alasky.cds.unistra.fr/jwst/moc.fits" }] }), "jwst");
+  const build = await store.create({ discoveryRequestName: candidate.requestName, candidate });
+  const runner = {
+    validate: async () => ({ valid: true }),
+    build: async (_source: string, output: string) => {
+      await writeFile(path.join(output, "moc.fits"), "moc");
+      await writeFile(path.join(output, "query-order8.json"), "{}");
+      await writeFile(path.join(output, "preview-order4.json"), "{}");
+      await writeFile(path.join(output, "statistics.json"), "{}");
+      return { cells: 3, availableOrders: [8], maxOrder: 8 };
     },
   };
-  assert.throws(() => resolveMocDiscoveryReview(failedProbeRequest, { candidateId: "gaia", probeId: "c".repeat(64), decision: "ready-for-build" }), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 409);
-  const pending = resolveMocDiscoveryReview(failedProbeRequest, { candidateId: "gaia", probeId: "c".repeat(64), decision: "pending" });
-  assert.equal(pending.probeId, "c".repeat(64));
-  assert.equal(pending.sourceSnapshotSha256, undefined);
+  const service = new MocBuildService({ store, evidenceRoot: evidence, fetchImpl: async () => new Response("source-moc"), runner });
+  service.enqueue(build, candidate);
+  for (let attempt = 0; attempt < 100 && store.get(build.name).phase !== "STAGED"; attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(store.get(build.name).phase, "STAGED");
+  assert.equal(store.get(build.name).source.snapshotSha256?.length, 64);
+  assert.equal(store.get(build.name).outputs?.cellCount, 3);
+});
 
-  assert.throws(() => resolveMocDiscoveryReview({ name: "legacy", status: { phase: "SUCCEEDED" } }, { candidateId: "gaia", decision: "rejected" }), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 409 && /summary is unavailable/.test(error.message));
+test("staged MOC outputs publish immutably and can be restored", async () => {
+  const content = await mkdtemp(path.join(os.tmpdir(), "atlas-moc-public-content-"));
+  const evidence = await mkdtemp(path.join(os.tmpdir(), "atlas-moc-public-evidence-"));
+  const store = new MocBuildStore(content);
+  const candidate = resolveMocDiscoveryCandidate(request({ schemaVersion: 2, truncated: false, summaryTruncated: false, candidates: [{ candidateId: "jwst", mocUrl: "https://alasky.cds.unistra.fr/jwst/moc.fits" }] }), "jwst");
+  const build = await store.create({ discoveryRequestName: candidate.requestName, candidate, productId: "jwst-dr1" });
+  const runner = {
+    validate: async () => ({ valid: true }),
+    build: async (_source: string, output: string) => {
+      await writeFile(path.join(output, "moc.fits"), "moc");
+      await writeFile(path.join(output, "query-order8.json"), JSON.stringify({ order: 8, ordering: "NESTED", pixels: [1, 2] }));
+      await writeFile(path.join(output, "preview-order4.json"), JSON.stringify({ order: 4, ordering: "NESTED", pixels: [0] }));
+      await writeFile(path.join(output, "statistics.json"), "{}");
+      return { cells: 2, availableOrders: [4, 8], maxOrder: 8 };
+    },
+  };
+  const service = new MocBuildService({ store, evidenceRoot: evidence, fetchImpl: async () => new Response("source-moc"), runner });
+  service.enqueue(build, candidate);
+  for (let attempt = 0; attempt < 100 && store.get(build.name).phase !== "STAGED"; attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
+  const staged = store.get(build.name);
+  const publications = new MocPublicationStore(content, evidence);
+  const publication = await publications.publish(staged, { productId: "jwst-dr1", surveyId: "jwst", releaseId: "dr1", name: "JWST DR1" });
+  assert.equal(publication.files.query?.sha256.length, 64);
+  assert.match(publications.absolutePath(publication.files.moc), /moc-releases/);
+  assert.ok(publication.files.preview);
+  assert.equal((await readFile(publications.absolutePath(publication.files.preview), "utf8")).includes('"order":4'), true);
+  const restored = new MocPublicationStore(content, evidence);
+  await restored.initialize();
+  assert.equal(restored.forBuild(build.name)?.id, publication.id);
+});
+
+test("publication integrity verification rejects tampered content-volume files", async () => {
+  const content = await mkdtemp(path.join(os.tmpdir(), "atlas-moc-integrity-content-"));
+  const evidence = await mkdtemp(path.join(os.tmpdir(), "atlas-moc-integrity-evidence-"));
+  const store = new MocBuildStore(content);
+  const candidate = resolveMocDiscoveryCandidate(request({ schemaVersion: 2, truncated: false, summaryTruncated: false, candidates: [{ candidateId: "jwst", mocUrl: "https://alasky.cds.unistra.fr/jwst/moc.fits" }] }), "jwst");
+  const build = await store.create({ discoveryRequestName: candidate.requestName, candidate, productId: "jwst-dr1" });
+  const runner = {
+    validate: async () => ({ valid: true }),
+    build: async (_source: string, output: string) => {
+      await writeFile(path.join(output, "moc.fits"), "moc");
+      await writeFile(path.join(output, "query-order8.json"), JSON.stringify({ order: 8, ordering: "NESTED", pixels: [1] }));
+      return { cells: 1, availableOrders: [8], maxOrder: 8 };
+    },
+  };
+  const service = new MocBuildService({ store, evidenceRoot: evidence, fetchImpl: async () => new Response("source-moc"), runner });
+  service.enqueue(build, candidate);
+  for (let attempt = 0; attempt < 100 && store.get(build.name).phase !== "STAGED"; attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
+  const staged = store.get(build.name);
+  const publications = new MocPublicationStore(content, evidence);
+  const publication = await publications.publish(staged, { productId: "jwst-dr1", surveyId: "jwst", releaseId: "dr1", name: "JWST DR1" });
+  assert.deepEqual(await publications.verify(publication), { valid: true });
+  await writeFile(publications.absolutePath(publication.files.moc), "tampered");
+  const invalid = await publications.verify(publication);
+  if (invalid.valid) throw new Error("tampered publication unexpectedly passed integrity verification");
+  assert.match(invalid.reason, /SHA-256|size/i);
 });
