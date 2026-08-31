@@ -4,13 +4,13 @@ Updated: 2026-08-31
 
 Repository: `/home/aaron/Repo/Astro-Survey-Atlas-Assets`
 
-Starting commit: `49f434b`; current HEAD: `43b88cd`
+Starting commit: `49f434b`; latest code commit: `a24a9f5`
 
 ## Current Session Snapshot
 
-Updated after the 2026-08-31 registration-defaults and coverage-layer UI
-rollout. The working tree is intentionally dirty; preserve all existing
-changes and inspect overlapping diffs before editing.
+Updated after the 2026-08-31 registration-defaults, coverage-layer UI and
+font-consistency rollouts. Preserve all existing changes and inspect
+overlapping diffs before editing.
 
 ### Completed in This Session
 
@@ -25,26 +25,35 @@ changes and inspect overlapping diffs before editing.
 - Layer tooltips are one body-mounted instance, triggered by the entire row
   (pointer and keyboard), positioned outside the list, and suppressed on narrow
   touch layouts so they cannot cover the list or be clipped by scrolling.
+- Public and admin pages use standalone Simplified Chinese WOFF2 faces. The
+  `Atlas Mono` stack now falls back to the bundled `Atlas Sans CJK` face for
+  Chinese glyphs, so mono-styled labels do not silently select a host JP font.
 - Added focused layout and registration tests; API documentation describes the
   defaulting behavior. Warehouse and MOC-Core-SDK contracts were not changed.
 
 ### Verification and Deployment
 
-- `npm run build`, `npm test` (79 tests), `npm run validate`,
-  `helm lint charts/astro-survey-atlas-assets`, and `git diff --check` pass.
-- Helm revision 99 is healthy with image tag
-  `0.1.0-20260831-105813`; the `publish-assets` init container completed and
+- `npm run build`, `npm test` (85 tests), `npm run validate`,
+  `helm lint charts/astro-survey-atlas-assets`, Helm template rendering, and
+  `git diff --check` pass.
+- Helm revision 103 is healthy with image tag
+  `0.1.0-20260831-184932`; the `publish-assets` init container completed and
   the Pod is `1/1 Running` on `eva7028`.
 - Direct service URL: `http://10.15.51.75:32083/`.
   Ingress URLs: `http://astro.assets.dev.72602.space:32080/` and
   `https://astro.assets.dev.72602.space:32443/`.
 - Health bundle SHA-256 is
-  `00804a3ce33a8cbd5ab5e65250e4c5315d1e54ce6e82f9d6a3399c3ca8be9ad2`.
-  `/api/v1/assets` reports 221 files and `/api/v1/coverage` reports 58
-  footprints. A FITS Range request returned 32 bytes with `206 Partial
-  Content`, `Content-Range`, and `X-Content-SHA256`.
+  `ccc273c90738140dc3760ea387529a7d41a21e77b4187ca510f06760a1130046`;
+  `/healthz` reports 222 release files, `/api/v1/assets` reports 221 public
+  files, and `/api/v1/coverage` reports 58 footprints. A FITS Range request
+  returned 32 bytes with `206 Partial Content`, `Content-Range`, and
+  `X-Content-SHA256`.
 - The running image manifest digest is
-  `sha256:6a62dc145a21fcd32cbce9a515aaf26e809dcb610cd735fbdae4bc8ad59538fb`.
+  `sha256:5c9ff7af85e99731a2ce969e3caa85c0e04b7c921126d55e83ab299eba81fa28`.
+- Cache-disabled Chromium smoke on the public NodePort loaded both bundled
+  WOFF2 files. Chinese `survey-overline`, locale-toggle and admin title glyphs
+  resolved to `Noto Sans CJK SC`; Latin and numeric mono glyphs resolved to
+  `Noto Sans Mono`.
 
 ### 2026-08-31 Storage and Workspace Continuation
 
