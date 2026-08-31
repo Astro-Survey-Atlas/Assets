@@ -10,6 +10,7 @@ test("public styles use a standalone Simplified Chinese WOFF2 face", async () =>
   for (const styles of [siteStyles, adminStyles]) {
     assert.match(styles, /NotoSansSC-Regular\.woff2"\) format\("woff2"\)/);
     assert.match(styles, /NotoSansSC-Bold\.woff2"\) format\("woff2"\)/);
+    assert.match(styles, /--font-mono:\s*"Atlas Mono",\s*"Atlas Sans CJK",\s*monospace/);
     assert.doesNotMatch(styles, /NotoSansCJK-(?:Regular|Bold)\.ttc/);
   }
   for (const file of ["site/public/fonts/NotoSansSC-Regular.woff2", "site/public/fonts/NotoSansSC-Bold.woff2"]) {
