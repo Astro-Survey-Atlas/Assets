@@ -77,6 +77,25 @@ test("admin page is included as a separate deployable entry point", async () => 
   assert.match(html, /product-dialog-publish/);
 });
 
+test("cross-step MOC registration dialog is not nested in a hidden admin panel", async () => {
+  const html = await (await import("node:fs/promises")).readFile("site/admin/index.html", "utf8");
+  const stack: string[] = [];
+  let ancestors: string[] | undefined;
+  const tokens = /<\/?(main|section|div|dialog)\b[^>]*>/gi;
+  for (const match of html.matchAll(tokens)) {
+    const token = match[0];
+    if (token.startsWith("</")) {
+      stack.pop();
+      continue;
+    }
+    const id = token.match(/\bid="([^"]+)"/i)?.[1];
+    if (id === "moc-product-register-dialog") ancestors = [...stack];
+    stack.push(id ?? "");
+  }
+  assert.ok(ancestors, "registration dialog markup should be present");
+  assert.equal(ancestors!.includes("admin-step-review"), false, "registration dialog must not inherit the hidden review panel");
+});
+
 test("organization and SDK pages expose the shared Core repository", async () => {
   const fs = await import("node:fs/promises");
   const github = await fs.readFile("site/github/index.html", "utf8");

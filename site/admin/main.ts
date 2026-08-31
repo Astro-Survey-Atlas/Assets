@@ -10,18 +10,24 @@ interface AdminConfig { enabled: boolean; authRequired: boolean; namespace: stri
 interface Connector { name: string; type: ConnectorType; endpoint?: string; region?: string; bucket?: string; prefix?: string; accessKeyConfigured?: boolean; pvcName?: string; basePath?: string; localPath?: string; phase?: string; message?: string; checkedAt?: string; createdAt?: string }
 interface TaskStatus { phase: string; reason?: string; backend?: string; runId?: string; discoveredFiles?: number; processedHdus?: number; coverageDocuments?: number; objectDocuments?: number; errorCount?: number; availableOrders?: number[]; evidencePath?: string; sourceSnapshot?: { uri?: string; sha256: string; sizeBytes?: number }; startedAt?: string; completedAt?: string; message?: string }
 interface Task { name: string; createdAt?: string; layerId?: string; surveyId?: string; releaseId?: string; product?: string; productId?: string; modality?: string; mode?: string; backend?: string; sourceConnector?: string; sourcePaths: string[]; tags: string[]; batchId?: string; workKey?: string; workTitle?: string; recipe?: { mode?: string; outputOrder?: number; catalog?: Record<string, unknown> }; status: TaskStatus }
-interface MocBuildSummary { name: string; discoveryRequestName: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; sourceUrl?: string; phase: string; progress?: { phase?: string; step?: number; totalSteps?: number; percent?: number; message?: string }; createdAt?: string; updatedAt?: string; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number }; error?: { reason?: string; message?: string }; publishedAt?: string; publicationId?: string }
-interface Product { productId: string; draft: { productId: string; surveyId: string; releaseId: string; name: string; layerId?: string; modality?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; sourceUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: { name: string; mission: string; description: string; color: string; modalities: string[] }; publicRelease?: { label: string; kind: string; releasedYear?: number }; publicDescription?: string; publicStatus?: string; scanDefaults?: { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }; recipeVersion?: number; recipeHash?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } } }; published: unknown; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; mocBuild?: MocBuildSummary }
-interface CatalogStatus { mode: string; loadedAt: string; layers: number; footprints: number; warehouseConfigured: boolean }
+interface ProductLifecycle {
+  publication?: { state?: string; publishedAt?: string; publicationId?: string };
+  runtime?: { state?: string; layerId?: string; catalogRevision?: string; availableOrders?: number[]; overviewOrder?: number; maxOrder?: number };
+  links?: { product?: string; sky?: string; catalog?: string; moc?: string };
+}
+interface MocBuildSummary { name: string; discoveryRequestName: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; sourceUrl?: string; phase: string; progress?: { phase?: string; step?: number; totalSteps?: number; percent?: number; message?: string }; createdAt?: string; updatedAt?: string; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; query?: { order?: number }; preview?: { order?: number }; manifest?: { ref?: string; sha256?: string; sizeBytes?: number } }; error?: { reason?: string; message?: string }; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
+interface Product { productId: string; draft: { productId: string; surveyId: string; releaseId: string; name: string; layerId?: string; modality?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; sourceUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: { name: string; mission: string; description: string; color: string; modalities: string[] }; publicRelease?: { label: string; kind: string; releasedYear?: number }; publicDescription?: string; publicStatus?: string; scanDefaults?: { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }; recipeVersion?: number; recipeHash?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } } }; published: unknown; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle }
+interface CatalogStatus { mode: string; loadedAt: string; revision?: string; layers: number; footprints: number; warehouseConfigured: boolean }
 interface MocCandidateSummary { candidateId: string; title?: string; recordUrl?: string; mocUrl?: string; hipsUrl?: string }
 interface MocReviewSummary { schemaVersion: 2; truncated: boolean; summaryTruncated: boolean; searchRecordCount?: number; candidates: MocCandidateSummary[] }
 interface MocDiscoveryStatus { phase: string; jobName?: string; reason?: string; message?: string; evidencePath?: string; candidateCount?: number; lastTransitionTime?: string; reviewSummary?: MocReviewSummary; reviewSummaryState?: "available" | "missing" }
-interface MocDiscoveryRequest { name: string; namespace?: string; createdAt?: string; surveyName: string; releaseHint?: string; productHint?: string; policyRef: string; workKey?: string; workTitle?: string; status: MocDiscoveryStatus }
+interface MocDiscoveryRequest { name: string; namespace?: string; createdAt?: string; surveyName: string; releaseHint?: string; productHint?: string; surveyId?: string; releaseId?: string; productId?: string; policyRef: string; workKey?: string; workTitle?: string; status: MocDiscoveryStatus }
 interface MocBuildProgress { phase: string; step: number; totalSteps: number; percent?: number; message?: string }
-interface MocBuildRequest { schemaVersion: 1; kind: "MocBuildRequest"; name: string; discoveryRequestName: string; provider: string; candidateId: string; surveyId?: string; releaseId?: string; productId?: string; workKey?: string; workTitle?: string; createdAt: string; updatedAt: string; phase: string; progress: MocBuildProgress; source: { url: string; snapshotSha256?: string; sizeBytes?: number; evidenceRef?: string }; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; moc?: { ref: string; sha256: string; sizeBytes?: number }; query?: { ref: string; sha256?: string; order: number }; preview?: { ref: string; sha256?: string; order: number }; statistics?: { ref: string; sha256?: string } }; error?: { reason: string; message: string }; duplicateOf?: string; publishedAt?: string; publicationId?: string }
-interface ReviewProduct { productId: string; name: string; modality?: string; description: string; status: string; sourceUrl?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; geometrySourceUrl?: string; geometrySourceLabel?: string; reason?: string; manualStep?: string; coverage?: { availableOrders?: number[]; overviewOrder?: number; maxOrder?: number; layerId?: string; areaDeg2?: number }; mocBuild?: MocBuildSummary; review?: { state: string; draftRevision?: number; publishedRevision?: number | null; updatedAt?: string; publishedAt?: string | null } }
+interface MocBuildRequest { schemaVersion: 1; kind: "MocBuildRequest"; name: string; discoveryRequestName: string; provider: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; workKey?: string; workTitle?: string; createdAt: string; updatedAt: string; phase: string; progress: MocBuildProgress; source: { url: string; snapshotSha256?: string; sizeBytes?: number; evidenceRef?: string }; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; moc?: { ref: string; sha256: string; sizeBytes?: number }; query?: { ref: string; sha256?: string; order: number }; preview?: { ref: string; sha256?: string; order: number }; statistics?: { ref: string; sha256?: string; sizeBytes?: number }; manifest?: { ref: string; sha256?: string; sizeBytes?: number } }; error?: { reason: string; message: string }; duplicateOf?: string; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
+interface MocRegistrationDefaults { releaseId: string; releaseLabel: string; releaseKind: string; productName: string; productDescription: string; productStatus: string; modality: string; dataOrigin: string }
+interface ReviewProduct { productId: string; name: string; modality?: string; description: string; status: string; sourceUrl?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; geometrySourceUrl?: string; geometrySourceLabel?: string; reason?: string; manualStep?: string; coverage?: { availableOrders?: number[]; overviewOrder?: number; maxOrder?: number; layerId?: string; areaDeg2?: number }; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle; review?: { state: string; draftRevision?: number; publishedRevision?: number | null; updatedAt?: string; publishedAt?: string | null } }
 interface ReviewRelease { id: string; label: string; kind: string; releasedYear?: number; modalities: string[]; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; products: ReviewProduct[] }
-interface ReviewMocBuild { name: string; discoveryRequestName: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; sourceUrl?: string; phase: string; progress?: { percent?: number; message?: string }; createdAt?: string; updatedAt?: string; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number }; }
+interface ReviewMocBuild { name: string; discoveryRequestName: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; sourceUrl?: string; phase: string; progress?: { percent?: number; message?: string }; createdAt?: string; updatedAt?: string; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number }; lifecycle?: ProductLifecycle }
 interface ReviewSurvey { id: string; surveyId: string; name: string; mission: string; color: string; description: string; modalities: string[]; imageUrl: string; statistics: Record<string, number>; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; releases: ReviewRelease[]; unmatchedProducts?: Array<Record<string, unknown>>; unmatchedBuilds?: ReviewMocBuild[] }
 
 const tokenKey = "astro-survey-atlas-assets.admin-token";
@@ -208,6 +214,45 @@ function phaseLabel(phase?: string): string {
   return normalized || "PENDING";
 }
 
+function lifecycleStateLabel(state?: string): string {
+  if (!state) return "--";
+  const normalized = phaseLabel(state);
+  return ({
+    CATALOG_BASELINE: "CATALOG BASELINE",
+    ACTIVE: "ACTIVE",
+    INVALID: "INVALID",
+    INACTIVE: "INACTIVE",
+    PUBLISHED: "PUBLISHED",
+    DRAFT: "DRAFT",
+  } as Record<string, string>)[normalized] ?? normalized;
+}
+
+function orderLabel(orders?: number[]): string {
+  return orders?.length ? orders.map((order) => `O${order}`).join(" / ") : "--";
+}
+
+function lifecycleMarkup(lifecycle?: ProductLifecycle, fallbackPublication?: string, nativeOrders?: number[]): string {
+  const publication = lifecycleStateLabel(lifecycle?.publication?.state ?? fallbackPublication);
+  const runtime = lifecycleStateLabel(lifecycle?.runtime?.state);
+  const publicOrders = orderLabel(lifecycle?.runtime?.availableOrders);
+  const native = orderLabel(nativeOrders);
+  return `<div class="lifecycle-readout"><span class="lifecycle-chip lifecycle-publication lifecycle-${phaseClass(publication)}">PRODUCT ${escapeText(publication)}</span><span class="lifecycle-chip lifecycle-runtime lifecycle-${phaseClass(runtime)}">RUNTIME ${escapeText(runtime)}</span><span class="lifecycle-orders"><span>NATIVE</span> ${escapeText(native)} · <span>PUBLIC</span> ${escapeText(publicOrders)}</span></div>`;
+}
+
+function lifecycleLinksMarkup(lifecycle?: ProductLifecycle): string {
+  const links = lifecycle?.links;
+  if (!links) return "";
+  const entries: Array<[keyof NonNullable<ProductLifecycle["links"]>, string]> = [["product", "产品"], ["sky", "天球"], ["catalog", "Catalog"], ["moc", "FITS MOC"]];
+  const rendered = entries.flatMap(([key, label]) => {
+    const url = links[key];
+    if (typeof url !== "string" || !url.trim()) return [];
+    const external = /^https?:\/\//i.test(url);
+    if (!external && !(url.startsWith("/") && !url.startsWith("//"))) return [];
+    return [`<a href="${escapeText(url)}"${external ? ' target="_blank" rel="noreferrer"' : ""}>${escapeText(label)}</a>`];
+  });
+  return rendered.length ? `<div class="lifecycle-links">${rendered.join("")}</div>` : "";
+}
+
 function taskWorkKey(task: Task): string {
   return task.workKey ?? (task.productId ? `product:${task.productId}` : `work:${task.surveyId ?? "unknown"}:${task.releaseId ?? "unknown"}:${task.product ?? task.layerId ?? task.name}`);
 }
@@ -236,7 +281,7 @@ function renderTasks(tasks: Task[]): void {
   body.innerHTML = tasks.map((task) => {
     const status = task.status ?? { phase: "Pending" };
     const modality = task.modality ?? "other";
-    const stats = [status.discoveredFiles !== undefined ? `${status.discoveredFiles.toLocaleString()} files` : "files unknown", status.coverageDocuments !== undefined ? `${status.coverageDocuments.toLocaleString()} coverage` : "coverage unknown", status.objectDocuments !== undefined ? `${status.objectDocuments.toLocaleString()} objects` : "objects unknown", status.errorCount !== undefined ? `${status.errorCount.toLocaleString()} errors` : "errors unknown"].join(" · ");
+    const stats = [status.discoveredFiles !== undefined ? `${status.discoveredFiles.toLocaleString()} files` : "files unknown", status.coverageDocuments !== undefined ? `${status.coverageDocuments.toLocaleString()} coverage` : "coverage unknown", status.objectDocuments !== undefined ? `${status.objectDocuments.toLocaleString()} objects` : "objects unknown", status.errorCount !== undefined ? `${status.errorCount.toLocaleString()} errors` : "errors unknown", status.availableOrders?.length ? `native ${orderLabel(status.availableOrders)}` : "native orders unknown"].join(" · ");
     const retrying = taskRetryInFlight.has(task.name);
     return `<tr><td><div class="task-identity"><i data-lucide="${modalityIcon(modality)}"></i><strong>${escapeText(workTitle(task))}</strong></div><small>${escapeText(task.name)} · ${escapeText(modality)} · ${escapeText(task.recipe?.mode ?? task.mode ?? "recipe pending")} · ${escapeText(task.batchId ?? "run pending")}</small></td><td><strong>${escapeText(task.product ?? task.productId ?? task.layerId ?? "product pending")}</strong><small>${escapeText(task.surveyId ?? "survey pending")} / ${escapeText(task.releaseId ?? "release pending")}</small></td><td><span>${escapeText(task.sourceConnector ?? "source pending")}</span><small>${escapeText(task.sourcePaths[0] ?? "path pending")}</small></td><td><span class="task-phase task-phase-${phaseClass(status.phase)}">${escapeText(phaseLabel(status.phase))}</span><small>${escapeText(status.reason ?? status.message ?? "")}</small></td><td><span>${escapeText(stats)}</span><small>${status.runId ? `run ${escapeText(status.runId)}` : "run pending"}</small></td><td><span>${escapeText(formatDate(status.completedAt ?? status.startedAt ?? task.createdAt))}</span></td><td><div class="task-row-actions"><button type="button" class="admin-quiet" data-task-details="${escapeText(task.name)}" title="查看任务详情"><i data-lucide="eye"></i><span>详情</span></button><button type="button" class="admin-quiet" data-task-resubmit="${escapeText(task.name)}" title="重新提交任务"${retrying ? " disabled" : ""}><i data-lucide="rotate-ccw"></i><span>${retrying ? "重提中…" : "重提"}</span></button></div></td></tr>`;
   }).join("");
@@ -369,9 +414,17 @@ function mocBuildDetailAction(name: string): string {
   return `<button type="button" class="admin-quiet" data-moc-build-details="${escapeText(name)}" title="查看 MOC 构建详情"><i data-lucide="eye"></i><span>构建详情</span></button>`;
 }
 
-function mocBuildRegistrationAction(build: MocBuildRequest): string {
+function mocBuildRegistrationAction(build: MocBuildRequest | MocBuildSummary): string {
   if (build.phase !== "STAGED" || build.productId) return "";
   return `<button type="button" class="admin-primary" data-register-moc-build-output="${escapeText(build.name)}" title="登记为公共产品"><i data-lucide="plus"></i><span>登记产品</span></button>`;
+}
+
+function mocBuildReadout(build: MocBuildRequest | MocBuildSummary): string {
+  const complete = phaseLabel(build.phase) === "STAGED" ? `<span class="build-complete">构建完成</span>` : "";
+  const nativeOrders = build.outputs?.availableOrders;
+  const lifecycle = lifecycleMarkup(build.lifecycle, undefined, nativeOrders);
+  const links = lifecycleLinksMarkup(build.lifecycle);
+  return `${complete}${lifecycle}${links}`;
 }
 
 function renderMocBuildDetails(build: MocBuildRequest): void {
@@ -390,8 +443,8 @@ function renderMocBuildDetails(build: MocBuildRequest): void {
   const percent = typeof progress.percent === "number" ? Math.max(0, Math.min(100, progress.percent)) : undefined;
   const registerAction = build.phase === "STAGED" && !build.productId ? `<button type="button" class="admin-primary" data-register-moc-build-detail="${escapeText(build.name)}"><i data-lucide="plus"></i><span>登记为产品</span></button>` : "";
   byId("moc-build-detail-title").textContent = build.workTitle ?? build.name;
-  byId("moc-build-detail-content").innerHTML = `<div class="build-progress-summary"><div><span class="task-phase task-phase-${phaseClass(build.phase)}">${escapeText(build.phase)}</span><strong>${escapeText(progress.message ?? "")}</strong>${registerAction}</div>${percent !== undefined ? `<progress max="100" value="${percent}"></progress><span>${percent}% · step ${progress.step}/${progress.totalSteps}</span>` : ""}</div><dl class="task-detail-grid">${detailValue("build", build.name)}${detailValue("discovery", build.discoveryRequestName)}${detailValue("candidate", build.candidateId)}${detailValue("product", build.productId)}${detailValue("source", build.source.url)}${detailValue("source snapshot", build.source.snapshotSha256 ? `${build.source.snapshotSha256}${build.source.sizeBytes !== undefined ? ` · ${build.source.sizeBytes} bytes` : ""}` : undefined)}${detailValue("evidence", build.source.evidenceRef)}${detailValue("created", formatDate(build.createdAt))}${detailValue("updated", formatDate(build.updatedAt))}${detailValue("published", build.publishedAt ? `${formatDate(build.publishedAt)}${build.publicationId ? ` · ${build.publicationId}` : ""}` : "not published")}${detailValue("error", build.error ? `${build.error.reason}: ${build.error.message}` : undefined)}</dl>${outputRows ? `<h5 class="build-detail-subheading">构建产出</h5><dl class="task-detail-grid">${outputRows}</dl>` : ""}`;
-  byId("moc-build-detail-content").querySelector<HTMLButtonElement>("[data-register-moc-build-detail]")?.addEventListener("click", () => openMocProductRegistration(build.name));
+  byId("moc-build-detail-content").innerHTML = `<div class="build-progress-summary"><div><span class="task-phase task-phase-${phaseClass(build.phase)}">${escapeText(build.phase)}</span><strong>${escapeText(progress.message ?? "")}</strong>${registerAction}</div>${percent !== undefined ? `<progress max="100" value="${percent}"></progress><span>${percent}% · step ${progress.step}/${progress.totalSteps}</span>` : ""}${mocBuildReadout(build)}</div><dl class="task-detail-grid">${detailValue("build", build.name)}${detailValue("discovery", build.discoveryRequestName)}${detailValue("candidate", build.candidateId)}${detailValue("product", build.productId)}${detailValue("source", build.source.url)}${detailValue("source snapshot", build.source.snapshotSha256 ? `${build.source.snapshotSha256}${build.source.sizeBytes !== undefined ? ` · ${build.source.sizeBytes} bytes` : ""}` : undefined)}${detailValue("evidence", build.source.evidenceRef)}${detailValue("created", formatDate(build.createdAt))}${detailValue("updated", formatDate(build.updatedAt))}${detailValue("published", build.publishedAt ? `${formatDate(build.publishedAt)}${build.publicationId ? ` · ${build.publicationId}` : ""}` : "not published")}${detailValue("error", build.error ? `${build.error.reason}: ${build.error.message}` : undefined)}</dl>${outputRows ? `<h5 class="build-detail-subheading">构建产出</h5><dl class="task-detail-grid">${outputRows}</dl>` : ""}`;
+  byId("moc-build-detail-content").querySelector<HTMLButtonElement>("[data-register-moc-build-detail]")?.addEventListener("click", () => void openMocProductRegistration(build.name));
   renderIcons();
 }
 
@@ -411,9 +464,9 @@ function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], build
     requests.map((request) => ({ key: mocWorkKey(request), createdAt: request.createdAt, value: request })),
   );
   if (!groups.length) {
-    container.innerHTML = builds.length ? `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p></div><div class="work-output-status"><span class="task-phase task-phase-${phaseClass(build.phase)}">BUILD ${escapeText(build.phase)}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>` : `<div class="resource-empty">暂无任务产出</div>`;
+    container.innerHTML = builds.length ? `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status"><span class="task-phase task-phase-${phaseClass(build.phase)}">BUILD ${escapeText(build.phase)}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>` : `<div class="resource-empty">暂无任务产出</div>`;
     container.querySelectorAll<HTMLButtonElement>("[data-moc-build-details]").forEach((button) => button.addEventListener("click", () => void openMocBuildDetails(button.dataset.mocBuildDetails ?? "")));
-    container.querySelectorAll<HTMLButtonElement>("[data-register-moc-build-output]").forEach((button) => button.addEventListener("click", () => openMocProductRegistration(button.dataset.registerMocBuildOutput ?? "")));
+    container.querySelectorAll<HTMLButtonElement>("[data-register-moc-build-output]").forEach((button) => button.addEventListener("click", () => void openMocProductRegistration(button.dataset.registerMocBuildOutput ?? "")));
     renderIcons();
     return;
   }
@@ -432,7 +485,7 @@ function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], build
     const evidence = task?.status.evidencePath ?? request?.status.evidencePath;
     const attemptLabel = `${group.taskAttempts} scan / ${group.mocAttempts} MOC attempts; latest result only`;
     const relatedBuilds = builds.filter((build) => build.discoveryRequestName === request?.name || (build.productId && build.productId === task?.productId));
-    const buildRows = relatedBuilds.map((build) => `<div class="work-build-output"><span class="task-phase task-phase-${phaseClass(build.phase)}">BUILD ${escapeText(build.phase)}</span><span>${escapeText(build.progress?.message ?? "")}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<span class="work-build-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</span></div>`).join("");
+    const buildRows = relatedBuilds.map((build) => `<div class="work-build-output"><span class="task-phase task-phase-${phaseClass(build.phase)}">BUILD ${escapeText(build.phase)}</span><span>${escapeText(build.progress?.message ?? "")}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<span class="work-build-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</span>${mocBuildReadout(build)}</div>`).join("");
     return `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="layers-3"></i><strong>${escapeText(workTitle(task, request))}</strong></div><small>${escapeText(key)} · ${escapeText(attemptLabel)}</small><p>${escapeText(counts)}${evidence ? ` · evidence ${escapeText(evidence)}` : ""}</p>${buildRows}</div><div class="work-output-status"><span class="task-phase task-phase-${phaseClass(scanStatus)}">SCAN ${escapeText(scanStatus)}</span><span class="task-phase task-phase-${phaseClass(mocStatus)}">MOC ${escapeText(mocStatus)}</span><div class="work-output-actions">${task ? `<button type="button" class="admin-quiet" data-task-details-output="${escapeText(task.name)}" title="查看扫描详情"><i data-lucide="eye"></i><span>详情</span></button>` : ""}${request ? `<button type="button" class="admin-quiet" data-moc-review-output="${escapeText(request.name)}" title="查看候选"><i data-lucide="shield-check"></i><span>候选</span></button>` : ""}${retry}${mocRetry}</div></div></article>`;
   }).join("");
   container.innerHTML = `<div class="work-output-list">${rows}</div>`;
@@ -441,10 +494,10 @@ function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], build
   container.querySelectorAll<HTMLButtonElement>("[data-moc-review-output]").forEach((button) => button.addEventListener("click", () => void openMocReview(button.dataset.mocReviewOutput ?? "")));
   container.querySelectorAll<HTMLButtonElement>("[data-moc-retry-output]").forEach((button) => button.addEventListener("click", () => void resubmitMocDiscovery(button.dataset.mocRetryOutput ?? "")));
   if (builds.length && !groups.some((group) => builds.some((build) => build.discoveryRequestName === group.request?.name))) {
-    container.insertAdjacentHTML("beforeend", `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p></div><div class="work-output-status"><span class="task-phase task-phase-${phaseClass(build.phase)}">BUILD ${escapeText(build.phase)}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>`);
+    container.insertAdjacentHTML("beforeend", `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status"><span class="task-phase task-phase-${phaseClass(build.phase)}">BUILD ${escapeText(build.phase)}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>`);
   }
   container.querySelectorAll<HTMLButtonElement>("[data-moc-build-details]").forEach((button) => button.addEventListener("click", () => void openMocBuildDetails(button.dataset.mocBuildDetails ?? "")));
-  container.querySelectorAll<HTMLButtonElement>("[data-register-moc-build-output]").forEach((button) => button.addEventListener("click", () => openMocProductRegistration(button.dataset.registerMocBuildOutput ?? "")));
+  container.querySelectorAll<HTMLButtonElement>("[data-register-moc-build-output]").forEach((button) => button.addEventListener("click", () => void openMocProductRegistration(button.dataset.registerMocBuildOutput ?? "")));
   renderIcons();
 }
 
@@ -546,25 +599,25 @@ function renderReviewSurveys(surveys: ReviewSurvey[]): void {
       const orders = product.coverage?.availableOrders?.map((order) => `O${order}`).join(" / ") || "orders unavailable";
       const reviewState = product.review?.state ?? "unmatched";
       const buildStatus = mocBuildStatusText(product.mocBuild);
-      return `<article class="review-product-row"><div><strong>${escapeText(product.name)}</strong><span>${escapeText(product.modality ?? "modality unknown")} · ${escapeText(product.status)} · ${escapeText(orders)}</span><p>${escapeText(product.description || product.reason || "No public description")}</p>${product.reason ? `<small>${escapeText(product.reason)}</small>` : ""}${buildStatus ? `<small class="moc-build-status">${escapeText(buildStatus)}</small>` : ""}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span><button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}" title="编辑产品文稿"><i data-lucide="pencil"></i><span>编辑</span></button>${reviewState !== "published" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish title="发布产品"><i data-lucide="upload"></i><span>发布</span></button>` : ""}</div></article>`;
+      return `<article class="review-product-row"><div><strong>${escapeText(product.name)}</strong><span>${escapeText(product.modality ?? "modality unknown")} · ${escapeText(product.status)} · ${escapeText(orders)}</span><p>${escapeText(product.description || product.reason || "No public description")}</p>${product.reason ? `<small>${escapeText(product.reason)}</small>` : ""}${buildStatus ? `<small class="moc-build-status">${escapeText(buildStatus)}</small>` : ""}${lifecycleMarkup(product.lifecycle, reviewState, product.mocBuild?.outputs?.availableOrders)}${lifecycleLinksMarkup(product.lifecycle)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span><button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}" title="编辑产品文稿"><i data-lucide="pencil"></i><span>编辑</span></button>${reviewState !== "published" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish title="发布产品"><i data-lucide="upload"></i><span>发布</span></button>` : ""}</div></article>`;
     }).join("") || `<div class="resource-empty">该 Release 没有匹配的产品</div>`}</div></section>`).join("") : "";
     const unmatchedRecords = survey.unmatchedProducts ?? [];
     const unmatchedProducts = selected ? unmatchedRecords.filter((product) => !productQuery || Object.values(product).join(" ").toLocaleLowerCase().includes(productQuery)).map((product) => {
       const productId = typeof product.productId === "string" ? product.productId : "";
       const name = typeof product.name === "string" ? product.name : productId || "unmatched product";
       const reviewState = typeof product.review === "object" && product.review && typeof (product.review as Record<string, unknown>).state === "string" ? String((product.review as Record<string, unknown>).state) : "unmatched";
-      return `<article class="review-product-row"><div><strong>${escapeText(name)}</strong><span>${escapeText(String(product.surveyId ?? "survey unknown"))} · ${escapeText(String(product.releaseId ?? "release unknown"))}</span><p>该草稿没有对应的公共 survey/release/product 记录，需要补齐映射或确认是否应移除。</p></div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span>${productId ? `<button type="button" class="admin-quiet" data-edit-product="${escapeText(productId)}" title="编辑未匹配产品"><i data-lucide="pencil"></i><span>编辑</span></button>${reviewState !== "unmatched-published" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(productId)}" data-publish title="发布未匹配产品"><i data-lucide="upload"></i><span>发布</span></button>` : ""}` : ""}</div></article>`;
+      return `<article class="review-product-row"><div><strong>${escapeText(name)}</strong><span>${escapeText(String(product.surveyId ?? "survey unknown"))} · ${escapeText(String(product.releaseId ?? "release unknown"))}</span><p>该草稿没有对应的公共 survey/release/product 记录，需要补齐映射或确认是否应移除。</p>${lifecycleMarkup(undefined, reviewState)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span>${productId ? `<button type="button" class="admin-quiet" data-edit-product="${escapeText(productId)}" title="编辑未匹配产品"><i data-lucide="pencil"></i><span>编辑</span></button>${reviewState !== "unmatched-published" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(productId)}" data-publish title="发布未匹配产品"><i data-lucide="upload"></i><span>发布</span></button>` : ""}` : ""}</div></article>`;
     }).join("") : "";
     const unmatched = selected && unmatchedRecords.length ? `<section class="review-release review-unmatched"><div class="review-release-heading"><div><span class="section-index">QUEUE</span><h5>未匹配公共 Catalog</h5></div><small>Assets editorial queue</small></div><div class="review-product-list">${unmatchedProducts || `<div class="resource-empty">暂无未匹配产品</div>`}</div></section>` : "";
     const unmatchedBuilds = survey.unmatchedBuilds ?? [];
-    const mocBuildQueue = selected && unmatchedBuilds.length ? `<section class="review-release review-unmatched"><div class="review-release-heading"><div><span class="section-index">MOC QUEUE</span><h5>待登记 MOC 构建</h5></div><small>STAGED · 需要绑定产品</small></div><div class="review-product-list">${unmatchedBuilds.map((build) => `<article class="review-product-row"><div><strong>${escapeText(build.candidateTitle ?? build.candidateId)}</strong><span>${escapeText(build.name)} · ${escapeText(build.candidateId)} · ${escapeText(build.phase)}</span><p>构建已经完成，但还没有 survey / release / product 归属。登记后才能编辑公共文稿并发布。</p>${build.sourceUrl ? `<small class="moc-build-status">${escapeText(build.sourceUrl)}</small>` : ""}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(build.phase)}">${escapeText(build.phase)}</span><button type="button" class="admin-quiet" data-register-moc-build="${escapeText(build.name)}" title="登记为公共产品"><i data-lucide="plus"></i><span>登记产品</span></button></div></article>`).join("")}</div></section>` : "";
+    const mocBuildQueue = selected && unmatchedBuilds.length ? `<section class="review-release review-unmatched"><div class="review-release-heading"><div><span class="section-index">MOC QUEUE</span><h5>待登记 MOC 构建</h5></div><small>STAGED · 需要绑定产品</small></div><div class="review-product-list">${unmatchedBuilds.map((build) => `<article class="review-product-row"><div><strong>${escapeText(build.candidateTitle ?? build.candidateId)}</strong><span>${escapeText(build.name)} · ${escapeText(build.candidateId)} · ${escapeText(build.phase)}</span><p>构建已经完成，但还没有 survey / release / product 归属。登记后才能编辑公共文稿并发布。</p>${build.sourceUrl ? `<small class="moc-build-status">${escapeText(build.sourceUrl)}</small>` : ""}${mocBuildReadout(build)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(build.phase)}">${escapeText(build.phase)}</span><button type="button" class="admin-quiet" data-register-moc-build="${escapeText(build.name)}" title="登记为公共产品"><i data-lucide="plus"></i><span>登记产品</span></button></div></article>`).join("")}</div></section>` : "";
     const image = survey.imageUrl ? `<img src="${escapeText(survey.imageUrl)}" alt="" loading="lazy" />` : "";
     return `<article class="review-survey${selected ? " is-selected" : ""}" style="--survey-color:${escapeText(survey.color)}"><button type="button" class="review-survey-header" data-review-survey="${escapeText(survey.id)}"><span class="review-survey-swatch" aria-hidden="true"></span><span class="review-survey-copy"><strong>${escapeText(survey.name)}</strong><small>${escapeText(survey.mission)} · ${survey.releases.length} releases · ${escapeText(publicStats || "statistics unavailable")}</small><p>${escapeText(survey.description)}</p></span><i data-lucide="${selected ? "chevron-up" : "chevron-down"}"></i></button>${selected ? `<div class="review-survey-body"><div class="review-survey-meta"><span>${escapeText(survey.modalities.join(" · "))}</span><span>Coverage ${escapeText(survey.coverageOrders?.availableOrders?.map((order) => `O${order}`).join(" / ") || "orders unavailable")}</span>${image}</div>${releases}${unmatched}${mocBuildQueue}</div>` : ""}</article>`;
   }).join("");
   list.querySelectorAll<HTMLButtonElement>("[data-review-survey]").forEach((button) => button.addEventListener("click", () => { selectedReviewSurveyId = button.dataset.reviewSurvey ?? ""; renderReviewSurveys(reviewSurveyRecords); }));
   list.querySelectorAll<HTMLButtonElement>("[data-edit-product]").forEach((button) => button.addEventListener("click", () => openProduct(button.dataset.editProduct ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-publish-product]").forEach((button) => button.addEventListener("click", () => void publishProduct(button.dataset.publishProduct ?? "")));
-  list.querySelectorAll<HTMLButtonElement>("[data-register-moc-build]").forEach((button) => button.addEventListener("click", () => openMocProductRegistration(button.dataset.registerMocBuild ?? "")));
+  list.querySelectorAll<HTMLButtonElement>("[data-register-moc-build]").forEach((button) => button.addEventListener("click", () => void openMocProductRegistration(button.dataset.registerMocBuild ?? "")));
   renderIcons();
 }
 
@@ -614,7 +667,11 @@ function openProduct(productId: string): void {
   const facts = byId("product-public-facts");
   const publicProduct = reviewSurveyRecords.flatMap((survey) => survey.releases.flatMap((release) => release.products)).find((entry) => entry.productId === productId);
   const mocBuild = product.mocBuild ?? publicProduct?.mocBuild;
-  facts.innerHTML = `<div class="section-heading"><div><span class="section-index">PUBLIC FACTS</span><h4>${escapeText(product.draft.name)}</h4></div><span class="section-note">read-only · /surveys/ source</span></div><dl class="product-fact-grid">${detailValue("survey", product.draft.surveyId)}${detailValue("release", product.draft.releaseId)}${detailValue("modality", publicProduct?.modality ?? product.draft.modality)}${detailValue("catalog status", publicProduct?.status)}${detailValue("description", publicProduct?.description)}${detailValue("coverage orders", (publicProduct?.coverage?.availableOrders ?? product.coverage?.availableOrders ?? product.draft.coverage?.availableOrders)?.map((order) => `O${order}`).join(" / "))}${detailValue("layer", publicProduct?.coverage?.layerId ?? product.draft.layerId)}${detailValue("MOC build", mocBuildStatusText(mocBuild) || "not started")}</dl>`;
+  const lifecycle = product.lifecycle ?? publicProduct?.lifecycle;
+  const runtimeInvalid = lifecycle?.runtime?.state === "INVALID";
+  const reload = runtimeInvalid ? `<button type="button" class="admin-quiet lifecycle-reload" data-reload-catalog title="Reload runtime Catalog"><i data-lucide="rotate-cw"></i><span>Reload Catalog</span></button>` : "";
+  facts.innerHTML = `<div class="section-heading"><div><span class="section-index">PUBLIC FACTS</span><h4>${escapeText(product.draft.name)}</h4></div><span class="section-note">read-only · /surveys/ source</span></div><dl class="product-fact-grid">${detailValue("survey", product.draft.surveyId)}${detailValue("release", product.draft.releaseId)}${detailValue("modality", publicProduct?.modality ?? product.draft.modality)}${detailValue("catalog status", publicProduct?.status)}${detailValue("description", publicProduct?.description)}${detailValue("coverage orders", (publicProduct?.coverage?.availableOrders ?? product.coverage?.availableOrders ?? product.draft.coverage?.availableOrders)?.map((order) => `O${order}`).join(" / "))}${detailValue("layer", publicProduct?.coverage?.layerId ?? product.draft.layerId)}${detailValue("MOC build", mocBuildStatusText(mocBuild) || "not started")}</dl>${lifecycleMarkup(lifecycle, product.published ? "PUBLISHED" : "DRAFT", mocBuild?.outputs?.availableOrders)}${lifecycleLinksMarkup(lifecycle)}${reload}`;
+  facts.querySelector<HTMLButtonElement>("[data-reload-catalog]")?.addEventListener("click", (event) => void reloadCatalogRuntime(event.currentTarget as HTMLButtonElement));
   (form.elements.namedItem("productId") as HTMLInputElement).value = productId;
   (form.elements.namedItem("summaryMarkdown") as HTMLTextAreaElement).value = product.draft.presentation.summaryMarkdown;
   (form.elements.namedItem("methodologyMarkdown") as HTMLTextAreaElement).value = product.draft.presentation.methodologyMarkdown;
@@ -629,6 +686,7 @@ function openProduct(productId: string): void {
   publishButton.hidden = Boolean(product.published);
   publishButton.dataset.publishProduct = productId;
   byId<HTMLDialogElement>("product-dialog").showModal();
+  renderIcons();
 }
 
 function guessedSurveyId(build: ReviewMocBuild | MocBuildRequest): string {
@@ -645,29 +703,48 @@ function setRegistrationField(form: HTMLFormElement, name: string, value: string
   if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) field.value = value === undefined ? "" : String(value);
 }
 
-function openMocProductRegistration(name: string): void {
-  const build = mocBuildRecords.find((entry) => entry.name === name);
-  if (!build || build.phase !== "STAGED" || build.productId) return;
-  const form = byId<HTMLFormElement>("moc-product-register-form");
-  setRegistrationField(form, "buildName", build.name);
-  setRegistrationField(form, "surveyId", build.surveyId ?? guessedSurveyId(build));
-  setRegistrationField(form, "surveyName", build.surveyId?.toUpperCase() ?? guessedSurveyId(build).toUpperCase());
-  setRegistrationField(form, "releaseId", build.releaseId ?? "");
-  setRegistrationField(form, "releaseLabel", build.releaseId ?? "");
-  setRegistrationField(form, "releaseKind", "release");
-  setRegistrationField(form, "productName", build.candidateTitle ?? build.candidateId);
-  setRegistrationField(form, "modality", "infrared");
-  setRegistrationField(form, "surveyColor", "#42d5c4");
-  setRegistrationField(form, "surveyModalities", "infrared, imaging");
-  const sourceUrl = mocBuildSourceUrl(build);
-  setRegistrationField(form, "sourceUrl", sourceUrl);
-  setRegistrationField(form, "geometrySourceUrl", sourceUrl);
-  setRegistrationField(form, "geometrySourceLabel", "CDS MOC source");
-  setRegistrationField(form, "candidateSource", sourceUrl);
-  byId("moc-product-register-build-facts").innerHTML = `<div class="section-heading"><div><span class="section-index">STAGED BUILD</span><h4>${escapeText(build.candidateTitle ?? build.candidateId)}</h4></div><span class="section-note">read-only build facts</span></div><dl class="product-fact-grid">${detailValue("build", build.name)}${detailValue("candidate", build.candidateId)}${detailValue("source", sourceUrl)}${detailValue("outputs", build.outputs?.availableOrders?.map((order) => `O${order}`).join(" / "))}</dl>`;
-  const buildDialog = byId<HTMLDialogElement>("moc-build-detail-dialog");
-  if (buildDialog.open) buildDialog.close();
-  byId<HTMLDialogElement>("moc-product-register-dialog").showModal();
+async function openMocProductRegistration(name: string): Promise<void> {
+  const listedBuild = mocBuildRecords.find((entry) => entry.name === name);
+  if (!listedBuild || listedBuild.phase !== "STAGED" || listedBuild.productId) return;
+  try {
+    const response = await api<{ request: MocBuildRequest; registrationDefaults?: MocRegistrationDefaults }>(`/api/v1/admin/moc-builds/${encodeURIComponent(name)}`);
+    const build = response.request;
+    if (build.phase !== "STAGED" || build.productId) return;
+    const defaults = response.registrationDefaults ?? {
+      releaseId: build.releaseId ?? "public",
+      releaseLabel: build.releaseId?.toUpperCase() ?? "Public MOC",
+      releaseKind: "release",
+      productName: build.candidateTitle ?? build.candidateId,
+      productDescription: `${build.candidateTitle ?? build.candidateId} 的公开天区覆盖 MOC；来源为 CDS MOC 服务，已由 Assets 校验并锁定来源哈希。`,
+      productStatus: "acquired",
+      modality: "imaging",
+      dataOrigin: "observed",
+    };
+    const form = byId<HTMLFormElement>("moc-product-register-form");
+    form.reset();
+    setRegistrationField(form, "buildName", build.name);
+    setRegistrationField(form, "surveyId", build.surveyId ?? guessedSurveyId(build));
+    setRegistrationField(form, "surveyName", build.surveyId?.toUpperCase() ?? guessedSurveyId(build).toUpperCase());
+    setRegistrationField(form, "releaseId", defaults.releaseId);
+    setRegistrationField(form, "releaseLabel", defaults.releaseLabel);
+    setRegistrationField(form, "releaseKind", defaults.releaseKind);
+    setRegistrationField(form, "productName", defaults.productName);
+    setRegistrationField(form, "productDescription", defaults.productDescription);
+    setRegistrationField(form, "productStatus", defaults.productStatus);
+    setRegistrationField(form, "modality", defaults.modality);
+    setRegistrationField(form, "dataOrigin", defaults.dataOrigin);
+    setRegistrationField(form, "surveyColor", "#42d5c4");
+    setRegistrationField(form, "surveyModalities", `${defaults.modality}, imaging`);
+    const sourceUrl = mocBuildSourceUrl(build);
+    setRegistrationField(form, "sourceUrl", sourceUrl);
+    setRegistrationField(form, "geometrySourceUrl", sourceUrl);
+    setRegistrationField(form, "geometrySourceLabel", "CDS MOC source");
+    setRegistrationField(form, "candidateSource", sourceUrl);
+    byId("moc-product-register-build-facts").innerHTML = `<div class="section-heading"><div><span class="section-index">STAGED BUILD</span><h4>${escapeText(build.candidateTitle ?? build.candidateId)}</h4></div><span class="section-note">Release/产品空白时使用自动事实</span></div><dl class="product-fact-grid">${detailValue("build", build.name)}${detailValue("candidate", build.candidateId)}${detailValue("source", sourceUrl)}${detailValue("outputs", build.outputs?.availableOrders?.map((order) => `O${order}`).join(" / "))}</dl>`;
+    const buildDialog = byId<HTMLDialogElement>("moc-build-detail-dialog");
+    if (buildDialog.open) buildDialog.close();
+    byId<HTMLDialogElement>("moc-product-register-dialog").showModal();
+  } catch (error) { toast(error instanceof Error ? error.message : "MOC 登记默认值加载失败", true); }
 }
 
 async function submitMocProductRegistration(event: SubmitEvent): Promise<void> {
@@ -690,12 +767,12 @@ async function submitMocProductRegistration(event: SubmitEvent): Promise<void> {
     ...(year ? { releasedYear: Number(year) } : {}),
     productName: formValue(form, "productName"),
     productDescription: formValue(form, "productDescription"),
-    productStatus: formValue(form, "productStatus") || "acquired",
+    productStatus: formValue(form, "productStatus"),
     modality: formValue(form, "modality"),
     sourceUrl: formValue(form, "sourceUrl"),
     geometrySourceUrl: formValue(form, "geometrySourceUrl"),
     geometrySourceLabel: formValue(form, "geometrySourceLabel"),
-    dataOrigin: formValue(form, "dataOrigin") || "observed",
+    dataOrigin: formValue(form, "dataOrigin"),
   };
   try {
     const response = await api<{ product: Product; request: MocBuildRequest }>(`/api/v1/admin/moc-builds/${encodeURIComponent(buildName)}/register-product`, { method: "POST", body: JSON.stringify(input) });
@@ -720,6 +797,19 @@ async function publishProduct(productId: string): Promise<void> {
   const product = productRecords.find((entry) => entry.productId === productId);
   if (!product) return;
   try { await api(`/api/v1/admin/products/${encodeURIComponent(productId)}/publish`, { method: "POST", body: JSON.stringify({ revision: product.revision }) }); if (byId<HTMLDialogElement>("product-dialog").open) byId<HTMLDialogElement>("product-dialog").close(); toast("产品已发布"); await refresh(); } catch (error) { toast(error instanceof Error ? error.message : "发布失败", true); }
+}
+
+async function reloadCatalogRuntime(button?: HTMLButtonElement): Promise<void> {
+  if (button) button.disabled = true;
+  try {
+    const response = await api<{ catalog: CatalogStatus }>("/api/v1/admin/catalog/reload", { method: "POST" });
+    toast(`Coverage 已重载：${response.catalog.footprints} footprints · ${response.catalog.revision ?? "revision unknown"}`);
+    await refresh();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "Coverage reload 失败", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 async function refresh(): Promise<void> {
@@ -862,16 +952,7 @@ byId<HTMLFormElement>("login-form").addEventListener("submit", async (event) => 
 });
 byId("logout-button").addEventListener("click", () => { token = ""; sessionStorage.removeItem(tokenKey); if (pollTimer !== undefined) window.clearTimeout(pollTimer); pollTimer = undefined; connectorProbeResults.clear(); connectorRecords = []; showLogin(); });
 byId("refresh-button").addEventListener("click", () => void refresh());
-byId("catalog-reload-button").addEventListener("click", async () => {
-  const button = byId<HTMLButtonElement>("catalog-reload-button");
-  button.disabled = true;
-  try {
-    const response = await api<{ catalog: CatalogStatus }>("/api/v1/admin/catalog/reload", { method: "POST" });
-    toast(`Coverage 已重载：${response.catalog.footprints} footprints`);
-    await refresh();
-  } catch (error) { toast(error instanceof Error ? error.message : "Coverage reload 失败", true); }
-  finally { button.disabled = false; }
-});
+byId("catalog-reload-button").addEventListener("click", (event) => void reloadCatalogRuntime(event.currentTarget as HTMLButtonElement));
 byId<HTMLFormElement>("connector-form").addEventListener("submit", (event) => void submitConnector(event));
 byId<HTMLFormElement>("task-form").addEventListener("submit", (event) => void submitTask(event));
 byId<HTMLFormElement>("moc-discovery-form").addEventListener("submit", (event) => void submitMocDiscovery(event));

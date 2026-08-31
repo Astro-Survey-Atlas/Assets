@@ -1,10 +1,66 @@
 # Assets Session Handoff
 
-Updated: 2026-08-30
+Updated: 2026-08-31
 
 Repository: `/home/aaron/Repo/Astro-Survey-Atlas-Assets`
 
-Starting commit: `49f434b`; current HEAD: `b1cc340`
+Starting commit: `49f434b`; current HEAD: `43b88cd`
+
+## Current Session Snapshot
+
+Updated after the 2026-08-31 registration-defaults and coverage-layer UI
+rollout. The working tree is intentionally dirty; preserve all existing
+changes and inspect overlapping diffs before editing.
+
+### Completed in This Session
+
+- MOC product registration accepts blank Release/product facts. Assets derives
+  defaults from public catalog facts, discovery hints and selected candidates;
+  explicit operator values override those defaults. The server applies the
+  same fallback at submit time, so the API does not depend on browser
+  pre-filling.
+- The globe layer panel now reserves the viewport, hides and inert-ifies the
+  coverage detail and selection queue while open, and keeps every row inside a
+  scrollable `100dvh` panel with safe-area padding.
+- Layer tooltips are one body-mounted instance, triggered by the entire row
+  (pointer and keyboard), positioned outside the list, and suppressed on narrow
+  touch layouts so they cannot cover the list or be clipped by scrolling.
+- Added focused layout and registration tests; API documentation describes the
+  defaulting behavior. Warehouse and MOC-Core-SDK contracts were not changed.
+
+### Verification and Deployment
+
+- `npm run build`, `npm test` (79 tests), `npm run validate`,
+  `helm lint charts/astro-survey-atlas-assets`, and `git diff --check` pass.
+- Helm revision 99 is healthy with image tag
+  `0.1.0-20260831-105813`; the `publish-assets` init container completed and
+  the Pod is `1/1 Running` on `eva7028`.
+- Direct service URL: `http://10.15.51.75:32083/`.
+  Ingress URLs: `http://astro.assets.dev.72602.space:32080/` and
+  `https://astro.assets.dev.72602.space:32443/`.
+- Health bundle SHA-256 is
+  `00804a3ce33a8cbd5ab5e65250e4c5315d1e54ce6e82f9d6a3399c3ca8be9ad2`.
+  `/api/v1/assets` reports 221 files and `/api/v1/coverage` reports 58
+  footprints. A FITS Range request returned 32 bytes with `206 Partial
+  Content`, `Content-Range`, and `X-Content-SHA256`.
+- The running image manifest digest is
+  `sha256:6a62dc145a21fcd32cbce9a515aaf26e809dcb610cd735fbdae4bc8ad59538fb`.
+
+### Next Session
+
+1. Read `AGENTS.md`, this handoff, `docs/coverage-workflow.md`, and the
+   coverage-workflow skill before touching scan, MOC, evidence, overlap or
+   reverse-lookup behavior.
+2. Keep the static-plus-Warehouse catalog merge and all current tests intact;
+   do not add Warehouse workflow logic to Assets or modify MOC-Core-SDK.
+3. For future UI changes, repeat the desktop/mobile layer-panel smoke and
+   check that tooltip rectangles remain outside the list.
+4. Coordinate any new Warehouse layer or MOC discovery work with its owner;
+   retain historical evidence and do not expose input manifests in the public
+   release.
+5. Before the next rollout, rerun the complete build/test/lint gate and use a
+   new immutable image tag. Do not delete old ReplicaSets or release PVC
+   directories.
 
 ## Start Here
 
@@ -296,11 +352,45 @@ PostgreSQL integration case skipped when its database URL is unset). Warehouse
 passes both `mvn -B -q test` and `mvn -B -q verify`; the shared Core conformance
 fixture remains pinned to MOC-Core-SDK commit `2ebc395`.
 
+The deep-link/catalog follow-up was deployed as Helm revision 97 with image tag
+`0.1.0-20260830-233430`. The live service reports 57 ACTIVE coverage layers;
+JWST O4 cell `2337` and O8 cell `598322` are available, and its FITS route
+returns a verified `206 Partial Content` response. Desktop and 390px mobile
+browser smokes opened `/?survey=jwst&product=3b997b091a6793c40bf3`, rendered
+the JWST layer, and reported no horizontal overflow or browser exceptions.
+
+The 2026-08-31 interaction regression fix was deployed as Helm revision 98
+with image tag `0.1.0-20260831-070428`. The rollout has one healthy Pod and
+the `publish-assets` init container completed successfully. The live health
+bundle is `00804a3ce33a8cbd5ab5e65250e4c5315d1e54ce6e82f9d6a3399c3ca8be9ad2`;
+the health/API asset listing exposes 216 files (the base release manifest remains
+211 files) and 57 coverage footprints.
+The FITS range smoke returned `206 Partial Content` with `Content-Range` and
+`X-Content-SHA256`. Browser smoke verified that entering the globe leaves all
+21 survey controls unselected, Gaia O8 + DES O4 G mode explains that no common
+order exists without sending an overlap request, and CSST + JWST reaches
+`COMMON ORDER O8 · 1 CELLS`. The MOC registration dialog is visible and
+scrollable; closing it leaves the other admin tabs operable. No page runtime
+exceptions were observed in these checks.
+
+The registration-defaults and layer-panel interaction fixes were deployed as
+Helm revision 99 with image tag `0.1.0-20260831-105813`. The rollout completed
+with one healthy Pod; `publish-assets` activated the same verified bundle and
+the service loaded 56 ACTIVE Warehouse layers. Direct NodePort smoke checks
+returned 200 for `/healthz`, `/api/v1/assets` (221 files), and
+`/api/v1/coverage` (58 footprints). A DESI FITS Range request returned 32
+bytes with `206 Partial Content`, the expected `Content-Range`, and
+`X-Content-SHA256`. The running image manifest digest is
+`sha256:6a62dc145a21fcd32cbce9a515aaf26e809dcb610cd735fbdae4bc8ad59538fb`.
+Browser smoke verified that the layer list remains fully scrollable, hides the
+coverage/selection overlays while open, and places the hover tooltip outside
+the list without creating a mobile hover layer.
+
 ## Live Deployment Layout
 
 Assets is a separate Helm release in namespace `astro-survey-atlas-assets`.
-The current dev rollout is Helm revision 94, image tag
-`0.1.0-20260830-175732`, and serves through:
+The current dev rollout is Helm revision 99, image tag
+`0.1.0-20260831-105813`, and serves through:
 
 ```text
 http://10.15.51.75:32083/
@@ -328,7 +418,7 @@ publication. The current runtime bundle is
 `00804a3ce33a8cbd5ab5e65250e4c5315d1e54ce6e82f9d6a3399c3ca8be9ad2`, with
 211 manifest files. The init container completed successfully; the image
 manifest digest is
-`sha256:7b32810b8a77c7db0ccc323813a23d29e102fc5a042f9ce6d84babb60ca478df`.
+`sha256:6a62dc145a21fcd32cbce9a515aaf26e809dcb610cd735fbdae4bc8ad59538fb`.
 
 The Gaia O8-only Warehouse layers are included in the globe's O4 visual
 overview by NESTED coarsening, while their API coverage remains explicitly O8.

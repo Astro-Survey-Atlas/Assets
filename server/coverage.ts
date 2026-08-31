@@ -22,6 +22,8 @@ export interface CoverageCellLayer {
   cells: Map<number, number[]>;
   recipe?: CoverageRecipeSummary;
   sourceUnitIndex?: SourceUnitIndexSummary;
+  /** Stable content revision used to version browser/cache block requests. */
+  revision?: string;
 }
 
 export interface CoverageRecipeSummary {
@@ -48,11 +50,13 @@ export interface SourceUnitIndexSummary {
 }
 
 export interface CoverageCatalog {
-  schemaVersion: 1;
+  schemaVersion: number;
   coordinateFrame: "ICRS";
   ordering: "NESTED";
   tileScheme: "ipix-range-4096";
   layers: Array<Omit<CoverageCellLayer, "cells"> & { tileIdsByOrder: Record<string, number[]> }>;
+  revision?: string;
+  generatedAt?: string;
 }
 
 const identity = (surveyId: string, releaseId: string, product: string): string => `${surveyId}:${releaseId}:${product}`;
@@ -67,6 +71,50 @@ function colorFor(id: string): string {
 
 function hashCells(cells: number[]): string {
   return createHash("sha256").update(JSON.stringify(cells)).digest("hex");
+}
+
+function revisionPayload(record: CoverageCellLayer): Record<string, unknown> {
+  return {
+    layerId: record.layerId,
+    productId: record.productId,
+    surveyId: record.surveyId,
+    releaseId: record.releaseId,
+    product: record.product,
+    modality: record.modality,
+    coverageRole: record.coverageRole,
+    availableOrders: [...record.availableOrders].sort((left, right) => left - right),
+    overviewOrder: record.overviewOrder,
+    maxOrder: record.maxOrder,
+    tileScheme: record.tileScheme,
+    cells: Object.fromEntries([...record.cells.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([order, cells]) => [String(order), [...cells].sort((left, right) => left - right)])),
+  };
+}
+
+export function coverageLayerRevision(record: CoverageCellLayer): string {
+  return createHash("sha256").update(JSON.stringify(revisionPayload(record))).digest("hex").slice(0, 32);
+}
+
+export function withCoverageRevisions(
+  catalog: CoverageCatalog & { records: Map<string, CoverageCellLayer> },
+): CoverageCatalog & { records: Map<string, CoverageCellLayer> } {
+  const records = new Map([...catalog.records.entries()].map(([layerId, record]) => {
+    const revision = coverageLayerRevision(record);
+    return [layerId, { ...record, revision }] as const;
+  }));
+  const layers = [...records.values()].map(({ cells, ...record }) => ({
+    ...record,
+    tileIdsByOrder: Object.fromEntries([...cells.entries()]
+      .map(([order, values]) => [String(order), [...new Set(values.map((cell) => Math.floor(cell / 4096)))].sort((left, right) => left - right)])),
+  }));
+  const revision = createHash("sha256")
+    .update(JSON.stringify(layers
+      .map((layer) => [layer.layerId, layer.revision] as const)
+      .sort(([left], [right]) => left.localeCompare(right))))
+    .digest("hex")
+    .slice(0, 32);
+  return { ...catalog, schemaVersion: 2, revision, layers, records };
 }
 
 function recipeSteps(mode: string, recipe: Record<string, unknown>): CoverageRecipeSummary["steps"] {
@@ -202,8 +250,7 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
       }
     } catch { /* no high-order projection for this layer */ }
   }
-  const layers = [...records.values()].map(({ cells, ...record }) => ({ ...record, tileIdsByOrder: Object.fromEntries([...cells.entries()].map(([order, values]) => [String(order), [...new Set(values.map((cell) => Math.floor(cell / 4096)))].sort((a, b) => a - b)])) }));
-  return { schemaVersion: 1, coordinateFrame: "ICRS", ordering: "NESTED", tileScheme: "ipix-range-4096", layers, records };
+  return withCoverageRevisions({ schemaVersion: 2, coordinateFrame: "ICRS", ordering: "NESTED", tileScheme: "ipix-range-4096", layers: [], records });
 }
 
 /**
@@ -266,11 +313,7 @@ export function coverageCatalogFromWarehouse(
     };
     records.set(record.layerId, record);
   }
-  const layers = [...records.values()].map(({ cells, ...record }) => ({
-    ...record,
-    tileIdsByOrder: Object.fromEntries([...cells.entries()].map(([order, values]) => [String(order), [...new Set(values.map((cell) => Math.floor(cell / 4096)))].sort((a, b) => a - b)])),
-  }));
-  return { ...base, layers, records };
+  return withCoverageRevisions({ ...base, schemaVersion: 2, layers: [], records });
 }
 
 export function coverageBlock(record: CoverageCellLayer, order: number, tileId: number): { layerId: string; order: number; tileId: number; cells: number[]; sha256: string } | null {

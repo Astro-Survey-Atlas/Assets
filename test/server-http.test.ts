@@ -122,11 +122,27 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
 
   const coverageCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`);
   assert.equal(coverageCatalogResponse.status, 200);
-  const coverageCatalog = await coverageCatalogResponse.json() as { ordering: string; layers: Array<{ layerId: string; surveyId: string; availableOrders: number[]; tileIdsByOrder: Record<string, number[]>; recipe?: { mode: string; steps: any[] }; sourceUnitIndex?: { status: string; unitKind?: string } }> };
+  const catalogEtag = coverageCatalogResponse.headers.get("etag");
+  assert.match(catalogEtag ?? "", /^"catalog-[a-f0-9]{32}"$/);
+  const coverageCatalog = await coverageCatalogResponse.json() as { revision: string; ordering: string; layers: Array<{ layerId: string; surveyId: string; availableOrders: number[]; tileIdsByOrder: Record<string, number[]>; revision?: string; recipe?: { mode: string; steps: any[] }; sourceUnitIndex?: { status: string; unitKind?: string } }> };
+  assert.match(coverageCatalog.revision, /^[a-f0-9]{32}$/);
+  const notModifiedCatalog = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`, { headers: { "If-None-Match": catalogEtag! } });
+  assert.equal(notModifiedCatalog.status, 304);
   assert.equal(coverageCatalog.ordering, "NESTED");
   assert.ok(coverageCatalog.layers.every((layer) => layer.availableOrders.every((order) => Array.isArray(layer.tileIdsByOrder[String(order)]))));
   const desiLayer = coverageCatalog.layers.find((layer) => layer.layerId === "desi-dr1-spectra-footprint");
   assert.equal(desiLayer?.recipe?.mode, "tile-table");
+  assert.match(desiLayer?.revision ?? "", /^[a-f0-9]{32}$/);
+  const desiOrder = desiLayer?.availableOrders[0];
+  const desiTile = desiOrder === undefined ? undefined : desiLayer?.tileIdsByOrder[String(desiOrder)]?.[0];
+  assert.notEqual(desiTile, undefined);
+  const block = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/blocks/${desiLayer!.layerId}?order=${desiOrder}&tile=${desiTile}&revision=${desiLayer!.revision}`);
+  assert.equal(block.status, 200);
+  const blockBody = await block.json() as { revision: string; cells: number[] };
+  assert.equal(blockBody.revision, desiLayer!.revision);
+  assert.ok(Array.isArray(blockBody.cells));
+  const staleBlock = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/blocks/${desiLayer!.layerId}?order=${desiOrder}&tile=${desiTile}&revision=stale`);
+  assert.equal(staleBlock.status, 409);
   assert.ok((desiLayer?.recipe?.steps.length ?? 0) >= 7);
   assert.equal(desiLayer?.sourceUnitIndex?.status, "exact");
   const csstW2Layer = coverageCatalog.layers.find((layer) => layer.layerId === "csst-sim-w2-image-extent");
@@ -426,10 +442,28 @@ test("staged MOC builds can be registered, reviewed and published as a dynamic s
   context.after(() => { child.kill("SIGTERM"); });
   await waitFor(`http://127.0.0.1:${port}/healthz`, child);
   const headers = { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" };
-  const register = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-builds/${buildName}/register-product`, { method: "POST", headers, body: JSON.stringify({ surveyId: "jwst", surveyName: "JWST", mission: "James Webb Space Telescope", surveyDescription: "Public JWST coverage products.", surveyColor: "#42d5c4", surveyModalities: ["infrared", "imaging"], releaseId: "dr1", releaseLabel: "DR1", releaseKind: "release", productName: "JWST DR1 public MOC", productDescription: "JWST DR1 public MOC coverage.", productStatus: "acquired", modality: "infrared", sourceUrl: "https://alasky.cds.unistra.fr/jwst/dr1", geometrySourceUrl: "https://alasky.cds.unistra.fr/jwst/dr1/moc.fits", geometrySourceLabel: "CDS MOC source" }) });
+  const detail = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-builds/${buildName}`, { headers });
+  assert.equal(detail.status, 200);
+  const detailBody = await detail.json() as { registrationDefaults?: { releaseId?: string; releaseLabel?: string; productName?: string; modality?: string } };
+  assert.deepEqual(detailBody.registrationDefaults, {
+    releaseId: "dr1",
+    releaseLabel: "DR1",
+    releaseKind: "release",
+    productName: "JWST DR1",
+    productDescription: "JWST DR1 的公开天区覆盖 MOC；来源为 CDS MOC 服务，已由 Assets 校验并锁定来源哈希。",
+    productStatus: "acquired",
+    modality: "infrared",
+    dataOrigin: "observed",
+  });
+  const register = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-builds/${buildName}/register-product`, { method: "POST", headers, body: JSON.stringify({ surveyId: "jwst", surveyName: "JWST", mission: "James Webb Space Telescope", surveyDescription: "Public JWST coverage products.", surveyColor: "#42d5c4", surveyModalities: ["infrared", "imaging"], releaseId: " ", releaseLabel: "", releaseKind: "", productName: "", productDescription: " ", productStatus: "", modality: "", dataOrigin: "", sourceUrl: "https://alasky.cds.unistra.fr/jwst/dr1", geometrySourceUrl: "https://alasky.cds.unistra.fr/jwst/dr1/moc.fits", geometrySourceLabel: "CDS MOC source" }) });
   assert.equal(register.status, 201);
-  const registered = await register.json() as { product: { productId: string; draft: { surveyId: string; releaseId: string; publicSurvey?: { name: string } } }; request: { productId?: string; workKey?: string } };
+  const registered = await register.json() as { product: { productId: string; draft: { surveyId: string; releaseId: string; name: string; modality?: string; publicDescription?: string; publicSurvey?: { name: string }; publicRelease?: { label: string; kind: string } } }; request: { productId?: string; workKey?: string } };
   assert.equal(registered.product.draft.surveyId, "jwst");
+  assert.equal(registered.product.draft.releaseId, "dr1");
+  assert.equal(registered.product.draft.name, "JWST DR1");
+  assert.equal(registered.product.draft.modality, "infrared");
+  assert.equal(registered.product.draft.publicRelease?.label, "DR1");
+  assert.equal(registered.product.draft.publicDescription, "JWST DR1 的公开天区覆盖 MOC；来源为 CDS MOC 服务，已由 Assets 校验并锁定来源哈希。");
   assert.equal(registered.product.draft.publicSurvey?.name, "JWST");
   assert.equal(registered.request.productId, registered.product.productId);
   assert.equal(registered.request.workKey, `product:${registered.product.productId}`);
@@ -662,12 +696,20 @@ test("HTTP publication activates dynamic MOC assets and restores them after rest
   const adminHeaders = { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" };
   const adminProducts = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products?view=surveys`, { headers: adminHeaders });
   assert.equal(adminProducts.status, 200);
-  const adminProductBody = await adminProducts.json() as { surveys: Array<{ releases: Array<{ products: Array<{ productId: string; mocBuild?: { name: string; phase: string; progress?: { percent?: number } } }> }> }> };
+  const adminProductBody = await adminProducts.json() as { surveys: Array<{ releases: Array<{ products: Array<{ productId: string; mocBuild?: { name: string; phase: string; progress?: { percent?: number }; lifecycle?: { publication?: { state?: string }; runtime?: { state?: string; availableOrders?: number[] } } }; lifecycle?: { publication?: { state?: string }; runtime?: { state?: string; availableOrders?: number[] } } }> }> }> };
   const stagedAdminProduct = adminProductBody.surveys.flatMap((survey) => survey.releases.flatMap((release) => release.products)).find((product) => product.productId === productId);
   assert.equal(stagedAdminProduct?.mocBuild?.name, buildName);
   assert.equal(stagedAdminProduct?.mocBuild?.phase, "STAGED");
+  assert.equal(stagedAdminProduct?.lifecycle?.publication?.state, "DRAFT");
+  assert.equal(stagedAdminProduct?.lifecycle?.runtime?.state, "INACTIVE");
+  assert.equal(stagedAdminProduct?.mocBuild?.lifecycle?.runtime?.state, "INACTIVE");
   const publish = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${productId}/publish`, { method: "POST", headers: adminHeaders, body: "{}" });
   assert.equal(publish.status, 200);
+  const publishBody = await publish.json() as { lifecycle?: { publication?: { state?: string }; runtime?: { state?: string; availableOrders?: number[] }; links?: Record<string, string> } };
+  assert.equal(publishBody.lifecycle?.publication?.state, "PUBLISHED");
+  assert.equal(publishBody.lifecycle?.runtime?.state, "ACTIVE");
+  assert.deepEqual(publishBody.lifecycle?.runtime?.availableOrders, [4, 8]);
+  assert.deepEqual(Object.keys(publishBody.lifecycle?.links ?? {}).sort(), ["catalog", "moc", "product", "sky"]);
 
   const assetsResponse = await fetch(`http://127.0.0.1:${port}/api/v1/assets`);
   assert.equal(assetsResponse.status, 200);

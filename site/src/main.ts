@@ -2,6 +2,8 @@ import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, Extern
 import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 import type { SurveyLayerContextMenu, SurveyLayerInspection, SurveyLayerOverlapComponent, SurveyLayerState } from "./atlas/survey-layer-viewer.js";
+import { highestCommonCoverageOrder } from "./atlas/coverage-orders.js";
+import { coverageLayerTooltipPosition } from "./atlas/layer-panel-layout.js";
 import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-layout.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
 
@@ -144,7 +146,15 @@ let activeSurveyId: string | null = null;
 let coverageCatalog: CoverageCatalog | null = null;
 const coverageBlockCache = new Map<string, number[]>();
 const coverageRequests = new Map<string, AbortController>();
+type CoverageLayerLoadState = "loading" | "ready" | "empty" | "error";
+const coverageLayerLoadStates = new Map<string, CoverageLayerLoadState>();
+const coverageLayerLoadErrors = new Map<string, string>();
 const COVERAGE_CACHE_LIMIT = 128;
+const COVERAGE_REFRESH_INTERVAL_MS = 60_000;
+let coverageRefreshTimer: number | null = null;
+let coverageCatalogEtag = "";
+interface SkyDeepLinkTarget { surveyId?: string; productId?: string; layerId?: string; error?: string }
+let deepLinkTarget: SkyDeepLinkTarget | null = null;
 let pendingCoverageState: SurveyLayerState | null = null;
 let coverageStateFrame = 0;
 let overlapMode = false;
@@ -166,6 +176,8 @@ let layerCloseTimer: number | null = null;
 let layerCloseDeadline = 0;
 let layerCloseRemaining = 0;
 let layerClosePaused = false;
+let coverageLayerTooltip: HTMLElement | null = null;
+let coverageLayerTooltipRow: HTMLElement | null = null;
 const overlapEvidenceCache = new Map<string, OverlapEvidenceResult>();
 const overlapDetailsCache = new Map<string, OverlapDetailsResponse>();
 let lastEscapeAt = -Infinity;
@@ -186,16 +198,21 @@ function updateHomeScrollProgress(): void {
   coverageDots?.setHomeScrollProgress(progress);
 }
 
+function coverageBlockKey(layer: CoverageCatalog["layers"][number], order: number, tile: number): string {
+  return `${layer.layerId}:${layer.revision ?? "legacy"}:${order}:${tile}`;
+}
+
 async function fetchCoverageBlock(layer: CoverageCatalog["layers"][number], order: number, tile: number): Promise<number[]> {
-  const key = `${layer.layerId}:${order}:${tile}`;
+  const key = coverageBlockKey(layer, order, tile);
   const cached = coverageBlockCache.get(key);
   if (cached) return cached;
   const controller = new AbortController();
   coverageRequests.get(key)?.abort();
   coverageRequests.set(key, controller);
   try {
-    const response = await fetch(`/api/v1/coverage/blocks/${encodeURIComponent(layer.layerId)}?order=${order}&tile=${tile}`, { signal: controller.signal });
-    if (!response.ok) return [];
+    const revision = layer.revision ? `&revision=${encodeURIComponent(layer.revision)}` : "";
+    const response = await fetch(`/api/v1/coverage/blocks/${encodeURIComponent(layer.layerId)}?order=${order}&tile=${tile}${revision}`, { signal: controller.signal });
+    if (!response.ok) throw new Error(`coverage block HTTP ${response.status}`);
     const block = await response.json() as { cells?: number[] };
     const cells = Array.isArray(block.cells) ? [...new Set(block.cells)].sort((a, b) => a - b) : [];
     coverageBlockCache.set(key, cells);
@@ -215,8 +232,92 @@ async function fetchCoverageOverview(layer: CoverageCatalog["layers"][number]): 
 
 async function fetchCoverageLayerOrder(layer: CoverageCatalog["layers"][number], order: number): Promise<number[]> {
   const tiles = layer.tileIdsByOrder?.[String(order)] ?? [0];
-  const blocks = await Promise.all(tiles.map((tile) => fetchCoverageBlock(layer, order, tile)));
-  return [...new Set(blocks.flat())].sort((a, b) => a - b);
+  coverageLayerLoadStates.set(layer.layerId, "loading");
+  coverageLayerLoadErrors.delete(layer.layerId);
+  try {
+    const blocks = await Promise.all(tiles.map((tile) => fetchCoverageBlock(layer, order, tile)));
+    const cells = [...new Set(blocks.flat())].sort((a, b) => a - b);
+    coverageLayerLoadStates.set(layer.layerId, cells.length ? "ready" : "empty");
+    return cells;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return [];
+    coverageLayerLoadStates.set(layer.layerId, "error");
+    coverageLayerLoadErrors.set(layer.layerId, error instanceof Error ? error.message : "coverage block unavailable");
+    return [];
+  }
+}
+
+function allCoverageSurveyIds(): string[] {
+  return [...new Set(coverageCatalog?.layers.map((layer) => layer.surveyId) ?? [])];
+}
+
+function productForLayer(layer: CoverageCatalog["layers"][number]): SurveyProduct | undefined {
+  const survey = surveyIndex?.surveys.find((entry) => entry.id === layer.surveyId);
+  const release = survey?.releases.find((entry) => entry.id === layer.releaseId);
+  return release?.products.find((product) => product.productId === layer.productId || product.name === layer.product);
+}
+
+function readSkyDeepLink(): SkyDeepLinkTarget | null {
+  const params = new URLSearchParams(window.location.search);
+  const surveyId = params.get("survey")?.trim() || undefined;
+  const productId = params.get("product")?.trim() || undefined;
+  if (!surveyId && !productId) return null;
+  const productMatch = productId
+    ? surveyIndex?.surveys.flatMap((survey) => survey.releases.flatMap((release) => release.products.map((product) => ({ surveyId: survey.id, product }))))
+      .find((entry) => entry.product.productId === productId)
+    : undefined;
+  if (productId && !productMatch) return { surveyId, productId, error: "PRODUCT DEEP LINK NOT FOUND" };
+  if (surveyId && productMatch && surveyId !== productMatch.surveyId) return { surveyId, productId, error: "PRODUCT DOES NOT BELONG TO SURVEY" };
+  const resolvedSurveyId = productMatch?.surveyId ?? surveyId;
+  const product = productMatch?.product;
+  const layer = product?.coverage?.layerId
+    ? coverageCatalog?.layers.find((entry) => entry.layerId === product.coverage?.layerId)
+    : product ? coverageCatalog?.layers.find((entry) => entry.productId === product.productId || entry.product === product.name) : undefined;
+  return { surveyId: resolvedSurveyId, ...(productId ? { productId } : {}), ...(layer ? { layerId: layer.layerId } : {}) };
+}
+
+function syncSkyDeepLink(surveyId?: string, productId?: string): void {
+  const url = new URL(window.location.href);
+  url.search = "";
+  if (surveyId) url.searchParams.set("survey", surveyId);
+  if (productId) url.searchParams.set("product", productId);
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function coverageDiagnosticText(): string | null {
+  const failures = [...coverageLayerLoadStates.entries()].filter(([, state]) => state === "error");
+  if (!failures.length) return null;
+  const summary = failures.length === 1 ? "1 COVERAGE LAYER FAILED TO LOAD" : `${failures.length} COVERAGE LAYERS FAILED TO LOAD`;
+  return `${summary} · OPEN LAYERS TO RETRY`;
+}
+
+function renderCoverageLoadDiagnostics(): void {
+  const message = coverageDiagnosticText();
+  if (message) byId("coverage-state").textContent = message;
+}
+
+function coverageStateText(defaultValue: string): string {
+  return coverageDiagnosticText() ?? defaultValue;
+}
+
+function focusSkyTarget(target: SkyDeepLinkTarget | null): void {
+  if (!target?.surveyId || !coverageDots) return;
+  applyCoverageSelection([target.surveyId]);
+  coverageDots.setSelectedSurvey(target.surveyId);
+  const layer = target.layerId
+    ? coverageCatalog?.layers.find((entry) => entry.layerId === target.layerId)
+    : target.productId
+      ? coverageCatalog?.layers.find((entry) => entry.productId === target.productId)
+      : undefined;
+  if (layer) {
+    const cells = fetchCoverageLayerOrder(layer, layer.overviewOrder);
+    void cells.then((values) => {
+      if (!values.length || !coverageDots) return;
+      coverageDots.focusPixels(layer.overviewOrder, values);
+      updateCoverageReadout(layer.surveyId, productForLayer(layer)?.name ?? layer.product);
+    });
+  }
+  updateCoverageReadout(target.surveyId, layer ? productForLayer(layer)?.name ?? layer.product : undefined);
 }
 
 function updateCoverageReadout(surveyId: string | null, product?: string): void {
@@ -237,19 +338,19 @@ function updateCoverageReadout(surveyId: string | null, product?: string): void 
       scene.style.setProperty("--coverage-color", layers[0]?.color ?? "#42d5c4");
       title.textContent = product ? `${surveyId.toUpperCase()} · ${product.toUpperCase()}` : surveyId.toUpperCase();
       meta.textContent = orderText;
-      state.textContent = `${layers.length} COVERAGE LAYERS · SELECTED`;
+      state.textContent = coverageStateText(`${layers.length} COVERAGE LAYERS · SELECTED`);
       return;
     }
     scene.style.removeProperty("--coverage-color");
     title.textContent = t("coverage.allSurveys");
     meta.textContent = "NESTED HEALPIX · NSIDE 16";
-    state.textContent = coverageDots ? t("coverage.publicCells") : t("coverage.previewUnavailable");
+    state.textContent = coverageStateText(coverageDots ? t("coverage.publicCells") : t("coverage.previewUnavailable"));
     return;
   }
   scene.style.setProperty("--coverage-color", survey.color);
   title.textContent = product ? `${survey.name.toUpperCase()} · ${product.toUpperCase()}` : survey.name.toUpperCase();
   meta.textContent = `${orderText} · ${survey.statistics.footprintCells.toLocaleString("en-US")} CELLS`;
-  state.textContent = `${survey.statistics.acquired}/${survey.statistics.publicProducts} PRODUCTS · SELECTED`;
+  state.textContent = coverageStateText(`${survey.statistics.acquired}/${survey.statistics.publicProducts} PRODUCTS · SELECTED`);
 }
 
 function updateCoverageState(state: SurveyLayerState): void {
@@ -326,6 +427,7 @@ function updateOverlapPanelLayout(): void {
   }
   const crowded = overlapDrawerOpen && !drawer.hidden
     && overlapPanelsShouldExit(window.innerWidth, drawer.getBoundingClientRect().width);
+  const layersOpen = document.body.dataset.layersPanel === "open";
   if (crowded) {
     document.body.dataset.overlapPanels = "dismissed";
     document.body.style.setProperty("--overlap-panel-exit-transform", overlapPanelExitTransform(window.innerWidth));
@@ -336,8 +438,8 @@ function updateOverlapPanelLayout(): void {
     document.body.removeAttribute("data-overlap-panels");
     document.body.style.removeProperty("--overlap-panel-exit-transform");
   }
-  setOverlapPanelInteraction(panel, crowded);
-  setOverlapPanelInteraction(queue, crowded);
+  setOverlapPanelInteraction(panel, crowded || layersOpen);
+  setOverlapPanelInteraction(queue, crowded || layersOpen);
 }
 
 function visibleSurveyIdsFromControls(): string[] {
@@ -358,19 +460,15 @@ function applyCoverageSelection(surveyIds: Iterable<string>): void {
   renderSelectionQueue();
 }
 
-function commonOverviewOrder(surveyIds: string[] = visibleSurveyIdsFromControls()): number {
-  const layers = coverageCatalog?.layers.filter((layer) => surveyIds.includes(layer.surveyId)) ?? [];
-  const bySurvey = new Map<string, Set<number>>();
-  layers.forEach((layer) => { const orders = bySurvey.get(layer.surveyId) ?? new Set<number>(); layer.availableOrders.forEach((order) => orders.add(order)); bySurvey.set(layer.surveyId, orders); });
-  const common = [...bySurvey.values()].reduce<number[]>((orders, available, index) => index === 0 ? [...available] : orders.filter((order) => available.has(order)), []);
-  return common.length ? Math.max(...common) : 4;
+function commonOverviewOrder(surveyIds: string[] = visibleSurveyIdsFromControls()): number | null {
+  return highestCommonCoverageOrder(coverageCatalog?.layers ?? [], surveyIds);
 }
 
 function surveyCellsAtOrder(surveyId: string, order: number): Set<number> {
   const cells = new Set<number>();
   for (const layer of coverageCatalog?.layers.filter((candidate) => candidate.surveyId === surveyId && candidate.availableOrders.includes(order)) ?? []) {
     const tiles = layer.tileIdsByOrder?.[String(order)] ?? [0];
-    tiles.forEach((tile) => (coverageBlockCache.get(`${layer.layerId}:${order}:${tile}`) ?? []).forEach((pixel) => cells.add(pixel)));
+    tiles.forEach((tile) => (coverageBlockCache.get(coverageBlockKey(layer, order, tile)) ?? []).forEach((pixel) => cells.add(pixel)));
   }
   return cells;
 }
@@ -426,9 +524,11 @@ interface OverlapEvidenceResult {
     precision: string;
   }>;
   sourceFiles: Array<Record<string, unknown>>;
+  entrypoints?: Array<{ layerId: string; productId?: string; surveyId?: string; releaseId?: string; product?: string; order: number; nside: number; cells: number[]; precision: string; sourceUrl?: string; mocUrl?: string; note?: string }>;
   notes?: string[];
 }
-interface OverlapComponentView { id: string; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; evidenceLookup?: OverlapEvidenceLookup; surveys?: Array<{ surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; unitKind?: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }> }
+interface OverlapSurveyView { surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; unitKind?: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }
+interface OverlapComponentView { id: string; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; evidenceLookup?: OverlapEvidenceLookup; surveys?: OverlapSurveyView[] }
 interface OverlapDetailsResponse {
   schemaVersion: 1;
   component: OverlapComponentView;
@@ -499,7 +599,9 @@ function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLEl
     const product = release?.products.find((entry) => entry.name === layer.product);
     return product?.modality ? [modalityLabel(product.modality)] : [];
   }))];
-  summary.textContent = `${layers.length} products · ${orders.length ? `O${orders.join("/O")}` : "HEALPIX --"}${modalities.length ? ` · ${modalities.join(" · ")}` : ""}`;
+  const states = [...new Set(layers.map((layer) => coverageLayerLoadStates.get(layer.layerId) ?? "loading"))];
+  const stateLabel = states.includes("error") ? "ERROR" : states.includes("loading") ? "LOADING" : states.includes("empty") ? "EMPTY" : "READY";
+  summary.textContent = `${layers.length} products · ${orders.length ? `O${orders.join("/O")}` : "HEALPIX --"}${modalities.length ? ` · ${modalities.join(" · ")}` : ""} · ${stateLabel}`;
   body.append(kicker, title, summary);
   const list = document.createElement("div");
   list.className = "coverage-layer-detail-list";
@@ -508,12 +610,83 @@ function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLEl
     const product = release?.products.find((entry) => entry.name === layer.product);
     const row = document.createElement("div");
     row.className = "coverage-layer-detail-row";
-    row.textContent = `${layer.product || product?.name || "Coverage"} · ${layer.releaseId || release?.label || "--"} · ${layer.availableOrders.length ? `O${layer.availableOrders.join("/O")}` : "HEALPIX --"}`;
+    const state = coverageLayerLoadStates.get(layer.layerId) ?? "loading";
+    row.textContent = `${layer.product || product?.name || "Coverage"} · ${layer.releaseId || release?.label || "--"} · ${layer.availableOrders.length ? `O${layer.availableOrders.join("/O")}` : "HEALPIX --"} · ${state.toUpperCase()}`;
+    if (state === "error") {
+      const error = coverageLayerLoadErrors.get(layer.layerId);
+      row.title = error ?? "Coverage block unavailable";
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "coverage-layer-retry";
+      retry.title = "重试覆盖块加载";
+      retry.append(icon("refresh-cw"), document.createTextNode("重试"));
+      retry.addEventListener("click", () => retryCoverageSurvey(surveyId));
+      row.append(retry);
+    }
     list.append(row);
   });
   body.append(list);
   if (persistent) panel.append(body);
   return panel;
+}
+
+function hideCoverageLayerTooltip(): void {
+  coverageLayerTooltipRow?.removeAttribute("aria-describedby");
+  coverageLayerTooltipRow = null;
+  coverageLayerTooltip?.remove();
+  coverageLayerTooltip = null;
+}
+
+function positionCoverageLayerTooltip(): void {
+  const tooltip = coverageLayerTooltip;
+  const row = coverageLayerTooltipRow;
+  if (!tooltip || !row) return;
+  if (window.innerWidth <= 820) {
+    hideCoverageLayerTooltip();
+    return;
+  }
+  const host = byId("coverage-layers");
+  const listRect = host.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  if (rowRect.bottom <= listRect.top || rowRect.top >= listRect.bottom) {
+    hideCoverageLayerTooltip();
+    return;
+  }
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const position = coverageLayerTooltipPosition(window.innerWidth, window.innerHeight, rowRect, listRect, tooltipRect);
+  if (!position) {
+    hideCoverageLayerTooltip();
+    return;
+  }
+  tooltip.style.left = `${position.left}px`;
+  tooltip.style.top = `${position.top}px`;
+}
+
+function showCoverageLayerTooltip(surveyId: string, row: HTMLElement): void {
+  if (window.innerWidth <= 820) return;
+  hideCoverageLayerTooltip();
+  const tooltip = createCoverageLayerDetail(surveyId);
+  tooltip.classList.add("coverage-layer-tooltip");
+  tooltip.id = "coverage-layer-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  document.body.append(tooltip);
+  coverageLayerTooltip = tooltip;
+  coverageLayerTooltipRow = row;
+  row.setAttribute("aria-describedby", tooltip.id);
+  positionCoverageLayerTooltip();
+}
+
+function setCoverageLayersOpen(open: boolean): void {
+  const layers = byId("coverage-layers");
+  const auxiliaryPanels = [byId("coverage-detail-panel"), byId("selection-queue")];
+  layers.hidden = !open;
+  if (open) document.body.dataset.layersPanel = "open";
+  else document.body.removeAttribute("data-layers-panel");
+  auxiliaryPanels.forEach((panel) => { panel.inert = open; });
+  hideCoverageLayerTooltip();
+  positionSelectionQueue();
+  positionOverlapPanel();
+  updateCoverageEmptyGuide();
 }
 
 function createSelectedComponentDetail(component: OverlapComponentView): HTMLElement {
@@ -587,9 +760,7 @@ function scheduleLayerCloseTimer(): void {
   layerCloseTimer = window.setTimeout(() => {
     layerCloseTimer = null;
     layerCloseRemaining = 0;
-    byId("coverage-layers").hidden = true;
-    positionSelectionQueue();
-    updateCoverageEmptyGuide();
+    setCoverageLayersOpen(false);
   }, layerCloseRemaining);
 }
 
@@ -809,7 +980,7 @@ function overlapCsvRows(component: OverlapComponentView, result: OverlapEvidence
     files.set(id, source);
   });
   const edges = result?.edges ?? [];
-  const fallbackLayers = [...(coverageCatalog?.layers ?? [])].filter((layer) => layer.cells.get(component.order)?.some((cell) => component.cells.includes(cell)));
+  const fallbackLayers = [...(coverageCatalog?.layers ?? [])].filter((layer) => layer.tileIdsByOrder?.[String(component.order)]?.some((tile) => (coverageBlockCache.get(coverageBlockKey(layer, component.order, tile)) ?? []).some((cell) => component.cells.includes(cell))));
   if (!edges.length) {
     const layers = fallbackLayers.length ? fallbackLayers : [{ layerId: "", surveyId: "", releaseId: "", product: "", modality: "" }];
     return layers.map((layer) => {
@@ -918,10 +1089,34 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
 
 function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): void {
   node.replaceChildren();
-  if (!result.available) {
+  const entrypoints = result.entrypoints ?? [];
+  if (!result.available && !entrypoints.length) {
     node.append(Object.assign(document.createElement("small"), { textContent: t("coverage.evidenceUnavailable") }));
     return;
   }
+  if (entrypoints.length) {
+    const heading = document.createElement("strong");
+    heading.textContent = `PUBLIC MOC ENTRYPOINTS · ${entrypoints.length}`;
+    node.append(heading);
+    const list = document.createElement("div");
+    list.className = "overlap-evidence-files";
+    entrypoints.forEach((entry) => {
+      const row = document.createElement("div");
+      row.className = "overlap-evidence-file";
+      row.append(Object.assign(document.createElement("strong"), { textContent: `${entry.product ?? entry.productId ?? entry.layerId} · O${entry.order} · ${entry.cells.length} cells` }));
+      if (entry.note) row.append(Object.assign(document.createElement("small"), { textContent: entry.note }));
+      const links = document.createElement("div");
+      links.className = "overlap-unit-links";
+      const sourceLink = drawerExternalLink(entry.sourceUrl, "Public source");
+      if (sourceLink) links.append(sourceLink);
+      const mocLink = drawerDocLink(entry.mocUrl, "FITS MOC");
+      if (mocLink) links.append(mocLink);
+      if (links.childElementCount) row.append(links);
+      list.append(row);
+    });
+    node.append(list);
+  }
+  if (!result.available) return;
   const files = new Map<string, Record<string, unknown>>();
   result.sourceFiles.forEach((source) => {
     const id = sourceValue(source, ["fileId", "file_id", "sourceFileId", "source_file_id", "_id"]) ?? String(files.size);
@@ -998,7 +1193,7 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
   content.append(detail);
   const products = document.createElement("div");
   products.className = "overlap-products";
-  const entries = component.surveys ?? surveyIds.flatMap((surveyId) => {
+  const entries: OverlapSurveyView[] = component.surveys ?? surveyIds.flatMap((surveyId): OverlapSurveyView[] => {
     const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
     return survey?.releases.flatMap((release) => release.products.filter((product) => product.coverage).map((product) => ({ surveyId, releaseId: release.id, product: product.name, modality: product.modality, downloadUrl: product.sourceUrl }))) ?? [];
   });
@@ -1345,15 +1540,15 @@ function openOverlapDrawer(): void {
   const drawer = byId("overlap-drawer");
   if (!overlapDrawerPreviousState) {
     overlapDrawerPreviousState = {
-      layersHidden: byId("coverage-layers").hidden,
-      queueHidden: byId("selection-queue").hidden,
-      panelHidden: byId("coverage-detail-panel").hidden,
-      helpHidden: byId("coverage-help").hidden,
-      guideHidden: byId("coverage-empty-guide").hidden,
+      layersHidden: Boolean(byId("coverage-layers").hidden),
+      queueHidden: Boolean(byId("selection-queue").hidden),
+      panelHidden: Boolean(byId("coverage-detail-panel").hidden),
+      helpHidden: Boolean(byId("coverage-help").hidden),
+      guideHidden: Boolean(byId("coverage-empty-guide").hidden),
     };
     overlapDrawerPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
-  byId("coverage-layers").hidden = true;
+  setCoverageLayersOpen(false);
   byId("coverage-help").hidden = true;
   byId("coverage-empty-guide").hidden = true;
   overlapDrawerOpen = true;
@@ -1381,7 +1576,7 @@ function closeOverlapDrawer(): void {
   const previous = overlapDrawerPreviousState;
   overlapDrawerPreviousState = null;
   if (previous) {
-    byId("coverage-layers").hidden = previous.layersHidden;
+    setCoverageLayersOpen(!previous.layersHidden);
     byId("selection-queue").hidden = previous.queueHidden;
     byId("coverage-detail-panel").hidden = previous.panelHidden;
     byId("coverage-help").hidden = previous.helpHidden;
@@ -1404,7 +1599,15 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
     toast(t("coverage.needTwoSurveys"));
     return;
   }
-  const order = commonOverviewOrder(surveyIds);
+  let order: number | null = null;
+  if (activate) {
+    order = commonOverviewOrder(surveyIds);
+    if (order === null) {
+      toast(t("coverage.noCommonOrder"));
+      byId("coverage-state").textContent = t("coverage.noCommonOrder");
+      return;
+    }
+  }
   const requestSequence = ++overlapRequestSequence;
   overlapMode = activate;
   if (!activate) {
@@ -1430,17 +1633,14 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
     panel.style.removeProperty("right");
     panel.style.removeProperty("width");
     setOverlapExpandVisible(false);
-    byId("coverage-layers").hidden = false;
-    positionSelectionQueue();
-    updateCoverageEmptyGuide();
+    setCoverageLayersOpen(true);
     return;
   }
   if (activate) {
     clearLayerCloseTimer();
-    byId("coverage-layers").hidden = true;
-    positionSelectionQueue();
-    updateCoverageEmptyGuide();
+    setCoverageLayersOpen(false);
   }
+  if (order === null) return;
   coverageDots?.setOverlapMode(true);
   activeOverlapComponents = [];
   overlapDetailsCache.clear();
@@ -1506,6 +1706,7 @@ function openCoverageContextMenu(menuState: SurveyLayerContextMenu): void {
 
 function renderCoverageLayers(): void {
   const host = byId("coverage-layers");
+  hideCoverageLayerTooltip();
   host.replaceChildren();
   if (!coverageCatalog) return;
   bindLayerCloseTimer(host);
@@ -1527,24 +1728,23 @@ function renderCoverageLayers(): void {
     const name = document.createElement("span");
     const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
     label.dataset.searchText = `${survey?.name ?? surveyId} ${survey?.mission ?? ""}`.toLocaleLowerCase();
-    name.textContent = survey?.name ?? surveyId.toUpperCase();
+    const loadState = layers.some((layer) => coverageLayerLoadStates.get(layer.layerId) === "error")
+      ? "ERROR"
+      : layers.some((layer) => coverageLayerLoadStates.get(layer.layerId) === "loading") ? "LOADING" : "READY";
+    name.textContent = `${survey?.name ?? surveyId.toUpperCase()} · ${loadState}`;
     name.className = "coverage-layer-name";
     const swatch = document.createElement("span");
     swatch.className = "coverage-layer-swatch";
     swatch.style.backgroundColor = layers[0]?.color ?? survey?.color ?? "#42d5c4";
     swatch.setAttribute("aria-label", `图层颜色 ${swatch.style.backgroundColor}`);
-    const detail = createCoverageLayerDetail(surveyId);
-    label.addEventListener("pointerenter", () => {
-      const bounds = label.getBoundingClientRect();
-      const detailWidth = Math.min(292, Math.max(220, window.innerWidth - 390));
-      detail.style.top = `${Math.max(12, Math.min(bounds.top, window.innerHeight - 210))}px`;
-      detail.style.left = `${Math.min(bounds.right + 12, window.innerWidth - detailWidth - 12)}px`;
-      detail.style.display = "grid";
-    });
+    label.addEventListener("pointerenter", () => showCoverageLayerTooltip(surveyId, label));
     label.addEventListener("pointerleave", () => {
-      detail.style.removeProperty("top");
-      detail.style.removeProperty("left");
-      detail.style.removeProperty("display");
+      if (coverageLayerTooltipRow === label) hideCoverageLayerTooltip();
+    });
+    label.addEventListener("focusin", () => showCoverageLayerTooltip(surveyId, label));
+    label.addEventListener("focusout", (event) => {
+      const related = event.relatedTarget;
+      if (!(related instanceof Node) || !label.contains(related)) hideCoverageLayerTooltip();
     });
     const handle = document.createElement("span");
     handle.className = "coverage-layer-handle";
@@ -1577,8 +1777,12 @@ function renderCoverageLayers(): void {
       host.insertBefore(dragging, event.clientY < rect.top + rect.height / 2 ? label : label.nextSibling);
       coverageDots?.setLayerOrder([...host.querySelectorAll<HTMLElement>("[data-layer-key]")].map((node) => node.dataset.layerKey!).filter(Boolean));
     });
-    label.append(input, swatch, handle, name, detail);
+    label.append(input, swatch, handle, name);
     host.append(label);
+  }
+  if (host.dataset.tooltipBound !== "true") {
+    host.dataset.tooltipBound = "true";
+    host.addEventListener("scroll", positionCoverageLayerTooltip, { passive: true });
   }
   filterInput?.addEventListener("input", () => {
     const query = filterInput.value.trim().toLocaleLowerCase();
@@ -1884,6 +2088,103 @@ function renderSurveys(): void {
   renderIcons();
 }
 
+async function fetchCoverageCatalogDocument(): Promise<CoverageCatalog | null> {
+  const headers = new Headers({ Accept: "application/json" });
+  if (coverageCatalogEtag) headers.set("If-None-Match", coverageCatalogEtag);
+  const response = await fetch("/api/v1/coverage/catalog", { headers, cache: "no-cache" });
+  if (response.status === 304) return null;
+  if (!response.ok) throw new Error(`Coverage catalog request failed (${response.status})`);
+  coverageCatalogEtag = response.headers.get("etag") ?? coverageCatalogEtag;
+  return await response.json() as CoverageCatalog;
+}
+
+async function hydrateCoverageCatalog(nextCatalog: CoverageCatalog): Promise<void> {
+  const revisionChanged = Boolean(coverageCatalog?.revision && nextCatalog.revision && coverageCatalog.revision !== nextCatalog.revision);
+  coverageCatalog = nextCatalog;
+  if (revisionChanged) {
+    coverageBlockCache.clear();
+    overlapEvidenceCache.clear();
+    overlapDetailsCache.clear();
+    overlapController?.abort();
+    overlapController = null;
+    activeOverlapComponents = [];
+  }
+  coverageLayerLoadStates.clear();
+  coverageLayerLoadErrors.clear();
+  const blocks = new Map<string, number[]>();
+  if (coverageDots) {
+    await Promise.all(coverageCatalog.layers.map(async (layer) => {
+      const cells = await fetchCoverageOverview(layer);
+      if (cells.length) blocks.set(`${layer.layerId}:${layer.overviewOrder}`, cells);
+    }));
+    const availableSurveys = new Set(coverageCatalog.layers.map((layer) => layer.surveyId));
+    await coverageDots.loadCatalog(coverageCatalog, blocks, surveyIndex?.surveys ?? []);
+    if (coverageSelectionInitialized) {
+      const selected = [...queuedLayerIds].filter((surveyId) => availableSurveys.has(surveyId));
+      applyCoverageSelection(selected);
+    } else {
+      coverageDots.setVisibleSurveys(new Set(allCoverageSurveyIds()));
+    }
+    if (homeEntered) coverageDots.transitionToDataView(1);
+    else updateHomeScrollProgress();
+    renderCoverageLayers();
+    updateCoverageReadout(activeSurveyId);
+    renderCoverageLoadDiagnostics();
+    if (revisionChanged && overlapMode && visibleSurveyIdsFromControls().length >= 2) void activateOverlap(true);
+  }
+}
+
+function retryCoverageSurvey(surveyId: string): void {
+  if (!coverageCatalog) return;
+  const layer = coverageCatalog.layers.find((candidate) => candidate.surveyId === surveyId);
+  if (!layer) return;
+  coverageLayerLoadStates.set(layer.layerId, "loading");
+  renderCoverageLayers();
+  void hydrateCoverageCatalog(coverageCatalog).catch((error) => {
+    byId("coverage-state").textContent = error instanceof Error ? error.message : "COVERAGE RETRY FAILED";
+  });
+}
+
+async function refreshCoverageCatalog(): Promise<void> {
+  if (document.hidden || !coverageDots) return;
+  try {
+    const next = await fetchCoverageCatalogDocument();
+    if (next && next.revision !== coverageCatalog?.revision) {
+      await hydrateCoverageCatalog(next);
+      if (deepLinkTarget?.surveyId) focusSkyTarget(deepLinkTarget);
+    }
+  } catch (error) {
+    byId("coverage-state").textContent = error instanceof Error ? error.message : "COVERAGE CATALOG REFRESH FAILED";
+  }
+}
+
+function scheduleCoverageRefresh(): void {
+  if (coverageRefreshTimer !== null) window.clearInterval(coverageRefreshTimer);
+  coverageRefreshTimer = window.setInterval(() => void refreshCoverageCatalog(), COVERAGE_REFRESH_INTERVAL_MS);
+}
+
+function applySkyDeepLink(): void {
+  deepLinkTarget = readSkyDeepLink();
+  if (!deepLinkTarget) return;
+  if (deepLinkTarget.error) {
+    if (deepLinkTarget.surveyId && surveyIndex?.surveys.some((survey) => survey.id === deepLinkTarget?.surveyId)) {
+      enterAtlasExperience(deepLinkTarget.surveyId, deepLinkTarget.productId);
+      deepLinkTarget = { ...deepLinkTarget };
+    }
+    byId("coverage-state").textContent = deepLinkTarget.error;
+    return;
+  }
+  if (!deepLinkTarget.surveyId) {
+    byId("coverage-state").textContent = "PRODUCT DEEP LINK HAS NO PUBLIC SURVEY";
+    return;
+  }
+  if (!surveyIndex?.surveys.some((survey) => survey.id === deepLinkTarget?.surveyId)) {
+    byId("coverage-state").textContent = "SURVEY DEEP LINK NOT FOUND";
+    return;
+  }
+  enterAtlasExperience(deepLinkTarget.surveyId, deepLinkTarget.productId);
+}
+
 async function initialize(): Promise<void> {
   try {
     coverageDots = new AtlasCoverageGlobe(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"), updateCoverageReadout, updateCoverageInspector, updateCoverageState, openCoverageContextMenu, handleOverlapComponentLabel);
@@ -1892,33 +2193,21 @@ async function initialize(): Promise<void> {
     byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
   }
   const assetsPromise = fetch("/api/v1/assets", { headers: { Accept: "application/json" } });
-  const [surveysResponse, coverageCatalogResponse] = await Promise.all([
+  const [surveysResponse, nextCoverageCatalog] = await Promise.all([
     fetch("/api/v1/surveys", { headers: { Accept: "application/json" } }),
-    fetch("/api/v1/coverage/catalog", { headers: { Accept: "application/json" } }),
+    fetchCoverageCatalogDocument(),
   ]);
   if (!surveysResponse.ok) throw new Error("Public survey catalog request failed");
   surveyIndex = await surveysResponse.json() as SurveyIndex;
   initializeModalityFilter();
   renderSurveys();
-  if (coverageCatalogResponse.ok && coverageDots) {
-    coverageCatalog = await coverageCatalogResponse.json() as CoverageCatalog;
-    const blocks = new Map<string, number[]>();
-    await Promise.all(coverageCatalog.layers.map(async (layer) => {
-      const cells = await fetchCoverageOverview(layer);
-      if (cells.length) blocks.set(`${layer.layerId}:${layer.overviewOrder}`, cells);
-    }));
-    await coverageDots.loadCatalog(coverageCatalog, blocks, surveyIndex.surveys);
-    if (coverageSelectionInitialized) coverageDots.setVisibleSurveys(queuedLayerIds);
-    else coverageDots.setVisibleSurveys(new Set(coverageCatalog.layers.map((layer) => layer.surveyId)));
-    if (homeEntered) coverageDots.transitionToDataView(1);
-    else updateHomeScrollProgress();
-    renderCoverageLayers();
-    updateCoverageReadout(null);
-  } else if (coverageDots) {
-    byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
-  } else {
-    byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
-  }
+  if (nextCoverageCatalog) {
+    // Keep the catalog and URL state usable even when the optional WebGL
+    // viewer could not be created (for example, in a headless browser).
+    await hydrateCoverageCatalog(nextCoverageCatalog);
+    applySkyDeepLink();
+    scheduleCoverageRefresh();
+  } else if (coverageDots) byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
   const assetsResponse = await assetsPromise;
   if (!assetsResponse.ok) throw new Error("Public asset catalog request failed");
   manifest = await assetsResponse.json() as ReleaseManifest;
@@ -1952,10 +2241,12 @@ byId("dialog-close").addEventListener("click", () => byId<HTMLDialogElement>("su
 byId<HTMLDialogElement>("survey-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("survey-dialog").close(); });
 byId("preview-close").addEventListener("click", () => byId<HTMLDialogElement>("preview-dialog").close());
 byId<HTMLDialogElement>("preview-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("preview-dialog").close(); });
-function resetCoverageExperience(): void {
+function resetCoverageExperience(updateUrl = true): void {
   closeCoverageContextMenu();
   closeOverlapDrawer();
   applyCoverageSelection([]);
+  deepLinkTarget = null;
+  if (updateUrl) syncSkyDeepLink();
   clearLayerCloseTimer();
   overlapMode = false;
   overlapController?.abort();
@@ -1978,6 +2269,7 @@ function resetCoverageExperience(): void {
   panel.style.removeProperty("width");
   setOverlapExpandVisible(false);
   updateCoverageInspector(null);
+  updateCoverageReadout(null);
 }
 
 byId("coverage-reset").addEventListener("click", () => {
@@ -1992,10 +2284,7 @@ byId("coverage-layers-toggle").addEventListener("click", () => {
     return;
   }
   const layers = byId("coverage-layers");
-  layers.hidden = !layers.hidden;
-  positionSelectionQueue();
-  positionOverlapPanel();
-  updateCoverageEmptyGuide();
+  setCoverageLayersOpen(layers.hidden);
 });
 byId("coverage-empty-guide-action").addEventListener("click", () => {
   byId("coverage-layers-toggle").click();
@@ -2006,11 +2295,23 @@ byId("coverage-help-toggle").addEventListener("click", () => {
 });
 byId("coverage-help-close").addEventListener("click", () => { byId("coverage-help").hidden = true; });
 
-function enterAtlasExperience(surveyId?: string): void {
-  if (homeEntered) return;
-  if (surveyId) applyCoverageSelection([surveyId]);
+function enterAtlasExperience(surveyId?: string, productId?: string): void {
+  const selectedSurveyId = surveyId ?? deepLinkTarget?.surveyId;
+  if (selectedSurveyId) applyCoverageSelection([selectedSurveyId]);
   else applyCoverageSelection([]);
+  const wasEntered = homeEntered;
   homeEntered = true;
+  deepLinkTarget = selectedSurveyId ? { surveyId: selectedSurveyId, ...(productId ? { productId } : {}) } : null;
+  syncSkyDeepLink(selectedSurveyId, productId);
+  const focus = (): void => focusSkyTarget(deepLinkTarget);
+  if (wasEntered) {
+    document.body.dataset.homeState = "atlas";
+    coverageDots?.transitionToDataView(420);
+    focus();
+    renderSelectionQueue();
+    updateCoverageEmptyGuide();
+    return;
+  }
   const hero = byId("home-hero");
   document.body.dataset.homeState = "entering";
   document.body.style.setProperty("--home-scroll-progress", "1");
@@ -2022,6 +2323,7 @@ function enterAtlasExperience(surveyId?: string): void {
     hero.setAttribute("aria-hidden", "true");
     renderSelectionQueue();
     updateCoverageEmptyGuide();
+    focus();
     byId("coverage-layers-toggle").focus();
   };
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -2033,9 +2335,38 @@ function enterAtlasExperience(surveyId?: string): void {
 
 byId("home-enter").addEventListener("click", () => enterAtlasExperience());
 
+window.addEventListener("popstate", () => {
+  if (!surveyIndex || !coverageCatalog) return;
+  const target = readSkyDeepLink();
+  if (!target) {
+    deepLinkTarget = null;
+    if (homeEntered) resetCoverageExperience(false);
+    return;
+  }
+  if (target.error) {
+    if (target.surveyId && surveyIndex.surveys.some((survey) => survey.id === target.surveyId)) {
+      enterAtlasExperience(target.surveyId, target.productId);
+      deepLinkTarget = { ...target };
+    }
+    byId("coverage-state").textContent = target.error;
+    return;
+  }
+  if (!target.surveyId) {
+    byId("coverage-state").textContent = "PRODUCT DEEP LINK HAS NO PUBLIC SURVEY";
+    return;
+  }
+  enterAtlasExperience(target.surveyId, target.productId);
+});
+
+window.addEventListener("pageshow", () => void refreshCoverageCatalog());
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) void refreshCoverageCatalog();
+});
+
 window.addEventListener("resize", () => {
   positionSelectionQueue();
   positionOverlapPanel();
+  positionCoverageLayerTooltip();
   updateOverlapViewport();
   updateHomeScrollProgress();
 });
@@ -2074,9 +2405,7 @@ document.addEventListener("keydown", (event) => {
     panel.style.removeProperty("right");
     panel.style.removeProperty("width");
     setOverlapExpandVisible(false);
-    byId("coverage-layers").hidden = false;
-    positionSelectionQueue();
-    updateCoverageEmptyGuide();
+    setCoverageLayersOpen(true);
     coverageDots?.clearSelection();
     updateCoverageInspector(null);
     if (doubleEscape) resetCoverageExperience();

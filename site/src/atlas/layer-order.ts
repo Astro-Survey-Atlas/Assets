@@ -11,9 +11,10 @@ export interface LayerDepth {
 // transparent meshes deterministic and leaves the intersection highlighter
 // visible above them.
 const OVERLAP_DEPTH_STEP = 0;
-// Keep the public survey surfaces visibly separated in the hero composition.
-// Overlap mode still collapses these surfaces back onto one sphere.
-const RADIAL_DEPTH_STEP = 0.12;
+// Keep the public survey surfaces visibly separated in the hero composition,
+// while bounding the stack so a growing catalog can never cross radius zero.
+export const LAYER_RADIUS_MIN = 0.88;
+export const LAYER_RADIUS_MAX = 1.12;
 
 export function normalizeLayerOrder(
   knownKeys: Iterable<string>,
@@ -42,12 +43,13 @@ export function visibleLayerDepths(
 ): LayerDepth[] {
   const visible = new Set(visibleKeys);
   const keys = order.filter((key) => visible.has(key));
-  const midpoint = (keys.length - 1) / 2;
-  const step = layout === "layers" ? RADIAL_DEPTH_STEP : OVERLAP_DEPTH_STEP;
+  const span = LAYER_RADIUS_MAX - LAYER_RADIUS_MIN;
   return keys.map((key, index) => ({
     key,
     // The first list item is the front-most layer.
-    radius: 1 + (midpoint - index) * step,
+    radius: layout === "layers"
+      ? keys.length <= 1 ? 1 : LAYER_RADIUS_MAX - (index / (keys.length - 1)) * span
+      : 1 + (keys.length - 1 - index) * OVERLAP_DEPTH_STEP,
     renderOrder: 2 + (keys.length - 1 - index) * 2,
   }));
 }

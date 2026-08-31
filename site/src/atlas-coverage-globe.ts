@@ -15,6 +15,7 @@ export interface CoverageLayer {
   surveyId: string;
   releaseId: string;
   product: string;
+  modality?: string;
   color: string;
   availableOrders: number[];
   overviewOrder: number;
@@ -25,6 +26,7 @@ export interface CoverageLayer {
   tileIdsByOrder?: Record<string, number[]>;
   recipe?: { recipeVersion: number; mode: string; coordinateFrame: string; ordering: string; maxOrder: number; queryOrder: number; previewOrder: number; sourceUrl?: string; steps: Array<{ id: string; kind: string; title: string; bodyMarkdown: string; order: number; implementationRef: string }> };
   sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; indexUrl?: string; downloadUrlTemplate?: string; notes: string };
+  revision?: string;
 }
 
 export interface CoverageCatalog {
@@ -33,6 +35,8 @@ export interface CoverageCatalog {
   ordering: string;
   tileScheme: string;
   layers: CoverageLayer[];
+  revision?: string;
+  generatedAt?: string;
 }
 
 export interface CoverageSurvey {

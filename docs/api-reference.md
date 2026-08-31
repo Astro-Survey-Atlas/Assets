@@ -72,7 +72,13 @@ GET /api/v1/coverage/catalog
 GET /api/v1/coverage/blocks/{layerId}?order=4&tile=0
 ```
 
-`coverage/catalog` is the lightweight runtime index. It declares `coordinateFrame: ICRS`, `ordering: NESTED`, the `tileScheme`, stable `layerId`/`productId`, real `availableOrders`, area and cell counts. A block contains only explicit `order`/`ipix` cells and a SHA-256 of that cell payload. Blocks are immutable and support gzip or Brotli content negotiation, `ETag` and long-lived cache headers. The browser requests overview blocks first and higher-order blocks only after zooming.
+`coverage/catalog` is the lightweight runtime index. It declares `coordinateFrame: ICRS`, `ordering: NESTED`, the `tileScheme`, stable `layerId`/`productId`, real `availableOrders`, area and cell counts. The response also includes a content `revision` and an `ETag` of the form `"catalog-<revision>"`. A block contains only explicit `order`/`ipix` cells and a SHA-256 of that cell payload. Pass the layer revision returned by the catalog when requesting a block:
+
+```http
+GET /api/v1/coverage/blocks/desi-dr1-spectra-footprint?order=8&tile=3&revision=<layer-revision>
+```
+
+The server returns `409` when the revision is stale, so a client can reload the catalog before using the block. Revisioned blocks use immutable cache headers; requests without a revision are explicitly revalidated. Catalog requests honor `If-None-Match` and return `304 Not Modified`. The browser requests overview blocks first and higher-order blocks only after zooming.
 
 ## Coverage Overlap
 
@@ -149,7 +155,7 @@ GET /api/v1/products
 
 草稿和版本控制只在管理员认证边界内：`GET /api/v1/admin/products`、`GET /api/v1/admin/products?view=surveys`、`GET /api/v1/admin/products?surveyId=<surveyId>`、`GET /api/v1/admin/products/{productId}`、`PUT /api/v1/admin/products/{productId}/draft`、`POST /api/v1/admin/products/{productId}/publish` 和 `GET /api/v1/admin/products/{productId}/history`。产品 ID 固定由 `surveyId + releaseId + product name` 生成；流程图节点的实现引用由 recipe 固定，管理员只能修改解释文本和证据链接。产品记录包含已发布 coverage layer 的可用 HEALPix order。
 
-`GET /api/v1/admin/products?view=surveys` 是管理页审核入口。它按公共 `survey -> release -> product` 返回与 `/api/v1/surveys` 同源的名称、mission、描述、图片、modalities、统计、coverage orders 和产品状态；每个产品只附加 `review.state`、草稿/发布 revision、时间戳和当前 coverage 投影。它不会返回 input manifest、normalized scan、task snapshot、evidence 内容或内部路径。存在于 Assets 编辑存储但不再匹配公共 catalog 的产品会放在 `unmatchedProducts` 中，不会静默丢失。
+`GET /api/v1/admin/products?view=surveys` 是管理页审核入口。它按公共 `survey -> release -> product` 返回与 `/api/v1/surveys` 同源的名称、mission、描述、图片、modalities、统计、coverage orders 和产品状态；每个产品只附加 `review.state`、草稿/发布 revision、时间戳和当前 coverage 投影。产品还会返回 `lifecycle`：`publication.state` 是 `DRAFT` 或 `PUBLISHED`，`runtime.state` 是 `CATALOG_BASELINE`、`ACTIVE`、`INVALID` 或 `INACTIVE`，并携带 native build orders、公开 layer orders、catalog revision 和产品/天球/Catalog/FITS MOC 链接。它不会返回 input manifest、normalized scan、task snapshot、evidence 内容或内部路径。存在于 Assets 编辑存储但不再匹配公共 catalog 的产品会放在 `unmatchedProducts` 中，不会静默丢失。
 
 ### Public product dossier and evidence
 
@@ -247,6 +253,11 @@ truncation sentinel，因此 `truncated=true` 表示还有候选没有进入审�
 即使它的 survey 还不在静态公共 catalog 里也不会丢失。管理员提交
 `POST /api/v1/admin/moc-builds/{name}/register-product`，填写 survey、release、
 产品公共事实和来源 URL；Assets 会创建一个未发布的草稿产品并一次性绑定该 build。
+其中 Release/产品事实可以省略或提交空字符串。单 build 详情
+`GET /api/v1/admin/moc-builds/{name}` 对未绑定的 `STAGED` build 会附加
+`registrationDefaults`；服务端登记时再次按同一规则兜底。已有公共 Catalog 事实优先，
+其次使用 discovery 提示和候选标题，最后使用中性的 `public`/`Public MOC` 与来源描述。
+调用方提供的非空值始终覆盖默认值。
 之后在同一个产品审核页面编辑说明，最后调用 publish。登记不会把 discovery 候选
 直接变成公开产品，也不会修改原始 build attempt 或正常 Connector/ScanRequest 流程。
 
@@ -255,6 +266,13 @@ truncation sentinel，因此 `truncated=true` 表示还有候选没有进入审�
 大小和 SHA-256；publication 文件缺失或被篡改时不会进入 `/api/v1/assets`、
 `/api/v1/coverage` 或 `/api/v1/surveys`。发布成功后动态 layer 同时出现在这些接口，
 并可通过下列 MOC URL 下载。
+
+`GET /api/v1/admin/moc-builds` 和 `GET /api/v1/admin/moc-builds/{name}` 对已绑定产品
+附加同样的 `lifecycle` 投影；构建详情仍保留 native 输出 order，产品生命周期的
+runtime order 则来自当前已加载 Catalog。发布后的 lifecycle links 包含产品详情、
+canonical sky deep link、Catalog 和 FITS MOC。若 runtime 为 `INVALID`，通常表示
+publication 文件已存在但当前 Catalog 没有有效 layer；管理员可调用
+`POST /api/v1/admin/catalog/reload` 重新激活并复核 revision。
 
 ### Admin Connectors
 
@@ -284,7 +302,7 @@ summary、source snapshot hash 和 evidence path；不内嵌 manifest、normaliz
 scan 或错误文件。重提创建新的不可变 ScanRequest、run ID 和 evidence path，原
 任务保持不变。
 
-`GET /api/v1/admin/catalog/status` 返回当前 coverage 的加载模式、时间和记录数；
+`GET /api/v1/admin/catalog/status` 返回当前 coverage 的加载模式、时间、内容 revision 和记录数；
 `POST /api/v1/admin/catalog/reload` 重新加载静态公开覆盖，并用 Warehouse ACTIVE
 layer 按 layer identity 覆盖或追加。Warehouse 不可用时保留静态 catalog，并将
 模式报告为 `degraded`。

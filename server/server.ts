@@ -8,12 +8,12 @@ import { AdminHttpError, AssetsAdmin, KubernetesApiError, SUPPORTED_COVERAGE_MOD
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
-import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog, type CoverageCellLayer } from "./coverage.js";
+import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog, withCoverageRevisions, type CoverageCellLayer } from "./coverage.js";
 import { overlapForLayers } from "./overlap.js";
 import { ProductStore, type MocProductRegistrationInput, type ProductRecord } from "./products.js";
 import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
-import { CoverageEvidenceStore, EvidenceStoreError, type WarehouseLayerSnapshot } from "./evidence-store.js";
-import { buildOverlapDetails } from "./overlap-details.js";
+import { CoverageEvidenceStore, EvidenceStoreError, type ReverseLookupResult, type WarehouseLayerSnapshot } from "./evidence-store.js";
+import { buildOverlapDetails, publicExternalUrl } from "./overlap-details.js";
 import { resolveMocDiscoveryCandidate } from "./moc-discovery.js";
 import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
 import { buildPublicProductEvidence } from "./public-product-evidence.js";
@@ -164,11 +164,7 @@ async function activatePublishedMocs(): Promise<void> {
   if (!layers.length) return;
   const records = new Map(coverageCatalog.records);
   for (const layer of layers) records.set(layer.layerId, layer);
-  coverageCatalog = {
-    ...coverageCatalog,
-    records,
-    layers: [...records.values()].map(({ cells, ...layer }) => ({ ...layer, tileIdsByOrder: Object.fromEntries([...cells.entries()].map(([order, values]) => [String(order), [...new Set(values.map((cell) => Math.floor(cell / 4096)))].sort((a, b) => a - b)])) })),
-  };
+  coverageCatalog = withCoverageRevisions({ ...coverageCatalog, records, layers: [] });
   runtimeCoverageManifest = {
     ...runtimeCoverageManifest,
     generatedAt: new Date().toISOString(),
@@ -391,23 +387,29 @@ async function sourceUnitsReadyWithin(timeoutMs: number): Promise<SourceUnitWork
 
 function productCoverage(record: ProductRecord): Record<string, unknown> | undefined {
   const content = record.published ?? record.draft;
-  const layer = coverageCatalog.layers.find((candidate) => candidate.surveyId === content.surveyId
-    && candidate.releaseId === content.releaseId
-    && candidate.product === content.name);
+  const layer = productCoverageLayer(record);
   if (!layer) return undefined;
   return { layerId: layer.layerId, availableOrders: layer.availableOrders, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder, coverageRole: layer.coverageRole, areaDeg2: layer.areaDeg2 };
 }
 
-function productCoverageLayer(record: ProductRecord): CoverageCellLayer | undefined {
+function productCoverageLayer(record: ProductRecord, build?: ReturnType<MocBuildStore["get"]>): CoverageCellLayer | undefined {
   const content = record.published ?? record.draft;
-  return coverageCatalog.records.get(content.layerId ?? "")
-    ?? [...coverageCatalog.records.values()].find((candidate) => candidate.surveyId === content.surveyId
-      && candidate.releaseId === content.releaseId
-      && candidate.product === content.name);
+  const direct = content.layerId ? coverageCatalog.records.get(content.layerId) : undefined;
+  if (direct) return direct;
+  const matches = [...coverageCatalog.records.values()].filter((candidate) => candidate.surveyId === content.surveyId
+    && candidate.releaseId === content.releaseId
+    && candidate.product === content.name);
+  if (build?.publicationId) {
+    const publication = mocPublicationStore.forBuild(build.name);
+    const publishedLayer = publication ? coverageCatalog.records.get(publication.layerId) : undefined;
+    if (publishedLayer) return publishedLayer;
+  }
+  return matches.find((candidate) => candidate.layerId.startsWith("moc-")) ?? matches[0];
 }
 
 function adminMocBuildSummaryForBuild(build: ReturnType<MocBuildStore["get"]>): Record<string, unknown> {
   const outputs = build.outputs;
+  const productRecord = build.productId ? products.list().find((record) => record.productId === build.productId) : undefined;
   return {
     name: build.name,
     discoveryRequestName: build.discoveryRequestName,
@@ -431,6 +433,103 @@ function adminMocBuildSummaryForBuild(build: ReturnType<MocBuildStore["get"]>): 
     ...(build.error ? { error: build.error } : {}),
     ...(build.publishedAt ? { publishedAt: build.publishedAt } : {}),
     ...(build.publicationId ? { publicationId: build.publicationId } : {}),
+    ...(productRecord ? { lifecycle: adminProductLifecycle(productRecord, build) } : {}),
+  };
+}
+
+function adminProductLifecycle(record: ProductRecord, build?: ReturnType<MocBuildStore["get"]>): Record<string, unknown> {
+  const layer = productCoverageLayer(record, build);
+  const published = Boolean(record.published);
+  const hasPublication = Boolean(build?.publicationId);
+  const runtimeState = hasPublication
+    ? layer ? "ACTIVE" : "INVALID"
+    : layer ? "CATALOG_BASELINE" : "INACTIVE";
+  return {
+    publication: {
+      state: published ? "PUBLISHED" : "DRAFT",
+      ...(record.publishedAt ? { publishedAt: record.publishedAt } : {}),
+      ...(build?.publicationId ? { publicationId: build.publicationId } : {}),
+    },
+    runtime: {
+      state: runtimeState,
+      ...(layer ? {
+        layerId: layer.layerId,
+        catalogRevision: coverageCatalog.revision,
+        availableOrders: layer.availableOrders,
+        overviewOrder: layer.overviewOrder,
+        maxOrder: layer.maxOrder,
+      } : {}),
+    },
+    links: {
+      product: published
+        ? `/api/v1/products/${encodeURIComponent(record.productId)}`
+        : `/api/v1/admin/products/${encodeURIComponent(record.productId)}`,
+      catalog: "/api/v1/coverage/catalog",
+      ...(published && layer ? { sky: `/?survey=${encodeURIComponent(record.draft.surveyId)}&product=${encodeURIComponent(record.productId)}` } : {}),
+      ...(published && layer ? { moc: `/api/v1/coverage/layers/${encodeURIComponent(layer.layerId)}/moc.fits` } : {}),
+    },
+  };
+}
+
+function adminMocBuildView(build: ReturnType<MocBuildStore["get"]>): Record<string, unknown> {
+  const product = build.productId ? products.list().find((record) => record.productId === build.productId) : undefined;
+  return {
+    ...build,
+    ...(product ? { lifecycle: adminProductLifecycle(product, build) } : {}),
+  };
+}
+
+type MocRegistrationDefaultField = "releaseId" | "releaseLabel" | "releaseKind" | "productName" | "productDescription" | "productStatus" | "modality" | "dataOrigin";
+type MocRegistrationDefaults = Pick<MocProductRegistrationInput, MocRegistrationDefaultField>;
+
+function registrationSlug(value: string | undefined, fallback = "public"): string {
+  const normalized = (value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 63);
+  return normalized || fallback;
+}
+
+function inferMocModality(surveyName: string, productName: string, existing?: string): string {
+  if (existing?.trim()) return existing.trim();
+  const value = `${surveyName} ${productName}`.toLowerCase();
+  if (/gaia|catalog|source|astrometr|quasar/.test(value)) return "catalog";
+  if (/jwst|wise|2mass|vista|infrared|nircam|miri|spitzer/.test(value)) return "infrared";
+  if (/galex|ultraviolet|uv\b/.test(value)) return "ultraviolet";
+  if (/desi|spectr|spectrum|ifs/.test(value)) return "spectroscopy";
+  return "imaging";
+}
+
+async function mocRegistrationDefaults(build: ReturnType<MocBuildStore["get"]>): Promise<{ values: MocRegistrationDefaults; sources: Partial<Record<MocRegistrationDefaultField, string>> }> {
+  const discovery = await admin.getMocDiscoveryRequest(build.discoveryRequestName);
+  const candidate = resolveMocDiscoveryCandidate(discovery, build.candidateId);
+  const surveyId = build.surveyId ?? discovery.surveyId ?? registrationSlug(discovery.surveyName);
+  const survey = surveyIndex.surveys.find((entry) => entry.id === surveyId);
+  const release = survey?.releases.find((entry) => entry.id === (build.releaseId ?? discovery.releaseId ?? registrationSlug(discovery.releaseHint, "")));
+  const releaseId = build.releaseId ?? discovery.releaseId ?? (discovery.releaseHint ? registrationSlug(discovery.releaseHint) : "public");
+  const releaseLabel = release?.label ?? discovery.releaseHint?.trim() ?? (releaseId === "public" ? "Public MOC" : releaseId.toUpperCase());
+  const productName = discovery.productHint?.trim() || candidate.candidate.title?.trim() || candidate.candidate.candidateId;
+  const existingProduct = release?.products.find((entry) => entry.name === productName);
+  const modality = inferMocModality(discovery.surveyName, productName, existingProduct?.modality);
+  const values: MocRegistrationDefaults = {
+    releaseId,
+    releaseLabel,
+    releaseKind: release?.kind ?? "release",
+    productName,
+    productDescription: `${productName} 的公开天区覆盖 MOC；来源为 CDS MOC 服务，已由 Assets 校验并锁定来源哈希。`,
+    productStatus: existingProduct?.status ?? "acquired",
+    modality,
+    dataOrigin: existingProduct?.dataOrigin ?? "observed",
+  };
+  return {
+    values,
+    sources: {
+      releaseId: build.releaseId || discovery.releaseId || (discovery.releaseHint ? "discovery.releaseHint" : "fallback.public"),
+      releaseLabel: release ? "public.catalog" : discovery.releaseHint ? "discovery.releaseHint" : "fallback.public",
+      releaseKind: release ? "public.catalog" : "fallback.release",
+      productName: discovery.productHint ? "discovery.productHint" : candidate.candidate.title ? "discovery.candidate.title" : "discovery.candidateId",
+      productDescription: "assets.registration-template",
+      productStatus: existingProduct ? "public.catalog" : "fallback.acquired",
+      modality: existingProduct ? "public.catalog" : "assets.candidate-inference",
+      dataOrigin: existingProduct ? "public.catalog" : "fallback.observed",
+    },
   };
 }
 
@@ -567,7 +666,7 @@ function buildPublicProductDossier(record: ProductRecord): PublicProductDossier 
   const query = links.find((link) => link.kind === "official-query");
   const data = links.find((link) => link.kind === "official-data");
   const geometry = links.find((link) => link.kind === "geometry-source");
-  const view: PublicProductLink = { kind: "coverage-preview", label: "View in sky", url: `/surveys/#product=${encodeURIComponent(product.productId)}`, description: "在 Atlas 天球视图中定位这个产品的公开覆盖。" };
+  const view: PublicProductLink = { kind: "coverage-preview", label: "View in sky", url: `/?survey=${encodeURIComponent(product.surveyId)}&product=${encodeURIComponent(product.productId)}`, description: "在 Atlas 天球视图中定位这个产品的公开覆盖。" };
   const checks: PublicProductDossier["verification"]["checks"] = [
     { id: "coverage", label: "Published coverage", status: hasCoverage ? "passed" : "unavailable", ...(hasCoverage ? { detail: `${availableOrders.length} HEALPix order(s) are published.` } : { detail: "Only an official entrypoint is available." }) },
     { id: "moc", label: "FITS MOC artifact", status: mocAsset ? "passed" : hasCoverage ? "warning" : "unavailable", ...(mocAsset ? { detail: "The downloadable artifact is allowlisted and hash-addressed." } : {}) },
@@ -611,7 +710,7 @@ function publicProductListView(record: ProductRecord): Record<string, unknown> {
 
 function adminProductView(record: ProductRecord): Record<string, unknown> {
   const mocBuild = adminMocBuildSummary(record.productId);
-  return { ...record, ...(productCoverage(record) ? { coverage: productCoverage(record) } : {}), ...(mocBuild ? { mocBuild } : {}) };
+  return { ...record, ...(productCoverage(record) ? { coverage: productCoverage(record) } : {}), ...(mocBuild ? { mocBuild } : {}), lifecycle: adminProductLifecycle(record, mocBuild ? mocBuildStore.get(String(mocBuild.name)) : undefined) };
 }
 
 function adminProductSummaries(records: ProductRecord[]): Array<Record<string, unknown>> {
@@ -669,6 +768,7 @@ function adminProductSurveys(records: ProductRecord[], index: typeof surveyIndex
           productId,
           ...(coverage ? { coverage } : {}),
           ...(mocBuild ? { mocBuild } : {}),
+          ...(record ? { lifecycle: adminProductLifecycle(record, mocBuild ? mocBuildStore.get(String(mocBuild.name)) : undefined) } : {}),
           review: record ? {
             state: record.published ? "published" : "draft",
             draftRevision: record.revision,
@@ -738,6 +838,11 @@ function json(response: ServerResponse, status: number, body: unknown): void {
 }
 
 function compressedJson(request: IncomingMessage, response: ServerResponse, status: number, body: unknown, cacheControl = "no-cache", etag?: string): void {
+  if (etag && request.headers["if-none-match"]?.split(",").map((value) => value.trim()).includes(etag)) {
+    response.writeHead(304, { ETag: etag, "Cache-Control": cacheControl, Vary: "Accept-Encoding" });
+    response.end();
+    return;
+  }
   const raw = Buffer.from(`${JSON.stringify(body)}\n`);
   const accept = String(request.headers["accept-encoding"] ?? "");
   const encoded = /\bbr\b/i.test(accept) ? brotliCompressSync(raw) : /\bgzip\b/i.test(accept) ? gzipSync(raw) : raw;
@@ -1135,28 +1240,34 @@ async function registerMocBuildProduct(name: string, body: Record<string, unknow
     product = products.get(requestedProductId);
     if (product.published) throw new AdminHttpError(409, `Product ${requestedProductId} is already published`);
   } else {
+    const defaults = await mocRegistrationDefaults(build);
     const modalities = Array.isArray(body.surveyModalities)
       ? body.surveyModalities.filter((value): value is string => typeof value === "string")
       : typeof body.surveyModalities === "string" ? body.surveyModalities.split(",").map((value) => value.trim()).filter(Boolean) : [];
+    const selectedModalities = modalities.length ? modalities : [defaults.values.modality];
+    const textOrDefault = (key: MocRegistrationDefaultField): string => {
+      const value = body[key];
+      return typeof value === "string" && value.trim() ? value : String(defaults.values[key] ?? "");
+    };
     const input: MocProductRegistrationInput = {
       surveyId: typeof body.surveyId === "string" ? body.surveyId : "",
       surveyName: typeof body.surveyName === "string" ? body.surveyName : "",
       mission: typeof body.mission === "string" ? body.mission : "",
       surveyDescription: typeof body.surveyDescription === "string" ? body.surveyDescription : "",
       surveyColor: typeof body.surveyColor === "string" ? body.surveyColor : "#42d5c4",
-      surveyModalities: modalities,
-      releaseId: typeof body.releaseId === "string" ? body.releaseId : "",
-      releaseLabel: typeof body.releaseLabel === "string" ? body.releaseLabel : "",
-      releaseKind: typeof body.releaseKind === "string" ? body.releaseKind : "release",
+      surveyModalities: selectedModalities,
+      releaseId: textOrDefault("releaseId"),
+      releaseLabel: textOrDefault("releaseLabel"),
+      releaseKind: textOrDefault("releaseKind"),
       ...(typeof body.releasedYear === "number" ? { releasedYear: body.releasedYear } : {}),
-      productName: typeof body.productName === "string" ? body.productName : candidate.candidate.title ?? candidate.candidate.candidateId,
-      productDescription: typeof body.productDescription === "string" ? body.productDescription : "",
-      ...(typeof body.productStatus === "string" ? { productStatus: body.productStatus as MocProductRegistrationInput["productStatus"] } : {}),
-      modality: typeof body.modality === "string" ? body.modality : "infrared",
+      productName: textOrDefault("productName"),
+      productDescription: textOrDefault("productDescription"),
+      productStatus: textOrDefault("productStatus") as MocProductRegistrationInput["productStatus"],
+      modality: textOrDefault("modality"),
       sourceUrl: typeof body.sourceUrl === "string" && body.sourceUrl.trim() ? body.sourceUrl : candidate.candidate.recordUrl ?? candidate.sourceUrl,
       geometrySourceUrl: typeof body.geometrySourceUrl === "string" && body.geometrySourceUrl.trim() ? body.geometrySourceUrl : candidate.mocUrl ?? candidate.sourceUrl,
       ...(typeof body.geometrySourceLabel === "string" ? { geometrySourceLabel: body.geometrySourceLabel } : {}),
-      ...(typeof body.dataOrigin === "string" ? { dataOrigin: body.dataOrigin as MocProductRegistrationInput["dataOrigin"] } : {}),
+      dataOrigin: textOrDefault("dataOrigin") as MocProductRegistrationInput["dataOrigin"],
     };
     product = await products.createMocProduct(input);
     if (product.published) throw new AdminHttpError(409, `Product ${product.productId} is already published`);
@@ -1183,12 +1294,12 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       return json(response, 201, { connector: await admin.createConnector(input) });
     }
     if (pathname === "/api/v1/admin/catalog/status" && request.method === "GET") {
-      return json(response, 200, { mode: coverageLoadMode, loadedAt: coverageLoadedAt, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size, warehouseConfigured: evidenceStore.configured });
+      return json(response, 200, { mode: coverageLoadMode, loadedAt: coverageLoadedAt, revision: coverageCatalog.revision, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size, warehouseConfigured: evidenceStore.configured });
     }
     if (pathname === "/api/v1/admin/catalog/reload" && request.method === "POST") {
       const catalogState = await reloadRuntimeCoverage();
       surveyIndex = applyPublishedProductMetadata(surveyIndex);
-      return json(response, 200, { catalog: catalogState });
+      return json(response, 200, { catalog: { ...catalogState, revision: coverageCatalog.revision } });
     }
     if (pathname === "/api/v1/admin/tasks" && request.method === "GET") return json(response, 200, { tasks: await admin.listTasks() });
     if (pathname === "/api/v1/admin/tasks" && request.method === "POST") {
@@ -1245,7 +1356,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       return json(response, 200, { request: await admin.getMocDiscoveryRequest(decodeURIComponent(mocMatch[1])) });
     }
     if (pathname === "/api/v1/admin/moc-builds" && request.method === "GET") {
-      return json(response, 200, { requests: mocBuildStore.list() });
+      return json(response, 200, { requests: mocBuildStore.list().map(adminMocBuildView) });
     }
     if (pathname === "/api/v1/admin/moc-builds" && request.method === "POST") {
       return json(response, 201, { request: await createMocBuild(await requestJsonBody(request)) });
@@ -1260,7 +1371,16 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     }
     const mocBuildMatch = /^\/api\/v1\/admin\/moc-builds\/([^/]+)$/.exec(pathname);
     if (mocBuildMatch?.[1] && request.method === "GET") {
-      return json(response, 200, { request: mocBuildStore.get(decodeURIComponent(mocBuildMatch[1])) });
+      const build = mocBuildStore.get(decodeURIComponent(mocBuildMatch[1]));
+      if (build.phase === "STAGED" && !build.productId) {
+        try {
+          const defaults = await mocRegistrationDefaults(build);
+          return json(response, 200, { request: adminMocBuildView(build), registrationDefaults: defaults.values, registrationDefaultSources: defaults.sources });
+        } catch {
+          // A build detail remains readable even if its discovery evidence has expired.
+        }
+      }
+      return json(response, 200, { request: adminMocBuildView(build) });
     }
     const taskMatch = /^\/api\/v1\/admin\/tasks\/([^/]+)$/.exec(pathname);
     const retryMatch = /^\/api\/v1\/admin\/tasks\/([^/]+)\/resubmit$/.exec(pathname);
@@ -1309,7 +1429,8 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         await reloadRuntimeCoverage();
       }
       surveyIndex = applyPublishedProductMetadata(surveyIndex);
-      return json(response, 200, { product });
+      const publishedBuild = mocBuildStore.list().find((build) => build.productId === productId);
+      return json(response, 200, { product, lifecycle: adminProductLifecycle(product, publishedBuild) });
     }
     const historyMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/history$/.exec(pathname);
     if (historyMatch?.[1] && request.method === "GET") return json(response, 200, { history: await products.history(decodeURIComponent(historyMatch[1])) });
@@ -1331,7 +1452,12 @@ function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, p
   if (!Number.isSafeInteger(order) || !Number.isSafeInteger(tile) || order < 0 || order > 29 || tile < 0) return json(response, 400, { error: "order and tile are required integers" });
   const block = coverageBlock(record, order, tile);
   if (!block) return json(response, 404, { error: "Coverage block is unavailable" });
-  compressedJson(request, response, 200, block, "public, max-age=31536000, immutable", `"sha256-${block.sha256}"`);
+  const requestedRevision = query.get("revision");
+  if (requestedRevision && requestedRevision !== record.revision) {
+    return json(response, 409, { error: "Coverage catalog revision changed", layerId: record.layerId, revision: record.revision });
+  }
+  const cacheControl = requestedRevision ? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate";
+  compressedJson(request, response, 200, { ...block, revision: record.revision }, cacheControl, `"sha256-${block.sha256}"`);
 }
 
 async function sendCoverageOverlap(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -1393,6 +1519,38 @@ async function sendCoverageOverlapDetails(request: IncomingMessage, response: Se
   return compressedJson(request, response, 200, details, "public, max-age=60, stale-while-revalidate=120");
 }
 
+function publicReverseEntrypoints(layerIds: readonly string[], order: number, cells: readonly number[]): Array<Record<string, unknown>> {
+  const requested = new Set(cells);
+  return layerIds.flatMap((layerId) => {
+    const layer = coverageCatalog.records.get(layerId);
+    if (!layer) return [];
+    const matchedCells = (layer.cells.get(order) ?? []).filter((cell) => requested.has(cell));
+    if (!matchedCells.length) return [];
+    const survey = surveyIndex.surveys.find((entry) => entry.id === layer.surveyId);
+    const release = survey?.releases.find((entry) => entry.id === layer.releaseId);
+    const product = release?.products.find((entry) => entry.name === layer.product);
+    const sourceUrl = publicExternalUrl(product?.geometrySourceUrl ?? product?.sourceUrl ?? layer.recipe?.sourceUrl);
+    const mocAsset = [...catalog.files.entries()].find(([, entry]) => entry.record.kind === "moc"
+      && entry.record.surveyId === layer.surveyId
+      && entry.record.releaseId === layer.releaseId
+      && entry.record.product === layer.product);
+    return [{
+      layerId,
+      productId: layer.productId,
+      surveyId: layer.surveyId,
+      releaseId: layer.releaseId,
+      product: layer.product,
+      order,
+      nside: 2 ** order,
+      cells: matchedCells,
+      precision: "entrypoint-only",
+      ...(sourceUrl ? { sourceUrl } : {}),
+      ...(mocAsset ? { mocUrl: `/api/v1/coverage/layers/${encodeURIComponent(layerId)}/moc.fits` } : {}),
+      note: layer.sourceUnitIndex?.notes ?? "该图层提供公共覆盖入口，但没有文件级反向索引。",
+    }];
+  });
+}
+
 async function sendCoverageReverseLookup(request: IncomingMessage, response: ServerResponse): Promise<void> {
   const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
   const layerIds = Array.isArray(body.layerIds) ? body.layerIds.filter((value): value is string => typeof value === "string") : [];
@@ -1400,7 +1558,24 @@ async function sendCoverageReverseLookup(request: IncomingMessage, response: Ser
   const order = typeof body.order === "number" && Number.isSafeInteger(body.order) ? body.order : Number.NaN;
   const limit = typeof body.limit === "number" && Number.isSafeInteger(body.limit) ? body.limit : undefined;
   if (layerIds.length < 1 || !Number.isSafeInteger(order) || order < 0 || order > 29 || !cells.length) return json(response, 400, { error: "layerIds, order and cells are required" });
-  return compressedJson(request, response, 200, await evidenceStore.reverseLookup({ layerIds, order, cells, limit }), "public, max-age=30, stale-while-revalidate=60");
+  const warehouseLayerIds = layerIds.filter((layerId) => warehouseLayerSnapshots.has(layerId));
+  const publicLayerIds = layerIds.filter((layerId) => !warehouseLayerIds.includes(layerId));
+  const entrypoints = publicReverseEntrypoints(publicLayerIds, order, cells);
+  const warehouseResult: ReverseLookupResult = warehouseLayerIds.length
+    ? await evidenceStore.reverseLookup({ layerIds: warehouseLayerIds, order, cells, limit }, { tolerateUnavailable: true })
+    : evidenceStore.unavailableResult({ layerIds: [], order, cells }, "这些图层由 Assets 公共 MOC 提供；没有 Warehouse 文件级反向索引。 ");
+  const precision = warehouseResult.truncated
+    ? "truncated"
+    : entrypoints.length
+      ? "entrypoint-only"
+      : warehouseResult.precision;
+  return compressedJson(request, response, 200, {
+    ...warehouseResult,
+    requested: { ...warehouseResult.requested, layerIds },
+    precision,
+    entrypoints,
+    notes: [...warehouseResult.notes, ...(entrypoints.length ? [`${entrypoints.length} 个公共 MOC 图层仅提供入口级来源。`] : [])],
+  }, "public, max-age=30, stale-while-revalidate=60");
 }
 
 const server = http.createServer((request, response) => {
@@ -1423,7 +1598,9 @@ const server = http.createServer((request, response) => {
     if (pathname === "/api/v1/resource-packages/catalog.json") return json(response, 200, await resourcePackageCatalog(catalog));
     if (pathname === "/api/v1/coverage/catalog") {
       const { records: _records, ...publicCoverageCatalog } = coverageCatalog;
-      return compressedJson(request, response, 200, publicCoverageCatalog, "public, max-age=300, stale-while-revalidate=60");
+      const body = { ...publicCoverageCatalog, schemaVersion: 2, generatedAt: coverageLoadedAt };
+      const etag = `"catalog-${coverageCatalog.revision ?? "unknown"}"`;
+      return compressedJson(request, response, 200, body, "no-cache, must-revalidate", etag);
     }
     if (pathname.startsWith("/api/v1/coverage/blocks/")) return sendCoverageBlock(request, response, pathname);
     if (pathname === "/api/v1/coverage") return json(response, 200, runtimeCoverageManifest);
