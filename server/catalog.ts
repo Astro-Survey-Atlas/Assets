@@ -70,7 +70,7 @@ export function publicManifest(catalog: LoadedCatalog, additionalRecords: Public
   const evidenceBytes = files.filter((record) => record.deliveryClass === "evidence").reduce((sum, record) => sum + record.sizeBytes, 0);
   return {
     ...catalog.manifest,
-    statistics: { ...catalog.manifest.statistics, totalBytes: files.reduce((sum, record) => sum + record.sizeBytes, 0), rawMocFiles: files.filter((record) => record.kind === "moc").length, runtimeBytes, evidenceBytes },
+    statistics: { ...catalog.manifest.statistics, packages: files.filter((record) => record.kind === "package").length, totalBytes: files.reduce((sum, record) => sum + record.sizeBytes, 0), rawMocFiles: files.filter((record) => record.kind === "moc").length, runtimeBytes, evidenceBytes },
     files: files.map(({ path: _path, ...record }) => {
       const previewMode = assetPreviewMode(record.mediaType);
       return {

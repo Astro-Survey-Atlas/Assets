@@ -302,6 +302,23 @@ function releaseWebglContext(renderer: THREE.WebGLRenderer): void {
   renderer.getContext().getExtension("WEBGL_lose_context")?.loseContext();
 }
 
+/** Some drivers return null for unsupported precision queries. Three.js calls
+ * this method while constructing a renderer, so choose a conservative shader
+ * precision before it can dereference that null result. */
+export function rendererPrecision(canvas: HTMLCanvasElement): "highp" | "mediump" | "lowp" {
+  const context = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+  if (!context || typeof context.getShaderPrecisionFormat !== "function") return "lowp";
+  try {
+    const highVertex = context.getShaderPrecisionFormat(context.VERTEX_SHADER, context.HIGH_FLOAT);
+    const highFragment = context.getShaderPrecisionFormat(context.FRAGMENT_SHADER, context.HIGH_FLOAT);
+    if ((highVertex?.precision ?? 0) > 0 && (highFragment?.precision ?? 0) > 0) return "highp";
+    const mediumVertex = context.getShaderPrecisionFormat(context.VERTEX_SHADER, context.MEDIUM_FLOAT);
+    const mediumFragment = context.getShaderPrecisionFormat(context.FRAGMENT_SHADER, context.MEDIUM_FLOAT);
+    if ((mediumVertex?.precision ?? 0) > 0 && (mediumFragment?.precision ?? 0) > 0) return "mediump";
+  } catch { /* fall through to the universally supported low precision */ }
+  return "lowp";
+}
+
 function clearGroup(group: THREE.Group): void {
   for (const child of [...group.children]) {
     group.remove(child);
@@ -551,7 +568,7 @@ export class SurveyLayerViewer {
     surveys.forEach((survey) => this.#colorBySurvey.set(survey.id, displayColor(survey.color)));
 
     const highResolutionViewport = window.innerWidth * window.innerHeight >= 3_000_000;
-    this.#renderer = new THREE.WebGLRenderer({ canvas, antialias: !highResolutionViewport, powerPreference: "high-performance" });
+    this.#renderer = new THREE.WebGLRenderer({ canvas, antialias: !highResolutionViewport, powerPreference: "high-performance", precision: rendererPrecision(canvas) });
     this.#basePixelRatio = Math.min(window.devicePixelRatio, 1.35);
     this.#renderer.setPixelRatio(this.#basePixelRatio);
     this.#renderer.outputColorSpace = THREE.SRGBColorSpace;

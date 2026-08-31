@@ -139,6 +139,13 @@ const assetGroupDefinitions: Array<{ id: "moc" | "geometry" | "package" | "evide
 let manifest: ReleaseManifest | null = null;
 let surveyIndex: SurveyIndex | null = null;
 let search = "";
+const PUBLIC_CATALOG_CACHE_KEYS = {
+  surveys: "astro-assets:public-surveys:v1",
+  coverage: "astro-assets:coverage-catalog:v1",
+  assets: "astro-assets:release-manifest:v1",
+} as const;
+const PUBLIC_REQUEST_RETRY_DELAYS_MS = [150, 400, 900] as const;
+let usedCachedPublicCatalog = false;
 const selectedModalities = new Set<Modality>();
 let modalityFilterInitialized = false;
 let coverageDots: AtlasCoverageGlobe | null = null;
@@ -178,6 +185,70 @@ let layerCloseRemaining = 0;
 let layerClosePaused = false;
 let coverageLayerTooltip: HTMLElement | null = null;
 let coverageLayerTooltipRow: HTMLElement | null = null;
+
+function cachePublicCatalog<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify({ savedAt: new Date().toISOString(), value }));
+  } catch {
+    // Private browsing and quota limits must not make the public catalog fail.
+  }
+}
+
+function readCachedPublicCatalog<T>(key: string, isValue: (value: unknown) => value is T): T | undefined {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as { value?: unknown };
+    return isValue(parsed?.value) ? parsed.value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isSurveyIndex(value: unknown): value is SurveyIndex {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value)
+    && (value as Partial<SurveyIndex>).schemaVersion === 1
+    && Array.isArray((value as Partial<SurveyIndex>).surveys)
+    && Array.isArray((value as Partial<SurveyIndex>).sharedAssets));
+}
+
+function isCoverageCatalog(value: unknown): value is CoverageCatalog {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value)
+    && Number.isSafeInteger((value as Partial<CoverageCatalog>).schemaVersion)
+    && Array.isArray((value as Partial<CoverageCatalog>).layers));
+}
+
+function isReleaseManifest(value: unknown): value is ReleaseManifest {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value)
+    && (value as Partial<ReleaseManifest>).bundle
+    && Array.isArray((value as Partial<ReleaseManifest>).files));
+}
+
+async function fetchPublicResponse(url: string, init: RequestInit = {}): Promise<Response> {
+  class NonRetryablePublicRequestError extends Error {}
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= PUBLIC_REQUEST_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      const response = await fetch(url, { ...init, cache: "no-cache" });
+      if (response.ok || response.status === 304) return response;
+      const error = new Error(`Public catalog request failed (${response.status})`);
+      if (response.status < 500 && response.status !== 408 && response.status !== 429) throw new NonRetryablePublicRequestError(error.message);
+      lastError = error;
+    } catch (error) {
+      if (error instanceof NonRetryablePublicRequestError) throw error;
+      lastError = error;
+    }
+    const delay = PUBLIC_REQUEST_RETRY_DELAYS_MS[attempt];
+    if (delay !== undefined) await new Promise((resolve) => window.setTimeout(resolve, delay));
+  }
+  throw lastError instanceof Error ? lastError : new Error("Public catalog request failed");
+}
+
+async function fetchPublicJson<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetchPublicResponse(url, init);
+  if (response.status === 304) throw new Error("Public catalog returned 304 without a cached response");
+  return await response.json() as T;
+}
 const overlapEvidenceCache = new Map<string, OverlapEvidenceResult>();
 const overlapDetailsCache = new Map<string, OverlapDetailsResponse>();
 let lastEscapeAt = -Infinity;
@@ -2091,11 +2162,13 @@ function renderSurveys(): void {
 async function fetchCoverageCatalogDocument(): Promise<CoverageCatalog | null> {
   const headers = new Headers({ Accept: "application/json" });
   if (coverageCatalogEtag) headers.set("If-None-Match", coverageCatalogEtag);
-  const response = await fetch("/api/v1/coverage/catalog", { headers, cache: "no-cache" });
+  const response = await fetchPublicResponse("/api/v1/coverage/catalog", { headers });
   if (response.status === 304) return null;
-  if (!response.ok) throw new Error(`Coverage catalog request failed (${response.status})`);
   coverageCatalogEtag = response.headers.get("etag") ?? coverageCatalogEtag;
-  return await response.json() as CoverageCatalog;
+  const next = await response.json() as unknown;
+  if (!isCoverageCatalog(next)) throw new Error("Coverage catalog response is invalid");
+  cachePublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.coverage, next);
+  return next;
 }
 
 async function hydrateCoverageCatalog(nextCatalog: CoverageCatalog): Promise<void> {
@@ -2192,25 +2265,60 @@ async function initialize(): Promise<void> {
     console.warn("HEALPix globe unavailable", error);
     byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
   }
-  const assetsPromise = fetch("/api/v1/assets", { headers: { Accept: "application/json" } });
-  const [surveysResponse, nextCoverageCatalog] = await Promise.all([
-    fetch("/api/v1/surveys", { headers: { Accept: "application/json" } }),
-    fetchCoverageCatalogDocument(),
+  const assetsPromise = fetchPublicJson<unknown>("/api/v1/assets", { headers: { Accept: "application/json" } }).then((value) => {
+    if (!isReleaseManifest(value)) throw new Error("Public asset catalog response is invalid");
+    cachePublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.assets, value);
+    return value;
+  }).catch((error) => {
+    const cached = readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.assets, isReleaseManifest);
+    if (!cached) throw error;
+    usedCachedPublicCatalog = true;
+    return cached;
+  });
+  const coveragePromise = fetchCoverageCatalogDocument().then(
+    (catalog) => ({ catalog, error: undefined as unknown }),
+    (error: unknown) => {
+      const cached = readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.coverage, isCoverageCatalog);
+      if (cached) {
+        usedCachedPublicCatalog = true;
+        return { catalog: cached, error };
+      }
+      return { catalog: null, error };
+    },
+  );
+  const surveysPromise = fetchPublicJson<unknown>("/api/v1/surveys", { headers: { Accept: "application/json" } }).then((value) => {
+    if (!isSurveyIndex(value)) throw new Error("Public survey catalog response is invalid");
+    cachePublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.surveys, value);
+    return value;
+  }).catch((error) => {
+    const cached = readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.surveys, isSurveyIndex);
+    if (!cached) throw error;
+    usedCachedPublicCatalog = true;
+    return cached;
+  });
+  const [surveys, coverageResult] = await Promise.all([
+    surveysPromise,
+    coveragePromise,
   ]);
-  if (!surveysResponse.ok) throw new Error("Public survey catalog request failed");
-  surveyIndex = await surveysResponse.json() as SurveyIndex;
+  surveyIndex = surveys;
   initializeModalityFilter();
   renderSurveys();
-  if (nextCoverageCatalog) {
+  if (coverageResult.catalog) {
     // Keep the catalog and URL state usable even when the optional WebGL
     // viewer could not be created (for example, in a headless browser).
-    await hydrateCoverageCatalog(nextCoverageCatalog);
-    applySkyDeepLink();
-    scheduleCoverageRefresh();
-  } else if (coverageDots) byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
-  const assetsResponse = await assetsPromise;
-  if (!assetsResponse.ok) throw new Error("Public asset catalog request failed");
-  manifest = await assetsResponse.json() as ReleaseManifest;
+    try {
+      await hydrateCoverageCatalog(coverageResult.catalog);
+      applySkyDeepLink();
+      scheduleCoverageRefresh();
+    } catch (error) {
+      console.warn("Coverage preview unavailable", error);
+      byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
+    }
+  } else {
+    console.warn("Coverage catalog unavailable", coverageResult.error);
+    byId("coverage-state").textContent = "COVERAGE CATALOG UNAVAILABLE";
+  }
+  manifest = await assetsPromise;
   byId("footer-release").textContent = `${manifest.bundle.id.toUpperCase()} · VERIFIED`;
   byId("stat-releases").textContent = String(manifest.statistics.releases);
   byId("stat-acquired").textContent = String(manifest.statistics.acquired);
@@ -2222,6 +2330,7 @@ async function initialize(): Promise<void> {
   byId("generated-at").textContent = new Date(manifest.generatedAt).toLocaleString("zh-CN", { hour12: false, timeZone: "UTC" }) + " UTC";
   const provenance = manifest.files.find((record) => record.kind === "provenance");
   if (provenance) byId<HTMLAnchorElement>("provenance-download").href = provenance.downloadUrl;
+  if (usedCachedPublicCatalog) byId("coverage-state").textContent = "PUBLIC CATALOG CACHED · RETRYING";
 }
 
 byId<HTMLInputElement>("survey-search").addEventListener("input", (event) => {
@@ -2453,5 +2562,5 @@ renderIcons();
 void initialize().catch((error) => {
   console.error(error);
   byId("coverage-state").textContent = t("coverage.releaseUnavailable");
-  byId("survey-list").replaceChildren(Object.assign(document.createElement("div"), { className: "error-row", textContent: t("coverage.catalogLoadFailed") }));
+  if (!surveyIndex) byId("survey-list").replaceChildren(Object.assign(document.createElement("div"), { className: "error-row", textContent: t("coverage.catalogLoadFailed") }));
 });

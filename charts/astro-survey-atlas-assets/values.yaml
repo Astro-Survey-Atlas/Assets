@@ -86,6 +86,14 @@ syncResources:
 # release activation remains PVC-backed and uses the filesystem adapter.
 objectStore:
   enabled: false
+  # filesystem keeps local development self-contained; production should use
+  # pull so the init container consumes the immutable S3 current pointer.
+  mode: filesystem
+  currentKey: public/current.json
+  retainReleases: 2
+  # Cleanup can be slow on network PVCs. Keep it disabled for development;
+  # production release reviews may enable it explicitly.
+  cleanup: false
   endpoint: ""
   bucket: ""
   prefix: ""

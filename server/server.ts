@@ -16,6 +16,7 @@ import { CoverageEvidenceStore, EvidenceStoreError, type ReverseLookupResult, ty
 import { buildOverlapDetails, publicExternalUrl } from "./overlap-details.js";
 import { resolveMocDiscoveryCandidate } from "./moc-discovery.js";
 import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
+import { DynamicResourcePackageStore, dynamicResourcePackageAssetId } from "./resource-package-publication.js";
 import { buildPublicProductEvidence } from "./public-product-evidence.js";
 import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductVerificationStatus, PublicSurveyModality } from "./types.js";
 
@@ -43,8 +44,11 @@ const mocBuildStore = new MocBuildStore(contentRoot);
 await mocBuildStore.initialize();
 const mocPublicationStore = new MocPublicationStore(contentRoot, evidenceRoot);
 await mocPublicationStore.initialize();
+const dynamicResourcePackages = new DynamicResourcePackageStore(contentRoot);
+await dynamicResourcePackages.initialize();
 const publishedPublicAssets = new Map<string, { record: PublicAssetRecord; absolutePath: string }>();
 const publishedAssetIds = new Set<string>();
+const dynamicPackageAssetIds = new Set<string>();
 let staticCoverageCatalog = await loadCoverageCatalog(releaseRoot, coverageManifest);
 let coverageCatalog = staticCoverageCatalog;
 let runtimeCoverageManifest = coverageManifest;
@@ -57,6 +61,34 @@ function clearPublishedAssets(): void {
   for (const id of publishedAssetIds) catalog.files.delete(id);
   publishedAssetIds.clear();
   publishedPublicAssets.clear();
+}
+
+function clearDynamicPackageAssets(): void {
+  for (const id of dynamicPackageAssetIds) catalog.files.delete(id);
+  dynamicPackageAssetIds.clear();
+}
+
+function registerDynamicPackageAssets(): void {
+  clearDynamicPackageAssets();
+  for (const asset of dynamicResourcePackages.assets()) {
+    const record: PublicAssetRecord = {
+      id: asset.id,
+      kind: "package",
+      label: asset.name,
+      description: `Immutable Resource Package v3 for ${asset.surveyId}.`,
+      path: asset.path,
+      downloadName: asset.downloadName,
+      mediaType: "application/zip",
+      sizeBytes: asset.sizeBytes,
+      sha256: asset.sha256,
+      surveyId: asset.surveyId,
+      ...(asset.releaseId ? { releaseId: asset.releaseId } : {}),
+      version: asset.version,
+      deliveryClass: "runtime",
+    };
+    catalog.files.set(asset.id, { record, absolutePath: path.resolve(contentRoot, asset.path) });
+    dynamicPackageAssetIds.add(asset.id);
+  }
 }
 
 function publicationAsset(id: string, publication: MocPublication, file: MocPublicationFile, kind: PublicAssetRecord["kind"], label: string, downloadName: string): { record: PublicAssetRecord; absolutePath: string } {
@@ -241,6 +273,25 @@ async function resumeMocBuilds(): Promise<void> {
 }
 await resumeMocBuilds();
 
+async function refreshDynamicResourcePackages(): Promise<void> {
+  // Restore previously generated immutable archives before attempting to
+  // generate a newer package. A transient publication error must not make the
+  // last known package disappear from the public catalog.
+  registerDynamicPackageAssets();
+  const verified = (await Promise.all(mocPublicationStore.list().map(async (publication) => {
+    const integrity = await mocPublicationStore.verify(publication);
+    return integrity.valid ? publication : undefined;
+  }))).filter((publication): publication is MocPublication => Boolean(publication));
+  try {
+    await dynamicResourcePackages.sync(verified, products.list(), (file) => mocPublicationStore.absolutePath(file));
+    registerDynamicPackageAssets();
+  } catch (error) {
+    // A failed generated package must not remove the last valid package from
+    // the public catalog. The publication itself remains independently usable.
+    console.warn(`Unable to refresh dynamic Resource Packages: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurveyIndex>>): Awaited<ReturnType<typeof loadSurveyIndex>> {
   const published = products.list().filter((record): record is ProductRecord & { published: NonNullable<ProductRecord["published"]> } => Boolean(record.published));
   if (!published.length) return index;
@@ -346,6 +397,7 @@ function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurv
     }),
   };
 }
+await refreshDynamicResourcePackages();
 surveyIndex = applyPublishedProductMetadata(surveyIndex);
 let sourceUnitsPromise: Promise<SourceUnitWorkerStore> | null = null;
 let sourceUnitsFallbackPromise: Promise<SourceUnitStore> | null = null;
@@ -863,13 +915,24 @@ async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<st
   const packageAssets = [...catalog.files.values()]
     .map(({ record }) => record)
     .filter((record) => record.kind === "package");
-  const packages = document.packages.map((value) => {
+  const dynamicEntries = dynamicResourcePackages.list();
+  const identities = new Set(document.packages.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+    const entry = value as Record<string, unknown>;
+    return `${typeof entry.id === "string" ? entry.id : ""}@${typeof entry.version === "string" ? entry.version : ""}`;
+  }));
+  const packageEntries = [...document.packages, ...dynamicEntries.filter((entry) => !identities.has(`${entry.id}@${entry.version}`))];
+  const packages = packageEntries.map((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Resource package catalog contains an invalid entry");
     const entry = value as Record<string, unknown>;
+    const packageId = typeof entry.id === "string" ? entry.id : undefined;
     const surveyId = typeof entry.surveyId === "string" ? entry.surveyId : undefined;
     const version = typeof entry.version === "string" ? entry.version : undefined;
     const releases = Array.isArray(entry.releases) ? entry.releases.filter((release): release is string => typeof release === "string") : [];
-    const asset = packageAssets.find((candidate) => candidate.surveyId === surveyId
+    const dynamicAsset = surveyId && version && packageId
+      ? packageAssets.find((candidate) => candidate.id === dynamicResourcePackageAssetId({ id: packageId, version }))
+      : undefined;
+    const asset = dynamicAsset ?? packageAssets.find((candidate) => candidate.surveyId === surveyId
       && candidate.version === version
       && (!candidate.releaseId || releases.includes(candidate.releaseId)));
     return {
@@ -1427,6 +1490,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       if (staged && publication) {
         await mocBuildStore.markPublished(staged.name, publication.id);
         await reloadRuntimeCoverage();
+        await refreshDynamicResourcePackages();
       }
       surveyIndex = applyPublishedProductMetadata(surveyIndex);
       const publishedBuild = mocBuildStore.list().find((build) => build.productId === productId);

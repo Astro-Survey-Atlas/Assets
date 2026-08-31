@@ -14,14 +14,14 @@
 }
 @font-face {
   font-family: "Atlas Sans CJK";
-  src: url("/fonts/NotoSansCJK-Regular.ttc") format("truetype-collection");
+  src: url("/fonts/NotoSansSC-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: "Atlas Sans CJK";
-  src: url("/fonts/NotoSansCJK-Bold.ttc") format("truetype-collection");
+  src: url("/fonts/NotoSansSC-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
   font-display: swap;

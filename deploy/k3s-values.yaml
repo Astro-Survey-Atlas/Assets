@@ -71,5 +71,14 @@ syncResources:
     cpu: 500m
     memory: 512Mi
 
+# Development cluster uses the image/PVC release path. Production overlays
+# must set mode=pull, endpoint, bucket and a credentials Secret.
+objectStore:
+  enabled: false
+  mode: filesystem
+  currentKey: public/current.json
+  retainReleases: 2
+  cleanup: false
+
 nodeSelector:
   kubernetes.io/hostname: eva7028

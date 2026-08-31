@@ -1,0 +1,37 @@
+# Production overlay template. Replace every angle-bracket placeholder during
+# the release review; do not commit real endpoints, bucket names or Secrets.
+# Keep deploy/k3s-values.yaml for the development filesystem-backed rollout.
+
+image:
+  repository: <immutable-image-repository>
+  tag: <immutable-image-tag>
+  pullPolicy: Always
+
+objectStore:
+  enabled: true
+  mode: pull
+  endpoint: <production-s3-endpoint>
+  bucket: <production-bucket>
+  currentKey: public/current.json
+  retainReleases: 2
+  cleanup: true
+  prefix: ""
+  region: <production-region>
+  forcePathStyle: false
+  publicBaseUrl: <public-release-base-url>
+  root: /data/object-store
+  credentialsSecret:
+    name: <secret-name>
+    accessKeyIdKey: access-key-id
+    secretAccessKeyKey: secret-access-key
+    sessionTokenKey: session-token
+
+# Use pre-created production PVCs so release/content/evidence ownership is
+# explicit. The chart defaults remain suitable for development.
+persistence:
+  enabled: false
+  existingClaim: <production-release-pvc>
+contentPersistence:
+  existingClaim: <production-content-pvc>
+evidencePersistence:
+  existingClaim: <production-evidence-pvc>

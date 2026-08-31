@@ -44,6 +44,38 @@ evidence/<survey-id>/<scan-run-id>/provenance.json
 evidence/<survey-id>/<scan-run-id>/errors.jsonl.zst
 ```
 
+## Runtime filesystem contract
+
+The filesystem layout is part of the deployment contract. It keeps the public
+release read path, editable publication state and evidence state separate:
+
+| Path | Owner and contents | Lifecycle |
+| --- | --- | --- |
+| `/data/.staging` | `sync-release` temporary downloads, manifest checks and SHA-256 validation | Deleted after success or failure; never served |
+| `/data/releases/<sha256>` | A fully verified immutable public release copied from S3 (or the image in development) | Retain the configured rollback count; never edit in place |
+| `/data/current` | Symlink to the active `/data/releases/<sha256>` directory | Replaced atomically after validation; the server reads only this path |
+| `/var/lib/assets-content` | Dynamic product drafts, MOC publication records and verified Resource Package v3 archives/state | Persistent content PVC; not a public source tree or a scan-evidence store |
+| `/var/lib/assets-evidence` | Source snapshots, normalized scans, task snapshots, build inputs/outputs and errors | Persistent evidence PVC/object prefix; excluded from public catalog and initial browser requests |
+
+In production `publish-assets` runs in `mode: pull`: it reads only the S3
+`current.json` pointer, downloads the selected manifest and allowlisted release
+objects into `/data/.staging`, verifies every size/hash, then atomically
+activates `/data/current`. It does not copy the repository `artifacts/` tree
+into a running pod. `mode: filesystem` is the development/image fallback;
+`mode: push` is an explicit publisher used only by a release job. Release
+history cleanup is controlled separately by `ASSETS_RELEASE_CLEANUP`; keep it
+off for development rollouts because recursive deletion on a network PVC can
+delay the init container, and enable it only in the reviewed production
+overlay with the configured retention count.
+
+Dynamic MOCs and Resource Package archives are generated only after a product
+is explicitly published. Their immutable bytes live under the content PVC and
+are exposed through the Assets catalog after startup/reload integrity checks;
+they are not mixed into `/data/.staging` or evidence storage. A future object
+store migration should publish these content records under the same immutable
+release/evidence prefixes and keep the public catalog as the only Workspace
+entry point.
+
 The public prefix is anonymously readable only for allowlisted release files.
 The evidence prefix is not listed in the public catalog and is exposed only
 through an authenticated or explicitly signed evidence workflow. Internal

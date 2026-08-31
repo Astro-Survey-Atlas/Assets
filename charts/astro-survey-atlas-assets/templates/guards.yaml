@@ -6,3 +6,6 @@
 {{- if and .Values.objectStore.enabled (not .Values.objectStore.endpoint) }}{{ fail "objectStore.endpoint is required when objectStore.enabled is true" }}{{- end }}
 {{- if and .Values.objectStore.enabled (not .Values.objectStore.bucket) }}{{ fail "objectStore.bucket is required when objectStore.enabled is true" }}{{- end }}
 {{- if and .Values.objectStore.enabled (not .Values.objectStore.credentialsSecret.name) }}{{ fail "objectStore.credentialsSecret.name is required when objectStore.enabled is true" }}{{- end }}
+{{- if not (has .Values.objectStore.mode (list "filesystem" "push" "pull")) }}{{ fail "objectStore.mode must be filesystem, push or pull" }}{{- end }}
+{{- if and (eq .Values.objectStore.mode "pull") (not .Values.objectStore.enabled) }}{{ fail "objectStore.enabled must be true when objectStore.mode=pull" }}{{- end }}
+{{- if and (eq .Values.objectStore.mode "push") (not .Values.objectStore.enabled) }}{{ fail "objectStore.enabled must be true when objectStore.mode=push" }}{{- end }}

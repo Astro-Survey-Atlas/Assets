@@ -46,6 +46,56 @@ changes and inspect overlapping diffs before editing.
 - The running image manifest digest is
   `sha256:6a62dc145a21fcd32cbce9a515aaf26e809dcb610cd735fbdae4bc8ad59538fb`.
 
+### 2026-08-31 Storage and Workspace Continuation
+
+- Dynamic Resource Package v3 archives are now generated from verified,
+  explicitly published MOC records, persisted on the content volume and
+  restored only after ID, version, path, size and SHA-256 checks. Public package
+  asset IDs normalize `3.0.0` to `3-0-0` so the archive URL is a safe path
+  component. FITS outputs are checked for ICRS/NUNIQ/MOC 2.0/SPACE semantics,
+  and projections retain their real NESTED order and HEALPix bounds.
+- `sync-release` supports production S3 `pull`: it verifies `current.json`,
+  the release manifest and every object in `/data/.staging`, activates
+  `/data/releases/<sha256>` and atomically switches `/data/current`. The
+  development `deploy/k3s-values.yaml` remains filesystem-backed.
+- The runtime storage and Workspace handoff is documented in
+  `docs/public-artifact-storage.md` and `docs/resource-package-integration.md`;
+  `deploy/production-values.example.yaml` contains placeholders only and does
+  not assert a real endpoint, bucket or Secret.
+- Workspace now accepts a dynamic Assets catalog's explicit `replacedBy: []`.
+  A real static Euclid package and a temporary dynamically generated JWST
+  package were downloaded completely, checked against catalog size/SHA-256,
+  installed, and queried with `mocLayers()`; both returned the manifest's real
+  layer identity and MOC hash.
+- Assets local verification is green after the complete ZIP assertions:
+  `npm run validate` (84 Node tests plus Core wheel verification), Helm lint,
+  template rendering with the production overlay and `git diff --check` pass.
+  Workspace `npm run build` and `npm test` pass (one PostgreSQL test is skipped
+  when its URL is unset).
+- The dev rollout is Helm revision 101 with image
+  `0.1.0-20260831-164957`, Pod `1/1 Running`, and live bundle SHA-256
+  `ccc273c90738140dc3760ea387529a7d41a21e77b4187ca510f06760a1130046` at
+  `http://10.15.51.75:32083/`. The live JWST Resource Package archive is
+  `4d41ac806e2e9f76db13b4cddc54de7e8699c4501d35d90ccb0f34e8c7f239aa` and
+  contains both published layers `moc-jwst-dr1-611dfe774f60` and
+  `moc-jwst-dr1-c0924d1a5468`.
+- The revision-101 smoke returned 221 public assets and 58 coverage
+  footprints; a DESI FITS range returned `206 Partial Content` with
+  `Content-Range` and `X-Content-SHA256`. The active filesystem path is
+  `/data/current -> releases/ccc273c90738140dc3760ea387529a7d41a21e77b4187ca510f06760a1130046`,
+  and the image manifest digest is
+  `sha256:f86bae15a613c9755e9473ec4b7efdf31eaa36cca708673aaa534b1c49980af6`.
+- Workspace installed that public JWST package from the Assets catalog and
+  verified the installed MOC bytes against the manifest. Dynamic package
+  asset IDs now use the same normalized semver path (`3-0-0`) when the server
+  resolves catalog entries, so a same-survey static package cannot be selected
+  by fallback matching. Public catalog requests on the Assets home page retry
+  short transient failures and fall back to the last successful browser cache.
+- Release-directory cleanup is explicit via `ASSETS_RELEASE_CLEANUP`. The
+  development Helm values leave it off to avoid multi-gigabyte NFS deletion in
+  the init critical path; the production overlay enables it with the reviewed
+  retention count.
+
 ### Next Session
 
 1. Read `AGENTS.md`, this handoff, `docs/coverage-workflow.md`, and the

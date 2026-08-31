@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { ArtifactStoreConflictError, FilesystemArtifactStore, createArtifactStore, publishReleaseBundle } from "../server/artifact-store.js";
+import { cleanupReleaseHistory, syncReleaseFromObjectStore } from "../server/sync-release.js";
 
 function sha256(value: Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
@@ -66,3 +67,66 @@ test("object-store factory requires a complete S3 configuration and falls back t
   assert.throws(() => createArtifactStore({ endpoint: "http://minio.local" }), /configured together/);
   assert.throws(() => createArtifactStore({ bucket: "atlas" }), /configured together/);
 });
+
+test("object-store pull verifies the manifest before atomically activating current", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-object-pull-"));
+  const source = path.join(root, "source");
+  const objectRoot = path.join(root, "objects");
+  const target = path.join(root, "target");
+  const filePath = path.join(source, "src", "tiny.txt");
+  const bytes = Buffer.from("pulled release\n", "utf8");
+  const record = {
+    id: "tiny-release-file",
+    kind: "documentation",
+    label: "Tiny release file",
+    description: "test",
+    path: "src/tiny.txt",
+    downloadName: "tiny.txt",
+    mediaType: "text/plain; charset=utf-8",
+    deliveryClass: "runtime",
+    sizeBytes: bytes.length,
+    sha256: sha256(bytes),
+  };
+  const bundleSha256 = sha256(Buffer.from(JSON.stringify([{ id: record.id, path: record.path, sizeBytes: record.sizeBytes, sha256: record.sha256 }])));
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, bytes);
+  await mkdir(path.join(source, "artifacts", "public-survey-footprints"), { recursive: true });
+  await writeFile(path.join(source, "artifacts", "public-survey-footprints", "release-manifest.json"), `${JSON.stringify({
+    schemaVersion: 1,
+    generatedAt: "2026-08-28T00:00:00Z",
+    bundle: { id: "tiny-release", sha256: bundleSha256 },
+    files: [record],
+  })}\n`);
+  const store = new FilesystemArtifactStore(objectRoot);
+  await publishReleaseBundle(source, store);
+  const synced = await syncReleaseFromObjectStore(store, target);
+  assert.equal(synced.bundle.sha256, bundleSha256);
+  assert.equal(synced.installedTarget, `releases/${bundleSha256}`);
+  assert.equal((await readFile(path.join(target, "current", "src", "tiny.txt"), "utf8")), "pulled release\n");
+  assert.equal((await loadReleaseManifest(target)).bundle.sha256, bundleSha256);
+});
+
+test("release history cleanup is explicit and never removes the active target", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-release-cleanup-"));
+  try {
+    const names = ["a".repeat(64), "b".repeat(64), "c".repeat(64)];
+    for (const name of names) {
+      await mkdir(path.join(root, "releases", name), { recursive: true });
+      await writeFile(path.join(root, "releases", name, "marker"), name);
+    }
+    await utimes(path.join(root, "releases", names[0]!), new Date(1_000), new Date(1_000));
+    await utimes(path.join(root, "releases", names[1]!), new Date(2_000), new Date(2_000));
+    await symlink(path.join("releases", names[2]!), path.join(root, "current"), "dir");
+    const removed = await cleanupReleaseHistory(root, 2);
+    assert.equal(removed, 1);
+    assert.equal((await stat(path.join(root, "releases", names[2]!))).isDirectory(), true);
+    assert.equal((await stat(path.join(root, "releases", names[1]!))).isDirectory(), true);
+    await assert.rejects(() => stat(path.join(root, "releases", names[0]!)), { code: "ENOENT" });
+  } finally {
+    await import("node:fs/promises").then(({ rm }) => rm(root, { recursive: true, force: true }));
+  }
+});
+
+async function loadReleaseManifest(root: string): Promise<{ bundle: { sha256: string } }> {
+  return JSON.parse(await readFile(path.join(root, "current", "artifacts", "public-survey-footprints", "release-manifest.json"), "utf8")) as { bundle: { sha256: string } };
+}

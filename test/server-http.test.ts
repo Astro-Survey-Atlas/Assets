@@ -51,7 +51,7 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   context.after(() => { child.kill("SIGTERM"); });
   await waitFor(`http://127.0.0.1:${port}/healthz`, child);
 
-  for (const [font, mediaType] of [["NotoSans-Regular.ttf", "font/ttf"], ["NotoSansCJK-Regular.ttc", "font/collection"]] as const) {
+  for (const [font, mediaType] of [["NotoSans-Regular.ttf", "font/ttf"], ["NotoSansSC-Regular.woff2", "font/woff2"]] as const) {
     const fontResponse = await fetch(`http://127.0.0.1:${port}/fonts/${font}`);
     assert.equal(fontResponse.status, 200);
     assert.equal(fontResponse.headers.get("content-type"), mediaType);
@@ -88,6 +88,12 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.equal(packageArchive.status, 206);
   assert.equal(packageArchive.headers.get("x-content-sha256"), packageCatalog.packages[0]!.sha256);
   assert.equal((await packageArchive.arrayBuffer()).byteLength, 8);
+  const completePackageArchive = await fetch(`http://127.0.0.1:${port}${packageCatalog.packages[0]!.archiveUrl}`);
+  assert.equal(completePackageArchive.status, 200);
+  const completePackageBytes = new Uint8Array(await completePackageArchive.arrayBuffer());
+  assert.equal(completePackageArchive.headers.get("content-length"), String(packageCatalog.packages[0]!.sizeBytes));
+  assert.equal(completePackageBytes.byteLength, packageCatalog.packages[0]!.sizeBytes);
+  assert.equal(sha256(completePackageBytes), packageCatalog.packages[0]!.sha256);
 
   const zip = catalog.files.find((entry) => entry.id.startsWith("package-"));
   assert.ok(zip);
@@ -628,7 +634,7 @@ test("HTTP publication activates dynamic MOC assets and restores them after rest
   const buildRoot = path.join(evidenceRoot, "moc-build", buildName);
   await mkdir(buildRoot, { recursive: true });
   const outputBytes = {
-    moc: Buffer.from("dynamic-moc-fits"),
+    moc: await readFile(path.resolve("artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/euclid-q1-deep-fields-image-extent.moc.fits")),
     query: Buffer.from(JSON.stringify({ order: 8, ordering: "NESTED", pixels: [1, 2] })),
     preview: Buffer.from(JSON.stringify({ order: 4, ordering: "NESTED", pixels: [0] })),
     statistics: Buffer.from(JSON.stringify({ cells: 2 })),
@@ -717,6 +723,23 @@ test("HTTP publication activates dynamic MOC assets and restores them after rest
   const dynamicAsset = assets.files.find((asset) => asset.id.startsWith("layer-moc-euclid-euclid-ero-") && asset.id.endsWith("-moc"));
   assert.ok(dynamicAsset);
   assert.equal(dynamicAsset.sha256, sha256(outputBytes.moc));
+
+  const packageCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/resource-packages/catalog.json`);
+  assert.equal(packageCatalogResponse.status, 200);
+  const packageCatalog = await packageCatalogResponse.json() as { packages: Array<{ id: string; surveyId: string; version: string; archiveUrl: string; sha256: string; sizeBytes: number }> };
+  const dynamicPackage = packageCatalog.packages.find((entry) => entry.surveyId === "euclid" && entry.id.startsWith("public-euclid-footprints-"));
+  assert.ok(dynamicPackage);
+  assert.equal(dynamicPackage.version, "3.0.0");
+  const packageArchive = await fetch(`http://127.0.0.1:${port}${dynamicPackage.archiveUrl}`, { headers: { Range: "bytes=0-7" } });
+  assert.equal(packageArchive.status, 206);
+  assert.equal(packageArchive.headers.get("x-content-sha256"), dynamicPackage.sha256);
+  assert.equal((await packageArchive.arrayBuffer()).byteLength, 8);
+  const completePackageArchive = await fetch(`http://127.0.0.1:${port}${dynamicPackage.archiveUrl}`);
+  assert.equal(completePackageArchive.status, 200);
+  const completePackageBytes = new Uint8Array(await completePackageArchive.arrayBuffer());
+  assert.equal(completePackageArchive.headers.get("content-length"), String(dynamicPackage.sizeBytes));
+  assert.equal(completePackageBytes.byteLength, dynamicPackage.sizeBytes);
+  assert.equal(sha256(completePackageBytes), dynamicPackage.sha256);
 
   const coverageCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`);
   assert.equal(coverageCatalogResponse.status, 200);

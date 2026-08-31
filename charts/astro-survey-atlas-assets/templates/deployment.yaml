@@ -33,12 +33,22 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["node", "dist/server/sync-release.js"]
           env:
+            {{- if ne .Values.objectStore.mode "pull" }}
             - name: ASSET_SOURCE_ROOT
               value: /app/release
+            {{- end }}
             - name: ASSET_TARGET_ROOT
               value: /data
+            - name: ASSETS_OBJECT_STORE_MODE
+              value: {{ .Values.objectStore.mode | quote }}
+            - name: ASSETS_OBJECT_STORE_CURRENT_KEY
+              value: {{ .Values.objectStore.currentKey | quote }}
+            - name: ASSETS_RELEASE_RETENTION
+              value: {{ .Values.objectStore.retainReleases | quote }}
+            - name: ASSETS_RELEASE_CLEANUP
+              value: {{ .Values.objectStore.cleanup | quote }}
             - name: ASSETS_OBJECT_STORE_PUBLISH
-              value: {{ .Values.objectStore.enabled | quote }}
+              value: {{ and .Values.objectStore.enabled (eq .Values.objectStore.mode "push") | quote }}
             - name: ASSETS_OBJECT_STORE_ENDPOINT
               value: {{ .Values.objectStore.endpoint | quote }}
             - name: ASSETS_OBJECT_STORE_BUCKET
