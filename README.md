@@ -104,3 +104,9 @@ The site has separate entry points for the [project overview](/github/),
 [survey directory](/surveys/) and [integration/SDK status](/sdk/).
 
 中文说明见 [README.cn.md](README.cn.md)。
+
+## License
+
+This repository is licensed under the Apache License, Version 2.0. See
+[LICENSE](LICENSE) and [NOTICE](NOTICE). It is part of the Astro Survey Atlas
+GitHub organization and is not an Apache Software Foundation project.

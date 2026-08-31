@@ -87,3 +87,9 @@ npm start
 [集成/SDK 状态](/sdk/)。
 
 English version: [README.md](README.md)。
+
+## 许可证
+
+本仓库采用 Apache License, Version 2.0。详见 [LICENSE](LICENSE) 和
+[NOTICE](NOTICE)。本项目属于 Astro Survey Atlas GitHub 组织，不是 Apache
+Software Foundation 项目。
