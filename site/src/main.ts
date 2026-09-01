@@ -5,7 +5,9 @@ import type { SurveyLayerContextMenu, SurveyLayerInspection, SurveyLayerOverlapC
 import { highestCommonCoverageOrder } from "./atlas/coverage-orders.js";
 import { coverageLayerTooltipPosition } from "./atlas/layer-panel-layout.js";
 import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-layout.js";
+import { joinUnique, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch } from "./overlap-download.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
+import { loadPublicCatalogResource, type PublicCatalogResource, type PublicCatalogSource } from "./public-catalog.js";
 
 import "./styles.css";
 
@@ -146,6 +148,12 @@ const PUBLIC_CATALOG_CACHE_KEYS = {
 } as const;
 const PUBLIC_REQUEST_RETRY_DELAYS_MS = [150, 400, 900] as const;
 let usedCachedPublicCatalog = false;
+type PublicCatalogName = keyof typeof PUBLIC_CATALOG_CACHE_KEYS;
+const publicCatalogSources: Record<PublicCatalogName, PublicCatalogSource | undefined> = {
+  surveys: undefined,
+  coverage: undefined,
+  assets: undefined,
+};
 const selectedModalities = new Set<Modality>();
 let modalityFilterInitialized = false;
 let coverageDots: AtlasCoverageGlobe | null = null;
@@ -185,6 +193,12 @@ let layerCloseRemaining = 0;
 let layerClosePaused = false;
 let coverageLayerTooltip: HTMLElement | null = null;
 let coverageLayerTooltipRow: HTMLElement | null = null;
+
+function setOverlapMode(active: boolean): void {
+  overlapMode = active;
+  if (active) document.body.dataset.overlapMode = "active";
+  else document.body.removeAttribute("data-overlap-mode");
+}
 
 function cachePublicCatalog<T>(key: string, value: T): void {
   try {
@@ -248,6 +262,18 @@ async function fetchPublicJson<T>(url: string, init: RequestInit = {}): Promise<
   const response = await fetchPublicResponse(url, init);
   if (response.status === 304) throw new Error("Public catalog returned 304 without a cached response");
   return await response.json() as T;
+}
+
+function recordPublicCatalogResult(name: PublicCatalogName, result: PublicCatalogResource<unknown>): void {
+  publicCatalogSources[name] = result.source;
+  if (result.source !== "fresh") usedCachedPublicCatalog = true;
+  if (result.error) console.warn(`Public catalog ${name} ${result.source}: ${result.error}`);
+  const sources = Object.values(publicCatalogSources);
+  document.body.dataset.publicCatalogState = sources.includes("unavailable")
+    ? "unavailable"
+    : sources.some((source) => source !== undefined && source !== "fresh")
+      ? "degraded"
+      : "fresh";
 }
 const overlapEvidenceCache = new Map<string, OverlapEvidenceResult>();
 const overlapDetailsCache = new Map<string, OverlapDetailsResponse>();
@@ -576,6 +602,7 @@ interface OverlapEvidenceResult {
   precision: string;
   truncated: boolean;
   edges: Array<{
+    edgeId?: string;
     layerId?: string;
     surveyId?: string;
     releaseId?: string;
@@ -591,11 +618,15 @@ interface OverlapEvidenceResult {
     decMin?: number;
     decMax?: number;
     sizeBytes?: number;
+    order: number;
     ipix: number;
+    coverageMethod?: string;
+    coverageRole?: string;
     precision: string;
   }>;
   sourceFiles: Array<Record<string, unknown>>;
   entrypoints?: Array<{ layerId: string; productId?: string; surveyId?: string; releaseId?: string; product?: string; order: number; nside: number; cells: number[]; precision: string; sourceUrl?: string; mocUrl?: string; note?: string }>;
+  downloadPlan?: DownloadPlan;
   notes?: string[];
 }
 interface OverlapSurveyView { surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; unitKind?: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }
@@ -990,6 +1021,19 @@ function publicExternalUrl(value: unknown): string | undefined {
   return parsed.toString();
 }
 
+function publicLocator(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const trimmed = value.trim();
+  if (/^(?:s3|oss):\/\//i.test(trimmed)) return trimmed;
+  if (/^file:\/\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === "file:" && !parsed.hostname && !parsed.username && !parsed.password) return trimmed;
+    } catch { return undefined; }
+  }
+  return publicExternalUrl(trimmed);
+}
+
 function publicFileName(value: unknown): string {
   const raw = typeof value === "string" ? value : "";
   if (!raw) return "";
@@ -1011,23 +1055,13 @@ async function fetchOverlapEvidence(component: OverlapComponentView, signal?: Ab
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     signal,
-    body: JSON.stringify({ layerIds: lookup.layerIds, order: lookup.order, cells: component.cells, limit: 250 }),
+    body: JSON.stringify({ layerIds: lookup.layerIds, order: lookup.order, cells: component.cells, limit: 5000 }),
   });
   if (!response.ok) throw new Error(`reverse lookup HTTP ${response.status}`);
   const result = await response.json() as OverlapEvidenceResult;
   overlapEvidenceCache.set(component.id, result);
   return result;
 }
-
-function csvCell(value: unknown): string {
-  const text = value == null ? "" : String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
-
-const OVERLAP_DOWNLOAD_HEADER = [
-  "component_id", "order", "nside", "ipix", "precision", "layer_id", "survey_id", "release_id", "product", "modality",
-  "source_file_id", "file_name", "external_source_url", "download_url", "ra_min_deg", "ra_max_deg", "dec_min_deg", "dec_max_deg", "area_deg2", "notes",
-] as const;
 
 function publicLayerEntry(layerId: string | undefined): { surveyId: string; releaseId: string; product: string; modality: string; sourceUrl?: string; geometrySourceUrl?: string } {
   const layer = layerId ? coverageCatalog?.layers.find((entry) => entry.layerId === layerId) : undefined;
@@ -1044,54 +1078,52 @@ function publicLayerEntry(layerId: string | undefined): { surveyId: string; rele
   };
 }
 
-function overlapCsvRows(component: OverlapComponentView, result: OverlapEvidenceResult | null): string[][] {
-  const files = new Map<string, Record<string, unknown>>();
-  result?.sourceFiles.forEach((source) => {
-    const id = sourceValue(source, ["fileId", "file_id", "sourceFileId", "source_file_id", "_id"]) ?? String(files.size);
-    files.set(id, source);
+function legacyDownloadPlan(result: OverlapEvidenceResult | null): DownloadPlan {
+  const sourceFiles = result?.sourceFiles ?? [];
+  const sourceById = new Map<string, Record<string, unknown>>();
+  sourceFiles.forEach((source) => {
+    const id = sourceValue(source, ["fileId", "file_id", "sourceFileId", "source_file_id", "_id"]);
+    if (id) sourceById.set(id, source);
   });
-  const edges = result?.edges ?? [];
-  const fallbackLayers = [...(coverageCatalog?.layers ?? [])].filter((layer) => layer.tileIdsByOrder?.[String(component.order)]?.some((tile) => (coverageBlockCache.get(coverageBlockKey(layer, component.order, tile)) ?? []).some((cell) => component.cells.includes(cell))));
-  if (!edges.length) {
-    const layers = fallbackLayers.length ? fallbackLayers : [{ layerId: "", surveyId: "", releaseId: "", product: "", modality: "" }];
-    return layers.map((layer) => {
-      const entry = publicLayerEntry(layer.layerId);
-      return [component.id, String(component.order), String(2 ** component.order), "", result?.precision ?? "entrypoint-only", layer.layerId, entry.surveyId, entry.releaseId, entry.product, entry.modality, "", "", entry.geometrySourceUrl ?? entry.sourceUrl ?? "", entry.sourceUrl ?? "", String(component.bounds.raMin), String(component.bounds.raMax), String(component.bounds.decMin), String(component.bounds.decMax), String(component.bounds.areaDeg2), entry.sourceUrl || entry.geometrySourceUrl ? "" : "no-public-download-entrypoint"];
+  const files = new Map<string, DownloadPlanFile>();
+  (result?.edges ?? []).forEach((edge) => {
+    const source = edge.sourceFileId ? sourceById.get(edge.sourceFileId) : undefined;
+    const sourceUri = publicLocator(sourceValue(source ?? {}, ["sourceUri", "source_uri", "uri", "urn"]) ?? edge.sourceUri);
+    const downloadUrl = publicExternalUrl(sourceValue(source ?? {}, ["downloadUrl", "download_url"]) ?? edge.downloadUrl ?? sourceUri);
+    const fileId = edge.sourceFileId ?? sourceUri ?? edge.edgeId ?? `edge:${edge.layerId ?? "unknown"}:${edge.order}:${edge.ipix}`;
+    const match: DownloadPlanMatch = { ...(edge.layerId ? { layerId: edge.layerId } : {}), order: edge.order, ipix: edge.ipix, precision: edge.precision, ...(edge.coverageMethod ? { coverageMethod: edge.coverageMethod } : {}), ...(edge.coverageRole ? { coverageRole: edge.coverageRole } : {}) };
+    const current = files.get(fileId);
+    if (current) {
+      if (!current.matchingCoverage.some((entry) => entry.layerId === match.layerId && entry.order === match.order && entry.ipix === match.ipix)) current.matchingCoverage.push(match);
+      return;
+    }
+    const fileName = sourceValue(source ?? {}, ["fileName", "file_name", "name"]) ?? edge.fileName;
+    const fileType = sourceValue(source ?? {}, ["fileType", "file_type", "type"]);
+    const sizeBytes = Number(sourceValue(source ?? {}, ["sizeBytes", "size_bytes", "size"]) ?? edge.sizeBytes);
+    files.set(fileId, {
+      fileId,
+      metadataState: source ? "complete" : "missing",
+      ...(fileName ? { fileName } : {}),
+      ...(fileType ? { fileType } : {}),
+      ...(Number.isFinite(sizeBytes) ? { sizeBytes } : {}),
+      ...(sourceUri ? { sourceUri } : {}),
+      downloadable: Boolean(downloadUrl),
+      ...(downloadUrl ? { downloadUrl } : {}),
+      matchingCoverage: [match],
     });
-  }
-  return edges.map((edge) => {
-    const sourceId = edge.sourceFileId ?? "";
-    const source = files.get(sourceId) ?? {};
-    const layer = publicLayerEntry(edge.layerId ?? sourceValue(source, ["layerId", "layer_id"]));
-    const sourceUrl = publicExternalUrl(edge.sourceUri ?? sourceValue(source, ["sourceUri", "source_uri", "sourceUrl", "source_url", "uri", "urn"])) ?? layer.geometrySourceUrl ?? layer.sourceUrl;
-    const downloadUrl = publicExternalUrl(edge.downloadUrl ?? sourceValue(source, ["downloadUrl", "download_url"])) ?? layer.sourceUrl;
-    const raMin = Number.isFinite(edge.raMin) ? edge.raMin : component.bounds.raMin;
-    const raMax = Number.isFinite(edge.raMax) ? edge.raMax : component.bounds.raMax;
-    const decMin = Number.isFinite(edge.decMin) ? edge.decMin : component.bounds.decMin;
-    const decMax = Number.isFinite(edge.decMax) ? edge.decMax : component.bounds.decMax;
+  });
+  const entrypoints = (result?.entrypoints ?? []).flatMap((entry): DownloadPlanEntrypoint[] => {
+    const common = { layerId: entry.layerId, ...(entry.productId ? { productId: entry.productId } : {}), ...(entry.surveyId ? { surveyId: entry.surveyId } : {}), ...(entry.releaseId ? { releaseId: entry.releaseId } : {}), ...(entry.product ? { product: entry.product } : {}), order: entry.order, nside: entry.nside, cells: entry.cells, precision: entry.precision, ...(entry.note ? { note: entry.note } : {}) };
     return [
-      component.id,
-      String(component.order),
-      String(2 ** component.order),
-      String(edge.ipix ?? ""),
-      edge.precision ?? result?.precision ?? "",
-      edge.layerId ?? sourceValue(source, ["layerId", "layer_id"]) ?? "",
-      edge.surveyId ?? sourceValue(source, ["surveyId", "survey_id"]) ?? layer.surveyId,
-      edge.releaseId ?? sourceValue(source, ["releaseId", "release_id"]) ?? layer.releaseId,
-      edge.product ?? sourceValue(source, ["product", "productName", "product_name"]) ?? layer.product,
-      edge.modality ?? sourceValue(source, ["modality", "data_modality"]) ?? layer.modality,
-      sourceId,
-      publicFileName(edge.fileName ?? sourceValue(source, ["name", "fileName", "file_name"])),
-      sourceUrl ?? "",
-      downloadUrl ?? "",
-      String(raMin),
-      String(raMax),
-      String(decMin),
-      String(decMax),
-      String(component.bounds.areaDeg2),
-      sourceUrl || downloadUrl ? "" : "no-public-download-entrypoint",
+      ...(entry.sourceUrl ? [{ ...common, kind: "official-data", purpose: "data-access" as const, url: entry.sourceUrl, sourceUrl: entry.sourceUrl }] : []),
+      ...(entry.mocUrl ? [{ ...common, kind: "coverage-moc", purpose: "coverage-reference" as const, url: entry.mocUrl, mocUrl: entry.mocUrl }] : []),
     ];
   });
+  return { schemaVersion: 1, files: [...files.values()], entrypoints, truncated: result?.truncated ?? false, warnings: [] };
+}
+
+function downloadPlanFor(result: OverlapEvidenceResult | null): DownloadPlan {
+  return result?.downloadPlan ?? legacyDownloadPlan(result);
 }
 
 async function downloadOverlapCsv(components: OverlapComponentView[], filename: string, button: HTMLButtonElement): Promise<void> {
@@ -1100,8 +1132,12 @@ async function downloadOverlapCsv(components: OverlapComponentView[], filename: 
   button.textContent = t("coverage.downloadLoading");
   try {
     const results = await Promise.all(components.map((component) => fetchOverlapEvidence(component)));
-    const rows = components.flatMap((component, index) => overlapCsvRows(component, results[index]));
-    const csv = [OVERLAP_DOWNLOAD_HEADER, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
+    const rows = components.flatMap((component, index) => overlapCsvRows(component, downloadPlanFor(results[index]), publicLayerEntry, results[index]?.precision));
+    if (!rows.length) {
+      toast(t("coverage.noDownloadEntries"));
+      return;
+    }
+    const csv = overlapCsvDocument(rows);
     const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
@@ -1116,10 +1152,6 @@ async function downloadOverlapCsv(components: OverlapComponentView[], filename: 
     button.replaceChildren(icon("download"), document.createTextNode(original));
     renderIcons();
   }
-}
-
-function overlapJsonRows(component: OverlapComponentView, result: OverlapEvidenceResult | null): Array<Record<string, string>> {
-  return overlapCsvRows(component, result).map((row) => Object.fromEntries(OVERLAP_DOWNLOAD_HEADER.map((key, index) => [key, row[index] ?? ""])));
 }
 
 async function downloadOverlapJson(components: OverlapComponentView[], filename: string, button: HTMLButtonElement): Promise<void> {
@@ -1139,7 +1171,7 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
         nside: 2 ** component.order,
         cells: component.cells,
         bounds: component.bounds,
-        rows: overlapJsonRows(component, results[index]),
+        ...(results[index] ? { downloadPlan: downloadPlanFor(results[index]) } : { downloadPlan: { schemaVersion: 1, files: [], entrypoints: [], truncated: false, warnings: ["reverse lookup was unavailable"] } }),
       })),
     };
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" }));
@@ -1158,80 +1190,100 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
   }
 }
 
+function appendSourceLocator(row: HTMLElement, sourceUri: string): void {
+  const local = sourceUri.startsWith("file:///");
+  const object = /^(?:s3|oss):\/\//i.test(sourceUri);
+  const locator = document.createElement("div");
+  locator.className = "overlap-source-locator";
+  const value = document.createElement("code");
+  value.textContent = `${local ? "LOCAL FILE URI" : object ? "OBJECT URI" : "SOURCE URI"} · ${sourceUri}`;
+  const copyUri = document.createElement("button");
+  copyUri.className = "icon-button overlap-source-copy";
+  copyUri.type = "button";
+  copyUri.title = "复制源文件 URI";
+  copyUri.setAttribute("aria-label", `复制源文件 URI ${sourceUri}`);
+  copyUri.append(icon("copy"));
+  copyUri.addEventListener("click", () => void copy(sourceUri, t("coverage.uriCopied")));
+  locator.append(value, copyUri);
+  row.append(locator);
+  row.append(Object.assign(document.createElement("small"), {
+    textContent: local
+      ? "本地文件定位符：需在对应数据挂载环境访问"
+      : object
+        ? "对象存储定位符：需使用对应存储权限访问"
+        : "源文件定位符不可由浏览器直接下载",
+  }));
+}
+
 function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): void {
   node.replaceChildren();
-  const entrypoints = result.entrypoints ?? [];
-  if (!result.available && !entrypoints.length) {
+  const plan = downloadPlanFor(result);
+  if (!result.available && !plan.files.length && !plan.entrypoints.length) {
     node.append(Object.assign(document.createElement("small"), { textContent: t("coverage.evidenceUnavailable") }));
     return;
   }
-  if (entrypoints.length) {
+  const directFiles = plan.files.filter((file) => file.downloadable).length;
+  const locatorFiles = plan.files.filter((file) => !file.downloadable && Boolean(file.sourceUri)).length;
+  const tileLinks = plan.entrypoints.filter((entry) => entry.kind === "tile-directory").length;
+  const heading = document.createElement("strong");
+  heading.textContent = `DOWNLOAD PLAN · ${plan.files.length} files · ${directFiles} direct downloads · ${locatorFiles} URI locators · ${tileLinks} tile links${plan.truncated ? " · truncated" : ""}`;
+  node.append(heading);
+  if (plan.warnings.length) {
+    const warning = document.createElement("small");
+    warning.textContent = plan.warnings.join(" · ");
+    warning.className = "overlap-evidence-warning";
+    node.append(warning);
+  }
+  if (plan.files.length) {
+    const filesHeading = document.createElement("strong");
+    filesHeading.textContent = "FILES · coverage matches";
+    node.append(filesHeading);
+    const list = document.createElement("div");
+    list.className = "overlap-evidence-files";
+    plan.files.forEach((file) => {
+      const row = document.createElement("div");
+      row.className = "overlap-evidence-file";
+      const title = document.createElement("strong");
+      title.textContent = file.fileName ?? file.fileId;
+      row.append(title);
+      const matchSummary = document.createElement("small");
+      matchSummary.textContent = `${file.matchingCoverage.length} coverage match${file.matchingCoverage.length === 1 ? "" : "es"} · ${joinUnique(file.matchingCoverage.map((match) => match.layerId)) || "layer unknown"} · ${joinUnique(file.matchingCoverage.map((match) => `O${match.order}:${match.ipix}`))}`;
+      row.append(matchSummary);
+      if (file.metadataState === "missing") row.append(Object.assign(document.createElement("small"), { textContent: "FileAsset metadata missing; not verified as a complete file record" }));
+      if (file.downloadable && file.downloadUrl) {
+        const link = drawerExternalLink(file.downloadUrl, t("coverage.downloadOfficial"));
+        if (link) row.append(link);
+      } else if (file.sourceUri) {
+        appendSourceLocator(row, file.sourceUri);
+      } else {
+        row.append(Object.assign(document.createElement("small"), { textContent: "没有公开文件下载地址" }));
+      }
+      list.append(row);
+    });
+    node.append(list);
+  } else {
+    node.append(Object.assign(document.createElement("small"), { textContent: t("coverage.noSourceFiles") }));
+  }
+  if (plan.entrypoints.length) {
     const heading = document.createElement("strong");
-    heading.textContent = `PUBLIC MOC ENTRYPOINTS · ${entrypoints.length}`;
+    heading.textContent = `DATA / COVERAGE ENTRYPOINTS · ${plan.entrypoints.length}`;
     node.append(heading);
     const list = document.createElement("div");
     list.className = "overlap-evidence-files";
-    entrypoints.forEach((entry) => {
+    plan.entrypoints.forEach((entry) => {
       const row = document.createElement("div");
       row.className = "overlap-evidence-file";
-      row.append(Object.assign(document.createElement("strong"), { textContent: `${entry.product ?? entry.productId ?? entry.layerId} · O${entry.order} · ${entry.cells.length} cells` }));
+      row.append(Object.assign(document.createElement("strong"), { textContent: `${entry.kind} · ${entry.product ?? entry.productId ?? entry.layerId ?? "entrypoint"}` }));
+      if (entry.order !== undefined) row.append(Object.assign(document.createElement("small"), { textContent: `O${entry.order} · ${(entry.cells ?? []).length} cells · ${entry.precision}` }));
       if (entry.note) row.append(Object.assign(document.createElement("small"), { textContent: entry.note }));
-      const links = document.createElement("div");
-      links.className = "overlap-unit-links";
-      const sourceLink = drawerExternalLink(entry.sourceUrl, "Public source");
-      if (sourceLink) links.append(sourceLink);
-      const mocLink = drawerDocLink(entry.mocUrl, "FITS MOC");
-      if (mocLink) links.append(mocLink);
-      if (links.childElementCount) row.append(links);
+      const entryUrl = entry.url ?? entry.sourceUrl ?? entry.mocUrl;
+      const entryLink = drawerDocLink(entryUrl, entry.kind === "tile-directory" ? `Open tile ${String(entry.tileId ?? "")} directory`.trim() : entry.purpose === "coverage-reference" ? "Coverage reference" : "Official data entrypoint");
+      if (entryLink) row.append(entryLink);
       list.append(row);
     });
     node.append(list);
   }
-  if (!result.available) return;
-  const files = new Map<string, Record<string, unknown>>();
-  result.sourceFiles.forEach((source) => {
-    const id = sourceValue(source, ["fileId", "file_id", "sourceFileId", "source_file_id", "_id"]) ?? String(files.size);
-    files.set(id, source);
-  });
-  const heading = document.createElement("strong");
-  heading.textContent = `DOWNLOAD PLAN · ${files.size} files · ${result.edges.length} coverage edges${result.truncated ? " · truncated" : ""}`;
-  node.append(heading);
-  if (!files.size) {
-    node.append(Object.assign(document.createElement("small"), { textContent: t("coverage.noSourceFiles") }));
-    return;
-  }
-  const list = document.createElement("div");
-  list.className = "overlap-evidence-files";
-  files.forEach((source) => {
-    const row = document.createElement("div");
-    row.className = "overlap-evidence-file";
-    const name = publicFileName(sourceValue(source, ["name", "fileName", "file_name"])) || "source file";
-    const title = document.createElement("strong");
-    title.textContent = name;
-    row.append(title);
-    const wcs = source.wcs_summary;
-    if (wcs && typeof wcs === "object") {
-      const summary = wcs as Record<string, unknown>;
-      const raMin = Number(summary.ra_min_deg);
-      const raMax = Number(summary.ra_max_deg);
-      const decMin = Number(summary.dec_min_deg);
-      const decMax = Number(summary.dec_max_deg);
-      if ([raMin, raMax, decMin, decMax].every(Number.isFinite)) row.append(Object.assign(document.createElement("small"), { textContent: `RA ${raMin.toFixed(3)}°–${raMax.toFixed(3)}° · DEC ${decMin.toFixed(3)}°–${decMax.toFixed(3)}°` }));
-    }
-    const uri = publicExternalUrl(sourceValue(source, ["downloadUrl", "download_url", "sourceUrl", "source_url", "uri", "source_uri", "urn"]));
-    if (uri) {
-      if (/^https?:\/\//i.test(uri)) {
-        const link = document.createElement("a");
-        link.href = uri;
-        link.target = "_blank";
-        link.rel = "noreferrer";
-        link.textContent = t("coverage.downloadOfficial");
-        row.append(link);
-      }
-    } else row.append(Object.assign(document.createElement("small"), { textContent: "no-public-download-entrypoint" }));
-    list.append(row);
-  });
-  node.append(list);
+  renderIcons();
 }
 
 async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLElement): Promise<void> {
@@ -1680,7 +1732,7 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
     }
   }
   const requestSequence = ++overlapRequestSequence;
-  overlapMode = activate;
+  setOverlapMode(activate);
   if (!activate) {
     clearLayerCloseTimer();
     coverageDots?.setViewportRightInset(0);
@@ -1882,9 +1934,9 @@ function toast(message: string): void {
   window.setTimeout(() => { element.dataset.visible = "false"; }, 1800);
 }
 
-async function copy(value: string): Promise<void> {
+async function copy(value: string, message = "SHA-256 已复制"): Promise<void> {
   await navigator.clipboard.writeText(value);
-  toast("SHA-256 已复制");
+  toast(message);
 }
 
 function renderIcons(): void {
@@ -2244,7 +2296,7 @@ function applySkyDeepLink(): void {
       enterAtlasExperience(deepLinkTarget.surveyId, deepLinkTarget.productId);
       deepLinkTarget = { ...deepLinkTarget };
     }
-    byId("coverage-state").textContent = deepLinkTarget.error;
+    byId("coverage-state").textContent = deepLinkTarget.error ?? "PRODUCT DEEP LINK INVALID";
     return;
   }
   if (!deepLinkTarget.surveyId) {
@@ -2265,49 +2317,46 @@ async function initialize(): Promise<void> {
     console.warn("HEALPix globe unavailable", error);
     byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
   }
-  const assetsPromise = fetchPublicJson<unknown>("/api/v1/assets", { headers: { Accept: "application/json" } }).then((value) => {
+  const assetsPromise = loadPublicCatalogResource<ReleaseManifest>(async () => {
+    const value = await fetchPublicJson<unknown>("/api/v1/assets", { headers: { Accept: "application/json" } });
     if (!isReleaseManifest(value)) throw new Error("Public asset catalog response is invalid");
     cachePublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.assets, value);
     return value;
-  }).catch((error) => {
-    const cached = readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.assets, isReleaseManifest);
-    if (!cached) throw error;
-    usedCachedPublicCatalog = true;
-    return cached;
+  }, {
+    current: manifest,
+    cached: readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.assets, isReleaseManifest),
   });
-  const coveragePromise = fetchCoverageCatalogDocument().then(
-    (catalog) => ({ catalog, error: undefined as unknown }),
-    (error: unknown) => {
-      const cached = readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.coverage, isCoverageCatalog);
-      if (cached) {
-        usedCachedPublicCatalog = true;
-        return { catalog: cached, error };
-      }
-      return { catalog: null, error };
-    },
-  );
-  const surveysPromise = fetchPublicJson<unknown>("/api/v1/surveys", { headers: { Accept: "application/json" } }).then((value) => {
+  const coveragePromise = loadPublicCatalogResource<CoverageCatalog>(fetchCoverageCatalogDocument, {
+    current: coverageCatalog,
+    cached: readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.coverage, isCoverageCatalog),
+  });
+  const surveysPromise = loadPublicCatalogResource<SurveyIndex>(async () => {
+    const value = await fetchPublicJson<unknown>("/api/v1/surveys", { headers: { Accept: "application/json" } });
     if (!isSurveyIndex(value)) throw new Error("Public survey catalog response is invalid");
     cachePublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.surveys, value);
     return value;
-  }).catch((error) => {
-    const cached = readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.surveys, isSurveyIndex);
-    if (!cached) throw error;
-    usedCachedPublicCatalog = true;
-    return cached;
+  }, {
+    current: surveyIndex,
+    cached: readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.surveys, isSurveyIndex),
   });
-  const [surveys, coverageResult] = await Promise.all([
-    surveysPromise,
-    coveragePromise,
-  ]);
-  surveyIndex = surveys;
-  initializeModalityFilter();
-  renderSurveys();
-  if (coverageResult.catalog) {
+  const [assetsResult, coverageResult, surveysResult] = await Promise.all([assetsPromise, coveragePromise, surveysPromise]);
+  recordPublicCatalogResult("assets", assetsResult);
+  recordPublicCatalogResult("coverage", coverageResult);
+  recordPublicCatalogResult("surveys", surveysResult);
+
+  if (surveysResult.value) {
+    surveyIndex = surveysResult.value;
+    initializeModalityFilter();
+    renderSurveys();
+  } else if (!surveyIndex) {
+    byId("survey-list").replaceChildren(Object.assign(document.createElement("div"), { className: "error-row", textContent: t("coverage.catalogLoadFailed") }));
+  }
+
+  if (coverageResult.value) {
     // Keep the catalog and URL state usable even when the optional WebGL
     // viewer could not be created (for example, in a headless browser).
     try {
-      await hydrateCoverageCatalog(coverageResult.catalog);
+      if (coverageResult.value !== coverageCatalog || coverageResult.source !== "memory") await hydrateCoverageCatalog(coverageResult.value);
       applySkyDeepLink();
       scheduleCoverageRefresh();
     } catch (error) {
@@ -2315,21 +2364,23 @@ async function initialize(): Promise<void> {
       byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
     }
   } else {
-    console.warn("Coverage catalog unavailable", coverageResult.error);
     byId("coverage-state").textContent = "COVERAGE CATALOG UNAVAILABLE";
   }
-  manifest = await assetsPromise;
-  byId("footer-release").textContent = `${manifest.bundle.id.toUpperCase()} · VERIFIED`;
-  byId("stat-releases").textContent = String(manifest.statistics.releases);
-  byId("stat-acquired").textContent = String(manifest.statistics.acquired);
-  byId("stat-moc").textContent = String(manifest.statistics.rawMocFiles);
-  byId("stat-packages").textContent = String(manifest.statistics.packages);
-  byId("stat-size").textContent = bytes(manifest.statistics.runtimeBytes ?? manifest.statistics.totalBytes);
-  byId("home-stat-releases").textContent = String(manifest.statistics.releases);
-  byId("bundle-hash").textContent = manifest.bundle.sha256;
-  byId("generated-at").textContent = new Date(manifest.generatedAt).toLocaleString("zh-CN", { hour12: false, timeZone: "UTC" }) + " UTC";
-  const provenance = manifest.files.find((record) => record.kind === "provenance");
-  if (provenance) byId<HTMLAnchorElement>("provenance-download").href = provenance.downloadUrl;
+
+  if (assetsResult.value) {
+    manifest = assetsResult.value;
+    byId("footer-release").textContent = `${manifest.bundle.id.toUpperCase()} · VERIFIED`;
+    byId("stat-releases").textContent = String(manifest.statistics.releases);
+    byId("stat-acquired").textContent = String(manifest.statistics.acquired);
+    byId("stat-moc").textContent = String(manifest.statistics.rawMocFiles);
+    byId("stat-packages").textContent = String(manifest.statistics.packages);
+    byId("stat-size").textContent = bytes(manifest.statistics.runtimeBytes ?? manifest.statistics.totalBytes);
+    byId("home-stat-releases").textContent = String(manifest.statistics.releases);
+    byId("bundle-hash").textContent = manifest.bundle.sha256;
+    byId("generated-at").textContent = new Date(manifest.generatedAt).toLocaleString("zh-CN", { hour12: false, timeZone: "UTC" }) + " UTC";
+    const provenance = manifest.files.find((record) => record.kind === "provenance");
+    if (provenance) byId<HTMLAnchorElement>("provenance-download").href = provenance.downloadUrl;
+  }
   if (usedCachedPublicCatalog) byId("coverage-state").textContent = "PUBLIC CATALOG CACHED · RETRYING";
 }
 
@@ -2357,7 +2408,7 @@ function resetCoverageExperience(updateUrl = true): void {
   deepLinkTarget = null;
   if (updateUrl) syncSkyDeepLink();
   clearLayerCloseTimer();
-  overlapMode = false;
+  setOverlapMode(false);
   overlapController?.abort();
   overlapController = null;
   activeOverlapSurveyIds = [];
@@ -2393,7 +2444,7 @@ byId("coverage-layers-toggle").addEventListener("click", () => {
     return;
   }
   const layers = byId("coverage-layers");
-  setCoverageLayersOpen(layers.hidden);
+  setCoverageLayersOpen(Boolean(layers.hidden));
 });
 byId("coverage-empty-guide-action").addEventListener("click", () => {
   byId("coverage-layers-toggle").click();
@@ -2496,7 +2547,7 @@ document.addEventListener("keydown", (event) => {
     const doubleEscape = now - lastEscapeAt < 500;
     lastEscapeAt = now;
     closeCoverageContextMenu();
-    overlapMode = false;
+    setOverlapMode(false);
     overlapController?.abort();
     overlapController = null;
     activeOverlapSurveyIds = [];

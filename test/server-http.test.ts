@@ -166,31 +166,67 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
 
   const csstDesiOverlap = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["csst", "desi"], requestedOrder: 4 }) });
   assert.equal(csstDesiOverlap.status, 200);
-  const csstDesiOverlapBody = await csstDesiOverlap.json() as { commonOrder: number; pixels: number[]; components: Array<{ order: number; surveys?: Array<{ sourceUnitIndex?: { unitKind?: string }; sourceUnits?: { units: Array<{ unitId: string }>; totalUnits: number } | null }> }> };
+  const csstDesiOverlapBody = await csstDesiOverlap.json() as { commonOrder: number; pixels: number[]; components: Array<{ id: string; order: number; cells: number[]; evidenceLookup?: { endpoint: string; layerIds: string[]; order: number; precision: string; deferred: boolean }; surveys?: Array<{ sourceUnitIndex?: { unitKind?: string }; sourceUnits?: { units: Array<{ unitId: string }>; totalUnits: number } | null }> }> };
   assert.equal(csstDesiOverlapBody.commonOrder, 4);
   assert.ok(csstDesiOverlapBody.pixels.length > 0);
   assert.ok(csstDesiOverlapBody.components.every((component) => component.order === 4));
   const tileMatches = csstDesiOverlapBody.components.flatMap((component) => component.surveys ?? []).filter((entry) => entry.sourceUnitIndex?.unitKind === "tile").map((entry) => entry.sourceUnits).filter((value): value is { units: Array<{ unitId: string }>; totalUnits: number } => Boolean(value));
   assert.ok(tileMatches.some((match) => match.totalUnits > 0 && match.units.some((unit) => unit.unitId)));
+  const csstDesiComponent = csstDesiOverlapBody.components[0];
+  assert.ok(csstDesiComponent?.evidenceLookup?.layerIds.includes("desi-dr1-spectra-footprint"));
+
+  const publicOverlap = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["galex", "nvss"], requestedOrder: 4 }) });
+  assert.equal(publicOverlap.status, 200);
+  const publicOverlapBody = await publicOverlap.json() as { components: Array<{ cells: number[]; evidenceLookup?: { endpoint: string; layerIds: string[]; order: number } }> };
+  const publicComponent = publicOverlapBody.components[0];
+  assert.ok(publicComponent?.evidenceLookup);
+  assert.ok(publicComponent.evidenceLookup.layerIds.some((layerId) => layerId.startsWith("galex-")));
+  assert.ok(publicComponent.evidenceLookup.layerIds.some((layerId) => layerId.startsWith("nvss-")));
+
+  const publicReverseLookup = await fetch(`http://127.0.0.1:${port}${publicComponent.evidenceLookup.endpoint}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ layerIds: publicComponent.evidenceLookup.layerIds, order: publicComponent.evidenceLookup.order, cells: publicComponent.cells, limit: 250 }) });
+  assert.equal(publicReverseLookup.status, 200);
+  const publicReverseBody = await publicReverseLookup.json() as { downloadPlan: { files: unknown[]; entrypoints: Array<{ layerId?: string; url?: string; cells?: number[] }> } };
+  assert.deepEqual(publicReverseBody.downloadPlan.files, []);
+  assert.ok(publicReverseBody.downloadPlan.entrypoints.some((entry) => entry.layerId && entry.url && (entry.cells?.length ?? 0) > 0));
 
   const componentId = csstDesiOverlapBody.components[0] ? "C01" : "C99";
   const overlapDetails = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap/details`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["csst", "desi"], componentId }) });
   assert.equal(overlapDetails.status, 200);
-  const overlapDetailsBody = await overlapDetails.json() as { schemaVersion: number; component: { id: string; order: number }; publicSources: Array<{ surveyId: string; coverageClaim?: { kind: string } }>; warehouseEvidence: Array<{ state: string; connector: { status: string } }>; method: { summary: string }; reverseLookup: { endpoint: string; order: number; deferred: boolean } };
+  const overlapDetailsBody = await overlapDetails.json() as { schemaVersion: number; component: { id: string; order: number }; publicSources: Array<{ surveyId: string; coverageClaim?: { kind: string } }>; warehouseEvidence: Array<{ state: string; connector: { status: string } }>; method: { summary: string }; reverseLookup: { endpoint: string; layerIds: string[]; order: number; deferred: boolean } };
   assert.equal(overlapDetailsBody.schemaVersion, 1);
   assert.equal(overlapDetailsBody.component.id, componentId);
   assert.ok(overlapDetailsBody.method.summary.length > 0);
   assert.equal(overlapDetailsBody.reverseLookup.endpoint, "/api/v1/coverage/reverse-lookup");
   assert.equal(overlapDetailsBody.reverseLookup.order, overlapDetailsBody.component.order);
   assert.equal(overlapDetailsBody.reverseLookup.deferred, true);
+  assert.ok(overlapDetailsBody.reverseLookup.layerIds.includes("desi-dr1-spectra-footprint"));
   assert.ok(overlapDetailsBody.publicSources.every((source) => source.coverageClaim?.kind));
   assert.ok(overlapDetailsBody.warehouseEvidence.every((entry) => entry.connector.status === "known" || entry.connector.status === "unavailable"));
 
   const reverseLookup = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/reverse-lookup`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ layerIds: ["desi-dr1-spectra-footprint"], order: 4, cells: [1087] }) });
   assert.equal(reverseLookup.status, 200);
-  const reverseBody = await reverseLookup.json() as { available: boolean; precision: string };
+  const reverseBody = await reverseLookup.json() as {
+    available: boolean;
+    precision: string;
+    edges: unknown[];
+    sourceFiles: unknown[];
+    downloadPlan: {
+      files: Array<{ sourceUri?: string; downloadable: boolean; downloadUrl?: string; matchingCoverage: Array<{ order: number; ipix: number }> }>;
+      entrypoints: Array<{ kind: string; purpose: string; url?: string; tileId?: string; cells?: number[] }>;
+      truncated: boolean;
+      warnings: string[];
+    };
+  };
   assert.equal(reverseBody.available, false);
   assert.equal(reverseBody.precision, "entrypoint-only");
+  assert.deepEqual(reverseBody.downloadPlan.files, []);
+  assert.equal(reverseBody.downloadPlan.truncated, false);
+  assert.ok(reverseBody.downloadPlan.entrypoints.some((entry) => entry.kind === "official-release" && entry.purpose === "data-access"));
+  assert.ok(reverseBody.downloadPlan.entrypoints.some((entry) => entry.kind === "coverage-source" && entry.purpose === "coverage-reference"));
+  assert.ok(reverseBody.downloadPlan.entrypoints.some((entry) => entry.kind === "tile-directory" && entry.purpose === "data-access"));
+  assert.ok(reverseBody.downloadPlan.entrypoints.some((entry) => entry.kind === "tile-directory" && entry.tileId && (entry.cells?.length ?? 0) > 0));
+  assert.equal(reverseBody.downloadPlan.entrypoints.some((entry) => entry.kind === "official-data"), false);
+  assert.ok(reverseBody.downloadPlan.entrypoints.every((entry) => entry.url?.startsWith("https://") || entry.url?.startsWith("/api/v1/")));
 
   const surveysResponse = await fetch(`http://127.0.0.1:${port}/api/v1/surveys`);
   assert.equal(surveysResponse.status, 200);
@@ -245,8 +281,23 @@ test("admin endpoints require a token and expose the configured control-plane bo
 
   const denied = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tasks`);
   assert.equal(denied.status, 401);
+  const deniedProduct = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/bb743658cd44269d7675`);
+  assert.equal(deniedProduct.status, 401);
+  assert.deepEqual(await deniedProduct.json(), { error: "Invalid Assets admin token" });
   const malformed = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tasks`, { headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(malformed.status, 503);
+
+  const existingProduct = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/bb743658cd44269d7675`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(existingProduct.status, 200);
+  assert.equal((await existingProduct.json() as { product: { productId: string } }).product.productId, "bb743658cd44269d7675");
+
+  const missingProduct = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/missing-product-id`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(missingProduct.status, 404);
+  assert.deepEqual(await missingProduct.json(), { error: "Product not found" });
+
+  const malformedProductPath = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/%E0%A4%A`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(malformedProductPath.status, 400);
+  assert.deepEqual(await malformedProductPath.json(), { error: "Invalid URL path segment" });
 
   const catalogStatus = await fetch(`http://127.0.0.1:${port}/api/v1/admin/catalog/status`, { headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(catalogStatus.status, 200);

@@ -205,16 +205,18 @@ export function buildOverlapDetails(input: {
   sourceUnitsByLayer?: ReadonlyMap<string, unknown>;
   warehouseSnapshots?: ReadonlyMap<string, WarehouseLayerSnapshot>;
 }): OverlapDetails {
+  const componentLayers = selectedLayers(input.layers, input.result, input.component);
   const warehouseEvidence = warehouseEvidenceFor(input.layers, input.result, input.component, input.warehouseSnapshots ?? new Map());
-  const precisions = warehouseEvidence.map((entry) => entry.precision);
+  const warehousePrecision = new Map(warehouseEvidence.map((entry) => [entry.layerId, entry.precision]));
+  const precisions: DetailPrecision[] = componentLayers.map((layer) => warehousePrecision.get(layer.layerId) ?? layer.sourceUnitIndex?.status ?? "entrypoint-only");
   const precision: DetailPrecision = precisions.includes("truncated")
     ? "truncated"
-    : precisions.includes("estimated")
-      ? "estimated"
-      : precisions.includes("exact")
-        ? "exact"
+    : precisions.length > 0 && precisions.every((entry) => entry === "exact")
+      ? "exact"
+      : precisions.length > 0 && precisions.every((entry) => entry === "exact" || entry === "estimated")
+        ? "estimated"
         : "entrypoint-only";
-  const layerIds = warehouseEvidence.map((entry) => entry.layerId);
+  const layerIds = componentLayers.map((entry) => entry.layerId);
   const method = {
     summary: "Intersect explicit ICRS/NESTED cells at the highest real common order, then label side-connected components.",
     docsUrl: "/api/v1/coverage/catalog",

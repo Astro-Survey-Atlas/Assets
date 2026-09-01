@@ -1,16 +1,18 @@
 # Assets Session Handoff
 
-Updated: 2026-08-31
+Updated: 2026-09-01
 
 Repository: `/home/aaron/Repo/Astro-Survey-Atlas-Assets`
 
-Starting commit: `49f434b`; latest code commit: `a24a9f5`
+Starting commit: `49f434b`; latest code commit before this closure: `a24a9f5`
 
 ## Current Session Snapshot
 
 Updated after the 2026-08-31 registration-defaults, coverage-layer UI and
-font-consistency rollouts. Preserve all existing changes and inspect
-overlapping diffs before editing.
+font-consistency rollouts, plus the MOC discovery and reverse-lookup follow-up.
+The code-stage reliability and storage-boundary work is complete in the working
+tree; production deployment remains deferred. Preserve all existing changes
+and inspect overlapping diffs before editing.
 
 ### Completed in This Session
 
@@ -30,8 +32,51 @@ overlapping diffs before editing.
   Chinese glyphs, so mono-styled labels do not silently select a host JP font.
 - Added focused layout and registration tests; API documentation describes the
   defaulting behavior. Warehouse and MOC-Core-SDK contracts were not changed.
+- MOC discovery now exposes an explicit `discoveryState` (`running`, `ready`,
+  `empty`, `incomplete` or `failed`). The admin review dialog explains failure
+  reasons and evidence, hides candidate/build controls unless a complete v2
+  summary is ready, and keeps retries available for terminal failures.
+- Reverse lookup now returns a file-level `downloadPlan`: one row per
+  FileAsset, all matching NESTED cells, HTTP(S)-only direct downloads, and
+  separate official/MOC/tile entrypoints. `s3://`, `oss://` and canonical
+  `file:///...` values remain non-clickable location hints. The plan is
+  exported by both CSV and JSON.
 
-### Verification and Deployment
+### 2026-09-01 Overlap Download Plan Closure
+
+- Every overlap component now defers reverse lookup for all layers that
+  actually participate in that component. Public MOC/entrypoint layers, exact
+  DESI Tile layers and Warehouse FileAsset layers are no longer filtered out
+  by a file-only predicate.
+- Warehouse `FileAsset.sourceUri` preserves public HTTP(S), `s3://`, `oss://`
+  and hostless `file:///...` locators. Only public HTTP(S) is a browser direct
+  download; local and object-store URIs are shown and copyable without being
+  rewritten or falsely marked downloadable.
+- DESI Tile entrypoints use the official cumulative Tile directory and carry
+  `tileId` plus the exact requested NESTED cells intersecting that Tile. O4
+  uses the locked coarse reverse index; finer orders rerasterize the locked
+  Tile geometry with the same `queryDiscInclusive` rule before intersection.
+  A component's full cell list is never copied onto each Tile.
+- CSV exports distinguish `item_kind=file` and `item_kind=entrypoint`, retain
+  complete file coverage matches, and expose Tile `tile_id`, exact
+  `matching_cells` and `entrypoint_url`. Empty plans produce zero data rows;
+  the old `no-public-download-entrypoint` placeholder is gone. JSON preserves
+  the same authoritative `downloadPlan` structure.
+- The compact mobile overlap view now hides the duplicate selection queue and
+  gives the scrollable result panel an opaque reading surface while overlap is
+  active. Desktop behavior is unchanged.
+- Final local gate: `npm run validate` passes 98 Node tests plus the Core wheel
+  verification. Helm lint and development/production template rendering pass,
+  as does `git diff --check`. The generated 211-file bundle remains
+  `e7684305a9c81df66a2fd7c9387c1dc3672c093caecdfe36383076ee5e520f2c`.
+- Cache-disabled Chromium smoke at 1440x900 and 390x844 reached CSST/DESI
+  `COMMON ORDER O8` with 11,119 cells and 324 official Tile links for C01.
+  Tile cells were strict subsets of the component where appropriate. The
+  Chinese mobile pass loaded both bundled CJK weights, had no browser errors
+  or horizontal overflow, and screenshots/canvas-region pixel samples were
+  nonblank. No cluster or 72602 deployment was performed.
+
+### Last Deployed Baseline
 
 - `npm run build`, `npm test` (85 tests), `npm run validate`,
   `helm lint charts/astro-survey-atlas-assets`, Helm template rendering, and
@@ -55,7 +100,38 @@ overlapping diffs before editing.
   resolved to `Noto Sans CJK SC`; Latin and numeric mono glyphs resolved to
   `Noto Sans Mono`.
 
-### 2026-08-31 Storage and Workspace Continuation
+### Current code-stage closure
+
+- The browser loads `surveys`, `coverage` and `assets` as independent resources.
+  Each request retries, then keeps the current in-memory value or a validated
+  browser cache; one failed request cannot clear the other catalogs. The
+  source state is exposed as `fresh`, `memory`, `cached` or `unavailable` on the
+  document for diagnostics.
+- Admin product routes have stable JSON semantics: missing/invalid Bearer
+  tokens are `401`, unknown product IDs are `404`, malformed path/JSON is `400`,
+  revision conflicts are `409`, and unexpected admin errors are a generic
+  `500`. The known `bb743658cd44269d7675` record is an existing CSST W2 draft.
+- Release loading and object-store publication force evidence paths (input
+  manifests, normalized scans, task snapshots, scan errors, raw/CSST data) to
+  remain evidence even if a stale manifest declares `runtime`. Dynamic package
+  and MOC records still use explicit logical asset IDs and verified hashes.
+- Node regression tests cover the public catalog fallback policy, product API
+  error matrix and evidence allowlist boundary. Production S3, 72602 minipc,
+  the production hostname and Ingress remain untouched.
+- Local final gate passed: `npm run validate` completed 93 Node tests plus the
+  Core wheel verification; Helm lint, development/production template
+  rendering, and `git diff --check` also pass. The generated local bundle is
+  `e7684305a9c81df66a2fd7c9387c1dc3672c093caecdfe36383076ee5e520f2c` and has
+  not been deployed.
+- `npx tsc -p tsconfig.site.json --noEmit` and the server type check pass; the
+  site tsconfig now includes the installed Node type declarations used by the
+  shared survey registry module.
+- Chromium smoke passed at 1440px and 390px: both loaded 17 surveys with
+  `document.fonts.status=loaded` and no horizontal overflow. With the coverage
+  catalog request forced to fail, the page stayed populated and reported
+  `data-public-catalog-state="degraded"`.
+
+### 2026-08-31 Storage and Workspace Continuation (historical checkpoint)
 
 - Dynamic Resource Package v3 archives are now generated from verified,
   explicitly published MOC records, persisted on the content volume and
@@ -81,7 +157,7 @@ overlapping diffs before editing.
   template rendering with the production overlay and `git diff --check` pass.
   Workspace `npm run build` and `npm test` pass (one PostgreSQL test is skipped
   when its URL is unset).
-- The dev rollout is Helm revision 101 with image
+- The dev rollout at that checkpoint was Helm revision 101 with image
   `0.1.0-20260831-164957`, Pod `1/1 Running`, and live bundle SHA-256
   `ccc273c90738140dc3760ea387529a7d41a21e77b4187ca510f06760a1130046` at
   `http://10.15.51.75:32083/`. The live JWST Resource Package archive is
@@ -448,8 +524,11 @@ the list without creating a mobile hover layer.
 ## Live Deployment Layout
 
 Assets is a separate Helm release in namespace `astro-survey-atlas-assets`.
-The current dev rollout is Helm revision 99, image tag
-`0.1.0-20260831-105813`, and serves through:
+The latest recorded dev rollout is Helm revision 103, image tag
+`0.1.0-20260831-184932`, and serves through:
+
+The current working-tree closure is not deployed; these endpoints continue to
+serve that recorded image until a later, explicitly approved rollout.
 
 ```text
 http://10.15.51.75:32083/

@@ -202,7 +202,11 @@ input:disabled, select:disabled, textarea:disabled { background: #071017; color:
 .moc-review-detail p { margin: 4px 0; }
 #moc-review-state[data-state="ready"] { border-left-color: var(--green); }
 #moc-review-state[data-state="empty"] { border-left-color: var(--ochre); }
-#moc-review-state[data-state="warning"], #moc-review-state[data-state="missing"] { border-left-color: var(--coral); }
+#moc-review-state[data-state="running"] { border-left-color: var(--teal); }
+#moc-review-state[data-state="incomplete"], #moc-review-state[data-state="failed"] { border-left-color: var(--coral); }
+.moc-review-failure { display: grid; gap: 6px; padding: 11px 12px; border-left: 3px solid var(--coral); background: rgba(50, 26, 29, .7); color: var(--ink); font: 10px/1.45 var(--font-mono), monospace; overflow-wrap: anywhere; }
+.moc-review-failure p { margin: 0; }
+.moc-review-failure small { color: #ffb0b5; }
 .review-survey { border-top: 1px solid var(--line); }
 .review-survey:last-child { border-bottom: 1px solid var(--line); }
 .review-survey-header { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 13px; align-items: center; width: 100%; padding: 16px 0; border: 0; background: transparent; color: var(--ink); cursor: pointer; text-align: left; }

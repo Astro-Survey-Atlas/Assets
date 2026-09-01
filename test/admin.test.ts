@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { AdminHttpError, AssetsAdmin, buildConnectorResource, buildConnectorResources, buildTaskResource, connectorView, taskView, type ObjectStorageProbeInput } from "../server/admin.js";
+import { AdminHttpError, AssetsAdmin, buildConnectorResource, buildConnectorResources, buildTaskResource, connectorView, mocDiscoveryState, taskView, type ObjectStorageProbeInput } from "../server/admin.js";
 import { aggregateWorkAttempts } from "../site/admin/work-items.js";
 
 test("work output aggregation counts attempts but renders only the latest result", () => {
@@ -234,11 +234,13 @@ test("MOC discovery lists stay compact while details expose review summaries", a
   const detail = await admin.getMocDiscoveryRequest("jwst-moc-discovery");
 
   assert.equal(list[0]?.status.reviewSummary, undefined);
+  assert.equal(list[0]?.status.discoveryState, "ready");
   assert.equal(detail.surveyId, "jwst");
   assert.equal(detail.releaseId, "dr1");
   assert.equal(detail.productId, "jwst-dr1");
   assert.equal(detail.status.reviewSummary?.candidates[0]?.candidateId, "jwst");
   assert.equal(detail.status.reviewSummary?.candidates[0]?.mocUrl, "https://alasky.cds.unistra.fr/jwst/moc.fits");
+  assert.equal(detail.status.discoveryState, "ready");
 });
 
 test("MOC views preserve a legitimate zero-result summary separately from a missing summary", async () => {
@@ -258,10 +260,21 @@ test("MOC views preserve a legitimate zero-result summary separately from a miss
   const emptyView = await admin.getMocDiscoveryRequest(empty.metadata.name);
   const legacyView = await admin.getMocDiscoveryRequest(legacy.metadata.name);
   assert.equal(emptyView.status.reviewSummaryState, "available");
+  assert.equal(emptyView.status.discoveryState, "empty");
   assert.deepEqual(emptyView.status.reviewSummary?.candidates, []);
   assert.equal(emptyView.status.candidateCount, 0);
   assert.equal(legacyView.status.reviewSummaryState, "missing");
+  assert.equal(legacyView.status.discoveryState, "incomplete");
   assert.equal(legacyView.status.reviewSummary, undefined);
+});
+
+test("MOC discovery state makes Warehouse failures and incomplete summaries explicit", () => {
+  assert.equal(mocDiscoveryState({ phase: "FAILED", reason: "ReconcileError" }), "failed");
+  assert.equal(mocDiscoveryState({ phase: "RUNNING" }), "running");
+  assert.equal(mocDiscoveryState({ phase: "SUCCEEDED", reviewSummary: { schemaVersion: 2, truncated: false, summaryTruncated: false, candidates: [{ candidateId: "roman" }] } }), "ready");
+  assert.equal(mocDiscoveryState({ phase: "SUCCEEDED", reviewSummary: { schemaVersion: 2, truncated: false, summaryTruncated: false, candidates: [] } }), "empty");
+  assert.equal(mocDiscoveryState({ phase: "SUCCEEDED", reviewSummary: { schemaVersion: 2, truncated: true, summaryTruncated: false, candidates: [{ candidateId: "roman" }] } }), "incomplete");
+  assert.equal(mocDiscoveryState({ phase: "SUCCEEDED", reviewSummaryState: "missing" }), "incomplete");
 });
 
 test("MOC views accept zero-result summaries when Kubernetes omits empty arrays", async () => {

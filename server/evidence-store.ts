@@ -35,6 +35,65 @@ export interface CoverageEdge {
   precision: ReversePrecision;
 }
 
+export interface DownloadPlanMatch {
+  layerId?: string;
+  order: number;
+  ipix: number;
+  precision: ReversePrecision;
+  coverageMethod?: string;
+  coverageRole?: string;
+  sourceOrder?: number;
+}
+
+export interface DownloadPlanFile {
+  fileId: string;
+  metadataState: "complete" | "missing";
+  fileName?: string;
+  fileType?: string;
+  sizeBytes?: number;
+  lastModified?: string;
+  etag?: string;
+  sourceUri?: string;
+  downloadable: boolean;
+  downloadUrl?: string;
+  matchingCoverage: DownloadPlanMatch[];
+}
+
+export interface DownloadPlanEntrypoint {
+  kind: string;
+  purpose: "data-access" | "coverage-reference";
+  layerId?: string;
+  productId?: string;
+  surveyId?: string;
+  releaseId?: string;
+  product?: string;
+  order?: number;
+  nside?: number;
+  cells?: number[];
+  precision: ReversePrecision;
+  url?: string;
+  sourceUrl?: string;
+  mocUrl?: string;
+  truncated?: boolean;
+  note?: string;
+  [key: string]: unknown;
+}
+
+export interface DownloadPlan {
+  schemaVersion: 1;
+  files: DownloadPlanFile[];
+  entrypoints: DownloadPlanEntrypoint[];
+  truncated: boolean;
+  warnings: string[];
+}
+
+export interface DownloadPlanInput {
+  edges: CoverageEdge[];
+  sourceFiles: Array<Record<string, unknown>>;
+  entrypoints?: DownloadPlanEntrypoint[];
+  truncated: boolean;
+}
+
 export interface ReverseLookupResult {
   schemaVersion: 1;
   available: boolean;
@@ -45,6 +104,7 @@ export interface ReverseLookupResult {
   sourceFiles: Array<Record<string, unknown>>;
   truncated: boolean;
   notes: string[];
+  downloadPlan: DownloadPlan;
 }
 
 export interface EvidenceStoreOptions {
@@ -106,6 +166,113 @@ const text = (value: unknown): string | undefined => typeof value === "string" &
 const number = (value: unknown): number | undefined => typeof value === "number" && Number.isFinite(value) ? value : typeof value === "string" && value.trim() && Number.isFinite(Number(value)) ? Number(value) : undefined;
 const first = (source: Record<string, unknown>, keys: string[]): unknown => keys.map((key) => source[key]).find((value) => value !== undefined && value !== null);
 
+const PRIVATE_HOST = /^(?:localhost|127(?:\.|$)|0(?:\.|$)|10(?:\.|$)|192\.168(?:\.|$)|169\.254(?:\.|$)|172\.(?:1[6-9]|2\d|3[0-1])(?:\.|$)|\[?::1\]?$)/i;
+const INTERNAL_HOST = /(?:\.local$|\.internal$|\.svc(?:\.|$)|\.cluster\.local$|(?:^|[-.])(minio|elasticsearch|kubernetes)(?:[-.]|$))/i;
+
+function safePublicHttpUrl(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  try {
+    const parsed = new URL(value);
+    if (!/^https?:$/.test(parsed.protocol) || parsed.username || parsed.password || PRIVATE_HOST.test(parsed.hostname) || INTERNAL_HOST.test(parsed.hostname)) return undefined;
+    return parsed.toString();
+  } catch { return undefined; }
+}
+
+function locator(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const trimmed = value.trim();
+  if (/^(?:s3|oss):\/\//i.test(trimmed)) return trimmed;
+  if (/^file:\/\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === "file:" && !parsed.hostname && !parsed.username && !parsed.password) return trimmed;
+    } catch { return undefined; }
+  }
+  return safePublicHttpUrl(trimmed);
+}
+
+function sourceIdentifier(source: Record<string, unknown>): string | undefined {
+  const value = first(source, ["fileId", "file_id", "sourceFileId", "source_file_id", "_id"]);
+  return typeof value === "string" && value.length ? value : undefined;
+}
+
+function sourceString(source: Record<string, unknown>, keys: string[]): string | undefined {
+  const value = first(source, keys);
+  return typeof value === "string" && value.length ? value : undefined;
+}
+
+function sourceNumber(source: Record<string, unknown>, keys: string[]): number | undefined {
+  return number(first(source, keys));
+}
+
+function matchingKey(match: DownloadPlanMatch): string {
+  return [match.layerId ?? "", match.order, match.ipix, match.precision, match.coverageMethod ?? "", match.coverageRole ?? "", match.sourceOrder ?? ""].join("|");
+}
+
+/** Build the file-level public contract without turning coverage edges into files. */
+export function buildDownloadPlan(input: DownloadPlanInput): DownloadPlan {
+  const sourceById = new Map<string, Record<string, unknown>>();
+  input.sourceFiles.forEach((source) => {
+    const id = sourceIdentifier(source);
+    if (id) sourceById.set(id, source);
+  });
+  const files = new Map<string, DownloadPlanFile>();
+  const warnings = new Set<string>();
+  for (const edge of input.edges) {
+    const source = edge.sourceFileId ? sourceById.get(edge.sourceFileId) : undefined;
+    const sourceUri = locator(sourceString(source ?? {}, ["sourceUri", "source_uri", "uri", "urn"]) ?? edge.sourceUri);
+    const fileId = edge.sourceFileId ?? sourceIdentifier(source ?? {}) ?? (sourceUri ? `uri:${sourceUri}` : `edge:${edge.edgeId}`);
+    const downloadUrl = safePublicHttpUrl(sourceString(source ?? {}, ["downloadUrl", "download_url"]) ?? edge.downloadUrl ?? sourceUri);
+    const matchingCoverage: DownloadPlanMatch = {
+      ...(edge.layerId ? { layerId: edge.layerId } : {}),
+      order: edge.order,
+      ipix: edge.ipix,
+      precision: edge.precision,
+      ...(edge.coverageMethod ? { coverageMethod: edge.coverageMethod } : {}),
+      ...(edge.coverageRole ? { coverageRole: edge.coverageRole } : {}),
+      ...(sourceNumber(source ?? {}, ["sourceOrder", "source_order"]) !== undefined ? { sourceOrder: sourceNumber(source ?? {}, ["sourceOrder", "source_order"]) } : {}),
+    };
+    const current = files.get(fileId);
+    if (current) {
+      const key = matchingKey(matchingCoverage);
+      if (!current.matchingCoverage.some((match) => matchingKey(match) === key)) current.matchingCoverage.push(matchingCoverage);
+      continue;
+    }
+    const metadataState = source ? "complete" : "missing";
+    if (!source) warnings.add(`FileAsset metadata is missing for ${fileId}`);
+    const fileName = sourceString(source ?? {}, ["fileName", "file_name", "name"]) ?? edge.fileName;
+    const fileType = sourceString(source ?? {}, ["fileType", "file_type", "type"]);
+    const sizeBytes = sourceNumber(source ?? {}, ["sizeBytes", "size_bytes", "size"]) ?? edge.sizeBytes;
+    const lastModified = sourceString(source ?? {}, ["lastModified", "last_modified"]);
+    const etag = sourceString(source ?? {}, ["etag", "eTag", "ETag"]) ?? edge.etag;
+    files.set(fileId, {
+      fileId,
+      metadataState,
+      ...(fileName ? { fileName } : {}),
+      ...(fileType ? { fileType } : {}),
+      ...(sizeBytes !== undefined ? { sizeBytes } : {}),
+      ...(lastModified ? { lastModified } : {}),
+      ...(etag ? { etag } : {}),
+      ...(sourceUri ? { sourceUri } : {}),
+      downloadable: Boolean(downloadUrl),
+      ...(downloadUrl ? { downloadUrl } : {}),
+      matchingCoverage: [matchingCoverage],
+    });
+  }
+  const sortedFiles = [...files.values()].sort((left, right) => left.fileId.localeCompare(right.fileId));
+  sortedFiles.forEach((file) => file.matchingCoverage.sort((left, right) => {
+    const layer = (left.layerId ?? "").localeCompare(right.layerId ?? "");
+    return layer || left.order - right.order || left.ipix - right.ipix;
+  }));
+  return {
+    schemaVersion: 1,
+    files: sortedFiles,
+    entrypoints: [...(input.entrypoints ?? [])],
+    truncated: input.truncated,
+    warnings: [...warnings],
+  };
+}
+
 function stableEdgeId(source: Record<string, unknown>, fallback: string): string {
   const key = [source.layerId, source.layer_id, source.sourceFileId, source.source_file_id, source.order, source.ipix, source.tileId, source.tile_id].map((value) => String(value ?? "")).join("|");
   return createHash("sha256").update(key || fallback).digest("hex").slice(0, 24);
@@ -141,7 +308,7 @@ function normalizeEdge(hit: SearchHit, request: ReverseLookupRequest): CoverageE
     sizeBytes: number(first(source, ["sizeBytes", "size_bytes", "size"])),
     coverageMethod: text(first(source, ["coverageMethod", "coverage_method"])),
     coverageRole: text(first(source, ["coverageRole", "coverage_role"])),
-    downloadUrl: text(first(source, ["downloadUrl", "download_url", "sourceUrl", "source_url"])),
+    downloadUrl: text(first(source, ["downloadUrl", "download_url"])),
     precision: precision && ["exact", "estimated", "entrypoint-only", "truncated"].includes(precision) ? precision : "exact",
   };
 }
@@ -184,6 +351,7 @@ export class CoverageEvidenceStore {
       sourceFiles: [],
       truncated: false,
       notes: [note ?? "Warehouse evidence index is not configured; local MOC geometry is still available, but file-level reverse lookup is unavailable."],
+      downloadPlan: buildDownloadPlan({ edges: [], sourceFiles: [], truncated: false }),
     };
   }
 
@@ -234,6 +402,7 @@ export class CoverageEvidenceStore {
       precision: truncated ? "truncated" : capped.some((edge) => edge.precision !== "exact") ? "estimated" : "exact",
       edges: capped, sourceFiles, truncated,
       notes: ["Online reverse lookup is served by warehouse Elasticsearch coverage edges.", ...(truncated ? [`Result limited to ${limit} edges.`] : [])],
+      downloadPlan: buildDownloadPlan({ edges: capped, sourceFiles, truncated }),
     };
   }
 

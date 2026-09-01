@@ -3,7 +3,7 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "ccc273c90738140dc3760ea387529a7d41a21e77b4187ca510f06760a1130046"
+    "sha256": "e7684305a9c81df66a2fd7c9387c1dc3672c093caecdfe36383076ee5e520f2c"
   },
   "statistics": {
     "releases": 55,
@@ -14,8 +14,8 @@
     "footprints": 47,
     "packages": 14,
     "rawMocFiles": 48,
-    "totalBytes": 40263012,
-    "runtimeBytes": 12503276,
+    "totalBytes": 40264554,
+    "runtimeBytes": 12504818,
     "evidenceBytes": 27759736
   },
   "files": [
@@ -76,8 +76,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/public-artifact-storage.md",
-      "sizeBytes": 9528,
-      "sha256": "99d3b55c6c5fd96dbb875b8752e462ef920f010df45b0c72f72b16d47d3d78f3"
+      "sizeBytes": 10471,
+      "sha256": "14b8b3860eac37e46441cde533750fd13b171d691715ee6d3f53ee1ce35d3140"
     },
     {
       "id": "documentation-resource-package-integration",
@@ -88,8 +88,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/resource-package-integration.md",
-      "sizeBytes": 5523,
-      "sha256": "9d744c77fcba188f2dccf3c91a9aba0e35de12648a27df84bf84d78ca5ed01da"
+      "sizeBytes": 6122,
+      "sha256": "78170e73bf80bd63ff2a2cc7696a31e03413e701149e9040605a43ad46bb8e87"
     },
     {
       "id": "layer-csst-sim-w2-image-extent-preview-order4",

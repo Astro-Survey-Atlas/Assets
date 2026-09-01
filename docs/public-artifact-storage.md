@@ -12,6 +12,15 @@ publishable. Warehouse owns scan execution and operational evidence for its
 `ScanRequest` runs. Workspace downloads and verifies public packages but does
 not become a second public catalog.
 
+The repository `artifacts/` tree is a reproducible build/evidence workspace, not
+the runtime data directory. A file is distributable only when it is referenced
+by the generated `artifacts/public-survey-footprints/release-manifest.json` and
+passes its size and SHA-256 checks. Source inventories, input manifests,
+normalized scans, task snapshots and scan errors remain evidence even when they
+are checked into the development workspace. The same physical file may have
+multiple logical asset IDs, but each ID still points to the manifest's verified
+bytes; there is no implicit directory scan fallback.
+
 Every release entry has an explicit `deliveryClass`:
 
 | Class | Examples | Browser startup | Long-term home |
@@ -67,6 +76,12 @@ history cleanup is controlled separately by `ASSETS_RELEASE_CLEANUP`; keep it
 off for development rollouts because recursive deletion on a network PVC can
 delay the init container, and enable it only in the reviewed production
 overlay with the configured retention count.
+
+The S3-to-runtime path is therefore fixed: download into `/data/.staging`,
+validate the pointer, manifest and every object, move the verified bundle to
+`/data/releases/<bundle-sha256>`, and atomically replace `/data/current`. The
+server reads only `/data/current`; it never serves `/data/.staging`, the S3
+bucket root or the Git checkout.
 
 Dynamic MOCs and Resource Package archives are generated only after a product
 is explicitly published. Their immutable bytes live under the content PVC and

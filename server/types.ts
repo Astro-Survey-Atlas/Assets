@@ -18,6 +18,19 @@ export interface PublicAssetRecord {
   deliveryClass?: "runtime" | "evidence";
 }
 
+/**
+ * Infer the delivery boundary from a release record. Explicit evidence is
+ * still allowed for generated records, but source snapshots must never be
+ * promoted to the public runtime class by a stale or hand-edited manifest.
+ */
+export function inferredPublicAssetDeliveryClass(record: Pick<PublicAssetRecord, "path"> & Partial<Pick<PublicAssetRecord, "kind">>): "runtime" | "evidence" {
+  const normalizedPath = record.path.replaceAll("\\", "/").toLowerCase();
+  if (/(^|\/)(csst|raw|evidence)(\/|$)/.test(normalizedPath)
+    || /(?:input-manifest|normalized-scan|task-snapshot|coverage-job-snapshot|scan[-_]error|run-statistics|sample-report)/.test(normalizedPath)
+    || record.kind === "provenance" || record.kind === "ledger") return "evidence";
+  return "runtime";
+}
+
 export type PublicAssetPreviewMode = "text" | "image";
 
 export type PublicAssetProjection = Omit<PublicAssetRecord, "path"> & {

@@ -14,10 +14,14 @@ export interface SourceUnit {
   downloadUrl: string;
 }
 
+export interface MatchedSourceUnit extends SourceUnit {
+  matchingCells: number[];
+}
+
 export interface SourceUnitMatch {
   status: "exact";
   unitKind: "tile";
-  units: SourceUnit[];
+  units: MatchedSourceUnit[];
   totalUnits: number;
   truncated: boolean;
   notes: string;
@@ -174,21 +178,31 @@ export class SourceUnitStore {
     if (!layer || order < layer.coarseOrder) return null;
     const unitIndexes = new Set<number>();
     const parentScale = 2 ** (2 * (order - layer.coarseOrder));
-    cells.forEach((pixel) => layer.coarseByPixel.get(Math.floor(pixel / parentScale))?.forEach((index) => unitIndexes.add(index)));
+    const requestedCells = [...new Set(cells)].sort((left, right) => left - right);
+    const coarseMatches = new Map<number, number[]>();
+    requestedCells.forEach((pixel) => layer.coarseByPixel.get(Math.floor(pixel / parentScale))?.forEach((index) => {
+      unitIndexes.add(index);
+      if (order !== layer.coarseOrder) return;
+      const matches = coarseMatches.get(index);
+      if (matches) matches.push(pixel);
+      else coarseMatches.set(index, [pixel]);
+    }));
 
     // At order 4 the compact index is already the exact inclusive raster.
     // At a finer order, validate only its coarse candidates against the
     // requested cells using the same queryDiscInclusive rasterization.
-    const selected = new Set(cells);
+    const selected = new Set(requestedCells);
     const exactHealpix = order === layer.coarseOrder ? null : new Healpix(2 ** order);
     const allUnits = [...unitIndexes]
-      .filter((index) => {
-        if (!exactHealpix) return true;
-        const unit = layer.units[index]!;
-        const pointing = new Pointing(null, false, (90 - unit.decDeg) * Math.PI / 180, unit.raDeg * Math.PI / 180);
-        return rangePixels(exactHealpix, pointing, unit.radiusDeg).some((pixel) => selected.has(pixel));
+      .flatMap((index): MatchedSourceUnit[] => {
+        let matchingCells = coarseMatches.get(index) ?? [];
+        if (exactHealpix) {
+          const unit = layer.units[index]!;
+          const pointing = new Pointing(null, false, (90 - unit.decDeg) * Math.PI / 180, unit.raDeg * Math.PI / 180);
+          matchingCells = rangePixels(exactHealpix, pointing, unit.radiusDeg).filter((pixel) => selected.has(pixel));
+        }
+        return matchingCells.length ? [{ ...layer.units[index]!, matchingCells }] : [];
       })
-      .map((index) => layer.units[index]!)
       .sort((left, right) => Number(left.unitId) - Number(right.unitId));
     return { status: "exact", unitKind: "tile", units: allUnits.slice(0, limit), totalUnits: allUnits.length, truncated: allUnits.length > limit, notes: "由生成 MOC 的同一份官方 TILE_COMPLETENESS 快照、NEXP 筛选和焦面半径与重合 HEALPix cells 求交；order-4 父像元只用于缩小候选集合。" };
   }

@@ -19,6 +19,25 @@ export type ConnectorType = typeof CONNECTOR_TYPES[number];
 export type ConnectorInputType = typeof CONNECTOR_TYPES[number];
 export type ConnectorPhase = "NOT_CHECKED" | "READY" | "PENDING" | "ERROR";
 export type TaskBackend = "job" | "flink";
+export type MocDiscoveryState = "running" | "ready" | "empty" | "incomplete" | "failed";
+
+export interface MocDiscoveryStateInput {
+  phase?: string;
+  reason?: string;
+  message?: string;
+  reviewSummary?: MocReviewSummary;
+  reviewSummaryState?: "available" | "missing";
+}
+
+/** Convert Warehouse's phase/summary pair into an operator-facing outcome. */
+export function mocDiscoveryState(input: MocDiscoveryStateInput): MocDiscoveryState {
+  const phase = String(input.phase ?? "PENDING").trim().toUpperCase();
+  if (["FAILED", "ERROR", "INVALID", "CANCELLED"].includes(phase)) return "failed";
+  if (!["SUCCEEDED", "COMPLETED"].includes(phase)) return "running";
+  const summary = input.reviewSummary;
+  if (!summary || input.reviewSummaryState === "missing" || summary.truncated || summary.summaryTruncated) return "incomplete";
+  return summary.candidates.length ? "ready" : "empty";
+}
 
 export interface AdminConfig {
   enabled: boolean;
@@ -231,6 +250,7 @@ export interface MocDiscoveryView {
     lastTransitionTime?: string;
     reviewSummary?: MocReviewSummary;
     reviewSummaryState?: "available" | "missing";
+    discoveryState?: MocDiscoveryState;
   };
 }
 
@@ -649,6 +669,8 @@ function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = f
   const summary = reviewSummaryView(status.reviewSummary);
   const work = parseWorkContext(resource.metadata?.annotations?.["assets.atlas.zhejianglab.org/work-ref"]);
   const candidateCount = number("candidateCount") ?? summary?.candidates.length;
+  const phase = (value("phase") ?? "PENDING").toUpperCase();
+  const reviewSummaryState = summary ? "available" as const : "missing" as const;
   return {
     name: resource.metadata?.name ?? "",
     namespace: resource.metadata?.namespace,
@@ -663,14 +685,15 @@ function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = f
     ...(work?.releaseId ? { releaseId: work.releaseId } : {}),
     ...(work?.productId ? { productId: work.productId } : {}),
     status: {
-      phase: (value("phase") ?? "PENDING").toUpperCase(),
+      phase,
       ...(value("jobName") ? { jobName: value("jobName") } : {}),
       ...(value("reason") ? { reason: value("reason") } : {}),
       ...(value("message") ? { message: value("message") } : {}),
       ...(value("evidencePath") ? { evidencePath: value("evidencePath") } : {}),
       ...(candidateCount !== undefined ? { candidateCount } : {}),
       ...(value("lastTransitionTime") ? { lastTransitionTime: value("lastTransitionTime") } : {}),
-      reviewSummaryState: summary ? "available" as const : "missing" as const,
+      reviewSummaryState,
+      discoveryState: mocDiscoveryState({ phase, reviewSummary: summary, reviewSummaryState }),
       ...(includeReviewSummary && summary ? { reviewSummary: summary } : {}),
     },
   };

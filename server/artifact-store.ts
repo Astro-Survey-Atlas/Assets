@@ -4,6 +4,7 @@ import { readFileSync as readFileSyncFromFs } from "node:fs";
 import path from "node:path";
 
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { inferredPublicAssetDeliveryClass } from "./types.js";
 
 export interface ArtifactObject {
   key: string;
@@ -405,9 +406,8 @@ interface ReleaseRecord {
 }
 
 function releaseDeliveryClass(record: ReleaseRecord): "runtime" | "evidence" {
-  if (record.deliveryClass) return record.deliveryClass;
-  if (record.path.includes("/csst/") || record.path.includes("/raw/") || record.path.endsWith("/provenance.json") || record.id.includes("provenance") || record.id.includes("snapshot") || record.id.includes("normalized")) return "evidence";
-  return "runtime";
+  if (inferredPublicAssetDeliveryClass(record) === "evidence") return "evidence";
+  return record.deliveryClass ?? "runtime";
 }
 
 function objectKeyFor(record: ReleaseRecord, bundle: { id: string; sha256: string }): string {

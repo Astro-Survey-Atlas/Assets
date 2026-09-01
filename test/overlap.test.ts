@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Healpix } from "healpixjs";
+import { Healpix, Pointing } from "healpixjs";
 
 import type { CoverageCellLayer } from "../server/coverage.js";
 import { highestCommonOrder, overlapForLayers } from "../server/overlap.js";
@@ -88,9 +88,36 @@ test("exiting overlap rebases the orbit around the celestial sphere", () => {
 
 test("DESI source units are reconstructed from the locked TILE_COMPLETENESS snapshots", async () => {
   const store = await SourceUnitStore.load(process.cwd());
-  const match = store.match("desi-dr1-spectra-footprint", 4, [1087, 1130, 1173, 1216]);
+  const requestedCells = [1087, 1130, 1173, 1216];
+  const match = store.match("desi-dr1-spectra-footprint", 4, requestedCells);
   assert.ok(match);
   assert.equal(match.status, "exact");
   assert.ok(match.totalUnits > 0);
   assert.match(match.units[0]!.downloadUrl, new RegExp("data\\.desi\\.lbl\\.gov/public/dr1/spectro/redux/iron/tiles/cumulative"));
+  assert.ok(match.units.every((unit) => unit.matchingCells.length > 0 && unit.matchingCells.every((cell) => requestedCells.includes(cell))));
+  assert.ok(match.units.some((unit) => unit.matchingCells.length < requestedCells.length));
+});
+
+test("DESI source-unit matches retain each tile's exact finer-order cell subset", async () => {
+  const store = await SourceUnitStore.load(process.cwd());
+  const coarseMatch = store.match("desi-dr1-spectra-footprint", 4, [1087], 1);
+  assert.ok(coarseMatch?.units[0]);
+  const unit = coarseMatch.units[0];
+  const order = 8;
+  const healpix = new Healpix(2 ** order);
+  const pointing = new Pointing(null, false, (90 - unit.decDeg) * Math.PI / 180, unit.raDeg * Math.PI / 180);
+  const ranges = healpix.queryDiscInclusive(pointing, unit.radiusDeg * Math.PI / 180, 8) as unknown as { r: Int32Array; sz: number };
+  const tileCells: number[] = [];
+  for (let index = 0; index < ranges.sz; index += 2) {
+    for (let pixel = ranges.r[index]!; pixel < ranges.r[index + 1]!; pixel += 1) tileCells.push(pixel);
+  }
+  assert.ok(tileCells.length > 1);
+  const expected = [tileCells[0]!, tileCells.at(-1)!].sort((left, right) => left - right);
+  const outsideTile = [...Array(256).keys()].map((offset) => 637 * 256 + offset).find((cell) => !tileCells.includes(cell));
+  assert.notEqual(outsideTile, undefined);
+  const requestedCells = [...expected, outsideTile!];
+  const exactMatch = store.match("desi-dr1-spectra-footprint", order, requestedCells, 5000);
+  const exactUnit = exactMatch?.units.find((candidate) => candidate.unitId === unit.unitId);
+  assert.deepEqual(exactUnit?.matchingCells, expected);
+  assert.notDeepEqual(exactUnit?.matchingCells, requestedCells);
 });

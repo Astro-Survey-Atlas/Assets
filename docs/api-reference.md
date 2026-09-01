@@ -65,6 +65,18 @@ coverage layer exists: `availableOrders`, `overviewOrder`, `maxOrder`, and
 
 返回公开巡天、Release 和产品状态的只读索引，供 Assets 网站渲染卡片和详情。它只反映已进入当前公开目录的内容；尚未审核的登记、未发布的 MOC build 或 coverage task 不会出现在这里。
 
+### Browser catalog failure policy
+
+首页把 `/api/v1/surveys`、`/api/v1/coverage/catalog` 和 `/api/v1/assets`
+作为三个独立的公开资源。每个请求都会进行有限重试；失败时先保留当前内存
+版本，再使用同一浏览器中最近一次通过 schema 校验的缓存版本。一个资源失败不会
+清空其它已经成功的目录，也不会用空的 `304` 响应覆盖当前目录。只有该资源没有
+可用的内存或缓存版本时，页面才显示“巡天公开目录载入失败”。
+
+服务端不会把浏览器缓存当作发布源。发布源始终是经过
+`release-manifest.json` 校验的静态 release 或已通过文件/哈希校验的动态 MOC
+publication；缓存只用于短暂网络故障时继续浏览。
+
 ## Coverage Catalog And Blocks
 
 ```http
@@ -110,9 +122,11 @@ connected component's metadata on demand:
 The response contains the component bounds, `publicSources` (public survey,
 release, product, modality and public MOC/tile/archive claims), and
 `warehouseEvidence` (ACTIVE layer, scan run, source snapshot, file/coverage
-counts and connector status). Internal `s3://`, MinIO, Elasticsearch,
-Kubernetes, PVC and local paths are omitted. File-level reverse lookup remains
-bounded and deferred through `/api/v1/coverage/reverse-lookup`.
+counts and connector status). Infrastructure endpoints, credentials and
+evidence-storage paths are omitted. Each component's deferred `evidenceLookup`
+includes every layer that actually participates in that component, including
+public MOC, Tile and Warehouse FileAsset layers. File/Tile reverse lookup
+remains bounded and deferred through `/api/v1/coverage/reverse-lookup`.
 
 All coverage cells remain explicit ICRS/NESTED `order/ipix` values. The
 `precision` field is one of `exact`, `estimated`, `entrypoint-only` or
@@ -137,6 +151,75 @@ edges, source file IDs, URI/name/ETag/WCS bounds, download entrypoints and a
 
 The service unions published products within each selected survey, then intersects the resulting survey coverages. It uses the highest real order shared by every selected survey that does not exceed `requestedOrder`; no layer is upsampled to an order it does not publish. The response reports `commonOrder`, explicit NESTED `pixels`, four-side-connected components with stable `C01` identifiers and RA/DEC bounds, plus source-unit/download matches when a release has a locked reverse index. At least two distinct survey IDs are required.
 
+#### Download plan
+
+`downloadPlan` is the authoritative export for this lookup. It deliberately keeps
+coverage matches, real files and general public entrypoints separate:
+
+```json
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "fileId": "file-123",
+      "metadataState": "complete",
+      "fileName": "tile.fits",
+      "sourceUri": "s3://bucket/path/tile.fits",
+      "downloadable": false,
+      "matchingCoverage": [
+        { "layerId": "layer-1", "order": 8, "ipix": 123, "precision": "exact" }
+      ]
+    }
+  ],
+  "entrypoints": [
+    { "kind": "tile-directory", "purpose": "data-access", "tileId": "1234", "cells": [123], "url": "https://data.example/tiles/1234/" },
+    { "kind": "coverage-moc", "purpose": "coverage-reference", "url": "/api/v1/coverage/layers/layer-1/moc.fits" }
+  ],
+  "truncated": false,
+  "warnings": []
+}
+```
+
+Each source `FileAsset` appears at most once in `files[]`; every matching
+`order`/`ipix` edge is retained in its `matchingCoverage[]`. `metadataState`
+is `missing` when Warehouse returned an edge without a matching FileAsset, so
+the response never invents a complete file record. `downloadable=true` and
+`downloadUrl` are reserved for a public HTTP(S) file URL. Canonical `s3://`,
+`oss://` and hostless `file:///...` values remain visible verbatim as
+`sourceUri` location hints but are not clickable and are explicitly not direct
+browser downloads. A `file:///...` locator names the path in the Warehouse
+scanner's mounted data environment; it does not claim that the same path
+exists on the public Assets host. Assets does not proxy credentials, presign
+objects or translate local paths.
+
+`entrypoints[]` contains links that are useful for reaching the official data
+service or checking the coverage itself, not additional file rows. Current
+entrypoint kinds are `official-release`, `official-data`, `official-query`,
+`coverage-source`, `coverage-moc` and `tile-directory`. MOC URLs and tile
+directories therefore appear only as coverage/data entrypoints. A
+`tile-directory` entry carries `tileId` and only the requested NESTED cells
+that actually intersect that Tile; its URL is the official directory and
+Assets does not crawl or expand the directory into inferred file rows. The
+historical top-level `edges`, `sourceFiles` and `entrypoints` fields remain for
+clients that have not migrated; new exports should consume `downloadPlan`.
+
+#### CSV and JSON exports
+
+The browser's overlap export requests the same bounded `downloadPlan`. JSON
+preserves it without flattening. CSV emits one row per real item and uses:
+
+- `item_kind=file` for a Warehouse FileAsset. `source_file_id`, `source_uri`,
+  `downloadable`, `download_url` and the complete `matching_cells` JSON value
+  identify the source and all matching coverage edges.
+- `item_kind=entrypoint` for an official data or coverage entry. Tile rows use
+  `entrypoint_kind=tile-directory`, include `tile_id`, put the exact Tile
+  intersection in `matching_cells`, and put the official directory in
+  `entrypoint_url`.
+
+When a component has neither a real FileAsset locator nor an entrypoint, the
+CSV contains no data row for that component. It never manufactures a blank
+`entrypoint-only` placeholder such as `no-public-download-entrypoint`.
+
 ## Legacy Coverage Index
 
 ```http
@@ -154,6 +237,20 @@ GET /api/v1/products
 ```
 
 草稿和版本控制只在管理员认证边界内：`GET /api/v1/admin/products`、`GET /api/v1/admin/products?view=surveys`、`GET /api/v1/admin/products?surveyId=<surveyId>`、`GET /api/v1/admin/products/{productId}`、`PUT /api/v1/admin/products/{productId}/draft`、`POST /api/v1/admin/products/{productId}/publish` 和 `GET /api/v1/admin/products/{productId}/history`。产品 ID 固定由 `surveyId + releaseId + product name` 生成；流程图节点的实现引用由 recipe 固定，管理员只能修改解释文本和证据链接。产品记录包含已发布 coverage layer 的可用 HEALPix order。
+
+所有 admin product 请求都必须带 `Authorization: Bearer <admin-token>`。错误语义固定如下：
+
+| 条件 | HTTP | JSON |
+| --- | --- | --- |
+| 缺少或错误令牌 | `401` | `{ "error": "Invalid Assets admin token" }` |
+| 产品 ID 不存在 | `404` | `{ "error": "Product not found" }` |
+| 非法 URL path segment 或 JSON | `400` | 可读的 `error` |
+| revision 冲突 | `409` | `{ "error": "Product revision conflict" }` |
+| 未预期的 admin 异常 | `500` | `{ "error": "Internal server error" }` |
+
+例如 `bb743658cd44269d7675` 是当前 CSST W2 草稿产品：带有效令牌的
+`GET /api/v1/admin/products/bb743658cd44269d7675` 返回 `200`；不带令牌返回
+`401`，不能把认证失败当成产品不存在。
 
 `GET /api/v1/admin/products?view=surveys` 是管理页审核入口。它按公共 `survey -> release -> product` 返回与 `/api/v1/surveys` 同源的名称、mission、描述、图片、modalities、统计、coverage orders 和产品状态；每个产品只附加 `review.state`、草稿/发布 revision、时间戳和当前 coverage 投影。产品还会返回 `lifecycle`：`publication.state` 是 `DRAFT` 或 `PUBLISHED`，`runtime.state` 是 `CATALOG_BASELINE`、`ACTIVE`、`INVALID` 或 `INACTIVE`，并携带 native build orders、公开 layer orders、catalog revision 和产品/天球/Catalog/FITS MOC 链接。它不会返回 input manifest、normalized scan、task snapshot、evidence 内容或内部路径。存在于 Assets 编辑存储但不再匹配公共 catalog 的产品会放在 `unmatchedProducts` 中，不会静默丢失。
 

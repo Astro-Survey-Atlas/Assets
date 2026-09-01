@@ -63,6 +63,15 @@ is:
    path (or the Workspace HTTP adapter); do not search by ZIP filename or infer
    a layer from a survey label.
 
+Workspace's local paths are also part of the contract. Catalog snapshots are
+stored under `assets-snapshots/<catalog-sha256>/` with `assets-current` pointing
+to the last verified snapshot; package downloads use a private staging
+directory under the configured package root; verified archives are installed at
+`<package-root>/installed/<package-id>/<version>`. Temporary ZIPs and failed
+staging directories are removed after the job, while the installed directory
+and its state file retain the package hash and active release IDs. No step
+searches the Assets repository or an S3 prefix by filename.
+
 The corresponding HTTP operations are `POST /api/resource-packages/:id/install`,
 poll `GET /api/resource-packages/jobs/:jobId`, then
 `POST /api/resource-packages/:id/activate` and

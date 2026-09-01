@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, AudioLines, Box, ChevronDown, ChevronUp, Database, Eye, Image, Layers3, LogOut, Pencil, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Search, Send, ShieldCheck, Table2, Unlock, Upload, createIcons } from "lucide";
+import { Activity, ArrowLeft, AudioLines, Box, ChevronDown, ChevronUp, CircleAlert, Database, Eye, Image, Layers3, LogOut, Pencil, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Search, Send, ShieldCheck, Table2, Unlock, Upload, createIcons } from "lucide";
 import "./styles.css";
 import { mountLocaleControls, t } from "../src/i18n.js";
 import { aggregateWorkAttempts } from "./work-items.js";
@@ -20,7 +20,8 @@ interface Product { productId: string; draft: { productId: string; surveyId: str
 interface CatalogStatus { mode: string; loadedAt: string; revision?: string; layers: number; footprints: number; warehouseConfigured: boolean }
 interface MocCandidateSummary { candidateId: string; title?: string; recordUrl?: string; mocUrl?: string; hipsUrl?: string }
 interface MocReviewSummary { schemaVersion: 2; truncated: boolean; summaryTruncated: boolean; searchRecordCount?: number; candidates: MocCandidateSummary[] }
-interface MocDiscoveryStatus { phase: string; jobName?: string; reason?: string; message?: string; evidencePath?: string; candidateCount?: number; lastTransitionTime?: string; reviewSummary?: MocReviewSummary; reviewSummaryState?: "available" | "missing" }
+type MocDiscoveryState = "running" | "ready" | "empty" | "incomplete" | "failed";
+interface MocDiscoveryStatus { phase: string; jobName?: string; reason?: string; message?: string; evidencePath?: string; candidateCount?: number; lastTransitionTime?: string; reviewSummary?: MocReviewSummary; reviewSummaryState?: "available" | "missing"; discoveryState?: MocDiscoveryState }
 interface MocDiscoveryRequest { name: string; namespace?: string; createdAt?: string; surveyName: string; releaseHint?: string; productHint?: string; surveyId?: string; releaseId?: string; productId?: string; policyRef: string; workKey?: string; workTitle?: string; status: MocDiscoveryStatus }
 interface MocBuildProgress { phase: string; step: number; totalSteps: number; percent?: number; message?: string }
 interface MocBuildRequest { schemaVersion: 1; kind: "MocBuildRequest"; name: string; discoveryRequestName: string; provider: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; workKey?: string; workTitle?: string; createdAt: string; updatedAt: string; phase: string; progress: MocBuildProgress; source: { url: string; snapshotSha256?: string; sizeBytes?: number; evidenceRef?: string }; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; moc?: { ref: string; sha256: string; sizeBytes?: number }; query?: { ref: string; sha256?: string; order: number }; preview?: { ref: string; sha256?: string; order: number }; statistics?: { ref: string; sha256?: string; sizeBytes?: number }; manifest?: { ref: string; sha256?: string; sizeBytes?: number } }; error?: { reason: string; message: string }; duplicateOf?: string; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
@@ -41,7 +42,7 @@ const byId = <T extends HTMLElement>(id: string): T => {
 };
 
 function renderIcons(): void {
-  createIcons({ icons: { Activity, ArrowLeft, AudioLines, Box, ChevronDown, ChevronUp, Database, Eye, Image, Layers3, LogOut, Pencil, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Search, Send, ShieldCheck, Table2, Unlock, Upload }, attrs: { "aria-hidden": "true" } });
+  createIcons({ icons: { Activity, ArrowLeft, AudioLines, Box, ChevronDown, ChevronUp, CircleAlert, Database, Eye, Image, Layers3, LogOut, Pencil, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Search, Send, ShieldCheck, Table2, Unlock, Upload }, attrs: { "aria-hidden": "true" } });
 }
 
 type AdminStep = "sources" | "tasks" | "review";
@@ -214,6 +215,43 @@ function phaseLabel(phase?: string): string {
   return normalized || "PENDING";
 }
 
+function mocFailureReasonLabel(reason?: string): string {
+  const normalized = String(reason ?? "").trim();
+  return ({
+    ReconcileError: "Warehouse 控制器处理探查请求时出错",
+    DiscoveryProtocolError: "Warehouse 返回的探查结果不符合约定",
+    InvalidIntent: "探查请求参数不完整或无效",
+  } as Record<string, string>)[normalized] ?? (normalized || "Warehouse 未完成公开 MOC 探查");
+}
+
+function mocDiscoveryStateForStatus(status: MocDiscoveryStatus): MocDiscoveryState {
+  if (status.discoveryState) return status.discoveryState;
+  const phase = phaseLabel(status.phase);
+  if (["FAILED", "ERROR", "INVALID", "CANCELLED"].includes(phase)) return "failed";
+  if (!["SUCCEEDED", "COMPLETED"].includes(phase)) return "running";
+  const summary = status.reviewSummary;
+  if (!summary || status.reviewSummaryState === "missing" || summary.truncated || summary.summaryTruncated) return "incomplete";
+  return summary.candidates.length ? "ready" : "empty";
+}
+
+function mocDiscoveryStateLabel(state: MocDiscoveryState): string {
+  return ({
+    running: "探查进行中",
+    ready: "候选可审核",
+    empty: "探查完成，暂无候选",
+    incomplete: "摘要不完整，需重新探查",
+    failed: "探查失败",
+  } as Record<MocDiscoveryState, string>)[state];
+}
+
+function mocReviewAction(request: MocDiscoveryRequest, dataAttribute: "data-moc-review" | "data-moc-review-output"): string {
+  const state = mocDiscoveryStateForStatus(request.status);
+  const iconName = state === "ready" ? "shield-check" : state === "failed" ? "circle-alert" : "eye";
+  const label = state === "ready" ? "审核候选" : state === "failed" ? "失败详情" : "查看状态";
+  const title = state === "ready" ? "查看候选并创建构建请求" : state === "failed" ? "查看探查失败原因" : "查看探查状态";
+  return `<button type="button" class="admin-quiet" ${dataAttribute}="${escapeText(request.name)}" title="${title}"><i data-lucide="${iconName}"></i><span>${label}</span></button>`;
+}
+
 function lifecycleStateLabel(state?: string): string {
   if (!state) return "--";
   const normalized = phaseLabel(state);
@@ -307,11 +345,20 @@ function renderMocDiscoveryRequests(requests: MocDiscoveryRequest[]): void {
   list.innerHTML = requests.map((request) => {
     const status = request.status ?? { phase: "PENDING" };
     const hints = [request.releaseHint, request.productHint].filter(Boolean).join(" · ");
-    const counts = status.candidateCount !== undefined ? `${status.candidateCount} candidates` : "候选数等待 Warehouse 摘要";
-    const reviewState = status.reviewSummaryState === "available" ? "候选可构建" : status.phase === "SUCCEEDED" ? "摘要缺失，需重新探查" : "等待探查完成";
+    const discoveryState = mocDiscoveryStateForStatus(status);
+    const counts = discoveryState === "ready" && status.candidateCount !== undefined
+        ? `${status.candidateCount} 个候选`
+      : discoveryState === "empty"
+        ? "Warehouse 已完成查询，候选数为 0"
+        : discoveryState === "failed"
+          ? `${mocFailureReasonLabel(status.reason)}${status.message ? ` · ${status.message}` : ""}`
+          : discoveryState === "incomplete"
+            ? "Warehouse 已结束，但候选摘要不完整"
+            : "Warehouse 正在处理探查请求";
+    const reviewState = mocDiscoveryStateLabel(discoveryState);
     const retrying = mocRetryInFlight === request.name;
     const retry = ["SUCCEEDED", "FAILED", "COMPLETED", "ERROR", "INVALID", "CANCELLED"].includes(phaseLabel(status.phase)) ? `<button type="button" class="admin-quiet" data-moc-retry="${escapeText(request.name)}" title="重新探查"${retrying ? " disabled" : ""}><i data-lucide="rotate-ccw"></i><span>${retrying ? "探查中…" : "重新探查"}</span></button>` : "";
-    return `<article class="resource-row moc-discovery-row"><div><div class="task-identity"><i data-lucide="search"></i><strong>${escapeText(workTitle(undefined, request))}</strong></div><span>${escapeText(request.name)}${hints ? ` · ${escapeText(hints)}` : ""}</span><p>${escapeText(counts)} · ${escapeText(reviewState)}${status.evidencePath ? ` · evidence ${escapeText(status.evidencePath)}` : ""}</p></div><div class="moc-discovery-row-actions"><span class="task-phase task-phase-${phaseClass(status.phase)}">${escapeText(phaseLabel(status.phase))}</span><button type="button" class="admin-quiet" data-moc-review="${escapeText(request.name)}" title="查看候选并创建构建请求"><i data-lucide="shield-check"></i><span>候选</span></button>${retry}</div></article>`;
+    return `<article class="resource-row moc-discovery-row"><div><div class="task-identity"><i data-lucide="search"></i><strong>${escapeText(workTitle(undefined, request))}</strong></div><span>${escapeText(request.name)}${hints ? ` · ${escapeText(hints)}` : ""}</span><p>${escapeText(counts)} · ${escapeText(reviewState)}${status.evidencePath ? ` · evidence ${escapeText(status.evidencePath)}` : ""}</p></div><div class="moc-discovery-row-actions"><span class="task-phase task-phase-${phaseClass(status.phase)}">${escapeText(phaseLabel(status.phase))}</span>${mocReviewAction(request, "data-moc-review")}${retry}</div></article>`;
   }).join("");
   list.querySelectorAll<HTMLButtonElement>("[data-moc-review]").forEach((button) => button.addEventListener("click", () => void openMocReview(button.dataset.mocReview ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-moc-retry]").forEach((button) => button.addEventListener("click", () => void resubmitMocDiscovery(button.dataset.mocRetry ?? "")));
@@ -324,20 +371,75 @@ let activeMocCandidateId = "";
 
 function renderMocReviewSummary(request: MocDiscoveryRequest): void {
   const summary = request.status.reviewSummary;
+  const discoveryState = mocDiscoveryStateForStatus(request.status);
+  const identity = workTitle(undefined, request);
+  const kicker = byId("moc-review-kicker");
+  const title = byId("moc-review-title");
   const state = byId("moc-review-state");
   const select = byId<HTMLSelectElement>("moc-build-candidate");
+  const candidateFields = byId("moc-review-candidate-fields");
+  const failure = byId("moc-review-failure");
+  const retry = byId<HTMLButtonElement>("moc-review-retry");
+  const create = byId<HTMLButtonElement>("moc-create-build");
+  const protocol = byId("moc-review-protocol");
+  kicker.textContent = discoveryState === "ready" ? "BUILD REVIEW" : "MOC DISCOVERY";
+  title.textContent = `${identity} · ${mocDiscoveryStateLabel(discoveryState)}`;
+  state.dataset.state = discoveryState;
+  failure.hidden = true;
+  failure.replaceChildren();
+  retry.hidden = discoveryState === "running";
+  candidateFields.hidden = discoveryState !== "ready";
+  protocol.hidden = discoveryState !== "ready";
+  select.disabled = discoveryState !== "ready";
   select.replaceChildren(new Option("选择候选", ""));
-  if (!summary) {
-    state.dataset.state = "missing";
-    state.textContent = request.status.phase === "SUCCEEDED" ? "任务成功但没有 v2 候选摘要，请重新探查。" : "等待 Warehouse 投影候选摘要。";
-    byId("moc-candidate-detail").innerHTML = "";
-    byId<HTMLButtonElement>("moc-create-build").disabled = true;
+  const candidateDetail = byId("moc-candidate-detail");
+  candidateDetail.replaceChildren();
+  if (discoveryState === "failed") {
+    state.textContent = `公开 MOC 探查未完成：${mocFailureReasonLabel(request.status.reason)}`;
+    const message = request.status.message ?? "没有生成可审核的候选摘要。";
+    const summaryNode = document.createElement("p");
+    summaryNode.textContent = message;
+    failure.append(summaryNode);
+    if (request.status.reason) {
+      const reason = document.createElement("small");
+      reason.textContent = `技术原因：${request.status.reason}`;
+      failure.append(reason);
+    }
+    if (request.status.evidencePath) {
+      const evidence = document.createElement("small");
+      evidence.textContent = `证据位置：${request.status.evidencePath}`;
+      failure.append(evidence);
+    }
+    if (request.status.lastTransitionTime) {
+      const transition = document.createElement("small");
+      transition.textContent = `最后更新：${formatDate(request.status.lastTransitionTime)}`;
+      failure.append(transition);
+    }
+    failure.hidden = false;
+    create.disabled = true;
     return;
   }
-  state.dataset.state = summary.truncated || summary.summaryTruncated ? "warning" : summary.candidates.length ? "ready" : "empty";
-  state.textContent = summary.candidates.length
-    ? `${summary.candidates.length} candidates${summary.truncated || summary.summaryTruncated ? " · 结果有截断" : ""}`
-    : summary.truncated || summary.summaryTruncated ? "结果被截断，不能创建完整构建" : "本次 CDS 查询没有候选 MOC";
+  if (discoveryState === "running") {
+    state.textContent = "Warehouse 正在执行公开 MOC 探查，候选摘要尚未就绪。";
+    create.disabled = true;
+    return;
+  }
+  if (discoveryState === "empty") {
+    state.textContent = "探查已完成，本次 CDS 查询没有候选 MOC。";
+    create.disabled = true;
+    return;
+  }
+  if (!summary) {
+    state.textContent = "探查已结束，但没有可读的 v2 候选摘要，请重新探查。";
+    create.disabled = true;
+    return;
+  }
+  if (discoveryState === "incomplete") {
+    state.textContent = `候选摘要不完整${summary.truncated || summary.summaryTruncated ? "：结果被截断" : ""}，请重新探查后再构建。`;
+    create.disabled = true;
+    return;
+  }
+  state.textContent = `已找到 ${summary.candidates.length} 个候选 MOC，可选择后创建构建请求。`;
   summary.candidates.forEach((candidate) => select.add(new Option(`${candidate.title ?? candidate.candidateId}`, candidate.candidateId)));
   select.value = activeMocCandidateId && summary.candidates.some((candidate) => candidate.candidateId === activeMocCandidateId) ? activeMocCandidateId : summary.candidates[0]?.candidateId ?? "";
   activeMocCandidateId = select.value;
@@ -352,7 +454,7 @@ function syncMocCandidateSelection(): void {
   byId("moc-candidate-detail").innerHTML = candidate
     ? `<strong>${escapeText(candidate.title ?? candidate.candidateId)}</strong><p>${escapeText(candidate.candidateId)}</p><small>${escapeText(candidate.mocUrl ?? candidate.hipsUrl ?? "没有可下载 MOC URL")}</small>`
     : `<span class="resource-empty">请选择一个候选</span>`;
-  byId<HTMLButtonElement>("moc-create-build").disabled = !candidate || request?.status.phase !== "SUCCEEDED" || Boolean(request.status.reviewSummary?.truncated || request.status.reviewSummary?.summaryTruncated);
+  byId<HTMLButtonElement>("moc-create-build").disabled = !candidate || !request || mocDiscoveryStateForStatus(request.status) !== "ready";
 }
 
 async function openMocReview(name: string): Promise<void> {
@@ -486,7 +588,7 @@ function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], build
     const attemptLabel = `${group.taskAttempts} scan / ${group.mocAttempts} MOC attempts; latest result only`;
     const relatedBuilds = builds.filter((build) => build.discoveryRequestName === request?.name || (build.productId && build.productId === task?.productId));
     const buildRows = relatedBuilds.map((build) => `<div class="work-build-output"><span class="task-phase task-phase-${phaseClass(build.phase)}">BUILD ${escapeText(build.phase)}</span><span>${escapeText(build.progress?.message ?? "")}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<span class="work-build-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</span>${mocBuildReadout(build)}</div>`).join("");
-    return `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="layers-3"></i><strong>${escapeText(workTitle(task, request))}</strong></div><small>${escapeText(key)} · ${escapeText(attemptLabel)}</small><p>${escapeText(counts)}${evidence ? ` · evidence ${escapeText(evidence)}` : ""}</p>${buildRows}</div><div class="work-output-status"><span class="task-phase task-phase-${phaseClass(scanStatus)}">SCAN ${escapeText(scanStatus)}</span><span class="task-phase task-phase-${phaseClass(mocStatus)}">MOC ${escapeText(mocStatus)}</span><div class="work-output-actions">${task ? `<button type="button" class="admin-quiet" data-task-details-output="${escapeText(task.name)}" title="查看扫描详情"><i data-lucide="eye"></i><span>详情</span></button>` : ""}${request ? `<button type="button" class="admin-quiet" data-moc-review-output="${escapeText(request.name)}" title="查看候选"><i data-lucide="shield-check"></i><span>候选</span></button>` : ""}${retry}${mocRetry}</div></div></article>`;
+    return `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="layers-3"></i><strong>${escapeText(workTitle(task, request))}</strong></div><small>${escapeText(key)} · ${escapeText(attemptLabel)}</small><p>${escapeText(counts)}${evidence ? ` · evidence ${escapeText(evidence)}` : ""}</p>${buildRows}</div><div class="work-output-status"><span class="task-phase task-phase-${phaseClass(scanStatus)}">SCAN ${escapeText(scanStatus)}</span><span class="task-phase task-phase-${phaseClass(mocStatus)}">MOC ${escapeText(mocStatus)}</span><div class="work-output-actions">${task ? `<button type="button" class="admin-quiet" data-task-details-output="${escapeText(task.name)}" title="查看扫描详情"><i data-lucide="eye"></i><span>详情</span></button>` : ""}${request ? mocReviewAction(request, "data-moc-review-output") : ""}${retry}${mocRetry}</div></div></article>`;
   }).join("");
   container.innerHTML = `<div class="work-output-list">${rows}</div>`;
   container.querySelectorAll<HTMLButtonElement>("[data-task-details-output]").forEach((button) => button.addEventListener("click", () => void openTaskDetails(button.dataset.taskDetailsOutput ?? "")));

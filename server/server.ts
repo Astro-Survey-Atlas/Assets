@@ -12,7 +12,7 @@ import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog, withC
 import { overlapForLayers } from "./overlap.js";
 import { ProductStore, type MocProductRegistrationInput, type ProductRecord } from "./products.js";
 import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
-import { CoverageEvidenceStore, EvidenceStoreError, type ReverseLookupResult, type WarehouseLayerSnapshot } from "./evidence-store.js";
+import { CoverageEvidenceStore, EvidenceStoreError, type DownloadPlanEntrypoint, type ReverseLookupResult, type WarehouseLayerSnapshot } from "./evidence-store.js";
 import { buildOverlapDetails, publicExternalUrl } from "./overlap-details.js";
 import { resolveMocDiscoveryCandidate } from "./moc-discovery.js";
 import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
@@ -947,6 +947,14 @@ function requestPath(request: IncomingMessage): string {
   return new URL(request.url ?? "/", "http://localhost").pathname;
 }
 
+function decodeAdminPathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    throw new AdminHttpError(400, "Invalid URL path segment");
+  }
+}
+
 function requestQuery(request: IncomingMessage): URLSearchParams {
   return new URL(request.url ?? "/", "http://localhost").searchParams;
 }
@@ -1464,18 +1472,18 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     const productMatch = /^\/api\/v1\/admin\/products\/([^/]+)$/.exec(pathname);
     const draftMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/draft$/.exec(pathname);
     if (productMatch?.[1] && request.method === "GET") {
-      const record = products.get(decodeURIComponent(productMatch[1]));
+      const record = products.get(decodeAdminPathSegment(productMatch[1]));
       return json(response, 200, { product: adminProductView(record) });
     }
     if ((productMatch?.[1] || draftMatch?.[1]) && request.method === "PUT") {
       const body = await requestJsonBody(request);
       const productId = productMatch?.[1] ?? draftMatch?.[1]!;
-      return json(response, 200, { product: await products.updateDraft(decodeURIComponent(productId), body.content ?? body, expectedRevision(request, body)) });
+      return json(response, 200, { product: await products.updateDraft(decodeAdminPathSegment(productId), body.content ?? body, expectedRevision(request, body)) });
     }
     const publishMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/publish$/.exec(pathname);
     if (publishMatch?.[1] && request.method === "POST") {
       const body = await requestJsonBody(request).catch(() => ({}));
-      const productId = decodeURIComponent(publishMatch[1]);
+      const productId = decodeAdminPathSegment(publishMatch[1]);
       const existing = products.get(productId);
       const revision = expectedRevision(request, body);
       if (revision !== undefined && revision !== existing.revision) throw new AdminHttpError(409, "Product revision conflict");
@@ -1497,11 +1505,12 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       return json(response, 200, { product, lifecycle: adminProductLifecycle(product, publishedBuild) });
     }
     const historyMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/history$/.exec(pathname);
-    if (historyMatch?.[1] && request.method === "GET") return json(response, 200, { history: await products.history(decodeURIComponent(historyMatch[1])) });
+    if (historyMatch?.[1] && request.method === "GET") return json(response, 200, { history: await products.history(decodeAdminPathSegment(historyMatch[1])) });
     return json(response, 404, { error: "Admin endpoint not found" });
   } catch (error) {
     if (error instanceof AdminHttpError || error instanceof KubernetesApiError) return json(response, error.statusCode, { error: error.message });
-    throw error;
+    console.error("Assets admin request failed", error instanceof Error ? error.message : String(error));
+    return json(response, 500, { error: "Internal server error" });
   }
 }
 
@@ -1531,23 +1540,28 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
   const result = overlapForLayers([...coverageCatalog.records.values()], surveyIds, requestedOrder);
   if (!result) return json(response, 400, { error: "At least two surveys with a common HEALPix order are required" });
   const selectedLayers = [...coverageCatalog.records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
-  const evidenceLayers = selectedLayers.filter((layer) => layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "file");
   const needsSourceUnits = result.components.length > 0 && selectedLayers.some((layer) => layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "tile");
   const sourceUnits = needsSourceUnits ? await sourceUnitsReadyWithin(3_000) : null;
   const componentDetails = await Promise.all(result.components.map(async (component) => {
     const componentCells = new Set(component.cells);
+    const componentLayers = selectedLayers.filter((layer) => layer.cells.get(component.order)?.some((pixel) => componentCells.has(pixel)));
+    const sourceStates = componentLayers.map((layer) => layer.sourceUnitIndex?.status ?? "entrypoint-only");
+    const lookupPrecision = sourceStates.includes("entrypoint-only")
+      ? "entrypoint-only"
+      : sourceStates.includes("estimated")
+        ? "estimated"
+        : "exact";
     return { ...component,
-    // File-level evidence can be very large for a connected component. The
-    // UI already has this component's cells, so it requests the exact bounded
-    // file plan only when the user opens that component.
-    evidenceLookup: evidenceLayers.length ? {
+    // File and tile matches can be large. The component already carries its
+    // cells, so the browser requests the bounded plan only when needed.
+    evidenceLookup: componentLayers.length ? {
       endpoint: "/api/v1/coverage/reverse-lookup",
-      layerIds: evidenceLayers.map((layer) => layer.layerId),
+      layerIds: componentLayers.map((layer) => layer.layerId),
       order: component.order,
-      precision: "exact",
+      precision: lookupPrecision,
       deferred: true,
     } : undefined,
-    surveys: await Promise.all(selectedLayers.filter((layer) => layer.cells.get(component.order)?.some((pixel) => componentCells.has(pixel))).map(async (layer) => ({
+    surveys: await Promise.all(componentLayers.map(async (layer) => ({
       surveyId: layer.surveyId,
       releaseId: layer.releaseId,
       product: layer.product,
@@ -1593,7 +1607,10 @@ function publicReverseEntrypoints(layerIds: readonly string[], order: number, ce
     const survey = surveyIndex.surveys.find((entry) => entry.id === layer.surveyId);
     const release = survey?.releases.find((entry) => entry.id === layer.releaseId);
     const product = release?.products.find((entry) => entry.name === layer.product);
-    const sourceUrl = publicExternalUrl(product?.geometrySourceUrl ?? product?.sourceUrl ?? layer.recipe?.sourceUrl);
+    const sourceUrl = publicExternalUrl(product?.sourceUrl);
+    const officialDataUrl = publicExternalUrl(product?.officialDataUrl);
+    const officialQueryUrl = publicExternalUrl(product?.officialQueryUrl);
+    const geometrySourceUrl = publicExternalUrl(product?.geometrySourceUrl ?? layer.recipe?.sourceUrl);
     const mocAsset = [...catalog.files.entries()].find(([, entry]) => entry.record.kind === "moc"
       && entry.record.surveyId === layer.surveyId
       && entry.record.releaseId === layer.releaseId
@@ -1609,10 +1626,82 @@ function publicReverseEntrypoints(layerIds: readonly string[], order: number, ce
       cells: matchedCells,
       precision: "entrypoint-only",
       ...(sourceUrl ? { sourceUrl } : {}),
+      ...(officialDataUrl ? { officialDataUrl } : {}),
+      ...(officialQueryUrl ? { officialQueryUrl } : {}),
+      ...(geometrySourceUrl ? { geometrySourceUrl } : {}),
       ...(mocAsset ? { mocUrl: `/api/v1/coverage/layers/${encodeURIComponent(layerId)}/moc.fits` } : {}),
       note: layer.sourceUnitIndex?.notes ?? "该图层提供公共覆盖入口，但没有文件级反向索引。",
     }];
   });
+}
+
+function reverseEntrypointPrecision(value: unknown): DownloadPlanEntrypoint["precision"] {
+  return value === "exact" || value === "estimated" || value === "entrypoint-only" || value === "truncated" ? value : "entrypoint-only";
+}
+
+function normalizeReverseEntrypoints(entries: Array<Record<string, unknown>>): DownloadPlanEntrypoint[] {
+  return entries.flatMap((entry) => {
+    const common = {
+      ...(typeof entry.layerId === "string" ? { layerId: entry.layerId } : {}),
+      ...(typeof entry.productId === "string" ? { productId: entry.productId } : {}),
+      ...(typeof entry.surveyId === "string" ? { surveyId: entry.surveyId } : {}),
+      ...(typeof entry.releaseId === "string" ? { releaseId: entry.releaseId } : {}),
+      ...(typeof entry.product === "string" ? { product: entry.product } : {}),
+      ...(typeof entry.order === "number" ? { order: entry.order } : {}),
+      ...(typeof entry.nside === "number" ? { nside: entry.nside } : {}),
+      ...(Array.isArray(entry.cells) ? { cells: entry.cells.filter((cell): cell is number => typeof cell === "number") } : {}),
+      precision: reverseEntrypointPrecision(entry.precision),
+      ...(typeof entry.note === "string" ? { note: entry.note } : {}),
+    };
+    const normalized: DownloadPlanEntrypoint[] = [];
+    const addExternal = (kind: string, purpose: DownloadPlanEntrypoint["purpose"], key: "sourceUrl" | "officialDataUrl" | "officialQueryUrl" | "geometrySourceUrl"): void => {
+      const url = publicExternalUrl(entry[key]);
+      if (!url) return;
+      normalized.push({ ...common, kind, purpose, url, [key]: url });
+    };
+    addExternal("official-release", "data-access", "sourceUrl");
+    addExternal("official-data", "data-access", "officialDataUrl");
+    addExternal("official-query", "data-access", "officialQueryUrl");
+    addExternal("coverage-source", "coverage-reference", "geometrySourceUrl");
+    if (typeof entry.mocUrl === "string" && (entry.mocUrl.startsWith("/") || publicExternalUrl(entry.mocUrl))) {
+      normalized.push({ ...common, kind: "coverage-moc", purpose: "coverage-reference", url: entry.mocUrl, mocUrl: entry.mocUrl });
+    }
+    return normalized;
+  });
+}
+
+async function publicTileEntrypoints(layerIds: readonly string[], order: number, cells: readonly number[], limit: number): Promise<{ entries: DownloadPlanEntrypoint[]; truncated: boolean }> {
+  const layers = layerIds.map((layerId) => coverageCatalog.records.get(layerId)).filter((layer): layer is CoverageCellLayer => Boolean(layer && layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "tile"));
+  if (!layers.length) return { entries: [], truncated: false };
+  const sourceUnits = await sourceUnitsReadyWithin(3_000);
+  if (!sourceUnits) return { entries: [], truncated: false };
+  const entries: DownloadPlanEntrypoint[] = [];
+  let truncated = false;
+  for (const layer of layers) {
+    const match = await Promise.resolve(sourceUnits.match(layer.layerId, order, [...cells], limit)).catch(() => null);
+    if (!match) continue;
+    truncated ||= match.truncated;
+    for (const unit of match.units) {
+      entries.push({
+        kind: "tile-directory",
+        purpose: "data-access",
+        layerId: layer.layerId,
+        surveyId: layer.surveyId,
+        releaseId: layer.releaseId,
+        product: layer.product,
+        order,
+        nside: 2 ** order,
+        cells: unit.matchingCells,
+        precision: "exact",
+        url: unit.downloadUrl,
+        note: `TILE ${unit.unitId} · NEXP ${unit.exposureCount} · LASTNIGHT ${unit.lastNight}`,
+        tileId: unit.unitId,
+        exposureCount: unit.exposureCount,
+        lastNight: unit.lastNight,
+      });
+    }
+  }
+  return { entries, truncated };
 }
 
 async function sendCoverageReverseLookup(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -1625,20 +1714,33 @@ async function sendCoverageReverseLookup(request: IncomingMessage, response: Ser
   const warehouseLayerIds = layerIds.filter((layerId) => warehouseLayerSnapshots.has(layerId));
   const publicLayerIds = layerIds.filter((layerId) => !warehouseLayerIds.includes(layerId));
   const entrypoints = publicReverseEntrypoints(publicLayerIds, order, cells);
+  const boundedLimit = Math.min(Math.max(limit ?? 500, 1), 5000);
+  const tileEntrypoints = await publicTileEntrypoints(layerIds, order, cells, boundedLimit);
+  const downloadEntrypoints = [...normalizeReverseEntrypoints(entrypoints), ...tileEntrypoints.entries];
   const warehouseResult: ReverseLookupResult = warehouseLayerIds.length
     ? await evidenceStore.reverseLookup({ layerIds: warehouseLayerIds, order, cells, limit }, { tolerateUnavailable: true })
     : evidenceStore.unavailableResult({ layerIds: [], order, cells }, "这些图层由 Assets 公共 MOC 提供；没有 Warehouse 文件级反向索引。 ");
-  const precision = warehouseResult.truncated
+  const precision = warehouseResult.truncated || tileEntrypoints.truncated
     ? "truncated"
-    : entrypoints.length
+    : !warehouseResult.available && downloadEntrypoints.length
       ? "entrypoint-only"
       : warehouseResult.precision;
+  const downloadPlan = {
+    ...warehouseResult.downloadPlan,
+    entrypoints: downloadEntrypoints,
+    truncated: warehouseResult.downloadPlan.truncated || tileEntrypoints.truncated,
+    warnings: [
+      ...warehouseResult.downloadPlan.warnings,
+      ...(tileEntrypoints.truncated ? ["Tile entrypoint results were truncated"] : []),
+    ],
+  };
   return compressedJson(request, response, 200, {
     ...warehouseResult,
     requested: { ...warehouseResult.requested, layerIds },
     precision,
     entrypoints,
-    notes: [...warehouseResult.notes, ...(entrypoints.length ? [`${entrypoints.length} 个公共 MOC 图层仅提供入口级来源。`] : [])],
+    downloadPlan,
+    notes: [...warehouseResult.notes, ...(downloadEntrypoints.length ? [`${downloadEntrypoints.length} 个公共数据或覆盖入口不包含在文件清单中。`] : [])],
   }, "public, max-age=30, stale-while-revalidate=60");
 }
 

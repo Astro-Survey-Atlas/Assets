@@ -1,7 +1,51 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CoverageEvidenceStore } from "../server/evidence-store.js";
+import { buildDownloadPlan, CoverageEvidenceStore } from "../server/evidence-store.js";
+
+test("download plans deduplicate files while retaining every matching cell", () => {
+  const plan = buildDownloadPlan({
+    edges: [
+      { edgeId: "edge-1", layerId: "layer-1", sourceFileId: "file-1", sourceUri: "s3://bucket/catalog.fits", fileName: "catalog.fits", order: 8, ipix: 101, precision: "exact" },
+      { edgeId: "edge-2", layerId: "layer-1", sourceFileId: "file-1", sourceUri: "s3://bucket/catalog.fits", fileName: "catalog.fits", order: 8, ipix: 102, precision: "exact" },
+      { edgeId: "edge-3", layerId: "layer-2", sourceFileId: "file-2", sourceUri: "https://data.example/image.fits", fileName: "image.fits", order: 8, ipix: 101, precision: "estimated" },
+    ],
+    sourceFiles: [
+      { file_id: "file-1", source_uri: "s3://bucket/catalog.fits", file_name: "catalog.fits", file_type: "FITS", size_bytes: 12 },
+      { file_id: "file-2", source_uri: "https://data.example/image.fits", file_name: "image.fits", file_type: "FITS", size_bytes: 34 },
+    ],
+    entrypoints: [{ kind: "coverage-moc", purpose: "coverage-reference", layerId: "layer-1", url: "https://data.example/coverage.moc.fits", precision: "entrypoint-only" }],
+    truncated: false,
+  });
+
+  assert.equal(plan.files.length, 2);
+  assert.deepEqual(plan.files[0]?.matchingCoverage.map((match) => match.ipix), [101, 102]);
+  assert.equal(plan.files[0]?.sourceUri, "s3://bucket/catalog.fits");
+  assert.equal(plan.files[0]?.downloadable, false);
+  assert.equal(plan.files[0]?.downloadUrl, undefined);
+  assert.equal(plan.files[1]?.downloadable, true);
+  assert.equal(plan.files[1]?.downloadUrl, "https://data.example/image.fits");
+  assert.equal(plan.entrypoints[0]?.kind, "coverage-moc");
+});
+
+test("download plans preserve canonical local file URIs as non-downloadable locators", () => {
+  const sourceUri = "file:///data/catalogs/roman/image-001.fits";
+  const plan = buildDownloadPlan({
+    edges: [
+      { edgeId: "edge-local", layerId: "roman-images", sourceFileId: "file-local", sourceUri, order: 8, ipix: 456, precision: "exact" },
+    ],
+    sourceFiles: [
+      { file_id: "file-local", source_uri: sourceUri, file_name: "image-001.fits", file_type: "FITS" },
+    ],
+    truncated: false,
+  });
+
+  assert.equal(plan.files.length, 1);
+  assert.equal(plan.files[0]?.sourceUri, sourceUri);
+  assert.equal(plan.files[0]?.downloadable, false);
+  assert.equal(plan.files[0]?.downloadUrl, undefined);
+  assert.deepEqual(plan.files[0]?.matchingCoverage.map((match) => match.ipix), [456]);
+});
 
 test("warehouse evidence lookup preserves explicit order and source file metadata", async () => {
   const requests: Array<{ url: string; body: any }> = [];
@@ -18,10 +62,34 @@ test("warehouse evidence lookup preserves explicit order and source file metadat
   assert.equal(result.precision, "exact");
   assert.equal(result.edges[0]?.ipix, 123);
   assert.equal(result.sourceFiles[0]?.file_name, "tile.fits");
+  assert.equal(result.downloadPlan.files.length, 1);
+  assert.equal(result.downloadPlan.files[0]?.sourceUri, "oss://tiles/tile.fits");
+  assert.equal(result.downloadPlan.files[0]?.downloadable, false);
+  assert.equal(result.downloadPlan.files[0]?.downloadUrl, undefined);
+  assert.deepEqual(result.downloadPlan.files[0]?.matchingCoverage.map((match) => match.ipix), [123]);
   assert.equal(requests.length, 3);
   const orderClause = requests[1]?.body.query.bool.must[0];
   assert.equal(orderClause?.bool?.minimum_should_match, 1);
   assert.ok(orderClause?.bool?.should.some((clause: any) => clause.term?.healpix_order === 4));
+});
+
+test("warehouse reverse lookup exposes a public HTTP file as a direct download", async () => {
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("ast_layer_index_v1")) return new Response(JSON.stringify({ hits: { hits: [{ _id: "layer-http", _source: { layer_id: "layer-http", state: "ACTIVE" } }] } }), { status: 200 });
+    if (url.includes("ast_file_index_v1")) return new Response(JSON.stringify({ hits: { hits: [{ _id: "file-http", _source: {
+      file_id: "file-http", file_name: "catalog.fits", file_type: "FITS", source_uri: "https://data.example/catalog.fits", download_url: "https://download.example/catalog.fits", size_bytes: 42,
+    } }] } }), { status: 200 });
+    return new Response(JSON.stringify({ hits: { total: { value: 1 }, hits: [{ _id: "edge-http", _source: {
+      layer_id: "layer-http", healpix_order: 8, healpix_cell: 456, source_file_id: "file-http", source_uri: "https://data.example/catalog.fits", precision: "exact",
+    } }] } }), { status: 200 });
+  };
+  const result = await new CoverageEvidenceStore({ url: "http://warehouse:9200", fetchImpl }).reverseLookup({ layerIds: ["layer-http"], order: 8, cells: [456] });
+  const file = result.downloadPlan.files[0];
+  assert.equal(file?.metadataState, "complete");
+  assert.equal(file?.downloadable, true);
+  assert.equal(file?.downloadUrl, "https://download.example/catalog.fits");
+  assert.equal(file?.sourceUri, "https://data.example/catalog.fits");
 });
 
 test("warehouse coverage contract fields are normalized for reverse lookup", async () => {

@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { loadCatalog, publicManifest } from "../server/catalog.js";
@@ -41,6 +45,32 @@ test("public API projection hides filesystem paths and exposes stable downloads"
   assert.ok(response.files.length > 50);
   assert.ok(response.files.every((entry) => !("path" in entry)));
   assert.ok(response.files.every((entry) => entry.downloadUrl === `/api/v1/assets/${entry.id}/download`));
+});
+
+test("release catalog rejects evidence records misclassified as runtime", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-catalog-boundary-"));
+  try {
+    const file = {
+      id: "input-manifest",
+      kind: "manifest",
+      label: "Input manifest",
+      description: "evidence",
+      path: "evidence/input-manifest.json",
+      downloadName: "input-manifest.json",
+      mediaType: "application/json",
+      sizeBytes: 1,
+      sha256: "a".repeat(64),
+      deliveryClass: "runtime",
+    };
+    const bundleSha256 = createHash("sha256").update(JSON.stringify([{ id: file.id, path: file.path, sizeBytes: file.sizeBytes, sha256: file.sha256 }])).digest("hex");
+    const manifest = { schemaVersion: 1, generatedAt: "2026-08-31T00:00:00Z", bundle: { id: "boundary", sha256: bundleSha256 }, files: [file] };
+    const manifestPath = path.join(root, "artifacts", "public-survey-footprints");
+    await mkdir(manifestPath, { recursive: true });
+    await writeFile(path.join(manifestPath, "release-manifest.json"), `${JSON.stringify(manifest)}\n`);
+    await assert.rejects(() => loadCatalog(root, false), /Evidence asset cannot be marked runtime/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("current package catalog publishes only referenced release versions", async () => {

@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import type { PublicAssetManifest, PublicAssetPreviewMode, PublicAssetProjection, PublicAssetRecord } from "./types.js";
+import { inferredPublicAssetDeliveryClass, type PublicAssetManifest, type PublicAssetPreviewMode, type PublicAssetProjection, type PublicAssetRecord } from "./types.js";
 
 export interface LoadedCatalog {
   root: string;
@@ -34,6 +34,8 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
   for (const record of manifest.files) {
     if (!record.id || files.has(record.id) || !/^[a-z0-9][a-z0-9-]*$/.test(record.id)) throw new Error(`Invalid or duplicate public asset ID: ${record.id}`);
     if (!/^[a-f0-9]{64}$/.test(record.sha256) || !Number.isSafeInteger(record.sizeBytes) || record.sizeBytes < 1) throw new Error(`Invalid public asset checksum record: ${record.id}`);
+    if (record.deliveryClass !== undefined && record.deliveryClass !== "runtime" && record.deliveryClass !== "evidence") throw new Error(`Invalid delivery class: ${record.id}`);
+    if (record.deliveryClass === "runtime" && inferredPublicAssetDeliveryClass(record) === "evidence") throw new Error(`Evidence asset cannot be marked runtime: ${record.id}`);
     const absolutePath = resolveInside(normalizedRoot, record.path);
     if (verifyFiles) {
       const details = await stat(absolutePath);
@@ -59,13 +61,11 @@ export function publicManifest(catalog: LoadedCatalog, additionalRecords: Public
     // Runtime contains only the catalog, projections, previews and lightweight
     // metadata needed by the public page. Raw inputs and audit snapshots stay
     // addressable, but are deliberately marked as evidence.
-    if (record.path.includes("/csst/") || record.path.includes("/raw/") || record.kind === "provenance" || record.kind === "ledger") return "evidence";
-    if (record.kind === "moc") return "evidence";
-    return "runtime";
+    return inferredPublicAssetDeliveryClass(record);
   };
   const known = new Set(catalog.manifest.files.map((record) => record.id));
   const files = [...catalog.manifest.files, ...additionalRecords.filter((record) => !known.has(record.id))]
-    .map((record) => ({ ...record, deliveryClass: record.deliveryClass ?? classify(record) }));
+    .map((record) => ({ ...record, deliveryClass: classify(record) === "evidence" ? "evidence" : record.deliveryClass ?? "runtime" }));
   const runtimeBytes = files.filter((record) => record.deliveryClass === "runtime").reduce((sum, record) => sum + record.sizeBytes, 0);
   const evidenceBytes = files.filter((record) => record.deliveryClass === "evidence").reduce((sum, record) => sum + record.sizeBytes, 0);
   return {
