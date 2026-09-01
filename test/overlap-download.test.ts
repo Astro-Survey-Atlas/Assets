@@ -46,6 +46,28 @@ test("file rows retain local URIs and all matching coverage", () => {
   assert.deepEqual(JSON.parse(row.matching_cells ?? "[]").map((match: { ipix: number }) => match.ipix), [101, 102]);
 });
 
+test("file rows retain an official link and owned URI independently", () => {
+  const plan: DownloadPlan = {
+    schemaVersion: 1,
+    files: [{
+      fileId: "owned-file",
+      metadataState: "complete",
+      fileName: "tile.fits",
+      sourceUri: "oss://survey-data/tiles/1234/tile.fits",
+      downloadable: true,
+      downloadUrl: "https://data.example/tiles/1234/tile.fits",
+      matchingCoverage: [{ layerId: "desi", order: 8, ipix: 101, precision: "exact" }],
+    }],
+    entrypoints: [],
+    truncated: false,
+    warnings: [],
+  };
+  const row = record(overlapCsvRows(component, plan, () => layer)[0]!);
+  assert.equal(row.source_uri, "oss://survey-data/tiles/1234/tile.fits");
+  assert.equal(row.downloadable, "true");
+  assert.equal(row.download_url, "https://data.example/tiles/1234/tile.fits");
+});
+
 test("tile rows expose the matched cells, tile identity and official directory URL", () => {
   const plan: DownloadPlan = {
     schemaVersion: 1,

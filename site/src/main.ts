@@ -8,6 +8,7 @@ import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-la
 import { joinUnique, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch } from "./overlap-download.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { loadPublicCatalogResource, type PublicCatalogResource, type PublicCatalogSource } from "./public-catalog.js";
+import { createRevisionHydrationQueue } from "./revision-hydration-queue.js";
 
 import "./styles.css";
 
@@ -160,7 +161,7 @@ let coverageDots: AtlasCoverageGlobe | null = null;
 let activeSurveyId: string | null = null;
 let coverageCatalog: CoverageCatalog | null = null;
 const coverageBlockCache = new Map<string, number[]>();
-const coverageRequests = new Map<string, AbortController>();
+const coverageRequests = new Map<string, Promise<number[]>>();
 type CoverageLayerLoadState = "loading" | "ready" | "empty" | "error";
 const coverageLayerLoadStates = new Map<string, CoverageLayerLoadState>();
 const coverageLayerLoadErrors = new Map<string, string>();
@@ -168,6 +169,8 @@ const COVERAGE_CACHE_LIMIT = 128;
 const COVERAGE_REFRESH_INTERVAL_MS = 60_000;
 let coverageRefreshTimer: number | null = null;
 let coverageCatalogEtag = "";
+let coverageInitializationComplete = false;
+let coverageRefreshInFlight: Promise<void> | null = null;
 interface SkyDeepLinkTarget { surveyId?: string; productId?: string; layerId?: string; error?: string }
 let deepLinkTarget: SkyDeepLinkTarget | null = null;
 let pendingCoverageState: SurveyLayerState | null = null;
@@ -250,6 +253,7 @@ async function fetchPublicResponse(url: string, init: RequestInit = {}): Promise
       lastError = error;
     } catch (error) {
       if (error instanceof NonRetryablePublicRequestError) throw error;
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
       lastError = error;
     }
     const delay = PUBLIC_REQUEST_RETRY_DELAYS_MS[attempt];
@@ -303,24 +307,30 @@ async function fetchCoverageBlock(layer: CoverageCatalog["layers"][number], orde
   const key = coverageBlockKey(layer, order, tile);
   const cached = coverageBlockCache.get(key);
   if (cached) return cached;
+  const inFlight = coverageRequests.get(key);
+  if (inFlight) return inFlight;
   const controller = new AbortController();
-  coverageRequests.get(key)?.abort();
-  coverageRequests.set(key, controller);
-  try {
-    const revision = layer.revision ? `&revision=${encodeURIComponent(layer.revision)}` : "";
-    const response = await fetch(`/api/v1/coverage/blocks/${encodeURIComponent(layer.layerId)}?order=${order}&tile=${tile}${revision}`, { signal: controller.signal });
-    if (!response.ok) throw new Error(`coverage block HTTP ${response.status}`);
-    const block = await response.json() as { cells?: number[] };
-    const cells = Array.isArray(block.cells) ? [...new Set(block.cells)].sort((a, b) => a - b) : [];
-    coverageBlockCache.set(key, cells);
-    while (coverageBlockCache.size > COVERAGE_CACHE_LIMIT) coverageBlockCache.delete(coverageBlockCache.keys().next().value!);
-    return cells;
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") return [];
-    throw error;
-  } finally {
-    if (coverageRequests.get(key) === controller) coverageRequests.delete(key);
-  }
+  const request = (async (): Promise<number[]> => {
+    try {
+      const revision = layer.revision ? `&revision=${encodeURIComponent(layer.revision)}` : "";
+      const response = await fetchPublicResponse(`/api/v1/coverage/blocks/${encodeURIComponent(layer.layerId)}?order=${order}&tile=${tile}${revision}`, { signal: controller.signal });
+      if (!response.ok) throw new Error(`coverage block HTTP ${response.status}`);
+      const block = await response.json() as { cells?: number[] };
+      const cells = Array.isArray(block.cells) ? [...new Set(block.cells)].sort((a, b) => a - b) : [];
+      coverageBlockCache.set(key, cells);
+      while (coverageBlockCache.size > COVERAGE_CACHE_LIMIT) coverageBlockCache.delete(coverageBlockCache.keys().next().value!);
+      return cells;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return [];
+      throw error;
+    }
+  })();
+  coverageRequests.set(key, request);
+  void request.then(
+    () => { if (coverageRequests.get(key) === request) coverageRequests.delete(key); },
+    () => { if (coverageRequests.get(key) === request) coverageRequests.delete(key); },
+  );
+  return request;
 }
 
 async function fetchCoverageOverview(layer: CoverageCatalog["layers"][number]): Promise<number[]> {
@@ -671,7 +681,7 @@ function positionOverlapPanel(): void {
   panel.style.left = "auto";
   panel.style.right = window.innerWidth <= 820 ? "14px" : "28px";
   panel.style.top = window.innerWidth <= 820 ? "150px" : "214px";
-  panel.style.width = window.innerWidth <= 820 ? "min(300px, calc(100vw - 28px))" : "300px";
+  panel.style.width = "var(--coverage-panel-width)";
 }
 
 function layersForSurvey(surveyId: string): CoverageCatalog["layers"] {
@@ -815,11 +825,14 @@ function positionSelectionQueue(): void {
     queue.style.removeProperty("top");
     queue.style.removeProperty("left");
     queue.style.removeProperty("width");
+    queue.style.removeProperty("--selection-queue-top");
     return;
   }
   const layers = byId("coverage-layers");
   const top = layers.hidden ? 132 : Math.min(window.innerHeight - 180, layers.getBoundingClientRect().bottom + 16);
-  queue.style.top = `${Math.max(132, top)}px`;
+  const boundedTop = Math.max(132, top);
+  queue.style.top = `${boundedTop}px`;
+  queue.style.setProperty("--selection-queue-top", `${boundedTop}px`);
   queue.style.left = "28px";
   queue.style.width = "min(330px, calc(100vw - 56px))";
 }
@@ -1193,6 +1206,7 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
 function appendSourceLocator(row: HTMLElement, sourceUri: string): void {
   const local = sourceUri.startsWith("file:///");
   const object = /^(?:s3|oss):\/\//i.test(sourceUri);
+  const remote = !local && !object;
   const locator = document.createElement("div");
   locator.className = "overlap-source-locator";
   const value = document.createElement("code");
@@ -1211,7 +1225,9 @@ function appendSourceLocator(row: HTMLElement, sourceUri: string): void {
       ? "本地文件定位符：需在对应数据挂载环境访问"
       : object
         ? "对象存储定位符：需使用对应存储权限访问"
-        : "源文件定位符不可由浏览器直接下载",
+        : remote
+          ? "源文件 URI：记录实际数据位置；官方下载链接可能不同"
+          : "源文件定位符不可由浏览器直接下载",
   }));
 }
 
@@ -1223,7 +1239,7 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): v
     return;
   }
   const directFiles = plan.files.filter((file) => file.downloadable).length;
-  const locatorFiles = plan.files.filter((file) => !file.downloadable && Boolean(file.sourceUri)).length;
+  const locatorFiles = plan.files.filter((file) => Boolean(file.sourceUri)).length;
   const tileLinks = plan.entrypoints.filter((entry) => entry.kind === "tile-directory").length;
   const heading = document.createElement("strong");
   heading.textContent = `DOWNLOAD PLAN · ${plan.files.length} files · ${directFiles} direct downloads · ${locatorFiles} URI locators · ${tileLinks} tile links${plan.truncated ? " · truncated" : ""}`;
@@ -1250,12 +1266,20 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): v
       matchSummary.textContent = `${file.matchingCoverage.length} coverage match${file.matchingCoverage.length === 1 ? "" : "es"} · ${joinUnique(file.matchingCoverage.map((match) => match.layerId)) || "layer unknown"} · ${joinUnique(file.matchingCoverage.map((match) => `O${match.order}:${match.ipix}`))}`;
       row.append(matchSummary);
       if (file.metadataState === "missing") row.append(Object.assign(document.createElement("small"), { textContent: "FileAsset metadata missing; not verified as a complete file record" }));
-      if (file.downloadable && file.downloadUrl) {
-        const link = drawerExternalLink(file.downloadUrl, t("coverage.downloadOfficial"));
-        if (link) row.append(link);
-      } else if (file.sourceUri) {
+      let hasLocation = false;
+      if (file.downloadUrl) {
+        const link = drawerExternalLink(file.downloadUrl, file.downloadUrl);
+        if (link) {
+          link.title = t("coverage.downloadOfficial");
+          row.append(link);
+          hasLocation = true;
+        }
+      }
+      if (file.sourceUri) {
         appendSourceLocator(row, file.sourceUri);
-      } else {
+        hasLocation = true;
+      }
+      if (!hasLocation) {
         row.append(Object.assign(document.createElement("small"), { textContent: "没有公开文件下载地址" }));
       }
       list.append(row);
@@ -1277,7 +1301,11 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): v
       if (entry.order !== undefined) row.append(Object.assign(document.createElement("small"), { textContent: `O${entry.order} · ${(entry.cells ?? []).length} cells · ${entry.precision}` }));
       if (entry.note) row.append(Object.assign(document.createElement("small"), { textContent: entry.note }));
       const entryUrl = entry.url ?? entry.sourceUrl ?? entry.mocUrl;
-      const entryLink = drawerDocLink(entryUrl, entry.kind === "tile-directory" ? `Open tile ${String(entry.tileId ?? "")} directory`.trim() : entry.purpose === "coverage-reference" ? "Coverage reference" : "Official data entrypoint");
+      const entryLabel = entry.kind === "tile-directory" && typeof entryUrl === "string"
+        ? entryUrl
+        : entry.purpose === "coverage-reference" ? "Coverage reference" : "Official data entrypoint";
+      const entryLink = drawerDocLink(entryUrl, entryLabel);
+      if (entry.kind === "tile-directory" && entry.tileId) row.append(Object.assign(document.createElement("small"), { textContent: `TILE ${entry.tileId}` }));
       if (entryLink) row.append(entryLink);
       list.append(row);
     });
@@ -1569,8 +1597,11 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
     if (source.sourceUnits) {
       const units = document.createElement("small"); units.textContent = `${source.sourceUnits.unitKind ?? "source units"} · ${source.sourceUnits.totalUnits ?? source.sourceUnits.units?.length ?? 0}${source.sourceUnits.truncated ? " · truncated" : ""}`; card.append(units);
       source.sourceUnits.units?.slice(0, 12).forEach((unit) => {
-      const unitLink = drawerExternalLink(unit.downloadUrl, unit.unitId);
-        if (unitLink) links.append(unitLink);
+        const unitLink = drawerExternalLink(unit.downloadUrl, `TILE ${unit.unitId}`);
+        if (unitLink) {
+          unitLink.title = `TILE ${unit.unitId} · NEXP ${unit.exposureCount ?? "--"} · LASTNIGHT ${unit.lastNight ?? "--"}`;
+          links.append(unitLink);
+        }
       });
     }
     publicList.append(card);
@@ -2223,8 +2254,17 @@ async function fetchCoverageCatalogDocument(): Promise<CoverageCatalog | null> {
   return next;
 }
 
-async function hydrateCoverageCatalog(nextCatalog: CoverageCatalog): Promise<void> {
-  const revisionChanged = Boolean(coverageCatalog?.revision && nextCatalog.revision && coverageCatalog.revision !== nextCatalog.revision);
+function coverageCatalogRevisionKey(catalog: CoverageCatalog): string {
+  if (catalog.revision) return `revision:${catalog.revision}`;
+  if (catalog.generatedAt) return `generated:${catalog.generatedAt}`;
+  // Older catalogs did not carry a revision. Keep a deterministic fallback so
+  // an initialization retry does not rebuild the same catalog twice.
+  return `catalog:${JSON.stringify(catalog)}`;
+}
+
+async function hydrateCoverageCatalogInternal(nextCatalog: CoverageCatalog): Promise<void> {
+  const previousCatalog = coverageCatalog;
+  const revisionChanged = Boolean(previousCatalog && coverageCatalogRevisionKey(previousCatalog) !== coverageCatalogRevisionKey(nextCatalog));
   coverageCatalog = nextCatalog;
   if (revisionChanged) {
     coverageBlockCache.clear();
@@ -2238,17 +2278,17 @@ async function hydrateCoverageCatalog(nextCatalog: CoverageCatalog): Promise<voi
   coverageLayerLoadErrors.clear();
   const blocks = new Map<string, number[]>();
   if (coverageDots) {
-    await Promise.all(coverageCatalog.layers.map(async (layer) => {
+    await Promise.all(nextCatalog.layers.map(async (layer) => {
       const cells = await fetchCoverageOverview(layer);
       if (cells.length) blocks.set(`${layer.layerId}:${layer.overviewOrder}`, cells);
     }));
-    const availableSurveys = new Set(coverageCatalog.layers.map((layer) => layer.surveyId));
-    await coverageDots.loadCatalog(coverageCatalog, blocks, surveyIndex?.surveys ?? []);
+    const availableSurveys = new Set(nextCatalog.layers.map((layer) => layer.surveyId));
+    await coverageDots.loadCatalog(nextCatalog, blocks, surveyIndex?.surveys ?? []);
     if (coverageSelectionInitialized) {
       const selected = [...queuedLayerIds].filter((surveyId) => availableSurveys.has(surveyId));
       applyCoverageSelection(selected);
     } else {
-      coverageDots.setVisibleSurveys(new Set(allCoverageSurveyIds()));
+      coverageDots.setVisibleSurveys(new Set(nextCatalog.layers.map((layer) => layer.surveyId)));
     }
     if (homeEntered) coverageDots.transitionToDataView(1);
     else updateHomeScrollProgress();
@@ -2259,28 +2299,55 @@ async function hydrateCoverageCatalog(nextCatalog: CoverageCatalog): Promise<voi
   }
 }
 
+const coverageHydration = createRevisionHydrationQueue(coverageCatalogRevisionKey, hydrateCoverageCatalogInternal);
+
+function hydrateCoverageCatalog(nextCatalog: CoverageCatalog, force = false): Promise<void> {
+  return coverageHydration.enqueue(nextCatalog, force);
+}
+
 function retryCoverageSurvey(surveyId: string): void {
   if (!coverageCatalog) return;
   const layer = coverageCatalog.layers.find((candidate) => candidate.surveyId === surveyId);
   if (!layer) return;
   coverageLayerLoadStates.set(layer.layerId, "loading");
   renderCoverageLayers();
-  void hydrateCoverageCatalog(coverageCatalog).catch((error) => {
+  void hydrateCoverageCatalog(coverageCatalog, true).catch((error) => {
     byId("coverage-state").textContent = error instanceof Error ? error.message : "COVERAGE RETRY FAILED";
   });
 }
 
-async function refreshCoverageCatalog(): Promise<void> {
-  if (document.hidden || !coverageDots) return;
-  try {
-    const next = await fetchCoverageCatalogDocument();
-    if (next && next.revision !== coverageCatalog?.revision) {
-      await hydrateCoverageCatalog(next);
-      if (deepLinkTarget?.surveyId) focusSkyTarget(deepLinkTarget);
+function refreshCoverageCatalog(): Promise<void> {
+  if (document.hidden || !coverageDots || !coverageInitializationComplete) return Promise.resolve();
+  if (coverageRefreshInFlight) return coverageRefreshInFlight;
+  const request = (async (): Promise<void> => {
+    try {
+      const next = await fetchCoverageCatalogDocument();
+      if (next) {
+        const nextRevision = coverageCatalogRevisionKey(next);
+        const currentRevision = coverageCatalog ? coverageCatalogRevisionKey(coverageCatalog) : null;
+        if (nextRevision !== currentRevision || coverageHydration.appliedRevision !== nextRevision) {
+          await hydrateCoverageCatalog(next);
+          if (deepLinkTarget?.surveyId) focusSkyTarget(deepLinkTarget);
+        }
+      } else if (coverageCatalog) {
+        // A failed hydration may have already recorded the catalog ETag. A
+        // subsequent refresh therefore returns 304; retry the un-applied
+        // catalog instead of treating that response as a successful load.
+        const currentRevision = coverageCatalogRevisionKey(coverageCatalog);
+        if (coverageHydration.appliedRevision !== currentRevision) {
+          await hydrateCoverageCatalog(coverageCatalog, true);
+          if (deepLinkTarget?.surveyId) focusSkyTarget(deepLinkTarget);
+        }
+      }
+    } catch (error) {
+      byId("coverage-state").textContent = error instanceof Error ? error.message : "COVERAGE CATALOG REFRESH FAILED";
     }
-  } catch (error) {
-    byId("coverage-state").textContent = error instanceof Error ? error.message : "COVERAGE CATALOG REFRESH FAILED";
-  }
+  })();
+  coverageRefreshInFlight = request;
+  void request.finally(() => {
+    if (coverageRefreshInFlight === request) coverageRefreshInFlight = null;
+  });
+  return request;
 }
 
 function scheduleCoverageRefresh(): void {
@@ -2356,13 +2423,16 @@ async function initialize(): Promise<void> {
     // Keep the catalog and URL state usable even when the optional WebGL
     // viewer could not be created (for example, in a headless browser).
     try {
-      if (coverageResult.value !== coverageCatalog || coverageResult.source !== "memory") await hydrateCoverageCatalog(coverageResult.value);
+      await hydrateCoverageCatalog(coverageResult.value);
       applySkyDeepLink();
-      scheduleCoverageRefresh();
     } catch (error) {
       console.warn("Coverage preview unavailable", error);
       byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
     }
+    // Keep retrying a catalog whose first viewer hydration failed. The
+    // refresh path can reuse the un-applied catalog even when the server
+    // answers 304 for its already-recorded ETag.
+    scheduleCoverageRefresh();
   } else {
     byId("coverage-state").textContent = "COVERAGE CATALOG UNAVAILABLE";
   }
@@ -2382,6 +2452,7 @@ async function initialize(): Promise<void> {
     if (provenance) byId<HTMLAnchorElement>("provenance-download").href = provenance.downloadUrl;
   }
   if (usedCachedPublicCatalog) byId("coverage-state").textContent = "PUBLIC CATALOG CACHED · RETRYING";
+  coverageInitializationComplete = true;
 }
 
 byId<HTMLInputElement>("survey-search").addEventListener("input", (event) => {
@@ -2614,4 +2685,5 @@ void initialize().catch((error) => {
   console.error(error);
   byId("coverage-state").textContent = t("coverage.releaseUnavailable");
   if (!surveyIndex) byId("survey-list").replaceChildren(Object.assign(document.createElement("div"), { className: "error-row", textContent: t("coverage.catalogLoadFailed") }));
+  coverageInitializationComplete = true;
 });

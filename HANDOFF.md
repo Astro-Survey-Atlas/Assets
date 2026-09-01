@@ -65,7 +65,7 @@ and inspect overlapping diffs before editing.
 - The compact mobile overlap view now hides the duplicate selection queue and
   gives the scrollable result panel an opaque reading surface while overlap is
   active. Desktop behavior is unchanged.
-- Final local gate: `npm run validate` passes 98 Node tests plus the Core wheel
+- Final local gate: `npm run build` and `npm test` pass 102 Node tests plus the Core wheel
   verification. Helm lint and development/production template rendering pass,
   as does `git diff --check`. The generated 211-file bundle remains
   `e7684305a9c81df66a2fd7c9387c1dc3672c093caecdfe36383076ee5e520f2c`.
@@ -74,31 +74,53 @@ and inspect overlapping diffs before editing.
   Tile cells were strict subsets of the component where appropriate. The
   Chinese mobile pass loaded both bundled CJK weights, had no browser errors
   or horizontal overflow, and screenshots/canvas-region pixel samples were
-  nonblank. No cluster or 72602 deployment was performed.
+  nonblank. No production or 72602 deployment was performed at that checkpoint.
+
+### 2026-09-01 Coverage Initialization and WebGL Closure
+
+- Coverage hydration is serialized by catalog revision. Initialization and
+  `pageshow`/visibility refreshes cannot rebuild the same catalog concurrently;
+  duplicate overview-block requests share one in-flight promise. A failed
+  revision remains retryable, including after a `304 Not Modified`, and the
+  layer retry action forces a fresh hydration.
+- Reloading the coverage catalog disposes the old scene and renderer resources
+  without calling `WEBGL_lose_context` on the shared canvas. Final globe
+  disposal still releases the context, and queued frames from a retired viewer
+  are cancelled.
+- Added regression coverage for the revision queue, renderer disposal and
+  independent download-plan locations; the full suite passes 103/103 Node
+  tests plus Core wheel verification.
+- Coverage layer queues now use the available viewport height, accept wheel and
+  touch scrolling, and keep persistent layer details in the outer queue rather
+  than truncating each card at a fixed inner height. Overlap Result keeps Tile
+  numbers while Download Plan shows the complete official URL and source URI.
+- Development deployment is Helm revision 108 with image tag
+  `0.1.0-20260901-172411`; the Pod is `1/1 Running` on `eva7028`.
+- Twenty delayed-catalog Chromium runs at 1440x900 all reported
+  `contextLost=0`, a ready non-empty canvas, DESI selected, and no page or
+  console errors. Production remains untouched.
 
 ### Last Deployed Baseline
 
-- `npm run build`, `npm test` (85 tests), `npm run validate`,
+- `npm run build`, `npm test` (103 tests),
   `helm lint charts/astro-survey-atlas-assets`, Helm template rendering, and
   `git diff --check` pass.
-- Helm revision 103 is healthy with image tag
-  `0.1.0-20260831-184932`; the `publish-assets` init container completed and
+- Helm revision 108 is healthy with image tag
+  `0.1.0-20260901-172411`; the `publish-assets` init container completed and
   the Pod is `1/1 Running` on `eva7028`.
 - Direct service URL: `http://10.15.51.75:32083/`.
   Ingress URLs: `http://astro.assets.dev.72602.space:32080/` and
   `https://astro.assets.dev.72602.space:32443/`.
 - Health bundle SHA-256 is
-  `ccc273c90738140dc3760ea387529a7d41a21e77b4187ca510f06760a1130046`;
+  `e7684305a9c81df66a2fd7c9387c1dc3672c093caecdfe36383076ee5e520f2c`;
   `/healthz` reports 222 release files, `/api/v1/assets` reports 221 public
-  files, and `/api/v1/coverage` reports 58 footprints. A FITS Range request
+  files, and `/api/v1/coverage` reports 62 footprints. A FITS Range request
   returned 32 bytes with `206 Partial Content`, `Content-Range`, and
   `X-Content-SHA256`.
 - The running image manifest digest is
-  `sha256:5c9ff7af85e99731a2ce969e3caa85c0e04b7c921126d55e83ab299eba81fa28`.
-- Cache-disabled Chromium smoke on the public NodePort loaded both bundled
-  WOFF2 files. Chinese `survey-overline`, locale-toggle and admin title glyphs
-  resolved to `Noto Sans CJK SC`; Latin and numeric mono glyphs resolved to
-  `Noto Sans Mono`.
+  `sha256:62d07b599f11e1c14c08a98a52657dd2a156aa063ef3d2202a7972d62259aba5`.
+- Delayed-catalog Chromium smoke on the public NodePort passed 20/20 runs with
+  no WebGL context loss, blank canvas or browser errors.
 
 ### Current code-stage closure
 
@@ -116,13 +138,14 @@ and inspect overlapping diffs before editing.
   remain evidence even if a stale manifest declares `runtime`. Dynamic package
   and MOC records still use explicit logical asset IDs and verified hashes.
 - Node regression tests cover the public catalog fallback policy, product API
-  error matrix and evidence allowlist boundary. Production S3, 72602 minipc,
-  the production hostname and Ingress remain untouched.
-- Local final gate passed: `npm run validate` completed 93 Node tests plus the
-  Core wheel verification; Helm lint, development/production template
-  rendering, and `git diff --check` also pass. The generated local bundle is
-  `e7684305a9c81df66a2fd7c9387c1dc3672c093caecdfe36383076ee5e520f2c` and has
-  not been deployed.
+  error matrix, evidence allowlist boundary, revision hydration and renderer
+  disposal. Production S3, 72602 minipc, the production hostname and Ingress
+  remain untouched.
+- Local final gate passed: `npm run build` and `npm test` completed 103 Node
+  tests plus the Core wheel verification; Helm lint, development/production
+  template rendering, and `git diff --check` also pass. The generated bundle
+  `e7684305a9c81df66a2fd7c9387c1dc3672c093caecdfe36383076ee5e520f2c` is
+  deployed to the development NodePort only.
 - `npx tsc -p tsconfig.site.json --noEmit` and the server type check pass; the
   site tsconfig now includes the installed Node type declarations used by the
   shared survey registry module.

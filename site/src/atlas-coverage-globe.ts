@@ -137,7 +137,10 @@ export class AtlasCoverageGlobe {
     } catch { /* browsers without Font Loading API use the declared fallback */ }
     const manifest = footprintManifest(catalog, blocks);
     const selectedSurveyIds = new Set(this.#visibleSurveyIds);
-    this.#viewer?.dispose();
+    // Rebuilding the scene reuses the canvas. Releasing the WebGL context here
+    // can trigger WEBGL_lose_context and leave the replacement renderer blank;
+    // the context is released only when the globe itself is finally disposed.
+    this.#viewer?.dispose({ releaseContext: false });
     this.#surveys = surveys;
     const cards = surveys.map(surveyCardFor);
     this.#viewer = new SurveyLayerViewer(

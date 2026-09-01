@@ -302,6 +302,11 @@ function releaseWebglContext(renderer: THREE.WebGLRenderer): void {
   renderer.getContext().getExtension("WEBGL_lose_context")?.loseContext();
 }
 
+export function disposeRenderer(renderer: THREE.WebGLRenderer, releaseContext = true): void {
+  renderer.dispose();
+  if (releaseContext) releaseWebglContext(renderer);
+}
+
 /** Some drivers return null for unsupported precision queries. Three.js calls
  * this method while constructing a renderer, so choose a conservative shader
  * precision before it can dereference that null result. */
@@ -542,6 +547,8 @@ export class SurveyLayerViewer {
   #activeOverlapComponentId: string | null = null;
   #activeOverlapHighlight: OverlapHighlight | null = null;
   #viewportRightInset = 0;
+  #disposed = false;
+  #renderFrame: number | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -1181,8 +1188,13 @@ export class SurveyLayerViewer {
     this.#controls.update();
   }
 
-  dispose(): void {
+  dispose(options: { releaseContext?: boolean } = {}): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
     this.#cameraTransition = null;
+    if (this.#renderFrame !== null) cancelAnimationFrame(this.#renderFrame);
+    this.#renderFrame = null;
+    this.#renderQueued = false;
     if (this.#clickTimer) clearTimeout(this.#clickTimer);
     this.#clickTimer = null;
     this.#resizeObserver.disconnect();
@@ -1198,8 +1210,7 @@ export class SurveyLayerViewer {
     this.#canvas.removeEventListener("pointerleave", this.#handlePointerLeave);
     this.#canvas.removeEventListener("pointercancel", this.#handlePointerCancel);
     disposeObject(this.#scene);
-    this.#renderer.dispose();
-    releaseWebglContext(this.#renderer);
+    disposeRenderer(this.#renderer, options.releaseContext !== false);
   }
 
   #rebuildVisible(animated: boolean): void {
@@ -2305,10 +2316,13 @@ export class SurveyLayerViewer {
   }
 
   #requestRender(): void {
+    if (this.#disposed) return;
     if (this.#renderQueued) return;
     this.#renderQueued = true;
-    requestAnimationFrame((now) => {
+    this.#renderFrame = requestAnimationFrame((now) => {
+      this.#renderFrame = null;
       this.#renderQueued = false;
+      if (this.#disposed) return;
       this.#advanceCameraTransition(now);
       this.#advanceFragmentTransitions(now);
       this.#advanceExplosionTransition(now);
