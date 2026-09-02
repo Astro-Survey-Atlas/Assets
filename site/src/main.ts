@@ -545,7 +545,7 @@ function updateOverlapPanelLayout(): void {
     document.body.removeAttribute("data-overlap-panels");
     document.body.style.removeProperty("--overlap-panel-exit-transform");
   }
-  setOverlapPanelInteraction(panel, crowded || layersOpen);
+  setOverlapPanelInteraction(panel, crowded);
   setOverlapPanelInteraction(queue, crowded || layersOpen);
 }
 
@@ -790,11 +790,12 @@ function showCoverageLayerTooltip(surveyId: string, row: HTMLElement): void {
 
 function setCoverageLayersOpen(open: boolean): void {
   const layers = byId("coverage-layers");
-  const auxiliaryPanels = [byId("coverage-detail-panel"), byId("selection-queue")];
+  const queue = byId("selection-queue");
   layers.hidden = !open;
   if (open) document.body.dataset.layersPanel = "open";
   else document.body.removeAttribute("data-layers-panel");
-  auxiliaryPanels.forEach((panel) => { panel.inert = open; });
+  queue.inert = open;
+  updateOverlapPanelLayout();
   hideCoverageLayerTooltip();
   positionSelectionQueue();
   positionOverlapPanel();

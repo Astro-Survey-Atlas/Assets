@@ -16,6 +16,20 @@ The code-stage reliability and storage-boundary work is complete in the working
 tree; production deployment remains deferred. Preserve all existing changes
 and inspect overlapping diffs before editing.
 
+### Latest Development Deployment (2026-09-02)
+
+- Helm revision `112` is running image tag `0.1.0-20260902-132800` on
+  `eva7028`, serving at `http://10.15.51.75:32083/`.
+- The `publish-assets` init container completed with exit code `0` and
+  activated bundle SHA-256
+  `6e480be8cbfa3269978bb9abe9495b3fe8750d7ff71044aa2fe1353a2e954d59`.
+- Live smoke reports `/healthz` `ok`, 230 public asset files and 59 coverage
+  footprints. A DESI FITS range request returned `206 Partial Content` with
+  `Content-Range` and `X-Content-SHA256`.
+- `npm run build`, `npm test` (106 Node tests plus Core wheel verification),
+  and Helm lint passed before rollout. Production and the 72602 production
+  cluster remain untouched.
+
 ### Gaia DR3 Full-Sky Release (2026-09-02)
 
 - Added the reviewed CDS Gaia DR3 main-source catalog-presence MOC as
@@ -35,7 +49,7 @@ and inspect overlapping diffs before editing.
   runtime Warehouse merge by default and through Helm values. The Warehouse
   index still reports those foreign test layers as `ACTIVE`; coordinate their
   state transition with the Warehouse owner rather than mutating them here.
-- Dev rollout is Helm revision 111, image tag `0.1.0-20260902-120500`, bundle
+- Dev rollout is Helm revision 112, image tag `0.1.0-20260902-132800`, bundle
   SHA-256 `6e480be8cbfa3269978bb9abe9495b3fe8750d7ff71044aa2fe1353a2e954d59`,
   serving at `http://10.15.51.75:32083/`. Online smoke confirms Gaia only,
   O4/O8, full-sky area, entrypoint-only reverse lookup and no smoke layers.
