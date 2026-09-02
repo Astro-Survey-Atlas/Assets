@@ -262,20 +262,20 @@ interface CameraPose {
   target: THREE.Vector3;
 }
 
-const BASE_COLOR = new THREE.Color("#168f89");
-const OVERLAP_COLOR = new THREE.Color("#ffd24a");
-const SELECTION_COLOR = new THREE.Color("#9fe7e0");
-const SELECTION_EDGE_COLOR = new THREE.Color("#e7fffb");
-const WORKSPACE_COLOR = new THREE.Color("#d69b4e");
+const BASE_COLOR = new THREE.Color("#2c3792");
+const OVERLAP_COLOR = new THREE.Color("#2c3792");
+const SELECTION_COLOR = new THREE.Color("#f01951");
+const SELECTION_EDGE_COLOR = new THREE.Color("#f6f6ff");
+const WORKSPACE_COLOR = new THREE.Color("#8d97ff");
 // The opening shot is a close, cropped glimpse of the layered globe. The
 // tighter field keeps the shell geometry legible while the pose below moves
 // its centre beyond the upper-left of the viewport.
 const HOME_FOV_DEG = 24;
-const COVERAGE_OPACITY = 0.17;
-const COVERAGE_EDGE_OPACITY = 0.22;
+const COVERAGE_OPACITY = 0.26;
+const COVERAGE_EDGE_OPACITY = 0.34;
 // Keep surrounding layers subdued while the selected region remains readable.
-const DIMMED_OPACITY = 0.075;
-const DIMMED_EDGE_OPACITY = 0.12;
+const DIMMED_OPACITY = 0.13;
+const DIMMED_EDGE_OPACITY = 0.2;
 const EXPLODED_OPACITY = 0.58;
 const EXPLODED_LAYER_STEP = 0.18;
 const REGION_INNER_PADDING = 0.045;
@@ -388,6 +388,16 @@ function overlapComponentsForPixels(pixels: readonly number[], nside: number): S
   return result;
 }
 
+export function largestConnectedPixelComponent(pixels: readonly number[], nside: number): number[] {
+  const uniquePixels = [...new Set(pixels)];
+  if (uniquePixels.length <= 1) return uniquePixels;
+  const components = overlapComponentsForPixels(uniquePixels, nside);
+  const largest = components.reduce<SurveyLayerOverlapComponent | undefined>((current, candidate) => (
+    !current || candidate.cells.length > current.cells.length ? candidate : current
+  ), undefined);
+  return [...(largest?.cells ?? uniquePixels)];
+}
+
 function artifactKey(artifact: SurveyFootprint): string {
   return `${surveySourceIdentity(artifact)}:${artifact.label}`;
 }
@@ -410,7 +420,7 @@ export function sourceVariantColor(base: THREE.Color, index: number, count: numb
 }
 
 export function workspaceAssetColor(key: string): string {
-  const palette = ["#f2cf62", "#45d7c6", "#ef8db2", "#9b8cff", "#5caeff", "#f29a62", "#72d88d", "#ed6d70"];
+  const palette = ["#5965c7", "#f01951", "#8d97ff", "#a674d6", "#5caeff", "#d95f90", "#b06cf0", "#ed6d70"];
   let hash = 2166136261;
   for (let index = 0; index < key.length; index += 1) {
     hash ^= key.charCodeAt(index);
@@ -454,14 +464,15 @@ function countLabelSprite(text: string, position: THREE.Vector3, depthTest = tru
   canvas.height = 64;
   const context = canvas.getContext("2d")!;
   context.clearRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = "rgba(4, 9, 12, 0.72)";
-  context.strokeStyle = "rgba(255, 255, 255, 0.45)";
+  const lightTheme = document.documentElement.dataset.theme === "light";
+  context.fillStyle = lightTheme ? "rgba(255, 255, 255, 0.92)" : "rgba(4, 9, 12, 0.72)";
+  context.strokeStyle = lightTheme ? "rgba(44, 55, 146, 0.45)" : "rgba(255, 255, 255, 0.45)";
   context.lineWidth = 2;
   context.beginPath();
   context.roundRect(10, 10, 172, 44, 18);
   context.fill();
   context.stroke();
-  context.fillStyle = "#ffffff";
+  context.fillStyle = lightTheme ? "#20286f" : "#ffffff";
   context.font = '700 24px "Atlas Sans CJK", "Atlas Sans", sans-serif';
   context.textAlign = "center";
   context.textBaseline = "middle";
@@ -619,9 +630,9 @@ export class SurveyLayerViewer {
 
   setTheme(theme: "light" | "dark"): void {
     this.#canvas.dataset.theme = theme;
-    this.#renderer.setClearColor(this.#backgroundColor ?? (theme === "light" ? 0xaebbc1 : 0x000000), 1);
-    (this.#starField.material as THREE.PointsMaterial).color.setHex(theme === "light" ? 0x879ca8 : 0x71808b);
-    (this.#starField.material as THREE.PointsMaterial).opacity = theme === "light" ? 0.34 : 0.28;
+    this.#renderer.setClearColor(this.#backgroundColor ?? (theme === "light" ? 0xfbfbfe : 0x090b18), 1);
+    (this.#starField.material as THREE.PointsMaterial).color.setHex(theme === "light" ? 0x5965c7 : 0x71808b);
+    (this.#starField.material as THREE.PointsMaterial).opacity = theme === "light" ? 0.24 : 0.28;
     this.#requestRender();
   }
 
@@ -878,6 +889,7 @@ export class SurveyLayerViewer {
   }
 
   setVisibleSurveys(surveyIds: Iterable<string>): void {
+    const hadNoVisibleSurveys = this.#visibleSurveyIds.size === 0;
     const available = new Set(this.#model.slots.filter((slot) => slot.hasFootprint).map((slot) => slot.surveyId));
     this.#workspaceLayers.forEach((layer) => {
       if (!this.#workspaceLayerAssetIds(layer).length && layer.pixels.length) available.add(layer.surveyId ?? "__unassigned__");
@@ -889,6 +901,7 @@ export class SurveyLayerViewer {
     if (this.#focusedSurveyId && !this.#visibleSurveyIds.has(this.#focusedSurveyId)) this.#focusedSurveyId = null;
     this.#pruneSelection();
     this.#rebuildVisible(true);
+    if (hadNoVisibleSurveys && next.size === 1) this.focusSurvey(next.values().next().value as string);
   }
 
   setOverlapMode(active: boolean): void {
@@ -944,7 +957,7 @@ export class SurveyLayerViewer {
           radius,
           color: SELECTION_COLOR,
           inset: nside === this.#manifest.nside ? 0.016 : 0.006,
-        })), SELECTION_RENDER_ORDER + 2, 0.26);
+        })), SELECTION_RENDER_ORDER + 2, 0.42);
         this.#activeOverlapHighlight = highlight;
         this.#overlapSelectionGroup.add(highlight.root);
       }
@@ -1035,7 +1048,9 @@ export class SurveyLayerViewer {
     if (!pixels?.length || !this.#visibleSurveyIds.has(surveyId)) return;
     this.#focusedSurveyId = surveyId;
     this.#applyFocus();
-    const direction = this.#pixelDirection(pixels);
+    const direction = this.#pixelDirection(
+      largestConnectedPixelComponent(pixels, this.#manifest.nside),
+    );
     const outer = this.#outerRadius;
     const tangent = Math.abs(direction.y) > 0.9
       ? new THREE.Vector3(1, 0, 0)
@@ -2111,7 +2126,7 @@ export class SurveyLayerViewer {
     const overlapPulse = 0.5 + 0.5 * Math.sin(now * 0.003);
     this.#overlapDashMaterials.forEach((material) => {
       (material as THREE.LineDashedMaterial & { dashOffset: number }).dashOffset = -now * 0.00008;
-      material.opacity = 0.72 + overlapPulse * 0.28;
+      material.opacity = 0.88 + overlapPulse * 0.12;
     });
     if (!this.#selectionCoreMaterial || !this.#selectionEdgeMaterial || !this.#selectionGlowMaterial) return;
     const pulse = 0.5 + 0.5 * Math.sin(now * 0.004);

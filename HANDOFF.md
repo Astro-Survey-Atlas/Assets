@@ -1,12 +1,49 @@
 # Assets Session Handoff
 
-Updated: 2026-09-02
+Updated: 2026-09-03
 
 Repository: `/home/aaron/Repo/Astro-Survey-Atlas-Assets`
 
 Starting commit: `49f434b`; latest code commit before this closure: `a24a9f5`
 
 ## Current Session Snapshot
+
+### 2026-09-03 Globe Visibility Fix and Development Rollout
+
+- Fixed the coverage viewer's initial single-survey framing. When the
+  selection changes from empty to one survey, the viewer now focuses the
+  largest connected HEALPix component instead of averaging separated regions
+  into a direction that may have no coverage. The behavior is survey-agnostic
+  and applies to CSST, DESI and other multi-region footprints.
+- Increased normal and dimmed coverage opacity/edge contrast, restored each
+  survey's `--layer-color` for `COVERAGE LAYER` details and selection borders,
+  and strengthened the indigo overlap surface/dash plus active component
+  highlight for the light theme. Added a regression test for largest-component
+  focus selection.
+- Local verification passed: `npm run build`, `npm test` (107 Node tests plus
+  Core wheel verification), `npx tsc -p tsconfig.site.json --noEmit`,
+  `npm run build:site`, `helm lint charts/astro-survey-atlas-assets`, and
+  `git diff --check`.
+- Development Helm release is revision `115`, image tag
+  `0.1.0-20260903-062410`, image manifest
+  `sha256:233cd83bae19dc8d1460b74ab2cb490d2024ef78df635f0a222e510d352d57b4`
+  on node `eva7028`. The `publish-assets` init container completed with exit
+  code `0` and activated bundle
+  `public-survey-footprints-2026-08-20` with SHA-256
+  `6e480be8cbfa3269978bb9abe9495b3fe8750d7ff71044aa2fe1353a2e954d59`.
+- Live development URL: `http://10.15.51.75:32083/`; ingress host:
+  `http://astro.assets.dev.72602.space/`.
+- Online smoke passed: `/healthz` returned `ok` with 231 release files;
+  `/api/v1/assets` returned 230 public files; `/api/v1/coverage` returned 59
+  footprints; `/api/v1/coverage/catalog` returned 59 layers at revision
+  `577ac2c10f20b38b9d96916730805942`; and a DESI DR1 FITS Range request
+  returned `206 Partial Content`, `Content-Range: bytes 0-31/1339200` and
+  `X-Content-SHA256`.
+- Production and the 72602 production cluster were not changed. The working
+  tree remains intentionally uncommitted and contains this session's viewer,
+  public-style and regression-test edits alongside earlier UI/catalog work;
+  preserve and inspect those changes before the next rollout. Existing
+  `.tmp-atlas-*` screenshots are local working artifacts.
 
 Updated after the 2026-08-31 registration-defaults, coverage-layer UI and
 font-consistency rollouts, the MOC discovery and reverse-lookup follow-up, the
@@ -16,7 +53,7 @@ The code-stage reliability and storage-boundary work is complete in the working
 tree; production deployment remains deferred. Preserve all existing changes
 and inspect overlapping diffs before editing.
 
-### Latest Development Deployment (2026-09-02)
+### Previous Development Deployment (2026-09-02)
 
 - Helm revision `112` is running image tag `0.1.0-20260902-132800` on
   `eva7028`, serving at `http://10.15.51.75:32083/`.
@@ -49,7 +86,7 @@ and inspect overlapping diffs before editing.
   runtime Warehouse merge by default and through Helm values. The Warehouse
   index still reports those foreign test layers as `ACTIVE`; coordinate their
   state transition with the Warehouse owner rather than mutating them here.
-- Dev rollout is Helm revision 112, image tag `0.1.0-20260902-132800`, bundle
+- At that checkpoint, the dev rollout was Helm revision 112, image tag `0.1.0-20260902-132800`, bundle
   SHA-256 `6e480be8cbfa3269978bb9abe9495b3fe8750d7ff71044aa2fe1353a2e954d59`,
   serving at `http://10.15.51.75:32083/`. Online smoke confirms Gaia only,
   O4/O8, full-sky area, entrypoint-only reverse lookup and no smoke layers.
@@ -158,7 +195,7 @@ and inspect overlapping diffs before editing.
   Content` with `Content-Range` and `X-Content-SHA256`. Production and the
   72602 production cluster remain untouched.
 
-### Last Deployed Baseline
+### Historical Deployed Baseline (2026-09-02)
 
 - `npm run build`, `npm test` (103 tests),
   `helm lint charts/astro-survey-atlas-assets`, Helm template rendering, and
@@ -605,8 +642,8 @@ the list without creating a mobile hover layer.
 ## Live Deployment Layout
 
 Assets is a separate Helm release in namespace `astro-survey-atlas-assets`.
-The latest recorded dev rollout is Helm revision 109, image tag
-`0.1.0-20260902-094018`, and serves through:
+The latest recorded dev rollout is Helm revision 115, image tag
+`0.1.0-20260903-062410`, and serves through:
 
 ```text
 http://10.15.51.75:32083/
@@ -631,10 +668,10 @@ The public site serves through the `astro-survey-atlas-assets` Service/Ingress.
 The release PVC contains the static public bundle used for fallback and
 publication. The current runtime bundle is
 `public-survey-footprints-2026-08-20`, SHA-256
-`e7684305a9c81df66a2fd7c9387c1dc3672c093caecdfe36383076ee5e520f2c`, with
-211 manifest files. The init container completed successfully; the image
+`6e480be8cbfa3269978bb9abe9495b3fe8750d7ff71044aa2fe1353a2e954d59`, with
+220 manifest files. The init container completed successfully; the image
 manifest digest is
-`sha256:8d6cefcad70660647e6b045b5b96bc48dbf59562a1b4f77063ac7259fc68c918`.
+`sha256:233cd83bae19dc8d1460b74ab2cb490d2024ef78df635f0a222e510d352d57b4`.
 
 The Gaia O8-only Warehouse layers are included in the globe's O4 visual
 overview by NESTED coarsening, while their API coverage remains explicitly O8.

@@ -3,13 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#050a10" />
+    <meta name="theme-color" content="#090b18" />
+    <link rel="icon" type="image/svg+xml" href="/icon_without_name_lon_web.svg" />
+    <link rel="stylesheet" href="../src/public.css" />
+    <script src="/theme-bootstrap.js"></script>
     <title>Astro Survey Atlas Assets · Survey Directory</title>
   </head>
   <body class="resources-page surveys-page">
     <header class="site-header resources-header">
-      <a class="brand" href="/" aria-label="Astro Survey Atlas Assets"><span><strong>ASTRO SURVEY ATLAS ASSETS</strong><small>SURVEY DIRECTORY</small></span></a>
-      <nav class="site-nav" aria-label="Site navigation"><a class="site-nav-link" href="/"><i data-lucide="home"></i><span data-i18n="nav.home">Home</span></a><a class="site-nav-link" href="/github/"><i data-lucide="git-branch"></i><span data-i18n="nav.github">GitHub</span></a><a class="site-nav-link" href="/surveys/" aria-current="page"><i data-lucide="telescope"></i><span data-i18n="nav.surveys">Survey Directory</span></a><a class="site-nav-link" href="/sdk/"><i data-lucide="file-code-2"></i><span data-i18n="nav.sdk">SDK</span></a><button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button></nav>
+      <a class="brand" href="/" aria-label="Astro Survey Atlas home"><img class="brand-logo" src="/icon_without_name_lon_web.svg" alt="Astro Survey Atlas" width="72" height="28" /><span class="brand-wordmark"><strong>Astro Survey Atlas</strong><small>SURVEY DIRECTORY</small></span></a>
+      <button class="mobile-menu-toggle" type="button" data-mobile-menu-toggle aria-label="Open navigation" aria-expanded="false"><i data-lucide="menu"></i></button>
+      <nav class="site-nav" data-site-nav aria-label="Site navigation"><a class="site-nav-link" href="/atlas/" data-i18n="nav.sky">Sky Atlas</a><a class="site-nav-link" href="/surveys/" aria-current="page" data-i18n="nav.surveys">Survey Directory</a><a class="site-nav-link" href="/resources/" data-i18n="nav.resources">Resources</a><a class="site-nav-link" href="/sdk/" data-i18n="nav.sdk">SDK</a><a class="site-nav-link" href="/github/" data-i18n="nav.github">GitHub</a><button class="theme-toggle" type="button" data-theme-toggle aria-label="Use light theme" title="Light theme"><i data-lucide="sun"></i></button><button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button><a class="admin-entry" href="/admin/" data-i18n-title="nav.admin"><span data-i18n="nav.admin">Control Room</span></a></nav>
     </header>
     <main class="resources-main">
       <section class="resources-hero"><p class="eyebrow" data-i18n="page.surveys.eyebrow">PUBLIC SKY COVERAGE / SURVEY DIRECTORY</p><h1 data-i18n="page.surveys.title">Surveys, releases, and HEALPix capability</h1><p data-i18n="page.surveys.lead">Browse releases, products, modalities, and the actual HEALPix orders available for each survey.</p></section>

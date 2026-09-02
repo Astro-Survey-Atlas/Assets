@@ -1,4 +1,4 @@
-import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Maximize2, Minimize2, RotateCcw, Search, ShieldCheck, Telescope, X, createIcons } from "lucide";
+import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Maximize2, Minimize2, Moon, Menu, RotateCcw, Search, ShieldCheck, Sun, Telescope, X, createIcons } from "lucide";
 import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 import type { SurveyLayerContextMenu, SurveyLayerInspection, SurveyLayerOverlapComponent, SurveyLayerState } from "./atlas/survey-layer-viewer.js";
@@ -9,6 +9,7 @@ import { joinUnique, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { loadPublicCatalogResource, type PublicCatalogResource, type PublicCatalogSource } from "./public-catalog.js";
 import { createRevisionHydrationQueue } from "./revision-hydration-queue.js";
+import { mountSiteChrome } from "./site-chrome.js";
 
 import "./styles.css";
 
@@ -282,10 +283,12 @@ function recordPublicCatalogResult(name: PublicCatalogName, result: PublicCatalo
 const overlapEvidenceCache = new Map<string, OverlapEvidenceResult>();
 const overlapDetailsCache = new Map<string, OverlapDetailsResponse>();
 let lastEscapeAt = -Infinity;
-let homeEntered = false;
+const isAtlasPage = window.location.pathname === "/atlas/" || window.location.pathname === "/atlas";
+let homeEntered = isAtlasPage;
 let coverageSelectionInitialized = false;
 
 mountLocaleControls();
+mountSiteChrome();
 
 function isAtlasInteractive(): boolean {
   return document.body.dataset.homeState === "atlas";
@@ -1973,6 +1976,11 @@ function byId<T extends HTMLElement>(id: string): T {
   return element as T;
 }
 
+function setTextIfPresent(id: string, value: string): void {
+  const element = document.getElementById(id);
+  if (element) element.textContent = value;
+}
+
 function bytes(value: number): string {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(value < 10 * 1024 ? 1 : 0)} KB`;
@@ -1993,7 +2001,7 @@ async function copy(value: string, message = "SHA-256 已复制"): Promise<void>
 
 function renderIcons(): void {
     createIcons({
-    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Maximize2, Minimize2, RotateCcw, Search, ShieldCheck, Telescope, X },
+    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Maximize2, Minimize2, Moon, Menu, RotateCcw, Search, ShieldCheck, Sun, Telescope, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -2308,6 +2316,11 @@ async function hydrateCoverageCatalogInternal(nextCatalog: CoverageCatalog): Pro
     if (coverageSelectionInitialized) {
       const selected = [...queuedLayerIds].filter((surveyId) => availableSurveys.has(surveyId));
       applyCoverageSelection(selected);
+    } else if (isAtlasPage) {
+      // The standalone Atlas starts with an intentional empty selection. The
+      // homepage may still use the loaded footprints as its ambient preview,
+      // but the interactive page must never imply that every survey is chosen.
+      applyCoverageSelection([]);
     } else {
       coverageDots.setVisibleSurveys(new Set(nextCatalog.layers.map((layer) => layer.surveyId)));
     }
@@ -2375,6 +2388,14 @@ function scheduleCoverageRefresh(): void {
   if (coverageRefreshTimer !== null) window.clearInterval(coverageRefreshTimer);
   coverageRefreshTimer = window.setInterval(() => void refreshCoverageCatalog(), COVERAGE_REFRESH_INTERVAL_MS);
 }
+
+// Global enterAtlasExperience function for inline onclick handlers if needed
+declare global {
+  interface Window {
+    enterAtlasExperience: (surveyId?: string, productId?: string) => void;
+  }
+}
+window.enterAtlasExperience = enterAtlasExperience;
 
 function applySkyDeepLink(): void {
   deepLinkTarget = readSkyDeepLink();
@@ -2446,6 +2467,11 @@ async function initialize(): Promise<void> {
     try {
       await hydrateCoverageCatalog(coverageResult.value);
       applySkyDeepLink();
+
+      // Setup a subtle auto-rotation for the background visual if we are on the homepage
+      if (coverageDots && !homeEntered) {
+          coverageDots.resetView(); // This should trigger a continuous slow rotation if implemented in AtlasCoverageGlobe
+      }
     } catch (error) {
       console.warn("Coverage preview unavailable", error);
       byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
@@ -2466,7 +2492,7 @@ async function initialize(): Promise<void> {
     byId("stat-moc").textContent = String(manifest.statistics.rawMocFiles);
     byId("stat-packages").textContent = String(manifest.statistics.packages);
     byId("stat-size").textContent = bytes(manifest.statistics.runtimeBytes ?? manifest.statistics.totalBytes);
-    byId("home-stat-releases").textContent = String(manifest.statistics.releases);
+    setTextIfPresent("home-stat-releases", String(manifest.statistics.releases));
     byId("bundle-hash").textContent = manifest.bundle.sha256;
     byId("generated-at").textContent = new Date(manifest.generatedAt).toLocaleString("zh-CN", { hour12: false, timeZone: "UTC" }) + " UTC";
     const provenance = manifest.files.find((record) => record.kind === "provenance");
@@ -2522,6 +2548,35 @@ function resetCoverageExperience(updateUrl = true): void {
   setOverlapExpandVisible(false);
   updateCoverageInspector(null);
   updateCoverageReadout(null);
+
+  // Keep the standalone atlas page in its interactive state. The homepage
+  // uses the same controller but must return to its introductory hero.
+  if (isAtlasPage) {
+    document.body.dataset.homeState = "atlas";
+    document.documentElement.style.overflow = "";
+    const atlasScene = document.getElementById("coverage-scene");
+    if (atlasScene) {
+      atlasScene.style.opacity = "1";
+      atlasScene.style.pointerEvents = "auto";
+    }
+    homeEntered = true;
+    return;
+  }
+
+  // Revert UI to the home state
+  document.body.dataset.homeState = "intro";
+  document.documentElement.style.overflow = "";
+  const coverageScene = document.getElementById("coverage-scene");
+  if (coverageScene) {
+      coverageScene.style.opacity = "0";
+      coverageScene.style.pointerEvents = "none";
+  }
+  const hero = document.getElementById("home-hero");
+  if (hero) {
+      hero.classList.remove("is-exiting");
+      hero.removeAttribute("aria-hidden");
+  }
+  homeEntered = false;
 }
 
 byId("coverage-reset").addEventListener("click", () => {
@@ -2565,6 +2620,13 @@ function enterAtlasExperience(surveyId?: string, productId?: string): void {
     return;
   }
   const hero = byId("home-hero");
+
+  const coverageScene = document.getElementById("coverage-scene");
+  if (coverageScene) {
+      coverageScene.style.opacity = "1";
+      coverageScene.style.pointerEvents = "auto";
+  }
+
   document.body.dataset.homeState = "entering";
   document.body.style.setProperty("--home-scroll-progress", "1");
   window.scrollTo({ top: 0, behavior: "auto" });
@@ -2585,7 +2647,16 @@ function enterAtlasExperience(surveyId?: string, productId?: string): void {
   window.setTimeout(finish, 680);
 }
 
-byId("home-enter").addEventListener("click", () => enterAtlasExperience());
+const enterBtn = document.getElementById("home-enter");
+if (enterBtn) {
+  enterBtn.addEventListener("click", () => enterAtlasExperience());
+}
+
+// Fallback listener for the old ID if it's still being used somewhere else
+const oldEnterBtn = document.getElementById("home-enter");
+if (oldEnterBtn && !enterBtn) {
+    oldEnterBtn.addEventListener("click", () => enterAtlasExperience());
+}
 
 window.addEventListener("popstate", () => {
   if (!surveyIndex || !coverageCatalog) return;
@@ -2699,6 +2770,10 @@ window.addEventListener("atlas:locale-change", () => {
   if (surveyIndex) renderSurveyFilterOptions();
   renderSelectionQueue();
   updateCoverageEmptyGuide();
+});
+
+window.addEventListener("atlas:theme-change", () => {
+  coverageDots?.setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
 });
 
 renderIcons();

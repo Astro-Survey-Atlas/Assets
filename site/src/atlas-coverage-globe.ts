@@ -125,6 +125,10 @@ export class AtlasCoverageGlobe {
     canvas.dataset.renderer = "three";
   }
 
+  setTheme(theme: "light" | "dark"): void {
+    this.#viewer?.setTheme(theme);
+  }
+
   async loadCatalog(catalog: CoverageCatalog, blocks: ReadonlyMap<string, number[]>, surveys: CoverageSurvey[]): Promise<void> {
     // Canvas text is rasterized at creation time, so wait for the bundled
     // faces before constructing labels used by the Three.js viewer.

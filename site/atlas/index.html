@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#090b18" />
+    <meta name="description" content="Astro Survey Atlas Assets public sky coverage" />
+    <link rel="icon" type="image/svg+xml" href="/icon_without_name_lon_web.svg" />
+    <link rel="stylesheet" href="/src/public.css" />
+    <script src="/theme-bootstrap.js"></script>
+    <title>Astro Survey Atlas Assets</title>
+  </head>
+  <body class="public-site atlas-page" data-home-state="atlas">
+    <header class="site-header public-header">
+      <a class="brand" href="/" aria-label="Astro Survey Atlas Public Assets">
+        <img class="brand-logo" src="/icon_without_name_lon_web.svg" alt="Astro Survey Atlas" width="72" height="28" />
+        <span class="brand-wordmark"><strong>Astro Survey Atlas</strong><small>SKY ATLAS WORKSPACE</small></span>
+      </a>
+      <button class="mobile-menu-toggle" type="button" data-mobile-menu-toggle aria-label="Open navigation" aria-expanded="false"><i data-lucide="menu"></i></button>
+      <nav class="site-nav" data-site-nav aria-label="Site navigation">
+        <a class="site-nav-link" href="/atlas/" aria-current="page" data-i18n="nav.sky">Sky Atlas</a>
+        <a class="site-nav-link" href="/surveys/" data-i18n="nav.surveys">Survey Directory</a>
+        <a class="site-nav-link" href="/resources/" data-i18n="nav.resources">Resources</a>
+        <a class="site-nav-link" href="/sdk/" data-i18n="nav.sdk">SDK</a>
+        <a class="site-nav-link" href="/github/" data-i18n="nav.github">GitHub</a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Use light theme" title="Light theme"><i data-lucide="sun"></i></button>
+        <button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button>
+        <a class="admin-entry" href="/admin/" data-i18n-title="nav.admin"><span data-i18n="nav.admin">Control Room</span></a>
+      </nav>
+    </header>
+
+    <main>
+      <div id="coverage-scene" class="coverage-scene" aria-label="公开巡天 HEALPix 天球覆盖">
+        <canvas id="coverage-canvas" role="img" aria-label="根据公开覆盖块绘制的 HEALPix 单元"></canvas>
+      </div>
+      <div class="coverage-tools">
+        <div id="coverage-status" class="coverage-status" aria-live="polite">
+          <span>NSIDE <output id="coverage-status-nside">--</output></span>
+          <span>FOV <output id="coverage-status-fov">--</output></span>
+          <span>CAM <output id="coverage-status-camera">--</output></span>
+        </div>
+        <button id="coverage-reset" class="icon-button" type="button" title="重置天球视角" aria-label="重置天球视角"><i data-lucide="rotate-ccw"></i></button>
+        <button id="coverage-layers-toggle" class="icon-button" type="button" title="打开图层" aria-label="打开图层"><i data-lucide="layers-3"></i></button>
+        <button id="coverage-help-toggle" class="icon-button" type="button" title="查看快捷键说明" aria-label="查看快捷键说明"><i data-lucide="circle-help"></i></button>
+      </div>
+        <div id="coverage-layers" class="coverage-layers" hidden aria-label="覆盖图层"></div>
+        <aside id="coverage-empty-guide" class="coverage-empty-guide" hidden aria-live="polite" aria-label="选择巡天引导">
+          <div class="coverage-empty-guide-mark" aria-hidden="true"><i data-lucide="layers-3"></i></div>
+          <div class="coverage-empty-guide-copy">
+            <strong data-i18n="coverage.emptyGuideTitle">NO SURVEY SELECTED</strong>
+            <p data-i18n="coverage.emptyGuideBody">Click the layers button to open the survey list, then try selecting one.</p>
+            <button id="coverage-empty-guide-action" class="coverage-empty-guide-action" type="button"><i data-lucide="layers-3"></i><span data-i18n="coverage.emptyGuideAction">Open survey layers</span></button>
+          </div>
+        </aside>
+        <aside id="coverage-help" class="coverage-help" hidden aria-label="天球快捷键说明">
+          <div class="coverage-help-heading"><strong data-i18n="coverage.shortcuts">SHORTCUTS</strong><button id="coverage-help-close" class="icon-button" type="button" data-i18n-title="common.close" data-i18n-aria-label="common.close"><i data-lucide="x"></i></button></div>
+          <dl>
+            <div><dt>F</dt><dd data-i18n="coverage.focus">Focus the selected region and narrow the field of view.</dd></div>
+            <div><dt>G</dt><dd data-i18n="coverage.overlapShortcut">Toggle the selected surveys into a co-registered overlap view.</dd></div>
+            <div><dt>ESC</dt><dd data-i18n="coverage.escape">Exit overlap and clear the current selection and inspector.</dd></div>
+            <div><dt>R</dt><dd data-i18n="coverage.resetShortcut">Reset the sky and camera to the starting view.</dd></div>
+          </dl>
+        </aside>
+        <div class="coverage-readout" aria-live="polite">
+          <span class="coverage-readout-kicker">SKY COVERAGE / ICRS</span>
+          <strong id="coverage-selection-title" data-i18n="coverage.allSurveys">ALL PUBLIC SURVEYS</strong>
+          <span id="coverage-selection-meta">NESTED HEALPIX · NSIDE 16</span>
+          <span class="coverage-readout-status"><span aria-hidden="true"></span><output id="coverage-state" data-i18n="coverage.loading">LOADING HEALPIX CELLS</output></span>
+        </div>
+        <aside id="coverage-detail-panel" class="coverage-detail-panel" hidden aria-live="polite" aria-label="区块覆盖信息">
+          <div id="coverage-detail-kicker" class="coverage-detail-kicker" data-i18n="coverage.cellInspector">CELL INSPECTOR</div>
+          <strong id="coverage-detail-title" data-i18n="coverage.healpixCell">HEALPIX CELL</strong>
+          <button id="overlap-expand" class="icon-button overlap-expand-button" type="button" data-i18n-title="coverage.overlapExpand" data-i18n-aria-label="coverage.overlapExpand" title="展开重合详情" aria-label="展开重合详情" hidden><i data-lucide="maximize-2"></i></button>
+          <div id="coverage-detail-content"></div>
+        </aside>
+        <aside id="selection-queue" class="selection-queue" hidden aria-live="polite" aria-label="当前选择"></aside>
+        <aside id="overlap-drawer" class="overlap-drawer" hidden role="dialog" aria-modal="true" aria-labelledby="overlap-drawer-title" aria-label="重合详情">
+          <div class="overlap-drawer-header">
+            <div class="overlap-drawer-heading">
+              <span class="coverage-detail-kicker" data-i18n="coverage.overlapDrawer">OVERLAP DETAILS</span>
+              <strong id="overlap-drawer-title">--</strong>
+            </div>
+            <button id="overlap-drawer-close" class="icon-button" type="button" data-i18n-title="coverage.overlapCollapse" data-i18n-aria-label="coverage.overlapCollapse" title="关闭重合详情" aria-label="关闭重合详情"><i data-lucide="x"></i></button>
+          </div>
+          <div id="overlap-drawer-components" class="overlap-drawer-components" aria-label="连通区域"></div>
+          <div id="overlap-drawer-content" class="overlap-drawer-content" aria-live="polite"></div>
+        </aside>
+        <div id="coverage-context-menu" class="coverage-context-menu" hidden role="menu" aria-label="覆盖区域操作"></div>
+      <section class="directory-intro" aria-labelledby="page-title">
+        <div class="intro-copy">
+          <p class="eyebrow" data-i18n="directory.eyebrow">PUBLIC SKY COVERAGE CATALOG / 2026.08</p>
+          <h1 id="page-title" data-i18n="directory.title">Public Survey Footprints</h1>
+          <p class="intro-lead" data-i18n="directory.lead">Readable, comparable, downloadable sky coverage for public surveys. Each record links to native FITS MOCs, geometry sources, release packages, and reviewable evidence.</p>
+          <div class="intro-rule" aria-hidden="true"></div>
+          <p class="intro-note"><strong data-i18n="directory.noteTitle">Directory notes</strong> <span data-i18n="directory.note">ICRS coordinates and NESTED HEALPix provide one spatial language for public releases. Survey colors map to the sky; focus or select a record to locate its coverage.</span></p>
+          <dl class="headline-stats" aria-label="发布统计">
+            <div><dt>RELEASES</dt><dd id="stat-releases">--</dd></div>
+            <div><dt>EXACT MOC</dt><dd id="stat-acquired">--</dd></div>
+            <div><dt>RAW FITS</dt><dd id="stat-moc">--</dd></div>
+            <div><dt>PACKAGES</dt><dd id="stat-packages">--</dd></div>
+            <div><dt>ARCHIVE SIZE</dt><dd id="stat-size">--</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="catalog-shell" aria-labelledby="catalog-title">
+        <div class="catalog-heading">
+          <div>
+            <p class="eyebrow">SURVEY REGISTER / SORTED BY SOURCE</p>
+            <h2 id="catalog-title" data-i18n="directory.bySurvey">Browse public assets by survey</h2>
+          </div>
+          <div class="search-field">
+            <i data-lucide="search"></i>
+            <label class="sr-only" for="survey-search">搜索巡天</label>
+            <input id="survey-search" type="search" autocomplete="off" data-i18n-placeholder="common.search" placeholder="Search surveys, missions, modalities, or products" />
+            <button id="survey-filter-toggle" class="search-filter-button" type="button" data-i18n-title="directory.filterTitle" data-i18n-aria-label="directory.filterTitle" title="FILTER BY MODALITY" aria-label="FILTER BY MODALITY" aria-haspopup="dialog" aria-controls="survey-filter-dialog"><i data-lucide="list-filter"></i><span data-i18n="directory.filterShort">FILTER</span></button>
+          </div>
+        </div>
+        <div class="survey-result-row"><output id="survey-count">--</output><span data-i18n="directory.resultHint">Each record shows published products, coverage cells, and download entry points</span></div>
+        <div id="survey-list" class="survey-list" aria-live="polite">
+          <div class="loading-row"><span></span><strong>正在验证巡天目录</strong></div>
+        </div>
+      </section>
+
+      <section class="integrity-band" aria-labelledby="integrity-title">
+        <div>
+          <p class="eyebrow" data-i18n="integrity.eyebrow">REPRODUCIBLE EVIDENCE</p>
+          <h2 id="integrity-title" data-i18n="integrity.title">Every download has a source and hash</h2>
+          <p class="integrity-copy" data-i18n="integrity.copy">Release manifests, source files, and provenance are preserved together. Verify every download independently with SHA-256.</p>
+        </div>
+        <dl>
+          <div><dt>BUNDLE SHA-256</dt><dd><code id="bundle-hash">--</code><button id="copy-bundle-hash" class="icon-button" type="button" title="复制 bundle SHA-256" aria-label="复制 bundle SHA-256"><i data-lucide="copy"></i></button></dd></div>
+          <div><dt>GENERATED AT</dt><dd id="generated-at">--</dd></div>
+        </dl>
+        <a id="provenance-download" class="command-button" href="#"><i data-lucide="file-check-2"></i><span data-i18n="integrity.provenance">Download provenance</span></a>
+      </section>
+    </main>
+
+    <footer>
+      <span>ICRS / NESTED HEALPIX / SHA-256</span>
+      <span id="footer-release">PUBLIC-SURVEY-FOOTPRINTS-2026-08-20 · VERIFIED</span>
+    </footer>
+
+    <dialog id="survey-dialog" class="survey-dialog">
+      <div class="dialog-bar"><span id="dialog-kind">SURVEY</span><button id="dialog-close" class="icon-button" type="button" aria-label="关闭详情" title="关闭"><i data-lucide="x"></i></button></div>
+      <div id="dialog-content" class="survey-dialog-content"></div>
+    </dialog>
+
+    <dialog id="preview-dialog" class="survey-dialog preview-dialog">
+      <div class="dialog-bar"><span id="preview-kind">FILE PREVIEW</span><button id="preview-close" class="icon-button" type="button" aria-label="关闭预览" title="关闭"><i data-lucide="x"></i></button></div>
+      <div id="preview-content" class="survey-dialog-content preview-content"></div>
+    </dialog>
+
+    <dialog id="survey-filter-dialog" class="survey-dialog survey-filter-dialog">
+      <div class="dialog-bar"><span data-i18n="directory.filterTitle">FILTER BY MODALITY</span><button id="survey-filter-close" class="icon-button" type="button" data-i18n-title="common.close" data-i18n-aria-label="common.close"><i data-lucide="x"></i></button></div>
+      <div class="survey-dialog-content">
+        <div class="survey-filter-heading">
+          <strong data-i18n="directory.filterHeading">Choose modalities</strong>
+          <span id="survey-filter-count"></span>
+        </div>
+        <div id="survey-filter-options" class="survey-filter-options"></div>
+      </div>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

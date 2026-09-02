@@ -7,11 +7,13 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        index: "site/index.html",
-        admin: "site/admin/index.html",
-        github: "site/github/index.html",
-        surveys: "site/surveys/index.html",
-        sdk: "site/sdk/index.html",
+        index: "index.html",
+        admin: "admin/index.html",
+        atlas: "atlas/index.html",
+        github: "github/index.html",
+        resources: "resources/index.html",
+        surveys: "surveys/index.html",
+        sdk: "sdk/index.html",
       },
     },
   },

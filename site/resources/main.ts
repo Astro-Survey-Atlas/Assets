@@ -1,6 +1,7 @@
-import { ArrowLeft, ExternalLink, FileCode2, GitBranch, Home, Search, Telescope, X, createIcons } from "lucide";
-import "../src/styles.css";
+import { ArrowLeft, ArrowRight, ExternalLink, FileCode2, GitBranch, Home, Search, Telescope, X, createIcons } from "lucide";
+import "../src/public.css";
 import { locale, mountLocaleControls, t } from "../src/i18n.js";
+import { mountSiteChrome } from "../src/site-chrome.js";
 
 interface Asset { label: string; downloadName: string; downloadUrl: string; sha256: string; sizeBytes: number; releaseId?: string; product?: string; surveyId?: string }
 interface Product { productId?: string; name: string; modality: string; description?: string; coverage?: { layerId?: string; availableOrders: number[]; overviewOrder: number; maxOrder: number; coverageRole?: string; areaDeg2?: number }; sourceUrl?: string; geometrySourceUrl?: string; sourceLabel?: string; geometrySourceLabel?: string; dataOrigin?: string; sourceTier?: string; status?: string; reason?: string; manualStep?: string; detailUrl?: string; evidenceUrl?: string; links?: ProductLink[] }
@@ -34,6 +35,7 @@ let published = new Map<string, PublishedProduct>();
 let query = "";
 
 mountLocaleControls();
+mountSiteChrome();
 
 const orderText = (orders?: number[]): string => orders?.length ? orders.map((order) => `O${order}`).join(" / ") : "--";
 const productKey = (surveyId: string, releaseId: string, product: Product): string => product.productId ?? `${surveyId}:${releaseId}:${product.name}`;
@@ -378,7 +380,10 @@ function openHashProduct(): void {
 }
 
 function renderIcons(): void {
-  createIcons({ icons: { ArrowLeft, ExternalLink, FileCode2, GitBranch, Home, Search, Telescope, X }, attrs: { "aria-hidden": "true" } });
+  const options = { icons: { ArrowLeft, ArrowRight, ExternalLink, FileCode2, GitBranch, Home, Search, Telescope, X }, attrs: { "aria-hidden": "true" } };
+  createIcons({ ...options, root: document.querySelector("main") ?? document.body });
+  const dialog = document.getElementById("product-dialog");
+  if (dialog) createIcons({ ...options, root: dialog });
 }
 
 byId<HTMLInputElement>("resource-search").addEventListener("input", (event) => {

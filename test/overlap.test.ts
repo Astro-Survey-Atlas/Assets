@@ -6,7 +6,7 @@ import type { CoverageCellLayer } from "../server/coverage.js";
 import { highestCommonOrder, overlapForLayers } from "../server/overlap.js";
 import { SourceUnitStore } from "../server/source-units.js";
 import { buildOverlapHighlight } from "../site/src/atlas/overlap-highlight.js";
-import { recenteredOrbitPose } from "../site/src/atlas/survey-layer-viewer.js";
+import { largestConnectedPixelComponent, recenteredOrbitPose } from "../site/src/atlas/survey-layer-viewer.js";
 import { cameraDistanceForAngularRadius } from "../site/src/atlas/survey-layer-viewer.js";
 import * as THREE from "three";
 
@@ -52,6 +52,14 @@ test("overlap components use side neighbours and remain stable", () => {
   assert.ok(result.components.some((component) => JSON.stringify(component.cells) === JSON.stringify([start, side].sort((left, right) => left - right))));
   assert.equal(result.components[0]?.id, "C01");
   assert.equal(result.components[1]?.id, "C02");
+});
+
+test("survey focus chooses the largest connected footprint component", () => {
+  const healpix = new Healpix(16);
+  const start = 1000;
+  const side = healpix.neighbours(start)[0]!;
+  const separate = [...Array(12 * 16 * 16).keys()].find((pixel) => pixel !== start && pixel !== side && ![...healpix.neighbours(start), ...healpix.neighbours(side)].includes(pixel))!;
+  assert.deepEqual(largestConnectedPixelComponent([separate, side, start], 16), [start, side].sort((left, right) => left - right));
 });
 
 test("component camera fitting zooms small regions without the old distance cap", () => {
