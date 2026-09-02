@@ -37,10 +37,15 @@
         <canvas id="coverage-canvas" role="img" aria-label="根据公开覆盖块绘制的 HEALPix 单元"></canvas>
       </div>
       <div class="coverage-tools">
-          <button id="coverage-reset" class="icon-button" type="button" title="重置天球视角" aria-label="重置天球视角"><i data-lucide="rotate-ccw"></i></button>
-          <button id="coverage-layers-toggle" class="icon-button" type="button" title="打开图层" aria-label="打开图层"><i data-lucide="layers-3"></i></button>
-          <button id="coverage-help-toggle" class="icon-button" type="button" title="查看快捷键说明" aria-label="查看快捷键说明"><i data-lucide="circle-help"></i></button>
+        <div id="coverage-status" class="coverage-status" aria-live="polite">
+          <span>NSIDE <output id="coverage-status-nside">--</output></span>
+          <span>FOV <output id="coverage-status-fov">--</output></span>
+          <span>CAM <output id="coverage-status-camera">--</output></span>
         </div>
+        <button id="coverage-reset" class="icon-button" type="button" title="重置天球视角" aria-label="重置天球视角"><i data-lucide="rotate-ccw"></i></button>
+        <button id="coverage-layers-toggle" class="icon-button" type="button" title="打开图层" aria-label="打开图层"><i data-lucide="layers-3"></i></button>
+        <button id="coverage-help-toggle" class="icon-button" type="button" title="查看快捷键说明" aria-label="查看快捷键说明"><i data-lucide="circle-help"></i></button>
+      </div>
         <div id="coverage-layers" class="coverage-layers" hidden aria-label="覆盖图层"></div>
         <aside id="coverage-empty-guide" class="coverage-empty-guide" hidden aria-live="polite" aria-label="选择巡天引导">
           <div class="coverage-empty-guide-mark" aria-hidden="true"><i data-lucide="layers-3"></i></div>
@@ -84,12 +89,6 @@
           <div id="overlap-drawer-content" class="overlap-drawer-content" aria-live="polite"></div>
         </aside>
         <div id="coverage-context-menu" class="coverage-context-menu" hidden role="menu" aria-label="覆盖区域操作"></div>
-      <div id="coverage-status" class="coverage-status" aria-live="polite">
-          <span>NSIDE <output id="coverage-status-nside">--</output></span>
-          <span>FOV <output id="coverage-status-fov">--</output></span>
-          <span>CAM <output id="coverage-status-camera">--</output></span>
-      </div>
-
       <section id="home-hero" class="home-hero" aria-labelledby="home-title">
         <div class="home-hero-copy home-hero-copy-primary">
           <p class="eyebrow" data-i18n="home.eyebrow">PUBLIC SKY DATA / OPEN INFRASTRUCTURE</p>

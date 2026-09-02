@@ -1,6 +1,6 @@
 # Assets Session Handoff
 
-Updated: 2026-09-01
+Updated: 2026-09-02
 
 Repository: `/home/aaron/Repo/Astro-Survey-Atlas-Assets`
 
@@ -9,7 +9,8 @@ Starting commit: `49f434b`; latest code commit before this closure: `a24a9f5`
 ## Current Session Snapshot
 
 Updated after the 2026-08-31 registration-defaults, coverage-layer UI and
-font-consistency rollouts, plus the MOC discovery and reverse-lookup follow-up.
+font-consistency rollouts, the MOC discovery and reverse-lookup follow-up, and
+the 2026-09-02 coverage control-panel adjustment.
 The code-stage reliability and storage-boundary work is complete in the working
 tree; production deployment remains deferred. Preserve all existing changes
 and inspect overlapping diffs before editing.
@@ -94,19 +95,37 @@ and inspect overlapping diffs before editing.
   touch scrolling, and keep persistent layer details in the outer queue rather
   than truncating each card at a fixed inner height. Overlap Result keeps Tile
   numbers while Download Plan shows the complete official URL and source URI.
-- Development deployment is Helm revision 108 with image tag
-  `0.1.0-20260901-172411`; the Pod is `1/1 Running` on `eva7028`.
+- Development deployment is Helm revision 109 with image tag
+  `0.1.0-20260902-094018`; the Pod is `1/1 Running` on `eva7028`.
 - Twenty delayed-catalog Chromium runs at 1440x900 all reported
   `contextLost=0`, a ready non-empty canvas, DESI selected, and no page or
   console errors. Production remains untouched.
+
+### 2026-09-02 Coverage Control and Detail View
+
+- `#coverage-status` now sits at the leading edge of the top-left coverage
+  controls, before reset/layers/help; narrow screens wrap the status into its
+  own row so the buttons remain usable.
+- Cell Inspector and Overlap Result use the available viewport height with
+  safe top/bottom insets, so their content can be read and scrolled without
+  the old fixed inner `290px` cap. Coverage Layer and selection queue keep
+  wheel/touch scrolling while hiding persistent scrollbar tracks.
+- The verified image was pushed and deployed as Helm revision 109. The
+  `publish-assets` init container completed successfully and activated bundle
+  `e7684305a9c81df66a2fd7c9387c1dc3672c093caecdfe36383076ee5e520f2c`.
+- Development smoke passed through the NodePort: `/healthz` reports 222
+  release files, `/api/v1/assets` reports 221 public files, `/api/v1/coverage`
+  reports 62 footprints, and a FITS Range request returned `206 Partial
+  Content` with `Content-Range` and `X-Content-SHA256`. Production and the
+  72602 production cluster remain untouched.
 
 ### Last Deployed Baseline
 
 - `npm run build`, `npm test` (103 tests),
   `helm lint charts/astro-survey-atlas-assets`, Helm template rendering, and
   `git diff --check` pass.
-- Helm revision 108 is healthy with image tag
-  `0.1.0-20260901-172411`; the `publish-assets` init container completed and
+- Helm revision 109 is healthy with image tag
+  `0.1.0-20260902-094018`; the `publish-assets` init container completed and
   the Pod is `1/1 Running` on `eva7028`.
 - Direct service URL: `http://10.15.51.75:32083/`.
   Ingress URLs: `http://astro.assets.dev.72602.space:32080/` and
@@ -118,7 +137,7 @@ and inspect overlapping diffs before editing.
   returned 32 bytes with `206 Partial Content`, `Content-Range`, and
   `X-Content-SHA256`.
 - The running image manifest digest is
-  `sha256:62d07b599f11e1c14c08a98a52657dd2a156aa063ef3d2202a7972d62259aba5`.
+  `sha256:8d6cefcad70660647e6b045b5b96bc48dbf59562a1b4f77063ac7259fc68c918`.
 - Delayed-catalog Chromium smoke on the public NodePort passed 20/20 runs with
   no WebGL context loss, blank canvas or browser errors.
 
@@ -547,11 +566,8 @@ the list without creating a mobile hover layer.
 ## Live Deployment Layout
 
 Assets is a separate Helm release in namespace `astro-survey-atlas-assets`.
-The latest recorded dev rollout is Helm revision 103, image tag
-`0.1.0-20260831-184932`, and serves through:
-
-The current working-tree closure is not deployed; these endpoints continue to
-serve that recorded image until a later, explicitly approved rollout.
+The latest recorded dev rollout is Helm revision 109, image tag
+`0.1.0-20260902-094018`, and serves through:
 
 ```text
 http://10.15.51.75:32083/
@@ -576,10 +592,10 @@ The public site serves through the `astro-survey-atlas-assets` Service/Ingress.
 The release PVC contains the static public bundle used for fallback and
 publication. The current runtime bundle is
 `public-survey-footprints-2026-08-20`, SHA-256
-`00804a3ce33a8cbd5ab5e65250e4c5315d1e54ce6e82f9d6a3399c3ca8be9ad2`, with
+`e7684305a9c81df66a2fd7c9387c1dc3672c093caecdfe36383076ee5e520f2c`, with
 211 manifest files. The init container completed successfully; the image
 manifest digest is
-`sha256:6a62dc145a21fcd32cbce9a515aaf26e809dcb610cd735fbdae4bc8ad59538fb`.
+`sha256:8d6cefcad70660647e6b045b5b96bc48dbf59562a1b4f77063ac7259fc68c918`.
 
 The Gaia O8-only Warehouse layers are included in the globe's O4 visual
 overview by NESTED coarsening, while their API coverage remains explicitly O8.
