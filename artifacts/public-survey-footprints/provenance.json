@@ -5,23 +5,23 @@
     "name": "scripts/public_footprint_artifacts.ts"
   },
   "statistics": {
-    "releases": 55,
-    "products": 90,
-    "acquired": 38,
+    "releases": 56,
+    "products": 91,
+    "acquired": 39,
     "overview_only": 11,
     "awaiting_geometry": 41,
     "not_applicable": 0,
-    "manifestFootprints": 47,
+    "manifestFootprints": 48,
     "packages": 16
   },
   "inputs": {
     "canonicalManifest": {
       "path": "../../src/footprints/survey-footprints.json",
-      "sha256": "1e89ac66f6c03c3710fbb6e75eb2295d4868c26170b622c8c2922e1a27977d68"
+      "sha256": "c32c178517c65bfbb2963853a6e64d6bc28dbc5f5501e01f5e2cfcb9421c713b"
     },
     "sources": {
       "path": "sources.json",
-      "sha256": "eb2bd2d469991a9d4e5d4c1ed45426890cc57ac7506efaf1cf3a48cbc1b5e010"
+      "sha256": "781d03dbb8cf75b121e49cc222dfafdb24c092a012e3d318f1b69a6dfb6d5498"
     },
     "manual": {
       "path": "manual/footprints.json",
@@ -29,7 +29,7 @@
     },
     "rawMocIndex": {
       "path": "raw/moc/index.json",
-      "sha256": "2a07d31bbe626d11b949fef271df686a561547971f367cc1109b937309702f26"
+      "sha256": "2f5ade6ffa3391159ebec019524b609c11b6e7d5d9fae27b87303e35ae99fdce"
     },
     "rawGeometryIndex": {
       "path": "raw/geometry/index.json",
@@ -54,13 +54,13 @@
   "files": {
     "manifest": {
       "path": "normalized/survey-footprints.json",
-      "sha256": "1e89ac66f6c03c3710fbb6e75eb2295d4868c26170b622c8c2922e1a27977d68",
-      "sizeBytes": 976560
+      "sha256": "c32c178517c65bfbb2963853a6e64d6bc28dbc5f5501e01f5e2cfcb9421c713b",
+      "sizeBytes": 1019078
     },
     "catalog": {
       "path": "packages/catalog.json",
-      "sha256": "81703242918a55f45935029440686b4c04d0d28c17031643b71cd6c8218fefc9",
-      "sizeBytes": 22243
+      "sha256": "bfb89632babbbd1e5b9b2a94e644dddb012a5079b94ae5184e841ba6f8e734bf",
+      "sizeBytes": 23789
     },
     "packages": [
       {
@@ -153,6 +153,13 @@
         "archive": "public-kids-footprints-3.0.0.zip",
         "sizeBytes": 3017,
         "sha256": "723c1e15e9518c1e7e68ef9305d1c3a7c5578c97c4b1271618effee320da706f"
+      },
+      {
+        "id": "public-gaia-footprints",
+        "version": "3.0.0",
+        "archive": "public-gaia-footprints-3.0.0.zip",
+        "sizeBytes": 22801,
+        "sha256": "47a473da1e55b7f44c865bbf5512c3ba953d389bdce4704ff4b840d5aa69872b"
       },
       {
         "id": "public-nvss-footprints",

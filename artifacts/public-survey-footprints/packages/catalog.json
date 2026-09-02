@@ -715,6 +715,55 @@
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
+      "surveyId": "gaia",
+      "name": "Gaia DR3",
+      "description": "Gaia DR3 main-source catalog object-presence coverage from the reviewed CDS ICRS/NUNIQ MOC. This package contains coverage geometry and provenance, not the Gaia catalog rows.",
+      "modalities": [
+        "catalog",
+        "astrometry",
+        "photometry"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "catalog-object-presence-MOC"
+      ],
+      "facilities": [
+        "ESA Gaia / DPAC"
+      ],
+      "coverageAuthorities": [
+        "CDS Gaia DR3 catalog MOC"
+      ],
+      "accessModes": [
+        "Gaia Archive",
+        "Gaia Archive TAP",
+        "CDS VizieR"
+      ],
+      "sources": [
+        {
+          "releaseId": "gaia-dr3",
+          "label": "Gaia DR3 main-source catalog MOC",
+          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=record&fmt=json",
+          "authority": "ESA Gaia / DPAC / CDS",
+          "license": "Gaia/DPAC attribution and CDS public data terms",
+          "attributionUrl": "https://www.cosmos.esa.int/web/gaia-users/credits"
+        }
+      ],
+      "id": "public-gaia-footprints",
+      "releases": [
+        "gaia-dr3"
+      ],
+      "releaseLabels": {
+        "gaia-dr3": "DR3"
+      },
+      "version": "3.0.0",
+      "archiveUrl": "public-gaia-footprints-3.0.0.zip",
+      "sizeBytes": 22801,
+      "sha256": "47a473da1e55b7f44c865bbf5512c3ba953d389bdce4704ff4b840d5aa69872b",
+      "updatedAt": "2026-09-02T02:59:38Z"
+    },
+    {
       "surveyId": "nvss",
       "name": "NVSS",
       "description": "NVSS 1.4 GHz 图像网格覆盖。",

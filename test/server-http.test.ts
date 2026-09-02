@@ -130,7 +130,7 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.equal(coverageCatalogResponse.status, 200);
   const catalogEtag = coverageCatalogResponse.headers.get("etag");
   assert.match(catalogEtag ?? "", /^"catalog-[a-f0-9]{32}"$/);
-  const coverageCatalog = await coverageCatalogResponse.json() as { revision: string; ordering: string; layers: Array<{ layerId: string; surveyId: string; availableOrders: number[]; tileIdsByOrder: Record<string, number[]>; revision?: string; recipe?: { mode: string; steps: any[] }; sourceUnitIndex?: { status: string; unitKind?: string } }> };
+  const coverageCatalog = await coverageCatalogResponse.json() as { revision: string; ordering: string; layers: Array<{ layerId: string; surveyId: string; coverageRole?: string; cellCount: number; areaDeg2: number; availableOrders: number[]; tileIdsByOrder: Record<string, number[]>; revision?: string; recipe?: { mode: string; steps: any[] }; sourceUnitIndex?: { status: string; unitKind?: string } }> };
   assert.match(coverageCatalog.revision, /^[a-f0-9]{32}$/);
   const notModifiedCatalog = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`, { headers: { "If-None-Match": catalogEtag! } });
   assert.equal(notModifiedCatalog.status, 304);
@@ -160,6 +160,27 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   const csstW1Layer = coverageCatalog.layers.find((layer) => layer.layerId === "csst-sim-w1-image-extent");
   assert.equal(csstW1Layer?.recipe?.mode, "fits-wcs");
   assert.ok(csstW1Layer?.recipe?.steps.some((step: any) => step.id === "header"));
+  const gaiaLayer = coverageCatalog.layers.find((layer) => layer.layerId === "gaia-dr3-main-source-presence");
+  assert.ok(gaiaLayer);
+  assert.equal(gaiaLayer.coverageRole, "object_presence");
+  assert.deepEqual(gaiaLayer.availableOrders, [4, 8]);
+  assert.equal(gaiaLayer.cellCount, 3_072);
+  assert.ok(gaiaLayer.areaDeg2 > 41_252 && gaiaLayer.areaDeg2 < 41_253);
+  assert.equal(gaiaLayer.sourceUnitIndex?.status, "entrypoint-only");
+  assert.ok(["assets-atlas-catalog-gaia-current", "assets-smoke-catalog-gaia", "warehouse-caller-assets", "warehouse-selftest-s3"]
+    .every((layerId) => !coverageCatalog.layers.some((layer) => layer.layerId === layerId)));
+
+  const gaiaReverse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/reverse-lookup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ layerIds: [gaiaLayer.layerId], order: 4, cells: [0], limit: 10 }),
+  });
+  assert.equal(gaiaReverse.status, 200);
+  const gaiaReverseBody = await gaiaReverse.json() as { precision: string; requested: { order: number }; downloadPlan: { files: unknown[]; entrypoints: Array<{ kind: string; precision: string; order?: number }> } };
+  assert.equal(gaiaReverseBody.precision, "entrypoint-only");
+  assert.equal(gaiaReverseBody.requested.order, 4);
+  assert.deepEqual(gaiaReverseBody.downloadPlan.files, []);
+  assert.ok(gaiaReverseBody.downloadPlan.entrypoints.some((entry) => entry.kind === "official-query" && entry.precision === "entrypoint-only" && entry.order === 4));
 
   const invalidOverlap = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["desi"] }) });
   assert.equal(invalidOverlap.status, 400);
@@ -174,6 +195,14 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.ok(tileMatches.some((match) => match.totalUnits > 0 && match.units.some((unit) => unit.unitId)));
   const csstDesiComponent = csstDesiOverlapBody.components[0];
   assert.ok(csstDesiComponent?.evidenceLookup?.layerIds.includes("desi-dr1-spectra-footprint"));
+  const dynamicComponent = csstDesiOverlapBody.components.at(-1);
+  assert.ok(dynamicComponent?.evidenceLookup);
+  const dynamicReverse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/reverse-lookup`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ layerIds: dynamicComponent!.evidenceLookup!.layerIds, order: dynamicComponent!.order, cells: dynamicComponent!.cells, limit: 5000 }) });
+  assert.equal(dynamicReverse.status, 200);
+  const dynamicReverseBody = await dynamicReverse.json() as { downloadPlan: { entrypoints: Array<{ kind: string; layerId?: string; sourceUri?: string; sourceScope?: string; tileId?: string; required?: boolean; selectionComplete?: boolean }>; tileSelections?: Array<{ layerId: string; tileIds: string[]; complete: boolean }> } };
+  assert.ok(dynamicReverseBody.downloadPlan.entrypoints.some((entry) => entry.kind === "source-path" && entry.layerId === "csst-sim-w2-image-extent" && entry.sourceUri?.includes("W2_Phot")));
+  assert.ok(dynamicReverseBody.downloadPlan.entrypoints.some((entry) => entry.kind === "tile-directory" && entry.required === true && entry.selectionComplete === true && entry.tileId));
+  assert.ok(dynamicReverseBody.downloadPlan.tileSelections?.some((selection) => selection.layerId === "desi-dr1-spectra-footprint" && selection.complete && selection.tileIds.length > 0));
 
   const publicOverlap = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["galex", "nvss"], requestedOrder: 4 }) });
   assert.equal(publicOverlap.status, 200);
@@ -234,7 +263,7 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
     surveys: Array<{ id: string; modalities: string[]; statistics: { publicProducts: number; acquired: number }; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; releases: Array<{ coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; products: Array<{ status: string; reason?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number } }> }>; assets: Array<{ surveyId?: string; downloadUrl: string }> }>;
     sharedAssets: Array<{ surveyId?: string; downloadUrl: string }>;
   };
-  assert.equal(surveys.surveys.length, 17);
+  assert.equal(surveys.surveys.length, 18);
   const csst = surveys.surveys.find((survey) => survey.id === "csst");
   assert.ok(csst);
   assert.deepEqual(csst.modalities.sort(), ["catalog", "imaging", "photometry", "simulation"]);
@@ -250,6 +279,10 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   const sdss = surveys.surveys.find((survey) => survey.id === "sdss");
   assert.ok(sdss && sdss.statistics.acquired < sdss.statistics.publicProducts);
   assert.ok(sdss.releases.flatMap((release) => release.products).some((product) => product.status === "awaiting_geometry" && product.reason));
+  const gaia = surveys.surveys.find((survey) => survey.id === "gaia");
+  assert.ok(gaia);
+  assert.deepEqual(gaia.coverageOrders?.availableOrders, [4, 8]);
+  assert.equal(gaia.releases[0]?.products[0]?.status, "acquired");
 
   const head = await fetch(`http://127.0.0.1:${port}${provenance.downloadUrl}`, { method: "HEAD" });
   assert.equal(head.status, 200);

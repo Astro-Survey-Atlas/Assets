@@ -62,6 +62,19 @@ export interface CoverageCatalog {
 const identity = (surveyId: string, releaseId: string, product: string): string => `${surveyId}:${releaseId}:${product}`;
 const slug = (value: string): string => value.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 96);
 
+const defaultExcludedWarehouseLayerIds = new Set([
+  "assets-atlas-catalog-gaia-current",
+  "assets-smoke-catalog-gaia",
+  "warehouse-caller-assets",
+  "warehouse-selftest-s3",
+]);
+
+function excludedWarehouseLayerIds(): Set<string> {
+  const configured = process.env.ASSETS_WAREHOUSE_EXCLUDED_LAYER_IDS;
+  if (configured === undefined) return defaultExcludedWarehouseLayerIds;
+  return new Set(configured.split(",").map((value) => value.trim()).filter(Boolean));
+}
+
 function colorFor(id: string): string {
   const palette = ["#1e857b", "#376b9b", "#a66a25", "#b64b3e", "#3b8054", "#7a5a9e", "#b27b2d", "#2b7887"];
   let hash = 0;
@@ -266,7 +279,11 @@ export function coverageCatalogFromWarehouse(
 ): CoverageCatalog & { records: Map<string, CoverageCellLayer> } {
   const fallbackById = base.records;
   const records = new Map(base.records);
+  const excluded = excludedWarehouseLayerIds();
   for (const layer of snapshot.layers) {
+    // Smoke and self-test layers remain evidence-only even if a stale
+    // Warehouse index briefly reports them as ACTIVE.
+    if (excluded.has(layer.layerId)) continue;
     const fallback = fallbackById.get(layer.layerId);
     const cells = new Map<number, number[]>();
     snapshot.coverages

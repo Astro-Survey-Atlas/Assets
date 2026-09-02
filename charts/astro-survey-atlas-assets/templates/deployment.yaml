@@ -130,6 +130,8 @@ spec:
               value: {{ .Values.warehouse.coverageIndex | quote }}
             - name: ASSETS_WAREHOUSE_FILE_INDEX
               value: {{ .Values.warehouse.fileIndex | quote }}
+            - name: ASSETS_WAREHOUSE_EXCLUDED_LAYER_IDS
+              value: {{ join "," .Values.warehouse.excludedLayerIds | quote }}
             {{- if .Values.admin.enabled }}
             - name: ASSETS_ADMIN_TOKEN
               valueFrom:

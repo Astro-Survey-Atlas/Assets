@@ -30,6 +30,25 @@ BUILD_PLAN = ROOT / "src/layers/public-build-plan.json"
 
 TARGETS: list[dict[str, Any]] = [
     {
+        "sourceId": "CDS/I/355/gaiadr3",
+        "surveyId": "gaia",
+        "releaseId": "gaia-dr3",
+        "product": "Gaia DR3 main source presence",
+        "layerId": "gaia-dr3-main-source-presence",
+        "label": "Gaia DR3 main source catalog presence",
+        "rawFile": "gaia-gaia-dr3-main-source-presence.fits",
+        "recordFile": "gaia-gaia-dr3-main-source-presence.record.json",
+        "officialUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+        "mocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits",
+        "recordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=record&fmt=json",
+        "attributionUrl": "https://www.cosmos.esa.int/web/gaia-users/credits",
+        "coverageRole": "object_presence",
+        "dataOrigin": "catalog",
+        "modality": "catalog",
+        "notes": "Reviewed Gaia DR3 main-source catalog row-presence SMOC in ICRS/NUNIQ. This is an exact catalog presence map, not an imaging or scanning-law footprint.",
+        "retrievedAt": "2026-09-02T02:59:38Z",
+    },
+    {
         "sourceId": "CDS/P/Skymapper/DR4/color",
         "surveyId": "skymapper",
         "releaseId": "skymapper-dr4",
@@ -152,8 +171,8 @@ def update_footprints() -> None:
             "quality": "moc",
             "sourceUrl": target["mocUrl"],
             "sourceId": target["sourceId"],
-            "retrievedAt": "2026-08-28T03:53:18.820Z",
-            "notes": "CDS spatial SMOC projection of an STMOC. Temporal metadata is evidence-only; the order-4 manifest is a display preview.",
+            "retrievedAt": target.get("retrievedAt", "2026-08-28T03:53:18.820Z"),
+            "notes": target.get("notes", "CDS spatial SMOC projection of an STMOC. Temporal metadata is evidence-only; the order-4 manifest is a display preview."),
         })
     document["footprints"] = restore_order(document["footprints"], LEGACY_FOOTPRINT_ORDER, lambda item: identity(item["surveyId"], item["releaseId"], item["product"]))
     save(FOOTPRINTS, document)
@@ -175,11 +194,12 @@ def update_sources() -> None:
             "status": "acquired",
             "sourceUrl": target["officialUrl"],
             "geometrySourceUrl": target["mocUrl"],
-            "coverageRole": "footprint_extent",
-            "notes": "Reviewed CDS ICRS/NUNIQ order-10 spatial MOC; native STMOC time metadata is evidence-only and precision is estimated.",
+            "coverageRole": target.get("coverageRole", "footprint_extent"),
+            **({"attributionUrl": target["attributionUrl"]} if target.get("attributionUrl") else {}),
+            "notes": target.get("notes", "Reviewed CDS ICRS/NUNIQ order-10 spatial MOC; native STMOC time metadata is evidence-only and precision is estimated."),
         })
     releases[:] = restore_order(releases, LEGACY_SOURCE_ORDER, lambda entry: (entry["surveyId"], entry["releaseId"]))
-    document["auditedAt"] = "2026-08-28"
+    document["auditedAt"] = "2026-09-02"
     save(SOURCES, document)
 
 
@@ -202,7 +222,7 @@ def update_raw_index() -> None:
             "metadataUrl": target["recordUrl"],
             "fitsPath": target["rawFile"],
             "metadataPath": target["recordFile"],
-            "retrievedAt": "2026-08-28T03:53:18.820Z",
+            "retrievedAt": target.get("retrievedAt", "2026-08-28T03:53:18.820Z"),
             "mediaType": "application/fits",
             "byteLength": (RAW / target["rawFile"]).stat().st_size,
             "sha256": digest(RAW / target["rawFile"]),
@@ -216,9 +236,10 @@ def update_source_registry() -> None:
         entry = next(item for item in document["sources"] if item["id"] == target["layerId"] or item["surveyId"] == target["surveyId"] and item["releaseId"] == target["releaseId"])
         entry.update({
             "status": "acquired",
-            "acquiredAt": "2026-08-28T03:53:18.820Z",
+            "acquiredAt": target.get("retrievedAt", "2026-08-28T03:53:18.820Z"),
             "sourceSnapshotSha256": digest(RAW / target["rawFile"]),
             "sourceRecordSha256": digest(RAW / target["recordFile"]),
+            **({"attributionUrl": target["attributionUrl"]} if target.get("attributionUrl") else {}),
         })
     save(SOURCE_REGISTRY, document)
 
@@ -239,9 +260,9 @@ def update_layers() -> None:
             "surveyId": target["surveyId"],
             "releaseId": target["releaseId"],
             "product": target["product"],
-            "modality": "imaging",
-            "coverageRole": "footprint_extent",
-            "dataOrigin": "observed",
+            "modality": target.get("modality", "imaging"),
+            "coverageRole": target.get("coverageRole", "footprint_extent"),
+            "dataOrigin": target.get("dataOrigin", "observed"),
             "sourceTier": "third_party_moc",
             "maxOrder": 10,
             "status": "acquired",

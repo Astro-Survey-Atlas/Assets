@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "auditedAt": "2026-08-28",
+  "auditedAt": "2026-09-02",
   "auditPolicy": "Acquired denotes an exact product MOC; overview_only denotes an official or artifact-backed overview; awaiting_geometry denotes a product requiring exact geometry.",
   "releases": [
     {
@@ -971,6 +971,21 @@
           "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=smoc&order=10&fmt=fits",
           "coverageRole": "footprint_extent",
           "notes": "Reviewed CDS ICRS/NUNIQ order-10 spatial MOC; native STMOC time metadata is evidence-only and precision is estimated."
+        }
+      ]
+    },
+    {
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "products": [
+        {
+          "product": "Gaia DR3 main source presence",
+          "status": "acquired",
+          "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits",
+          "coverageRole": "object_presence",
+          "attributionUrl": "https://www.cosmos.esa.int/web/gaia-users/credits",
+          "notes": "Reviewed Gaia DR3 main-source catalog row-presence SMOC in ICRS/NUNIQ. This is an exact catalog presence map, not an imaging or scanning-law footprint."
         }
       ]
     }

@@ -7,7 +7,7 @@ test("MOC source registry separates catalog presence from image footprints", asy
     coordinateFrame: string;
     ordering: string;
     sourcePolicy: { previewOrder: number; releaseRequires: string[] };
-    sources: Array<{ id: string; sourceKind: string; mocUrl: string; maxOrder: number; overviewOrder: number; coverageRole: string; dataOrigin: string; sourceTier: string; precision: string; licenseStatus: string; status: string }>;
+    sources: Array<{ id: string; sourceKind: string; mocUrl: string; maxOrder: number; overviewOrder: number; coverageRole: string; dataOrigin: string; sourceTier: string; precision: string; licenseStatus: string; status: string; attributionUrl?: string }>;
   };
   assert.equal(registry.coordinateFrame, "ICRS");
   assert.equal(registry.ordering, "NESTED");
@@ -35,7 +35,10 @@ test("MOC source registry separates catalog presence from image footprints", asy
   for (const id of ["skymapper-dr4-color-footprint", "kids-dr5-color-footprint", "vista-viking-j-footprint", "decals-dr5-color-footprint"]) {
     assert.equal(registry.sources.find((source) => source.id === id)?.status, "acquired", `${id} must have a locked snapshot before release`);
   }
-  for (const id of ["gaia-dr3-main-source", "erass1-main-source-presence", "xmm-4xmm-dr13-source-presence", "planck-hfi-857-footprint"]) {
+  assert.equal(registry.sources.find((source) => source.id === "gaia-dr3-main-source")?.status, "acquired");
+  assert.match(registry.sources.find((source) => source.id === "gaia-dr3-main-source")?.licenseStatus ?? "", /^reviewed-/);
+  assert.equal(registry.sources.find((source) => source.id === "gaia-dr3-main-source")?.attributionUrl, "https://www.cosmos.esa.int/web/gaia-users/credits");
+  for (const id of ["erass1-main-source-presence", "xmm-4xmm-dr13-source-presence", "planck-hfi-857-footprint"]) {
     assert.equal(registry.sources.find((source) => source.id === id)?.status, "candidate", `${id} remains blocked pending terms review`);
   }
   for (const id of ["erass1-main-source-presence", "planck-hfi-857-footprint"]) {

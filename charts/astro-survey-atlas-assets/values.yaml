@@ -24,6 +24,12 @@ warehouse:
   layerIndex: ast_layer_index_v1
   coverageIndex: ast_coverage_index_v1
   fileIndex: ast_file_index_v1
+  # Evidence-only smoke/self-test layers must never enter the public catalog.
+  excludedLayerIds:
+    - assets-atlas-catalog-gaia-current
+    - assets-smoke-catalog-gaia
+    - warehouse-caller-assets
+    - warehouse-selftest-s3
 
 service:
   type: ClusterIP

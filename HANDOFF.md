@@ -9,11 +9,36 @@ Starting commit: `49f434b`; latest code commit before this closure: `a24a9f5`
 ## Current Session Snapshot
 
 Updated after the 2026-08-31 registration-defaults, coverage-layer UI and
-font-consistency rollouts, the MOC discovery and reverse-lookup follow-up, and
-the 2026-09-02 coverage control-panel adjustment.
+font-consistency rollouts, the MOC discovery and reverse-lookup follow-up, the
+2026-09-02 coverage control-panel adjustment, and the Gaia DR3 full-sky
+catalog-presence release.
 The code-stage reliability and storage-boundary work is complete in the working
 tree; production deployment remains deferred. Preserve all existing changes
 and inspect overlapping diffs before editing.
+
+### Gaia DR3 Full-Sky Release (2026-09-02)
+
+- Added the reviewed CDS Gaia DR3 main-source catalog-presence MOC as
+  `gaia-dr3-main-source-presence`, with locked ICRS/NESTED input hash
+  `ea7f15e3e2c54daf034a99caf754147d35f0c7353e2925d1dd02c1664f6562f9` and
+  generated MOC hash `b0fa6948ab98c540d8f79e08ae699b406bb857c68233ebb3f33666be9869f16f`.
+- Gaia publishes O4/O8 projections, 12 O4 base cells, `41252.961249 deg2`,
+  `object_presence`/`catalog` classification, official Archive/TAP/CDS
+  entrypoints and `entrypoint-only` reverse lookup. It is not an imaging or
+  scanning-law footprint, and the raw input remains evidence-only.
+- Added the `public-gaia-footprints-3.0.0` Resource Package (SHA-256
+  `47a473da1e55b7f44c865bbf5512c3ba953d389bdce4704ff4b840d5aa69872b`) and
+  records the official Gaia/DPAC credits URL
+  `https://www.cosmos.esa.int/web/gaia-users/credits`.
+  Added regression tests for full-sky projections and public metadata.
+- Assets now excludes the four known Gaia smoke/self-test layer IDs from the
+  runtime Warehouse merge by default and through Helm values. The Warehouse
+  index still reports those foreign test layers as `ACTIVE`; coordinate their
+  state transition with the Warehouse owner rather than mutating them here.
+- Dev rollout is Helm revision 111, image tag `0.1.0-20260902-120500`, bundle
+  SHA-256 `6e480be8cbfa3269978bb9abe9495b3fe8750d7ff71044aa2fe1353a2e954d59`,
+  serving at `http://10.15.51.75:32083/`. Online smoke confirms Gaia only,
+  O4/O8, full-sky area, entrypoint-only reverse lookup and no smoke layers.
 
 ### Completed in This Session
 

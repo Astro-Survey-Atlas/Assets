@@ -29,9 +29,13 @@
       "dataOrigin": "catalog",
       "sourceTier": "third_party_moc",
       "precision": "exact",
-      "licenseStatus": "verify-official-release-terms",
-      "status": "candidate",
-      "notes": "Catalog row presence, not an imaging exposure footprint. Preserve Gaia/DPAC attribution and data-access terms."
+      "licenseStatus": "reviewed-CDS-Gaia-DR3-public-terms-with-ESA-DPAC-attribution",
+      "status": "acquired",
+      "notes": "Catalog row presence, not an imaging exposure footprint. Preserve Gaia/DPAC attribution and data-access terms.",
+      "acquiredAt": "2026-09-02T02:59:38Z",
+      "sourceSnapshotSha256": "ea7f15e3e2c54daf034a99caf754147d35f0c7353e2925d1dd02c1664f6562f9",
+      "sourceRecordSha256": "ce1bcf6beb9b7f49340dd16777a25852eee0682a993002455a0c43d8e60b062a",
+      "attributionUrl": "https://www.cosmos.esa.int/web/gaia-users/credits"
     },
     {
       "id": "erass1-main-source-presence",

@@ -1744,6 +1744,50 @@
       ]
     },
     {
+      "id": "gaia",
+      "name": "Gaia",
+      "mission": "ESA Gaia",
+      "color": "#f2c14e",
+      "description": "ESA Gaia DR3 astrometric and photometric source catalog. The published coverage is the exact CDS catalog-row object-presence MOC and covers the full sky at overview order.",
+      "modalities": [
+        "catalog",
+        "astrometry",
+        "photometry"
+      ],
+      "releases": [
+        {
+          "id": "gaia-dr3",
+          "label": "DR3",
+          "kind": "public_release",
+          "releasedYear": 2022,
+          "modalities": [
+            "catalog",
+            "astrometry",
+            "photometry"
+          ],
+          "products": [
+            {
+              "name": "Gaia DR3 main source presence",
+              "modality": "catalog",
+              "description": "Full-sky Gaia DR3 main-source catalog row presence from the CDS ICRS/NUNIQ SMOC. This does not describe imaging exposure, scanning-law depth, or a file-level source inventory.",
+              "status": "acquired",
+              "dataOrigin": "catalog",
+              "sourceTier": "third_party_moc",
+              "originNote": "CDS spatial MOC of the ESA Gaia/DPAC main source catalog; the catalog contains 1,811,709,771 rows.",
+              "sourceLabel": "ESA Gaia / DPAC DR3",
+              "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+              "officialDataLabel": "Gaia Archive",
+              "officialDataUrl": "https://gea.esac.esa.int/archive/",
+              "officialQueryLabel": "Gaia Archive TAP",
+              "officialQueryUrl": "https://gea.esac.esa.int/tap-server/tap",
+              "geometrySourceLabel": "CDS Gaia DR3 main-source SMOC order 10",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "nvss",
       "name": "NVSS",
       "mission": "NRAO VLA Sky Survey",

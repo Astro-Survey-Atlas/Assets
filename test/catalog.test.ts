@@ -11,9 +11,9 @@ import { projectRoot } from "../server/paths.js";
 test("release catalog verifies every public file and bundle digest", async () => {
   const catalog = await loadCatalog(projectRoot);
   assert.equal(catalog.manifest.schemaVersion, 1);
-  assert.equal(catalog.manifest.statistics.packages, 14);
-  assert.equal(catalog.manifest.statistics.rawMocFiles, 48);
-  assert.equal(catalog.manifest.statistics.acquired, 38);
+  assert.equal(catalog.manifest.statistics.packages, 15);
+  assert.equal(catalog.manifest.statistics.rawMocFiles, 50);
+  assert.equal(catalog.manifest.statistics.acquired, 39);
   assert.equal(catalog.files.size, catalog.manifest.files.length);
   assert.ok(catalog.manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)));
 });
@@ -76,8 +76,8 @@ test("release catalog rejects evidence records misclassified as runtime", async 
 test("current package catalog publishes only referenced release versions", async () => {
   const catalog = await loadCatalog(projectRoot, false);
   const packages = catalog.manifest.files.filter((entry) => entry.kind === "package");
-  assert.equal(packages.length, 14);
-  assert.equal(packages.filter((entry) => entry.version === "3.0.0").length, 14);
+  assert.equal(packages.length, 15);
+  assert.equal(packages.filter((entry) => entry.version === "3.0.0").length, 15);
   assert.equal(packages.some((entry) => entry.version !== "3.0.0"), false);
 });
 

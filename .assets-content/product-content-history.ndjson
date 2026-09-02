@@ -187,3 +187,4 @@
 {"action":"scan-defaults-migration","productId":"8bad9526a39794a56eff","revision":4,"at":"2026-08-27T06:25:20.755Z","recipeHash":"0ff232de5a549d8b31e0a646fd56cb4968c12b909b27891290045ac959073c20"}
 {"action":"scan-defaults-migration","productId":"3aaa0c8993d2f1f05de1","revision":4,"at":"2026-08-27T06:25:20.755Z","recipeHash":"327458e2c49cf5e72055d83021ef542d046f3714dd2f2694cc6312da665b6275"}
 {"action":"recipe-migration","productId":"8bad9526a39794a56eff","revision":5,"at":"2026-08-28T04:22:23.685Z","recipeHash":"c0bc7f4202f675406f3ac163c961e19a51274687df1fbb7c2be2474f6be95161"}
+{"action":"recipe-migration","productId":"41dec62dadad700ee1c0","revision":2,"at":"2026-09-02T04:04:12.975Z","recipeHash":"6428b4f4a03245f201e15438943ed6512b4afa6674c55de1bdf4ce9d3723a503"}

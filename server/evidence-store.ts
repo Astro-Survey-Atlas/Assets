@@ -72,17 +72,35 @@ export interface DownloadPlanEntrypoint {
   cells?: number[];
   precision: ReversePrecision;
   url?: string;
+  /** Original source locator; may be HTTP(S), s3://, oss:// or file:///. */
+  sourceUri?: string;
+  sourceScope?: "prefix" | "file" | "tile-directory";
   sourceUrl?: string;
   mocUrl?: string;
+  required?: boolean;
+  selectionRule?: string;
+  selectionComplete?: boolean;
   truncated?: boolean;
   note?: string;
   [key: string]: unknown;
+}
+
+export interface DownloadPlanTileSelection {
+  layerId: string;
+  surveyId?: string;
+  releaseId?: string;
+  product?: string;
+  tileIds: string[];
+  selectionRule: string;
+  complete: boolean;
+  note: string;
 }
 
 export interface DownloadPlan {
   schemaVersion: 1;
   files: DownloadPlanFile[];
   entrypoints: DownloadPlanEntrypoint[];
+  tileSelections?: DownloadPlanTileSelection[];
   truncated: boolean;
   warnings: string[];
 }

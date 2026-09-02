@@ -13,7 +13,7 @@ import { overlapForLayers } from "./overlap.js";
 import { ProductStore, type MocProductRegistrationInput, type ProductRecord } from "./products.js";
 import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
 import { CoverageEvidenceStore, EvidenceStoreError, type DownloadPlanEntrypoint, type ReverseLookupResult, type WarehouseLayerSnapshot } from "./evidence-store.js";
-import { buildOverlapDetails, publicExternalUrl } from "./overlap-details.js";
+import { buildOverlapDetails, publicExternalUrl, publicLocator } from "./overlap-details.js";
 import { resolveMocDiscoveryCandidate } from "./moc-discovery.js";
 import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
 import { DynamicResourcePackageStore, dynamicResourcePackageAssetId } from "./resource-package-publication.js";
@@ -216,8 +216,10 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
     try {
       const warehouseSnapshot = await evidenceStore.loadCurrentCoverageCatalog();
       if (warehouseSnapshot?.layers.length) {
-        warehouseLayerSnapshots = new Map(warehouseSnapshot.layers.map((layer) => [layer.layerId, layer]));
         coverageCatalog = coverageCatalogFromWarehouse(staticCoverageCatalog, warehouseSnapshot);
+        warehouseLayerSnapshots = new Map(warehouseSnapshot.layers
+          .filter((layer) => coverageCatalog.records.has(layer.layerId))
+          .map((layer) => [layer.layerId, layer]));
         runtimeCoverageManifest = {
           ...coverageManifest,
           generatedAt: new Date().toISOString(),
@@ -1610,7 +1612,9 @@ function publicReverseEntrypoints(layerIds: readonly string[], order: number, ce
     const sourceUrl = publicExternalUrl(product?.sourceUrl);
     const officialDataUrl = publicExternalUrl(product?.officialDataUrl);
     const officialQueryUrl = publicExternalUrl(product?.officialQueryUrl);
-    const geometrySourceUrl = publicExternalUrl(product?.geometrySourceUrl ?? layer.recipe?.sourceUrl);
+    const geometrySourceLocator = publicLocator(product?.geometrySourceUrl ?? layer.recipe?.sourceUrl);
+    const geometrySourceScope = geometrySourceLocator && /\.[a-z0-9]{1,12}(?:$|[?#])/i.test(geometrySourceLocator) ? "file" : "prefix";
+    const geometrySourceUrl = publicExternalUrl(geometrySourceLocator);
     const mocAsset = [...catalog.files.entries()].find(([, entry]) => entry.record.kind === "moc"
       && entry.record.surveyId === layer.surveyId
       && entry.record.releaseId === layer.releaseId
@@ -1629,6 +1633,7 @@ function publicReverseEntrypoints(layerIds: readonly string[], order: number, ce
       ...(officialDataUrl ? { officialDataUrl } : {}),
       ...(officialQueryUrl ? { officialQueryUrl } : {}),
       ...(geometrySourceUrl ? { geometrySourceUrl } : {}),
+      ...(geometrySourceLocator ? { sourceUri: geometrySourceLocator, sourceScope: geometrySourceScope, sourcePurpose: layer.sourceUnitIndex?.unitKind === "file" ? "data-access" : "coverage-reference" } : {}),
       ...(mocAsset ? { mocUrl: `/api/v1/coverage/layers/${encodeURIComponent(layerId)}/moc.fits` } : {}),
       note: layer.sourceUnitIndex?.notes ?? "该图层提供公共覆盖入口，但没有文件级反向索引。",
     }];
@@ -1663,6 +1668,22 @@ function normalizeReverseEntrypoints(entries: Array<Record<string, unknown>>): D
     addExternal("official-data", "data-access", "officialDataUrl");
     addExternal("official-query", "data-access", "officialQueryUrl");
     addExternal("coverage-source", "coverage-reference", "geometrySourceUrl");
+    const sourceUri = publicLocator(entry.sourceUri ?? entry.geometrySourceUrl);
+    const sourceScope: DownloadPlanEntrypoint["sourceScope"] = entry.sourceScope === "file" ? "file" : "prefix";
+    const sourcePurpose: DownloadPlanEntrypoint["purpose"] = entry.sourcePurpose === "data-access" ? "data-access" : "coverage-reference";
+    if (sourceUri) {
+      normalized.push({
+        ...common,
+        kind: "source-path",
+        purpose: sourcePurpose,
+        sourceUri,
+        sourceScope,
+        ...(publicExternalUrl(sourceUri) ? { url: publicExternalUrl(sourceUri) } : {}),
+        note: sourcePurpose === "data-access"
+          ? "原始数据来源路径；当前计划不展开到每个文件。"
+          : "覆盖或清单来源路径；科学数据请使用对应的数据入口。",
+      });
+    }
     if (typeof entry.mocUrl === "string" && (entry.mocUrl.startsWith("/") || publicExternalUrl(entry.mocUrl))) {
       normalized.push({ ...common, kind: "coverage-moc", purpose: "coverage-reference", url: entry.mocUrl, mocUrl: entry.mocUrl });
     }
@@ -1670,17 +1691,23 @@ function normalizeReverseEntrypoints(entries: Array<Record<string, unknown>>): D
   });
 }
 
-async function publicTileEntrypoints(layerIds: readonly string[], order: number, cells: readonly number[], limit: number): Promise<{ entries: DownloadPlanEntrypoint[]; truncated: boolean }> {
+const TILE_SELECTION_RULE = "all official tile footprints intersecting the current component cells";
+const TILE_SELECTION_NOTE = "下载本组件列出的全部 Tile 可获得覆盖当前重合区域的相关数据；Tile 内容可能超出组件边界，未做空间裁剪。";
+
+async function publicTileEntrypoints(layerIds: readonly string[], order: number, cells: readonly number[], limit: number): Promise<{ entries: DownloadPlanEntrypoint[]; selections: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; tileIds: string[]; selectionRule: string; complete: boolean; note: string }>; truncated: boolean }> {
   const layers = layerIds.map((layerId) => coverageCatalog.records.get(layerId)).filter((layer): layer is CoverageCellLayer => Boolean(layer && layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "tile"));
-  if (!layers.length) return { entries: [], truncated: false };
+  if (!layers.length) return { entries: [], selections: [], truncated: false };
   const sourceUnits = await sourceUnitsReadyWithin(3_000);
-  if (!sourceUnits) return { entries: [], truncated: false };
+  if (!sourceUnits) return { entries: [], selections: [], truncated: false };
   const entries: DownloadPlanEntrypoint[] = [];
+  const selections: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; tileIds: string[]; selectionRule: string; complete: boolean; note: string }> = [];
   let truncated = false;
   for (const layer of layers) {
     const match = await Promise.resolve(sourceUnits.match(layer.layerId, order, [...cells], limit)).catch(() => null);
     if (!match) continue;
     truncated ||= match.truncated;
+    const tileIds = match.units.map((unit) => unit.unitId);
+    selections.push({ layerId: layer.layerId, surveyId: layer.surveyId, releaseId: layer.releaseId, product: layer.product, tileIds, selectionRule: TILE_SELECTION_RULE, complete: !match.truncated, note: TILE_SELECTION_NOTE });
     for (const unit of match.units) {
       entries.push({
         kind: "tile-directory",
@@ -1694,14 +1721,19 @@ async function publicTileEntrypoints(layerIds: readonly string[], order: number,
         cells: unit.matchingCells,
         precision: "exact",
         url: unit.downloadUrl,
-        note: `TILE ${unit.unitId} · NEXP ${unit.exposureCount} · LASTNIGHT ${unit.lastNight}`,
+        sourceUri: unit.downloadUrl,
+        sourceScope: "tile-directory",
+        required: true,
+        selectionRule: TILE_SELECTION_RULE,
+        selectionComplete: !match.truncated,
+        note: `TILE ${unit.unitId} · NEXP ${unit.exposureCount} · LASTNIGHT ${unit.lastNight} · ${TILE_SELECTION_NOTE}`,
         tileId: unit.unitId,
         exposureCount: unit.exposureCount,
         lastNight: unit.lastNight,
       });
     }
   }
-  return { entries, truncated };
+  return { entries, selections, truncated };
 }
 
 async function sendCoverageReverseLookup(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -1712,8 +1744,7 @@ async function sendCoverageReverseLookup(request: IncomingMessage, response: Ser
   const limit = typeof body.limit === "number" && Number.isSafeInteger(body.limit) ? body.limit : undefined;
   if (layerIds.length < 1 || !Number.isSafeInteger(order) || order < 0 || order > 29 || !cells.length) return json(response, 400, { error: "layerIds, order and cells are required" });
   const warehouseLayerIds = layerIds.filter((layerId) => warehouseLayerSnapshots.has(layerId));
-  const publicLayerIds = layerIds.filter((layerId) => !warehouseLayerIds.includes(layerId));
-  const entrypoints = publicReverseEntrypoints(publicLayerIds, order, cells);
+  const entrypoints = publicReverseEntrypoints(layerIds, order, cells);
   const boundedLimit = Math.min(Math.max(limit ?? 500, 1), 5000);
   const tileEntrypoints = await publicTileEntrypoints(layerIds, order, cells, boundedLimit);
   const downloadEntrypoints = [...normalizeReverseEntrypoints(entrypoints), ...tileEntrypoints.entries];
@@ -1728,6 +1759,7 @@ async function sendCoverageReverseLookup(request: IncomingMessage, response: Ser
   const downloadPlan = {
     ...warehouseResult.downloadPlan,
     entrypoints: downloadEntrypoints,
+    tileSelections: tileEntrypoints.selections,
     truncated: warehouseResult.downloadPlan.truncated || tileEntrypoints.truncated,
     warnings: [
       ...warehouseResult.downloadPlan.warnings,

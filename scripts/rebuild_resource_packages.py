@@ -1,4 +1,4 @@
-"""Rebuild the public DESI and Euclid Resource Package v3 archives.
+"""Rebuild the public Resource Package v3 archives for selected surveys.
 
 The layer registry is the only identity/classification authority.  The script
 keeps the v3 archive shape stable, writes support files in a temporary
@@ -28,6 +28,7 @@ SOURCE_DATE_EPOCH = 1787184000
 TARGETS = {
     "public-desi-footprints": "desi",
     "public-euclid-footprints": "euclid",
+    "public-gaia-footprints": "gaia",
 }
 
 
@@ -86,6 +87,10 @@ def support_documents(package_id: str, survey_id: str, layers: list[dict[str, An
                 "sha256": snapshot.get("sha256"),
                 "sizeBytes": snapshot.get("sizeBytes"),
             },
+            **({"attributionUrl": recipe["recipe"]["attributionUrl"]}
+               if isinstance(recipe.get("recipe"), dict)
+               and isinstance(recipe["recipe"].get("attributionUrl"), str)
+               else {}),
             "mocSha256": layer["expectedSha256"],
         })
     provenance_doc = {

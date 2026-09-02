@@ -74,6 +74,35 @@ test("Warehouse coverage preserves static layers, overrides matching identities,
   assert.deepEqual(merged.layers.map(({ layerId }) => layerId), ["static-layer", "static-only", "warehouse-layer"]);
 });
 
+test("Warehouse smoke and self-test Gaia layers stay out of the public catalog", () => {
+  const staticGaia = layer("gaia-dr3-main-source-presence", "gaia", [0, 1, 2], "Gaia DR3 main source presence");
+  const base = {
+    schemaVersion: 1 as const,
+    coordinateFrame: "ICRS" as const,
+    ordering: "NESTED" as const,
+    tileScheme: "ipix-range-4096" as const,
+    layers: [],
+    records: new Map([[staticGaia.layerId, staticGaia]]),
+  };
+  const snapshot: WarehouseCoverageCatalogSnapshot = {
+    layers: [
+      warehouseLayer("assets-smoke-catalog-gaia", "gaia", "smoke-product"),
+      warehouseLayer("warehouse-selftest-s3", "gaia", "selftest-product"),
+    ],
+    coverages: [
+      { layerId: "assets-smoke-catalog-gaia", order: 8, ipix: 15_612 },
+      { layerId: "warehouse-selftest-s3", order: 8, ipix: 15_613 },
+    ],
+    truncated: false,
+  };
+
+  const merged = coverageCatalogFromWarehouse(base, snapshot);
+
+  assert.deepEqual([...merged.records.keys()], ["gaia-dr3-main-source-presence"]);
+  assert.equal(merged.records.get("assets-smoke-catalog-gaia"), undefined);
+  assert.equal(merged.records.get("warehouse-selftest-s3"), undefined);
+});
+
 test("coverage globe keeps O8-only Warehouse layers in the O4 visual overview", () => {
   const catalog: CoverageCatalog = {
     schemaVersion: 1,

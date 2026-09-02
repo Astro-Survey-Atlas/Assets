@@ -471,6 +471,23 @@
       "expectedSha256": "f7796308322935b1f304b33e4d8429680290e15744c7a95246259f70ff4046db"
     },
     {
+      "layerId": "gaia-dr3-main-source-presence",
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "product": "Gaia DR3 main source presence",
+      "modality": "catalog",
+      "coverageRole": "object_presence",
+      "dataOrigin": "catalog",
+      "sourceTier": "third_party_moc",
+      "maxOrder": 10,
+      "status": "acquired",
+      "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+      "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits",
+      "recipePath": "src/layers/recipes/gaia-dr3-main-source-presence.lock.json",
+      "artifactPath": "artifacts/public-survey-footprints/layers/gaia-dr3-main-source-presence/gaia-dr3-main-source-presence.moc.fits",
+      "expectedSha256": "b0fa6948ab98c540d8f79e08ae699b406bb857c68233ebb3f33666be9869f16f"
+    },
+    {
       "layerId": "decals-dr5-color-footprint",
       "surveyId": "decals",
       "releaseId": "decals-dr5",

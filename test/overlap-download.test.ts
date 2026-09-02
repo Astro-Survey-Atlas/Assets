@@ -97,3 +97,66 @@ test("tile rows expose the matched cells, tile identity and official directory U
   assert.match(row.entrypoint_url ?? "", /tiles\/cumulative\/1234/);
   assert.equal(row.source_file_id, "");
 });
+
+test("source-path rows preserve the original locator and tile selection metadata", () => {
+  const plan: DownloadPlan = {
+    schemaVersion: 1,
+    files: [],
+    entrypoints: [{
+      kind: "source-path",
+      purpose: "data-access",
+      layerId: "csst-sim-w2-image-extent",
+      surveyId: "csst",
+      releaseId: "csst-sim-w2-20250731",
+      product: "W2 simulated wide-field images",
+      order: 8,
+      nside: 256,
+      cells: [101, 102],
+      precision: "entrypoint-only",
+      sourceUri: "s3://data-and-computing/projects/CSST/W2_Phot/",
+      sourceScope: "prefix",
+      note: "原始数据来源前缀；当前计划不展开到每个文件。",
+    }, {
+      kind: "tile-directory",
+      purpose: "data-access",
+      layerId: "desi-dr1-spectra-footprint",
+      surveyId: "desi",
+      releaseId: "desi-dr1",
+      product: "DR1 spectra",
+      order: 8,
+      nside: 256,
+      cells: [101],
+      precision: "exact",
+      tileId: "1234",
+      url: "https://data.desi.lbl.gov/public/dr1/tile/1234/",
+      sourceUri: "https://data.desi.lbl.gov/public/dr1/tile/1234/",
+      sourceScope: "tile-directory",
+      required: true,
+      selectionComplete: true,
+      selectionRule: "all official tile footprints intersecting the current component cells",
+    }],
+    tileSelections: [{
+      layerId: "desi-dr1-spectra-footprint",
+      surveyId: "desi",
+      releaseId: "desi-dr1",
+      product: "DR1 spectra",
+      tileIds: ["1234"],
+      selectionRule: "all official tile footprints intersecting the current component cells",
+      complete: true,
+      note: "下载本组件列出的全部 Tile 可获得覆盖当前重合区域的相关数据；Tile 内容可能超出组件边界，未做空间裁剪。",
+    }],
+    truncated: false,
+    warnings: [],
+  };
+  const rows = overlapCsvRows(component, plan, (layerId) => layerId?.startsWith("csst") ? {
+    surveyId: "csst", releaseId: "csst-sim-w2-20250731", product: "W2 simulated wide-field images", modality: "imaging",
+  } : layer);
+  const source = record(rows[0]!);
+  assert.equal(source.item_kind, "source-path");
+  assert.equal(source.source_uri, "s3://data-and-computing/projects/CSST/W2_Phot/");
+  assert.equal(source.source_scope, "prefix");
+  const tile = record(rows[1]!);
+  assert.equal(tile.required, "true");
+  assert.equal(tile.selection_complete, "true");
+  assert.deepEqual(JSON.parse(tile.required_tile_ids!), ["1234"]);
+});

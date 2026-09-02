@@ -38,6 +38,11 @@
       "expectedSha256": "e1c38cd2abe21035deae79efdf13f003fb0421f14a780d3061dbc8a52d2da75e"
     },
     {
+      "spec": "src/layers/recipes/gaia-dr3-main-source-presence.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/gaia-dr3-main-source-presence",
+      "expectedSha256": "b0fa6948ab98c540d8f79e08ae699b406bb857c68233ebb3f33666be9869f16f"
+    },
+    {
       "spec": "src/layers/recipes/kids-dr5-color-footprint.lock.json",
       "output": "artifacts/public-survey-footprints/layers/kids-dr5-color-footprint",
       "expectedSha256": "0e4db99b72bf0b6f4478d099c7b7e008e2ec90c04f997f67b4a88880da1d8cb9"

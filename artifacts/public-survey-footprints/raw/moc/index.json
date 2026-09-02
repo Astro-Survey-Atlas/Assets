@@ -521,6 +521,20 @@
       "mediaType": "application/fits",
       "byteLength": 192960,
       "sha256": "592fbf29361a7de3efc29b4b2d904cbd80525224da7cbb60a3d23b3e4845d677"
+    },
+    {
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "product": "Gaia DR3 main source presence",
+      "sourceId": "CDS/I/355/gaiadr3",
+      "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits",
+      "metadataUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=record&fmt=json",
+      "fitsPath": "gaia-gaia-dr3-main-source-presence.fits",
+      "metadataPath": "gaia-gaia-dr3-main-source-presence.record.json",
+      "retrievedAt": "2026-09-02T02:59:38Z",
+      "mediaType": "application/fits",
+      "byteLength": 25920,
+      "sha256": "ea7f15e3e2c54daf034a99caf754147d35f0c7353e2925d1dd02c1664f6562f9"
     }
   ]
 }

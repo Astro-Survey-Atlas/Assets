@@ -3,20 +3,20 @@
   "generatedAt": "2026-08-20T05:11:37.055Z",
   "bundle": {
     "id": "public-survey-footprints-2026-08-20",
-    "sha256": "e7684305a9c81df66a2fd7c9387c1dc3672c093caecdfe36383076ee5e520f2c"
+    "sha256": "6e480be8cbfa3269978bb9abe9495b3fe8750d7ff71044aa2fe1353a2e954d59"
   },
   "statistics": {
-    "releases": 55,
-    "products": 90,
-    "acquired": 38,
+    "releases": 56,
+    "products": 91,
+    "acquired": 39,
     "overviewOnly": 11,
     "awaitingGeometry": 41,
-    "footprints": 47,
-    "packages": 14,
-    "rawMocFiles": 48,
-    "totalBytes": 40264554,
-    "runtimeBytes": 12504818,
-    "evidenceBytes": 27759736
+    "footprints": 48,
+    "packages": 15,
+    "rawMocFiles": 50,
+    "totalBytes": 45866725,
+    "runtimeBytes": 18028079,
+    "evidenceBytes": 27838646
   },
   "files": [
     {
@@ -484,6 +484,38 @@
       "sha256": "1cf306fab4995179219fbefd32b9648ce0455b65c48cab9246138cc72eff20ef"
     },
     {
+      "id": "layer-gaia-dr3-main-source-presence-preview-order4",
+      "kind": "geometry",
+      "label": "GAIA · Gaia DR3 main source presence order-4 preview projection",
+      "description": "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
+      "downloadName": "gaia-dr3-main-source-presence-preview-order4.json",
+      "mediaType": "application/json",
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "product": "Gaia DR3 main source presence",
+      "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/gaia-dr3-main-source-presence/preview-order4.json",
+      "sizeBytes": 14311,
+      "sha256": "82793e8eec0f057fd18e7d4bce5998896e2a860b27056902c4ed4186b2cfa3da"
+    },
+    {
+      "id": "layer-gaia-dr3-main-source-presence-query-order8",
+      "kind": "geometry",
+      "label": "GAIA · Gaia DR3 main source presence order-8 query projection",
+      "description": "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
+      "downloadName": "gaia-dr3-main-source-presence-query-order8.json",
+      "mediaType": "application/json",
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "product": "Gaia DR3 main source presence",
+      "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/gaia-dr3-main-source-presence/query-order8.json",
+      "sizeBytes": 5393975,
+      "sha256": "d4b5b11225a9e42d7bac736999ca39f5a42cf1bec3dd45cb7c61a19e313dab52"
+    },
+    {
       "id": "layer-kids-dr5-color-footprint-preview-order4",
       "kind": "geometry",
       "label": "KIDS · DR5 gri imaging order-4 preview projection",
@@ -588,8 +620,8 @@
       "mediaType": "application/json",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/sources.json",
-      "sizeBytes": 51962,
-      "sha256": "eb2bd2d469991a9d4e5d4c1ed45426890cc57ac7506efaf1cf3a48cbc1b5e010"
+      "sizeBytes": 52676,
+      "sha256": "781d03dbb8cf75b121e49cc222dfafdb24c092a012e3d318f1b69a6dfb6d5498"
     },
     {
       "id": "manifest-canonical",
@@ -600,8 +632,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "src/footprints/survey-footprints.json",
-      "sizeBytes": 976560,
-      "sha256": "1e89ac66f6c03c3710fbb6e75eb2295d4868c26170b622c8c2922e1a27977d68"
+      "sizeBytes": 1019078,
+      "sha256": "c32c178517c65bfbb2963853a6e64d6bc28dbc5f5501e01f5e2cfcb9421c713b"
     },
     {
       "id": "csst-w2-normalized-scan",
@@ -657,8 +689,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/normalized/survey-footprints.json",
-      "sizeBytes": 976560,
-      "sha256": "1e89ac66f6c03c3710fbb6e75eb2295d4868c26170b622c8c2922e1a27977d68"
+      "sizeBytes": 1019078,
+      "sha256": "c32c178517c65bfbb2963853a6e64d6bc28dbc5f5501e01f5e2cfcb9421c713b"
     },
     {
       "id": "manifest-survey-catalog",
@@ -669,8 +701,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "src/surveys/survey-catalog.json",
-      "sizeBytes": 83390,
-      "sha256": "1aef9397e4f2c14e858bb01ca1fad7eeed25021d853b739297a06bd8697b3cd5"
+      "sizeBytes": 85291,
+      "sha256": "1952a4c1276ea8b0687d7042e66ea2259d2f7754d7bcd05be647a92d6e4ac98c"
     },
     {
       "id": "moc-2mass-2mass-all-sky-h-band-imaging-cds-p-2mass-h-record",
@@ -1281,6 +1313,54 @@
       "sha256": "bf7f1457ce9d21129f7329a64475e50a0f904232fe7facda2c5c4edb45f2b15f"
     },
     {
+      "id": "layer-gaia-dr3-main-source-presence-lock",
+      "kind": "metadata",
+      "label": "GAIA · Gaia DR3 main source presence locked recipe",
+      "description": "Offline recipe and input snapshot lock used to build this public layer.",
+      "downloadName": "gaia-dr3-main-source-presence.lock.json",
+      "mediaType": "application/json",
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "product": "Gaia DR3 main source presence",
+      "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+      "deliveryClass": "runtime",
+      "path": "src/layers/recipes/gaia-dr3-main-source-presence.lock.json",
+      "sizeBytes": 1994,
+      "sha256": "054e1fefd6cef3538b162b9a3ed602a633a7906f63ee1ea60ebc6d25139261df"
+    },
+    {
+      "id": "moc-gaia-gaia-dr3-gaia-dr3-main-source-presence-cds-i-355-gaiadr3-record",
+      "kind": "metadata",
+      "label": "GAIA · Gaia DR3 main source presence source record",
+      "description": "CDS/HiPS source metadata accompanying gaia-gaia-dr3-main-source-presence.fits.",
+      "downloadName": "gaia-gaia-dr3-main-source-presence.record.json",
+      "mediaType": "application/json",
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "product": "Gaia DR3 main source presence",
+      "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=record&fmt=json",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/raw/moc/gaia-gaia-dr3-main-source-presence.record.json",
+      "sizeBytes": 3080,
+      "sha256": "ce1bcf6beb9b7f49340dd16777a25852eee0682a993002455a0c43d8e60b062a"
+    },
+    {
+      "id": "layer-gaia-dr3-main-source-presence-statistics",
+      "kind": "metadata",
+      "label": "GAIA · Gaia DR3 main source presence statistics",
+      "description": "Area, cell count and fixed-order projection counts for the authoritative layer.",
+      "downloadName": "gaia-dr3-main-source-presence-statistics.json",
+      "mediaType": "application/json",
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "product": "Gaia DR3 main source presence",
+      "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/layers/gaia-dr3-main-source-presence/statistics.json",
+      "sizeBytes": 209,
+      "sha256": "5bc0c7252a30d789d95ec1b239b1eec15d9fdd7d7d18cb8a27f8f00b9c4a8c0b"
+    },
+    {
       "id": "moc-galex-galex-gr6-gr7-fuv-imaging-cds-p-galexgr6-7-fuv-record",
       "kind": "metadata",
       "label": "GALEX · FUV imaging source record",
@@ -1609,8 +1689,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "src/layers/public-build-plan.json",
-      "sizeBytes": 2728,
-      "sha256": "6b76528435fa786042368b114a9ca5ee52708a31e25cdf43c182806f71255a9f"
+      "sizeBytes": 2999,
+      "sha256": "c3fa19860462e9785997534244fa5c09f7508eb61ab9daf993ed76a5ced121a3"
     },
     {
       "id": "metadata-moc-index",
@@ -1621,8 +1701,8 @@
       "mediaType": "application/json",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/raw/moc/index.json",
-      "sizeBytes": 27426,
-      "sha256": "2a07d31bbe626d11b949fef271df686a561547971f367cc1109b937309702f26"
+      "sizeBytes": 28151,
+      "sha256": "2f5ade6ffa3391159ebec019524b609c11b6e7d5d9fae27b87303e35ae99fdce"
     },
     {
       "id": "moc-nvss-nvss-final-1-4-ghz-radio-imaging-cds-p-nvss-record",
@@ -1757,8 +1837,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "src/moc-sources/source-registry.json",
-      "sizeBytes": 9297,
-      "sha256": "22b2f755bd744d159f5b290701e3bf28ad13bfb6ec9dfea48f9c221a704fb198"
+      "sizeBytes": 9642,
+      "sha256": "d39a2a6a817078a0e31717f61674bd368fa63a225eace4f8583b5b63d803eb8e"
     },
     {
       "id": "metadata-geometry-index",
@@ -1781,8 +1861,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "artifacts/public-survey-footprints/packages/catalog.json",
-      "sizeBytes": 22243,
-      "sha256": "81703242918a55f45935029440686b4c04d0d28c17031643b71cd6c8218fefc9"
+      "sizeBytes": 23789,
+      "sha256": "bfb89632babbbd1e5b9b2a94e644dddb012a5079b94ae5184e841ba6f8e734bf"
     },
     {
       "id": "metadata-resource-package-v3-schema",
@@ -1869,8 +1949,8 @@
       "mediaType": "application/json",
       "deliveryClass": "runtime",
       "path": "src/layers/layer-registry.json",
-      "sizeBytes": 24144,
-      "sha256": "1144f14086c7ae3611f0d5e5f11b809d22d74061d2549b57df4614a719440349"
+      "sizeBytes": 25016,
+      "sha256": "01ab79c9a22a76930dbd9f872a8e30ff056eab3d48d1ee217db3d6b70a257438"
     },
     {
       "id": "layer-vista-viking-j-footprint-lock",
@@ -2235,6 +2315,38 @@
       "path": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/euclid-q1-deep-fields-image-extent.moc.fits",
       "sizeBytes": 17280,
       "sha256": "e1c38cd2abe21035deae79efdf13f003fb0421f14a780d3061dbc8a52d2da75e"
+    },
+    {
+      "id": "moc-gaia-gaia-dr3-gaia-dr3-main-source-presence-cds-i-355-gaiadr3",
+      "kind": "moc",
+      "label": "GAIA · Gaia DR3 main source presence",
+      "description": "Native FITS MOC for gaia-dr3.",
+      "downloadName": "gaia-gaia-dr3-main-source-presence.fits",
+      "mediaType": "application/fits",
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "product": "Gaia DR3 main source presence",
+      "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/raw/moc/gaia-gaia-dr3-main-source-presence.fits",
+      "sizeBytes": 25920,
+      "sha256": "ea7f15e3e2c54daf034a99caf754147d35f0c7353e2925d1dd02c1664f6562f9"
+    },
+    {
+      "id": "layer-gaia-dr3-main-source-presence-moc",
+      "kind": "moc",
+      "label": "GAIA · Gaia DR3 main source presence authoritative MOC",
+      "description": "object_presence (catalog, third_party_moc) generated by Assets MOC Core 1.0.0.",
+      "downloadName": "gaia-dr3-main-source-presence.moc.fits",
+      "mediaType": "application/fits",
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "product": "Gaia DR3 main source presence",
+      "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/gaia-dr3-main-source-presence/gaia-dr3-main-source-presence.moc.fits",
+      "sizeBytes": 46080,
+      "sha256": "b0fa6948ab98c540d8f79e08ae699b406bb857c68233ebb3f33666be9869f16f"
     },
     {
       "id": "moc-galex-galex-gr6-gr7-fuv-imaging-cds-p-galexgr6-7-fuv",
@@ -2845,6 +2957,22 @@
       "sha256": "f3edf15c133cbc92797821e253208d540f382b77c4fa4cef33a7db472325e872"
     },
     {
+      "id": "package-public-gaia-footprints-3-0-0",
+      "kind": "package",
+      "label": "Gaia DR3",
+      "description": "Gaia DR3 main-source catalog object-presence coverage from the reviewed CDS ICRS/NUNIQ MOC. This package contains coverage geometry and provenance, not the Gaia catalog rows.",
+      "downloadName": "public-gaia-footprints-3.0.0.zip",
+      "mediaType": "application/zip",
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "version": "3.0.0",
+      "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=record&fmt=json",
+      "deliveryClass": "runtime",
+      "path": "artifacts/public-survey-footprints/packages/public-gaia-footprints-3.0.0.zip",
+      "sizeBytes": 22801,
+      "sha256": "47a473da1e55b7f44c865bbf5512c3ba953d389bdce4704ff4b840d5aa69872b"
+    },
+    {
       "id": "package-public-galex-footprints-3-0-0",
       "kind": "package",
       "label": "GALEX",
@@ -3174,6 +3302,22 @@
       "sha256": "d49db62d46eee15e6d52da289ef9bd7eb5a7b31e712ca5cf91c563d85dee00d9"
     },
     {
+      "id": "layer-gaia-dr3-main-source-presence-provenance",
+      "kind": "provenance",
+      "label": "GAIA · Gaia DR3 main source presence provenance",
+      "description": "Locked input, Core version, scientific classification and output hashes for this public layer.",
+      "downloadName": "gaia-dr3-main-source-presence-provenance.json",
+      "mediaType": "application/json",
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
+      "product": "Gaia DR3 main source presence",
+      "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+      "deliveryClass": "evidence",
+      "path": "artifacts/public-survey-footprints/layers/gaia-dr3-main-source-presence/provenance.json",
+      "sizeBytes": 2137,
+      "sha256": "88307ba84465d4268cb8061056843d65f094700381291efa9a260a538e90cf13"
+    },
+    {
       "id": "layer-kids-dr5-color-footprint-provenance",
       "kind": "provenance",
       "label": "KIDS · DR5 gri imaging provenance",
@@ -3198,8 +3342,8 @@
       "mediaType": "application/json",
       "deliveryClass": "evidence",
       "path": "artifacts/public-survey-footprints/provenance.json",
-      "sizeBytes": 5694,
-      "sha256": "63f8d72b2dd8635b2c28fc0a333ebd548860e827e10a4e1cea581695afefb370"
+      "sizeBytes": 5948,
+      "sha256": "f7979413761da0c45f3b159bb53ef89ec03798e3bf870165fe8bebc334c5b8d4"
     },
     {
       "id": "layer-skymapper-dr4-color-footprint-provenance",

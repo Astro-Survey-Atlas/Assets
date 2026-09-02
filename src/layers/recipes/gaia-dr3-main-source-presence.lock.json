@@ -1,0 +1,42 @@
+{
+  "layerId": "gaia-dr3-main-source-presence",
+  "surveyId": "gaia",
+  "releaseId": "gaia-dr3",
+  "product": "Gaia DR3 main source presence",
+  "modality": "catalog",
+  "mode": "nested-healpix",
+  "coverageRole": "object_presence",
+  "dataOrigin": "catalog",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+  "input": "artifacts/public-survey-footprints/raw/moc/gaia-gaia-dr3-main-source-presence.fits",
+  "recipe": {
+    "sourceKind": "catalog-moc",
+    "sourceId": "CDS/I/355/gaiadr3",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "ce1bcf6beb9b7f49340dd16777a25852eee0682a993002455a0c43d8e60b062a",
+    "attributionUrl": "https://www.cosmos.esa.int/web/gaia-users/credits",
+    "nativeMocOrder": 10,
+    "availableOrders": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "exportOrder": 10,
+    "precision": "exact",
+    "precisionJustification": "CDS Gaia DR3 main-source catalog row-presence SMOC; the native ICRS/NUNIQ cells are preserved and only coarsened for O8 query and O4 preview projections.",
+    "limitations": [
+      "This is catalog object presence, not an imaging exposure or scanning-law footprint.",
+      "Reverse lookup is entrypoint-only because the public MOC does not contain Gaia source-file units."
+    ]
+  },
+  "snapshot": {
+    "sha256": "ea7f15e3e2c54daf034a99caf754147d35f0c7353e2925d1dd02c1664f6562f9",
+    "sizeBytes": 25920,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits",
+    "recordSha256": "ce1bcf6beb9b7f49340dd16777a25852eee0682a993002455a0c43d8e60b062a",
+    "retrievedAt": "2026-09-02T02:59:38Z"
+  }
+}

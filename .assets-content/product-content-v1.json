@@ -10609,6 +10609,114 @@
       "updatedAt": "2026-08-28T04:22:23.686Z",
       "publishedAt": null,
       "contentSha256": "f9ab082b462cb1b4251d50a80fa038d718af58e6780c6914399f00c68b8217e3"
+    },
+    {
+      "productId": "41dec62dadad700ee1c0",
+      "draft": {
+        "productId": "41dec62dadad700ee1c0",
+        "surveyId": "gaia",
+        "releaseId": "gaia-dr3",
+        "name": "Gaia DR3 main source presence",
+        "modality": "catalog",
+        "layerId": "gaia-dr3-main-source-presence",
+        "coverageRole": "object_presence",
+        "dataOrigin": "catalog",
+        "sourceTier": "third_party_moc",
+        "mode": "nested-healpix",
+        "scanDefaults": {
+          "maxOrder": 10,
+          "allowedSuffixes": ".json,.csv,.tsv,.fits"
+        },
+        "originNote": "CDS spatial MOC of the ESA Gaia/DPAC main source catalog; the catalog contains 1,811,709,771 rows.",
+        "sourceLabel": "ESA Gaia / DPAC DR3",
+        "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+        "officialDataLabel": "Gaia Archive",
+        "officialDataUrl": "https://gea.esac.esa.int/archive/",
+        "officialQueryLabel": "Gaia Archive TAP",
+        "officialQueryUrl": "https://gea.esac.esa.int/tap-server/tap",
+        "geometrySourceLabel": "CDS Gaia DR3 main-source SMOC order 10",
+        "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits",
+        "recipeVersion": 1,
+        "recipeHash": "6428b4f4a03245f201e15438943ed6512b4afa6674c55de1bdf4ce9d3723a503",
+        "presentation": {
+          "summaryMarkdown": "",
+          "methodologyMarkdown": "",
+          "limitationsMarkdown": "",
+          "flow": {
+            "nodes": [
+              {
+                "id": "input",
+                "kind": "input",
+                "title": "原生 HEALPix/IPix 输入",
+                "bodyMarkdown": "input=artifacts/public-survey-footprints/raw/moc/gaia-gaia-dr3-main-source-presence.fits; sourceUrl=https://www.cosmos.esa.int/web/gaia/data-release-3; snapshotSha256=ea7f15e3e2c54daf034a99caf754147d35f0c7353e2925d1dd02c1664f6562f9; snapshotSizeBytes=25920",
+                "order": 0,
+                "implementationRef": "assets.coverage.input",
+                "evidenceRefs": []
+              },
+              {
+                "id": "validate",
+                "kind": "validate",
+                "title": "order、NESTED 与坐标校验",
+                "bodyMarkdown": "coordinateFrame=ICRS; ordering=NESTED",
+                "order": 1,
+                "implementationRef": "assets.coverage.validate",
+                "evidenceRefs": []
+              },
+              {
+                "id": "union",
+                "kind": "union",
+                "title": "cell union / dedup",
+                "bodyMarkdown": "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。",
+                "order": 2,
+                "implementationRef": "assets.coverage.union",
+                "evidenceRefs": []
+              },
+              {
+                "id": "outputs",
+                "kind": "outputs",
+                "title": "MOC、FITS、preview、statistics 输出",
+                "bodyMarkdown": "输出 IVOA FITS MOC、query projection、preview projection 和 statistics。",
+                "order": 3,
+                "implementationRef": "assets.coverage.outputs",
+                "evidenceRefs": []
+              },
+              {
+                "id": "evidence",
+                "kind": "evidence",
+                "title": "manifest、provenance、hash",
+                "bodyMarkdown": "保存锁定 recipe、输入快照 SHA-256、manifest、provenance 与输出 hash。",
+                "order": 4,
+                "implementationRef": "assets.coverage.evidence",
+                "evidenceRefs": []
+              }
+            ],
+            "edges": [
+              {
+                "from": "input",
+                "to": "validate"
+              },
+              {
+                "from": "validate",
+                "to": "union"
+              },
+              {
+                "from": "union",
+                "to": "outputs"
+              },
+              {
+                "from": "outputs",
+                "to": "evidence"
+              }
+            ]
+          }
+        }
+      },
+      "published": null,
+      "revision": 2,
+      "publishedRevision": null,
+      "updatedAt": "2026-09-02T04:04:12.975Z",
+      "publishedAt": null,
+      "contentSha256": "1027c9c4ef61829c0e7e51bbef99670ea1f58919b179f1527c2bc394e1075d91"
     }
   ]
 }

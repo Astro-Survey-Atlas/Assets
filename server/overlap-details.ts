@@ -82,6 +82,20 @@ export function publicExternalUrl(value: unknown): string | undefined {
   return parsed.toString();
 }
 
+/** Keep recorded source locators visible without turning them into downloads. */
+export function publicLocator(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const trimmed = value.trim();
+  if (/^(?:s3|oss):\/\//i.test(trimmed)) return trimmed;
+  if (/^file:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === "file:" && !parsed.hostname && !parsed.username && !parsed.password) return trimmed;
+    } catch { return undefined; }
+  }
+  return publicExternalUrl(trimmed);
+}
+
 function claimKind(product: string, geometryUrl?: string): CoverageClaimKind {
   const lower = `${product} ${geometryUrl ?? ""}`.toLowerCase();
   if (/\bmoc\b|moc\.fits|moc\.json/.test(lower)) return "moc";

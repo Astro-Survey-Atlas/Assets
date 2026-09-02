@@ -1241,8 +1241,9 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): v
   const directFiles = plan.files.filter((file) => file.downloadable).length;
   const locatorFiles = plan.files.filter((file) => Boolean(file.sourceUri)).length;
   const tileLinks = plan.entrypoints.filter((entry) => entry.kind === "tile-directory").length;
+  const sourcePaths = plan.entrypoints.filter((entry) => entry.kind === "source-path").length;
   const heading = document.createElement("strong");
-  heading.textContent = `DOWNLOAD PLAN · ${plan.files.length} files · ${directFiles} direct downloads · ${locatorFiles} URI locators · ${tileLinks} tile links${plan.truncated ? " · truncated" : ""}`;
+  heading.textContent = `DOWNLOAD PLAN · ${plan.files.length} files · ${directFiles} direct downloads · ${locatorFiles} URI locators · ${sourcePaths} source paths · ${tileLinks} tile links${plan.truncated ? " · truncated" : ""}`;
   node.append(heading);
   if (plan.warnings.length) {
     const warning = document.createElement("small");
@@ -1288,6 +1289,24 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): v
   } else {
     node.append(Object.assign(document.createElement("small"), { textContent: t("coverage.noSourceFiles") }));
   }
+  if (plan.tileSelections?.length) {
+    const selectionHeading = document.createElement("strong");
+    selectionHeading.textContent = "REQUIRED TILE SETS";
+    node.append(selectionHeading);
+    const selectionList = document.createElement("div");
+    selectionList.className = "overlap-evidence-files";
+    plan.tileSelections.forEach((selection) => {
+      const row = document.createElement("div");
+      row.className = "overlap-evidence-file";
+      const title = document.createElement("strong");
+      title.textContent = `${selection.product ?? selection.layerId} · ${selection.tileIds.length} Tile${selection.tileIds.length === 1 ? "" : "s"}`;
+      row.append(title);
+      row.append(Object.assign(document.createElement("small"), { textContent: `${selection.complete ? "完整集合" : "结果被截断，只是部分集合"} · ${selection.tileIds.join(", ") || "没有匹配 Tile"}` }));
+      row.append(Object.assign(document.createElement("small"), { textContent: selection.note }));
+      selectionList.append(row);
+    });
+    node.append(selectionList);
+  }
   if (plan.entrypoints.length) {
     const heading = document.createElement("strong");
     heading.textContent = `DATA / COVERAGE ENTRYPOINTS · ${plan.entrypoints.length}`;
@@ -1300,10 +1319,11 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult): v
       row.append(Object.assign(document.createElement("strong"), { textContent: `${entry.kind} · ${entry.product ?? entry.productId ?? entry.layerId ?? "entrypoint"}` }));
       if (entry.order !== undefined) row.append(Object.assign(document.createElement("small"), { textContent: `O${entry.order} · ${(entry.cells ?? []).length} cells · ${entry.precision}` }));
       if (entry.note) row.append(Object.assign(document.createElement("small"), { textContent: entry.note }));
+      if (entry.sourceUri && entry.kind !== "coverage-source") appendSourceLocator(row, entry.sourceUri);
       const entryUrl = entry.url ?? entry.sourceUrl ?? entry.mocUrl;
       const entryLabel = entry.kind === "tile-directory" && typeof entryUrl === "string"
         ? entryUrl
-        : entry.purpose === "coverage-reference" ? "Coverage reference" : "Official data entrypoint";
+        : entry.kind === "source-path" ? "Source path" : entry.purpose === "coverage-reference" ? "Coverage reference" : "Official data entrypoint";
       const entryLink = drawerDocLink(entryUrl, entryLabel);
       if (entry.kind === "tile-directory" && entry.tileId) row.append(Object.assign(document.createElement("small"), { textContent: `TILE ${entry.tileId}` }));
       if (entryLink) row.append(entryLink);
