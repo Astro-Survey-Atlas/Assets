@@ -265,17 +265,19 @@ interface CameraPose {
 const BASE_COLOR = new THREE.Color("#2c3792");
 const OVERLAP_COLOR = new THREE.Color("#2c3792");
 const SELECTION_COLOR = new THREE.Color("#f01951");
-const SELECTION_EDGE_COLOR = new THREE.Color("#f6f6ff");
+const SELECTION_EDGE_DARK = new THREE.Color("#f6f6ff");
+const SELECTION_EDGE_LIGHT = new THREE.Color("#5965c7");
+const SELECTION_CORE_LIGHT = new THREE.Color("#20286f");
 const WORKSPACE_COLOR = new THREE.Color("#8d97ff");
 // The opening shot is a close, cropped glimpse of the layered globe. The
 // tighter field keeps the shell geometry legible while the pose below moves
 // its centre beyond the upper-left of the viewport.
 const HOME_FOV_DEG = 24;
-const COVERAGE_OPACITY = 0.26;
-const COVERAGE_EDGE_OPACITY = 0.34;
+const COVERAGE_OPACITY = 0.34;
+const COVERAGE_EDGE_OPACITY = 0.16;
 // Keep surrounding layers subdued while the selected region remains readable.
-const DIMMED_OPACITY = 0.13;
-const DIMMED_EDGE_OPACITY = 0.2;
+const DIMMED_OPACITY = 0.2;
+const DIMMED_EDGE_OPACITY = 0.1;
 const EXPLODED_OPACITY = 0.58;
 const EXPLODED_LAYER_STEP = 0.18;
 const REGION_INNER_PADDING = 0.045;
@@ -465,21 +467,21 @@ function countLabelSprite(text: string, position: THREE.Vector3, depthTest = tru
   const context = canvas.getContext("2d")!;
   context.clearRect(0, 0, canvas.width, canvas.height);
   const lightTheme = document.documentElement.dataset.theme === "light";
-  context.fillStyle = lightTheme ? "rgba(255, 255, 255, 0.92)" : "rgba(4, 9, 12, 0.72)";
-  context.strokeStyle = lightTheme ? "rgba(44, 55, 146, 0.45)" : "rgba(255, 255, 255, 0.45)";
+  context.fillStyle = lightTheme ? "rgba(21, 26, 33, 0.86)" : "rgba(4, 9, 12, 0.72)";
+  context.strokeStyle = lightTheme ? "rgba(141, 151, 255, 0.72)" : "rgba(255, 255, 255, 0.45)";
   context.lineWidth = 2;
   context.beginPath();
   context.roundRect(10, 10, 172, 44, 18);
   context.fill();
   context.stroke();
-  context.fillStyle = lightTheme ? "#20286f" : "#ffffff";
+  context.fillStyle = lightTheme ? "#f4f5f6" : "#ffffff";
   context.font = '700 24px "Atlas Sans CJK", "Atlas Sans", sans-serif';
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillText(text, canvas.width / 2, canvas.height / 2 + 1);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest, depthWrite: false }));
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest, depthWrite: false, toneMapped: false }));
   sprite.position.copy(position);
   sprite.scale.set(0.15, 0.05, 1);
   sprite.renderOrder = LABEL_RENDER_ORDER;
@@ -630,9 +632,14 @@ export class SurveyLayerViewer {
 
   setTheme(theme: "light" | "dark"): void {
     this.#canvas.dataset.theme = theme;
-    this.#renderer.setClearColor(this.#backgroundColor ?? (theme === "light" ? 0xfbfbfe : 0x090b18), 1);
+    // Keep the daytime sky visibly separate from the light UI chrome. The
+    // matching CSS token is applied to the scene host as well.
+    this.#renderer.setClearColor(this.#backgroundColor ?? (theme === "light" ? 0x687078 : 0x25282d), 1);
     (this.#starField.material as THREE.PointsMaterial).color.setHex(theme === "light" ? 0x5965c7 : 0x71808b);
-    (this.#starField.material as THREE.PointsMaterial).opacity = theme === "light" ? 0.24 : 0.28;
+    (this.#starField.material as THREE.PointsMaterial).opacity = theme === "light" ? 0.16 : 0.18;
+    if (this.#overlapMode) this.#rebuildOverlapLabels();
+    if (this.#drillCells.size) this.setDrillCells([...this.#drillCells.values()], this.#drillNside);
+    if (this.#selectedPixels.size) this.#renderSelectionRegion();
     this.#requestRender();
   }
 
@@ -1362,7 +1369,7 @@ export class SurveyLayerViewer {
         records: layer.pixels.map((pixel) => ({ pixel })),
       };
       mesh.renderOrder = renderOrder;
-      const edges = new THREE.LineSegments(buildSphericalCellEdges(cells), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.68, depthTest: true, depthWrite: false, toneMapped: false }));
+      const edges = new THREE.LineSegments(buildSphericalCellEdges(cells), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.3, depthTest: true, depthWrite: false, toneMapped: false }));
       edges.renderOrder = renderOrder + 1;
       this.#workspaceCoverageGroup.add(mesh, edges);
     });
@@ -1593,16 +1600,20 @@ export class SurveyLayerViewer {
     for (const [surveyId, mesh] of this.#meshBySurvey) {
       mesh.material.opacity = this.#overlapMode
         ? 0.07
+        : this.#focusedSurveyId === surveyId
+        ? 0.52
         : this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null
         ? DIMMED_OPACITY
-        : this.#focusedSurveyId === surveyId ? 0.24 : COVERAGE_OPACITY;
+        : COVERAGE_OPACITY;
     }
     this.#workspaceCoverageGroup.traverse((child) => {
       if (!(child instanceof THREE.Mesh) || !(child.material instanceof THREE.MeshBasicMaterial)) return;
       const assetId = child.userData.assetId;
-      child.material.opacity = this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null
+      child.material.opacity = this.#focusedAssetId && assetId === this.#focusedAssetId
+        ? 0.42
+        : this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null
         ? DIMMED_OPACITY
-        : this.#focusedAssetId && assetId === this.#focusedAssetId ? 0.28 : 0.14;
+        : 0.14;
     });
     const edgeOpacity = this.#overlapMode ? 0.12 : this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null ? DIMMED_EDGE_OPACITY : COVERAGE_EDGE_OPACITY;
     this.#coverageEdgeMaterials.forEach((material) => { material.opacity = edgeOpacity; });
@@ -1761,19 +1772,22 @@ export class SurveyLayerViewer {
     const radii = depths.map((depth) => depth.radius);
     const minimumRadius = Math.max(0.05, Math.min(...radii) - REGION_INNER_PADDING);
     const maximumRadius = Math.max(...radii) + REGION_OUTER_PADDING;
+    const lightTheme = document.documentElement.dataset.theme === "light";
+    const edgeColor = lightTheme ? SELECTION_EDGE_LIGHT : SELECTION_EDGE_DARK;
+    const coreColor = lightTheme ? SELECTION_CORE_LIGHT : SELECTION_EDGE_DARK;
     const edgeCells = selected.map((pixel) => ({
       nside: this.#manifest.nside,
       pixel,
       innerRadius: minimumRadius,
       outerRadius: maximumRadius,
-      color: SELECTION_EDGE_COLOR,
+      color: edgeColor,
       inset: 0.012,
     }));
     const edgeGeometry = buildSphericalCellVolumeEdges(edgeCells);
     const volumeEdgeMaterial = new THREE.LineDashedMaterial({
-      color: SELECTION_EDGE_COLOR,
+      color: edgeColor,
       transparent: true,
-      opacity: 0.98,
+      opacity: lightTheme ? 0.86 : 0.98,
       depthTest: false,
       depthWrite: false,
       dashSize: 0.07,
@@ -1784,9 +1798,9 @@ export class SurveyLayerViewer {
     volumeEdges.computeLineDistances();
     volumeEdges.renderOrder = SELECTION_RENDER_ORDER + 1;
     const coreMaterial = new THREE.LineBasicMaterial({
-      color: 0xf7fffd,
+      color: coreColor,
       transparent: true,
-      opacity: 0.96,
+      opacity: lightTheme ? 0.96 : 0.96,
       depthTest: false,
       depthWrite: false,
       toneMapped: false,
@@ -1796,7 +1810,7 @@ export class SurveyLayerViewer {
     const glowMaterial = new THREE.LineBasicMaterial({
       color: SELECTION_COLOR,
       transparent: true,
-      opacity: 0.42,
+      opacity: lightTheme ? 0.2 : 0.42,
       depthTest: false,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -2130,11 +2144,12 @@ export class SurveyLayerViewer {
     });
     if (!this.#selectionCoreMaterial || !this.#selectionEdgeMaterial || !this.#selectionGlowMaterial) return;
     const pulse = 0.5 + 0.5 * Math.sin(now * 0.004);
+    const lightTheme = document.documentElement.dataset.theme === "light";
     this.#selectionEdgeMaterial.dashSize = 0.052 + pulse * 0.034;
     this.#selectionEdgeMaterial.gapSize = 0.028 + (1 - pulse) * 0.018;
-    this.#selectionEdgeMaterial.opacity = 0.86 + pulse * 0.14;
-    this.#selectionCoreMaterial.opacity = 0.88 + pulse * 0.12;
-    this.#selectionGlowMaterial.opacity = 0.28 + pulse * 0.38;
+    this.#selectionEdgeMaterial.opacity = lightTheme ? 0.76 + pulse * 0.12 : 0.86 + pulse * 0.14;
+    this.#selectionCoreMaterial.opacity = lightTheme ? 0.88 + pulse * 0.08 : 0.88 + pulse * 0.12;
+    this.#selectionGlowMaterial.opacity = lightTheme ? 0.14 + pulse * 0.16 : 0.28 + pulse * 0.38;
   }
 
   #backgroundStars(): THREE.Points {

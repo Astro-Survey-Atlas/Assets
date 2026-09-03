@@ -12,15 +12,16 @@
   --brand-magenta: #f01951;
   --brand-magenta-strong: #ff6b8d;
   --brand-magenta-soft: #4a1327;
-  --public-bg: #090b18;
-  --public-surface: #101327;
-  --public-surface-raised: #151a33;
-  --public-text: #f6f6ff;
-  --public-muted: #a9acc4;
-  --public-subtle: #747996;
-  --public-line: rgba(205, 209, 255, .17);
-  --public-line-strong: rgba(205, 209, 255, .35);
-  --public-shadow: 0 20px 60px rgba(0, 0, 0, .26);
+  --public-bg: #25282d;
+  --public-atlas-scene-bg: #25282d;
+  --public-surface: #2d3137;
+  --public-surface-raised: #363b42;
+  --public-text: #f4f5f6;
+  --public-muted: #b7bbc2;
+  --public-subtle: #8b919a;
+  --public-line: rgba(235, 238, 242, .16);
+  --public-line-strong: rgba(235, 238, 242, .32);
+  --public-shadow: 0 20px 60px rgba(0, 0, 0, .2);
 }
 
 :root[data-theme="light"] {
@@ -31,15 +32,16 @@
   --brand-magenta: #f01951;
   --brand-magenta-strong: #c70f3e;
   --brand-magenta-soft: #fff0f4;
-  --public-bg: #fbfbfe;
-  --public-surface: #ffffff;
-  --public-surface-raised: #f5f6fc;
-  --public-text: #161936;
-  --public-muted: #62677f;
-  --public-subtle: #858aa0;
-  --public-line: rgba(22, 25, 54, .13);
-  --public-line-strong: rgba(22, 25, 54, .26);
-  --public-shadow: 0 18px 50px rgba(31, 39, 90, .1);
+  --public-bg: #eef0f2;
+  --public-atlas-scene-bg: #687078;
+  --public-surface: #f6f7f8;
+  --public-surface-raised: #ffffff;
+  --public-text: #151a21;
+  --public-muted: #5f6670;
+  --public-subtle: #7d848d;
+  --public-line: rgba(21, 26, 33, .13);
+  --public-line-strong: rgba(21, 26, 33, .26);
+  --public-shadow: 0 18px 50px rgba(35, 42, 49, .1);
 }
 
 html:has(body.public-site),
@@ -93,6 +95,11 @@ body.resources-page .brand {
   object-position: center;
   opacity: .92;
 }
+
+/* The dark mark is intentionally a separate drawing: the circuit remains
+   readable against the charcoal header while the globe keeps the ASA accent. */
+:root[data-theme="dark"] .brand-logo { content: url("/icon_without_name_lon_web_dark.svg"); }
+:root[data-theme="light"] .brand-logo { content: url("/icon_without_name_lon_web.svg"); }
 
 .brand-wordmark,
 body.public-site .brand > span:last-child,
@@ -474,6 +481,143 @@ body.resources-page .eyebrow {
 .architecture-node:nth-child(2n) strong { color: var(--brand-magenta-strong); }
 .architecture-node:nth-child(3n) strong { color: var(--brand-indigo-strong); }
 
+/* Workflow introduction and the future demo media slot. The slot has a stable
+   16:9 frame so a real recording can be dropped in without shifting the page. */
+.workflow-showcase { padding-top: 92px; }
+.workflow-showcase-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(320px, .88fr);
+  align-items: start;
+  gap: clamp(28px, 6vw, 82px);
+}
+.workflow-media-slot { width: 100%; min-width: 0; margin: 0; }
+.workflow-media-placeholder {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  aspect-ratio: 16 / 9;
+  min-height: 280px;
+  overflow: hidden;
+  border: 1px dashed var(--public-line-strong);
+  background: color-mix(in srgb, var(--public-surface) 78%, var(--public-bg));
+  box-shadow: var(--public-shadow);
+}
+.workflow-media-chrome,
+.workflow-media-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px 15px;
+  color: var(--public-subtle);
+  font: 700 9px/1.2 var(--font-mono), monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.workflow-media-chrome { border-bottom: 1px solid var(--public-line); }
+.workflow-media-footer { border-top: 1px solid var(--public-line); flex-wrap: wrap; letter-spacing: .03em; text-transform: none; }
+.workflow-media-footer span { min-width: 0; overflow-wrap: anywhere; }
+.workflow-media-footer code { flex: 0 0 auto; color: var(--brand-indigo-strong); font: inherit; }
+.workflow-media-label { display: inline-flex; align-items: center; gap: 7px; color: var(--brand-magenta-strong); }
+.workflow-media-label svg { width: 13px; height: 13px; }
+.workflow-media-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--public-bg);
+}
+.workflow-stage-grid {
+  position: absolute;
+  inset: 0;
+  opacity: .45;
+  background-image: linear-gradient(var(--public-line) 1px, transparent 1px), linear-gradient(90deg, var(--public-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.workflow-stage-orbit {
+  position: absolute;
+  top: 50%;
+  left: 45%;
+  width: min(52%, 250px);
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, var(--brand-indigo-strong) 72%, transparent);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: inset 0 0 0 18px color-mix(in srgb, var(--brand-indigo) 8%, transparent), 0 0 0 1px color-mix(in srgb, var(--brand-magenta) 16%, transparent);
+}
+.workflow-stage-orbit::before,
+.workflow-stage-orbit::after {
+  content: "";
+  position: absolute;
+  inset: 16% 0;
+  border-block: 1px solid color-mix(in srgb, var(--brand-indigo-strong) 52%, transparent);
+  border-radius: 50%;
+}
+.workflow-stage-orbit::after { inset: 0 29%; border-block: 0; border-inline: 1px solid color-mix(in srgb, var(--brand-indigo-strong) 52%, transparent); }
+.workflow-stage-orbit span { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--brand-magenta); box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-magenta) 18%, transparent); }
+.workflow-stage-orbit span:nth-child(1) { top: 18%; left: 21%; }
+.workflow-stage-orbit span:nth-child(2) { right: 13%; bottom: 31%; background: var(--brand-indigo-strong); box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-indigo-strong) 18%, transparent); }
+.workflow-stage-orbit span:nth-child(3) { bottom: 12%; left: 40%; }
+.workflow-stage-panel {
+  position: absolute;
+  right: 7%;
+  bottom: 12%;
+  display: grid;
+  gap: 5px;
+  width: min(38%, 190px);
+  padding: 12px;
+  border: 1px solid var(--public-line-strong);
+  background: color-mix(in srgb, var(--public-surface) 92%, transparent);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--public-bg) 40%, transparent);
+}
+.workflow-stage-panel span { color: var(--brand-magenta-strong); font: 700 8px/1.2 var(--font-mono), monospace; }
+.workflow-stage-panel strong { color: var(--public-text); font: 700 13px/1.2 var(--font-sans), sans-serif; }
+.workflow-stage-panel small { color: var(--public-subtle); font: 700 8px/1.2 var(--font-mono), monospace; }
+.workflow-stage-route { position: absolute; display: inline-flex; align-items: center; gap: 7px; color: var(--public-muted); font: 700 8px/1 var(--font-mono), monospace; letter-spacing: .08em; }
+.workflow-stage-route b { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--brand-indigo); border-radius: 50%; color: var(--brand-indigo-strong); font: inherit; }
+.workflow-stage-route::after { content: ""; position: absolute; top: 50%; left: calc(100% + 8px); width: 38px; border-top: 1px solid var(--brand-indigo); opacity: .7; }
+.workflow-stage-route-one { top: 19%; left: 8%; }
+.workflow-stage-route-two { top: 46%; left: 6%; }
+.workflow-stage-route-three { top: 73%; left: 11%; }
+.workflow-stage-route-two b { border-color: var(--brand-magenta); color: var(--brand-magenta-strong); }
+.workflow-stage-route-three b { border-color: var(--public-line-strong); color: var(--public-text); }
+.workflow-stage-route-three::after { border-color: var(--brand-magenta); }
+.workflow-media-slot figcaption,
+.workflow-media-slot > figcaption { margin-top: 11px; color: var(--public-subtle); font: 600 10px/1.45 var(--font-mono), monospace; }
+.workflow-intro { min-width: 0; padding-top: 3px; }
+.workflow-intro h2 { max-width: 520px; margin: 0; color: var(--public-text); font: 700 clamp(30px, 4vw, 48px)/1.05 var(--font-sans), sans-serif; letter-spacing: -.035em; }
+.workflow-lead { max-width: 520px; margin: 18px 0 0; color: var(--public-muted); font-size: 15px; line-height: 1.65; }
+.workflow-steps { display: grid; gap: 0; margin: 28px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--public-line); }
+.workflow-step { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 14px; padding: 15px 0; border-bottom: 1px solid var(--public-line); }
+.workflow-step-index { color: var(--brand-magenta-strong); font: 700 10px/1.3 var(--font-mono), monospace; }
+.workflow-step strong { display: block; color: var(--public-text); font: 700 14px/1.3 var(--font-sans), sans-serif; }
+.workflow-step p { margin: 5px 0 0; color: var(--public-muted); font-size: 12px; line-height: 1.5; }
+.workflow-actions { margin-top: 25px; }
+.github-star-button { border-color: var(--brand-magenta); background: var(--brand-magenta); }
+.github-star-button:hover,
+.github-star-button:focus-visible { border-color: var(--brand-magenta-strong); background: var(--brand-magenta-strong); }
+.github-star-button svg:first-child { width: 15px; height: 15px; }
+.github-star-button svg:last-child { width: 14px; height: 14px; }
+.workflow-project-intro {
+  display: grid;
+  grid-template-columns: minmax(250px, .8fr) minmax(0, 1.2fr);
+  gap: 40px;
+  margin-top: 70px;
+  padding-top: 25px;
+  border-top: 1px solid var(--public-line);
+}
+.workflow-project-heading h3 { margin: 0; color: var(--public-text); font: 700 24px/1.15 var(--font-sans), sans-serif; letter-spacing: -.02em; }
+.workflow-project-heading p:not(.public-kicker) { max-width: 560px; margin: 14px 0 0; color: var(--public-muted); font-size: 13px; line-height: 1.65; }
+.workflow-plane-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--public-line); }
+.workflow-plane-list li { display: grid; align-content: start; gap: 7px; min-width: 0; padding: 13px 14px 0; border-left: 1px solid var(--public-line); }
+.workflow-plane-list li:first-child { padding-left: 0; border-left: 0; }
+.workflow-plane-list strong { color: var(--brand-indigo-strong); font: 700 10px/1.2 var(--font-mono), monospace; letter-spacing: .08em; }
+.workflow-plane-list li:nth-child(2) strong { color: var(--brand-magenta-strong); }
+.workflow-plane-list span { color: var(--public-muted); font-size: 11px; line-height: 1.5; }
+
 body.public-site > footer,
 body.resources-page > footer {
   position: relative;
@@ -617,7 +761,7 @@ body.resources-page .sdk-core-band pre { min-width: 0; max-width: 100%; overflow
 /* Atlas controls use the same public surface tokens as the rest of the site.
    The legacy viewer rules are intentionally dark, so keep this block last. */
 body.public-site.atlas-page .coverage-scene {
-  background: var(--public-bg);
+  background: var(--public-atlas-scene-bg);
 }
 
 body.public-site.atlas-page .coverage-tools .icon-button,
@@ -777,4 +921,277 @@ body.public-site.atlas-page .overlap-drawer-card.is-assets {
   body.public-site.atlas-page .coverage-status {
     flex-basis: 100%;
   }
+}
+
+/* Layers and Cell Inspector are two views of the same atlas surface. Keep
+   their geometry and material identical so neither reads like a separate UI. */
+body.public-site.atlas-page .coverage-layers,
+body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) {
+  box-sizing: border-box;
+  border: 1px solid var(--public-line-strong);
+  border-radius: 8px;
+  background: var(--public-surface);
+  box-shadow: var(--public-shadow);
+  backdrop-filter: blur(14px) saturate(1.05);
+}
+body.public-site.atlas-page .coverage-layers {
+  padding: 14px 14px max(14px, env(safe-area-inset-bottom));
+}
+body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) {
+  padding: 14px 14px max(14px, env(safe-area-inset-bottom));
+}
+body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) > div:last-child {
+  margin-inline: 12px;
+  background: transparent;
+}
+
+/* Overlap Result sits directly on the sky so the selected cells remain
+   visible behind its evidence readout. Keep the inner content inset from the
+   panel edge in both inspector modes. */
+body.public-site.atlas-page .coverage-detail-panel.is-overlap-panel {
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+body.public-site.atlas-page .coverage-detail-panel > div:last-child {
+  margin-inline: 12px;
+  background: transparent;
+}
+
+/* The homepage hero uses the whole field for the static ASA matrix. The
+   canvas supplies the spatial fade; copy remains above it for readability. */
+body.public-site:not(.atlas-page) .public-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+body.public-site:not(.atlas-page) .public-hero-copy {
+  position: relative;
+  z-index: 2;
+}
+
+body.public-site:not(.atlas-page) .sky-dot-matrix {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  justify-self: unset;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+body.public-site:not(.atlas-page) .sky-dot-matrix::before,
+body.public-site:not(.atlas-page) .sky-dot-matrix::after { display: none; }
+
+body.public-site:not(.atlas-page) .sky-dot-matrix canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+  background: transparent;
+}
+
+body.public-site:not(.atlas-page) .sky-preview-caption { display: none; }
+
+/* Terms are an index, not a marketing page: keep groups open, scannable and
+   bilingual while preserving the same public surfaces as the other routes. */
+.terms-main { padding-bottom: 112px; }
+.terms-hero { max-width: none !important; }
+.terms-hero h1 { max-width: 850px; }
+.terms-controls { display: grid; gap: 10px; margin-top: 28px; }
+.terms-search { display: flex; align-items: center; gap: 10px; box-sizing: border-box; width: 100%; min-height: 44px; padding: 0 13px; border: 1px solid var(--public-line-strong); border-radius: 6px; background: var(--public-surface); color: var(--public-subtle); }
+.terms-search:focus-within { border-color: var(--brand-indigo); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-indigo) 14%, transparent); }
+.terms-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--public-text); font: 600 13px/1.2 var(--font-sans), sans-serif; }
+.terms-count { color: var(--public-subtle); font: 700 10px/1 var(--font-mono), monospace; letter-spacing: .08em; text-transform: uppercase; }
+.terms-index-band { display: flex; align-items: end; justify-content: space-between; gap: 30px; margin-top: 30px; padding: 20px 0 22px; border-block: 1px solid var(--public-line); }
+.terms-index-heading { display: grid; gap: 6px; }
+.terms-index-heading .public-kicker { margin: 0; }
+.terms-index-heading h2 { margin: 0; color: var(--public-text); font: 700 18px/1.2 var(--font-mono), monospace; }
+.terms-index-band > p { max-width: 490px; margin: 0; color: var(--public-muted); font-size: 13px; line-height: 1.55; text-align: right; }
+.terms-groups { display: grid; gap: 58px; margin-top: 44px; }
+.terms-group { min-width: 0; }
+.terms-group-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
+.terms-group-heading .public-kicker { margin: 0; }
+.terms-group-heading > span { color: var(--public-subtle); font: 700 11px/1 var(--font-mono), monospace; }
+.terms-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.term-card { min-width: 0; padding: 20px; border: 1px solid var(--public-line); border-radius: 6px; background: var(--public-surface); }
+.term-card:hover { border-color: var(--public-line-strong); background: var(--public-surface-raised); }
+.term-card-top { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.term-card h3 { min-width: 0; margin: 0; color: var(--public-text); font: 700 17px/1.25 var(--font-sans), sans-serif; overflow-wrap: anywhere; }
+.term-origin { flex: 0 0 auto; padding: 4px 6px; border: 1px solid var(--public-line-strong); border-radius: 4px; color: var(--brand-indigo-strong); font: 700 8px/1 var(--font-mono), monospace; letter-spacing: .08em; }
+.term-origin[data-origin="standard"] { color: var(--brand-magenta-strong); }
+.term-definition { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 7px; margin: 15px 0 0; color: var(--public-muted); font-size: 12px; line-height: 1.55; }
+.term-definition b { color: var(--brand-indigo-strong); font: 700 9px/1.55 var(--font-mono), monospace; }
+.term-definition-zh { margin-top: 8px; }
+.term-definition-zh b { color: var(--brand-magenta-strong); }
+.term-detail { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--public-line); color: var(--public-text); font-size: 12px; line-height: 1.55; }
+.term-aliases { margin-top: 13px; overflow-wrap: anywhere; color: var(--public-subtle); font: 600 9px/1.45 var(--font-mono), monospace; }
+.terms-empty { margin: 0; padding: 26px 0; color: var(--public-muted); font-size: 14px; }
+
+/* Product, SDK and organization surfaces share the neutral-gray reference
+   treatment. Keep hard separators quiet so content, not chrome, leads. */
+body.resources-page .resource-band,
+body.resources-page .resource-explainer,
+body.resources-page .project-system,
+body.resources-page .project-repositories,
+body.resources-page .sdk-paths,
+body.resources-page .sdk-core-band,
+body.resources-page .sdk-status-band { border-color: var(--public-line); }
+body.resources-page .resource-product-item,
+body.resources-page .resource-search,
+body.resources-page .project-node,
+body.resources-page .project-audience-node,
+body.resources-page .project-contract,
+body.resources-page .project-core-consumer,
+body.resources-page .sdk-path,
+body.resources-page .sdk-status-band,
+body.resources-page .sdk-core-band,
+body.resources-page .resource-conclusion,
+body.resources-page .resource-evidence-item,
+body.resources-page .resource-check { background: var(--public-surface); }
+body.resources-page .resource-product-item:hover,
+body.resources-page .resource-product-item:focus-visible { background: var(--public-surface-raised); }
+body.resources-page .resource-product-dialog,
+body.resources-page .survey-dialog { background: var(--public-surface-raised); }
+body.resources-page .resource-conclusion { border-bottom-color: var(--public-line); }
+body.resources-page .resource-band pre,
+body.resources-page .resource-stage-code pre { background: var(--public-bg); }
+body.resources-page .command-button { color: #fff; }
+
+.github-page .project-system-map {
+  position: relative;
+  min-width: 0;
+}
+.github-page .project-system-map .project-primary-flow,
+.github-page .project-system-map .project-execution-flow {
+  position: relative;
+  z-index: 2;
+}
+.github-page .project-execution-flow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: 0;
+  max-width: none;
+  min-height: 190px;
+  margin: 22px auto 0;
+  padding: 40px 0;
+}
+.github-page .project-map-node {
+  position: relative;
+  z-index: 2;
+  min-height: 78px;
+  background: var(--public-surface);
+}
+.github-page .project-map-warehouse { width: min(360px, 100%); justify-self: center; }
+.github-page .project-execution-graph {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.github-page .project-execution-edge {
+  fill: none;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+.github-page .project-execution-edge-solid {
+  stroke: var(--brand-indigo);
+  marker-start: url("#project-map-arrow-indigo");
+  marker-end: url("#project-map-arrow-indigo");
+}
+.github-page .project-execution-edge-optional {
+  stroke: var(--brand-magenta);
+  stroke-dasharray: 6 5;
+  marker-start: url("#project-map-arrow-magenta");
+  marker-end: url("#project-map-arrow-magenta");
+}
+.github-page #project-map-arrow-indigo path { fill: var(--brand-indigo); }
+.github-page #project-map-arrow-magenta path { fill: var(--brand-magenta); }
+.github-page .project-execution-label {
+  position: absolute;
+  z-index: 3;
+  max-width: 205px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--public-muted);
+  font: 700 8px/1.2 var(--font-mono), monospace;
+  letter-spacing: .03em;
+  text-align: center;
+  text-shadow: 0 0 5px var(--public-bg), 0 0 5px var(--public-bg);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.github-page .project-execution-label-solid { color: var(--brand-indigo-strong); }
+.github-page .project-execution-label-optional { color: var(--brand-magenta-strong); }
+
+/* SDK content is one reading surface. Keep the section rhythm and dividers,
+   but remove the nested light panels that made the page look fragmented. */
+body.resources-page.sdk-page .sdk-status-band,
+body.resources-page.sdk-page .sdk-path,
+body.resources-page.sdk-page .sdk-core-band {
+  background: transparent;
+  box-shadow: none;
+}
+body.resources-page.sdk-page .sdk-status-band {
+  border-top: 1px solid var(--public-line);
+  border-bottom-color: var(--public-line);
+}
+body.resources-page.sdk-page .sdk-path-list { background: transparent; }
+body.resources-page.sdk-page .sdk-path { border-bottom-color: var(--public-line); }
+body.resources-page.sdk-page .sdk-core-band {
+  border-top-color: var(--public-line);
+  border-bottom-color: var(--public-line);
+}
+body.resources-page.sdk-page .sdk-core-band pre {
+  border: 1px solid var(--public-line);
+  background: color-mix(in srgb, var(--public-bg) 75%, transparent);
+  color: var(--public-text);
+}
+
+@media (max-width: 900px) {
+  body.public-site:not(.atlas-page) .public-hero { padding-bottom: 170px; }
+  .terms-grid { grid-template-columns: 1fr; }
+  .workflow-showcase-grid { grid-template-columns: 1fr; gap: 36px; }
+  .workflow-media-slot { max-width: 760px; }
+  .workflow-project-intro { grid-template-columns: 1fr; gap: 28px; }
+}
+
+@media (max-width: 760px) {
+  body.public-site:not(.atlas-page) .public-hero { padding-bottom: 190px; }
+  .terms-index-band { display: grid; align-items: start; gap: 12px; }
+  .terms-index-band > p { text-align: left; }
+  .terms-controls { align-items: stretch; flex-direction: column; }
+  .terms-search { width: 100%; }
+  .github-page .project-system-map { padding-inline: 14px; }
+  .github-page .project-execution-flow {
+    grid-template-columns: 1fr;
+    min-height: 210px;
+    padding: 26px 0 30px;
+  }
+  .github-page .project-execution-label {
+    max-width: min(132px, calc(50% - 22px));
+    white-space: normal;
+  }
+  .workflow-showcase { padding-top: 72px; }
+  .workflow-media-placeholder { min-height: 210px; }
+  .workflow-project-intro { margin-top: 54px; }
+  .workflow-plane-list { grid-template-columns: 1fr; }
+  .workflow-plane-list li,
+  .workflow-plane-list li:first-child { padding: 13px 0 0; border-left: 0; border-bottom: 1px solid var(--public-line); }
+  .workflow-plane-list li:last-child { border-bottom: 0; }
 }

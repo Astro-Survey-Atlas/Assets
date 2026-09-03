@@ -14,7 +14,7 @@
     <header class="site-header resources-header">
       <a class="brand" href="/" aria-label="Astro Survey Atlas home"><img class="brand-logo" src="/icon_without_name_lon_web.svg" alt="Astro Survey Atlas" width="72" height="28" /><span class="brand-wordmark"><strong>Astro Survey Atlas</strong><small>ORGANIZATION OVERVIEW</small></span></a>
       <button class="mobile-menu-toggle" type="button" data-mobile-menu-toggle aria-label="Open navigation" aria-expanded="false"><i data-lucide="menu"></i></button>
-      <nav class="site-nav" data-site-nav aria-label="Site navigation"><a class="site-nav-link" href="/atlas/" data-i18n="nav.sky">Sky Atlas</a><a class="site-nav-link" href="/surveys/" data-i18n="nav.surveys">Survey Directory</a><a class="site-nav-link" href="/resources/" data-i18n="nav.resources">Resources</a><a class="site-nav-link" href="/sdk/" data-i18n="nav.sdk">SDK</a><a class="site-nav-link" href="/github/" aria-current="page" data-i18n="nav.github">GitHub</a><button class="theme-toggle" type="button" data-theme-toggle aria-label="Use light theme" title="Light theme"><i data-lucide="sun"></i></button><button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button><a class="admin-entry" href="/admin/" data-i18n-title="nav.admin"><span data-i18n="nav.admin">Control Room</span></a></nav>
+      <nav class="site-nav" data-site-nav aria-label="Site navigation"><a class="site-nav-link" href="/" data-i18n="nav.home">Home</a><a class="site-nav-link" href="/atlas/" data-i18n="nav.sky">Sky Atlas</a><a class="site-nav-link" href="/surveys/" data-i18n="nav.surveys">Survey Directory</a><a class="site-nav-link" href="/terms/" data-i18n="nav.terms">Terms</a><a class="site-nav-link" href="/sdk/" data-i18n="nav.sdk">SDK</a><a class="site-nav-link" href="/github/" aria-current="page" data-i18n="nav.github">GitHub</a><button class="theme-toggle" type="button" data-theme-toggle aria-label="Use light theme" title="Light theme"><i data-lucide="sun"></i></button><button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button><a class="admin-entry" href="/admin/" data-i18n-title="nav.admin"><span data-i18n="nav.admin">Control Room</span></a></nav>
     </header>
 
     <main class="resources-main github-main">
@@ -35,19 +35,31 @@
           <p data-i18n="page.github.systemLead">The projects cooperate through versioned contracts. They do not share user records, task history, credentials, or Elasticsearch ownership.</p>
         </div>
 
-        <div class="project-primary-flow" aria-label="Primary user and package flow">
-          <div class="project-audience-node"><i data-lucide="users"></i><strong data-i18n="page.github.users">RESEARCHERS</strong><small data-i18n="page.github.usersBody">Browse public coverage and official data entry points</small></div>
-          <div class="project-flow-arrow"><i data-lucide="arrow-right"></i><span data-i18n="page.github.publicEntry">PUBLIC ENTRY</span></div>
-          <a class="project-node project-node-assets" href="https://github.com/Astro-Survey-Atlas/Assets" target="_blank" rel="noreferrer"><i data-lucide="telescope"></i><span><strong>ASSETS</strong><small data-i18n="page.github.assetsRole">Public catalog, MOCs, overlap, reverse lookup and releases</small></span></a>
-          <div class="project-flow-arrow"><i data-lucide="arrow-right"></i><span>RESOURCE PACKAGE V3</span></div>
-          <a class="project-node project-node-workspace" href="https://github.com/Astro-Survey-Atlas/Workspace" target="_blank" rel="noreferrer"><i data-lucide="panels-top-left"></i><span><strong>WORKSPACE</strong><small data-i18n="page.github.workspaceRole">User assets, connectors, local workflows and user MOCs</small></span></a>
-        </div>
+        <div class="project-system-map" data-project-execution-map>
+          <div class="project-primary-flow" aria-label="Primary user and package flow">
+            <div class="project-audience-node"><i data-lucide="users"></i><strong data-i18n="page.github.users">RESEARCHERS</strong><small data-i18n="page.github.usersBody">Browse public coverage and official data entry points</small></div>
+            <div class="project-flow-arrow"><i data-lucide="arrow-right"></i><span data-i18n="page.github.publicEntry">PUBLIC ENTRY</span></div>
+            <a class="project-node project-map-node project-map-assets project-node-assets" data-project-node="assets" href="https://github.com/Astro-Survey-Atlas/Assets" target="_blank" rel="noreferrer"><i data-lucide="telescope"></i><span><strong>ASSETS</strong><small data-i18n="page.github.assetsRole">Public catalog, MOCs, overlap, reverse lookup and releases</small></span></a>
+            <div class="project-flow-arrow"><i data-lucide="arrow-right"></i><span>RESOURCE PACKAGE V3</span></div>
+            <a class="project-node project-map-node project-map-workspace project-node-workspace" data-project-node="workspace" href="https://github.com/Astro-Survey-Atlas/Workspace" target="_blank" rel="noreferrer"><i data-lucide="panels-top-left"></i><span><strong>WORKSPACE</strong><small data-i18n="page.github.workspaceRole">User assets, connectors, local workflows and user MOCs</small></span></a>
+          </div>
 
-        <div class="project-execution-flow" aria-label="Warehouse execution relationships">
-          <div class="project-contract"><i data-lucide="arrow-down"></i><strong>SCANPLAN V2</strong><small data-i18n="page.github.assetsToWarehouse">Assets submits bounded public coverage tasks</small></div>
-          <a class="project-node project-node-warehouse" href="https://github.com/Astro-Survey-Atlas/Warehouse" target="_blank" rel="noreferrer"><i data-lucide="database"></i><span><strong>WAREHOUSE</strong><small data-i18n="page.github.warehouseRole">Scanner, operator, current file/coverage indices and evidence</small></span></a>
-          <div class="project-contract"><i data-lucide="arrow-up"></i><strong>ACTIVE AST_*</strong><small data-i18n="page.github.warehouseToAssets">Assets reads current coverage and file evidence</small></div>
-          <div class="project-contract project-contract-optional"><i data-lucide="arrow-down-up"></i><strong data-i18n="page.github.optionalScan">OPTIONAL USER SCAN</strong><small data-i18n="page.github.workspaceToWarehouse">Workspace may submit a namespace-local ScanRequest</small></div>
+          <div class="project-execution-flow" aria-label="Warehouse execution relationships">
+            <a class="project-node project-map-node project-map-warehouse project-node-warehouse" data-project-node="warehouse" href="https://github.com/Astro-Survey-Atlas/Warehouse" target="_blank" rel="noreferrer">
+              <i data-lucide="database"></i>
+              <span><strong>WAREHOUSE</strong><small data-i18n="page.github.warehouseRole">Scanner, operator, current file/coverage indices and evidence</small></span>
+            </a>
+          </div>
+          <svg class="project-execution-graph" data-project-execution-graph aria-hidden="true" focusable="false">
+            <defs>
+              <marker id="project-map-arrow-indigo" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z"></path></marker>
+              <marker id="project-map-arrow-magenta" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z"></path></marker>
+            </defs>
+            <path class="project-execution-edge project-execution-edge-solid" data-project-edge="assets-warehouse"></path>
+            <path class="project-execution-edge project-execution-edge-optional" data-project-edge="workspace-warehouse"></path>
+          </svg>
+          <span class="project-execution-label project-execution-label-solid" data-project-label="assets-warehouse" data-i18n="page.github.scanPlanLabel">SCANPLAN V2</span>
+          <span class="project-execution-label project-execution-label-optional" data-project-label="workspace-warehouse" data-i18n="page.github.scanRequestLabel">SCANREQUEST</span>
         </div>
 
         <div class="project-core-flow" aria-label="Shared MOC Core dependencies">
@@ -84,5 +96,6 @@
     </main>
     <footer><span>ICRS / NESTED HEALPIX / SHA-256</span><span>ASTRO SURVEY ATLAS</span></footer>
     <script type="module" src="/src/site-locale.ts"></script>
+    <script type="module" src="/src/project-map.ts"></script>
   </body>
 </html>

@@ -1204,12 +1204,22 @@ async function sendStatic(response: ServerResponse, pathname: string): Promise<v
   const requested = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
   const resolved = path.resolve(siteRoot, requested.endsWith("/") ? path.join(requested, "index.html") : requested);
   const relative = path.relative(siteRoot, resolved);
-  const candidate = relative.startsWith("..") || path.isAbsolute(relative) ? path.join(siteRoot, "index.html") : resolved;
-  let filePath = candidate;
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+    response.end("Not found");
+    return;
+  }
+  const filePath = resolved;
   try {
-    if (!(await stat(filePath)).isFile()) filePath = path.join(siteRoot, "index.html");
+    if (!(await stat(filePath)).isFile()) {
+      response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+      response.end("Not found");
+      return;
+    }
   } catch {
-    filePath = path.join(siteRoot, "index.html");
+    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+    response.end("Not found");
+    return;
   }
   const body = await readFile(filePath);
   response.writeHead(200, {
@@ -1867,7 +1877,6 @@ const server = http.createServer((request, response) => {
     const preview = /^\/api\/v1\/assets\/([a-z0-9-]+)\/preview$/.exec(pathname);
     if (preview?.[1]) return sendPreview(request, response, catalog, preview[1]);
     if (pathname.startsWith("/api/")) return json(response, 404, { error: "API endpoint not found" });
-    if (pathname === "/resources" || pathname.startsWith("/resources/")) return json(response, 404, { error: "Resources route has been split into /github/, /surveys/ and /sdk/" });
     return sendStatic(response, pathname);
   })().catch((error) => {
     console.error(error);

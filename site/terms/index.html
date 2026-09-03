@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#eef0f2" />
+    <meta name="description" content="Astro Survey Atlas terms for coverage, evidence and integration contracts" />
+    <link rel="icon" type="image/svg+xml" href="/icon_without_name_lon_web.svg" />
+    <link rel="stylesheet" href="../src/public.css" />
+    <script src="/theme-bootstrap.js"></script>
+    <title>Astro Survey Atlas · Terms</title>
+  </head>
+  <body class="resources-page terms-page">
+    <header class="site-header resources-header">
+      <a class="brand" href="/" data-i18n-aria-label="nav.home">
+        <img class="brand-logo" src="/icon_without_name_lon_web.svg" alt="Astro Survey Atlas" width="72" height="28" />
+        <span class="brand-wordmark"><strong>Astro Survey Atlas</strong><small>ASA VOCABULARY</small></span>
+      </a>
+      <button class="mobile-menu-toggle" type="button" data-mobile-menu-toggle data-i18n-aria-label="nav.open" aria-expanded="false"><i data-lucide="menu"></i></button>
+      <nav class="site-nav" data-site-nav aria-label="Site navigation">
+        <a class="site-nav-link" href="/" data-i18n="nav.home">Home</a>
+        <a class="site-nav-link" href="/atlas/" data-i18n="nav.sky">Sky Atlas</a>
+        <a class="site-nav-link" href="/surveys/" data-i18n="nav.surveys">Survey Directory</a>
+        <a class="site-nav-link" href="/terms/" aria-current="page" data-i18n="nav.terms">Terms</a>
+        <a class="site-nav-link" href="/sdk/" data-i18n="nav.sdk">SDK</a>
+        <a class="site-nav-link" href="/github/" data-i18n="nav.github">GitHub</a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Use light theme" title="Light theme"><i data-lucide="sun"></i></button>
+        <button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button>
+        <a class="admin-entry" href="/admin/" data-i18n-title="nav.admin"><span data-i18n="nav.admin">Control Room</span></a>
+      </nav>
+    </header>
+
+    <main class="resources-main terms-main">
+      <section class="resources-hero terms-hero">
+        <p class="eyebrow" data-i18n="page.terms.eyebrow">ASA VOCABULARY / DEVELOPER TERMS</p>
+        <h1 data-i18n="page.terms.title">The words ASA uses to make the sky searchable</h1>
+        <p data-i18n="page.terms.lead">A shared glossary for coverage, evidence, execution and package contracts. Every definition is written for people integrating with Assets.</p>
+        <div class="terms-controls">
+          <label class="terms-search">
+            <i data-lucide="search"></i>
+            <span class="sr-only" data-i18n="page.terms.search">Search ASA terms</span>
+            <input id="terms-search" type="search" autocomplete="off" data-i18n-placeholder="page.terms.search" placeholder="Search ASA terms" />
+          </label>
+          <output id="terms-count" class="terms-count" aria-live="polite">--</output>
+        </div>
+      </section>
+
+      <section class="terms-index-band" aria-labelledby="terms-index-title">
+        <div class="terms-index-heading">
+          <p class="public-kicker" data-i18n="page.terms.indexLabel">TERM INDEX</p>
+          <h2 id="terms-index-title" data-i18n="page.terms.bilingual">EN / 中文</h2>
+        </div>
+        <p data-i18n="page.terms.note">ASA terms are marked separately from astronomy standards. Search matches names, aliases and both language definitions.</p>
+      </section>
+
+      <div id="terms-groups" class="terms-groups" aria-live="polite"></div>
+    </main>
+
+    <footer><span>ICRS / NESTED HEALPIX / SHA-256</span><span>ASTRO SURVEY ATLAS TERMS</span></footer>
+    <script type="module" src="../src/terms.ts"></script>
+  </body>
+</html>

@@ -4,6 +4,8 @@ import "./public.css";
 export type SiteTheme = "light" | "dark";
 
 const THEME_STORAGE_KEY = "asa-theme";
+const LIGHT_LOGO_SRC = "/icon_without_name_lon_web.svg";
+const DARK_LOGO_SRC = "/icon_without_name_lon_web_dark.svg";
 
 function systemTheme(): SiteTheme {
   return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
@@ -37,19 +39,28 @@ function iconElement(name: string): HTMLElement {
   return element;
 }
 
+function applyThemeLogos(theme: SiteTheme): void {
+  const source = theme === "dark" ? DARK_LOGO_SRC : LIGHT_LOGO_SRC;
+  document.querySelectorAll<HTMLImageElement>(".brand-logo").forEach((logo) => {
+    if (logo.getAttribute("src") !== source) logo.setAttribute("src", source);
+    logo.dataset.themeLogo = theme;
+  });
+}
+
 export function applySiteTheme(theme: SiteTheme, persist = false): void {
   document.documentElement.dataset.theme = theme;
   if (persist) {
     try { window.localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* private browsing */ }
   }
   const labels = themeLabels(theme);
+  applyThemeLogos(theme);
   document.querySelectorAll<HTMLElement>("[data-theme-toggle], #theme-toggle").forEach((toggle) => {
     toggle.setAttribute("aria-label", labels.label);
     toggle.setAttribute("title", labels.title);
     toggle.replaceChildren(iconElement(theme === "dark" ? "sun" : "moon"));
   });
   const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  if (meta) meta.content = theme === "dark" ? "#090b18" : "#ffffff";
+  if (meta) meta.content = theme === "dark" ? "#25282d" : "#eef0f2";
   renderChromeIcons();
   window.dispatchEvent(new CustomEvent("atlas:theme-change", { detail: { theme } }));
 }

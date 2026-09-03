@@ -18,9 +18,10 @@
       </a>
       <button class="mobile-menu-toggle" type="button" data-mobile-menu-toggle data-i18n-aria-label="nav.open" aria-expanded="false"><i data-lucide="menu"></i></button>
       <nav class="site-nav" data-site-nav aria-label="Site navigation">
+        <a class="site-nav-link" href="/" aria-current="page" data-i18n="nav.home">Home</a>
         <a class="site-nav-link" href="/atlas/" data-i18n="nav.sky">Sky Atlas</a>
         <a class="site-nav-link" href="/surveys/" data-i18n="nav.surveys">Survey Directory</a>
-        <a class="site-nav-link" href="/resources/" data-i18n="nav.resources">Resources</a>
+        <a class="site-nav-link" href="/terms/" data-i18n="nav.terms">Terms</a>
         <a class="site-nav-link" href="/sdk/" data-i18n="nav.sdk">SDK</a>
         <a class="site-nav-link" href="/github/" data-i18n="nav.github">GitHub</a>
         <button class="theme-toggle" type="button" data-theme-toggle aria-label="Use light theme" title="Light theme"><i data-lucide="sun"></i></button>
@@ -40,9 +41,8 @@
             <a class="public-button-secondary" href="/surveys/"><span data-i18n="home.directory">Browse surveys</span><i data-lucide="arrow-right"></i></a>
           </div>
         </div>
-        <figure class="sky-preview">
+        <figure class="sky-preview sky-dot-matrix">
           <canvas id="home-sky-canvas" data-i18n-aria-label="home.previewAria" aria-label="Stylized HEALPix sky coverage preview"></canvas>
-          <figcaption class="sky-preview-caption"><strong>ICRS / NESTED</strong><span data-i18n="home.preview">Coverage preview</span></figcaption>
         </figure>
       </section>
 
@@ -82,7 +82,7 @@
             <div class="public-feature-icon"><i data-lucide="file-check-2"></i></div>
             <h3 data-i18n="home.evidenceTitle">Evidence attached</h3>
             <p data-i18n="home.evidenceBody">Keep source snapshots, derivation notes, output hashes and release provenance next to each result.</p>
-            <a href="/resources/"><span data-i18n="home.evidenceLink">Read the resources</span> <i data-lucide="arrow-up-right"></i></a>
+            <a href="/terms/"><span data-i18n="home.evidenceLink">Read the terms</span> <i data-lucide="arrow-up-right"></i></a>
           </article>
           <article class="public-feature">
             <div class="public-feature-icon"><i data-lucide="database"></i></div>
@@ -123,6 +123,65 @@
             <div class="architecture-node"><strong>Workspace</strong><span data-i18n="home.workspaceRole">Private assets and user workflows</span></div>
             <div class="architecture-node"><strong>MOC-Core-SDK</strong><span data-i18n="home.coreRole">Deterministic spatial contracts</span></div>
           </div>
+        </div>
+      </section>
+
+      <section class="public-section workflow-showcase" aria-labelledby="workflow-title">
+        <div class="workflow-showcase-grid">
+          <!-- Replace the placeholder inside this figure with a <video> or GIF when the walkthrough is ready. -->
+          <figure class="workflow-media-slot" data-media-slot="workflow-demo" aria-labelledby="workflow-media-caption">
+            <div class="workflow-media-placeholder">
+              <div class="workflow-media-chrome">
+                <span class="workflow-media-label"><i data-lucide="play"></i><span data-i18n="home.workflowMediaLabel">WORKFLOW DEMO</span></span>
+                <span>16:9 / READY</span>
+              </div>
+              <div class="workflow-media-stage" aria-hidden="true">
+                <div class="workflow-stage-grid"></div>
+                <div class="workflow-stage-orbit"><span></span><span></span><span></span></div>
+                <div class="workflow-stage-panel">
+                  <span>SELECTED COMPONENT</span>
+                  <strong>CSST / DESI</strong>
+                  <small>ICRS · NESTED · O8</small>
+                </div>
+                <div class="workflow-stage-route workflow-stage-route-one"><b>01</b><span>SELECT</span></div>
+                <div class="workflow-stage-route workflow-stage-route-two"><b>02</b><span>OVERLAP</span></div>
+                <div class="workflow-stage-route workflow-stage-route-three"><b>03</b><span>SOURCE</span></div>
+              </div>
+              <div class="workflow-media-footer">
+                <span data-i18n="home.workflowMediaPlaceholder">Operation demo slot — add a video or GIF</span>
+                <code>MEDIA SLOT</code>
+              </div>
+            </div>
+            <figcaption id="workflow-media-caption" data-i18n="home.workflowMediaCaption">A reserved 16:9 frame for a short Atlas walkthrough.</figcaption>
+          </figure>
+
+          <div class="workflow-intro">
+            <p class="public-kicker" data-i18n="home.workflowKicker">OPERATE THE ATLAS</p>
+            <h2 id="workflow-title" data-i18n="home.workflowTitle">From a sky cell to a source you can use.</h2>
+            <p class="workflow-lead" data-i18n="home.workflowLead">The public flow stays short: inspect a real footprint, compare the overlap, then follow the evidence to its source file or official archive.</p>
+            <ol class="workflow-steps">
+              <li class="workflow-step"><span class="workflow-step-index">01</span><div><strong data-i18n="home.workflowStep1Title">Select coverage</strong><p data-i18n="home.workflowStep1Body">Choose a survey and focus the cells that matter.</p></div></li>
+              <li class="workflow-step"><span class="workflow-step-index">02</span><div><strong data-i18n="home.workflowStep2Title">Compare the sky</strong><p data-i18n="home.workflowStep2Body">Inspect shared order, connected regions and precision.</p></div></li>
+              <li class="workflow-step"><span class="workflow-step-index">03</span><div><strong data-i18n="home.workflowStep3Title">Trace the evidence</strong><p data-i18n="home.workflowStep3Body">Open the verified file, package or official entry point.</p></div></li>
+            </ol>
+            <div class="workflow-actions public-actions">
+              <a class="public-button github-star-button" href="https://github.com/Astro-Survey-Atlas/Assets" target="_blank" rel="noreferrer"><i data-lucide="star"></i><span data-i18n="home.githubStar">Star Assets on GitHub</span><i data-lucide="external-link"></i></a>
+              <a class="public-button-secondary" href="/github/"><span data-i18n="home.projectIntroLink">Read the project map</span><i data-lucide="arrow-up-right"></i></a>
+            </div>
+          </div>
+        </div>
+
+        <div class="workflow-project-intro">
+          <div class="workflow-project-heading">
+            <p class="public-kicker" data-i18n="home.projectIntroKicker">PROJECT INTRODUCTION</p>
+            <h3 data-i18n="home.projectIntroTitle">One atlas, separate data planes.</h3>
+            <p data-i18n="home.projectIntroBody">Astro Survey Atlas is the public front door for survey coverage. Assets publishes reviewed layers, Warehouse executes bounded scans, Workspace keeps user data private, and the shared scientific core keeps their spatial contracts compatible.</p>
+          </div>
+          <ul class="workflow-plane-list" aria-label="Astro Survey Atlas project responsibilities">
+            <li><strong>ASSETS</strong><span data-i18n="home.assetsRole">Catalog, MOCs, overlap and public releases</span></li>
+            <li><strong>WAREHOUSE</strong><span data-i18n="home.warehouseRole">Enumeration, scans and current evidence</span></li>
+            <li><strong>WORKSPACE</strong><span data-i18n="home.workspaceRole">Private assets and user workflows</span></li>
+          </ul>
         </div>
       </section>
     </main>

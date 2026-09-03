@@ -364,8 +364,7 @@ async function openProduct(survey: Survey, release: Release, catalogProduct: Pro
     if (sourceUrl) { const action = document.createElement("a"); action.className = "command-button"; action.href = sourceUrl; action.target = "_blank"; action.rel = "noreferrer"; action.textContent = localized("前往官方来源", "Open official source"); content.append(action); }
   }
   if (!dialog.open) dialog.showModal();
-  const basePath = window.location.pathname.startsWith("/surveys") ? "/surveys/" : "/resources/";
-  history.replaceState(null, "", `${basePath}#product=${encodeURIComponent(productId)}`);
+  history.replaceState(null, "", `/surveys/#product=${encodeURIComponent(productId)}`);
 }
 
 function openHashProduct(): void {

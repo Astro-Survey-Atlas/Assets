@@ -12,3 +12,4 @@ artifacts/public-survey-footprints/csst/input-manifest.json
 artifacts/moc-source-probe.json
 .tmp-screens
 .tmp-ui
+tmp/*

@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   root: "site",
+  appType: "mpa",
   build: {
     outDir: "../dist/site",
     emptyOutDir: true,
@@ -11,9 +12,9 @@ export default defineConfig({
         admin: "admin/index.html",
         atlas: "atlas/index.html",
         github: "github/index.html",
-        resources: "resources/index.html",
         surveys: "surveys/index.html",
         sdk: "sdk/index.html",
+        terms: "terms/index.html",
       },
     },
   },

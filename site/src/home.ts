@@ -9,7 +9,9 @@ import {
   Menu,
   Moon,
   PanelsTopLeft,
+  Play,
   Sun,
+  Star,
   Telescope,
   X,
   createIcons,
@@ -45,7 +47,7 @@ const byId = <T extends HTMLElement>(id: string): T => document.getElementById(i
 
 function renderIcons(): void {
   createIcons({
-    icons: { ArrowRight, ArrowUpRight, Database, ExternalLink, FileCheck2, Grid2X2, "Grid2x2": Grid2X2, LocateFixed, Menu, Moon, PanelsTopLeft, Sun, Telescope, X },
+    icons: { ArrowRight, ArrowUpRight, Database, ExternalLink, FileCheck2, Grid2X2, "Grid2x2": Grid2X2, LocateFixed, Menu, Moon, PanelsTopLeft, Play, Star, Sun, Telescope, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -66,81 +68,83 @@ function drawSkyPreview(): void {
   if (!context) return;
   context.setTransform(dpr, 0, 0, dpr, 0, 0);
   const dark = document.documentElement.dataset.theme !== "light";
-  const background = cssColor("--public-bg", dark ? "#090b18" : "#fbfbfe");
   const indigo = cssColor("--brand-indigo", "#2c3792");
   const indigoStrong = cssColor("--brand-indigo-strong", dark ? "#8d97ff" : "#20286f");
   const magenta = cssColor("--brand-magenta", "#f01951");
   context.clearRect(0, 0, width, height);
-  context.fillStyle = background;
-  context.fillRect(0, 0, width, height);
 
-  let seed = 0x2c3792;
-  const random = (): number => {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    return seed / 4294967296;
+  // Keep the matrix static, but shape its visibility spatially: it enters
+  // softly from the left, is clearest around ASA, and fades out to the right
+  // and at the top/bottom edges like the supplied reference image.
+  const smoothstep = (edge0: number, edge1: number, value: number): number => {
+    const normalized = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+    return normalized * normalized * (3 - 2 * normalized);
   };
-  for (let index = 0; index < Math.round(width * height / 220); index += 1) {
-    const x = random() * width;
-    const y = random() * height;
-    const radius = .35 + random() * 1.1;
-    context.globalAlpha = .2 + random() * .55;
-    context.fillStyle = indigoStrong;
+  const horizontalFade = (value: number): number => smoothstep(0.02, 0.34, value) * (1 - smoothstep(0.68, 1, value));
+  const verticalFade = (value: number): number => smoothstep(0, 0.2, value) * (1 - smoothstep(0.8, 1, value));
+  const mobile = width < 760;
+  const cell = Math.max(10, Math.min(20, width / 56));
+  const centerColumn = Math.round((width * (mobile ? .58 : .67)) / cell);
+  const centerRow = Math.round((height * (mobile ? .78 : .53)) / cell);
+  const dotSize = Math.max(6, Math.min(14, cell * .72));
+  const drawDot = (x: number, y: number, alpha: number, color: string): void => {
+    const half = dotSize / 2;
+    const radius = Math.min(2.8, dotSize * .28);
+    context.globalAlpha = Math.max(0, Math.min(1, alpha));
+    context.fillStyle = color;
     context.beginPath();
-    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.moveTo(x - half + radius, y - half);
+    context.arcTo(x + half, y - half, x + half, y + half, radius);
+    context.arcTo(x + half, y + half, x - half, y + half, radius);
+    context.arcTo(x - half, y + half, x - half, y - half, radius);
+    context.arcTo(x - half, y - half, x + half, y - half, radius);
+    context.closePath();
     context.fill();
+  };
+  const columns = Math.ceil(width / cell);
+  const rows = Math.ceil(height / cell);
+  for (let row = 0; row < rows; row += 1) {
+    const y = row * cell + cell / 2;
+    const yFade = verticalFade(y / height);
+    for (let column = 0; column < columns; column += 1) {
+      const x = column * cell + cell / 2;
+      const fade = horizontalFade(x / width) * yFade;
+      if (fade < .008) continue;
+      const variation = .58 + ((column * 13 + row * 17 + 9001) % 11) / 24;
+      const accent = (column * 19 + row * 23 + 7) % 29 === 0;
+      const color = accent ? magenta : ((column + row) % 5 === 0 ? indigo : indigoStrong);
+      const alpha = fade * (dark ? .28 : .2) * variation;
+      drawDot(x, y, alpha, color);
+    }
   }
-  context.globalAlpha = 1;
 
-  const centerX = width * .54;
-  const centerY = height * .51;
-  const radius = Math.min(width, height) * .34;
-  context.save();
-  context.translate(centerX, centerY);
-  context.strokeStyle = indigo;
-  context.lineWidth = 1;
-  context.globalAlpha = dark ? .78 : .55;
-  context.beginPath();
-  context.arc(0, 0, radius, 0, Math.PI * 2);
-  context.stroke();
-  context.globalAlpha = dark ? .34 : .22;
-  for (let index = 1; index < 6; index += 1) {
-    const offset = radius * (index / 6);
-    context.beginPath();
-    context.ellipse(0, 0, radius, offset, 0, 0, Math.PI * 2);
-    context.stroke();
-  }
-  for (let index = 1; index < 6; index += 1) {
-    const widthScale = index / 6;
-    context.beginPath();
-    context.ellipse(0, 0, radius * widthScale, radius, 0, 0, Math.PI * 2);
-    context.stroke();
-  }
-  context.globalAlpha = dark ? .72 : .58;
-  context.strokeStyle = magenta;
-  context.lineWidth = 2;
-  for (const band of [-.56, -.28, .12, .38]) {
-    context.beginPath();
-    context.ellipse(0, radius * band, radius * .92, radius * .13, 0, 0, Math.PI * 2);
-    context.stroke();
-  }
-  context.globalAlpha = dark ? .18 : .12;
-  context.fillStyle = magenta;
-  context.beginPath();
-  context.moveTo(-radius * .82, radius * .18);
-  context.bezierCurveTo(-radius * .22, -radius * .28, radius * .08, radius * .58, radius * .83, -radius * .12);
-  context.lineTo(radius * .83, radius * .12);
-  context.bezierCurveTo(radius * .05, radius * .84, -radius * .3, -radius * .06, -radius * .82, radius * .3);
-  context.closePath();
-  context.fill();
-  context.restore();
+  const glyphs: Record<string, string[]> = {
+    A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+    S: ["11111", "10000", "10000", "01110", "00001", "00001", "11111"],
+  };
+  const glyphScale = 1;
+  const letterGap = 3;
+  const word = ["A", "S", "A"];
+  const wordWidth = word.reduce((sum, letter) => sum + glyphs[letter]![0]!.length * glyphScale, 0) + letterGap * (word.length - 1);
+  const wordHeight = glyphs.A!.length * glyphScale;
+  const startColumn = Math.round(centerColumn - wordWidth / 2);
+  const startRow = Math.round(centerRow - wordHeight / 2);
+  word.forEach((letter, letterIndex) => {
+    const rowsForLetter = glyphs[letter]!;
+    rowsForLetter.forEach((pattern, row) => {
+      [...pattern].forEach((value, column) => {
+        if (value !== "1") return;
+        const gridColumn = startColumn + column + letterIndex * (rowsForLetter[0]!.length + letterGap);
+        const gridRow = startRow + row;
+        const x = gridColumn * cell + cell / 2;
+        const y = gridRow * cell + cell / 2;
+        const fade = horizontalFade(x / width) * verticalFade(y / height);
+        const accent = (column * 7 + row * 11 + letterIndex * 5) % 9 === 0;
+        drawDot(x, y, (dark ? .78 : .84) * Math.max(.62, fade), accent ? magenta : indigoStrong);
+      });
+    });
+  });
   context.globalAlpha = 1;
-
-  context.fillStyle = indigoStrong;
-  context.font = "600 10px monospace";
-  context.fillText("NESTED / O4-O8", 16, height - 18);
-  context.fillStyle = magenta;
-  const coverageLabel = locale() === "zh" ? "公共覆盖" : "PUBLIC COVERAGE";
-  context.fillText(coverageLabel, width - (locale() === "zh" ? 76 : 116), 23);
 }
 
 function renderStats(surveys: SurveyRecord[]): void {
