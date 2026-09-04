@@ -1223,8 +1223,9 @@ footer > span:last-child { margin-left: auto; color: var(--teal); text-shadow: v
     z-index: 35;
     padding: 14px 12px 18px;
     border: 1px solid rgba(70, 97, 107, .78);
-    background: rgba(5, 10, 16, .94);
-    box-shadow: 0 16px 38px rgba(0, 0, 0, .36);
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
   }
   body[data-overlap-mode="active"] .selection-queue { visibility: hidden; pointer-events: none; }
 }

@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, AudioLines, Box, ChevronDown, ChevronUp, CircleAlert, Database, Eye, Image, Layers3, LogOut, Pencil, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Search, Send, ShieldCheck, Table2, Unlock, Upload, createIcons } from "lucide";
+import { Activity, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Unlock, Upload, X, Sun, createIcons } from "lucide";
 import "./styles.css";
 import { mountLocaleControls, t } from "../src/i18n.js";
 import { aggregateWorkAttempts } from "./work-items.js";
@@ -7,7 +7,7 @@ mountLocaleControls();
 
 type ConnectorType = "s3" | "oss" | "local";
 interface AdminConfig { enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; modalities?: string[]; connectorTypes: ConnectorType[]; backends: string[]; scanRequestApiVersion?: string } }
-interface Connector { name: string; type: ConnectorType; endpoint?: string; region?: string; bucket?: string; prefix?: string; accessKeyConfigured?: boolean; pvcName?: string; basePath?: string; localPath?: string; phase?: string; message?: string; checkedAt?: string; createdAt?: string }
+interface Connector { name: string; type: ConnectorType | string; endpoint?: string; region?: string; bucket?: string; prefix?: string; accessKeyConfigured?: boolean; pvcName?: string; basePath?: string; localPath?: string; phase?: string; message?: string; checkedAt?: string; createdAt?: string }
 interface TaskStatus { phase: string; reason?: string; backend?: string; runId?: string; discoveredFiles?: number; processedHdus?: number; coverageDocuments?: number; objectDocuments?: number; errorCount?: number; availableOrders?: number[]; evidencePath?: string; sourceSnapshot?: { uri?: string; sha256: string; sizeBytes?: number }; startedAt?: string; completedAt?: string; message?: string }
 interface Task { name: string; createdAt?: string; layerId?: string; surveyId?: string; releaseId?: string; product?: string; productId?: string; modality?: string; mode?: string; backend?: string; sourceConnector?: string; sourcePaths: string[]; tags: string[]; batchId?: string; workKey?: string; workTitle?: string; recipe?: { mode?: string; outputOrder?: number; catalog?: Record<string, unknown> }; status: TaskStatus }
 interface ProductLifecycle {
@@ -26,10 +26,42 @@ interface MocDiscoveryRequest { name: string; namespace?: string; createdAt?: st
 interface MocBuildProgress { phase: string; step: number; totalSteps: number; percent?: number; message?: string }
 interface MocBuildRequest { schemaVersion: 1; kind: "MocBuildRequest"; name: string; discoveryRequestName: string; provider: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; workKey?: string; workTitle?: string; createdAt: string; updatedAt: string; phase: string; progress: MocBuildProgress; source: { url: string; snapshotSha256?: string; sizeBytes?: number; evidenceRef?: string }; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; moc?: { ref: string; sha256: string; sizeBytes?: number }; query?: { ref: string; sha256?: string; order: number }; preview?: { ref: string; sha256?: string; order: number }; statistics?: { ref: string; sha256?: string; sizeBytes?: number }; manifest?: { ref: string; sha256?: string; sizeBytes?: number } }; error?: { reason: string; message: string }; duplicateOf?: string; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
 interface MocRegistrationDefaults { releaseId: string; releaseLabel: string; releaseKind: string; productName: string; productDescription: string; productStatus: string; modality: string; dataOrigin: string }
-interface ReviewProduct { productId: string; name: string; modality?: string; description: string; status: string; sourceUrl?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; geometrySourceUrl?: string; geometrySourceLabel?: string; reason?: string; manualStep?: string; coverage?: { availableOrders?: number[]; overviewOrder?: number; maxOrder?: number; layerId?: string; areaDeg2?: number }; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle; review?: { state: string; draftRevision?: number; publishedRevision?: number | null; updatedAt?: string; publishedAt?: string | null } }
+interface ReviewProduct { productId: string; name: string; canonicalName?: string; modality?: string; description: string; status: string; sourceUrl?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; geometrySourceUrl?: string; geometrySourceLabel?: string; reason?: string; manualStep?: string; coverage?: { availableOrders?: number[]; overviewOrder?: number; maxOrder?: number; layerId?: string; areaDeg2?: number }; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle; review?: { state: string; draftRevision?: number; publishedRevision?: number | null; updatedAt?: string; publishedAt?: string | null } }
 interface ReviewRelease { id: string; label: string; kind: string; releasedYear?: number; modalities: string[]; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; products: ReviewProduct[] }
 interface ReviewMocBuild { name: string; discoveryRequestName: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; sourceUrl?: string; phase: string; progress?: { percent?: number; message?: string }; createdAt?: string; updatedAt?: string; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number }; lifecycle?: ProductLifecycle }
 interface ReviewSurvey { id: string; surveyId: string; name: string; mission: string; color: string; description: string; modalities: string[]; imageUrl: string; statistics: Record<string, number>; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; releases: ReviewRelease[]; unmatchedProducts?: Array<Record<string, unknown>>; unmatchedBuilds?: ReviewMocBuild[] }
+
+interface EditorialProduct {
+  productId: string;
+  releaseId: string;
+  canonicalName: string;
+  name: string;
+  description: string;
+  reason?: string;
+  manualStep?: string;
+  modality?: string;
+  status?: string;
+  coverage?: ReviewProduct["coverage"];
+}
+interface EditorialRelease {
+  id: string;
+  label: string;
+  kind?: string;
+  releasedYear?: number;
+  modalities?: string[];
+  coverageOrders?: ReviewRelease["coverageOrders"];
+  products: EditorialProduct[];
+}
+interface EditorialSnapshot {
+  survey: { id: string; name: string; mission: string; description: string; color?: string; modalities?: string[]; imageUrl?: string; statistics?: Record<string, number>; coverageOrders?: ReviewSurvey["coverageOrders"] };
+  releases: EditorialRelease[];
+}
+interface EditorialDocument {
+  surveyId: string;
+  revision: number;
+  draft: EditorialSnapshot;
+  published: EditorialSnapshot | null;
+}
 
 const tokenKey = "astro-survey-atlas-assets.admin-token";
 let adminConfig: AdminConfig | null = null;
@@ -42,7 +74,440 @@ const byId = <T extends HTMLElement>(id: string): T => {
 };
 
 function renderIcons(): void {
-  createIcons({ icons: { Activity, ArrowLeft, AudioLines, Box, ChevronDown, ChevronUp, CircleAlert, Database, Eye, Image, Layers3, LogOut, Pencil, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Search, Send, ShieldCheck, Table2, Unlock, Upload }, attrs: { "aria-hidden": "true" } });
+  createIcons({ icons: { Activity, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Sun, Table2, Unlock, Upload, X }, attrs: { "aria-hidden": "true" } });
+}
+
+type AdminTheme = "light" | "dark";
+const adminThemeKey = "asa-theme";
+
+function adminSystemTheme(): AdminTheme {
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+function storedAdminTheme(): AdminTheme | null {
+  try {
+    const value = window.localStorage.getItem(adminThemeKey);
+    return value === "light" || value === "dark" ? value : null;
+  } catch { return null; }
+}
+
+function applyAdminTheme(theme: AdminTheme, persist = false): void {
+  document.documentElement.dataset.theme = theme;
+  if (persist) {
+    try { window.localStorage.setItem(adminThemeKey, theme); } catch { /* private browsing */ }
+  }
+  const toggle = document.getElementById("theme-toggle");
+  if (toggle) {
+    toggle.replaceChildren();
+    const icon = document.createElement("i");
+    icon.dataset.lucide = theme === "dark" ? "sun" : "moon";
+    toggle.append(icon);
+    toggle.setAttribute("aria-label", theme === "dark" ? "切换到亮色模式" : "切换到暗色模式");
+    toggle.title = theme === "dark" ? "亮色模式" : "暗色模式";
+  }
+  renderIcons();
+}
+
+function cloneEditorial<T>(value: T): T {
+  return structuredClone(value);
+}
+
+function editorialObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function editorialText(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function editorialSnapshotFromReview(survey: ReviewSurvey): EditorialSnapshot {
+  return {
+    survey: {
+      id: survey.id || survey.surveyId,
+      name: survey.name,
+      mission: survey.mission,
+      description: survey.description,
+      color: survey.color,
+      modalities: [...survey.modalities],
+      imageUrl: survey.imageUrl,
+      statistics: { ...survey.statistics },
+      coverageOrders: survey.coverageOrders ? cloneEditorial(survey.coverageOrders) : undefined,
+    },
+    releases: survey.releases.map((release) => ({
+      id: release.id,
+      label: release.label,
+      kind: release.kind,
+      releasedYear: release.releasedYear,
+      modalities: [...release.modalities],
+      coverageOrders: release.coverageOrders ? cloneEditorial(release.coverageOrders) : undefined,
+      products: release.products.map((product) => ({
+        productId: product.productId,
+        releaseId: release.id,
+        canonicalName: product.canonicalName ?? product.name,
+        name: product.name,
+        description: product.description,
+        reason: product.reason,
+        manualStep: product.manualStep,
+        modality: product.modality,
+        status: product.status,
+        coverage: product.coverage ? cloneEditorial(product.coverage) : undefined,
+      })),
+    })),
+  };
+}
+
+function normalizeEditorialSnapshot(value: unknown, fallback: EditorialSnapshot): EditorialSnapshot {
+  const raw = editorialObject(value);
+  if (!raw) return cloneEditorial(fallback);
+  const rawSurvey = editorialObject(raw.survey) ?? editorialObject(raw.publicSurvey) ?? raw;
+  const survey = {
+    ...fallback.survey,
+    id: editorialText(rawSurvey?.id, fallback.survey.id),
+    name: editorialText(rawSurvey?.name, fallback.survey.name),
+    mission: editorialText(rawSurvey?.mission, fallback.survey.mission),
+    description: editorialText(rawSurvey?.description, fallback.survey.description),
+    ...(typeof rawSurvey?.color === "string" ? { color: rawSurvey.color } : {}),
+    ...(Array.isArray(rawSurvey?.modalities) ? { modalities: rawSurvey.modalities.filter((entry): entry is string => typeof entry === "string") } : {}),
+    ...(typeof rawSurvey?.imageUrl === "string" ? { imageUrl: rawSurvey.imageUrl } : {}),
+    ...(editorialObject(rawSurvey?.statistics) ? { statistics: rawSurvey.statistics as Record<string, number> } : {}),
+    ...(editorialObject(rawSurvey?.coverageOrders) ? { coverageOrders: rawSurvey.coverageOrders as ReviewSurvey["coverageOrders"] } : {}),
+  };
+  const fallbackReleases = new Map(fallback.releases.map((release) => [release.id, release]));
+  const rawReleases = Array.isArray(raw.releases) ? raw.releases : fallback.releases;
+  const releases = rawReleases.map((releaseValue, releaseIndex) => {
+    const rawRelease = editorialObject(releaseValue) ?? {};
+    const fallbackRelease = fallbackReleases.get(editorialText(rawRelease.releaseId ?? rawRelease.id)) ?? fallback.releases[releaseIndex];
+    if (!fallbackRelease) return null;
+    const fallbackProducts = new Map(fallbackRelease.products.map((product) => [product.productId, product]));
+    const rawProducts = Array.isArray(rawRelease.products) ? rawRelease.products : fallbackRelease.products;
+    const products = rawProducts.map((productValue, productIndex) => {
+      const rawProduct = editorialObject(productValue) ?? {};
+      const fallbackProduct = fallbackProducts.get(editorialText(rawProduct.productId)) ?? fallbackRelease.products[productIndex];
+      if (!fallbackProduct) return null;
+      return {
+        ...fallbackProduct,
+        productId: fallbackProduct.productId,
+        name: editorialText(rawProduct.displayName ?? rawProduct.name, fallbackProduct.name),
+        releaseId: fallbackRelease.id,
+        canonicalName: editorialText(rawProduct.canonicalName, fallbackProduct.canonicalName ?? fallbackProduct.name),
+        description: editorialText(rawProduct.description, fallbackProduct.description),
+        ...(rawProduct.reason === null || typeof rawProduct.reason === "string" ? { reason: editorialText(rawProduct.reason) || undefined } : {}),
+        ...(rawProduct.manualStep === null || typeof rawProduct.manualStep === "string" ? { manualStep: editorialText(rawProduct.manualStep) || undefined } : {}),
+      };
+    }).filter((product): product is EditorialProduct => Boolean(product));
+    return {
+      ...fallbackRelease,
+      id: fallbackRelease.id,
+      label: editorialText(rawRelease.label, fallbackRelease.label),
+      products,
+    };
+  }).filter((release): release is EditorialRelease => Boolean(release));
+  return { survey, releases };
+}
+
+function normalizeEditorialDocument(value: unknown, survey: ReviewSurvey, current?: EditorialDocument): EditorialDocument {
+  const fallback = editorialSnapshotFromReview(survey);
+  const outer = editorialObject(value);
+  const raw = editorialObject(outer?.editorial) ?? editorialObject(outer?.document) ?? outer ?? {};
+  const draftValue = raw.draft ?? raw.content ?? raw.snapshot ?? raw;
+  const publishedValue = raw.published;
+  const revision = typeof raw.revision === "number" && Number.isSafeInteger(raw.revision)
+    ? raw.revision
+    : current?.revision ?? 1;
+  return {
+    surveyId: editorialText(raw.surveyId, survey.surveyId || survey.id),
+    revision,
+    draft: normalizeEditorialSnapshot(draftValue, current?.draft ?? fallback),
+    published: publishedValue === null || publishedValue === undefined
+      ? current?.published ?? null
+      : normalizeEditorialSnapshot(publishedValue, current?.published ?? fallback),
+  };
+}
+
+function editorialApiContent(snapshot: EditorialSnapshot): Record<string, unknown> {
+  return {
+    surveyId: snapshot.survey.id,
+    name: snapshot.survey.name,
+    mission: snapshot.survey.mission,
+    description: snapshot.survey.description,
+    releases: snapshot.releases.map((release) => ({
+      releaseId: release.id,
+      label: release.label,
+      products: release.products.map((product) => ({
+        productId: product.productId,
+        releaseId: release.id,
+        canonicalName: product.canonicalName ?? product.name,
+        displayName: product.name,
+        description: product.description,
+        reason: product.reason ?? "",
+        manualStep: product.manualStep ?? "",
+      })),
+    })),
+  };
+}
+
+function editorialFieldValue(snapshot: EditorialSnapshot, path: string): string {
+  const match = /^(survey\.(?:name|mission|description)|releases\.(\d+)\.label|releases\.(\d+)\.products\.(\d+)\.(name|description|reason|manualStep))$/.exec(path);
+  if (!match) return "";
+  if (match[1]?.startsWith("survey.")) return snapshot.survey[match[1].slice("survey.".length) as "name" | "mission" | "description"];
+  const releaseIndex = Number(match[2] ?? match[3]);
+  const release = snapshot.releases[releaseIndex];
+  if (!release) return "";
+  if (match[2] !== undefined) return release.label;
+  const product = release.products[Number(match[4])];
+  if (!product) return "";
+  return editorialText(product[match[5] as "name" | "description" | "reason" | "manualStep"]);
+}
+
+function setEditorialFieldValue(snapshot: EditorialSnapshot, path: string, value: string): void {
+  const match = /^(survey\.(?:name|mission|description)|releases\.(\d+)\.label|releases\.(\d+)\.products\.(\d+)\.(name|description|reason|manualStep))$/.exec(path);
+  if (!match) return;
+  if (match[1]?.startsWith("survey.")) {
+    snapshot.survey[match[1].slice("survey.".length) as "name" | "mission" | "description"] = value;
+    return;
+  }
+  const releaseIndex = Number(match[2] ?? match[3]);
+  const release = snapshot.releases[releaseIndex];
+  if (!release) return;
+  if (match[2] !== undefined) {
+    release.label = value;
+    return;
+  }
+  const product = release.products[Number(match[4])];
+  if (!product) return;
+  const key = match[5] as "name" | "description" | "reason" | "manualStep";
+  if (key === "name" || key === "description") product[key] = value;
+  else product[key] = value || undefined;
+}
+
+interface EditorialFieldDescriptor { path: string; label: string; value: string; multiline?: boolean; placeholder?: string }
+
+function editorialFieldDescriptors(snapshot: EditorialSnapshot): EditorialFieldDescriptor[] {
+  const fields: EditorialFieldDescriptor[] = [
+    { path: "survey.name", label: "Survey name", value: snapshot.survey.name },
+    { path: "survey.mission", label: "Mission", value: snapshot.survey.mission },
+    { path: "survey.description", label: "Survey description", value: snapshot.survey.description, multiline: true },
+  ];
+  snapshot.releases.forEach((release, releaseIndex) => {
+    fields.push({ path: `releases.${releaseIndex}.label`, label: `${release.id} / Release label`, value: release.label });
+    release.products.forEach((product, productIndex) => {
+      fields.push(
+        { path: `releases.${releaseIndex}.products.${productIndex}.name`, label: `${product.productId} / Product name`, value: product.name },
+        { path: `releases.${releaseIndex}.products.${productIndex}.description`, label: `${product.productId} / Product description`, value: product.description, multiline: true },
+        ...(product.reason !== undefined ? [{ path: `releases.${releaseIndex}.products.${productIndex}.reason`, label: `${product.productId} / Status reason`, value: product.reason, multiline: true, placeholder: "Add a public status note" }] : []),
+        ...(product.manualStep !== undefined ? [{ path: `releases.${releaseIndex}.products.${productIndex}.manualStep`, label: `${product.productId} / Next step`, value: product.manualStep, multiline: true, placeholder: "Add the next public action" }] : []),
+      );
+    });
+  });
+  return fields;
+}
+
+function editorialEditable(field: EditorialFieldDescriptor): string {
+  const value = field.value.trim();
+  const placeholder = field.placeholder ?? "Click to edit";
+  return `<button type="button" class="editorial-editable${field.multiline ? " editorial-editable-multiline" : ""}${value ? "" : " is-empty"}" data-editorial-field="${escapeText(field.path)}" data-editorial-multiline="${field.multiline ? "true" : "false"}" aria-label="编辑 ${escapeText(field.label)}"><span>${escapeText(value || placeholder)}</span><i data-lucide="pencil-line"></i></button>`;
+}
+
+function editorialReadOnly(label: string, value: unknown, icon = "lock-keyhole"): string {
+  return `<span class="editorial-readonly"><i data-lucide="${icon}"></i><span><small>${escapeText(label)}</small><strong>${escapeText(value ?? "--")}</strong></span></span>`;
+}
+
+function editorialStatMarkup(statistics: Record<string, number> | undefined): string {
+  const entries = Object.entries(statistics ?? {}).filter(([, value]) => typeof value === "number").slice(0, 4);
+  return entries.length
+    ? entries.map(([key, value]) => `<span class="editorial-stat"><i data-lucide="${key.toLowerCase().includes("cell") ? "grid-3x3" : key.toLowerCase().includes("product") ? "package-check" : "chart-no-axes-combined"}"></i><span>${escapeText(key.replace(/([A-Z])/g, " $1"))}</span><strong>${value.toLocaleString()}</strong></span>`).join("")
+    : `<span class="editorial-stat"><i data-lucide="chart-no-axes-combined"></i><span>Statistics</span><strong>--</strong></span>`;
+}
+
+function surveyColorAttribute(value: unknown): string {
+  const color = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return /^#[0-9a-f]{6}$/.test(color) ? ` data-survey-color="${escapeText(color)}"` : "";
+}
+
+function editorialDiffFields(): Array<{ label: string; before: string; after: string }> {
+  if (!activeEditorial) return [];
+  const baseline = activeEditorial.document.published ?? activeEditorial.baseline;
+  return editorialFieldDescriptors(activeEditorial.document.draft).flatMap((field) => {
+    const before = editorialFieldValue(baseline, field.path);
+    return before === field.value ? [] : [{ label: field.label, before: before || "(empty)", after: field.value || "(empty)" }];
+  });
+}
+
+function updateEditorialStatus(): void {
+  const state = activeEditorial;
+  const dirty = Boolean(state && JSON.stringify(state.document.draft) !== JSON.stringify(state.baseline));
+  const indicator = byId("editorial-dirty-indicator");
+  indicator.dataset.dirty = String(dirty);
+  indicator.innerHTML = `<i data-lucide="${dirty ? "circle-alert" : "circle-check"}"></i><span>${dirty ? "有未保存修改" : "无未保存修改"}</span>`;
+  byId<HTMLButtonElement>("editorial-discard-button").disabled = !dirty;
+  byId<HTMLButtonElement>("editorial-save-button").disabled = !dirty;
+  byId<HTMLButtonElement>("editorial-diff-button").disabled = !Boolean(state && editorialDiffFields().length);
+  byId<HTMLButtonElement>("editorial-publish-button").disabled = !state;
+  renderIcons();
+}
+
+function renderEditorialCanvas(): void {
+  if (!activeEditorial) return;
+  const canvas = byId("editorial-canvas");
+  const snapshot = activeEditorial.document.draft;
+  const surveyColor = surveyColorAttribute(snapshot.survey.color);
+  const surveyFields = new Map(editorialFieldDescriptors(snapshot).map((field) => [field.path, field]));
+  const image = snapshot.survey.imageUrl ? `<img class="editorial-survey-image" src="${escapeText(snapshot.survey.imageUrl)}" alt="" loading="lazy" />` : "";
+  const releases = snapshot.releases.map((release, releaseIndex) => {
+    const releaseField = surveyFields.get(`releases.${releaseIndex}.label`)!;
+    const products = release.products.map((product, productIndex) => {
+      const prefix = `releases.${releaseIndex}.products.${productIndex}`;
+      const nameField = surveyFields.get(`${prefix}.name`)!;
+      const descriptionField = surveyFields.get(`${prefix}.description`)!;
+      const reasonField = surveyFields.get(`${prefix}.reason`);
+      const manualStepField = surveyFields.get(`${prefix}.manualStep`);
+      const orders = product.coverage?.availableOrders?.map((order) => `O${order}`).join(" / ") || "orders unavailable";
+      return `<article class="editorial-product-row"><div class="editorial-product-copy"><div class="editorial-product-title"><span class="modality-icon"><i data-lucide="${modalityIcon(product.modality)}"></i></span>${editorialEditable(nameField)}</div><div class="editorial-product-facts">${editorialReadOnly("MODALITY", product.modality ?? "unknown", modalityIcon(product.modality))}${editorialReadOnly("STATUS", product.status ?? "unknown", "circle-check")}${editorialReadOnly("COVERAGE", orders, "grid-3x3")}${editorialReadOnly("PRODUCT ID", product.productId)}</div><div class="editorial-copy-field"><small>PUBLIC DESCRIPTION</small>${editorialEditable(descriptionField)}</div>${reasonField ? `<div class="editorial-copy-field"><small>STATUS REASON</small>${editorialEditable(reasonField)}</div>` : ""}${manualStepField ? `<div class="editorial-copy-field"><small>NEXT STEP</small>${editorialEditable(manualStepField)}</div>` : ""}</div><div class="editorial-product-locks">${editorialReadOnly("LAYER / RECIPE", `${product.coverage?.layerId ?? "--"} · locked`, "lock-keyhole")}</div></article>`;
+    }).join("");
+    return `<section class="editorial-release"><header class="editorial-release-header"><div><span class="section-index">RELEASE</span>${editorialEditable(releaseField)}</div><div class="editorial-release-locks">${editorialReadOnly("RELEASE ID", release.id)}${editorialReadOnly("KIND", release.kind ?? "--")}${editorialReadOnly("YEAR", release.releasedYear ?? "--", "calendar-days")}</div></header><div class="editorial-product-list">${products || `<p class="resource-empty">该 Release 没有产品</p>`}</div></section>`;
+  }).join("");
+  canvas.innerHTML = `<div class="editorial-preview-kicker"><span><i data-lucide="eye"></i> PUBLIC SURVEY DIRECTORY PREVIEW</span><span><i data-lucide="lock-keyhole"></i> IDs / data facts locked</span></div><article class="editorial-survey-preview"${surveyColor}><header class="editorial-survey-header"><span class="editorial-survey-swatch"${surveyColor} aria-hidden="true"></span><div class="editorial-survey-heading"><div class="editorial-edit-label">SURVEY NAME</div>${editorialEditable(surveyFields.get("survey.name")!)}<div class="editorial-edit-label">MISSION</div>${editorialEditable(surveyFields.get("survey.mission")!)}</div>${image}</header><div class="editorial-survey-description"><div class="editorial-edit-label">PUBLIC DESCRIPTION</div>${editorialEditable(surveyFields.get("survey.description")!)}</div><div class="editorial-survey-readonly"><div class="editorial-stat-strip">${editorialStatMarkup(snapshot.survey.statistics)}</div>${editorialReadOnly("SURVEY ID", snapshot.survey.id)}${editorialReadOnly("MODALITIES", (snapshot.survey.modalities ?? []).join(" · "), "layers-3")}</div></article><div class="editorial-releases-heading"><span class="section-index">SURVEY → RELEASE → PRODUCT</span><span>${snapshot.releases.length} release${snapshot.releases.length === 1 ? "" : "s"}</span></div>${releases}`;
+  canvas.hidden = false;
+  canvas.querySelectorAll<HTMLButtonElement>("[data-editorial-field]").forEach((button) => button.addEventListener("click", () => startEditorialInlineEdit(button)));
+  renderIcons();
+  updateEditorialStatus();
+}
+
+function startEditorialInlineEdit(button: HTMLButtonElement): void {
+  if (!activeEditorial) return;
+  const path = button.dataset.editorialField;
+  if (!path) return;
+  const multiline = button.dataset.editorialMultiline === "true";
+  const input = document.createElement(multiline ? "textarea" : "input");
+  input.className = "editorial-inline-input";
+  input.value = editorialFieldValue(activeEditorial.document.draft, path);
+  input.setAttribute("aria-label", button.getAttribute("aria-label") ?? "Edit catalog text");
+  if (multiline && input instanceof HTMLTextAreaElement) { input.rows = 3; input.maxLength = 12000; }
+  else { input.maxLength = 2000; }
+  button.replaceWith(input);
+  let finished = false;
+  const finish = (cancel = false): void => {
+    if (finished) return;
+    finished = true;
+    if (!cancel) setEditorialFieldValue(activeEditorial!.document.draft, path, input.value.trim());
+    renderEditorialCanvas();
+  };
+  input.addEventListener("blur", () => finish());
+  input.addEventListener("keydown", (event) => {
+    const keyboardEvent = event as KeyboardEvent;
+    if (keyboardEvent.key === "Escape") { keyboardEvent.preventDefault(); finish(true); }
+    if (keyboardEvent.key === "Enter" && (!multiline || keyboardEvent.metaKey || keyboardEvent.ctrlKey)) { keyboardEvent.preventDefault(); finish(); }
+  });
+  input.focus();
+  input.select();
+}
+
+let activeEditorial: { survey: ReviewSurvey; document: EditorialDocument; baseline: EditorialSnapshot } | null = null;
+let editorialOpenRequest = 0;
+let editorialPublishPending = false;
+
+function setEditorialLoading(loading: boolean): void {
+  byId("editorial-loading").hidden = !loading;
+  byId("editorial-canvas").hidden = loading;
+  byId("editorial-error").hidden = true;
+  byId<HTMLButtonElement>("editorial-save-button").disabled = loading;
+  byId<HTMLButtonElement>("editorial-publish-button").disabled = loading;
+  if (loading) renderIcons();
+}
+
+async function openEditorial(surveyId: string): Promise<void> {
+  const survey = reviewSurveyRecords.find((entry) => entry.id === surveyId || entry.surveyId === surveyId);
+  if (!survey || survey.id.startsWith("__")) return;
+  const dialog = byId<HTMLDialogElement>("editorial-dialog");
+  activeEditorial = null;
+  const requestId = ++editorialOpenRequest;
+  byId("editorial-title").textContent = `${survey.name} · 编辑目录`;
+  byId("editorial-subtitle").textContent = "所见即所得预览 · 仅修改公开文案，系统事实保持锁定";
+  setEditorialLoading(true);
+  if (!dialog.open) dialog.showModal();
+  try {
+    const response = await api<unknown>(`/api/v1/admin/catalog/surveys/${encodeURIComponent(survey.surveyId || survey.id)}/editorial`);
+    if (requestId !== editorialOpenRequest) return;
+    const document = normalizeEditorialDocument(response, survey);
+    activeEditorial = { survey, document, baseline: cloneEditorial(document.draft) };
+    renderEditorialCanvas();
+    setEditorialLoading(false);
+    updateEditorialStatus();
+  } catch (error) {
+    if (requestId !== editorialOpenRequest) return;
+    setEditorialLoading(false);
+    const errorElement = byId("editorial-error");
+    errorElement.textContent = error instanceof Error ? error.message : "目录草稿加载失败";
+    errorElement.hidden = false;
+    byId("editorial-canvas").hidden = true;
+    updateEditorialStatus();
+  }
+}
+
+function renderEditorialDiff(forPublish: boolean): void {
+  const changes = editorialDiffFields();
+  byId("editorial-diff-title").textContent = forPublish ? "发布前确认" : "字段变更";
+  byId("editorial-diff-content").innerHTML = changes.length
+    ? `<p class="editorial-diff-summary">${forPublish ? "以下公开文案将写入巡天目录。数据、覆盖几何和系统 ID 不会改变。" : `${changes.length} 个公开字段已变化。`}</p><div class="editorial-diff-list">${changes.map((change) => `<article class="editorial-diff-row"><strong>${escapeText(change.label)}</strong><div><span class="editorial-diff-before">${escapeText(change.before)}</span><i data-lucide="arrow-right"></i><span class="editorial-diff-after">${escapeText(change.after)}</span></div></article>`).join("")}</div>`
+    : `<div class="resource-empty">当前没有待发布的文案变化。</div>`;
+  const confirm = byId<HTMLButtonElement>("editorial-diff-confirm");
+  confirm.hidden = !forPublish;
+  confirm.disabled = !changes.length;
+  confirm.value = forPublish ? "confirm" : "cancel";
+  renderIcons();
+}
+
+function openEditorialDiff(forPublish: boolean): void {
+  if (!activeEditorial) return;
+  renderEditorialDiff(forPublish);
+  byId<HTMLDialogElement>("editorial-diff-dialog").showModal();
+}
+
+async function saveEditorialDraft(silent = false): Promise<boolean> {
+  if (!activeEditorial) return false;
+  const state = activeEditorial;
+  const saveButton = byId<HTMLButtonElement>("editorial-save-button");
+  saveButton.disabled = true;
+  try {
+    const response = await api<unknown>(`/api/v1/admin/catalog/surveys/${encodeURIComponent(state.document.surveyId)}/editorial/draft`, { method: "PUT", body: JSON.stringify({ revision: state.document.revision, content: editorialApiContent(state.document.draft) }) });
+    state.document = normalizeEditorialDocument(response, state.survey, state.document);
+    state.baseline = cloneEditorial(state.document.draft);
+    renderEditorialCanvas();
+    if (!silent) toast("目录文案草稿已保存");
+    return true;
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "目录草稿保存失败", true);
+    updateEditorialStatus();
+    return false;
+  }
+}
+
+async function publishEditorial(): Promise<void> {
+  if (!activeEditorial || editorialPublishPending) return;
+  editorialPublishPending = true;
+  const state = activeEditorial;
+  try {
+    if (JSON.stringify(state.document.draft) !== JSON.stringify(state.baseline) && !(await saveEditorialDraft(true))) return;
+    const response = await api<unknown>(`/api/v1/admin/catalog/surveys/${encodeURIComponent(state.document.surveyId)}/editorial/publish`, { method: "POST", body: JSON.stringify({ revision: state.document.revision }) });
+    state.document = normalizeEditorialDocument(response, state.survey, state.document);
+    state.baseline = cloneEditorial(state.document.draft);
+    if (!state.document.published) state.document.published = cloneEditorial(state.document.draft);
+    renderEditorialCanvas();
+    toast("巡天目录文案已发布");
+    await refresh();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "目录文案发布失败", true);
+  } finally {
+    editorialPublishPending = false;
+    updateEditorialStatus();
+  }
+}
+
+function discardEditorialChanges(): void {
+  if (!activeEditorial) return;
+  activeEditorial.document.draft = cloneEditorial(activeEditorial.baseline);
+  renderEditorialCanvas();
+  toast("未保存的目录修改已撤销");
 }
 
 type AdminStep = "sources" | "tasks" | "review";
@@ -133,6 +598,23 @@ function connectorLabel(connector: Connector): string {
   return `${connector.name} · ${connector.type.toUpperCase()} · ${connector.phase ?? "NOT_CHECKED"}`;
 }
 
+function connectorIcon(type?: string): string {
+  const normalized = String(type ?? "").toLowerCase();
+  if (normalized === "s3" || normalized === "oss") return "cloud-cog";
+  if (normalized === "local" || normalized === "pvc" || normalized === "filesystem" || normalized === "file-system") return "hard-drive";
+  if (normalized === "jdbc" || normalized === "database" || normalized === "postgres" || normalized === "mysql") return "database";
+  return "plug";
+}
+
+function connectorTypeLabel(type?: string): string {
+  const normalized = String(type ?? "").toLowerCase();
+  if (normalized === "s3") return "S3 OBJECT STORAGE";
+  if (normalized === "oss") return "OSS OBJECT STORAGE";
+  if (normalized === "local" || normalized === "pvc" || normalized === "filesystem" || normalized === "file-system") return "LOCAL / PVC FILESYSTEM";
+  if (normalized === "jdbc" || normalized === "database" || normalized === "postgres" || normalized === "mysql") return "JDBC DATABASE";
+  return normalized ? normalized.toUpperCase() : "CONNECTOR";
+}
+
 function connectorLocation(connector: Connector): string {
   if (connector.type === "local") {
     if (connector.pvcName) return `PVC ${connector.pvcName}${connector.basePath ? ` · base ${connector.basePath}` : " · PVC root"}`;
@@ -153,7 +635,7 @@ function renderConnectorDetails(connector?: Connector): void {
   }
   const location = connectorLocation(connector);
   const phase = connector.phase ?? "NOT_CHECKED";
-  detail.innerHTML = `<div class="connector-detail-heading"><div><span class="section-note">SELECTED CONNECTOR</span><h4>${escapeText(connector.name)}</h4></div><div class="connector-detail-actions"><button type="button" class="admin-quiet" data-probe-connector="${escapeText(connector.name)}" title="探测 Connector 连接"${phase === "PROBING" ? " disabled" : ""}><i data-lucide="plug-zap"></i><span>${phase === "PROBING" ? "探测中…" : "探测连接"}</span></button><button type="button" class="admin-quiet" data-use-connector="${escapeText(connector.name)}" title="用此 Connector 创建扫描"><i data-lucide="send"></i><span>用于新扫描</span></button></div></div><dl class="connector-detail-grid">${detailValue("type", connector.type.toUpperCase())}${detailValue("phase", phase)}${detailValue("location", location)}${detailValue("PVC", connector.pvcName)}${detailValue("base path", connector.basePath)}${detailValue("legacy path", connector.localPath)}${detailValue("credentials", connector.accessKeyConfigured ? "configured" : "not configured")}${detailValue("checked", connector.checkedAt ? formatDate(connector.checkedAt) : "NOT_CHECKED")}${detailValue("created", formatDate(connector.createdAt))}${detailValue("message", connector.message)}</dl>`;
+  detail.innerHTML = `<div class="connector-detail-watermark" aria-hidden="true"><i data-lucide="${connectorIcon(connector.type)}"></i></div><div class="connector-detail-heading"><div class="connector-detail-title"><span class="connector-type-icon connector-type-${escapeText(String(connector.type).toLowerCase())}"><i data-lucide="${connectorIcon(connector.type)}"></i></span><div><span class="section-note">SELECTED CONNECTOR · ${escapeText(connectorTypeLabel(connector.type))}</span><h4>${escapeText(connector.name)}</h4></div></div><div class="connector-detail-actions"><button type="button" class="admin-quiet" data-probe-connector="${escapeText(connector.name)}" title="探测 Connector 连接"${phase === "PROBING" ? " disabled" : ""}><i data-lucide="plug-zap"></i><span>${phase === "PROBING" ? "探测中…" : "探测连接"}</span></button><button type="button" class="admin-quiet" data-use-connector="${escapeText(connector.name)}" title="用此 Connector 创建扫描"><i data-lucide="send"></i><span>用于新扫描</span></button></div></div><dl class="connector-detail-grid">${detailValue("type", connectorTypeLabel(connector.type))}${detailValue("phase", phase)}${detailValue("location", location)}${detailValue("PVC", connector.pvcName)}${detailValue("base path", connector.basePath)}${detailValue("legacy path", connector.localPath)}${detailValue("credentials", connector.accessKeyConfigured ? "configured" : "not configured")}${detailValue("checked", connector.checkedAt ? formatDate(connector.checkedAt) : "NOT_CHECKED")}${detailValue("created", formatDate(connector.createdAt))}${detailValue("message", connector.message)}</dl>`;
   detail.querySelector<HTMLButtonElement>("[data-probe-connector]")?.addEventListener("click", () => void probeConnector(connector.name));
   detail.querySelector<HTMLButtonElement>("[data-use-connector]")?.addEventListener("click", () => {
     setAdminStep("tasks");
@@ -176,10 +658,10 @@ function renderConnectors(connectors: Connector[]): void {
   }
   if (!connectorRecords.some((connector) => connector.name === selectedConnectorName)) selectedConnectorName = connectorRecords[0]!.name;
   list.innerHTML = connectorRecords.map((connector) => {
-    const type = connector.type === "local" ? "LOCAL" : connector.type.toUpperCase();
+    const type = connectorTypeLabel(connector.type);
     const location = connectorLocation(connector);
     const selected = connector.name === selectedConnectorName;
-    return `<button type="button" class="resource-row connector-row${selected ? " is-selected" : ""}" data-connector-name="${escapeText(connector.name)}"><span class="connector-row-copy"><strong>${escapeText(connector.name)}</strong><span>${type} · ${escapeText(connector.phase ?? "NOT_CHECKED")}</span><p>${escapeText(location)}</p></span><code>${escapeText(connector.message ?? "")}</code></button>`;
+    return `<button type="button" class="resource-row connector-row${selected ? " is-selected" : ""}" data-connector-name="${escapeText(connector.name)}"><span class="connector-type-icon connector-type-${escapeText(String(connector.type).toLowerCase())}" aria-hidden="true"><i data-lucide="${connectorIcon(connector.type)}"></i></span><span class="connector-row-copy"><strong>${escapeText(connector.name)}</strong><span>${escapeText(type)} · ${escapeText(connector.phase ?? "NOT_CHECKED")}</span><p>${escapeText(location)}</p></span><code>${escapeText(connector.message ?? "")}</code></button>`;
   }).join("");
   list.querySelectorAll<HTMLButtonElement>("[data-connector-name]").forEach((button) => button.addEventListener("click", () => {
     selectedConnectorName = button.dataset.connectorName ?? "";
@@ -269,6 +751,44 @@ function orderLabel(orders?: number[]): string {
   return orders?.length ? orders.map((order) => `O${order}`).join(" / ") : "--";
 }
 
+function phaseIcon(phase?: string): string {
+  const value = phaseLabel(phase);
+  if (["SUCCEEDED", "COMPLETED", "STAGED", "PUBLISHED", "ACTIVE"].includes(value)) return "circle-check";
+  if (["FAILED", "ERROR", "INVALID", "CANCELLED"].includes(value)) return "circle-alert";
+  if (["RUNNING", "PROBING", "PROCESSING"].includes(value)) return "loader-circle";
+  return "circle-dot";
+}
+
+function phaseMarkup(phase: string | undefined, prefix = ""): string {
+  const label = `${prefix}${phaseLabel(phase)}`;
+  return `<span class="task-phase task-phase-${phaseClass(phase ?? "PENDING")}" title="${escapeText(label)}"><i data-lucide="${phaseIcon(phase)}"></i><span>${escapeText(label)}</span></span>`;
+}
+
+function taskMetric(icon: string, label: string, value: string): string {
+  return `<span class="task-metric"><i data-lucide="${icon}"></i><span>${escapeText(label)}</span><strong>${escapeText(value)}</strong></span>`;
+}
+
+function taskStatsMarkup(status: TaskStatus): string {
+  return [
+    taskMetric("file-check-2", "files", status.discoveredFiles !== undefined ? status.discoveredFiles.toLocaleString() : "--"),
+    taskMetric("layers-3", "coverage", status.coverageDocuments !== undefined ? status.coverageDocuments.toLocaleString() : "--"),
+    taskMetric("boxes", "objects", status.objectDocuments !== undefined ? status.objectDocuments.toLocaleString() : "--"),
+    taskMetric("circle-alert", "errors", status.errorCount !== undefined ? status.errorCount.toLocaleString() : "--"),
+    taskMetric("grid-3x3", "orders", status.availableOrders?.length ? orderLabel(status.availableOrders) : "--"),
+  ].join("");
+}
+
+function artifactIcon(label: string): string {
+  const value = label.toLowerCase();
+  if (value.includes("moc")) return "globe-2";
+  if (value.includes("preview")) return "image";
+  if (value.includes("manifest")) return "file-check-2";
+  if (value.includes("stat")) return "chart-no-axes-combined";
+  if (value.includes("evidence")) return "shield-check";
+  if (value.includes("scan")) return "scan-line";
+  return "file-text";
+}
+
 function lifecycleMarkup(lifecycle?: ProductLifecycle, fallbackPublication?: string, nativeOrders?: number[]): string {
   const publication = lifecycleStateLabel(lifecycle?.publication?.state ?? fallbackPublication);
   const runtime = lifecycleStateLabel(lifecycle?.runtime?.state);
@@ -319,9 +839,8 @@ function renderTasks(tasks: Task[]): void {
   body.innerHTML = tasks.map((task) => {
     const status = task.status ?? { phase: "Pending" };
     const modality = task.modality ?? "other";
-    const stats = [status.discoveredFiles !== undefined ? `${status.discoveredFiles.toLocaleString()} files` : "files unknown", status.coverageDocuments !== undefined ? `${status.coverageDocuments.toLocaleString()} coverage` : "coverage unknown", status.objectDocuments !== undefined ? `${status.objectDocuments.toLocaleString()} objects` : "objects unknown", status.errorCount !== undefined ? `${status.errorCount.toLocaleString()} errors` : "errors unknown", status.availableOrders?.length ? `native ${orderLabel(status.availableOrders)}` : "native orders unknown"].join(" · ");
     const retrying = taskRetryInFlight.has(task.name);
-    return `<tr><td><div class="task-identity"><i data-lucide="${modalityIcon(modality)}"></i><strong>${escapeText(workTitle(task))}</strong></div><small>${escapeText(task.name)} · ${escapeText(modality)} · ${escapeText(task.recipe?.mode ?? task.mode ?? "recipe pending")} · ${escapeText(task.batchId ?? "run pending")}</small></td><td><strong>${escapeText(task.product ?? task.productId ?? task.layerId ?? "product pending")}</strong><small>${escapeText(task.surveyId ?? "survey pending")} / ${escapeText(task.releaseId ?? "release pending")}</small></td><td><span>${escapeText(task.sourceConnector ?? "source pending")}</span><small>${escapeText(task.sourcePaths[0] ?? "path pending")}</small></td><td><span class="task-phase task-phase-${phaseClass(status.phase)}">${escapeText(phaseLabel(status.phase))}</span><small>${escapeText(status.reason ?? status.message ?? "")}</small></td><td><span>${escapeText(stats)}</span><small>${status.runId ? `run ${escapeText(status.runId)}` : "run pending"}</small></td><td><span>${escapeText(formatDate(status.completedAt ?? status.startedAt ?? task.createdAt))}</span></td><td><div class="task-row-actions"><button type="button" class="admin-quiet" data-task-details="${escapeText(task.name)}" title="查看任务详情"><i data-lucide="eye"></i><span>详情</span></button><button type="button" class="admin-quiet" data-task-resubmit="${escapeText(task.name)}" title="重新提交任务"${retrying ? " disabled" : ""}><i data-lucide="rotate-ccw"></i><span>${retrying ? "重提中…" : "重提"}</span></button></div></td></tr>`;
+    return `<tr><td><div class="task-identity"><i data-lucide="${modalityIcon(modality)}"></i><strong>${escapeText(workTitle(task))}</strong></div><small>${escapeText(task.name)} · ${escapeText(modality)} · ${escapeText(task.recipe?.mode ?? task.mode ?? "recipe pending")} · ${escapeText(task.batchId ?? "run pending")}</small></td><td><strong>${escapeText(task.product ?? task.productId ?? task.layerId ?? "product pending")}</strong><small>${escapeText(task.surveyId ?? "survey pending")} / ${escapeText(task.releaseId ?? "release pending")}</small></td><td><span>${escapeText(task.sourceConnector ?? "source pending")}</span><small>${escapeText(task.sourcePaths[0] ?? "path pending")}</small></td><td>${phaseMarkup(status.phase)}<small>${escapeText(status.reason ?? status.message ?? "")}</small></td><td><div class="task-metric-list">${taskStatsMarkup(status)}</div><small>${status.runId ? `run ${escapeText(status.runId)}` : "run pending"}</small></td><td><span>${escapeText(formatDate(status.completedAt ?? status.startedAt ?? task.createdAt))}</span></td><td><div class="task-row-actions"><button type="button" class="admin-quiet" data-task-details="${escapeText(task.name)}" title="查看任务详情"><i data-lucide="eye"></i><span>详情</span></button><button type="button" class="admin-quiet" data-task-resubmit="${escapeText(task.name)}" title="重新提交任务"${retrying ? " disabled" : ""}><i data-lucide="rotate-ccw"></i><span>${retrying ? "重提中…" : "重提"}</span></button></div></td></tr>`;
   }).join("");
   body.querySelectorAll<HTMLButtonElement>("[data-task-details]").forEach((button) => button.addEventListener("click", () => void openTaskDetails(button.dataset.taskDetails ?? "")));
   body.querySelectorAll<HTMLButtonElement>("[data-task-resubmit]").forEach((button) => button.addEventListener("click", () => void resubmitTask(button.dataset.taskResubmit ?? "")));
@@ -358,7 +877,7 @@ function renderMocDiscoveryRequests(requests: MocDiscoveryRequest[]): void {
     const reviewState = mocDiscoveryStateLabel(discoveryState);
     const retrying = mocRetryInFlight === request.name;
     const retry = ["SUCCEEDED", "FAILED", "COMPLETED", "ERROR", "INVALID", "CANCELLED"].includes(phaseLabel(status.phase)) ? `<button type="button" class="admin-quiet" data-moc-retry="${escapeText(request.name)}" title="重新探查"${retrying ? " disabled" : ""}><i data-lucide="rotate-ccw"></i><span>${retrying ? "探查中…" : "重新探查"}</span></button>` : "";
-    return `<article class="resource-row moc-discovery-row"><div><div class="task-identity"><i data-lucide="search"></i><strong>${escapeText(workTitle(undefined, request))}</strong></div><span>${escapeText(request.name)}${hints ? ` · ${escapeText(hints)}` : ""}</span><p>${escapeText(counts)} · ${escapeText(reviewState)}${status.evidencePath ? ` · evidence ${escapeText(status.evidencePath)}` : ""}</p></div><div class="moc-discovery-row-actions"><span class="task-phase task-phase-${phaseClass(status.phase)}">${escapeText(phaseLabel(status.phase))}</span>${mocReviewAction(request, "data-moc-review")}${retry}</div></article>`;
+    return `<article class="resource-row moc-discovery-row"><div><div class="task-identity"><i data-lucide="search"></i><strong>${escapeText(workTitle(undefined, request))}</strong></div><span>${escapeText(request.name)}${hints ? ` · ${escapeText(hints)}` : ""}</span><p>${escapeText(counts)} · ${escapeText(reviewState)}${status.evidencePath ? ` · evidence ${escapeText(status.evidencePath)}` : ""}</p></div><div class="moc-discovery-row-actions">${phaseMarkup(status.phase)}${mocReviewAction(request, "data-moc-review")}${retry}</div></article>`;
   }).join("");
   list.querySelectorAll<HTMLButtonElement>("[data-moc-review]").forEach((button) => button.addEventListener("click", () => void openMocReview(button.dataset.mocReview ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-moc-retry]").forEach((button) => button.addEventListener("click", () => void resubmitMocDiscovery(button.dataset.mocRetry ?? "")));
@@ -545,7 +1064,7 @@ function renderMocBuildDetails(build: MocBuildRequest): void {
   const percent = typeof progress.percent === "number" ? Math.max(0, Math.min(100, progress.percent)) : undefined;
   const registerAction = build.phase === "STAGED" && !build.productId ? `<button type="button" class="admin-primary" data-register-moc-build-detail="${escapeText(build.name)}"><i data-lucide="plus"></i><span>登记为产品</span></button>` : "";
   byId("moc-build-detail-title").textContent = build.workTitle ?? build.name;
-  byId("moc-build-detail-content").innerHTML = `<div class="build-progress-summary"><div><span class="task-phase task-phase-${phaseClass(build.phase)}">${escapeText(build.phase)}</span><strong>${escapeText(progress.message ?? "")}</strong>${registerAction}</div>${percent !== undefined ? `<progress max="100" value="${percent}"></progress><span>${percent}% · step ${progress.step}/${progress.totalSteps}</span>` : ""}${mocBuildReadout(build)}</div><dl class="task-detail-grid">${detailValue("build", build.name)}${detailValue("discovery", build.discoveryRequestName)}${detailValue("candidate", build.candidateId)}${detailValue("product", build.productId)}${detailValue("source", build.source.url)}${detailValue("source snapshot", build.source.snapshotSha256 ? `${build.source.snapshotSha256}${build.source.sizeBytes !== undefined ? ` · ${build.source.sizeBytes} bytes` : ""}` : undefined)}${detailValue("evidence", build.source.evidenceRef)}${detailValue("created", formatDate(build.createdAt))}${detailValue("updated", formatDate(build.updatedAt))}${detailValue("published", build.publishedAt ? `${formatDate(build.publishedAt)}${build.publicationId ? ` · ${build.publicationId}` : ""}` : "not published")}${detailValue("error", build.error ? `${build.error.reason}: ${build.error.message}` : undefined)}</dl>${outputRows ? `<h5 class="build-detail-subheading">构建产出</h5><dl class="task-detail-grid">${outputRows}</dl>` : ""}`;
+  byId("moc-build-detail-content").innerHTML = `<div class="build-progress-summary"><div>${phaseMarkup(build.phase, "BUILD ")}<strong>${escapeText(progress.message ?? "")}</strong>${registerAction}</div>${percent !== undefined ? `<progress max="100" value="${percent}"></progress><span>${percent}% · step ${progress.step}/${progress.totalSteps}</span>` : ""}${mocBuildReadout(build)}</div><dl class="task-detail-grid">${detailValue("build", build.name)}${detailValue("discovery", build.discoveryRequestName)}${detailValue("candidate", build.candidateId)}${detailValue("product", build.productId)}${detailValue("source", build.source.url)}${detailValue("source snapshot", build.source.snapshotSha256 ? `${build.source.snapshotSha256}${build.source.sizeBytes !== undefined ? ` · ${build.source.sizeBytes} bytes` : ""}` : undefined)}${detailValue("evidence", build.source.evidenceRef)}${detailValue("created", formatDate(build.createdAt))}${detailValue("updated", formatDate(build.updatedAt))}${detailValue("published", build.publishedAt ? `${formatDate(build.publishedAt)}${build.publicationId ? ` · ${build.publicationId}` : ""}` : "not published")}${detailValue("error", build.error ? `${build.error.reason}: ${build.error.message}` : undefined)}</dl>${outputRows ? `<h5 class="build-detail-subheading">构建产出</h5><dl class="task-detail-grid">${outputRows}</dl>` : ""}`;
   byId("moc-build-detail-content").querySelector<HTMLButtonElement>("[data-register-moc-build-detail]")?.addEventListener("click", () => void openMocProductRegistration(build.name));
   renderIcons();
 }
@@ -566,7 +1085,7 @@ function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], build
     requests.map((request) => ({ key: mocWorkKey(request), createdAt: request.createdAt, value: request })),
   );
   if (!groups.length) {
-    container.innerHTML = builds.length ? `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status"><span class="task-phase task-phase-${phaseClass(build.phase)}">BUILD ${escapeText(build.phase)}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>` : `<div class="resource-empty">暂无任务产出</div>`;
+    container.innerHTML = builds.length ? `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status">${phaseMarkup(build.phase, "BUILD ")}${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>` : `<div class="resource-empty">暂无任务产出</div>`;
     container.querySelectorAll<HTMLButtonElement>("[data-moc-build-details]").forEach((button) => button.addEventListener("click", () => void openMocBuildDetails(button.dataset.mocBuildDetails ?? "")));
     container.querySelectorAll<HTMLButtonElement>("[data-register-moc-build-output]").forEach((button) => button.addEventListener("click", () => void openMocProductRegistration(button.dataset.registerMocBuildOutput ?? "")));
     renderIcons();
@@ -579,16 +1098,15 @@ function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], build
     const scanStatus = task ? phaseLabel(task.status?.phase) : "NOT_SUBMITTED";
     const mocStatus = request ? phaseLabel(request.status?.phase) : "NOT_SUBMITTED";
     const taskStatus = task?.status ?? { phase: "PENDING" };
-    const scanCounts = task ? [taskStatus.discoveredFiles !== undefined ? `${taskStatus.discoveredFiles.toLocaleString()} files` : "files unknown", taskStatus.coverageDocuments !== undefined ? `${taskStatus.coverageDocuments.toLocaleString()} coverage` : "coverage unknown", taskStatus.objectDocuments !== undefined ? `${taskStatus.objectDocuments.toLocaleString()} objects` : "objects unknown", taskStatus.errorCount !== undefined ? `${taskStatus.errorCount.toLocaleString()} errors` : "errors unknown", taskStatus.availableOrders?.length ? taskStatus.availableOrders.map((order) => `O${order}`).join("/") : "orders unknown"].join(" · ") : "文件扫描尚未提交";
-    const mocCounts = request ? `${request.status.candidateCount !== undefined ? request.status.candidateCount.toLocaleString() : "unknown"} candidates` : "MOC 尚未探查";
-    const counts = `${scanCounts} · ${mocCounts}`;
+    const scanCounts = task ? taskStatsMarkup(taskStatus) : `<span class="task-metric task-metric-empty"><i data-lucide="scan-line"></i><span>scan</span><strong>未提交</strong></span>`;
+    const mocCounts = request ? taskMetric("search", "candidates", request.status.candidateCount !== undefined ? request.status.candidateCount.toLocaleString() : "--") : taskMetric("search", "MOC", "未探查");
     const retry = task && ["SUCCEEDED", "FAILED", "COMPLETED", "ERROR", "INVALID", "CANCELLED"].includes(scanStatus) ? `<button type="button" class="admin-quiet" data-task-resubmit-output="${escapeText(task.name)}" title="重新提交文件扫描"><i data-lucide="rotate-ccw"></i><span>重提扫描</span></button>` : "";
     const mocRetry = request && ["SUCCEEDED", "FAILED", "COMPLETED", "ERROR", "INVALID", "CANCELLED"].includes(mocStatus) ? `<button type="button" class="admin-quiet" data-moc-retry-output="${escapeText(request.name)}" title="重新探查"><i data-lucide="rotate-ccw"></i><span>重提探查</span></button>` : "";
     const evidence = task?.status.evidencePath ?? request?.status.evidencePath;
     const attemptLabel = `${group.taskAttempts} scan / ${group.mocAttempts} MOC attempts; latest result only`;
     const relatedBuilds = builds.filter((build) => build.discoveryRequestName === request?.name || (build.productId && build.productId === task?.productId));
-    const buildRows = relatedBuilds.map((build) => `<div class="work-build-output"><span class="task-phase task-phase-${phaseClass(build.phase)}">BUILD ${escapeText(build.phase)}</span><span>${escapeText(build.progress?.message ?? "")}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<span class="work-build-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</span>${mocBuildReadout(build)}</div>`).join("");
-    return `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="layers-3"></i><strong>${escapeText(workTitle(task, request))}</strong></div><small>${escapeText(key)} · ${escapeText(attemptLabel)}</small><p>${escapeText(counts)}${evidence ? ` · evidence ${escapeText(evidence)}` : ""}</p>${buildRows}</div><div class="work-output-status"><span class="task-phase task-phase-${phaseClass(scanStatus)}">SCAN ${escapeText(scanStatus)}</span><span class="task-phase task-phase-${phaseClass(mocStatus)}">MOC ${escapeText(mocStatus)}</span><div class="work-output-actions">${task ? `<button type="button" class="admin-quiet" data-task-details-output="${escapeText(task.name)}" title="查看扫描详情"><i data-lucide="eye"></i><span>详情</span></button>` : ""}${request ? mocReviewAction(request, "data-moc-review-output") : ""}${retry}${mocRetry}</div></div></article>`;
+    const buildRows = relatedBuilds.map((build) => `<div class="work-build-output">${phaseMarkup(build.phase, "BUILD ")}<span>${escapeText(build.progress?.message ?? "")}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<span class="work-build-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</span>${mocBuildReadout(build)}</div>`).join("");
+    return `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="layers-3"></i><strong>${escapeText(workTitle(task, request))}</strong></div><small>${escapeText(key)} · ${escapeText(attemptLabel)}</small><div class="work-output-metrics"><div><span class="work-output-metrics-label"><i data-lucide="scan-line"></i>SCAN OUTPUT</span>${scanCounts}</div><div><span class="work-output-metrics-label"><i data-lucide="search"></i>MOC OUTPUT</span>${mocCounts}</div></div>${evidence ? `<p class="work-output-evidence"><i data-lucide="shield-check"></i>${escapeText(evidence)}</p>` : ""}${buildRows}</div><div class="work-output-status">${phaseMarkup(scanStatus, "SCAN ")}${phaseMarkup(mocStatus, "MOC ")}<div class="work-output-actions">${task ? `<button type="button" class="admin-quiet" data-task-details-output="${escapeText(task.name)}" title="查看扫描详情"><i data-lucide="eye"></i><span>详情</span></button>` : ""}${request ? mocReviewAction(request, "data-moc-review-output") : ""}${retry}${mocRetry}</div></div></article>`;
   }).join("");
   container.innerHTML = `<div class="work-output-list">${rows}</div>`;
   container.querySelectorAll<HTMLButtonElement>("[data-task-details-output]").forEach((button) => button.addEventListener("click", () => void openTaskDetails(button.dataset.taskDetailsOutput ?? "")));
@@ -596,7 +1114,7 @@ function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], build
   container.querySelectorAll<HTMLButtonElement>("[data-moc-review-output]").forEach((button) => button.addEventListener("click", () => void openMocReview(button.dataset.mocReviewOutput ?? "")));
   container.querySelectorAll<HTMLButtonElement>("[data-moc-retry-output]").forEach((button) => button.addEventListener("click", () => void resubmitMocDiscovery(button.dataset.mocRetryOutput ?? "")));
   if (builds.length && !groups.some((group) => builds.some((build) => build.discoveryRequestName === group.request?.name))) {
-    container.insertAdjacentHTML("beforeend", `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status"><span class="task-phase task-phase-${phaseClass(build.phase)}">BUILD ${escapeText(build.phase)}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>`);
+    container.insertAdjacentHTML("beforeend", `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status">${phaseMarkup(build.phase, "BUILD ")}${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>`);
   }
   container.querySelectorAll<HTMLButtonElement>("[data-moc-build-details]").forEach((button) => button.addEventListener("click", () => void openMocBuildDetails(button.dataset.mocBuildDetails ?? "")));
   container.querySelectorAll<HTMLButtonElement>("[data-register-moc-build-output]").forEach((button) => button.addEventListener("click", () => void openMocProductRegistration(button.dataset.registerMocBuildOutput ?? "")));
@@ -696,12 +1214,13 @@ function renderReviewSurveys(surveys: ReviewSurvey[]): void {
   if (!visible.some((survey) => survey.id === selectedReviewSurveyId)) selectedReviewSurveyId = visible[0]!.id;
   list.innerHTML = visible.map((survey) => {
     const selected = survey.id === selectedReviewSurveyId;
+    const surveyColor = surveyColorAttribute(survey.color);
     const publicStats = Object.entries(survey.statistics).filter(([, value]) => typeof value === "number").map(([key, value]) => `${key} ${value.toLocaleString()}`).join(" · ");
     const releases = selected ? survey.releases.map((release) => `<section class="review-release"><div class="review-release-heading"><div><span class="section-index">RELEASE</span><h5>${escapeText(release.label)}</h5></div><small>${escapeText(release.id)} · ${escapeText(release.kind)}${release.releasedYear ? ` · ${release.releasedYear}` : ""}</small></div><div class="review-product-list">${release.products.filter(reviewProductMatches).map((product) => {
       const orders = product.coverage?.availableOrders?.map((order) => `O${order}`).join(" / ") || "orders unavailable";
       const reviewState = product.review?.state ?? "unmatched";
       const buildStatus = mocBuildStatusText(product.mocBuild);
-      return `<article class="review-product-row"><div><strong>${escapeText(product.name)}</strong><span>${escapeText(product.modality ?? "modality unknown")} · ${escapeText(product.status)} · ${escapeText(orders)}</span><p>${escapeText(product.description || product.reason || "No public description")}</p>${product.reason ? `<small>${escapeText(product.reason)}</small>` : ""}${buildStatus ? `<small class="moc-build-status">${escapeText(buildStatus)}</small>` : ""}${lifecycleMarkup(product.lifecycle, reviewState, product.mocBuild?.outputs?.availableOrders)}${lifecycleLinksMarkup(product.lifecycle)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span><button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}" title="编辑产品文稿"><i data-lucide="pencil"></i><span>编辑</span></button>${reviewState !== "published" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish title="发布产品"><i data-lucide="upload"></i><span>发布</span></button>` : ""}</div></article>`;
+    return `<article class="review-product-row"><div><div class="review-product-title"><span class="modality-icon"><i data-lucide="${modalityIcon(product.modality)}"></i></span><strong>${escapeText(product.name)}</strong></div><span>${escapeText(product.modality ?? "modality unknown")} · ${escapeText(product.status)} · ${escapeText(orders)}</span><p>${escapeText(product.description || product.reason || "No public description")}</p>${product.reason ? `<small>${escapeText(product.reason)}</small>` : ""}${buildStatus ? `<small class="moc-build-status"><i data-lucide="box"></i>${escapeText(buildStatus)}</small>` : ""}${lifecycleMarkup(product.lifecycle, reviewState, product.mocBuild?.outputs?.availableOrders)}${lifecycleLinksMarkup(product.lifecycle)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span><button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}" title="编辑产品文稿"><i data-lucide="pencil"></i><span>产品事实</span></button>${reviewState !== "published" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish title="发布产品"><i data-lucide="upload"></i><span>发布产品</span></button>` : ""}</div></article>`;
     }).join("") || `<div class="resource-empty">该 Release 没有匹配的产品</div>`}</div></section>`).join("") : "";
     const unmatchedRecords = survey.unmatchedProducts ?? [];
     const unmatchedProducts = selected ? unmatchedRecords.filter((product) => !productQuery || Object.values(product).join(" ").toLocaleLowerCase().includes(productQuery)).map((product) => {
@@ -714,9 +1233,10 @@ function renderReviewSurveys(surveys: ReviewSurvey[]): void {
     const unmatchedBuilds = survey.unmatchedBuilds ?? [];
     const mocBuildQueue = selected && unmatchedBuilds.length ? `<section class="review-release review-unmatched"><div class="review-release-heading"><div><span class="section-index">MOC QUEUE</span><h5>待登记 MOC 构建</h5></div><small>STAGED · 需要绑定产品</small></div><div class="review-product-list">${unmatchedBuilds.map((build) => `<article class="review-product-row"><div><strong>${escapeText(build.candidateTitle ?? build.candidateId)}</strong><span>${escapeText(build.name)} · ${escapeText(build.candidateId)} · ${escapeText(build.phase)}</span><p>构建已经完成，但还没有 survey / release / product 归属。登记后才能编辑公共文稿并发布。</p>${build.sourceUrl ? `<small class="moc-build-status">${escapeText(build.sourceUrl)}</small>` : ""}${mocBuildReadout(build)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(build.phase)}">${escapeText(build.phase)}</span><button type="button" class="admin-quiet" data-register-moc-build="${escapeText(build.name)}" title="登记为公共产品"><i data-lucide="plus"></i><span>登记产品</span></button></div></article>`).join("")}</div></section>` : "";
     const image = survey.imageUrl ? `<img src="${escapeText(survey.imageUrl)}" alt="" loading="lazy" />` : "";
-    return `<article class="review-survey${selected ? " is-selected" : ""}" style="--survey-color:${escapeText(survey.color)}"><button type="button" class="review-survey-header" data-review-survey="${escapeText(survey.id)}"><span class="review-survey-swatch" aria-hidden="true"></span><span class="review-survey-copy"><strong>${escapeText(survey.name)}</strong><small>${escapeText(survey.mission)} · ${survey.releases.length} releases · ${escapeText(publicStats || "statistics unavailable")}</small><p>${escapeText(survey.description)}</p></span><i data-lucide="${selected ? "chevron-up" : "chevron-down"}"></i></button>${selected ? `<div class="review-survey-body"><div class="review-survey-meta"><span>${escapeText(survey.modalities.join(" · "))}</span><span>Coverage ${escapeText(survey.coverageOrders?.availableOrders?.map((order) => `O${order}`).join(" / ") || "orders unavailable")}</span>${image}</div>${releases}${unmatched}${mocBuildQueue}</div>` : ""}</article>`;
+    return `<article class="review-survey${selected ? " is-selected" : ""}"${surveyColor}><div class="review-survey-header"><button type="button" class="review-survey-toggle" data-review-survey="${escapeText(survey.id)}"><span class="review-survey-swatch"${surveyColor} aria-hidden="true"></span><span class="review-survey-copy"><strong>${escapeText(survey.name)}</strong><small>${escapeText(survey.mission)} · ${survey.releases.length} releases · ${escapeText(publicStats || "statistics unavailable")}</small><p>${escapeText(survey.description)}</p></span><i data-lucide="${selected ? "chevron-up" : "chevron-down"}"></i></button>${survey.id.startsWith("__") ? "" : `<button type="button" class="admin-quiet review-survey-edit" data-edit-editorial="${escapeText(survey.id)}" title="编辑巡天公开目录文案"><i data-lucide="pencil-line"></i><span>编辑目录</span></button>`}</div>${selected ? `<div class="review-survey-body"><div class="review-survey-meta"><span><i data-lucide="layers-3"></i>${escapeText(survey.modalities.join(" · "))}</span><span><i data-lucide="grid-3x3"></i>Coverage ${escapeText(survey.coverageOrders?.availableOrders?.map((order) => `O${order}`).join(" / ") || "orders unavailable")}</span>${image}</div>${releases}${unmatched}${mocBuildQueue}</div>` : ""}</article>`;
   }).join("");
   list.querySelectorAll<HTMLButtonElement>("[data-review-survey]").forEach((button) => button.addEventListener("click", () => { selectedReviewSurveyId = button.dataset.reviewSurvey ?? ""; renderReviewSurveys(reviewSurveyRecords); }));
+  list.querySelectorAll<HTMLButtonElement>("[data-edit-editorial]").forEach((button) => button.addEventListener("click", () => void openEditorial(button.dataset.editEditorial ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-edit-product]").forEach((button) => button.addEventListener("click", () => openProduct(button.dataset.editProduct ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-publish-product]").forEach((button) => button.addEventListener("click", () => void publishProduct(button.dataset.publishProduct ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-register-moc-build]").forEach((button) => button.addEventListener("click", () => void openMocProductRegistration(button.dataset.registerMocBuild ?? "")));
@@ -1053,6 +1573,9 @@ byId<HTMLFormElement>("login-form").addEventListener("submit", async (event) => 
   await refresh();
 });
 byId("logout-button").addEventListener("click", () => { token = ""; sessionStorage.removeItem(tokenKey); if (pollTimer !== undefined) window.clearTimeout(pollTimer); pollTimer = undefined; connectorProbeResults.clear(); connectorRecords = []; showLogin(); });
+applyAdminTheme(storedAdminTheme() ?? adminSystemTheme());
+byId("theme-toggle").addEventListener("click", () => applyAdminTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark", true));
+window.matchMedia?.("(prefers-color-scheme: light)").addEventListener("change", () => { if (!storedAdminTheme()) applyAdminTheme(adminSystemTheme()); });
 byId("refresh-button").addEventListener("click", () => void refresh());
 byId("catalog-reload-button").addEventListener("click", (event) => void reloadCatalogRuntime(event.currentTarget as HTMLButtonElement));
 byId<HTMLFormElement>("connector-form").addEventListener("submit", (event) => void submitConnector(event));
@@ -1063,6 +1586,26 @@ byId<HTMLFormElement>("moc-product-register-form").addEventListener("submit", (e
 byId<HTMLFormElement>("product-form").addEventListener("submit", (event) => void saveProduct(event));
 byId("product-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("product-dialog").close());
 byId<HTMLButtonElement>("product-dialog-publish").addEventListener("click", (event) => { const productId = (event.currentTarget as HTMLButtonElement).dataset.publishProduct; if (productId) void publishProduct(productId); });
+byId("editorial-dialog-close").addEventListener("click", () => {
+  if (activeEditorial && JSON.stringify(activeEditorial.document.draft) !== JSON.stringify(activeEditorial.baseline) && !window.confirm("目录有未保存修改，确定关闭吗？")) return;
+  byId<HTMLDialogElement>("editorial-dialog").close();
+  activeEditorial = null;
+});
+byId("editorial-discard-button").addEventListener("click", discardEditorialChanges);
+byId("editorial-save-button").addEventListener("click", () => void saveEditorialDraft());
+byId("editorial-publish-button").addEventListener("click", () => openEditorialDiff(true));
+byId("editorial-diff-button").addEventListener("click", () => openEditorialDiff(false));
+byId<HTMLFormElement>("editorial-diff-form").addEventListener("submit", (event) => {
+  const submitter = (event.submitter as HTMLButtonElement | null)?.id;
+  if (submitter === "editorial-diff-confirm") {
+    event.preventDefault();
+    byId<HTMLDialogElement>("editorial-diff-dialog").close();
+    void publishEditorial();
+  }
+});
+byId<HTMLDialogElement>("editorial-dialog").addEventListener("cancel", (event) => {
+  if (activeEditorial && JSON.stringify(activeEditorial.document.draft) !== JSON.stringify(activeEditorial.baseline) && !window.confirm("目录有未保存修改，确定关闭吗？")) event.preventDefault();
+});
 byId("moc-product-register-cancel").addEventListener("click", () => byId<HTMLDialogElement>("moc-product-register-dialog").close());
 byId("task-product").addEventListener("change", (event) => setDerivedProduct((event.currentTarget as HTMLSelectElement).value));
 byId("connector-type").addEventListener("change", updateConnectorFields);

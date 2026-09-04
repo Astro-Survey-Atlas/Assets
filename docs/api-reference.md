@@ -254,6 +254,27 @@ GET /api/v1/products
 
 `GET /api/v1/admin/products?view=surveys` 是管理页审核入口。它按公共 `survey -> release -> product` 返回与 `/api/v1/surveys` 同源的名称、mission、描述、图片、modalities、统计、coverage orders 和产品状态；每个产品只附加 `review.state`、草稿/发布 revision、时间戳和当前 coverage 投影。产品还会返回 `lifecycle`：`publication.state` 是 `DRAFT` 或 `PUBLISHED`，`runtime.state` 是 `CATALOG_BASELINE`、`ACTIVE`、`INVALID` 或 `INACTIVE`，并携带 native build orders、公开 layer orders、catalog revision 和产品/天球/Catalog/FITS MOC 链接。它不会返回 input manifest、normalized scan、task snapshot、evidence 内容或内部路径。存在于 Assets 编辑存储但不再匹配公共 catalog 的产品会放在 `unmatchedProducts` 中，不会静默丢失。
 
+### Survey editorial copy
+
+管理页的巡天目录编辑器使用同一份公共 `survey -> release -> product` 结构做所见即所得预览。它只保存公开文案，草稿在发布前不会进入公开接口：
+
+```http
+GET  /api/v1/admin/catalog/surveys/{surveyId}/editorial
+PUT  /api/v1/admin/catalog/surveys/{surveyId}/editorial/draft
+POST /api/v1/admin/catalog/surveys/{surveyId}/editorial/publish
+```
+
+`PUT` 请求体包含当前 `revision` 和 `content`。`content` 可编辑的字段是巡天的
+`name`、`mission`、`description`，Release 的 `label`，以及产品的
+`displayName`、`description`、已有的 `reason` 和 `manualStep`。`surveyId`、Release
+顺序、产品顺序、`productId`、`canonicalName`、modality、status、coverage、layer、recipe、
+hash 和来源事实由服务端从 catalog 重建并锁定；编辑器会以只读字段显示这些事实。
+
+`revision` 用于乐观并发控制：版本不匹配返回 `409`，非法字段或试图改动锁定事实返回
+`400`。发布会把当前 draft 复制为 published，并使 `/api/v1/surveys`、
+`/api/v1/products` 及产品详情使用新的公开文案；它不会改变 coverage、MOC、layer、recipe
+或稳定的产品 ID。所有三个 endpoint 都需要 `Authorization: Bearer <admin-token>`。
+
 ### Public product dossier and evidence
 
 ```http

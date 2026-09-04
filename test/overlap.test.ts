@@ -7,7 +7,8 @@ import { highestCommonOrder, overlapForLayers } from "../server/overlap.js";
 import { SourceUnitStore } from "../server/source-units.js";
 import { buildOverlapHighlight } from "../site/src/atlas/overlap-highlight.js";
 import { largestConnectedPixelComponent, recenteredOrbitPose } from "../site/src/atlas/survey-layer-viewer.js";
-import { cameraDistanceForAngularRadius } from "../site/src/atlas/survey-layer-viewer.js";
+import { cameraDistanceForAngularRadius, cameraDistanceForEffectiveFov, CENTERED_DATA_FOV_DEG } from "../site/src/atlas/survey-layer-viewer.js";
+import { coverageEscapeIntent } from "../site/src/atlas/coverage-interaction.js";
 import * as THREE from "three";
 
 function layer(layerId: string, surveyId: string, orders: Record<number, number[]>): CoverageCellLayer {
@@ -69,6 +70,20 @@ test("component camera fitting zooms small regions without the old distance cap"
   assert.ok(small < 2.8);
   assert.ok(large > small);
   assert.ok(large < 2.8);
+});
+
+test("centered data framing targets the canonical 115 degree effective FOV", () => {
+  const outerRadius = 1.12;
+  const cameraFovDeg = 48;
+  const distance = cameraDistanceForEffectiveFov(outerRadius, cameraFovDeg, CENTERED_DATA_FOV_DEG);
+  const effectiveFovDeg = THREE.MathUtils.radToDeg(2 * Math.atan((distance * Math.tan(THREE.MathUtils.degToRad(cameraFovDeg) / 2)) / outerRadius));
+  assert.ok(Math.abs(effectiveFovDeg - CENTERED_DATA_FOV_DEG) < 1e-9);
+});
+
+test("Escape keeps the drawer dismissal, focus clear and double-reset intents distinct", () => {
+  assert.equal(coverageEscapeIntent({ overlapDrawerOpen: true, now: 100, lastEscapeAt: 0 }), "dismiss-overlap-drawer");
+  assert.equal(coverageEscapeIntent({ overlapDrawerOpen: false, now: 1_000, lastEscapeAt: 0 }), "clear-focus");
+  assert.equal(coverageEscapeIntent({ overlapDrawerOpen: false, now: 1_400, lastEscapeAt: 1_000 }), "reset-experience");
 });
 
 test("overlap highlight builds solid cells and flow edges without a runtime error", () => {

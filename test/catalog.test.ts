@@ -105,6 +105,33 @@ test("admin page is included as a separate deployable entry point", async () => 
   assert.match(html, /ScanRequest/);
   assert.match(html, /\/admin\/main\.ts/);
   assert.match(html, /product-dialog-publish/);
+  assert.match(html, /editorial-dialog/);
+  assert.match(html, /editorial-diff-dialog/);
+  assert.match(html, /editorial-canvas/);
+  assert.match(html, /editorial-diff-confirm/);
+  assert.match(await (await import("node:fs/promises")).readFile("site/admin/main.ts", "utf8"), /CircleDot/);
+});
+
+test("admin survey colors use CSP-safe data attributes", async () => {
+  const [main, styles] = await Promise.all([
+    (await import("node:fs/promises")).readFile("site/admin/main.ts", "utf8"),
+    (await import("node:fs/promises")).readFile("site/admin/styles.css", "utf8"),
+  ]);
+  assert.doesNotMatch(main, /style=["']--survey-color/);
+  assert.match(main, /data-survey-color/);
+  assert.match(styles, /\.review-survey-swatch\[data-survey-color\][^}]*attr\(data-survey-color type\(<color>\)/);
+  assert.match(styles, /\.editorial-survey-swatch\[data-survey-color\][^}]*attr\(data-survey-color type\(<color>\)/);
+});
+
+test("admin light theme keeps form controls readable", async () => {
+  const [html, styles] = await Promise.all([
+    (await import("node:fs/promises")).readFile("site/admin/index.html", "utf8"),
+    (await import("node:fs/promises")).readFile("site/admin/styles.css", "utf8"),
+  ]);
+  assert.match(html, /id="admin-token"[^>]*type="password"/);
+  assert.match(html, /<form id="product-form"[\s\S]*<textarea name="methodologyMarkdown"/);
+  assert.match(styles, /:root\[data-theme="light"\]\s+input,\s*:root\[data-theme="light"\]\s+select,\s*:root\[data-theme="light"\]\s+textarea\s*\{[^}]*background:\s*var\(--bright\);[^}]*color:\s*var\(--ink\);/s);
+  assert.match(styles, /:root\[data-theme="light"\]\s+input::placeholder,\s*:root\[data-theme="light"\]\s+textarea::placeholder\s*\{[^}]*color:\s*var\(--muted\);/s);
 });
 
 test("cross-step MOC registration dialog is not nested in a hidden admin panel", async () => {

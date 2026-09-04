@@ -265,9 +265,7 @@ interface CameraPose {
 const BASE_COLOR = new THREE.Color("#2c3792");
 const OVERLAP_COLOR = new THREE.Color("#2c3792");
 const SELECTION_COLOR = new THREE.Color("#f01951");
-const SELECTION_EDGE_DARK = new THREE.Color("#f6f6ff");
-const SELECTION_EDGE_LIGHT = new THREE.Color("#5965c7");
-const SELECTION_CORE_LIGHT = new THREE.Color("#20286f");
+const SELECTION_EDGE_COLOR = new THREE.Color("#f6f6ff");
 const WORKSPACE_COLOR = new THREE.Color("#8d97ff");
 // The opening shot is a close, cropped glimpse of the layered globe. The
 // tighter field keeps the shell geometry legible while the pose below moves
@@ -287,6 +285,29 @@ const EXPLOSION_RENDER_ORDER = 11_000;
 const SELECTION_RENDER_ORDER = 12_000;
 const LABEL_RENDER_ORDER = 14_000;
 const OBJECT_RENDER_ORDER = 15_000;
+const DATA_VIEW_CAMERA_FOV_DEG = 48;
+
+/** The globe's centered data view is deliberately wide enough to show context. */
+export const CENTERED_DATA_FOV_DEG = 115;
+
+export function cameraDistanceForEffectiveFov(
+  outerRadius: number,
+  cameraFovDeg = DATA_VIEW_CAMERA_FOV_DEG,
+  effectiveFovDeg = CENTERED_DATA_FOV_DEG,
+): number {
+  const radius = Number.isFinite(outerRadius) && outerRadius > 0 ? outerRadius : 1;
+  const cameraHalfFov = THREE.MathUtils.clamp(
+    THREE.MathUtils.degToRad(cameraFovDeg) / 2,
+    THREE.MathUtils.degToRad(0.5),
+    THREE.MathUtils.degToRad(89.5),
+  );
+  const effectiveHalfFov = THREE.MathUtils.clamp(
+    THREE.MathUtils.degToRad(effectiveFovDeg) / 2,
+    THREE.MathUtils.degToRad(0.5),
+    THREE.MathUtils.degToRad(89.5),
+  );
+  return Math.max(radius * 1.002, radius * Math.tan(effectiveHalfFov) / Math.tan(cameraHalfFov));
+}
 
 function disposeObject(object: THREE.Object3D): void {
   object.traverse((child) => {
@@ -906,9 +927,14 @@ export class SurveyLayerViewer {
     this.#visibleSurveyIds.clear();
     next.forEach((surveyId) => this.#visibleSurveyIds.add(surveyId));
     if (this.#focusedSurveyId && !this.#visibleSurveyIds.has(this.#focusedSurveyId)) this.#focusedSurveyId = null;
+    if (hadNoVisibleSurveys) this.#focusedAssetId = null;
     this.#pruneSelection();
     this.#rebuildVisible(true);
-    if (hadNoVisibleSurveys && next.size === 1) this.focusSurvey(next.values().next().value as string);
+    // The first selected layer opens the canonical centered data view. A
+    // directional survey focus is still available through the explicit focus
+    // action, but selecting a layer should not strand the user in a narrow
+    // footprint-only frame.
+    if (hadNoVisibleSurveys && next.size === 1) this.focusData();
   }
 
   setOverlapMode(active: boolean): void {
@@ -929,9 +955,9 @@ export class SurveyLayerViewer {
       this.#activeOverlapComponentId = null;
       clearGroup(this.#overlapSelectionGroup);
       this.#activeOverlapHighlight = null;
-      this.#restoreGlobeOrbitTarget();
     }
     this.#rebuildVisible(true);
+    if (!active) this.#restoreGlobeOrbitTarget();
   }
 
   setOverlapCells(nside: number, pixels: readonly number[]): void {
@@ -1100,11 +1126,10 @@ export class SurveyLayerViewer {
   focusData(): void {
     this.#cameraTransition = null;
     this.#homeScrollProgress = 1;
-    const radius = this.#outerRadius;
     const viewDirection = this.#dataViewDirection();
     this.#camera.position.copy(viewDirection.multiplyScalar(this.#dataViewDistance()));
     this.#controls.target.set(0, 0, 0);
-    this.#camera.fov = 48;
+    this.#camera.fov = DATA_VIEW_CAMERA_FOV_DEG;
     this.#camera.updateProjectionMatrix();
     this.#camera.up.set(0, 1, 0);
     this.#controls.enabled = true;
@@ -1120,7 +1145,16 @@ export class SurveyLayerViewer {
     // next drag cannot keep orbiting the previously selected cell.
     this.#cameraTransition = null;
     const pose = recenteredOrbitPose(this.#camera.position, this.#controls.target);
-    this.#startCameraTransition(pose.cameraPosition, pose.orbitTarget, 520);
+    const direction = pose.cameraPosition.lengthSq() > 1e-9
+      ? pose.cameraPosition.normalize()
+      : this.#dataViewDirection();
+    this.#camera.fov = DATA_VIEW_CAMERA_FOV_DEG;
+    this.#camera.updateProjectionMatrix();
+    this.#startCameraTransition(
+      direction.multiplyScalar(this.#dataViewDistance()),
+      pose.orbitTarget,
+      520,
+    );
   }
 
   setHomePresentation(): void {
@@ -1142,7 +1176,7 @@ export class SurveyLayerViewer {
 
   transitionToDataPresentation(durationMs = 900): void {
     this.#homeScrollProgress = 1;
-    this.#camera.fov = 48;
+    this.#camera.fov = DATA_VIEW_CAMERA_FOV_DEG;
     this.#camera.updateProjectionMatrix();
     const radius = this.#outerRadius;
     this.#startCameraTransition(
@@ -1159,9 +1193,7 @@ export class SurveyLayerViewer {
   }
 
   #dataViewDistance(): number {
-    const bounds = this.#canvas.getBoundingClientRect();
-    const aspect = bounds.height > 0 ? bounds.width / bounds.height : 1.6;
-    return this.#outerRadius * (aspect < 1 ? 6.15 : 3.35);
+    return cameraDistanceForEffectiveFov(this.#outerRadius, DATA_VIEW_CAMERA_FOV_DEG, CENTERED_DATA_FOV_DEG);
   }
 
   #homePresentationPose(): CameraPose {
@@ -1772,22 +1804,19 @@ export class SurveyLayerViewer {
     const radii = depths.map((depth) => depth.radius);
     const minimumRadius = Math.max(0.05, Math.min(...radii) - REGION_INNER_PADDING);
     const maximumRadius = Math.max(...radii) + REGION_OUTER_PADDING;
-    const lightTheme = document.documentElement.dataset.theme === "light";
-    const edgeColor = lightTheme ? SELECTION_EDGE_LIGHT : SELECTION_EDGE_DARK;
-    const coreColor = lightTheme ? SELECTION_CORE_LIGHT : SELECTION_EDGE_DARK;
     const edgeCells = selected.map((pixel) => ({
       nside: this.#manifest.nside,
       pixel,
       innerRadius: minimumRadius,
       outerRadius: maximumRadius,
-      color: edgeColor,
+      color: SELECTION_EDGE_COLOR,
       inset: 0.012,
     }));
     const edgeGeometry = buildSphericalCellVolumeEdges(edgeCells);
     const volumeEdgeMaterial = new THREE.LineDashedMaterial({
-      color: edgeColor,
+      color: SELECTION_EDGE_COLOR,
       transparent: true,
-      opacity: lightTheme ? 0.86 : 0.98,
+      opacity: 0.98,
       depthTest: false,
       depthWrite: false,
       dashSize: 0.07,
@@ -1798,9 +1827,9 @@ export class SurveyLayerViewer {
     volumeEdges.computeLineDistances();
     volumeEdges.renderOrder = SELECTION_RENDER_ORDER + 1;
     const coreMaterial = new THREE.LineBasicMaterial({
-      color: coreColor,
+      color: SELECTION_EDGE_COLOR,
       transparent: true,
-      opacity: lightTheme ? 0.96 : 0.96,
+      opacity: 0.96,
       depthTest: false,
       depthWrite: false,
       toneMapped: false,
@@ -1810,7 +1839,7 @@ export class SurveyLayerViewer {
     const glowMaterial = new THREE.LineBasicMaterial({
       color: SELECTION_COLOR,
       transparent: true,
-      opacity: lightTheme ? 0.2 : 0.42,
+      opacity: 0.42,
       depthTest: false,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -2144,12 +2173,11 @@ export class SurveyLayerViewer {
     });
     if (!this.#selectionCoreMaterial || !this.#selectionEdgeMaterial || !this.#selectionGlowMaterial) return;
     const pulse = 0.5 + 0.5 * Math.sin(now * 0.004);
-    const lightTheme = document.documentElement.dataset.theme === "light";
     this.#selectionEdgeMaterial.dashSize = 0.052 + pulse * 0.034;
     this.#selectionEdgeMaterial.gapSize = 0.028 + (1 - pulse) * 0.018;
-    this.#selectionEdgeMaterial.opacity = lightTheme ? 0.76 + pulse * 0.12 : 0.86 + pulse * 0.14;
-    this.#selectionCoreMaterial.opacity = lightTheme ? 0.88 + pulse * 0.08 : 0.88 + pulse * 0.12;
-    this.#selectionGlowMaterial.opacity = lightTheme ? 0.14 + pulse * 0.16 : 0.28 + pulse * 0.38;
+    this.#selectionEdgeMaterial.opacity = 0.86 + pulse * 0.14;
+    this.#selectionCoreMaterial.opacity = 0.88 + pulse * 0.12;
+    this.#selectionGlowMaterial.opacity = 0.28 + pulse * 0.38;
   }
 
   #backgroundStars(): THREE.Points {

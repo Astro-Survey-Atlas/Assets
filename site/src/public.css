@@ -923,22 +923,25 @@ body.public-site.atlas-page .overlap-drawer-card.is-assets {
   }
 }
 
-/* Layers and Cell Inspector are two views of the same atlas surface. Keep
-   their geometry and material identical so neither reads like a separate UI. */
+/* Layers and Cell Inspector share the atlas surface geometry. The inspector
+   stays unfilled so the selected sky remains visible behind its readout. */
 body.public-site.atlas-page .coverage-layers,
 body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) {
   box-sizing: border-box;
   border: 1px solid var(--public-line-strong);
   border-radius: 8px;
+}
+body.public-site.atlas-page .coverage-layers {
+  padding: 14px 14px max(14px, env(safe-area-inset-bottom));
   background: var(--public-surface);
   box-shadow: var(--public-shadow);
   backdrop-filter: blur(14px) saturate(1.05);
 }
-body.public-site.atlas-page .coverage-layers {
-  padding: 14px 14px max(14px, env(safe-area-inset-bottom));
-}
 body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) {
   padding: 14px 14px max(14px, env(safe-area-inset-bottom));
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) > div:last-child {
   margin-inline: 12px;
@@ -975,6 +978,7 @@ body.public-site:not(.atlas-page) .sky-dot-matrix {
   position: absolute;
   z-index: 0;
   inset: 0;
+  transform: translateX(100px);
   width: auto;
   height: auto;
   max-width: none;

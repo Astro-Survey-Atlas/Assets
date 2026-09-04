@@ -3,6 +3,7 @@ import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 import type { SurveyLayerContextMenu, SurveyLayerInspection, SurveyLayerOverlapComponent, SurveyLayerState } from "./atlas/survey-layer-viewer.js";
 import { highestCommonCoverageOrder } from "./atlas/coverage-orders.js";
+import { coverageEscapeIntent } from "./atlas/coverage-interaction.js";
 import { coverageLayerTooltipPosition } from "./atlas/layer-panel-layout.js";
 import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-layout.js";
 import { joinUnique, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch } from "./overlap-download.js";
@@ -1802,6 +1803,9 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
     overlapDetailsCache.clear();
     coverageDots?.setOverlapMode(false);
     coverageDots?.setActiveOverlapComponent(null);
+    // Leave overlap on the canonical centered data view. This also clears any
+    // stale component/cell focus without changing the checked layer set.
+    coverageDots?.resetView();
     updateOverlapHud(null);
     const panel = byId("coverage-detail-panel");
     panel.hidden = true;
@@ -2519,12 +2523,9 @@ byId("dialog-close").addEventListener("click", () => byId<HTMLDialogElement>("su
 byId<HTMLDialogElement>("survey-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("survey-dialog").close(); });
 byId("preview-close").addEventListener("click", () => byId<HTMLDialogElement>("preview-dialog").close());
 byId<HTMLDialogElement>("preview-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("preview-dialog").close(); });
-function resetCoverageExperience(updateUrl = true): void {
+function clearCoverageFocus(openLayers = true): void {
   closeCoverageContextMenu();
   closeOverlapDrawer();
-  applyCoverageSelection([]);
-  deepLinkTarget = null;
-  if (updateUrl) syncSkyDeepLink();
   clearLayerCloseTimer();
   setOverlapMode(false);
   overlapController?.abort();
@@ -2536,6 +2537,7 @@ function resetCoverageExperience(updateUrl = true): void {
   coverageDots?.setOverlapMode(false);
   coverageDots?.setActiveOverlapComponent(null);
   updateOverlapHud(null);
+  if (openLayers) setCoverageLayersOpen(true);
   coverageDots?.clearSelection();
   coverageDots?.resetView();
   const panel = byId("coverage-detail-panel");
@@ -2548,6 +2550,13 @@ function resetCoverageExperience(updateUrl = true): void {
   setOverlapExpandVisible(false);
   updateCoverageInspector(null);
   updateCoverageReadout(null);
+}
+
+function resetCoverageExperience(updateUrl = true, preserveLayers = false): void {
+  if (!preserveLayers) applyCoverageSelection([]);
+  deepLinkTarget = null;
+  if (updateUrl) syncSkyDeepLink();
+  clearCoverageFocus(false);
 
   // Keep the standalone atlas page in its interactive state. The homepage
   // uses the same controller but must return to its introductory hero.
@@ -2707,31 +2716,14 @@ document.addEventListener("keydown", (event) => {
       lastEscapeAt = -Infinity;
       return;
     }
-    const doubleEscape = now - lastEscapeAt < 500;
-    lastEscapeAt = now;
-    closeCoverageContextMenu();
-    setOverlapMode(false);
-    overlapController?.abort();
-    overlapController = null;
-    activeOverlapSurveyIds = [];
-    activeOverlapComponents = [];
-    overlapEvidenceCache.clear();
-    overlapDetailsCache.clear();
-    coverageDots?.setOverlapMode(false);
-    coverageDots?.setActiveOverlapComponent(null);
-    updateOverlapHud(null);
-    const panel = byId("coverage-detail-panel");
-    panel.hidden = true;
-    panel.classList.remove("is-overlap-panel");
-    panel.style.removeProperty("left");
-    panel.style.removeProperty("top");
-    panel.style.removeProperty("right");
-    panel.style.removeProperty("width");
-    setOverlapExpandVisible(false);
-    setCoverageLayersOpen(true);
-    coverageDots?.clearSelection();
-    updateCoverageInspector(null);
-    if (doubleEscape) resetCoverageExperience();
+    const intent = coverageEscapeIntent({ overlapDrawerOpen: false, now, lastEscapeAt });
+    if (intent === "reset-experience") {
+      lastEscapeAt = -Infinity;
+      resetCoverageExperience(true, true);
+    } else {
+      lastEscapeAt = now;
+      clearCoverageFocus(true);
+    }
     return;
   }
   if (event.key.toLowerCase() === "r") {

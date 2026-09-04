@@ -13,3 +13,6 @@ artifacts/moc-source-probe.json
 .tmp-screens
 .tmp-ui
 tmp/*
+.assets-content/survey-editorial-v1.json
+.assets-content/survey-editorial-history.ndjson
+.assets-content/resource-package-publications-v1.json
