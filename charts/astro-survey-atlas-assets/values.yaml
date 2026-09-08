@@ -52,7 +52,7 @@ persistence:
   existingClaim: ""
   storageClass: ""
   accessModes: [ReadWriteOnce]
-  size: 256Mi
+  size: 1Gi
 
 contentPersistence:
   enabled: true
@@ -88,25 +88,33 @@ syncResources:
     cpu: 250m
     memory: 256Mi
 
-# Optional publication backend for the sync init container. When disabled,
-# release activation remains PVC-backed and uses the filesystem adapter.
+# Builds candidate release trees, packages deterministic archives and uploads
+# them to the object store. Shares the content PVC with the site so queued
+# publication runs survive restarts.
+releasePublisher:
+  enabled: true
+  pollSeconds: 5
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+# The init container always pulls one immutable release archive. Chart render
+# fails unless enabled/endpoint/bucket/credentialsSecret are all set; leave
+# defaults empty so accidental deploys without an overlay cannot start.
 objectStore:
-  enabled: false
-  # filesystem keeps local development self-contained; production should use
-  # pull so the init container consumes the immutable S3 current pointer.
-  mode: filesystem
+  enabled: true
   currentKey: public/current.json
   retainReleases: 2
-  # Cleanup can be slow on network PVCs. Keep it disabled for development;
-  # production release reviews may enable it explicitly.
   cleanup: false
   endpoint: ""
   bucket: ""
   prefix: ""
   region: us-east-1
   forcePathStyle: true
-  publicBaseUrl: ""
-  root: /data/object-store
   credentialsSecret:
     name: ""
     accessKeyIdKey: access-key-id

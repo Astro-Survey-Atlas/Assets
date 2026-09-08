@@ -10,7 +10,8 @@ import type { MocPublication } from "./moc-build.js";
 import type { ProductContent, ProductRecord } from "./products.js";
 
 const PACKAGE_SCHEMA_VERSION = 3;
-const PACKAGE_FORMAT_VERSION = "3.0.0";
+/** Baseline package format; dynamic packages increment the minor version per release. */
+const PACKAGE_VERSION_PATTERN = /^3\.(\d+)\.\d+$/;
 const STORE_SCHEMA_VERSION = 1;
 const ZIP_EPOCH = new Date("1980-01-01T00:00:00.000Z");
 const PACKAGE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -134,11 +135,23 @@ function expectedArchivePath(id: string, version: string): string {
   return `resource-packages/${id}/${version}/${id}.zip`;
 }
 
+function packageEntryKey(id: string, version: string): string {
+  return `${id}@${version}`;
+}
+
+function packageMinorVersion(version: string): number | undefined {
+  return PACKAGE_VERSION_PATTERN.exec(version)?.[1] === undefined ? undefined : Number(PACKAGE_VERSION_PATTERN.exec(version)![1]);
+}
+
+export function stableResourcePackageId(surveyId: string): string {
+  return `public-${slug(surveyId).slice(0, 40)}-footprints`;
+}
+
 function persistedPackageEntry(value: unknown): DynamicResourcePackageEntry | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const entry = value as Partial<DynamicResourcePackageEntry>;
   if (typeof entry.id !== "string" || entry.id.length > MAX_PACKAGE_ID_LENGTH || !PACKAGE_ID_PATTERN.test(entry.id)) return undefined;
-  if (entry.version !== PACKAGE_FORMAT_VERSION || typeof entry.version !== "string") return undefined;
+  if (typeof entry.version !== "string" || !PACKAGE_VERSION_PATTERN.test(entry.version)) return undefined;
   if (typeof entry.archivePath !== "string" || entry.archivePath !== expectedArchivePath(entry.id, entry.version) || entry.archivePath.includes("\\") || entry.archivePath.includes("\0")) return undefined;
   if (typeof entry.archiveUrl !== "string" || entry.archiveUrl !== `/api/v1/assets/${dynamicResourcePackageAssetId({ id: entry.id, version: entry.version })}/download`) return undefined;
   if (typeof entry.surveyId !== "string" || !entry.surveyId.trim() || entry.surveyId.length > 120) return undefined;
@@ -246,7 +259,7 @@ function packageSupport(layerBytes: readonly LayerBytes[], overviewOrder: number
   return Buffer.from(`${JSON.stringify({ schemaVersion: 1, generatedAt, coordinateFrame: "ICRS", nside: 2 ** overviewOrder, footprints }, null, 2)}\n`, "utf8");
 }
 
-function packageProvenance(layerBytes: readonly LayerBytes[], packageId: string, overviewOrder: number): Buffer {
+function packageProvenance(layerBytes: readonly LayerBytes[], packageId: string, packageVersion: string, overviewOrder: number): Buffer {
   const generatedAt = layerBytes.map((layer) => layer.publication.publishedAt).sort().at(-1) ?? new Date().toISOString();
   const layers = layerBytes.map(({ publication, product, query, preview, moc }) => ({
     layerId: publication.layerId,
@@ -266,7 +279,7 @@ function packageProvenance(layerBytes: readonly LayerBytes[], packageId: string,
       overviewOrder,
     },
   })).sort((left, right) => left.layerId.localeCompare(right.layerId));
-  return Buffer.from(`${JSON.stringify({ schemaVersion: 1, packageId, packageVersion: PACKAGE_FORMAT_VERSION, generatedAt, coordinateFrame: "ICRS", ordering: "NESTED", generator: { name: "astro-survey-atlas-assets", version: "1.0.0" }, layers }, null, 2)}\n`, "utf8");
+  return Buffer.from(`${JSON.stringify({ schemaVersion: 1, packageId, packageVersion, generatedAt, coordinateFrame: "ICRS", ordering: "NESTED", generator: { name: "astro-survey-atlas-assets", version: "1.0.0" }, layers }, null, 2)}\n`, "utf8");
 }
 
 async function zipEntries(entries: ReadonlyMap<string, Buffer>, destination: string): Promise<void> {
@@ -297,6 +310,7 @@ export function dynamicResourcePackageAssetId(entry: Pick<DynamicResourcePackage
  */
 export class DynamicResourcePackageStore {
   readonly contentRoot: string;
+  /** Keyed by `<id>@<version>`; one content lineage may carry several versions. */
   #entries = new Map<string, DynamicResourcePackageEntry>();
   #initialized = false;
 
@@ -314,8 +328,8 @@ export class DynamicResourcePackageStore {
         const seen = new Set<string>();
         for (const raw of value.packages) {
           const entry = persistedPackageEntry(raw);
-          if (!entry || seen.has(entry.id)) continue;
-          seen.add(entry.id);
+          if (!entry || seen.has(packageEntryKey(entry.id, entry.version))) continue;
+          seen.add(packageEntryKey(entry.id, entry.version));
           try {
             const archivePath = path.resolve(this.contentRoot, entry.archivePath);
             const relative = path.relative(this.contentRoot, archivePath);
@@ -323,7 +337,7 @@ export class DynamicResourcePackageStore {
             const details = await stat(archivePath);
             if (!details.isFile() || details.size !== entry.sizeBytes) continue;
             if (hash(await readFile(archivePath)) !== entry.sha256) continue;
-            this.#entries.set(entry.id, entry);
+            this.#entries.set(packageEntryKey(entry.id, entry.version), entry);
           } catch { /* stale generated package */ }
         }
       }
@@ -332,7 +346,20 @@ export class DynamicResourcePackageStore {
   }
 
   list(): Array<Omit<DynamicResourcePackageEntry, "archivePath" | "contentFingerprint">> {
-    return [...this.#entries.values()].sort((left, right) => left.id.localeCompare(right.id)).map(publicEntry);
+    return [...this.#entries.values()]
+      .sort((left, right) => left.id.localeCompare(right.id)
+        || (packageMinorVersion(left.version) ?? 0) - (packageMinorVersion(right.version) ?? 0))
+      .map(publicEntry);
+  }
+
+  /** Latest non-deprecated entry for a stable package ID, if any. */
+  latest(id: string): Omit<DynamicResourcePackageEntry, "archivePath" | "contentFingerprint"> | undefined {
+    const candidates = [...this.#entries.values()].filter((entry) => entry.id === id);
+    if (!candidates.length) return undefined;
+    const live = candidates.filter((entry) => !entry.deprecated);
+    const pool = live.length ? live : candidates;
+    const latest = pool.reduce((best, entry) => ((packageMinorVersion(entry.version) ?? -1) >= (packageMinorVersion(best.version) ?? -1) ? entry : best));
+    return publicEntry(latest);
   }
 
   assets(): DynamicResourcePackageAsset[] {
@@ -381,17 +408,22 @@ export class DynamicResourcePackageStore {
       source: publication.sourceSnapshotSha256,
       files: { moc: hash(moc), query, preview },
     })).sort((left, right) => left.layerId.localeCompare(right.layerId))));
-    const packageId = `public-${slug(surveyId).slice(0, 40)}-footprints-${fingerprint.slice(0, 16)}`;
-    const existingPackage = this.#entries.get(packageId);
-    if (existingPackage) {
-      if (existingPackage.contentFingerprint !== fingerprint) throw new Error(`Dynamic package identity collision: ${packageId}`);
-      return;
-    }
-    const packageDir = path.join(this.contentRoot, "resource-packages", packageId, PACKAGE_FORMAT_VERSION);
+    const packageId = stableResourcePackageId(surveyId);
+    const lineage = [...this.#entries.values()].filter((entry) => entry.id === packageId);
+    const existingPackage = lineage.find((entry) => entry.contentFingerprint === fingerprint && !entry.deprecated);
+    if (existingPackage) return;
+    // Stable package IDs carry incrementing content versions: static seed
+    // packages are 3.0.0, the first dynamic rebuild becomes 3.1.0, and every
+    // changed fingerprint bumps the minor version again.
+    const nextMinor = lineage.reduce((max, entry) => Math.max(max, packageMinorVersion(entry.version) ?? 0), 0) + 1;
+    const packageVersion = `3.${nextMinor}.0`;
+    const entryKey = packageEntryKey(packageId, packageVersion);
+    if (this.#entries.has(entryKey)) throw new Error(`Dynamic package version collision: ${packageId} ${packageVersion}`);
+    const packageDir = path.join(this.contentRoot, "resource-packages", packageId, packageVersion);
     await mkdir(packageDir, { recursive: true });
     const packagePath = path.join(packageDir, `${packageId}.zip`);
     const footprint = packageSupport(layers, overviewOrder);
-    const provenance = packageProvenance(layers, packageId, overviewOrder);
+    const provenance = packageProvenance(layers, packageId, packageVersion, overviewOrder);
     const first = layers[0]!;
     const releases = [...new Set(layers.map((layer) => layer.publication.releaseId))].sort();
     const releaseLabels = Object.fromEntries(layers.map((layer) => [layer.publication.releaseId, text(layer.product.publicRelease?.label, layer.publication.releaseId)]));
@@ -412,7 +444,7 @@ export class DynamicResourcePackageStore {
     const packageManifest = {
       schemaVersion: PACKAGE_SCHEMA_VERSION,
       id: packageId,
-      version: PACKAGE_FORMAT_VERSION,
+      version: packageVersion,
       surveyId,
       layers: layerRecords,
       files: [...support.entries()].map(([filePath, bytes]) => ({ path: filePath, sizeBytes: bytes.length, sha256: hash(bytes) })).sort((left, right) => left.path.localeCompare(right.path)),
@@ -448,8 +480,8 @@ export class DynamicResourcePackageStore {
       releases,
       releaseLabels,
       sources,
-      version: PACKAGE_FORMAT_VERSION,
-      archiveUrl: `/api/v1/assets/${dynamicResourcePackageAssetId({ id: packageId, version: PACKAGE_FORMAT_VERSION })}/download`,
+      version: packageVersion,
+      archiveUrl: `/api/v1/assets/${dynamicResourcePackageAssetId({ id: packageId, version: packageVersion })}/download`,
       sizeBytes: archiveBytes.length,
       sha256: archiveSha,
       updatedAt: latest,
@@ -464,7 +496,7 @@ export class DynamicResourcePackageStore {
       previous.deprecated = true;
       previous.replacedBy = [...new Set([...previous.replacedBy, packageId])];
     }
-    this.#entries.set(packageId, entry);
+    this.#entries.set(entryKey, entry);
   }
 
   private async persist(): Promise<void> {

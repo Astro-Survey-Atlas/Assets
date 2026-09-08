@@ -7,7 +7,7 @@ test("MOC source registry separates catalog presence from image footprints", asy
     coordinateFrame: string;
     ordering: string;
     sourcePolicy: { previewOrder: number; releaseRequires: string[] };
-    sources: Array<{ id: string; sourceKind: string; mocUrl: string; maxOrder: number; overviewOrder: number; coverageRole: string; dataOrigin: string; sourceTier: string; precision: string; licenseStatus: string; status: string; attributionUrl?: string }>;
+    sources: Array<{ id: string; surveyId?: string; releaseId?: string; sourceKind: string; mocUrl: string; maxOrder: number; overviewOrder: number; coverageRole: string; dataOrigin: string; sourceTier: string; precision: string; licenseStatus: string; status: string; attributionUrl?: string }>;
   };
   assert.equal(registry.coordinateFrame, "ICRS");
   assert.equal(registry.ordering, "NESTED");
@@ -38,6 +38,23 @@ test("MOC source registry separates catalog presence from image footprints", asy
   assert.equal(registry.sources.find((source) => source.id === "gaia-dr3-main-source")?.status, "acquired");
   assert.match(registry.sources.find((source) => source.id === "gaia-dr3-main-source")?.licenseStatus ?? "", /^reviewed-/);
   assert.equal(registry.sources.find((source) => source.id === "gaia-dr3-main-source")?.attributionUrl, "https://www.cosmos.esa.int/web/gaia-users/credits");
+  for (const [releaseId, sourceIds] of [
+    ["euclid-ero", [
+      "euclid-euclid-ero-ero-first-images-moc", "euclid-euclid-ero-ero-nisp-h-moc", "euclid-euclid-ero-ero-nisp-j-moc",
+      "euclid-euclid-ero-ero-nisp-y-moc", "euclid-euclid-ero-ero-vis-moc", "euclid-euclid-ero-ero-color-imaging-moc",
+    ]],
+    ["euclid-q1", [
+      "euclid-euclid-q1-euclid-q1-nisp-h-moc", "euclid-euclid-q1-euclid-q1-nisp-j-moc", "euclid-euclid-q1-euclid-q1-nisp-y-moc",
+      "euclid-euclid-q1-euclid-q1-vis-moc", "euclid-euclid-q1-euclid-q1-color-imaging-moc",
+    ]],
+  ] as const) {
+    for (const sourceId of sourceIds) {
+      const source = registry.sources.find((entry) => entry.id === sourceId);
+      assert.equal(source?.status, "acquired", `${sourceId} must have a locked snapshot`);
+      assert.equal(source?.surveyId, "euclid");
+      assert.equal(source?.releaseId, releaseId);
+    }
+  }
   for (const id of ["erass1-main-source-presence", "xmm-4xmm-dr13-source-presence", "planck-hfi-857-footprint"]) {
     assert.equal(registry.sources.find((source) => source.id === id)?.status, "candidate", `${id} remains blocked pending terms review`);
   }

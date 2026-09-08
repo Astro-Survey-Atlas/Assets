@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { readFile, stat, mkdir, rename, writeFile } from "node:fs/promises";
-import { readFileSync as readFileSyncFromFs } from "node:fs";
+import { createReadStream, createWriteStream, readFileSync as readFileSyncFromFs } from "node:fs";
+import { readFile, stat, mkdir, rename, writeFile, unlink } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
 import path from "node:path";
 
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { inferredPublicAssetDeliveryClass } from "./types.js";
 
 export interface ArtifactObject {
   key: string;
@@ -35,6 +36,8 @@ export interface ArtifactStore {
   get(key: string, range?: ByteRange): Promise<ArtifactObjectWithBody | null>;
   putImmutable(key: string, body: Uint8Array | string, options?: ArtifactPutOptions): Promise<ArtifactObject>;
   putMutable(key: string, body: Uint8Array | string, options?: ArtifactPutOptions): Promise<ArtifactObject>;
+  putFileImmutable(key: string, filePath: string, options?: ArtifactPutOptions): Promise<ArtifactObject>;
+  downloadToFile(key: string, filePath: string): Promise<ArtifactObject | null>;
 }
 
 export class ArtifactStoreError extends Error {
@@ -57,6 +60,16 @@ function bytesOf(body: Uint8Array | string): Buffer {
 
 function digest(body: Uint8Array): string {
   return createHash("sha256").update(body).digest("hex");
+}
+
+async function fileDigest(filePath: string): Promise<{ sizeBytes: number; sha256: string }> {
+  const hash = createHash("sha256");
+  let sizeBytes = 0;
+  for await (const chunk of createReadStream(filePath)) {
+    sizeBytes += chunk.length;
+    hash.update(chunk);
+  }
+  return { sizeBytes, sha256: hash.digest("hex") };
 }
 
 function cleanKey(key: string): string {
@@ -166,6 +179,42 @@ export class FilesystemArtifactStore implements ArtifactStore {
     await writeFile(metadataPath(filePath), JSON.stringify(options) + "\n");
     return { key: logical, sizeBytes: bytes.length, sha256: digest(bytes), ...(options.contentType ? { contentType: options.contentType } : {}) };
   }
+
+  async putFileImmutable(key: string, filePath: string, options: ArtifactPutOptions = {}): Promise<ArtifactObject> {
+    const logical = cleanKey(key);
+    const details = await fileDigest(filePath);
+    const existing = await this.head(logical);
+    if (existing) {
+      if (existing.sizeBytes === details.sizeBytes && existing.sha256 === details.sha256) return existing;
+      throw new ArtifactStoreConflictError(`Immutable object already exists with different bytes: ${logical}`);
+    }
+    const destination = this.filePath(logical);
+    await mkdir(path.dirname(destination), { recursive: true });
+    const temporary = `${destination}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      await pipeline(createReadStream(filePath), createWriteStream(temporary, { flags: "wx" }));
+      await rename(temporary, destination);
+    } catch (error) {
+      await unlink(temporary).catch(() => undefined);
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        const raced = await this.head(logical);
+        if (raced?.sizeBytes === details.sizeBytes && raced.sha256 === details.sha256) return raced;
+        throw new ArtifactStoreConflictError(`Immutable object was concurrently published with different bytes: ${logical}`);
+      }
+      throw error;
+    }
+    await writeFile(metadataPath(destination), JSON.stringify(options) + "\n", { flag: "w" });
+    return { key: logical, ...details, ...(options.contentType ? { contentType: options.contentType } : {}) };
+  }
+
+  async downloadToFile(key: string, filePath: string): Promise<ArtifactObject | null> {
+    const logical = cleanKey(key);
+    const existing = await this.head(logical);
+    if (!existing) return null;
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await pipeline(createReadStream(this.filePath(logical)), createWriteStream(filePath, { flags: "wx" }));
+    return existing;
+  }
 }
 
 export interface S3ArtifactStoreOptions {
@@ -256,6 +305,7 @@ export class S3ArtifactStore implements ArtifactStore {
     };
     try {
       const result = await this.#client.send(new PutObjectCommand(input));
+      await this.verifyRemoteObject(logical, bytes.length, sha256);
       return { key: logical, sizeBytes: bytes.length, sha256, ...(options.contentType ? { contentType: options.contentType } : {}), ...(result.ETag ? { etag: result.ETag.replace(/^"|"$/g, "") } : {}) };
     } catch (error) {
       if (!isPreconditionFailure(error)) throw new ArtifactStoreError(`S3 immutable PUT failed for ${logical}: ${error instanceof Error ? error.message : String(error)}`);
@@ -284,11 +334,116 @@ export class S3ArtifactStore implements ArtifactStore {
     }
   }
 
-  private async reconcileExisting(logical: string, existing: ArtifactObject, bytes: Buffer, sha256: string): Promise<ArtifactObject> {
-    if (existing.sizeBytes === bytes.length && existing.sha256 === sha256) return existing;
+  async putFileImmutable(key: string, filePath: string, options: ArtifactPutOptions = {}): Promise<ArtifactObject> {
+    const logical = cleanKey(key);
+    const details = await fileDigest(filePath);
+    const existing = await this.head(logical);
+    if (existing) return this.reconcileExisting(logical, existing, Buffer.alloc(0), details.sha256, details.sizeBytes);
+    try {
+      const result = await this.#client.send(new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: this.physicalKey(logical),
+        Body: createReadStream(filePath),
+        ContentLength: details.sizeBytes,
+        ...(options.contentType ? { ContentType: options.contentType } : {}),
+        ...(options.cacheControl ? { CacheControl: options.cacheControl } : {}),
+        Metadata: { ...(options.metadata ?? {}), sha256: details.sha256 },
+        IfNoneMatch: "*",
+      }));
+      await this.verifyRemoteObject(logical, details.sizeBytes, details.sha256);
+      return { key: logical, ...details, ...(options.contentType ? { contentType: options.contentType } : {}), ...(result.ETag ? { etag: result.ETag.replace(/^"|"$/g, "") } : {}) };
+    } catch (error) {
+      if (!isPreconditionFailure(error)) throw new ArtifactStoreError(`S3 immutable file PUT failed for ${logical}: ${error instanceof Error ? error.message : String(error)}`);
+      const raced = await this.head(logical);
+      if (!raced) throw new ArtifactStoreError(`S3 rejected immutable file PUT but the object is not readable: ${logical}`);
+      return this.reconcileExisting(logical, raced, Buffer.alloc(0), details.sha256, details.sizeBytes);
+    }
+  }
+
+  async downloadToFile(key: string, filePath: string): Promise<ArtifactObject | null> {
+    const logical = cleanKey(key);
+    const existing = await this.head(logical);
+    if (!existing) return null;
+    await mkdir(path.dirname(filePath), { recursive: true });
+    try {
+      const result = await this.#client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.physicalKey(logical) }));
+      if (!result.Body) throw new ArtifactStoreError(`S3 object has no readable body: ${logical}`);
+      await pipeline(Readable.from(result.Body as AsyncIterable<Uint8Array>), createWriteStream(filePath, { flags: "wx" }));
+      const details = await fileDigest(filePath);
+      if (details.sizeBytes !== existing.sizeBytes || (existing.sha256 && details.sha256 !== existing.sha256)) {
+        await unlink(filePath).catch(() => undefined);
+        throw new ArtifactStoreError(`S3 object checksum mismatch for ${logical}`, 409);
+      }
+      return { ...existing, ...details };
+    } catch (error) {
+      await unlink(filePath).catch(() => undefined);
+      if (error instanceof ArtifactStoreError) throw error;
+      throw new ArtifactStoreError(`S3 download failed for ${logical}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async verifyRemoteObject(logical: string, expectedSize: number, expectedSha256: string): Promise<void> {
+    const hash = createHash("sha256");
+    let size = 0;
+    const readWhole = async (): Promise<Buffer> => {
+      const result = await this.#client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.physicalKey(logical) }));
+      if (!result.Body) throw new Error("object has no readable body");
+      const chunks: Buffer[] = [];
+      for await (const chunk of result.Body as AsyncIterable<Uint8Array>) chunks.push(Buffer.from(chunk));
+      return Buffer.concat(chunks);
+    };
+    const readRange = async (start: number, end: number): Promise<Buffer> => {
+      const result = await this.#client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.physicalKey(logical), Range: `bytes=${start}-${end}` }));
+      if (!result.Body) throw new Error("object has no readable body");
+      const chunks: Buffer[] = [];
+      for await (const chunk of result.Body as AsyncIterable<Uint8Array>) chunks.push(Buffer.from(chunk));
+      const bytes = Buffer.concat(chunks);
+      if (bytes.length !== end - start + 1) throw new Error(`range read returned ${bytes.length} bytes, expected ${end - start + 1}`);
+      return bytes;
+    };
+    const retry = async (operation: () => Promise<Buffer>, label: string): Promise<Buffer> => {
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= 4; attempt += 1) {
+        try {
+          return await operation();
+        } catch (error) {
+          lastError = error;
+          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+        }
+      }
+      throw new ArtifactStoreError(`S3 read-after-write verification failed for ${logical} (${label}): ${lastError instanceof Error ? lastError.message : String(lastError)}`, 503);
+    };
+    try {
+      if (expectedSize <= 8 * 1024 * 1024) {
+        const bytes = await retry(readWhole, "full read");
+        size = bytes.length;
+        hash.update(bytes);
+      } else {
+        const chunkSize = 8 * 1024 * 1024;
+        for (let start = 0; start < expectedSize; start += chunkSize) {
+          const end = Math.min(start + chunkSize, expectedSize) - 1;
+          const bytes = await retry(() => readRange(start, end), `range ${start}-${end}`);
+          size += bytes.length;
+          hash.update(bytes);
+        }
+      }
+      if (size !== expectedSize || hash.digest("hex") !== expectedSha256) {
+        throw new ArtifactStoreError(`S3 read-after-write verification failed for ${logical}`, 409);
+      }
+    } catch (error) {
+      if (error instanceof ArtifactStoreError) throw error;
+      throw new ArtifactStoreError(`S3 read-after-write verification failed for ${logical}: ${error instanceof Error ? error.message : String(error)}`, 409);
+    }
+  }
+
+  private async reconcileExisting(logical: string, existing: ArtifactObject, bytes: Buffer, sha256: string, expectedSize = bytes.length): Promise<ArtifactObject> {
+    if (existing.sizeBytes === expectedSize && existing.sha256 === sha256) {
+      await this.verifyRemoteObject(logical, expectedSize, sha256);
+      return existing;
+    }
     if (!existing.sha256) {
-      const fetched = await this.get(logical);
-      if (fetched && fetched.body.length === bytes.length && digest(fetched.body) === sha256) return { ...existing, sha256 };
+      await this.verifyRemoteObject(logical, expectedSize, sha256);
+      return { ...existing, sha256 };
     }
     throw new ArtifactStoreConflictError(`Immutable object already exists with different bytes: ${logical}`);
   }
@@ -385,64 +540,43 @@ export function createArtifactStoreFromProcess(environment: NodeJS.ProcessEnv = 
   return createArtifactStore(artifactStoreEnvironmentFromProcess(environment), fallbackRoot);
 }
 
-export interface PublishedRelease {
-  schemaVersion: 1;
+export interface ReleaseArchiveDescriptor {
   bundle: { id: string; sha256: string };
-  manifestKey: string;
+  archivePath: string;
+  archiveSizeBytes: number;
+  archiveSha256: string;
+}
+
+export interface PublishedReleaseArchive {
+  schemaVersion: 2;
+  bundle: { id: string; sha256: string };
+  archiveKey: string;
+  archiveSizeBytes: number;
+  archiveSha256: string;
   currentKey: string;
-  runtimeCount: number;
-  evidenceCount: number;
   publishedAt: string;
 }
 
-interface ReleaseRecord {
-  id: string;
-  path: string;
-  sizeBytes: number;
-  sha256: string;
-  mediaType?: string;
-  deliveryClass?: "runtime" | "evidence";
-  [key: string]: unknown;
-}
-
-function releaseDeliveryClass(record: ReleaseRecord): "runtime" | "evidence" {
-  if (inferredPublicAssetDeliveryClass(record) === "evidence") return "evidence";
-  return record.deliveryClass ?? "runtime";
-}
-
-function objectKeyFor(record: ReleaseRecord, bundle: { id: string; sha256: string }): string {
-  const base = releaseDeliveryClass(record) === "evidence" ? "evidence" : "public/releases";
-  return `${base}/${cleanKey(bundle.id)}/${bundle.sha256}/${cleanKey(record.path)}`;
-}
-
-/** Publish a checked-in release into immutable public/evidence prefixes. */
-export async function publishReleaseBundle(sourceRoot: string, store: ArtifactStore, options: { currentKey?: string } = {}): Promise<PublishedRelease> {
-  const root = path.resolve(sourceRoot);
-  const releaseManifestPath = path.join(root, "artifacts", "public-survey-footprints", "release-manifest.json");
-  const manifest = JSON.parse(await readFile(releaseManifestPath, "utf8")) as { schemaVersion: number; generatedAt: string; bundle: { id: string; sha256: string }; files: ReleaseRecord[] };
-  if (manifest.schemaVersion !== 1 || !manifest.bundle?.id || !/^[a-f0-9]{64}$/.test(manifest.bundle.sha256) || !Array.isArray(manifest.files)) throw new ArtifactStoreError("Unsupported public release manifest", 400);
-  const objects: Array<ReleaseRecord & { objectKey: string }> = [];
-  let runtimeCount = 0;
-  let evidenceCount = 0;
-  for (const record of manifest.files) {
-    if (!record.id || !record.path || !Number.isSafeInteger(record.sizeBytes) || !/^[a-f0-9]{64}$/.test(record.sha256)) throw new ArtifactStoreError(`Invalid release asset record: ${record.id}`, 400);
-    const filePath = path.resolve(root, record.path);
-    const relative = path.relative(root, filePath);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) throw new ArtifactStoreError(`Release asset escapes source root: ${record.path}`, 400);
-    const bytes = await readFile(filePath);
-    if (bytes.length !== record.sizeBytes || digest(bytes) !== record.sha256) throw new ArtifactStoreError(`Release asset checksum mismatch: ${record.id}`, 409);
-    const deliveryClass = releaseDeliveryClass(record);
-    if (deliveryClass === "evidence") evidenceCount += 1; else runtimeCount += 1;
-    const objectKey = objectKeyFor(record, manifest.bundle);
-    await store.putImmutable(objectKey, bytes, { contentType: record.mediaType });
-    objects.push({ ...record, deliveryClass, objectKey });
-  }
-  const releaseBase = `public/releases/${cleanKey(manifest.bundle.id)}/${manifest.bundle.sha256}`;
-  const manifestKey = `${releaseBase}/release-manifest.json`;
-  const publishedManifest = { ...manifest, files: objects, objectStorage: { manifestKey, runtimeCount, evidenceCount } };
-  await store.putImmutable(manifestKey, `${JSON.stringify(publishedManifest, null, 2)}\n`, { contentType: "application/json; charset=utf-8", cacheControl: "public, max-age=31536000, immutable" });
+/** Publish one immutable release archive and advance the current pointer last. */
+export async function publishReleaseArchive(descriptor: ReleaseArchiveDescriptor, store: ArtifactStore, options: { currentKey?: string } = {}): Promise<PublishedReleaseArchive> {
+  if (!descriptor.bundle?.id || !/^[a-f0-9]{64}$/.test(descriptor.bundle.sha256)) throw new ArtifactStoreError("Invalid release bundle identity", 400);
+  if (!Number.isSafeInteger(descriptor.archiveSizeBytes) || descriptor.archiveSizeBytes < 1 || !/^[a-f0-9]{64}$/.test(descriptor.archiveSha256)) throw new ArtifactStoreError("Invalid release archive checksum", 400);
+  const archiveKey = `public/releases/${cleanKey(descriptor.bundle.id)}/${descriptor.bundle.sha256}/release.tar.gz`;
+  const uploaded = await store.putFileImmutable(archiveKey, descriptor.archivePath, {
+    contentType: "application/gzip",
+    cacheControl: "public, max-age=31536000, immutable",
+  });
+  if (uploaded.sizeBytes !== descriptor.archiveSizeBytes || uploaded.sha256 !== descriptor.archiveSha256) throw new ArtifactStoreError("Published release archive failed read-after-write verification", 409);
   const currentKey = options.currentKey ?? "public/current.json";
   const publishedAt = new Date().toISOString();
-  await store.putMutable(currentKey, `${JSON.stringify({ schemaVersion: 1, bundle: manifest.bundle, manifestKey, publishedAt })}\n`, { contentType: "application/json; charset=utf-8", cacheControl: "no-cache" });
-  return { schemaVersion: 1, bundle: manifest.bundle, manifestKey, currentKey, runtimeCount, evidenceCount, publishedAt };
+  const pointer = {
+    schemaVersion: 2 as const,
+    bundle: descriptor.bundle,
+    archiveKey,
+    archiveSizeBytes: descriptor.archiveSizeBytes,
+    archiveSha256: descriptor.archiveSha256,
+    publishedAt,
+  };
+  await store.putMutable(currentKey, `${JSON.stringify(pointer, null, 2)}\n`, { contentType: "application/json; charset=utf-8", cacheControl: "no-cache" });
+  return { ...pointer, currentKey };
 }

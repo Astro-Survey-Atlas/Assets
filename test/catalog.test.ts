@@ -12,25 +12,46 @@ test("release catalog verifies every public file and bundle digest", async () =>
   const catalog = await loadCatalog(projectRoot);
   assert.equal(catalog.manifest.schemaVersion, 1);
   assert.equal(catalog.manifest.statistics.packages, 15);
-  assert.equal(catalog.manifest.statistics.rawMocFiles, 50);
-  assert.equal(catalog.manifest.statistics.acquired, 39);
+  assert.equal(catalog.manifest.statistics.rawMocFiles, 87);
+  assert.equal(catalog.manifest.statistics.acquired, 111);
   assert.equal(catalog.files.size, catalog.manifest.files.length);
   assert.ok(catalog.manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)));
 });
 
-test("CSST release publishes reviewed MOC, geometry and complete evidence", async () => {
+test("release catalog labels projections with their locked order", async () => {
+  const catalog = await loadCatalog(projectRoot, false);
+  for (const order of [5, 7]) {
+    const entries = catalog.manifest.files.filter((entry) => entry.kind === "geometry" && entry.path.endsWith(`/query-order${order}.json`));
+    assert.ok(entries.length > 0, `missing order-${order} query projections`);
+    for (const entry of entries) {
+      assert.match(entry.id, new RegExp(`-query-order${order}$`));
+      assert.match(entry.label, new RegExp(`order-${order} query projection`));
+      assert.match(entry.downloadName, new RegExp(`query-order${order}\\.json$`));
+    }
+  }
+});
+
+test("CSST release publishes reviewed products and excludes warehouse evidence", async () => {
   const catalog = await loadCatalog(projectRoot, false);
   const files = catalog.manifest.files.filter((entry) => entry.surveyId === "csst");
   const ids = new Set(files.map((entry) => entry.id));
   for (const id of [
-    "csst-coverage-job-snapshot", "csst-provenance", "csst-run-statistics", "csst-sample-report",
-    "csst-wcs-geometry-summary", "csst-w1-display-footprint-nside16", "csst-w1-healpix-order8", "csst-w1-image-extent-moc-order8",
+    "csst-w1-display-footprint-nside16", "csst-w1-healpix-order8", "csst-w1-image-extent-moc-order8",
     "package-public-csst-footprints-3-0-0",
   ]) assert.ok(ids.has(id), `missing CSST release asset: ${id}`);
+  for (const id of [
+    "csst-coverage-job-snapshot", "csst-provenance", "csst-run-statistics", "csst-sample-report",
+    "csst-wcs-geometry-summary",
+  ]) assert.equal(ids.has(id), false, `warehouse evidence must stay off the public release: ${id}`);
   assert.equal(ids.has("csst-input-manifest"), false, "the 205 MB input manifest belongs on evidence storage, not the public release allowlist");
-  for (const band of ["w2", "w3", "w4"]) for (const suffix of [
-    "coverage-job-snapshot", "layer-provenance", "moc", "normalized-scan", "preview-order4", "provenance", "query-order8", "run-statistics", "sample-report", "statistics",
-  ]) assert.ok(ids.has(`csst-${band}-${suffix}`) || ids.has(`layer-csst-sim-${band}-image-extent-${suffix}`), `missing CSST ${band.toUpperCase()} release asset: ${suffix}`);
+  for (const band of ["w2", "w3", "w4"]) {
+    for (const suffix of ["moc", "preview-order4", "query-order8", "statistics"]) {
+      assert.ok(ids.has(`csst-${band}-${suffix}`) || ids.has(`layer-csst-sim-${band}-image-extent-${suffix}`), `missing CSST ${band.toUpperCase()} release asset: ${suffix}`);
+    }
+    for (const suffix of ["coverage-job-snapshot", "layer-provenance", "normalized-scan", "provenance", "run-statistics", "sample-report"]) {
+      assert.equal(ids.has(`csst-${band}-${suffix}`) || ids.has(`layer-csst-sim-${band}-image-extent-${suffix}`), false, `warehouse evidence must stay off the public release: csst-${band}-${suffix}`);
+    }
+  }
   assert.ok(files.filter((entry) => entry.kind === "moc").length >= 4);
   assert.ok(files.filter((entry) => entry.kind === "moc").every((entry) => entry.mediaType === "application/fits"));
   for (const band of ["w2", "w3", "w4"]) {
@@ -38,6 +59,16 @@ test("CSST release publishes reviewed MOC, geometry and complete evidence", asyn
     assert.ok(files.some((entry) => entry.releaseId === releaseId && entry.kind === "moc"), `missing ${band.toUpperCase()} MOC`);
     assert.ok(files.filter((entry) => entry.releaseId === releaseId && entry.kind !== "package").every((entry) => entry.product === `${band.toUpperCase()} simulated wide-field images`));
   }
+});
+
+test("public release manifest and API projection expose no evidence records", async () => {
+  const catalog = await loadCatalog(projectRoot);
+  assert.equal(catalog.manifest.files.filter((entry) => entry.deliveryClass === "evidence").length, 0);
+  const projection = publicManifest(catalog);
+  assert.equal(projection.files.length, catalog.manifest.files.length);
+  assert.equal(projection.statistics.evidenceBytes, 0);
+  assert.ok(projection.files.every((entry) => entry.deliveryClass === "runtime"));
+  assert.ok(projection.files.every((entry) => !/\/(raw|csst-evidence)\//.test(entry.downloadUrl)));
 });
 
 test("public API projection hides filesystem paths and exposes stable downloads", async () => {

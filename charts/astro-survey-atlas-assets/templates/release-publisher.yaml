@@ -1,0 +1,104 @@
+{{- if .Values.releasePublisher.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "astro-survey-atlas-assets.fullname" . }}-release-publisher
+  labels:
+    {{- include "astro-survey-atlas-assets.labels" . | nindent 4 }}
+    app.kubernetes.io/component: release-publisher
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "astro-survey-atlas-assets.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: release-publisher
+  template:
+    metadata:
+      labels:
+        {{- include "astro-survey-atlas-assets.labels" . | nindent 8 }}
+        app.kubernetes.io/component: release-publisher
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: {{ toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: release-publisher
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["node", "dist/server/release-publisher-worker.js"]
+          env:
+            - name: ASSET_RELEASE_ROOT
+              value: /data/current
+            - name: ASSETS_CONTENT_ROOT
+              value: /var/lib/assets-content
+            - name: ASSETS_PUBLICATION_POLL_SECONDS
+              value: {{ .Values.releasePublisher.pollSeconds | quote }}
+            - name: ASSETS_OBJECT_STORE_CURRENT_KEY
+              value: {{ .Values.objectStore.currentKey | quote }}
+            - name: ASSETS_OBJECT_STORE_ENDPOINT
+              value: {{ .Values.objectStore.endpoint | quote }}
+            - name: ASSETS_OBJECT_STORE_BUCKET
+              value: {{ .Values.objectStore.bucket | quote }}
+            - name: ASSETS_OBJECT_STORE_PREFIX
+              value: {{ .Values.objectStore.prefix | quote }}
+            - name: ASSETS_OBJECT_STORE_REGION
+              value: {{ .Values.objectStore.region | quote }}
+            - name: ASSETS_OBJECT_STORE_FORCE_PATH_STYLE
+              value: {{ .Values.objectStore.forcePathStyle | quote }}
+            - name: ASSETS_OBJECT_STORE_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "objectStore.credentialsSecret.name is required for the release publisher" .Values.objectStore.credentialsSecret.name }}
+                  key: {{ .Values.objectStore.credentialsSecret.accessKeyIdKey | quote }}
+            - name: ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.objectStore.credentialsSecret.name }}
+                  key: {{ .Values.objectStore.credentialsSecret.secretAccessKeyKey | quote }}
+            {{- if .Values.objectStore.credentialsSecret.sessionTokenKey }}
+            - name: ASSETS_OBJECT_STORE_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.objectStore.credentialsSecret.name }}
+                  key: {{ .Values.objectStore.credentialsSecret.sessionTokenKey | quote }}
+                  optional: true
+            {{- end }}
+          resources: {{ toYaml .Values.releasePublisher.resources | nindent 12 }}
+          securityContext: {{ toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: assets
+              mountPath: /data
+              readOnly: true
+            - name: content
+              mountPath: /var/lib/assets-content
+              readOnly: false
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: assets
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-assets" (include "astro-survey-atlas-assets.fullname" .)) .Values.persistence.existingClaim }}
+        - name: content
+          {{- if .Values.contentPersistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-content" (include "astro-survey-atlas-assets.fullname" .)) .Values.contentPersistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

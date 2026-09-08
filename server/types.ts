@@ -19,14 +19,17 @@ export interface PublicAssetRecord {
 }
 
 /**
- * Infer the delivery boundary from a release record. Explicit evidence is
- * still allowed for generated records, but source snapshots must never be
- * promoted to the public runtime class by a stale or hand-edited manifest.
+ * Infer the delivery boundary from a release record. Evidence-class source
+ * material (raw scans, job snapshots, run statistics, provenance, ledgers)
+ * must never be promoted to the public runtime class by a stale or
+ * hand-edited manifest. Official upstream survey inventories that runtime
+ * features read directly (DESI tile tables) are the only raw-path carve-out.
  */
 export function inferredPublicAssetDeliveryClass(record: Pick<PublicAssetRecord, "path"> & Partial<Pick<PublicAssetRecord, "kind">>): "runtime" | "evidence" {
   const normalizedPath = record.path.replaceAll("\\", "/").toLowerCase();
-  if (/(^|\/)(csst|raw|evidence)(\/|$)/.test(normalizedPath)
-    || /(?:input-manifest|normalized-scan|task-snapshot|coverage-job-snapshot|scan[-_]error|run-statistics|sample-report)/.test(normalizedPath)
+  if (/(^|\/)desi-(dr1-tiles-iron|edr-tiles-fuji)\.fits$/.test(normalizedPath)) return "runtime";
+  if (/(^|\/)(raw|evidence)(\/|$)/.test(normalizedPath)
+    || /(?:input-manifest|normalized-scan|task-snapshot|coverage-job-snapshot|wcs-geometry-summary|scan[-_]error|run-statistics|sample-report)/.test(normalizedPath)
     || record.kind === "provenance" || record.kind === "ledger") return "evidence";
   return "runtime";
 }

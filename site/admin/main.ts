@@ -510,11 +510,15 @@ function discardEditorialChanges(): void {
   toast("未保存的目录修改已撤销");
 }
 
-type AdminStep = "sources" | "tasks" | "review";
+type AdminStep = "sources" | "tasks" | "review" | "releases";
 let activeStep: AdminStep = "sources";
 
 function setAdminStep(step: AdminStep, replace = false): void {
   activeStep = step;
+  if (step === "releases" && !byId("admin-workspace").hidden) {
+    void loadPublicationPlan();
+    void loadPublicationRuns();
+  }
   document.querySelectorAll<HTMLElement>("[data-admin-panel]").forEach((panel) => { panel.hidden = panel.dataset.adminPanel !== step; });
   document.querySelectorAll<HTMLButtonElement>("[data-admin-step]").forEach((button) => {
     const selected = button.dataset.adminStep === step;
@@ -528,7 +532,7 @@ function setAdminStep(step: AdminStep, replace = false): void {
 
 function readAdminStep(): AdminStep {
   const value = location.hash.slice(1);
-  return value === "tasks" || value === "review" ? value : "sources";
+  return value === "tasks" || value === "review" || value === "releases" ? value : "sources";
 }
 
 function modalityIcon(modality?: string): string {
@@ -1479,6 +1483,8 @@ async function refresh(): Promise<void> {
   byId("step-tasks-count").textContent = String(taskCount);
   byId("step-review-count").textContent = reviewSurveys.status === "fulfilled" ? String(reviewSurveys.value.surveys.length) : "unknown";
   byId("admin-status").textContent = `${connectorCount} CONNECTORS · ${taskCount} TASKS · ${mocCount} DISCOVERY · ${buildCount} BUILDS · ${productCount} PRODUCTS · ${coverageState} · ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+  void loadPublicationPlan();
+  void loadPublicationRuns();
   })().catch((error) => {
     toast(error instanceof Error ? error.message : "刷新失败", true);
     byId("admin-status").textContent = "REFRESH FAILED";
@@ -1488,6 +1494,183 @@ async function refresh(): Promise<void> {
     schedulePolling();
   });
   return refreshInFlight;
+}
+
+interface PublicationPlanSurvey {
+  surveyId: string;
+  publishedLayers: number;
+  changedProducts: number;
+  currentPackage?: { id: string; version: string } | null;
+  changed: boolean;
+  blockers: string[];
+  selectable: boolean;
+}
+
+interface PublicationPlan {
+  planId: string;
+  baselineBundle: { id: string; sha256: string };
+  surveys: PublicationPlanSurvey[];
+  changedSurveyIds: string[];
+  dynamicPackages: number;
+  dynamicLayers: number;
+  createdAt: string;
+}
+
+interface PublicationRun {
+  runId: string;
+  planId: string;
+  surveyIds: string[];
+  status: string;
+  requestedBy?: string;
+  createdAt: string;
+  finishedAt?: string;
+  bundle?: { id: string; sha256: string };
+  archiveKey?: string;
+  archiveSha256?: string;
+  files?: number;
+  packages?: number;
+  error?: string;
+}
+
+let publicationPlan: PublicationPlan | null = null;
+const selectedPublicationSurveys = new Set<string>();
+let publicationRuns: PublicationRun[] = [];
+let publicationPollTimer: number | undefined;
+
+function publicationStatusLabel(status: string): string {
+  const labels: Record<string, string> = { queued: "排队中", building: "构建中", uploading: "上传中", published: "已发布", failed: "失败" };
+  return labels[status] ?? status;
+}
+
+async function loadPublicationPlan(): Promise<void> {
+  try {
+    const { plan } = await api<{ plan: PublicationPlan }>("/api/v1/admin/publication-plan");
+    publicationPlan = plan;
+    for (const surveyId of [...selectedPublicationSurveys]) {
+      if (!plan.surveys.some((survey) => survey.surveyId === surveyId && survey.selectable)) selectedPublicationSurveys.delete(surveyId);
+    }
+    renderPublicationPlan();
+  } catch (error) {
+    publicationPlan = null;
+    byId("publication-plan-list").innerHTML = `<tr><td colspan="7" class="resource-empty">${escapeText(error instanceof Error ? error.message : "发布计划读取失败")}</td></tr>`;
+    byId("publication-plan-summary").textContent = "发布计划不可用";
+  }
+}
+
+function renderPublicationPlan(): void {
+  const plan = publicationPlan;
+  if (!plan) return;
+  const changed = plan.surveys.filter((survey) => survey.changed);
+  byId("step-releases-count").textContent = String(changed.length);
+  byId("publication-plan-summary").textContent = `${plan.surveys.length} 巡天 · ${changed.length} 有变化 · ${plan.dynamicPackages} 资源包 · ${plan.dynamicLayers} 图层 · 基线 ${plan.baselineBundle.id.slice(0, 24)}…`;
+  const body = byId("publication-plan-list");
+  if (plan.surveys.length === 0) {
+    body.innerHTML = `<tr><td colspan="7" class="resource-empty">当前没有动态发布数据</td></tr>`;
+    updatePublicationPublishButton();
+    return;
+  }
+  body.innerHTML = plan.surveys.map((survey) => {
+    const checked = selectedPublicationSurveys.has(survey.surveyId);
+    const checkbox = survey.selectable
+      ? `<input type="checkbox" data-publication-survey="${escapeText(survey.surveyId)}" ${checked ? "checked" : ""} />`
+      : `<input type="checkbox" disabled />`;
+    const blockers = survey.blockers.length ? survey.blockers.map((blocker) => escapeText(blocker)).join("<br>") : "—";
+    return `<tr${survey.changed ? ' data-changed="true"' : ""}><td>${checkbox}</td><td>${escapeText(survey.surveyId)}</td><td>${survey.publishedLayers}</td><td>${survey.changedProducts}</td><td>${survey.currentPackage ? `${escapeText(survey.currentPackage.id)}<br><small>${escapeText(survey.currentPackage.version)}</small>` : "—"}</td><td>${survey.changed ? "是" : "否"}</td><td>${blockers}</td></tr>`;
+  }).join("");
+  body.querySelectorAll<HTMLInputElement>("[data-publication-survey]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) selectedPublicationSurveys.add(checkbox.dataset.publicationSurvey ?? "");
+      else selectedPublicationSurveys.delete(checkbox.dataset.publicationSurvey ?? "");
+      updatePublicationPublishButton();
+    });
+  });
+  updatePublicationPublishButton();
+}
+
+function updatePublicationPublishButton(): void {
+  byId<HTMLButtonElement>("publication-publish-button").disabled = selectedPublicationSurveys.size === 0;
+}
+
+async function publishSelectedSurveys(): Promise<void> {
+  const plan = publicationPlan;
+  if (!plan || selectedPublicationSurveys.size === 0) return;
+  const button = byId<HTMLButtonElement>("publication-publish-button");
+  button.disabled = true;
+  try {
+    const { run } = await api<{ run: PublicationRun }>("/api/v1/admin/publications", {
+      method: "POST",
+      body: JSON.stringify({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: [...selectedPublicationSurveys] }),
+    });
+    selectedPublicationSurveys.clear();
+    toast(`发布任务已提交：${run.runId}`);
+    publicationRuns = [run, ...publicationRuns];
+    renderPublicationRuns();
+    schedulePublicationPolling(run.runId);
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "发布提交失败", true);
+  } finally {
+    updatePublicationPublishButton();
+  }
+}
+
+async function loadPublicationRuns(): Promise<void> {
+  try {
+    const { runs } = await api<{ runs: PublicationRun[] }>("/api/v1/admin/publications");
+    publicationRuns = Array.isArray(runs) ? runs : [];
+    renderPublicationRuns();
+    const active = publicationRuns.find((run) => run.status === "queued" || run.status === "building" || run.status === "uploading");
+    if (active) schedulePublicationPolling(active.runId);
+  } catch (error) {
+    byId("publication-run-list").innerHTML = `<tr><td colspan="7" class="resource-empty">${escapeText(error instanceof Error ? error.message : "发布记录读取失败")}</td></tr>`;
+  }
+}
+
+function renderPublicationRuns(): void {
+  const body = byId("publication-run-list");
+  if (publicationRuns.length === 0) {
+    body.innerHTML = `<tr><td colspan="7" class="resource-empty">尚未提交发布任务</td></tr>`;
+    return;
+  }
+  body.innerHTML = publicationRuns.map((run) => `<tr><td>${escapeText(run.runId)}</td><td>${escapeText(publicationStatusLabel(run.status))}</td><td>${escapeText(run.surveyIds.join(", "))}</td><td>${run.bundle ? `${escapeText(run.bundle.id)}<br><small>${escapeText(run.bundle.sha256.slice(0, 16))}…</small>` : "—"}</td><td>${run.files ?? "--"}</td><td>${escapeText(formatDate(run.createdAt))}</td><td><button type="button" class="admin-quiet" data-publication-run="${escapeText(run.runId)}">详情</button></td></tr>`).join("");
+  body.querySelectorAll<HTMLButtonElement>("[data-publication-run]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const run = publicationRuns.find((item) => item.runId === button.dataset.publicationRun);
+      if (run) openPublicationRun(run);
+    });
+  });
+}
+
+function openPublicationRun(run: PublicationRun): void {
+  byId("publication-run-title").textContent = `发布详情 · ${run.runId}`;
+  const facts = [
+    ["状态", publicationStatusLabel(run.status)],
+    ["巡天", run.surveyIds.join(", ")],
+    ["Bundle", run.bundle ? `${run.bundle.id} / ${run.bundle.sha256}` : "—"],
+    ["Archive", run.archiveKey ?? "—"],
+    ["Archive SHA-256", run.archiveSha256 ?? "—"],
+    ["文件 / 资源包", `${run.files ?? "--"} / ${run.packages ?? "--"}`],
+    ["提交时间", formatDate(run.createdAt)],
+    ["完成时间", formatDate(run.finishedAt)],
+    ["错误", run.error ?? "—"],
+  ];
+  byId("publication-run-detail").innerHTML = `<dl class="admin-context">${facts.map(([label, value]) => `<div><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`).join("")}</dl>`;
+  byId<HTMLDialogElement>("publication-run-dialog").showModal();
+}
+
+function schedulePublicationPolling(runId: string): void {
+  if (publicationPollTimer !== undefined) window.clearTimeout(publicationPollTimer);
+  publicationPollTimer = window.setTimeout(async () => {
+    try {
+      const { run } = await api<{ run: PublicationRun }>(`/api/v1/admin/publications/${encodeURIComponent(runId)}`);
+      publicationRuns = publicationRuns.map((item) => (item.runId === run.runId ? run : item));
+      renderPublicationRuns();
+      if (run.status === "published") toast("Release archive 已发布");
+      else if (run.status === "failed") toast(run.error ? `发布失败：${run.error}` : "发布失败", true);
+      else schedulePublicationPolling(runId);
+    } catch {
+      schedulePublicationPolling(runId);
+    }
+  }, 4000);
 }
 
 function formValue(form: HTMLFormElement, name: string): string {
@@ -1577,6 +1760,9 @@ applyAdminTheme(storedAdminTheme() ?? adminSystemTheme());
 byId("theme-toggle").addEventListener("click", () => applyAdminTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark", true));
 window.matchMedia?.("(prefers-color-scheme: light)").addEventListener("change", () => { if (!storedAdminTheme()) applyAdminTheme(adminSystemTheme()); });
 byId("refresh-button").addEventListener("click", () => void refresh());
+byId("publication-refresh-button").addEventListener("click", () => { void loadPublicationPlan(); void loadPublicationRuns(); });
+byId("publication-publish-button").addEventListener("click", () => void publishSelectedSurveys());
+byId("publication-run-close").addEventListener("click", () => byId<HTMLDialogElement>("publication-run-dialog").close());
 byId("catalog-reload-button").addEventListener("click", (event) => void reloadCatalogRuntime(event.currentTarget as HTMLButtonElement));
 byId<HTMLFormElement>("connector-form").addEventListener("submit", (event) => void submitConnector(event));
 byId<HTMLFormElement>("task-form").addEventListener("submit", (event) => void submitTask(event));

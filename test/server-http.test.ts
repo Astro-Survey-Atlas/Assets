@@ -60,7 +60,7 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   const catalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/assets`);
   assert.equal(catalogResponse.status, 200);
   const catalog = await catalogResponse.json() as { files: Array<{ id: string; mediaType: string; sizeBytes: number; sha256: string; downloadUrl: string; previewUrl?: string; previewMode?: "text" | "image" }> };
-  const provenance = catalog.files.find((entry) => entry.id === "provenance-release");
+  const provenance = catalog.files.find((entry) => entry.id === "manifest-canonical");
   assert.ok(provenance);
   assert.ok(provenance.previewUrl?.endsWith("/preview"));
 
@@ -68,7 +68,7 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.equal(range.status, 206);
   assert.equal(range.headers.get("content-length"), "32");
   assert.equal(range.headers.get("x-content-sha256"), provenance.sha256);
-  assert.match(range.headers.get("content-disposition") ?? "", /provenance\.json/);
+  assert.match(range.headers.get("content-disposition") ?? "", /survey-footprints\.json/);
   assert.equal((await range.arrayBuffer()).byteLength, 32);
 
   const preview = await fetch(`http://127.0.0.1:${port}${provenance.previewUrl}`);
@@ -263,7 +263,7 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
     surveys: Array<{ id: string; modalities: string[]; statistics: { publicProducts: number; acquired: number }; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; releases: Array<{ coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; products: Array<{ status: string; reason?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number } }> }>; assets: Array<{ surveyId?: string; downloadUrl: string }> }>;
     sharedAssets: Array<{ surveyId?: string; downloadUrl: string }>;
   };
-  assert.equal(surveys.surveys.length, 18);
+  assert.equal(surveys.surveys.length, 30);
   const csst = surveys.surveys.find((survey) => survey.id === "csst");
   assert.ok(csst);
   assert.deepEqual(csst.modalities.sort(), ["catalog", "imaging", "photometry", "simulation"]);
@@ -272,7 +272,8 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.equal(csst.releases[0]?.coverageOrders?.overviewOrders[0], 4);
   assert.ok(csst.coverageOrders?.availableOrders.includes(8));
   assert.deepEqual(csst.releases[1]?.products[0]?.coverage?.availableOrders, [4, 8]);
-  assert.ok(csst.assets.some((asset) => asset.downloadUrl.includes("csst-coverage-job-snapshot")));
+  assert.ok(csst.assets.some((asset) => asset.downloadUrl.includes("csst-w1-display-footprint-nside16")));
+  assert.ok(csst.assets.every((asset) => !/coverage-job-snapshot|normalized-scan|run-statistics|sample-report|wcs-geometry-summary/.test(asset.downloadUrl)));
   assert.ok(surveys.surveys.every((survey) => survey.modalities.length > 0 && survey.statistics.publicProducts > 0));
   assert.ok(surveys.surveys.every((survey) => survey.assets.every((asset) => asset.surveyId === survey.id && asset.downloadUrl.startsWith("/api/v1/assets/"))));
   assert.ok(surveys.sharedAssets.every((asset) => !asset.surveyId));
@@ -811,9 +812,9 @@ test("HTTP publication activates dynamic MOC assets and restores them after rest
   const packageCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/resource-packages/catalog.json`);
   assert.equal(packageCatalogResponse.status, 200);
   const packageCatalog = await packageCatalogResponse.json() as { packages: Array<{ id: string; surveyId: string; version: string; archiveUrl: string; sha256: string; sizeBytes: number }> };
-  const dynamicPackage = packageCatalog.packages.find((entry) => entry.surveyId === "euclid" && entry.id.startsWith("public-euclid-footprints-"));
+  const dynamicPackage = packageCatalog.packages.find((entry) => entry.surveyId === "euclid" && entry.id === "public-euclid-footprints" && (entry as { deprecated?: boolean }).deprecated !== true);
   assert.ok(dynamicPackage);
-  assert.equal(dynamicPackage.version, "3.0.0");
+  assert.equal(dynamicPackage.version, "3.1.0");
   const packageArchive = await fetch(`http://127.0.0.1:${port}${dynamicPackage.archiveUrl}`, { headers: { Range: "bytes=0-7" } });
   assert.equal(packageArchive.status, 206);
   assert.equal(packageArchive.headers.get("x-content-sha256"), dynamicPackage.sha256);

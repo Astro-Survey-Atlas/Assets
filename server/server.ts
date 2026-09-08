@@ -18,6 +18,8 @@ import { buildOverlapDetails, publicExternalUrl, publicLocator } from "./overlap
 import { resolveMocDiscoveryCandidate } from "./moc-discovery.js";
 import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
 import { DynamicResourcePackageStore, dynamicResourcePackageAssetId } from "./resource-package-publication.js";
+import { PublicReleasePublisher, PublicationConflictError } from "./public-release-publication.js";
+import { ContentArchiveError } from "./content-archive.js";
 import { buildPublicProductEvidence } from "./public-product-evidence.js";
 import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductVerificationStatus, PublicSurveyModality } from "./types.js";
 
@@ -255,6 +257,14 @@ await reloadRuntimeCoverage();
 const admin = new AssetsAdmin();
 const products = new ProductStore();
 await products.initialize(releaseRoot, coverageCatalog.layers);
+const publisher = new PublicReleasePublisher({
+  contentRoot,
+  baselineRoot: releaseRoot,
+  loadPublications: () => mocPublicationStore.list(),
+  publicationFile: (file) => mocPublicationStore.absolutePath(file),
+  loadPackages: dynamicResourcePackages,
+  loadProducts: () => products.list(),
+});
 const mocBuildService = new MocBuildService({
   store: mocBuildStore,
   evidenceRoot,
@@ -744,7 +754,8 @@ function buildPublicProductDossier(record: ProductRecord): PublicProductDossier 
   const previewAsset = assets.find((asset) => asset.record.kind === "geometry" && /preview/i.test(asset.record.id));
   const packageAsset = assets.find((asset) => asset.record.kind === "package");
   const provenanceAsset = assets.find((asset) => asset.record.kind === "provenance" && (!layer || asset.record.path.includes(`/layers/${layer.layerId}/`) || asset.record.id.includes(layer.layerId)));
-  const geometryAsset = assets.find((asset) => asset.record.kind === "geometry" && !/preview|query/i.test(asset.record.id));
+  const geometryAsset = (layer ? assets.find((asset) => asset.record.kind === "geometry" && asset.record.id === `layer-${layer.layerId}-preview-order4`) : undefined)
+    ?? assets.find((asset) => asset.record.kind === "geometry" && !/preview|query/i.test(asset.record.id));
   const statisticsAsset = assets.find((asset) => asset.record.kind === "metadata" && /statistics/i.test(asset.record.id));
   const precision: PublicProductDossier["coverage"]["precision"] = !layer
     ? "entrypoint-only"
@@ -984,6 +995,7 @@ async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<st
     .map(({ record }) => record)
     .filter((record) => record.kind === "package");
   const dynamicEntries = dynamicResourcePackages.list();
+  const dynamicIds = new Set(dynamicEntries.map((entry) => entry.id));
   const identities = new Set(document.packages.map((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return "";
     const entry = value as Record<string, unknown>;
@@ -1003,8 +1015,13 @@ async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<st
     const asset = dynamicAsset ?? packageAssets.find((candidate) => candidate.surveyId === surveyId
       && candidate.version === version
       && (!candidate.releaseId || releases.includes(candidate.releaseId)));
+    // A dynamic rebuild supersedes the static seed package with the same
+    // stable ID: keep the static entry visible but flag it as replaced.
+    const superseded = packageId !== undefined && dynamicIds.has(packageId)
+      && !dynamicEntries.some((dynamic) => dynamic.id === packageId && dynamic.version === version);
     return {
       ...entry,
+      ...(superseded ? { deprecated: true, replacedBy: [packageId] } : {}),
       ...(asset ? { archiveUrl: `/api/v1/assets/${encodeURIComponent(asset.id)}/download` } : {}),
     };
   });
@@ -1614,9 +1631,33 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     }
     const historyMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/history$/.exec(pathname);
     if (historyMatch?.[1] && request.method === "GET") return json(response, 200, { history: await products.history(decodeAdminPathSegment(historyMatch[1])) });
+    if (pathname === "/api/v1/admin/publication-plan" && request.method === "GET") {
+      return json(response, 200, { plan: await publisher.plan() });
+    }
+    if (pathname === "/api/v1/admin/publications" && request.method === "GET") {
+      return json(response, 200, { runs: await publisher.list() });
+    }
+    if (pathname === "/api/v1/admin/publications" && request.method === "POST") {
+      const body = await requestJsonBody(request);
+      const surveyIds = Array.isArray(body.surveyIds) ? body.surveyIds.filter((value): value is string => typeof value === "string") : [];
+      const run = await publisher.submit({
+        planId: typeof body.planId === "string" ? body.planId : "",
+        expectedBaselineSha256: typeof body.expectedBaselineSha256 === "string" ? body.expectedBaselineSha256 : "",
+        surveyIds,
+      }, adminFromRequest(request));
+      return json(response, 202, { run });
+    }
+    const publicationMatch = /^\/api\/v1\/admin\/publications\/([^/]+)$/.exec(pathname);
+    if (publicationMatch?.[1] && request.method === "GET") {
+      const run = await publisher.get(decodeAdminPathSegment(publicationMatch[1]));
+      if (!run) return json(response, 404, { error: "Publication run not found" });
+      return json(response, 200, { run });
+    }
     return json(response, 404, { error: "Admin endpoint not found" });
   } catch (error) {
-    if (error instanceof AdminHttpError || error instanceof KubernetesApiError) return json(response, error.statusCode, { error: error.message });
+    if (error instanceof AdminHttpError || error instanceof KubernetesApiError || error instanceof PublicationConflictError || error instanceof ContentArchiveError) {
+      return json(response, error.statusCode, { error: error.message });
+    }
     console.error("Assets admin request failed", error instanceof Error ? error.message : String(error));
     return json(response, 500, { error: "Internal server error" });
   }

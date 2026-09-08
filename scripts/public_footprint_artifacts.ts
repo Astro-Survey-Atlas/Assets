@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { lstat, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 const root = path.resolve(process.env.ASSET_WORKTREE_ROOT ?? process.cwd());
@@ -53,12 +53,13 @@ function resolveArtifact(relativePath: string): string {
   return absolute;
 }
 
-async function verifyRecord(record: FileRecord, label: string, base = artifactRoot): Promise<void> {
+async function verifyRecord(record: FileRecord, label: string, base = artifactRoot, containmentRoot: string = root): Promise<void> {
   if (!record?.path || !SHA256.test(record.sha256)) throw new Error(`Invalid ${label} file record`);
   const filePath = path.resolve(base, record.path);
-  const relative = path.relative(root, filePath);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`${label} escapes Assets root`);
-  const details = await stat(filePath);
+  const relative = path.relative(containmentRoot, filePath);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`${label} escapes its containment root`);
+  const details = await lstat(filePath);
+  if (details.isSymbolicLink()) throw new Error(`${label} must not be a symlink`);
   if (!details.isFile() || (record.sizeBytes !== undefined && details.size !== record.sizeBytes)) throw new Error(`${label} size mismatch`);
   if (await sha256(filePath) !== record.sha256) throw new Error(`${label} SHA-256 mismatch`);
 }
@@ -145,13 +146,33 @@ export async function validate(): Promise<PublicFootprintStatistics> {
   }>(path.join(artifactRoot, "packages", "catalog.json"));
   if (packageCatalog.schemaVersion !== 3 || packageCatalog.version !== "3.0.0") errors.push("Active package catalog must be Resource Package v3 (3.0.0)");
   const provenancePackages = new Map((provenance.files?.packages ?? []).map((entry) => [`${entry.id}@${entry.version}`, entry]));
+  const packageStagingRoot = process.env.ASSETS_PACKAGE_STAGING_ROOT ? path.resolve(process.env.ASSETS_PACKAGE_STAGING_ROOT) : undefined;
+  const expectedPackageArchives = new Set((packageCatalog.packages ?? []).map((entry) => path.basename(entry.archiveUrl)));
+  if (packageStagingRoot) {
+    const staged = (await readdir(packageStagingRoot)).filter((name) => name.endsWith(".zip"));
+    for (const name of staged) if (!expectedPackageArchives.has(name)) errors.push(`Unexpected staged package: ${name}`);
+    if (staged.length < expectedPackageArchives.size) errors.push(`Package staging root is missing archives (${staged.length}/${expectedPackageArchives.size} present)`);
+  }
   for (const entry of packageCatalog.packages ?? []) {
     if (!Array.isArray(entry.releases) || entry.releases.length === 0 || !entry.releases.every((release) => typeof release === "string" && release.length > 0)) errors.push(`Package catalog releases are invalid: ${entry.id}`);
     if (!Array.isArray(entry.sources) || entry.sources.length === 0) errors.push(`Package catalog sources are invalid: ${entry.id}`);
     if (!entry.releaseLabels || typeof entry.releaseLabels !== "object" || Array.isArray(entry.releaseLabels)) errors.push(`Package catalog release labels are invalid: ${entry.id}`);
     const record = provenancePackages.get(`${entry.id}@${entry.version}`);
     if (!record || record.sizeBytes !== entry.sizeBytes || record.sha256 !== entry.sha256) errors.push(`Package provenance mismatch: ${entry.id}@${entry.version}`);
-    try { await verifyRecord({ path: entry.archiveUrl, sizeBytes: entry.sizeBytes, sha256: entry.sha256 }, `package ${entry.id}`, path.join(artifactRoot, "packages")); } catch (error) { errors.push(String(error)); }
+    const stagedArchive = packageStagingRoot !== undefined;
+    const archivePath = stagedArchive
+      ? path.join(packageStagingRoot, path.basename(entry.archiveUrl))
+      : path.join(artifactRoot, "packages", entry.archiveUrl);
+    try {
+      await verifyRecord(
+        { path: stagedArchive ? path.basename(entry.archiveUrl) : entry.archiveUrl, sizeBytes: entry.sizeBytes, sha256: entry.sha256 },
+        `package ${entry.id}`,
+        stagedArchive ? packageStagingRoot : path.join(artifactRoot, "packages"),
+        stagedArchive ? packageStagingRoot : root,
+      );
+    } catch (error) {
+      if (stagedArchive || (error as NodeJS.ErrnoException).code !== "ENOENT") errors.push(String(error));
+    }
   }
 
   for (const indexName of ["raw/moc/index.json", "raw/geometry/index.json"] as const) {

@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { PublicAssetKind, PublicAssetManifest, PublicAssetRecord } from "../server/types.js";
+import { inferredPublicAssetDeliveryClass, type PublicAssetManifest, type PublicAssetRecord } from "../server/types.js";
+import { publicReleaseBundleDigest } from "../server/catalog.js";
 
 const root = path.resolve(process.env.ASSET_WORKTREE_ROOT ?? process.cwd());
 const artifactRoot = path.join(root, "artifacts", "public-survey-footprints");
@@ -29,21 +30,6 @@ interface ProvenanceDocument {
     catalog: ProvenanceFile;
     packages: Array<{ id: string; version: string; archive: string; sizeBytes: number; sha256: string }>;
   };
-}
-
-interface RawMocIndex {
-  artifacts: Array<{
-    surveyId: string;
-    releaseId: string;
-    product: string;
-    sourceId: string;
-    sourceUrl: string;
-    metadataUrl: string;
-    fitsPath: string;
-    metadataPath: string;
-    byteLength: number;
-    sha256: string;
-  }>;
 }
 
 interface GeometryIndex {
@@ -134,15 +120,29 @@ function slug(value: string): string {
   return value.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 96);
 }
 
-async function asset(input: Omit<PublicAssetRecord, "path" | "sizeBytes" | "sha256"> & { filePath: string; expectedBytes?: number; expectedSha256?: string }): Promise<PublicAssetRecord> {
-  const details = await stat(input.filePath);
-  const sha256 = await digest(input.filePath);
-  if (input.expectedBytes !== undefined && details.size !== input.expectedBytes) throw new Error(`Size mismatch: ${relative(input.filePath)}`);
+function projectionOrder(fileName: string, kind: "query" | "preview"): number {
+  const match = fileName.match(new RegExp(`${kind}-order(\\d+)\\.json$`));
+  if (!match) throw new Error(`Layer ${kind} projection has no locked order: ${fileName}`);
+  return Number(match[1]);
+}
+
+async function asset(input: Omit<PublicAssetRecord, "path" | "sizeBytes" | "sha256"> & { filePath: string; expectedBytes?: number; expectedSha256?: string; pathOverride?: string; allowMissing?: boolean }): Promise<PublicAssetRecord> {
+  let sizeBytes: number;
+  let sha256: string;
+  try {
+    const details = await stat(input.filePath);
+    sizeBytes = details.size;
+    sha256 = await digest(input.filePath);
+  } catch (error) {
+    if (!input.allowMissing || (error as NodeJS.ErrnoException).code !== "ENOENT" || input.expectedBytes === undefined || input.expectedSha256 === undefined) throw error;
+    sizeBytes = input.expectedBytes;
+    sha256 = input.expectedSha256;
+  }
+  if (input.expectedBytes !== undefined && sizeBytes !== input.expectedBytes) throw new Error(`Size mismatch: ${relative(input.filePath)}`);
   if (input.expectedSha256 !== undefined && sha256 !== input.expectedSha256) throw new Error(`SHA-256 mismatch: ${relative(input.filePath)}`);
-  const { filePath, expectedBytes: _expectedBytes, expectedSha256: _expectedSha256, ...record } = input;
-  const relativePath = relative(filePath);
-  const deliveryClass: "runtime" | "evidence" = relativePath.includes("/csst/") || relativePath.includes("/raw/") || record.kind === "provenance" || record.kind === "ledger" || record.kind === "moc" ? "evidence" : "runtime";
-  return { ...record, deliveryClass, path: relative(filePath), sizeBytes: details.size, sha256 };
+  const { filePath, expectedBytes: _expectedBytes, expectedSha256: _expectedSha256, pathOverride: _pathOverride, allowMissing: _allowMissing, ...record } = input;
+  const relativePath = input.pathOverride ?? relative(filePath);
+  return { ...record, deliveryClass: inferredPublicAssetDeliveryClass({ path: relativePath, kind: record.kind }), path: relativePath, sizeBytes, sha256 };
 }
 
 async function verifiedProvenanceFiles(provenance: ProvenanceDocument): Promise<void> {
@@ -155,11 +155,9 @@ async function verifiedProvenanceFiles(provenance: ProvenanceDocument): Promise<
 
 async function build(): Promise<PublicAssetManifest> {
   const provenancePath = path.join(artifactRoot, "provenance.json");
-  const mocIndexPath = path.join(artifactRoot, "raw", "moc", "index.json");
   const geometryIndexPath = path.join(artifactRoot, "raw", "geometry", "index.json");
   const packageCatalogPath = path.join(artifactRoot, "packages", "catalog.json");
   const provenance = await json<ProvenanceDocument>(provenancePath);
-  const mocIndex = await json<RawMocIndex>(mocIndexPath);
   const geometryIndex = await json<GeometryIndex>(geometryIndexPath);
   const packageCatalog = await json<PackageCatalog>(packageCatalogPath);
   const layerPlanPath = path.join(root, "src", "layers", "public-build-plan.json");
@@ -185,12 +183,6 @@ async function build(): Promise<PublicAssetManifest> {
     id: "manifest-survey-catalog", kind: "manifest", label: "Public survey catalog",
     description: "Survey metadata, modalities, public products, acquisition states and outstanding geometry work.",
     filePath: path.join(root, "src", "surveys", "survey-catalog.json"), downloadName: "survey-catalog.json", mediaType: "application/json",
-  });
-  await push({
-    id: "ledger-products", kind: "ledger", label: "Product coverage status ledger",
-    description: "Product-level acquisition status, geometry source and outstanding calculation work.",
-    filePath: path.join(artifactRoot, "sources.json"), downloadName: "public-footprint-product-status.json", mediaType: "application/json",
-    expectedSha256: provenance.inputs.sources?.sha256,
   });
   await push({
     id: "documentation-moc-method", kind: "documentation", label: "MOC calculation and evidence method",
@@ -281,6 +273,8 @@ async function build(): Promise<PublicAssetManifest> {
     };
     const layerLabel = `${spec.surveyId.toUpperCase()} · ${spec.product}`;
     const layerDescription = `${spec.coverageRole} (${spec.dataOrigin}, ${spec.sourceTier}) generated by Assets MOC Core ${layerProvenance.coreVersion}.`;
+    const queryOrder = projectionOrder(layerProvenance.outputs.query.path, "query");
+    const previewOrder = projectionOrder(layerProvenance.outputs.preview.path, "preview");
     await push({
       id: `layer-${slug(spec.layerId)}-moc`, kind: "moc", label: `${layerLabel} authoritative MOC`,
       description: layerDescription, filePath: path.join(outputRoot, layerProvenance.outputs.moc.path),
@@ -288,21 +282,16 @@ async function build(): Promise<PublicAssetManifest> {
       expectedSha256: layerProvenance.outputs.moc.sha256, ...identity,
     });
     await push({
-      id: `layer-${slug(spec.layerId)}-query-order8`, kind: "geometry", label: `${layerLabel} order-8 query projection`,
+      id: `layer-${slug(spec.layerId)}-query-order${queryOrder}`, kind: "geometry", label: `${layerLabel} order-${queryOrder} query projection`,
       description: "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
-      filePath: path.join(outputRoot, layerProvenance.outputs.query.path), downloadName: `${spec.layerId}-query-order8.json`,
+      filePath: path.join(outputRoot, layerProvenance.outputs.query.path), downloadName: `${spec.layerId}-query-order${queryOrder}.json`,
       mediaType: "application/json", expectedBytes: layerProvenance.outputs.query.sizeBytes, expectedSha256: layerProvenance.outputs.query.sha256, ...identity,
     });
     await push({
-      id: `layer-${slug(spec.layerId)}-preview-order4`, kind: "geometry", label: `${layerLabel} order-4 preview projection`,
+      id: `layer-${slug(spec.layerId)}-preview-order${previewOrder}`, kind: "geometry", label: `${layerLabel} order-${previewOrder} preview projection`,
       description: "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
-      filePath: path.join(outputRoot, layerProvenance.outputs.preview.path), downloadName: `${spec.layerId}-preview-order4.json`,
+      filePath: path.join(outputRoot, layerProvenance.outputs.preview.path), downloadName: `${spec.layerId}-preview-order${previewOrder}.json`,
       mediaType: "application/json", expectedBytes: layerProvenance.outputs.preview.sizeBytes, expectedSha256: layerProvenance.outputs.preview.sha256, ...identity,
-    });
-    await push({
-      id: `layer-${slug(spec.layerId)}-provenance`, kind: "provenance", label: `${layerLabel} provenance`,
-      description: "Locked input, Core version, scientific classification and output hashes for this public layer.",
-      filePath: provenancePath, downloadName: `${spec.layerId}-provenance.json`, mediaType: "application/json", ...identity,
     });
     await push({
       id: `layer-${slug(spec.layerId)}-statistics`, kind: "metadata", label: `${layerLabel} statistics`,
@@ -317,43 +306,12 @@ async function build(): Promise<PublicAssetManifest> {
     });
   }
   await push({
-    id: "provenance-release", kind: "provenance", label: "Release provenance and hashes",
-    description: "Authoritative input, output and package SHA-256 provenance for this release.",
-    filePath: provenancePath, downloadName: "provenance.json", mediaType: "application/json",
-  });
-  await push({
-    id: "metadata-moc-index", kind: "metadata", label: "Native MOC source index",
-    description: "Source URLs, retrieval metadata, byte lengths and hashes for native FITS MOCs.",
-    filePath: mocIndexPath, downloadName: "moc-index.json", mediaType: "application/json",
-    expectedSha256: provenance.inputs.rawMocIndex?.sha256,
-  });
-  await push({
-    id: "metadata-geometry-index", kind: "metadata", label: "Raw geometry source index",
-    description: "Raw Euclid and DESI geometry metadata, parser parameters, byte lengths and hashes.",
-    filePath: geometryIndexPath, downloadName: "geometry-index.json", mediaType: "application/json",
-    expectedSha256: provenance.inputs.rawGeometryIndex?.sha256,
-  });
-  await push({
     id: "metadata-package-catalog", kind: "metadata", label: "Resource package catalog",
     description: "Current downloadable resource-package versions, sizes and SHA-256 values.",
     filePath: packageCatalogPath, downloadName: "resource-package-catalog.json", mediaType: "application/json",
     expectedSha256: provenance.files.catalog.sha256,
   });
 
-  const csstEvidence = [
-    ["csst-coverage-job-snapshot", "metadata", "CSST W1 coverage job snapshot", "coverage-job-snapshot.json", "Data-warehouse coverage request, scanner configuration and review decision for CSST W1 simulated wide-field images."],
-    ["csst-wcs-geometry-summary", "metadata", "CSST W1 WCS geometry summary", "wcs-geometry-summary.json", "Measured WCS bounds, HEALPix order, area, nominal-area comparison and anomaly decision."],
-    ["csst-run-statistics", "metadata", "CSST W1 full-run statistics", "run-statistics.json", "Summed 64-shard data-warehouse and selected sink coverage statistics."],
-    ["csst-sample-report", "metadata", "CSST W1 sample and smoke report", "sample-report.json", "Restricted-directory samples, smoke result and full-run anomaly audit."],
-    ["csst-provenance", "provenance", "CSST W1 provenance", "provenance.json", "CSST W1 source prefix, run IDs, connector configuration hash, static output hashes and release decision."],
-  ] as const;
-  for (const [id, kind, label, fileName, description] of csstEvidence) {
-    await push({
-      id, kind, label, description,
-      filePath: path.join(artifactRoot, "csst", fileName), downloadName: `csst-w1-${fileName}`, mediaType: "application/json",
-      surveyId: "csst", releaseId: "csst-sim-w1-20250731", product: "W1 simulated wide-field images",
-    });
-  }
   await push({
     id: "csst-w1-image-extent-moc-order8", kind: "moc", label: "CSST W1 simulated image WCS MOC",
     description: "Reviewed ICRS NUNIQ FITS MOC at maximum order 8 for the current W1_Phot WIDE images (354.759 deg2).",
@@ -379,19 +337,6 @@ async function build(): Promise<PublicAssetManifest> {
     const product = `${upper} simulated wide-field images`;
     const layerId = `csst-sim-${band}-image-extent`;
     const outputRoot = path.join(artifactRoot, "layers", layerId);
-    const evidence: Array<[string, PublicAssetKind, string, string, string]> = [
-      [`csst-${band}-coverage-job-snapshot`, "metadata", `CSST ${upper} coverage job snapshot`, `${band}-coverage-job-snapshot.json`, `Data-warehouse coverage task snapshot for CSST ${upper}.`],
-      [`csst-${band}-normalized-scan`, "manifest", `CSST ${upper} normalized scan input`, `${band}-normalized-scan.json`, `Normalized FITS-WCS scan cells returned by data-warehouse for CSST ${upper}.`],
-      [`csst-${band}-run-statistics`, "metadata", `CSST ${upper} run statistics`, `${band}-run-statistics.json`, `File, WCS and cell statistics for the CSST ${upper} coverage run.`],
-      [`csst-${band}-sample-report`, "metadata", `CSST ${upper} sample report`, `${band}-sample-report.json`, `Audited samples and exclusions from the CSST ${upper} scan.`],
-      [`csst-${band}-provenance`, "provenance", `CSST ${upper} provenance`, `${band}-provenance.json`, `Locked scanner input, MOC Core output hashes and run provenance for CSST ${upper}.`],
-    ];
-    for (const [id, kind, label, fileName, description] of evidence) {
-      await push({
-        id, kind, label, description, filePath: path.join(artifactRoot, "csst", fileName), downloadName: `csst-${band}-${fileName}`, mediaType: "application/json",
-        surveyId: "csst", releaseId, product,
-      });
-    }
     await push({
       id: `csst-${band}-moc`, kind: "moc", label: `CSST ${upper} simulated image WCS MOC`,
       description: `Authoritative ICRS/NUNIQ FITS MOC generated by Assets MOC Core from the data-warehouse ${upper} FITS-WCS result.`,
@@ -416,31 +361,11 @@ async function build(): Promise<PublicAssetManifest> {
       filePath: path.join(outputRoot, "statistics.json"), downloadName: `${layerId}-statistics.json`, mediaType: "application/json",
       surveyId: "csst", releaseId, product,
     });
-    await push({
-      id: `csst-${band}-layer-provenance`, kind: "provenance", label: `CSST ${upper} MOC Core provenance`,
-      description: "Assets MOC Core recipe, input snapshot and output hashes for the public layer.",
-      filePath: path.join(outputRoot, "provenance.json"), downloadName: `${layerId}-provenance.json`, mediaType: "application/json",
-      surveyId: "csst", releaseId, product,
-    });
-  }
-
-  for (const record of mocIndex.artifacts) {
-    const baseId = `moc-${slug(`${record.surveyId}-${record.releaseId}-${record.product}-${record.sourceId}`)}`;
-    await push({
-      id: baseId, kind: "moc", label: `${record.surveyId.toUpperCase()} · ${record.product}`,
-      description: `Native FITS MOC for ${record.releaseId}.`, filePath: path.join(artifactRoot, "raw", "moc", record.fitsPath),
-      downloadName: record.fitsPath, mediaType: "application/fits", expectedBytes: record.byteLength, expectedSha256: record.sha256,
-      surveyId: record.surveyId, releaseId: record.releaseId, product: record.product, sourceUrl: record.sourceUrl,
-    });
-    await push({
-      id: `${baseId}-record`, kind: "metadata", label: `${record.surveyId.toUpperCase()} · ${record.product} source record`,
-      description: `CDS/HiPS source metadata accompanying ${record.fitsPath}.`, filePath: path.join(artifactRoot, "raw", "moc", record.metadataPath),
-      downloadName: record.metadataPath, mediaType: "application/json", surveyId: record.surveyId, releaseId: record.releaseId,
-      product: record.product, sourceUrl: record.metadataUrl,
-    });
   }
 
   for (const record of geometryIndex.artifacts) {
+    const logicalPath = path.join("artifacts", "public-survey-footprints", "raw", "geometry", record.filePath);
+    if (inferredPublicAssetDeliveryClass({ path: logicalPath, kind: "geometry" }) === "evidence") continue;
     const geometryDescription = record.polygonCount !== undefined
       ? `${record.polygonCount} official polygons. ${record.parser}.`
       : `${record.selectedRowCount ?? 0}/${record.rowCount ?? 0} official observed tile rows (${record.filter ?? "no filter"}); ${record.tileRadiusDeg ?? "unknown"} deg tile radius. ${record.parser}.`;
@@ -454,12 +379,17 @@ async function build(): Promise<PublicAssetManifest> {
   }
 
   const provenancePackages = new Map(provenance.files.packages.map((entry) => [`${entry.id}@${entry.version}`, entry]));
+  const packageStagingRoot = process.env.ASSETS_PACKAGE_STAGING_ROOT ? path.resolve(process.env.ASSETS_PACKAGE_STAGING_ROOT) : undefined;
   for (const record of packageCatalog.packages) {
     const expected = provenancePackages.get(`${record.id}@${record.version}`);
     if (!expected) throw new Error(`Package is absent from provenance: ${record.id}@${record.version}`);
+    const packagePath = packageStagingRoot
+      ? path.join(packageStagingRoot, path.basename(record.archiveUrl))
+      : path.join(artifactRoot, "packages", record.archiveUrl);
     await push({
       id: `package-${slug(`${record.id}-${record.version}`)}`, kind: "package", label: record.name, description: record.description,
-      filePath: path.join(artifactRoot, "packages", record.archiveUrl), downloadName: path.basename(record.archiveUrl), mediaType: "application/zip",
+      filePath: packagePath, pathOverride: path.join("artifacts", "public-survey-footprints", "packages", path.basename(record.archiveUrl)),
+      downloadName: path.basename(record.archiveUrl), mediaType: "application/zip", allowMissing: !packageStagingRoot,
       expectedBytes: record.sizeBytes, expectedSha256: record.sha256, surveyId: record.surveyId,
       releaseId: record.sources?.[0]?.releaseId ?? record.releases?.[0], version: record.version, sourceUrl: record.sources?.[0]?.url,
     });
@@ -467,7 +397,9 @@ async function build(): Promise<PublicAssetManifest> {
 
   files.sort((left, right) => left.kind.localeCompare(right.kind) || left.label.localeCompare(right.label) || left.id.localeCompare(right.id));
   if (new Set(files.map((entry) => entry.id)).size !== files.length) throw new Error("Release manifest contains duplicate asset IDs");
-  const bundleSha256 = createHash("sha256").update(JSON.stringify(files.map(({ id, path: filePath, sizeBytes, sha256 }) => ({ id, path: filePath, sizeBytes, sha256 })))).digest("hex");
+  const evidenceLeak = files.find((entry) => entry.deliveryClass !== "runtime");
+  if (evidenceLeak) throw new Error(`Public release manifest must not contain evidence records: ${evidenceLeak.id}`);
+  const bundleSha256 = publicReleaseBundleDigest(files);
   const totalBytes = files.reduce((sum, entry) => sum + entry.sizeBytes, 0);
   const runtimeBytes = files.filter((entry) => entry.deliveryClass === "runtime").reduce((sum, entry) => sum + entry.sizeBytes, 0);
   const evidenceBytes = files.filter((entry) => entry.deliveryClass === "evidence").reduce((sum, entry) => sum + entry.sizeBytes, 0);
@@ -483,7 +415,7 @@ async function build(): Promise<PublicAssetManifest> {
       awaitingGeometry: provenance.statistics.awaiting_geometry,
       footprints: provenance.statistics.manifestFootprints,
       packages: packageCatalog.packages.length,
-      rawMocFiles: mocIndex.artifacts.length + 1 + layerPlan.builds.length,
+      rawMocFiles: files.filter((entry) => entry.kind === "moc").length,
       totalBytes,
       runtimeBytes,
       evidenceBytes,

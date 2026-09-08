@@ -9,6 +9,12 @@
   },
   "scripts": {
     "catalog:build": "tsx scripts/build-release-manifest.ts",
+    "release:package": "tsx scripts/release-archive.ts package",
+    "release:upload": "tsx scripts/release-archive.ts upload",
+    "archive:sync": "tsx scripts/content-archive.ts sync",
+    "archive:restore": "tsx scripts/content-archive.ts restore",
+    "archive:status": "tsx scripts/content-archive.ts status",
+    "archive:diff": "tsx scripts/content-archive.ts diff",
     "artifacts:validate": "tsx scripts/public_footprint_artifacts.ts validate",
     "preview:build": "tsx scripts/generate-coverage-preview.ts",
     "moc:validate": "tsx scripts/validate-moc-source-registry.ts",

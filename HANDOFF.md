@@ -8,6 +8,31 @@ Starting commit: `49f434b`; latest code commit before this closure: `a24a9f5`
 
 ## Current Session Snapshot
 
+### 2026-09-05 Public MOC Expansion to 100+
+
+- Added eight additional public CDS MocServer products (2MASS 6X H/J/K and
+  SDSS DR9 g/r/i/u/z) on top of the first expansion batch. The allow-listed
+  harvester now locks 63 CDS source records and writes raw evidence before
+  generating Assets MOC-Core layers.
+- The current static release contains 101 unique raw MOC source artifacts,
+  111 canonical footprint records before runtime Warehouse merge, 154 public
+  products with 102 `acquired` products, and 74 generated Core layers. All
+  imported layers retain ICRS/NESTED order metadata, source snapshot and record
+  hashes, and estimated/product-availability limitations where applicable.
+- Local gates passed: `npm run artifacts:validate`, `npm run moc:validate`,
+  `npm run build`, `npm test` (115 Node tests plus Core wheel verification),
+  `helm lint`, and `git diff --check`.
+- Development Helm revision 122 uses image tag
+  `0.1.0-20260905-021417`. The live NodePort remains
+  `http://10.15.51.75:32083/`; `/healthz` reports bundle SHA-256
+  `6e0af1fc390d70e46e39e67b70c0dfb562008205669624c924b148c4f7823467` and 735
+  release files. `/api/v1/coverage` and `/api/v1/coverage/catalog` each return
+  122 layers, and a new 2MASS 6X MOC Range request returned `206 Partial
+  Content` with `X-Content-SHA256`.
+- Production and the 72602 production cluster remain untouched. The working
+  tree is intentionally uncommitted; preserve the generated MOC evidence and
+  all pre-existing UI/catalog changes.
+
 ### 2026-09-03 Globe Visibility Fix and Development Rollout
 
 - Fixed the coverage viewer's initial single-survey framing. When the

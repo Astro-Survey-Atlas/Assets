@@ -1,6 +1,6 @@
 image:
   repository: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets
-  tag: "0.1.0-20260826-123500"
+  tag: "0.1.0-20260907-170429"
   pullPolicy: Always
 
 imagePullSecrets:
@@ -49,7 +49,7 @@ persistence:
   existingClaim: ""
   storageClass: nfs-data
   accessModes: [ReadWriteOnce]
-  size: 256Mi
+  size: 1Gi
 
 evidencePersistence:
   enabled: true
@@ -76,14 +76,23 @@ syncResources:
     cpu: 500m
     memory: 512Mi
 
-# Development cluster uses the image/PVC release path. Production overlays
-# must set mode=pull, endpoint, bucket and a credentials Secret.
+# Development canary: init always pulls the immutable archive selected by
+# public/current.json from cluster MinIO. Leave cleanup false until retention
+# and PVC capacity are proven.
 objectStore:
-  enabled: false
-  mode: filesystem
+  enabled: true
+  endpoint: http://minio.storage.svc.cluster.local:9000
+  bucket: asa-assets-dev
   currentKey: public/current.json
   retainReleases: 2
   cleanup: false
+  region: us-east-1
+  forcePathStyle: true
+  credentialsSecret:
+    name: asa-assets-object-store
+    accessKeyIdKey: access-key-id
+    secretAccessKeyKey: secret-access-key
+    sessionTokenKey: session-token
 
 nodeSelector:
   kubernetes.io/hostname: eva7028

@@ -69,8 +69,8 @@ test("dynamic publications produce immutable hash-addressed Resource Package v3 
   const initial = store.list();
   assert.equal(initial.length, 1);
   assert.equal(initial[0]!.surveyId, "jwst");
-  assert.equal(initial[0]!.version, "3.0.0");
-  assert.match(initial[0]!.id, /^public-jwst-footprints-[a-f0-9]{16}$/);
+  assert.equal(initial[0]!.version, "3.1.0");
+  assert.equal(initial[0]!.id, "public-jwst-footprints");
   const archive = store.assets()[0]!;
   assert.equal(archive.sha256, initial[0]!.sha256);
   assert.equal((await stat(path.join(contentRoot, archive.path))).size, archive.sizeBytes);
@@ -91,7 +91,15 @@ test("dynamic publications produce immutable hash-addressed Resource Package v3 
   await store.sync([first, second], [product()], (file) => path.join(contentRoot, file.path));
   const updated = store.list();
   assert.equal(updated.length, 2);
-  assert.equal(updated.filter((entry) => entry.deprecated).length, 1);
-  assert.equal(updated.filter((entry) => !entry.deprecated).length, 1);
+  assert.equal(updated[0]!.version, "3.1.0");
+  assert.equal(updated[0]!.deprecated, true);
+  assert.equal(updated[1]!.version, "3.2.0");
+  assert.equal(updated[1]!.deprecated, false);
+  assert.equal(updated[1]!.id, "public-jwst-footprints");
   assert.notEqual(updated[0]!.sha256, updated[1]!.sha256);
+
+  // An unchanged re-sync must not allocate a new version.
+  await store.sync([second], [product()], (file) => path.join(contentRoot, file.path));
+  assert.equal(store.list().length, 2);
+  assert.equal(store.latest("public-jwst-footprints")?.version, "3.2.0");
 });

@@ -86,11 +86,19 @@
     "ingress": { "type": "object" },
     "resources": { "type": "object" },
     "syncResources": { "type": "object" },
+    "releasePublisher": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "pollSeconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+        "resources": { "type": "object" }
+      },
+      "required": ["enabled", "pollSeconds", "resources"]
+    },
     "objectStore": {
       "type": "object",
       "properties": {
         "enabled": { "type": "boolean" },
-        "mode": { "type": "string", "enum": ["filesystem", "push", "pull"] },
         "currentKey": { "type": "string", "pattern": "^[^/].*[^/]$" },
         "retainReleases": { "type": "integer", "minimum": 1, "maximum": 20 },
         "cleanup": { "type": "boolean" },
@@ -99,8 +107,6 @@
         "prefix": { "type": "string" },
         "region": { "type": "string", "minLength": 1 },
         "forcePathStyle": { "type": "boolean" },
-        "publicBaseUrl": { "type": "string" },
-        "root": { "type": "string", "minLength": 1 },
         "credentialsSecret": {
           "type": "object",
           "properties": {
@@ -112,7 +118,7 @@
           "required": ["name", "accessKeyIdKey", "secretAccessKeyKey", "sessionTokenKey"]
         }
       },
-      "required": ["enabled", "mode", "currentKey", "retainReleases", "cleanup", "endpoint", "bucket", "prefix", "region", "forcePathStyle", "publicBaseUrl", "root", "credentialsSecret"]
+      "required": ["enabled", "currentKey", "retainReleases", "cleanup", "endpoint", "bucket", "prefix", "region", "forcePathStyle", "credentialsSecret"]
     },
     "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
     "tolerations": { "type": "array" },
@@ -120,5 +126,5 @@
     "podSecurityContext": { "type": "object" },
     "containerSecurityContext": { "type": "object" }
   },
-  "required": ["replicaCount", "image", "service", "persistence", "contentPersistence", "evidencePersistence", "admin", "warehouse", "objectStore"]
+  "required": ["replicaCount", "image", "service", "persistence", "contentPersistence", "evidencePersistence", "admin", "warehouse", "objectStore", "releasePublisher"]
 }

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { inferredPublicAssetDeliveryClass, type PublicAssetManifest, type PublicAssetPreviewMode, type PublicAssetProjection, type PublicAssetRecord } from "./types.js";
@@ -9,6 +9,13 @@ export interface LoadedCatalog {
   root: string;
   manifest: PublicAssetManifest;
   files: Map<string, { record: PublicAssetRecord; absolutePath: string }>;
+}
+
+const RELEASE_MANIFEST_PATH = "artifacts/public-survey-footprints/release-manifest.json";
+
+/** Bundle identity covers the complete manifest records so delivery/API metadata changes rotate the archive key. */
+export function publicReleaseBundleDigest(files: ReadonlyArray<PublicAssetRecord>): string {
+  return createHash("sha256").update(JSON.stringify(files)).digest("hex");
 }
 
 async function sha256(filePath: string): Promise<string> {
@@ -35,6 +42,7 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
     if (!record.id || files.has(record.id) || !/^[a-z0-9][a-z0-9-]*$/.test(record.id)) throw new Error(`Invalid or duplicate public asset ID: ${record.id}`);
     if (!/^[a-f0-9]{64}$/.test(record.sha256) || !Number.isSafeInteger(record.sizeBytes) || record.sizeBytes < 1) throw new Error(`Invalid public asset checksum record: ${record.id}`);
     if (record.deliveryClass !== undefined && record.deliveryClass !== "runtime" && record.deliveryClass !== "evidence") throw new Error(`Invalid delivery class: ${record.id}`);
+    if (record.deliveryClass === "evidence") throw new Error(`Public release manifest must not contain evidence records: ${record.id}`);
     if (record.deliveryClass === "runtime" && inferredPublicAssetDeliveryClass(record) === "evidence") throw new Error(`Evidence asset cannot be marked runtime: ${record.id}`);
     const absolutePath = resolveInside(normalizedRoot, record.path);
     if (verifyFiles) {
@@ -44,9 +52,33 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
     }
     files.set(record.id, { record, absolutePath });
   }
-  const bundleHash = createHash("sha256").update(JSON.stringify(manifest.files.map(({ id, path: filePath, sizeBytes, sha256: digest }) => ({ id, path: filePath, sizeBytes, sha256: digest })))).digest("hex");
+  const bundleHash = publicReleaseBundleDigest(manifest.files);
   if (bundleHash !== manifest.bundle.sha256) throw new Error("Public asset bundle digest does not match the release manifest");
   return { root: normalizedRoot, manifest, files };
+}
+
+/** Reject release trees with missing, extra or unsafe members beyond the manifest and its own manifest record. */
+export async function assertExactReleaseTree(root: string, catalog: LoadedCatalog): Promise<void> {
+  const expected = new Set(catalog.manifest.files.map((record) => record.path.replaceAll("\\", "/")));
+  expected.add(RELEASE_MANIFEST_PATH);
+  // Optional runtime marker written by sync after a verified archive pull.
+  const optional = new Set([".archive-sha256"]);
+  const walk = async (directory: string, relative: string): Promise<string[]> => {
+    const entries = await readdir(directory, { withFileTypes: true });
+    const found: string[] = [];
+    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+      const child = relative ? `${relative}/${entry.name}` : entry.name;
+      if (entry.isSymbolicLink()) throw new Error(`Release tree must not contain symlinks: ${child}`);
+      if (entry.isDirectory()) found.push(...await walk(path.join(directory, entry.name), child));
+      else if (entry.isFile()) found.push(child);
+      else throw new Error(`Release tree contains an unsupported file type: ${child}`);
+    }
+    return found;
+  };
+  const actual = await walk(path.resolve(root), "");
+  const actualSet = new Set(actual);
+  for (const file of actual) if (!expected.has(file) && !optional.has(file)) throw new Error(`Release tree contains an unlisted file: ${file}`);
+  for (const file of expected) if (!actualSet.has(file)) throw new Error(`Release tree is missing a listed file: ${file}`);
 }
 
 export function assetPreviewMode(mediaType: string): PublicAssetPreviewMode | undefined {
@@ -57,20 +89,17 @@ export function assetPreviewMode(mediaType: string): PublicAssetPreviewMode | un
 }
 
 export function publicManifest(catalog: LoadedCatalog, additionalRecords: PublicAssetRecord[] = []): Omit<PublicAssetManifest, "files"> & { files: PublicAssetProjection[] } {
-  const classify = (record: PublicAssetRecord): "runtime" | "evidence" => {
-    // Runtime contains only the catalog, projections, previews and lightweight
-    // metadata needed by the public page. Raw inputs and audit snapshots stay
-    // addressable, but are deliberately marked as evidence.
-    return inferredPublicAssetDeliveryClass(record);
-  };
+  // The public projection must never list, count or link evidence-class
+  // records. Evidence material stays on the evidence store and is simply
+  // invisible to the browser-facing catalog.
   const known = new Set(catalog.manifest.files.map((record) => record.id));
   const files = [...catalog.manifest.files, ...additionalRecords.filter((record) => !known.has(record.id))]
-    .map((record) => ({ ...record, deliveryClass: classify(record) === "evidence" ? "evidence" : record.deliveryClass ?? "runtime" }));
-  const runtimeBytes = files.filter((record) => record.deliveryClass === "runtime").reduce((sum, record) => sum + record.sizeBytes, 0);
-  const evidenceBytes = files.filter((record) => record.deliveryClass === "evidence").reduce((sum, record) => sum + record.sizeBytes, 0);
+    .filter((record) => inferredPublicAssetDeliveryClass(record) !== "evidence")
+    .map((record) => ({ ...record, deliveryClass: "runtime" as const }));
+  const runtimeBytes = files.reduce((sum, record) => sum + record.sizeBytes, 0);
   return {
     ...catalog.manifest,
-    statistics: { ...catalog.manifest.statistics, packages: files.filter((record) => record.kind === "package").length, totalBytes: files.reduce((sum, record) => sum + record.sizeBytes, 0), rawMocFiles: files.filter((record) => record.kind === "moc").length, runtimeBytes, evidenceBytes },
+    statistics: { ...catalog.manifest.statistics, packages: files.filter((record) => record.kind === "package").length, totalBytes: runtimeBytes, rawMocFiles: files.filter((record) => record.kind === "moc").length, runtimeBytes, evidenceBytes: 0 },
     files: files.map(({ path: _path, ...record }) => {
       const previewMode = assetPreviewMode(record.mediaType);
       return {
