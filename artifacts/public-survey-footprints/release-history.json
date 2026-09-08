@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "releases": [
+    {
+      "releaseId": "public-survey-footprints-2026-08-20-1",
+      "sequence": 1,
+      "bundleId": "public-survey-footprints-2026-08-20",
+      "releasedAt": "2026-08-20T05:11:37.055Z",
+      "packages": [
+        {
+          "id": "public-euclid-footprints",
+          "version": "3.0.0",
+          "name": "Euclid",
+          "sizeBytes": 39950,
+          "sha256": "5fb77791caf8675e63a2422afd1f60493c6cf9dfc71804a2c5a6b8d4a2dede71",
+          "downloadUrl": "/api/v1/resource-packages/public-euclid-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-galex-footprints",
+          "version": "3.0.0",
+          "name": "GALEX",
+          "sizeBytes": 12978,
+          "sha256": "ef58ea7d32143e9135a7a1447f3f3678459e5ead0a75e277568fd64f100ff1dd",
+          "downloadUrl": "/api/v1/resource-packages/public-galex-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-desi-footprints",
+          "version": "3.0.0",
+          "name": "DESI Spectroscopy",
+          "sizeBytes": 385410,
+          "sha256": "5da8651a6e43ffae1428d3edacff2e033a71aee276834c10f79829c9ed6d3f18",
+          "downloadUrl": "/api/v1/resource-packages/public-desi-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-legacy-surveys-footprints",
+          "version": "3.0.0",
+          "name": "DESI Legacy Surveys",
+          "sizeBytes": 21903,
+          "sha256": "c50ef2ae3956dec250733336d1698c24acf17a9afa28dbbd79f8439a7f13c9c4",
+          "downloadUrl": "/api/v1/resource-packages/public-legacy-surveys-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-sdss-footprints",
+          "version": "3.0.0",
+          "name": "SDSS",
+          "sizeBytes": 7292,
+          "sha256": "15640a9f7786bae150a64d8ad5a821f91020912923d79807b3342ac271c6a22b",
+          "downloadUrl": "/api/v1/resource-packages/public-sdss-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-hsc-ssp-footprints",
+          "version": "3.0.0",
+          "name": "HSC-SSP",
+          "sizeBytes": 8251,
+          "sha256": "678dc507722d69687fc359712afd975b84477d444f6b3e521896ef3857f04704",
+          "downloadUrl": "/api/v1/resource-packages/public-hsc-ssp-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-hst-footprints",
+          "version": "3.0.0",
+          "name": "HST",
+          "sizeBytes": 10736,
+          "sha256": "9fc806f5e246111b6d6b0c9b6fe1316cf502eaaad6a1faae5c7c671c3ac9bcbd",
+          "downloadUrl": "/api/v1/resource-packages/public-hst-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-panstarrs-footprints",
+          "version": "3.0.0",
+          "name": "Pan-STARRS1",
+          "sizeBytes": 13616,
+          "sha256": "2d4db6eb978bae76e765d3fabde52aaf20d75f33810c40c00503ab9165b33af0",
+          "downloadUrl": "/api/v1/resource-packages/public-panstarrs-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-des-footprints",
+          "version": "3.0.0",
+          "name": "DES",
+          "sizeBytes": 3670,
+          "sha256": "824da6e75d4756540e9ed4182cae6f4a36fe29006bdf0bb23fc652d96a1e117e",
+          "downloadUrl": "/api/v1/resource-packages/public-des-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-2mass-footprints",
+          "version": "3.0.0",
+          "name": "2MASS",
+          "sizeBytes": 10994,
+          "sha256": "e565b90b1f6cc5cc75da5440a53ce77f95c87d9d91120f125ec9d421c36551c5",
+          "downloadUrl": "/api/v1/resource-packages/public-2mass-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-allwise-footprints",
+          "version": "3.0.0",
+          "name": "AllWISE",
+          "sizeBytes": 11767,
+          "sha256": "3b3697edba5e163a80628977c9b6b571965910397eb1524c9a1e9e77fe4832e0",
+          "downloadUrl": "/api/v1/resource-packages/public-allwise-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-kids-footprints",
+          "version": "3.0.0",
+          "name": "KiDS",
+          "sizeBytes": 3017,
+          "sha256": "723c1e15e9518c1e7e68ef9305d1c3a7c5578c97c4b1271618effee320da706f",
+          "downloadUrl": "/api/v1/resource-packages/public-kids-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-gaia-footprints",
+          "version": "3.0.0",
+          "name": "Gaia DR3",
+          "sizeBytes": 22801,
+          "sha256": "47a473da1e55b7f44c865bbf5512c3ba953d389bdce4704ff4b840d5aa69872b",
+          "downloadUrl": "/api/v1/resource-packages/public-gaia-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-nvss-footprints",
+          "version": "3.0.0",
+          "name": "NVSS",
+          "sizeBytes": 8620,
+          "sha256": "ee74ffa811c75501ef80850d22d02ba7b21f6f4f28ed10ef41974b2f2893bdf7",
+          "downloadUrl": "/api/v1/resource-packages/public-nvss-footprints/versions/3.0.0/download"
+        }
+      ]
+    }
+  ]
+}
