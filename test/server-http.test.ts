@@ -83,7 +83,8 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.equal(packageCatalog.schemaVersion, 3);
   assert.equal(packageCatalog.version, "3.0.0");
   assert.ok(packageCatalog.packages.length > 0);
-  assert.ok(packageCatalog.packages.every((entry) => entry.archiveUrl.startsWith("/api/v1/assets/")));
+  assert.equal(packageCatalog.packages.filter((entry) => /csst/.test(entry.id)).length, 0);
+  assert.ok(packageCatalog.packages.every((entry) => entry.archiveUrl.startsWith("/api/v1/resource-packages/")), "catalog archiveUrls must use the versioned download route");
   const packageArchive = await fetch(`http://127.0.0.1:${port}${packageCatalog.packages[0]!.archiveUrl}`, { headers: { Range: "bytes=0-7" } });
   assert.equal(packageArchive.status, 206);
   assert.equal(packageArchive.headers.get("x-content-sha256"), packageCatalog.packages[0]!.sha256);
@@ -124,7 +125,7 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.equal(coverage.nside, 16);
   assert.ok(coverage.footprints.length > 20);
   assert.ok(coverage.footprints.every((footprint) => footprint.pixels.length > 0));
-  assert.equal(coverage.footprints.find((footprint) => footprint.surveyId === "csst")?.pixels.length, 46);
+  assert.equal(coverage.footprints.some((footprint) => footprint.surveyId === "csst"), false, "sensitive surveys must stay off the public coverage listing");
 
   const coverageCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`);
   assert.equal(coverageCatalogResponse.status, 200);
@@ -151,15 +152,9 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.equal(staleBlock.status, 409);
   assert.ok((desiLayer?.recipe?.steps.length ?? 0) >= 7);
   assert.equal(desiLayer?.sourceUnitIndex?.status, "exact");
-  const csstW2Layer = coverageCatalog.layers.find((layer) => layer.layerId === "csst-sim-w2-image-extent");
-  assert.equal(csstW2Layer?.recipe?.mode, "nested-healpix");
-  assert.equal(csstW2Layer?.sourceUnitIndex?.status, "exact");
-  assert.equal(csstW2Layer?.sourceUnitIndex?.unitKind, "file");
-  assert.ok(csstW2Layer?.recipe?.steps.some((step: any) => step.id === "header"));
-  assert.ok(csstW2Layer?.recipe?.steps.some((step: any) => step.id === "normalize"));
-  const csstW1Layer = coverageCatalog.layers.find((layer) => layer.layerId === "csst-sim-w1-image-extent");
-  assert.equal(csstW1Layer?.recipe?.mode, "fits-wcs");
-  assert.ok(csstW1Layer?.recipe?.steps.some((step: any) => step.id === "header"));
+  assert.equal(coverageCatalog.layers.some((layer) => layer.layerId === "csst-sim-w2-image-extent"), false, "sensitive survey layers must stay off the public coverage catalog");
+  assert.equal(coverageCatalog.layers.some((layer) => layer.layerId === "csst-sim-w1-image-extent"), false, "sensitive survey layers must stay off the public coverage catalog");
+  assert.ok(coverageCatalog.layers.every((layer) => !/csst/.test(layer.layerId)), "no CSST layers may remain in the public coverage catalog");
   const gaiaLayer = coverageCatalog.layers.find((layer) => layer.layerId === "gaia-dr3-main-source-presence");
   assert.ok(gaiaLayer);
   assert.equal(gaiaLayer.coverageRole, "object_presence");
@@ -185,22 +180,22 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   const invalidOverlap = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["desi"] }) });
   assert.equal(invalidOverlap.status, 400);
 
-  const csstDesiOverlap = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["csst", "desi"], requestedOrder: 4 }) });
-  assert.equal(csstDesiOverlap.status, 200);
-  const csstDesiOverlapBody = await csstDesiOverlap.json() as { commonOrder: number; pixels: number[]; components: Array<{ id: string; order: number; cells: number[]; evidenceLookup?: { endpoint: string; layerIds: string[]; order: number; precision: string; deferred: boolean }; surveys?: Array<{ sourceUnitIndex?: { unitKind?: string }; sourceUnits?: { units: Array<{ unitId: string }>; totalUnits: number } | null }> }> };
-  assert.equal(csstDesiOverlapBody.commonOrder, 4);
-  assert.ok(csstDesiOverlapBody.pixels.length > 0);
-  assert.ok(csstDesiOverlapBody.components.every((component) => component.order === 4));
-  const tileMatches = csstDesiOverlapBody.components.flatMap((component) => component.surveys ?? []).filter((entry) => entry.sourceUnitIndex?.unitKind === "tile").map((entry) => entry.sourceUnits).filter((value): value is { units: Array<{ unitId: string }>; totalUnits: number } => Boolean(value));
+  const gaiaDesiOverlap = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["gaia", "desi"], requestedOrder: 4 }) });
+  assert.equal(gaiaDesiOverlap.status, 200);
+  const gaiaDesiOverlapBody = await gaiaDesiOverlap.json() as { commonOrder: number; pixels: number[]; components: Array<{ id: string; order: number; cells: number[]; evidenceLookup?: { endpoint: string; layerIds: string[]; order: number; precision: string; deferred: boolean }; surveys?: Array<{ sourceUnitIndex?: { unitKind?: string }; sourceUnits?: { units: Array<{ unitId: string }>; totalUnits: number } | null }> }> };
+  assert.equal(gaiaDesiOverlapBody.commonOrder, 4);
+  assert.ok(gaiaDesiOverlapBody.pixels.length > 0);
+  assert.ok(gaiaDesiOverlapBody.components.every((component) => component.order === 4));
+  const tileMatches = gaiaDesiOverlapBody.components.flatMap((component) => component.surveys ?? []).filter((entry) => entry.sourceUnitIndex?.unitKind === "tile").map((entry) => entry.sourceUnits).filter((value): value is { units: Array<{ unitId: string }>; totalUnits: number } => Boolean(value));
   assert.ok(tileMatches.some((match) => match.totalUnits > 0 && match.units.some((unit) => unit.unitId)));
-  const csstDesiComponent = csstDesiOverlapBody.components[0];
-  assert.ok(csstDesiComponent?.evidenceLookup?.layerIds.includes("desi-dr1-spectra-footprint"));
-  const dynamicComponent = csstDesiOverlapBody.components.at(-1);
+  const gaiaDesiComponent = gaiaDesiOverlapBody.components[0];
+  assert.ok(gaiaDesiComponent?.evidenceLookup?.layerIds.includes("desi-dr1-spectra-footprint"));
+  const dynamicComponent = gaiaDesiOverlapBody.components.at(-1);
   assert.ok(dynamicComponent?.evidenceLookup);
   const dynamicReverse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/reverse-lookup`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ layerIds: dynamicComponent!.evidenceLookup!.layerIds, order: dynamicComponent!.order, cells: dynamicComponent!.cells, limit: 5000 }) });
   assert.equal(dynamicReverse.status, 200);
   const dynamicReverseBody = await dynamicReverse.json() as { downloadPlan: { entrypoints: Array<{ kind: string; layerId?: string; sourceUri?: string; sourceScope?: string; tileId?: string; required?: boolean; selectionComplete?: boolean }>; tileSelections?: Array<{ layerId: string; tileIds: string[]; complete: boolean }> } };
-  assert.ok(dynamicReverseBody.downloadPlan.entrypoints.some((entry) => entry.kind === "source-path" && entry.layerId === "csst-sim-w2-image-extent" && entry.sourceUri?.includes("W2_Phot")));
+  assert.ok(dynamicReverseBody.downloadPlan.entrypoints.some((entry) => entry.kind === "source-path" && entry.layerId === "desi-dr1-spectra-footprint" && entry.sourceUri?.includes("data.desi.lbl.gov")));
   assert.ok(dynamicReverseBody.downloadPlan.entrypoints.some((entry) => entry.kind === "tile-directory" && entry.required === true && entry.selectionComplete === true && entry.tileId));
   assert.ok(dynamicReverseBody.downloadPlan.tileSelections?.some((selection) => selection.layerId === "desi-dr1-spectra-footprint" && selection.complete && selection.tileIds.length > 0));
 
@@ -218,8 +213,8 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.deepEqual(publicReverseBody.downloadPlan.files, []);
   assert.ok(publicReverseBody.downloadPlan.entrypoints.some((entry) => entry.layerId && entry.url && (entry.cells?.length ?? 0) > 0));
 
-  const componentId = csstDesiOverlapBody.components[0] ? "C01" : "C99";
-  const overlapDetails = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap/details`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["csst", "desi"], componentId }) });
+  const componentId = gaiaDesiOverlapBody.components[0] ? "C01" : "C99";
+  const overlapDetails = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/overlap/details`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyIds: ["gaia", "desi"], componentId }) });
   assert.equal(overlapDetails.status, 200);
   const overlapDetailsBody = await overlapDetails.json() as { schemaVersion: number; component: { id: string; order: number }; publicSources: Array<{ surveyId: string; coverageClaim?: { kind: string } }>; warehouseEvidence: Array<{ state: string; connector: { status: string } }>; method: { summary: string }; reverseLookup: { endpoint: string; layerIds: string[]; order: number; deferred: boolean } };
   assert.equal(overlapDetailsBody.schemaVersion, 1);
@@ -263,17 +258,11 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
     surveys: Array<{ id: string; modalities: string[]; statistics: { publicProducts: number; acquired: number }; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; releases: Array<{ coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; products: Array<{ status: string; reason?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number } }> }>; assets: Array<{ surveyId?: string; downloadUrl: string }> }>;
     sharedAssets: Array<{ surveyId?: string; downloadUrl: string }>;
   };
-  assert.equal(surveys.surveys.length, 30);
-  const csst = surveys.surveys.find((survey) => survey.id === "csst");
-  assert.ok(csst);
-  assert.deepEqual(csst.modalities.sort(), ["catalog", "imaging", "photometry", "simulation"]);
-  assert.equal(csst.releases[0]?.products[0]?.status, "acquired");
-  assert.deepEqual(csst.releases[0]?.products[0]?.coverage?.availableOrders, [4]);
-  assert.equal(csst.releases[0]?.coverageOrders?.overviewOrders[0], 4);
-  assert.ok(csst.coverageOrders?.availableOrders.includes(8));
-  assert.deepEqual(csst.releases[1]?.products[0]?.coverage?.availableOrders, [4, 8]);
-  assert.ok(csst.assets.some((asset) => asset.downloadUrl.includes("csst-w1-display-footprint-nside16")));
-  assert.ok(csst.assets.every((asset) => !/coverage-job-snapshot|normalized-scan|run-statistics|sample-report|wcs-geometry-summary/.test(asset.downloadUrl)));
+  assert.equal(surveys.surveys.length, 29);
+  assert.equal(surveys.surveys.some((survey) => survey.id === "csst"), false, "sensitive surveys must stay off the public survey listing");
+  const modalities = surveys.surveys.flatMap((survey) => survey.modalities).sort();
+  assert.ok(modalities.includes("catalog"));
+  assert.ok(surveys.sharedAssets.every((asset) => !/csst/.test(asset.downloadUrl)));
   assert.ok(surveys.surveys.every((survey) => survey.modalities.length > 0 && survey.statistics.publicProducts > 0));
   assert.ok(surveys.surveys.every((survey) => survey.assets.every((asset) => asset.surveyId === survey.id && asset.downloadUrl.startsWith("/api/v1/assets/"))));
   assert.ok(surveys.sharedAssets.every((asset) => !asset.surveyId));
@@ -866,4 +855,54 @@ test("HTTP publication activates dynamic MOC assets and restores them after rest
   const rejectedCoverageResponse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`);
   const rejectedCoverage = await rejectedCoverageResponse.json() as { layers: Array<{ layerId: string }> };
   assert.equal(rejectedCoverage.layers.some((layer) => layer.layerId === dynamicLayer.layerId), false);
+});
+
+test("HTTP release history serves versioned package downloads and hides sensitive surveys", async (context) => {
+  const port = await freePort();
+  const child = spawn(process.execPath, [path.resolve("node_modules/tsx/dist/cli.mjs"), "server/server.ts"], {
+    cwd: process.cwd(),
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), PUBLIC_SITE_ROOT: path.resolve("site/public") },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  context.after(() => { child.kill("SIGTERM"); });
+  await waitFor(`http://127.0.0.1:${port}/healthz`, child);
+
+  const releasesResponse = await fetch(`http://127.0.0.1:${port}/api/v1/releases`);
+  assert.equal(releasesResponse.status, 200);
+  const history = await releasesResponse.json() as {
+    schemaVersion: number;
+    releases: Array<{ releaseId: string; sequence: number; bundleId: string; packages: Array<{ id: string; version: string; sizeBytes: number; sha256: string; downloadUrl: string }> }>;
+  };
+  assert.equal(history.schemaVersion, 1);
+  assert.ok(history.releases.length >= 1);
+  const newest = history.releases[0]!;
+  assert.ok(newest.packages.length >= 14);
+  assert.ok(newest.packages.every((entry) => !/csst/.test(entry.id)), "sensitive surveys must never appear in public release history");
+  assert.ok(newest.packages.every((entry) => entry.downloadUrl.startsWith(`/api/v1/resource-packages/${entry.id}/versions/${entry.version}/download`)));
+
+  const detailResponse = await fetch(`http://127.0.0.1:${port}/api/v1/releases/${newest.releaseId}`);
+  assert.equal(detailResponse.status, 200);
+  assert.equal((await detailResponse.json() as { releaseId: string }).releaseId, newest.releaseId);
+
+  const missingResponse = await fetch(`http://127.0.0.1:${port}/api/v1/releases/does-not-exist`);
+  assert.equal(missingResponse.status, 404);
+
+  const perReleaseCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/releases/${newest.releaseId}/resource-packages/catalog.json`);
+  assert.equal(perReleaseCatalogResponse.status, 200);
+  const perReleaseCatalog = await perReleaseCatalogResponse.json() as { packages: Array<{ id: string }> };
+  assert.equal(perReleaseCatalog.packages.filter((entry) => /csst/.test(entry.id)).length, 0);
+
+  const target = newest.packages.find((entry) => entry.id.includes("gaia")) ?? newest.packages[0]!;
+  const download = await fetch(`http://127.0.0.1:${port}${target.downloadUrl}`);
+  assert.equal(download.status, 200);
+  assert.equal(download.headers.get("x-content-sha256"), target.sha256);
+  assert.equal(Number(download.headers.get("content-length")), target.sizeBytes);
+  assert.equal(sha256(new Uint8Array(await download.arrayBuffer())), target.sha256);
+
+  const rangeDownload = await fetch(`http://127.0.0.1:${port}${target.downloadUrl}`, { headers: { Range: "bytes=0-7" } });
+  assert.equal(rangeDownload.status, 206);
+  assert.equal((await rangeDownload.arrayBuffer()).byteLength, 8);
+
+  const denied = await fetch(`http://127.0.0.1:${port}/api/v1/resource-packages/public-csst-footprints/versions/3.0.0/download`);
+  assert.equal(denied.status, 404);
 });

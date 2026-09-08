@@ -18,7 +18,8 @@ import { buildOverlapDetails, publicExternalUrl, publicLocator } from "./overlap
 import { resolveMocDiscoveryCandidate } from "./moc-discovery.js";
 import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
 import { DynamicResourcePackageStore, dynamicResourcePackageAssetId } from "./resource-package-publication.js";
-import { PublicReleasePublisher, PublicationConflictError } from "./public-release-publication.js";
+import { PublicReleasePublisher, PublicationConflictError, type ReleaseHistoryDocument } from "./public-release-publication.js";
+import { isDeniedPackageId, isDeniedSurvey } from "./publication-policy.js";
 import { ContentArchiveError } from "./content-archive.js";
 import { buildPublicProductEvidence } from "./public-product-evidence.js";
 import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductVerificationStatus, PublicSurveyModality } from "./types.js";
@@ -412,8 +413,13 @@ function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurv
   };
 }
 
-function publicSurveyIndex(): Awaited<ReturnType<typeof loadSurveyIndex>> {
+function adminSurveyIndex(): Awaited<ReturnType<typeof loadSurveyIndex>> {
   return editorial.applyPublished(runtimeSurveyIndex);
+}
+
+function publicSurveyIndex(): Awaited<ReturnType<typeof loadSurveyIndex>> {
+  const enriched = editorial.applyPublished(runtimeSurveyIndex);
+  return { ...enriched, surveys: enriched.surveys.filter((survey) => !isDeniedSurvey(survey.id)) };
 }
 
 function editorialApiContent(content: SurveyEditorialContent | null): SurveyEditorialContent | null {
@@ -991,17 +997,25 @@ async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<st
   if (document.schemaVersion !== 3 || document.version !== "3.0.0" || !Array.isArray(document.packages)) {
     throw new Error("Resource package catalog is not v3");
   }
+  // Serve-time policy filter: denied surveys are never listed, even when the
+  // on-disk catalog is an unsanitized worktree original.
+  const sanitizedPackages = (document.packages as unknown[]).filter((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const surveyId = (value as Record<string, unknown>)["surveyId"];
+    return typeof surveyId === "string" ? !isDeniedSurvey(surveyId) : true;
+  });
+  document.packages = sanitizedPackages;
   const packageAssets = [...catalog.files.values()]
     .map(({ record }) => record)
     .filter((record) => record.kind === "package");
   const dynamicEntries = dynamicResourcePackages.list();
   const dynamicIds = new Set(dynamicEntries.map((entry) => entry.id));
-  const identities = new Set(document.packages.map((value) => {
+  const identities = new Set(sanitizedPackages.map((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return "";
     const entry = value as Record<string, unknown>;
     return `${typeof entry.id === "string" ? entry.id : ""}@${typeof entry.version === "string" ? entry.version : ""}`;
   }));
-  const packageEntries = [...document.packages, ...dynamicEntries.filter((entry) => !identities.has(`${entry.id}@${entry.version}`))];
+  const packageEntries = [...sanitizedPackages, ...dynamicEntries.filter((entry) => !identities.has(`${entry.id}@${entry.version}`))];
   const packages = packageEntries.map((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Resource package catalog contains an invalid entry");
     const entry = value as Record<string, unknown>;
@@ -1022,10 +1036,35 @@ async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<st
     return {
       ...entry,
       ...(superseded ? { deprecated: true, replacedBy: [packageId] } : {}),
-      ...(asset ? { archiveUrl: `/api/v1/assets/${encodeURIComponent(asset.id)}/download` } : {}),
+      ...(packageId && version && asset
+        ? { archiveUrl: `/api/v1/resource-packages/${encodeURIComponent(packageId)}/versions/${encodeURIComponent(version)}/download` }
+        : asset
+          ? { archiveUrl: `/api/v1/assets/${encodeURIComponent(asset.id)}/download` }
+          : {}),
     };
   });
   return { ...document, packages };
+}
+
+/**
+ * Public release history from the current immutable release, with a
+ * fail-closed serve-time policy filter: packages of denied surveys are
+ * never listed even if a stale history document slipped through.
+ */
+async function releaseHistory(loaded: LoadedCatalog): Promise<ReleaseHistoryDocument> {
+  const historyFile = [...loaded.files.values()].find(({ record }) => record.path.endsWith("/release-history.json"));
+  if (!historyFile) return { schemaVersion: 1, releases: [] };
+  const document = JSON.parse(await readFile(historyFile.absolutePath, "utf8")) as ReleaseHistoryDocument;
+  if (document?.schemaVersion !== 1 || !Array.isArray(document.releases)) {
+    throw new Error("Release history document is not v1");
+  }
+  return {
+    schemaVersion: 1,
+    releases: document.releases.map((entry) => ({
+      ...entry,
+      packages: entry.packages.filter((pkg) => !isDeniedPackageId(pkg.id)),
+    })),
+  };
 }
 
 function requestPath(request: IncomingMessage): string {
@@ -1568,7 +1607,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     if (pathname === "/api/v1/admin/products" && request.method === "GET") {
       const records = products.list();
       const query = requestQuery(request);
-      if (query.get("view") === "surveys") return json(response, 200, { surveys: adminProductSurveys(records, publicSurveyIndex()) });
+      if (query.get("view") === "surveys") return json(response, 200, { surveys: adminProductSurveys(records, adminSurveyIndex()) });
       const surveyId = query.get("surveyId")?.trim();
       const filtered = surveyId ? records.filter((record) => record.draft.surveyId === surveyId) : records;
       return json(response, 200, { products: filtered.map(adminProductView) });
@@ -1941,6 +1980,39 @@ const server = http.createServer((request, response) => {
     });
     if (pathname === "/api/v1/assets") return json(response, 200, publicManifest(catalog, [...publishedPublicAssets.values()].map(({ record }) => record)));
     if (pathname === "/api/v1/resource-packages/catalog.json") return json(response, 200, await resourcePackageCatalog(catalog));
+    if (pathname === "/api/v1/releases") {
+      const history = await releaseHistory(catalog);
+      return compressedJson(request, response, 200, history, "public, max-age=60, stale-while-revalidate=300", `"releases-${catalog.manifest.bundle.sha256.slice(0, 16)}"`);
+    }
+    const releaseDetail = /^\/api\/v1\/releases\/([^/]+)$/.exec(pathname);
+    if (releaseDetail?.[1]) {
+      const releaseId = decodeURIComponent(releaseDetail[1]);
+      const entry = (await releaseHistory(catalog)).releases.find((candidate) => candidate.releaseId === releaseId);
+      if (!entry) return json(response, 404, { error: "Release not found" });
+      return compressedJson(request, response, 200, entry, "public, max-age=60, stale-while-revalidate=300");
+    }
+    const releaseCatalogRoute = /^\/api\/v1\/releases\/([^/]+)\/resource-packages\/catalog\.json$/.exec(pathname);
+    if (releaseCatalogRoute?.[1]) {
+      const releaseId = decodeURIComponent(releaseCatalogRoute[1]);
+      const history = await releaseHistory(catalog);
+      const currentEntry = [...history.releases].reverse().find((candidate) => candidate.bundleId === catalog.manifest.bundle.id);
+      if (!currentEntry || currentEntry.releaseId !== releaseId) {
+        return json(response, 404, { error: "Only the current release catalog is served online; historical catalogs live inside the immutable release archive" });
+      }
+      return json(response, 200, await resourcePackageCatalog(catalog));
+    }
+    const packageVersionDownload = /^\/api\/v1\/resource-packages\/([^/]+)\/versions\/([^/]+)\/download$/.exec(pathname);
+    if (packageVersionDownload?.[1] && packageVersionDownload[2]) {
+      const packageId = decodeURIComponent(packageVersionDownload[1]);
+      const version = decodeURIComponent(packageVersionDownload[2]);
+      const match = [...catalog.files.values()].find(({ record }) => record.kind === "package"
+        && record.version === version
+        && (record.downloadName === `${packageId}-${version}.zip` || record.path.endsWith(`/${packageId}-${version}.zip`)));
+      if (!match || isDeniedSurvey(match.record.surveyId) || isDeniedPackageId(packageId)) {
+        return json(response, 404, { error: "Resource package version not found" });
+      }
+      return sendDownload(request, response, catalog, match.record.id);
+    }
     if (pathname === "/api/v1/coverage/catalog") {
       const { records: _records, ...publicCoverageCatalog } = coverageCatalog;
       const body = { ...publicCoverageCatalog, schemaVersion: 2, generatedAt: coverageLoadedAt };
@@ -1948,7 +2020,7 @@ const server = http.createServer((request, response) => {
       return compressedJson(request, response, 200, body, "no-cache, must-revalidate", etag);
     }
     if (pathname.startsWith("/api/v1/coverage/blocks/")) return sendCoverageBlock(request, response, pathname);
-    if (pathname === "/api/v1/coverage") return json(response, 200, runtimeCoverageManifest);
+    if (pathname === "/api/v1/coverage") return json(response, 200, { ...runtimeCoverageManifest, footprints: runtimeCoverageManifest.footprints.filter((footprint) => !isDeniedSurvey(footprint.surveyId)) });
     if (pathname === "/api/v1/surveys") return json(response, 200, publicSurveyIndex());
     if (pathname === "/api/v1/products") return json(response, 200, { products: products.list().filter((record) => record.published).map(publicProductListView) });
     const productEvidence = /^\/api\/v1\/products\/([^/]+)\/evidence$/.exec(pathname);

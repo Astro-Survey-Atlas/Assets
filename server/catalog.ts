@@ -4,6 +4,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { inferredPublicAssetDeliveryClass, type PublicAssetManifest, type PublicAssetPreviewMode, type PublicAssetProjection, type PublicAssetRecord } from "./types.js";
+import { isSanitizableControlDocument, sanitizeReleaseControlDocument } from "./publication-policy.js";
 
 export interface LoadedCatalog {
   root: string;
@@ -47,8 +48,18 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
     const absolutePath = resolveInside(normalizedRoot, record.path);
     if (verifyFiles) {
       const details = await stat(absolutePath);
-      if (!details.isFile() || details.size !== record.sizeBytes) throw new Error(`Public asset size mismatch: ${record.id}`);
-      if (await sha256(absolutePath) !== record.sha256) throw new Error(`Public asset SHA-256 mismatch: ${record.id}`);
+      if (!details.isFile()) throw new Error(`Public asset is not a regular file: ${record.id}`);
+      let verified = details.size === record.sizeBytes && (await sha256(absolutePath)) === record.sha256;
+      // Worktree equivalence: control documents keep denied-survey data on
+      // disk while the release manifest records sanitized bytes. Accept the
+      // on-disk document when its sanitized projection matches the record.
+      if (!verified && isSanitizableControlDocument(record.path)) {
+        const sanitized = sanitizeReleaseControlDocument(record.path, await readFile(absolutePath));
+        verified = sanitized !== null
+          && sanitized.length === record.sizeBytes
+          && createHash("sha256").update(sanitized).digest("hex") === record.sha256;
+      }
+      if (!verified) throw new Error(`Public asset SHA-256 mismatch: ${record.id}`);
     }
     files.set(record.id, { record, absolutePath });
   }

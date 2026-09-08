@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { WarehouseCoverageCatalogSnapshot } from "./evidence-store.js";
+import { isDeniedLayerId, isDeniedSurvey } from "./publication-policy.js";
 
 export interface CoverageCellLayer {
   layerId: string;
@@ -168,6 +169,7 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
   for (const survey of surveyCatalog.surveys ?? []) colors.set(survey.id, survey.color);
   const records = new Map<string, CoverageCellLayer>();
   for (const footprint of manifest.footprints) {
+    if (isDeniedSurvey(footprint.surveyId)) continue;
     const key = identity(footprint.surveyId, footprint.releaseId, footprint.product);
     const registered = registryByIdentity.get(key);
     const layerId = registered?.layerId ?? `${slug(footprint.surveyId)}-${slug(footprint.releaseId)}-${slug(footprint.product)}`;
@@ -284,6 +286,7 @@ export function coverageCatalogFromWarehouse(
     // Smoke and self-test layers remain evidence-only even if a stale
     // Warehouse index briefly reports them as ACTIVE.
     if (excluded.has(layer.layerId)) continue;
+    if (isDeniedSurvey(layer.surveyId) || isDeniedLayerId(layer.layerId)) continue;
     const fallback = fallbackById.get(layer.layerId);
     const cells = new Map<number, number[]>();
     snapshot.coverages

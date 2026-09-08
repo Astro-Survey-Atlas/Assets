@@ -1,7 +1,11 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+const execFileAsync = promisify(execFile);
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -132,7 +136,11 @@ async function harness(): Promise<TestHarness> {
     },
     files: [],
   };
-  const catalogBytes = JSON.stringify({ schemaVersion: 3, version: "3.0.0", packages: [{ id: "public-legacy-footprints-legacy", surveyId: "m42" }] });
+  const catalogBytes = JSON.stringify({
+    schemaVersion: 3,
+    version: "3.0.0",
+    packages: [{ id: "public-legacy-footprints", version: "3.0.0", name: "Legacy footprints", surveyId: "m42" }],
+  });
   const zipBytes = zipContent;
   baselineManifest.files = [
     baselineLayerRecord,
@@ -149,12 +157,12 @@ async function harness(): Promise<TestHarness> {
       deliveryClass: "runtime",
     },
     {
-      id: "package-public-legacy-3-0-0",
+      id: "package-public-legacy-footprints-3-0-0",
       kind: "package",
       label: "Legacy package",
       description: "Legacy package",
-      path: "artifacts/public-survey-footprints/packages/public-legacy-3.0.0.zip",
-      downloadName: "public-legacy-3.0.0.zip",
+      path: "artifacts/public-survey-footprints/packages/public-legacy-footprints-3.0.0.zip",
+      downloadName: "public-legacy-footprints-3.0.0.zip",
       mediaType: "application/zip",
       sizeBytes: Buffer.byteLength(legacyZipBytes),
       sha256: createHash("sha256").update(legacyZipBytes).digest("hex"),
@@ -249,7 +257,7 @@ test("publisher executes a queued run into a verified archive and pointer", asyn
     const finished = await publisher.execute(run.runId);
     assert.equal(finished.status, "published", finished.error);
     assert.ok(finished.archiveKey?.startsWith("public/releases/"));
-    assert.equal(finished.files, 4);
+    assert.equal(finished.files, 6);
     assert.equal(finished.packages, 1);
 
     const pointer = JSON.parse((await readFile(path.join(objectRoot, "public/current.json"), "utf8")));
@@ -257,6 +265,99 @@ test("publisher executes a queued run into a verified archive and pointer", asyn
     assert.equal(pointer.archiveSha256, finished.archiveSha256);
     const archive = await stat(path.join(objectRoot, finished.archiveKey!));
     assert.equal(archive.size, finished.archiveSizeBytes);
+
+    const extractRoot = path.join(base, "extract");
+    await mkdir(extractRoot, { recursive: true });
+    await execFileAsync("tar", ["-xzf", path.join(objectRoot, finished.archiveKey!), "-C", extractRoot]);
+    const manifest = JSON.parse(await readFile(path.join(extractRoot, "artifacts/public-survey-footprints/release-manifest.json"), "utf8"));
+    const packagePaths = manifest.files.filter((record: { kind: string }) => record.kind === "package").map((record: { path: string }) => record.path);
+    assert.deepEqual(packagePaths.sort(), [
+      "artifacts/public-survey-footprints/packages/public-legacy-footprints-3.0.0.zip",
+      "artifacts/public-survey-footprints/packages/public-m42-footprints-3.1.0.zip",
+    ]);
+    const mergedCatalog = JSON.parse(await readFile(path.join(extractRoot, "artifacts/public-survey-footprints/packages/catalog.json"), "utf8"));
+    assert.equal(mergedCatalog.packages.length, 2);
+    const dynamicEntry = mergedCatalog.packages.find((entry: { id: string }) => entry.id === "public-m42-footprints");
+    assert.equal(dynamicEntry.archiveUrl, "/api/v1/resource-packages/public-m42-footprints/versions/3.1.0/download");
+    const history = JSON.parse(await readFile(path.join(extractRoot, "artifacts/public-survey-footprints/release-history.json"), "utf8"));
+    assert.equal(history.schemaVersion, 1);
+    assert.equal(history.releases.length, 1);
+    assert.equal(history.releases[0].sequence, 1);
+    assert.equal(history.releases[0].packages.length, 2);
+    assert.ok(history.releases[0].packages.every((entry: { downloadUrl: string }) => entry.downloadUrl.startsWith("/api/v1/resource-packages/") && entry.downloadUrl.includes("/versions/")));
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("publication policy denies sensitive surveys end to end", async () => {
+  const context = await harness();
+  const base = path.dirname(context.options.contentRoot);
+  try {
+    const csstLayerFile: MocPublicationFile = { path: "moc/csst-w1.fits", sha256: createHash("sha256").update("csst-moc").digest("hex"), sizeBytes: 8, mediaType: "application/fits" };
+    await writeFile(path.join(context.options.contentRoot, "moc/csst-w1.fits"), "csst-moc");
+    context.publications.push({
+      schemaVersion: 1,
+      id: "pub-csst",
+      buildName: "build-csst",
+      productId: "product-csst",
+      surveyId: "csst",
+      releaseId: "csst-w1",
+      product: "CSST W1",
+      layerId: "csst-sim-w1-image-extent",
+      sourceUrl: "https://example.org/csst",
+      publishedAt: "2026-01-02T00:00:00.000Z",
+      files: { moc: csstLayerFile },
+    });
+    const csstZip = "csst-archive-bytes";
+    context.packageEntries.push({
+      ...context.packageEntries[0]!,
+      id: "public-csst-footprints",
+      surveyId: "csst",
+      version: "3.1.0",
+      archiveUrl: "/api/v1/assets/package-public-csst-footprints-3-1-0/download",
+      archivePath: "resource-packages/public-csst-footprints/3.1.0/public-csst-footprints-3.1.0.zip",
+      sizeBytes: Buffer.byteLength(csstZip),
+      sha256: createHash("sha256").update(csstZip).digest("hex"),
+    });
+    context.packageAssets.push({
+      ...context.packageAssets[0]!,
+      id: "package-public-csst-footprints-3-1-0",
+      path: "resource-packages/public-csst-footprints/3.1.0/public-csst-footprints-3.1.0.zip",
+      downloadName: "public-csst-footprints-3.1.0.zip",
+      surveyId: "csst",
+      version: "3.1.0",
+      sizeBytes: Buffer.byteLength(csstZip),
+      sha256: createHash("sha256").update(csstZip).digest("hex"),
+    });
+    await writeFile(path.join(context.options.contentRoot, "resource-packages/public-csst-footprints/3.1.0/public-csst-footprints-3.1.0.zip"), csstZip, { flag: "wx" }).catch(() => undefined);
+
+    const objectRoot = path.join(base, "objects-csst");
+    const store = new FilesystemArtifactStore(objectRoot);
+    const publisher = new PublicReleasePublisher({ ...context.options, store });
+    const plan = await publisher.plan();
+    const csstPlan = plan.surveys.find((survey) => survey.surveyId === "csst");
+    assert.ok(csstPlan);
+    assert.ok(csstPlan.blockers.some((blocker) => blocker.includes("policy")));
+    assert.equal(csstPlan.selectable, false);
+    await assert.rejects(
+      publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["csst"] }),
+      (error: { statusCode?: number }) => error.statusCode === 409,
+    );
+
+    const run = await publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["m42"] });
+    await publisher.claimQueuedRun();
+    const finished = await publisher.execute(run.runId);
+    assert.equal(finished.status, "published", finished.error);
+    const extractRoot = path.join(base, "extract-csst");
+    await mkdir(extractRoot, { recursive: true });
+    await execFileAsync("tar", ["-xzf", path.join(objectRoot, finished.archiveKey!), "-C", extractRoot]);
+    const manifest = JSON.parse(await readFile(path.join(extractRoot, "artifacts/public-survey-footprints/release-manifest.json"), "utf8"));
+    assert.ok(manifest.files.every((record: { id: string; path: string; surveyId?: string }) => !/csst/i.test(record.id) && !record.path.includes("csst") && record.surveyId !== "csst"));
+    const mergedCatalog = JSON.parse(await readFile(path.join(extractRoot, "artifacts/public-survey-footprints/packages/catalog.json"), "utf8"));
+    assert.ok(mergedCatalog.packages.every((entry: { id: string; surveyId?: string }) => entry.id !== "public-csst-footprints" && entry.surveyId !== "csst"));
+    const history = JSON.parse(await readFile(path.join(extractRoot, "artifacts/public-survey-footprints/release-history.json"), "utf8"));
+    assert.ok(history.releases.every((release: { packages: Array<{ id: string }> }) => release.packages.every((entry) => !entry.id.includes("csst"))));
   } finally {
     await rm(base, { recursive: true, force: true });
   }

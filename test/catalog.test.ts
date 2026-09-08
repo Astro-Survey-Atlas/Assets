@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -11,8 +11,9 @@ import { projectRoot } from "../server/paths.js";
 test("release catalog verifies every public file and bundle digest", async () => {
   const catalog = await loadCatalog(projectRoot);
   assert.equal(catalog.manifest.schemaVersion, 1);
-  assert.equal(catalog.manifest.statistics.packages, 15);
-  assert.equal(catalog.manifest.statistics.rawMocFiles, 87);
+  assert.equal(catalog.manifest.statistics.packages, 14);
+  assert.equal(catalog.manifest.statistics.rawMocFiles, 80);
+  assert.equal(catalog.manifest.statistics.footprints, 116);
   assert.equal(catalog.manifest.statistics.acquired, 111);
   assert.equal(catalog.files.size, catalog.manifest.files.length);
   assert.ok(catalog.manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)));
@@ -31,34 +32,44 @@ test("release catalog labels projections with their locked order", async () => {
   }
 });
 
-test("CSST release publishes reviewed products and excludes warehouse evidence", async () => {
+test("publication policy keeps sensitive CSST surveys off the public release", async () => {
   const catalog = await loadCatalog(projectRoot, false);
-  const files = catalog.manifest.files.filter((entry) => entry.surveyId === "csst");
+  const files = catalog.manifest.files;
+  assert.equal(files.filter((entry) => entry.surveyId === "csst").length, 0);
   const ids = new Set(files.map((entry) => entry.id));
   for (const id of [
     "csst-w1-display-footprint-nside16", "csst-w1-healpix-order8", "csst-w1-image-extent-moc-order8",
     "package-public-csst-footprints-3-0-0",
-  ]) assert.ok(ids.has(id), `missing CSST release asset: ${id}`);
-  for (const id of [
-    "csst-coverage-job-snapshot", "csst-provenance", "csst-run-statistics", "csst-sample-report",
-    "csst-wcs-geometry-summary",
-  ]) assert.equal(ids.has(id), false, `warehouse evidence must stay off the public release: ${id}`);
-  assert.equal(ids.has("csst-input-manifest"), false, "the 205 MB input manifest belongs on evidence storage, not the public release allowlist");
+  ]) assert.equal(ids.has(id), false, `sensitive survey asset must stay off the public release: ${id}`);
   for (const band of ["w2", "w3", "w4"]) {
-    for (const suffix of ["moc", "preview-order4", "query-order8", "statistics"]) {
-      assert.ok(ids.has(`csst-${band}-${suffix}`) || ids.has(`layer-csst-sim-${band}-image-extent-${suffix}`), `missing CSST ${band.toUpperCase()} release asset: ${suffix}`);
-    }
-    for (const suffix of ["coverage-job-snapshot", "layer-provenance", "normalized-scan", "provenance", "run-statistics", "sample-report"]) {
-      assert.equal(ids.has(`csst-${band}-${suffix}`) || ids.has(`layer-csst-sim-${band}-image-extent-${suffix}`), false, `warehouse evidence must stay off the public release: csst-${band}-${suffix}`);
+    for (const suffix of ["moc", "preview-order4", "query-order8", "statistics", "coverage-job-snapshot", "normalized-scan", "provenance", "run-statistics", "sample-report"]) {
+      assert.equal(ids.has(`csst-${band}-${suffix}`) || ids.has(`layer-csst-sim-${band}-image-extent-${suffix}`), false, `sensitive survey asset must stay off the public release: csst-${band}-${suffix}`);
     }
   }
-  assert.ok(files.filter((entry) => entry.kind === "moc").length >= 4);
-  assert.ok(files.filter((entry) => entry.kind === "moc").every((entry) => entry.mediaType === "application/fits"));
-  for (const band of ["w2", "w3", "w4"]) {
-    const releaseId = `csst-sim-${band}-20250731`;
-    assert.ok(files.some((entry) => entry.releaseId === releaseId && entry.kind === "moc"), `missing ${band.toUpperCase()} MOC`);
-    assert.ok(files.filter((entry) => entry.releaseId === releaseId && entry.kind !== "package").every((entry) => entry.product === `${band.toUpperCase()} simulated wide-field images`));
-  }
+  assert.ok(files.every((entry) => !/(^|-)csst(-|$)/.test(entry.id)), "no CSST-flavoured record ids may remain");
+  assert.ok(files.every((entry) => !/(^|\/)csst(\/|-)/.test(entry.path)), "no CSST paths may remain in the release tree");
+  assert.ok(files.every((entry) => !/csst/i.test(entry.downloadName)), "no CSST downloads may remain");
+  assert.ok(files.every((entry) => entry.kind !== "moc" || entry.mediaType === "application/fits"));
+});
+
+test("release history ships as a public manifest record without sensitive packages", async () => {
+  const catalog = await loadCatalog(projectRoot, false);
+  const history = catalog.manifest.files.find((entry) => entry.id === "metadata-release-history");
+  assert.ok(history, "release-history.json must be a public manifest record");
+  assert.match(history.path, /release-history\.json$/);
+  const document = JSON.parse(await readFile(path.join(projectRoot, history.path), "utf8")) as {
+    schemaVersion: number;
+    releases: Array<{ releaseId: string; sequence: number; bundleId: string; releasedAt: string; packages: Array<{ id: string; version: string; downloadUrl: string }> }>;
+  };
+  assert.equal(document.schemaVersion, 1);
+  assert.equal(document.releases.length, 1);
+  const release = document.releases[0]!;
+  assert.equal(release.sequence, 1);
+  assert.ok(release.releaseId.endsWith("-1"));
+  assert.equal(release.bundleId, catalog.manifest.bundle.id);
+  assert.equal(release.packages.length, 14);
+  assert.ok(release.packages.every((entry) => !/csst/.test(entry.id)));
+  assert.ok(release.packages.every((entry) => entry.downloadUrl === `/api/v1/resource-packages/${entry.id}/versions/${entry.version}/download`));
 });
 
 test("public release manifest and API projection expose no evidence records", async () => {
@@ -107,8 +118,8 @@ test("release catalog rejects evidence records misclassified as runtime", async 
 test("current package catalog publishes only referenced release versions", async () => {
   const catalog = await loadCatalog(projectRoot, false);
   const packages = catalog.manifest.files.filter((entry) => entry.kind === "package");
-  assert.equal(packages.length, 15);
-  assert.equal(packages.filter((entry) => entry.version === "3.0.0").length, 15);
+  assert.equal(packages.length, 14);
+  assert.equal(packages.filter((entry) => entry.version === "3.0.0").length, 14);
   assert.equal(packages.some((entry) => entry.version !== "3.0.0"), false);
 });
 

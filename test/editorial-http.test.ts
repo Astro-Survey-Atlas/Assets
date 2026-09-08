@@ -67,20 +67,20 @@ test("editorial HTTP API keeps drafts private and publishes display copy without
   };
 
   let port = await start();
-  const endpoint = `http://127.0.0.1:${port}/api/v1/admin/catalog/surveys/csst/editorial`;
+  const endpoint = `http://127.0.0.1:${port}/api/v1/admin/catalog/surveys/gaia/editorial`;
   const headers = { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" };
   const initialResponse = await fetch(endpoint, { headers });
   assert.equal(initialResponse.status, 200);
   const initialBody = await initialResponse.json() as { editorial: { revision: number; draft: SurveyEditorialContent; published: unknown } };
   const initial = initialBody.editorial;
-  assert.equal(initial.draft.surveyId, "csst");
+  assert.equal(initial.draft.surveyId, "gaia");
   assert.equal(initial.revision, 1);
   const release = initial.draft.releases[0]!;
   const product = release.products[0]!;
   const productId = product.productId;
 
   const initialCatalog = await (await fetch("http://127.0.0.1:" + port + "/api/v1/surveys")).json() as { surveys: Array<{ id: string; name: string; mission: string; releases: Array<{ id: string; label: string; products: Array<{ productId?: string; name: string; description: string; coverage?: { layerId?: string } }> }> }> };
-  const initialPublicSurvey = initialCatalog.surveys.find((survey) => survey.id === "csst")!;
+  const initialPublicSurvey = initialCatalog.surveys.find((survey) => survey.id === "gaia")!;
   const initialPublicProduct = initialPublicSurvey.releases.find((entry) => entry.id === release.releaseId)!.products.find((entry) => entry.productId === productId)!;
   const initialLayerId = initialPublicProduct.coverage?.layerId;
 
@@ -101,7 +101,7 @@ test("editorial HTTP API keeps drafts private and publishes display copy without
   assert.equal(updated.editorial.published, null);
 
   const privateCatalog = await (await fetch(`http://127.0.0.1:${port}/api/v1/surveys`)).json() as typeof initialCatalog;
-  const privateSurvey = privateCatalog.surveys.find((survey) => survey.id === "csst")!;
+  const privateSurvey = privateCatalog.surveys.find((survey) => survey.id === "gaia")!;
   assert.equal(privateSurvey.name, initialPublicSurvey.name);
   assert.equal(privateSurvey.releases.find((entry) => entry.id === release.releaseId)!.products.find((entry) => entry.productId === productId)!.name, initialPublicProduct.name);
 
@@ -121,7 +121,7 @@ test("editorial HTTP API keeps drafts private and publishes display copy without
   assert.equal(published.editorial.audit.at(-1)?.action, "publish");
 
   const publicCatalog = await (await fetch(`http://127.0.0.1:${port}/api/v1/surveys`)).json() as typeof initialCatalog;
-  const publicSurvey = publicCatalog.surveys.find((survey) => survey.id === "csst")!;
+  const publicSurvey = publicCatalog.surveys.find((survey) => survey.id === "gaia")!;
   const publicRelease = publicSurvey.releases.find((entry) => entry.id === release.releaseId)!;
   const publicProduct = publicRelease.products.find((entry) => entry.productId === productId)!;
   assert.equal(publicSurvey.name, "CSST Editorial Name");
@@ -144,7 +144,7 @@ test("editorial HTTP API keeps drafts private and publishes display copy without
 
   await stop(child!);
   port = await start();
-  const restored = await (await fetch(`http://127.0.0.1:${port}/api/v1/admin/catalog/surveys/csst/editorial`, { headers })).json() as { editorial: { revision: number; published: { name: string } | null } };
+  const restored = await (await fetch(`http://127.0.0.1:${port}/api/v1/admin/catalog/surveys/gaia/editorial`, { headers })).json() as { editorial: { revision: number; published: { name: string } | null } };
   assert.equal(restored.editorial.revision, 2);
   assert.equal(restored.editorial.published?.name, "CSST Editorial Name");
 });

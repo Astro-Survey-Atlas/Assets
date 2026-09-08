@@ -7,6 +7,7 @@ import { pipeline } from "node:stream/promises";
 import yazl from "yazl";
 
 import type { MocPublication } from "./moc-build.js";
+import { isDeniedSurvey } from "./publication-policy.js";
 import type { ProductContent, ProductRecord } from "./products.js";
 
 const PACKAGE_SCHEMA_VERSION = 3;
@@ -386,6 +387,7 @@ export class DynamicResourcePackageStore {
     };
     const grouped = new Map<string, LayerBytes[]>();
     for (const publication of publications) {
+      if (isDeniedSurvey(publication.surveyId)) continue;
       const layer = await loadLayer(publication, products, resolveContentPath);
       if (!layer) continue;
       const current = grouped.get(publication.surveyId) ?? [];

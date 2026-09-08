@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { inferredPublicAssetDeliveryClass, type PublicAssetManifest, type PublicAssetRecord } from "../server/types.js";
 import { publicReleaseBundleDigest } from "../server/catalog.js";
+import { assertRecordPublishable, isDeniedLayerId, isDeniedSurvey, sanitizeReleaseControlDocument } from "../server/publication-policy.js";
 
 const root = path.resolve(process.env.ASSET_WORKTREE_ROOT ?? process.cwd());
 const artifactRoot = path.join(root, "artifacts", "public-survey-footprints");
@@ -104,8 +106,24 @@ interface LayerProvenance {
   };
 }
 
+interface ReleaseHistoryDocument {
+  schemaVersion: number;
+  releases: Array<{
+    releaseId: string;
+    sequence: number;
+    bundleId: string;
+    releasedAt: string;
+    notes?: string;
+    packages: Array<{ id: string; version: string; name: string; sizeBytes: number; sha256: string; downloadUrl: string }>;
+  }>;
+}
+
 async function json<T>(filePath: string): Promise<T> {
   return JSON.parse(await readFile(filePath, "utf8")) as T;
+}
+
+function sha256Bytes(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 async function digest(filePath: string): Promise<string> {
@@ -126,22 +144,27 @@ function projectionOrder(fileName: string, kind: "query" | "preview"): number {
   return Number(match[1]);
 }
 
-async function asset(input: Omit<PublicAssetRecord, "path" | "sizeBytes" | "sha256"> & { filePath: string; expectedBytes?: number; expectedSha256?: string; pathOverride?: string; allowMissing?: boolean }): Promise<PublicAssetRecord> {
-  let sizeBytes: number;
-  let sha256: string;
+async function asset(input: Omit<PublicAssetRecord, "path" | "sizeBytes" | "sha256"> & { filePath: string; expectedBytes?: number; expectedSha256?: string; pathOverride?: string; allowMissing?: boolean; sanitizeForPublication?: boolean }): Promise<PublicAssetRecord> {
+  let bytes: Buffer | null;
   try {
-    const details = await stat(input.filePath);
-    sizeBytes = details.size;
-    sha256 = await digest(input.filePath);
+    bytes = await readFile(input.filePath);
   } catch (error) {
     if (!input.allowMissing || (error as NodeJS.ErrnoException).code !== "ENOENT" || input.expectedBytes === undefined || input.expectedSha256 === undefined) throw error;
-    sizeBytes = input.expectedBytes;
-    sha256 = input.expectedSha256;
+    bytes = null;
   }
+  let sizeBytes = bytes?.length ?? input.expectedBytes!;
+  let sha256 = bytes ? sha256Bytes(bytes) : input.expectedSha256!;
   if (input.expectedBytes !== undefined && sizeBytes !== input.expectedBytes) throw new Error(`Size mismatch: ${relative(input.filePath)}`);
   if (input.expectedSha256 !== undefined && sha256 !== input.expectedSha256) throw new Error(`SHA-256 mismatch: ${relative(input.filePath)}`);
-  const { filePath, expectedBytes: _expectedBytes, expectedSha256: _expectedSha256, pathOverride: _pathOverride, allowMissing: _allowMissing, ...record } = input;
+  const { filePath, expectedBytes: _expectedBytes, expectedSha256: _expectedSha256, pathOverride: _pathOverride, allowMissing: _allowMissing, sanitizeForPublication: _sanitizeForPublication, ...record } = input;
   const relativePath = input.pathOverride ?? relative(filePath);
+  if (bytes && input.sanitizeForPublication) {
+    const sanitized = sanitizeReleaseControlDocument(relativePath, bytes);
+    if (sanitized) {
+      sizeBytes = sanitized.length;
+      sha256 = sha256Bytes(sanitized);
+    }
+  }
   return { ...record, deliveryClass: inferredPublicAssetDeliveryClass({ path: relativePath, kind: record.kind }), path: relativePath, sizeBytes, sha256 };
 }
 
@@ -171,18 +194,19 @@ async function build(): Promise<PublicAssetManifest> {
     id: "manifest-canonical", kind: "manifest", label: "Canonical NSIDE 16 footprint manifest",
     description: "The canonical ICRS HEALPix footprint manifest used by Astro Survey Atlas.",
     filePath: path.join(root, "src", "footprints", "survey-footprints.json"), downloadName: "survey-footprints.json", mediaType: "application/json",
-    expectedSha256: provenance.inputs.canonicalManifest?.sha256,
+    expectedSha256: provenance.inputs.canonicalManifest?.sha256, sanitizeForPublication: true,
   });
   await push({
     id: "manifest-normalized", kind: "manifest", label: "Normalized release manifest",
     description: "Normalized copy of the canonical footprint manifest included in the release bundle.",
     filePath: path.join(artifactRoot, provenance.files.manifest.path), downloadName: "survey-footprints-normalized.json", mediaType: "application/json",
-    expectedSha256: provenance.files.manifest.sha256,
+    expectedSha256: provenance.files.manifest.sha256, sanitizeForPublication: true,
   });
   await push({
     id: "manifest-survey-catalog", kind: "manifest", label: "Public survey catalog",
     description: "Survey metadata, modalities, public products, acquisition states and outstanding geometry work.",
     filePath: path.join(root, "src", "surveys", "survey-catalog.json"), downloadName: "survey-catalog.json", mediaType: "application/json",
+    sanitizeForPublication: true,
   });
   await push({
     id: "documentation-moc-method", kind: "documentation", label: "MOC calculation and evidence method",
@@ -228,6 +252,7 @@ async function build(): Promise<PublicAssetManifest> {
     id: "metadata-layer-registry", kind: "metadata", label: "Stable coverage layer registry",
     description: "Assets-owned stable layer IDs and scientific classifications for reviewed Core layers.",
     filePath: path.join(root, "src", "layers", "layer-registry.json"), downloadName: "layer-registry.json", mediaType: "application/json",
+    sanitizeForPublication: true,
   });
   await push({
     id: "metadata-moc-source-registry", kind: "metadata", label: "Public MOC source registry",
@@ -255,10 +280,12 @@ async function build(): Promise<PublicAssetManifest> {
     id: "metadata-public-build-plan", kind: "metadata", label: "Locked public Core build plan",
     description: "Offline public-layer build order, source-date epoch and authoritative MOC hashes.",
     filePath: layerPlanPath, downloadName: "public-build-plan.json", mediaType: "application/json",
+    sanitizeForPublication: true,
   });
   for (const entry of layerPlan.builds) {
     const specPath = path.join(root, entry.spec);
     const spec = await json<LayerSpec>(specPath);
+    if (isDeniedSurvey(spec.surveyId) || isDeniedLayerId(spec.layerId)) continue;
     const outputRoot = path.join(root, entry.output);
     const provenancePath = path.join(outputRoot, "provenance.json");
     const layerProvenance = await json<LayerProvenance>(provenancePath);
@@ -309,61 +336,11 @@ async function build(): Promise<PublicAssetManifest> {
     id: "metadata-package-catalog", kind: "metadata", label: "Resource package catalog",
     description: "Current downloadable resource-package versions, sizes and SHA-256 values.",
     filePath: packageCatalogPath, downloadName: "resource-package-catalog.json", mediaType: "application/json",
-    expectedSha256: provenance.files.catalog.sha256,
+    expectedSha256: provenance.files.catalog.sha256, sanitizeForPublication: true,
   });
-
-  await push({
-    id: "csst-w1-image-extent-moc-order8", kind: "moc", label: "CSST W1 simulated image WCS MOC",
-    description: "Reviewed ICRS NUNIQ FITS MOC at maximum order 8 for the current W1_Phot WIDE images (354.759 deg2).",
-    filePath: path.join(artifactRoot, "csst", "csst-w1-image-extent-order8.fits"), downloadName: "csst-w1-image-extent-order8.fits", mediaType: "application/fits",
-    surveyId: "csst", releaseId: "csst-sim-w1-20250731", product: "W1 simulated wide-field images",
-  });
-  await push({
-    id: "csst-w1-healpix-order8", kind: "geometry", label: "CSST W1 order-8 HEALPix image extent",
-    description: "6,763 unique ICRS NESTED NSIDE 256 pixels used to build the reviewed FITS MOC.",
-    filePath: path.join(artifactRoot, "csst", "healpix-order8.json"), downloadName: "csst-w1-healpix-order8.json", mediaType: "application/json",
-    surveyId: "csst", releaseId: "csst-sim-w1-20250731", product: "W1 simulated wide-field images",
-  });
-  await push({
-    id: "csst-w1-display-footprint-nside16", kind: "geometry", label: "CSST W1 website display footprint",
-    description: "46 NESTED NSIDE 16 parent pixels derived from the reviewed order-8 WCS union for website display.",
-    filePath: path.join(artifactRoot, "csst", "display-footprint-nside16.json"), downloadName: "csst-w1-display-footprint-nside16.json", mediaType: "application/json",
-    surveyId: "csst", releaseId: "csst-sim-w1-20250731", product: "W1 simulated wide-field images",
-  });
-
-  for (const band of ["w2", "w3", "w4"] as const) {
-    const upper = band.toUpperCase();
-    const releaseId = `csst-sim-${band}-20250731`;
-    const product = `${upper} simulated wide-field images`;
-    const layerId = `csst-sim-${band}-image-extent`;
-    const outputRoot = path.join(artifactRoot, "layers", layerId);
-    await push({
-      id: `csst-${band}-moc`, kind: "moc", label: `CSST ${upper} simulated image WCS MOC`,
-      description: `Authoritative ICRS/NUNIQ FITS MOC generated by Assets MOC Core from the data-warehouse ${upper} FITS-WCS result.`,
-      filePath: path.join(outputRoot, `${layerId}.moc.fits`), downloadName: `${layerId}.moc.fits`, mediaType: "application/fits",
-      surveyId: "csst", releaseId, product,
-    });
-    await push({
-      id: `csst-${band}-query-order8`, kind: "geometry", label: `CSST ${upper} order-8 query projection`,
-      description: "Fixed-order NESTED HEALPix query projection derived from the authoritative FITS MOC.",
-      filePath: path.join(outputRoot, "query-order8.json"), downloadName: `${layerId}-query-order8.json`, mediaType: "application/json",
-      surveyId: "csst", releaseId, product,
-    });
-    await push({
-      id: `csst-${band}-preview-order4`, kind: "geometry", label: `CSST ${upper} order-4 preview projection`,
-      description: "Fixed-order NESTED HEALPix preview projection derived from the authoritative FITS MOC.",
-      filePath: path.join(outputRoot, "preview-order4.json"), downloadName: `${layerId}-preview-order4.json`, mediaType: "application/json",
-      surveyId: "csst", releaseId, product,
-    });
-    await push({
-      id: `csst-${band}-statistics`, kind: "metadata", label: `CSST ${upper} MOC statistics`,
-      description: "Area, cell count and fixed-order projection counts for the authoritative layer.",
-      filePath: path.join(outputRoot, "statistics.json"), downloadName: `${layerId}-statistics.json`, mediaType: "application/json",
-      surveyId: "csst", releaseId, product,
-    });
-  }
 
   for (const record of geometryIndex.artifacts) {
+    if (isDeniedSurvey(record.surveyId)) continue;
     const logicalPath = path.join("artifacts", "public-survey-footprints", "raw", "geometry", record.filePath);
     if (inferredPublicAssetDeliveryClass({ path: logicalPath, kind: "geometry" }) === "evidence") continue;
     const geometryDescription = record.polygonCount !== undefined
@@ -380,7 +357,8 @@ async function build(): Promise<PublicAssetManifest> {
 
   const provenancePackages = new Map(provenance.files.packages.map((entry) => [`${entry.id}@${entry.version}`, entry]));
   const packageStagingRoot = process.env.ASSETS_PACKAGE_STAGING_ROOT ? path.resolve(process.env.ASSETS_PACKAGE_STAGING_ROOT) : undefined;
-  for (const record of packageCatalog.packages) {
+  const publicPackages = packageCatalog.packages.filter((record) => !isDeniedSurvey(record.surveyId));
+  for (const record of publicPackages) {
     const expected = provenancePackages.get(`${record.id}@${record.version}`);
     if (!expected) throw new Error(`Package is absent from provenance: ${record.id}@${record.version}`);
     const packagePath = packageStagingRoot
@@ -395,10 +373,47 @@ async function build(): Promise<PublicAssetManifest> {
     });
   }
 
+  const bundleId = `public-survey-footprints-${provenance.generatedAt.slice(0, 10)}`;
+  const historyPath = path.join(artifactRoot, "release-history.json");
+  let history: ReleaseHistoryDocument;
+  if (existsSync(historyPath)) {
+    history = await json<ReleaseHistoryDocument>(historyPath);
+    if (history.schemaVersion !== 1 || !Array.isArray(history.releases)) {
+      throw new Error("Release history document is malformed");
+    }
+  } else {
+    history = {
+      schemaVersion: 1,
+      releases: [{
+        releaseId: `${bundleId}-1`,
+        sequence: 1,
+        bundleId,
+        releasedAt: provenance.generatedAt,
+        packages: publicPackages.map((record) => ({
+          id: record.id,
+          version: record.version,
+          name: record.name,
+          sizeBytes: record.sizeBytes,
+          sha256: record.sha256,
+          downloadUrl: `/api/v1/resource-packages/${record.id}/versions/${record.version}/download`,
+        })),
+      }],
+    };
+    await writeFile(historyPath, `${JSON.stringify(history, null, 2)}\n`, "utf8");
+  }
+  await push({
+    id: "metadata-release-history", kind: "metadata", label: "Release history",
+    description: "Public release history with per-release package versions, sizes and SHA-256 values.",
+    filePath: historyPath, downloadName: "release-history.json", mediaType: "application/json",
+  });
+
   files.sort((left, right) => left.kind.localeCompare(right.kind) || left.label.localeCompare(right.label) || left.id.localeCompare(right.id));
   if (new Set(files.map((entry) => entry.id)).size !== files.length) throw new Error("Release manifest contains duplicate asset IDs");
   const evidenceLeak = files.find((entry) => entry.deliveryClass !== "runtime");
   if (evidenceLeak) throw new Error(`Public release manifest must not contain evidence records: ${evidenceLeak.id}`);
+  for (const entry of files) assertRecordPublishable(entry);
+  const canonicalFootprints = await json<{ footprints: Array<{ surveyId: string }> }>(path.join(root, "src", "footprints", "survey-footprints.json"));
+  const publicFootprintCount = canonicalFootprints.footprints.filter((entry) => !isDeniedSurvey(entry.surveyId)).length;
   const bundleSha256 = publicReleaseBundleDigest(files);
   const totalBytes = files.reduce((sum, entry) => sum + entry.sizeBytes, 0);
   const runtimeBytes = files.filter((entry) => entry.deliveryClass === "runtime").reduce((sum, entry) => sum + entry.sizeBytes, 0);
@@ -406,15 +421,15 @@ async function build(): Promise<PublicAssetManifest> {
   return {
     schemaVersion: 1,
     generatedAt: provenance.generatedAt,
-    bundle: { id: `public-survey-footprints-${provenance.generatedAt.slice(0, 10)}`, sha256: bundleSha256 },
+    bundle: { id: bundleId, sha256: bundleSha256 },
     statistics: {
       releases: provenance.statistics.releases,
       products: provenance.statistics.products,
       acquired: provenance.statistics.acquired,
       overviewOnly: provenance.statistics.overview_only,
       awaitingGeometry: provenance.statistics.awaiting_geometry,
-      footprints: provenance.statistics.manifestFootprints,
-      packages: packageCatalog.packages.length,
+      footprints: publicFootprintCount,
+      packages: publicPackages.length,
       rawMocFiles: files.filter((entry) => entry.kind === "moc").length,
       totalBytes,
       runtimeBytes,

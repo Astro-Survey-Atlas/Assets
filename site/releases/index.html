@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#eef0f2" />
+    <meta name="description" content="Astro Survey Atlas resource package releases: browse published versions, download archives or sync via API with SHA-256 verification" />
+    <link rel="icon" type="image/svg+xml" href="/icon_without_name_lon_web.svg" />
+    <link rel="stylesheet" href="../src/public.css" />
+    <script src="/theme-bootstrap.js"></script>
+    <title>Astro Survey Atlas · Releases</title>
+  </head>
+  <body class="resources-page releases-page">
+    <header class="site-header resources-header">
+      <a class="brand" href="/" data-i18n-aria-label="nav.home">
+        <img class="brand-logo" src="/icon_without_name_lon_web.svg" alt="Astro Survey Atlas" width="72" height="28" />
+        <span class="brand-wordmark"><strong>Astro Survey Atlas</strong><small>PUBLIC RESOURCE PACKAGES</small></span>
+      </a>
+      <button class="mobile-menu-toggle" type="button" data-mobile-menu-toggle data-i18n-aria-label="nav.open" aria-expanded="false"><i data-lucide="menu"></i></button>
+      <nav class="site-nav" data-site-nav aria-label="Site navigation">
+        <a class="site-nav-link" href="/" data-i18n="nav.home">Home</a>
+        <a class="site-nav-link" href="/atlas/" data-i18n="nav.sky">Sky Atlas</a>
+        <a class="site-nav-link" href="/surveys/" data-i18n="nav.surveys">Survey Directory</a>
+        <a class="site-nav-link" href="/releases/" aria-current="page" data-i18n="nav.releases">Releases</a>
+        <a class="site-nav-link" href="/terms/" data-i18n="nav.terms">Terms</a>
+        <a class="site-nav-link" href="/sdk/" data-i18n="nav.sdk">SDK</a>
+        <a class="site-nav-link" href="/github/" data-i18n="nav.github">GitHub</a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Use light theme" title="Light theme"><i data-lucide="sun"></i></button>
+        <button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button>
+        <a class="admin-entry" href="/admin/" data-i18n-title="nav.admin"><span data-i18n="nav.admin">Control Room</span></a>
+      </nav>
+    </header>
+
+    <main class="resources-main releases-main">
+      <section class="resources-hero releases-hero">
+        <p class="eyebrow" data-i18n="page.releases.eyebrow">RESOURCE PACKAGES / IMMUTABLE RELEASES</p>
+        <h1 data-i18n="page.releases.title">Every package version, published and downloadable</h1>
+        <p data-i18n="page.releases.lead">Browse published Resource Packages release by release, like a changelog of the sky. Download archives directly or pin a version through the API with SHA-256 verification.</p>
+      </section>
+
+      <section class="resource-band" aria-live="polite">
+        <div id="release-list" class="release-list">
+          <p class="release-placeholder">…</p>
+        </div>
+      </section>
+
+      <section class="resource-band release-api-band">
+        <p class="public-kicker" data-i18n="page.releases.apiSyncTitle">API sync</p>
+        <p class="release-api-hint" data-i18n="page.releases.apiSyncHint">List releases as JSON, then download a pinned package version and verify its SHA-256:</p>
+        <pre class="release-api-snippet"><code>curl /api/v1/releases
+curl -O /api/v1/resource-packages/&lt;package-id&gt;/versions/&lt;version&gt;/download
+sha256sum &lt;package-id&gt;-&lt;version&gt;.zip</code></pre>
+      </section>
+    </main>
+
+    <footer><span>ICRS / NESTED HEALPIX / SHA-256</span><span>ASTRO SURVEY ATLAS ASSETS</span></footer>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

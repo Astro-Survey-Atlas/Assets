@@ -67,13 +67,23 @@ function boundsFor(pixels: number[], order: number): OverlapBounds {
     raMax = ras[gapIndex]!;
     raWraps = raMin > raMax;
   }
+  let decMin = 0;
+  let decMax = 0;
+  if (values.length) {
+    decMin = values[0]!.dec;
+    decMax = decMin;
+    for (const value of values) {
+      if (value.dec < decMin) decMin = value.dec;
+      if (value.dec > decMax) decMax = value.dec;
+    }
+  }
   return {
     areaDeg2,
     raMin,
     raMax,
     raWraps,
-    decMin: values.length ? Math.min(...values.map((value) => value.dec)) : 0,
-    decMax: values.length ? Math.max(...values.map((value) => value.dec)) : 0,
+    decMin,
+    decMax,
   };
 }
 

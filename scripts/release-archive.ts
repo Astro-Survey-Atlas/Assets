@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { createArtifactStoreFromProcess, publishReleaseArchive, type ReleaseArchiveDescriptor } from "../server/artifact-store.js";
 import { publicReleaseBundleDigest } from "../server/catalog.js";
+import { isSanitizableControlDocument, sanitizeReleaseControlDocument } from "../server/publication-policy.js";
 import type { PublicAssetRecord } from "../server/types.js";
 
 const execFile = promisify(execFileCallback);
@@ -64,13 +65,21 @@ async function packageSource(sourceRoot: string, record: PublicAssetRecord, stag
 
 async function validateAndCopy(sourceRoot: string, record: PublicAssetRecord, stagingRoot: string | undefined, outputRoot: string): Promise<void> {
   const sourcePath = await packageSource(sourceRoot, record, stagingRoot);
-  const details = await fileDigest(sourcePath).catch((error) => {
+  let bytes = await readFile(sourcePath).catch((error) => {
     throw new Error(`Release asset is unavailable: ${record.path}: ${error instanceof Error ? error.message : String(error)}`);
   });
-  if (details.sizeBytes !== record.sizeBytes || details.sha256 !== record.sha256) throw new Error(`Release asset checksum mismatch: ${record.id}`);
+  if (bytes.length !== record.sizeBytes || digest(bytes) !== record.sha256) {
+    // Worktree equivalence: substitute the sanitized projection for control
+    // documents that still carry denied-survey entries on disk.
+    if (isSanitizableControlDocument(record.path)) {
+      const sanitized = sanitizeReleaseControlDocument(record.path, bytes);
+      if (sanitized) bytes = Buffer.from(sanitized);
+    }
+  }
+  if (bytes.length !== record.sizeBytes || digest(bytes) !== record.sha256) throw new Error(`Release asset checksum mismatch: ${record.id}`);
   const destination = inside(outputRoot, record.path);
   await mkdir(path.dirname(destination), { recursive: true });
-  await copyFile(sourcePath, destination);
+  await writeFile(destination, bytes);
 }
 
 async function listFiles(directory: string, relative = ""): Promise<string[]> {

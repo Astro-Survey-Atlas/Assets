@@ -7,11 +7,42 @@ import { createArtifactStoreFromProcess, publishReleaseArchive, type ArtifactSto
 import { publicReleaseBundleDigest } from "./catalog.js";
 import type { MocPublication, MocPublicationFile } from "./moc-build.js";
 import { dynamicResourcePackageAssetId, type DynamicResourcePackageAsset, type DynamicResourcePackageEntry } from "./resource-package-publication.js";
+import {
+  assertRecordPublishable,
+  isDeniedSurvey,
+  isDeniedLayerId,
+  isSanitizableControlDocument,
+  sanitizeReleaseControlDocument,
+} from "./publication-policy.js";
 import type { ProductRecord } from "./products.js";
 import { inferredPublicAssetDeliveryClass, type PublicAssetRecord } from "./types.js";
 
 const MANIFEST_RELATIVE_PATH = "artifacts/public-survey-footprints/release-manifest.json";
 const PACKAGE_CATALOG_RELATIVE_PATH = "artifacts/public-survey-footprints/packages/catalog.json";
+const RELEASE_HISTORY_RELATIVE_PATH = "artifacts/public-survey-footprints/release-history.json";
+
+export interface ReleaseHistoryPackage {
+  id: string;
+  version: string;
+  name: string;
+  sizeBytes: number;
+  sha256: string;
+  downloadUrl: string;
+}
+
+export interface ReleaseHistoryEntry {
+  releaseId: string;
+  sequence: number;
+  bundleId: string;
+  releasedAt: string;
+  notes?: string;
+  packages: ReleaseHistoryPackage[];
+}
+
+export interface ReleaseHistoryDocument {
+  schemaVersion: 1;
+  releases: ReleaseHistoryEntry[];
+}
 
 export interface ReleaseManifestDocument {
   schemaVersion: 1;
@@ -172,6 +203,7 @@ export class PublicReleasePublisher {
     for (const surveyId of surveyIds) {
       const layers = [...latestByLayer.values()].filter((publication) => publication.surveyId === surveyId);
       const blockers: string[] = [];
+      if (isDeniedSurvey(surveyId)) blockers.push("Survey is excluded from publication by policy");
       for (const layer of layers) {
         for (const file of Object.values(layer.files)) {
           if (!file) continue;
@@ -304,7 +336,7 @@ export class PublicReleasePublisher {
     run = { ...run, status: "building", startedAt: new Date().toISOString() };
     await this.#writeRun(run);
     try {
-      const candidate = await this.#buildCandidateTree(stagingRoot);
+      const candidate = await this.#buildCandidateTree(stagingRoot, runId);
       run = this.#append(run, `candidate: ${candidate.files.length} files, ${candidate.packages.length} dynamic packages`);
       const { packageRelease } = await import("../scripts/release-archive.js");
       archivePath = path.join(await mkdtemp(path.join(tmpdir(), "assets-release-archive-")), "release.tar.gz");
@@ -346,39 +378,49 @@ export class PublicReleasePublisher {
     }
   }
 
-  async #buildCandidateTree(stagingRoot: string): Promise<CandidateBuild> {
+  async #buildCandidateTree(stagingRoot: string, runId: string): Promise<CandidateBuild> {
     const baseline = await this.#baselineManifest();
     for (const record of baseline.files) {
       if (inferredPublicAssetDeliveryClass({ path: record.path, kind: record.kind }) === "evidence") {
         throw new PublicationConflictError(`Baseline release contains an evidence record: ${record.id}`, 500);
       }
+      try {
+        assertRecordPublishable(record);
+      } catch (error) {
+        throw new PublicationConflictError(error instanceof Error ? error.message : String(error), 500);
+      }
     }
-    const latest = await latestPackages(this.#options.loadPackages);
+    const allDynamic = await this.#allDynamicPackages();
     const baselinePath = (relativePath: string): string => path.resolve(this.#options.baselineRoot, relativePath);
 
-    const replacedSurveyIds = new Set<string>();
-    for (const entry of latest.values()) {
-      const superseded = baseline.files.some((record) => record.kind === "package" && record.surveyId === entry.entry.surveyId && record.sha256 !== entry.asset.sha256);
-      if (superseded) replacedSurveyIds.add(entry.entry.surveyId);
-    }
-    const replacedAssetIds = new Set([...latest.values()].map((entry: LatestPackage) => dynamicResourcePackageAssetId(entry.entry)));
-
+    const existingPaths = new Set<string>();
     const files: PublicAssetRecord[] = [];
     for (const record of baseline.files) {
-      if (record.kind === "package" && (replacedSurveyIds.has(record.surveyId ?? "") || replacedAssetIds.has(record.id))) continue;
-      if (record.path === PACKAGE_CATALOG_RELATIVE_PATH) continue;
+      if (record.path === PACKAGE_CATALOG_RELATIVE_PATH || record.path === RELEASE_HISTORY_RELATIVE_PATH) continue;
       const source = baselinePath(record.path);
-      const details = await stat(source);
-      if (details.size !== record.sizeBytes) throw new PublicationConflictError(`Baseline file size mismatch: ${record.path}`, 500);
+      let bytes = await readFile(source);
+      if (bytes.length !== record.sizeBytes || createHash("sha256").update(bytes).digest("hex") !== record.sha256) {
+        const sanitized = isSanitizableControlDocument(record.path) ? sanitizeReleaseControlDocument(record.path, bytes) : null;
+        if (
+          !sanitized ||
+          sanitized.length !== record.sizeBytes ||
+          createHash("sha256").update(sanitized).digest("hex") !== record.sha256
+        ) {
+          throw new PublicationConflictError(`Baseline file hash mismatch: ${record.path}`, 500);
+        }
+        bytes = Buffer.from(sanitized);
+      }
       const destination = this.#inside(stagingRoot, record.path);
       await mkdir(path.dirname(destination), { recursive: true });
-      await copyFile(source, destination);
+      await writeFile(destination, bytes);
       files.push({ ...record });
+      existingPaths.add(record.path);
     }
 
     const dynamicPackageEntries: PublicPackageEntry[] = [];
-    for (const { entry, asset } of [...latest.values()].sort((left: LatestPackage, right: LatestPackage) => left.entry.id.localeCompare(right.entry.id))) {
+    for (const { entry, asset } of allDynamic) {
       const releasePath = `artifacts/public-survey-footprints/packages/${asset.downloadName}`;
+      if (existingPaths.has(releasePath)) continue;
       const record: PublicAssetRecord = {
         id: asset.id,
         kind: "package",
@@ -401,6 +443,7 @@ export class PublicReleasePublisher {
       await mkdir(path.dirname(destination), { recursive: true });
       await copyFile(source, destination);
       files.push(record);
+      existingPaths.add(releasePath);
       dynamicPackageEntries.push(entry);
     }
 
@@ -413,6 +456,7 @@ export class PublicReleasePublisher {
     }
     for (const layerId of [...latestByLayer.keys()].sort()) {
       const publication = latestByLayer.get(layerId)!;
+      if (isDeniedSurvey(publication.surveyId) || isDeniedLayerId(publication.layerId)) continue;
       const layerRecords = this.#layerRecords(publication);
       if (layerRecords.every(({ record }) => baselineRecordIds.has(record.id))) continue;
       for (const { record, file } of layerRecords) {
@@ -424,10 +468,7 @@ export class PublicReleasePublisher {
       }
     }
 
-    const mergedCatalog = await this.#mergedPackageCatalog(baseline, latest);
-    const catalogDestination = this.#inside(stagingRoot, PACKAGE_CATALOG_RELATIVE_PATH);
-    await mkdir(path.dirname(catalogDestination), { recursive: true });
-    await writeFile(catalogDestination, `${JSON.stringify(mergedCatalog, null, 2)}\n`, "utf8");
+    const mergedCatalog = await this.#mergedPackageCatalog(allDynamic);
     const catalogBytes = Buffer.from(`${JSON.stringify(mergedCatalog, null, 2)}\n`, "utf8");
     const catalogRecord = baseline.files.find((record) => record.path === PACKAGE_CATALOG_RELATIVE_PATH);
     files.push({
@@ -445,19 +486,43 @@ export class PublicReleasePublisher {
       deliveryClass: "runtime" as const,
     });
 
+    const generatedAt = new Date().toISOString();
+    const bundleId = `public-survey-footprints-${generatedAt.slice(0, 10)}`;
+    const history = await this.#appendedReleaseHistory(bundleId, generatedAt, runId, files, mergedCatalog.packages);
+    const historyBytes = Buffer.from(`${JSON.stringify(history, null, 2)}\n`, "utf8");
+    const historyRecord = baseline.files.find((record) => record.path === RELEASE_HISTORY_RELATIVE_PATH);
+    files.push({
+      ...(historyRecord ?? {
+        id: "metadata-release-history",
+        kind: "metadata" as const,
+        label: "Release history",
+        description: "Chronological history of published public releases.",
+        downloadName: "release-history.json",
+        mediaType: "application/json",
+      }),
+      path: RELEASE_HISTORY_RELATIVE_PATH,
+      sizeBytes: historyBytes.byteLength,
+      sha256: createHash("sha256").update(historyBytes).digest("hex"),
+      deliveryClass: "runtime" as const,
+    });
+
     files.sort((left, right) => left.path.localeCompare(right.path));
     const seen = new Set<string>();
     for (const record of files) {
       if (seen.has(record.path)) throw new PublicationConflictError(`Candidate release has duplicate path: ${record.path}`, 500);
       seen.add(record.path);
       if (record.deliveryClass !== "runtime") throw new PublicationConflictError(`Candidate release contains an evidence record: ${record.id}`, 500);
+      try {
+        assertRecordPublishable(record);
+      } catch (error) {
+        throw new PublicationConflictError(error instanceof Error ? error.message : String(error), 500);
+      }
     }
     const bundleSha256 = publicReleaseBundleDigest(files);
-    const generatedAt = new Date().toISOString();
     const manifest: ReleaseManifestDocument = {
       schemaVersion: 1,
       generatedAt,
-      bundle: { id: `public-survey-footprints-${generatedAt.slice(0, 10)}`, sha256: bundleSha256 },
+      bundle: { id: bundleId, sha256: bundleSha256 },
       statistics: {
         ...baseline.statistics,
         packages: files.filter((record) => record.kind === "package").length,
@@ -468,10 +533,69 @@ export class PublicReleasePublisher {
       },
       files,
     };
+    const catalogDestination = this.#inside(stagingRoot, PACKAGE_CATALOG_RELATIVE_PATH);
+    await mkdir(path.dirname(catalogDestination), { recursive: true });
+    await writeFile(catalogDestination, catalogBytes);
+    const historyDestination = this.#inside(stagingRoot, RELEASE_HISTORY_RELATIVE_PATH);
+    await mkdir(path.dirname(historyDestination), { recursive: true });
+    await writeFile(historyDestination, historyBytes);
     const manifestDestination = this.#inside(stagingRoot, MANIFEST_RELATIVE_PATH);
     await mkdir(path.dirname(manifestDestination), { recursive: true });
     await writeFile(manifestDestination, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
     return { root: stagingRoot, files, packages: dynamicPackageEntries };
+  }
+
+  async #allDynamicPackages(): Promise<Array<{ entry: PublicPackageEntry; asset: DynamicResourcePackageAsset }>> {
+    const assets = await this.#options.loadPackages.assets();
+    const result: Array<{ entry: PublicPackageEntry; asset: DynamicResourcePackageAsset }> = [];
+    for (const entry of await this.#options.loadPackages.list()) {
+      if (entry.hidden || isDeniedSurvey(entry.surveyId)) continue;
+      const asset = assets.find((candidate) => candidate.id === dynamicResourcePackageAssetId(entry));
+      if (asset) result.push({ entry, asset });
+    }
+    return result.sort((left, right) => left.entry.id.localeCompare(right.entry.id) || packageMinor(left.entry.version) - packageMinor(right.entry.version));
+  }
+
+  async #appendedReleaseHistory(
+    bundleId: string,
+    releasedAt: string,
+    runId: string,
+    files: PublicAssetRecord[],
+    catalogPackages: Array<{ id: string; version: string; name: string }>,
+  ): Promise<ReleaseHistoryDocument> {
+    let history: ReleaseHistoryDocument = { schemaVersion: 1, releases: [] };
+    try {
+      const source = await readFile(path.resolve(this.#options.baselineRoot, RELEASE_HISTORY_RELATIVE_PATH), "utf8");
+      const parsed = JSON.parse(source) as ReleaseHistoryDocument;
+      if (parsed.schemaVersion === 1 && Array.isArray(parsed.releases)) history = parsed;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const sequence = history.releases.reduce((max, entry) => Math.max(max, entry.sequence), 0) + 1;
+    const packages: ReleaseHistoryPackage[] = [];
+    for (const catalogEntry of catalogPackages) {
+      if (isDeniedSurvey((catalogEntry as { surveyId?: string }).surveyId)) continue;
+      const record = files.find((candidate) => candidate.kind === "package" && candidate.path.endsWith(`/${catalogEntry.id}-${catalogEntry.version}.zip`));
+      if (!record) continue;
+      packages.push({
+        id: catalogEntry.id,
+        version: catalogEntry.version,
+        name: catalogEntry.name,
+        sizeBytes: record.sizeBytes,
+        sha256: record.sha256,
+        downloadUrl: `/api/v1/resource-packages/${catalogEntry.id}/versions/${catalogEntry.version}/download`,
+      });
+    }
+    history.releases.push({
+      releaseId: `${bundleId}-${sequence}`,
+      sequence,
+      bundleId,
+      releasedAt,
+      notes: `Publication run ${runId}`,
+      packages,
+    });
+    return history;
   }
 
   #layerRecordIds(publication: MocPublication): string[] {
@@ -512,16 +636,31 @@ export class PublicReleasePublisher {
     return records;
   }
 
-  async #mergedPackageCatalog(baseline: ReleaseManifestDocument, latest: Map<string, LatestPackage>): Promise<{ schemaVersion: number; version: string; packages: unknown[] }> {
+  async #mergedPackageCatalog(
+    allDynamic: Array<{ entry: PublicPackageEntry; asset: DynamicResourcePackageAsset }>,
+  ): Promise<{ schemaVersion: number; version: string; generatedAt?: string; packages: Array<Record<string, unknown> & { id: string; surveyId?: string; version: string; name: string }> }> {
     const source = await readFile(path.resolve(this.#options.baselineRoot, PACKAGE_CATALOG_RELATIVE_PATH), "utf8");
-    const document = JSON.parse(source) as { schemaVersion: number; version: string; packages: Array<Record<string, unknown> & { id: string; surveyId?: string }> };
-    const supersededIds = new Set(latest.keys());
-    const supersededSurveys = new Set([...latest.values()].map((entry: LatestPackage) => entry.entry.surveyId));
-    const packages = document.packages.filter((entry) => !supersededIds.has(entry.id) && !(entry.surveyId && supersededSurveys.has(entry.surveyId)));
-    for (const { entry } of [...latest.values()].sort((left: LatestPackage, right: LatestPackage) => left.entry.id.localeCompare(right.entry.id))) {
-      packages.push({ ...entry, archiveUrl: `/api/v1/assets/${dynamicResourcePackageAssetId(entry)}/download`, deprecated: false, replacedBy: [] });
+    const sanitized = isSanitizableControlDocument(PACKAGE_CATALOG_RELATIVE_PATH) ? sanitizeReleaseControlDocument(PACKAGE_CATALOG_RELATIVE_PATH, Buffer.from(source, "utf8")) : null;
+    const document = JSON.parse(sanitized ? sanitized.toString("utf8") : source) as {
+      schemaVersion: number;
+      version: string;
+      generatedAt?: string;
+      packages: Array<Record<string, unknown> & { id: string; surveyId?: string; version: string; name: string }>;
+    };
+    const packages = document.packages.filter((entry) => !(entry.surveyId && isDeniedSurvey(entry.surveyId)));
+    const known = new Set(packages.map((entry) => `${entry.id}@${entry.version}`));
+    for (const { entry } of allDynamic) {
+      if (isDeniedSurvey(entry.surveyId)) continue;
+      const key = `${entry.id}@${entry.version}`;
+      if (known.has(key)) continue;
+      known.add(key);
+      packages.push({
+        ...entry,
+        archiveUrl: `/api/v1/resource-packages/${entry.id}/versions/${entry.version}/download`,
+      });
     }
-    return { schemaVersion: document.schemaVersion, version: document.version, packages };
+    packages.sort((left, right) => left.id.localeCompare(right.id) || packageMinor(left.version) - packageMinor(right.version));
+    return { schemaVersion: document.schemaVersion, version: document.version, generatedAt: document.generatedAt, packages };
   }
 
   async #baselineManifest(): Promise<ReleaseManifestDocument> {

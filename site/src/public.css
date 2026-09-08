@@ -1199,3 +1199,233 @@ body.resources-page.sdk-page .sdk-core-band pre {
   .workflow-plane-list li:first-child { padding: 13px 0 0; border-left: 0; border-bottom: 1px solid var(--public-line); }
   .workflow-plane-list li:last-child { border-bottom: 0; }
 }
+
+/* ---------------------------------------------------------------------------
+ * Releases page (GitHub-Releases-style versioned package history)
+ * ------------------------------------------------------------------------- */
+
+.releases-page .release-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.releases-page .release-placeholder {
+  color: var(--public-muted);
+  font-size: 14px;
+  margin: 0;
+  padding: 18px 0;
+}
+
+.releases-page .release-error { color: var(--brand-magenta-strong); }
+
+.releases-page .release-retry {
+  align-items: center;
+  background: var(--public-surface-raised);
+  border: 1px solid var(--public-line-strong);
+  border-radius: 999px;
+  box-shadow: var(--public-shadow);
+  color: var(--public-text);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.releases-page .release-retry svg { width: 14px; height: 14px; }
+
+.releases-page details.release-entry {
+  background: var(--public-surface);
+  border: 1px solid var(--public-line);
+  border-radius: 14px;
+  box-shadow: var(--public-shadow);
+  overflow: hidden;
+}
+
+.releases-page details.release-entry[open] { border-color: var(--public-line-strong); }
+
+.releases-page .release-entry-summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  justify-content: space-between;
+  list-style: none;
+  padding: 18px 20px;
+  position: relative;
+}
+
+.releases-page .release-entry-summary::-webkit-details-marker { display: none; }
+
+.releases-page .release-entry-summary::after {
+  border-right: 2px solid var(--public-muted);
+  border-bottom: 2px solid var(--public-muted);
+  content: "";
+  height: 8px;
+  margin-left: auto;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+  width: 8px;
+}
+
+.releases-page details.release-entry[open] .release-entry-summary::after {
+  transform: rotate(225deg);
+}
+
+.releases-page .release-entry-title {
+  align-items: center;
+  color: var(--public-text);
+  display: inline-flex;
+  font-size: 15px;
+  font-weight: 650;
+  gap: 10px;
+}
+
+.releases-page .release-entry-title svg { width: 16px; height: 16px; color: var(--brand-indigo-strong); }
+
+.releases-page .release-entry-title code {
+  background: var(--public-surface-raised);
+  border: 1px solid var(--public-line);
+  border-radius: 6px;
+  font-size: 13px;
+  padding: 3px 8px;
+}
+
+.releases-page .release-current-badge {
+  background: var(--brand-indigo-strong);
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 10px;
+  text-transform: uppercase;
+}
+
+.releases-page .release-entry-meta {
+  color: var(--public-muted);
+  font-size: 13px;
+  margin-left: auto;
+}
+
+.releases-page .release-entry-body {
+  border-top: 1px solid var(--public-line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px 20px;
+}
+
+.releases-page .release-entry-facts,
+.releases-page .release-entry-notes {
+  color: var(--public-muted);
+  font-size: 13px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.releases-page .release-entry-notes { color: var(--public-text); }
+
+.releases-page .release-package-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.releases-page .release-package {
+  align-items: center;
+  background: var(--public-surface-raised);
+  border: 1px solid var(--public-line);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px 14px;
+  grid-template-columns: minmax(160px, 1.4fr) auto auto 1fr auto;
+  padding: 10px 14px;
+}
+
+.releases-page .release-package-name {
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.releases-page .release-package-version {
+  background: var(--brand-indigo-soft);
+  border-radius: 6px;
+  color: var(--brand-indigo-strong);
+  font-size: 12px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.releases-page .release-package-meta { color: var(--public-muted); font-size: 12px; white-space: nowrap; }
+
+.releases-page .release-package-sha {
+  color: var(--public-subtle);
+  font-family: ui-monospace, "SFMono-Regular", "JetBrains Mono", monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.releases-page .release-package-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.releases-page .release-copy-api { color: var(--public-muted); }
+
+.releases-page .release-copy-api.is-copied { color: var(--brand-indigo-strong); }
+
+.releases-page .release-download {
+  align-items: center;
+  background: var(--brand-indigo-strong);
+  border-radius: 999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 7px;
+  padding: 7px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.releases-page .release-download:hover { background: var(--brand-indigo-strong); filter: brightness(1.08); }
+
+.releases-page .release-download svg { width: 13px; height: 13px; }
+
+.releases-page .release-api-band { display: flex; flex-direction: column; gap: 10px; }
+
+.releases-page .release-api-hint { color: var(--public-muted); font-size: 14px; margin: 0; }
+
+.releases-page .release-api-snippet {
+  background: var(--public-surface-raised);
+  border: 1px solid var(--public-line);
+  border-radius: 10px;
+  color: var(--public-text);
+  font-family: ui-monospace, "SFMono-Regular", "JetBrains Mono", monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0;
+  overflow-x: auto;
+  padding: 14px 16px;
+}
+
+@media (max-width: 860px) {
+  .releases-page .release-package { grid-template-columns: 1fr auto; }
+
+  .releases-page .release-package-sha { grid-column: 1 / -1; }
+
+  .releases-page .release-package-actions { grid-column: 1 / -1; justify-content: flex-start; }
+
+  .releases-page .release-entry-meta { margin-left: 0; width: 100%; }
+}

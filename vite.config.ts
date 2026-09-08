@@ -13,6 +13,7 @@ export default defineConfig({
         atlas: "atlas/index.html",
         github: "github/index.html",
         surveys: "surveys/index.html",
+        releases: "releases/index.html",
         sdk: "sdk/index.html",
         terms: "terms/index.html",
       },
