@@ -1,0 +1,53 @@
+{
+  "layerId": "euclid-euclid-ero-ero-vis-moc",
+  "surveyId": "euclid",
+  "releaseId": "euclid-ero",
+  "product": "ERO VIS",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+  "input": "artifacts/public-survey-footprints/raw/moc/euclid-euclid-ero-ero-vis-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-smoc",
+    "sourceId": "CDS/P/Euclid/ERO/VIS",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FVIS&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FVIS&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "020ced8766f47d2ec63472bc0b5542ece65a874f751e9851cf5251361ca56ebd",
+    "nativeSpatialOrder": 13,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "a1dc8c4123b8bb8940518c0bf86f1d7442251be23556acb9836a04cfee7c2d13",
+    "sizeBytes": 11520,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FVIS&get=smoc&order=10&fmt=fits",
+    "recordSha256": "020ced8766f47d2ec63472bc0b5542ece65a874f751e9851cf5251361ca56ebd",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

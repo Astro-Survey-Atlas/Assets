@@ -155,6 +155,78 @@
               "geometrySourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-fields",
               "reason": "The official ERO release and field definitions are public, but their exact field geometry has not been converted to an acquired product MOC.",
               "manualStep": "Extract every field boundary listed by the official ERO fields page, convert each boundary to ICRS polygons, and union the polygons into the Early Release Observations MOC."
+            },
+            {
+              "name": "ERO color imaging",
+              "modality": "imaging",
+              "description": "ERO color imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2Fcolor&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "ERO First Images",
+              "modality": "imaging",
+              "description": "ERO First Images public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FFirstImages&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "ERO NISP.H",
+              "modality": "imaging",
+              "description": "ERO NISP.H public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.H&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "ERO NISP.J",
+              "modality": "imaging",
+              "description": "ERO NISP.J public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.J&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "ERO NISP.Y",
+              "modality": "imaging",
+              "description": "ERO NISP.Y public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.Y&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "ERO VIS",
+              "modality": "imaging",
+              "description": "ERO VIS public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FVIS&get=smoc&order=10&fmt=fits"
             }
           ]
         },
@@ -176,6 +248,66 @@
               "status": "acquired",
               "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid/Euclid_opens_data_treasure_trove_offers_glimpse_of_deep_fields",
               "geometrySourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip"
+            },
+            {
+              "name": "Euclid Q1 color imaging",
+              "modality": "imaging",
+              "description": "Euclid Q1 color imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2Fcolor&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "Euclid Q1 NISP.H",
+              "modality": "imaging",
+              "description": "Euclid Q1 NISP.H public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2FNISP.H&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "Euclid Q1 NISP.J",
+              "modality": "imaging",
+              "description": "Euclid Q1 NISP.J public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2FNISP.J&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "Euclid Q1 NISP.Y",
+              "modality": "imaging",
+              "description": "Euclid Q1 NISP.Y public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2FNISP.Y&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "Euclid Q1 VIS",
+              "modality": "imaging",
+              "description": "Euclid Q1 VIS public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2FVIS&get=smoc&order=10&fmt=fits"
             }
           ]
         },
@@ -477,6 +609,66 @@
               "status": "acquired",
               "sourceUrl": "https://www.sdss.org/dr9/",
               "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "DR9 g-band imaging",
+              "modality": "imaging",
+              "description": "DR9 g-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.sdss.org/dr9/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fg&get=smoc&order=7&fmt=fits"
+            },
+            {
+              "name": "DR9 i-band imaging",
+              "modality": "imaging",
+              "description": "DR9 i-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.sdss.org/dr9/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fi&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "DR9 r-band imaging",
+              "modality": "imaging",
+              "description": "DR9 r-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.sdss.org/dr9/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fr&get=smoc&order=7&fmt=fits"
+            },
+            {
+              "name": "DR9 u-band imaging",
+              "modality": "imaging",
+              "description": "DR9 u-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.sdss.org/dr9/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fu&get=smoc&order=7&fmt=fits"
+            },
+            {
+              "name": "DR9 z-band imaging",
+              "modality": "imaging",
+              "description": "DR9 z-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.sdss.org/dr9/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fz&get=smoc&order=7&fmt=fits"
             }
           ]
         },
@@ -830,6 +1022,53 @@
               "status": "acquired",
               "sourceUrl": "https://galex.stsci.edu/GR6/",
               "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2FNUV&get=smoc&order=4&fmt=json"
+            }
+          ]
+        },
+        {
+          "id": "galex-gr6-ais",
+          "label": "Galex Gr6 Ais",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "ultraviolet"
+          ],
+          "products": [
+            {
+              "name": "GALEX AIS color imaging",
+              "modality": "ultraviolet",
+              "description": "GALEX AIS color imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://galex.stsci.edu/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2Fcolor&get=smoc&order=8&fmt=fits"
+            },
+            {
+              "name": "GALEX AIS FUV imaging",
+              "modality": "ultraviolet",
+              "description": "GALEX AIS FUV imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://galex.stsci.edu/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2FFUV&get=smoc&order=8&fmt=fits"
+            },
+            {
+              "name": "GALEX AIS NUV imaging",
+              "modality": "ultraviolet",
+              "description": "GALEX AIS NUV imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://galex.stsci.edu/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2FNUV&get=smoc&order=8&fmt=fits"
             }
           ]
         }
@@ -1492,6 +1731,66 @@
               "status": "acquired",
               "sourceUrl": "https://des.ncsa.illinois.edu/releases/dr2",
               "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2FColorIRG&get=smoc&order=4&fmt=json"
+            },
+            {
+              "name": "DR2 Y-band imaging",
+              "modality": "imaging",
+              "description": "DR2 Y-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.darkenergysurvey.org/the-des-project/data-access/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2FY&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "DR2 g-band imaging",
+              "modality": "imaging",
+              "description": "DR2 g-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.darkenergysurvey.org/the-des-project/data-access/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2Fg&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "DR2 i-band imaging",
+              "modality": "imaging",
+              "description": "DR2 i-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.darkenergysurvey.org/the-des-project/data-access/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2Fi&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "DR2 r-band imaging",
+              "modality": "imaging",
+              "description": "DR2 r-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.darkenergysurvey.org/the-des-project/data-access/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2Fr&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "DR2 z-band imaging",
+              "modality": "imaging",
+              "description": "DR2 z-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.darkenergysurvey.org/the-des-project/data-access/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2Fz&get=smoc&order=10&fmt=fits"
             }
           ]
         }
@@ -1545,6 +1844,53 @@
               "status": "acquired",
               "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
               "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FK&get=smoc&order=4&fmt=json"
+            }
+          ]
+        },
+        {
+          "id": "2mass-6x",
+          "label": "2Mass 6X",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "infrared"
+          ],
+          "products": [
+            {
+              "name": "2MASS 6X H-band imaging",
+              "modality": "infrared",
+              "description": "2MASS 6X H-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS6X%2FH&get=smoc&order=9&fmt=fits"
+            },
+            {
+              "name": "2MASS 6X J-band imaging",
+              "modality": "infrared",
+              "description": "2MASS 6X J-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS6X%2FJ&get=smoc&order=9&fmt=fits"
+            },
+            {
+              "name": "2MASS 6X K-band imaging",
+              "modality": "infrared",
+              "description": "2MASS 6X K-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS6X%2FK&get=smoc&order=9&fmt=fits"
             }
           ]
         }
@@ -1653,14 +1999,22 @@
       "mission": "Australian National University SkyMapper",
       "color": "#f08a5d",
       "description": "Southern-sky optical imaging. The bundled DR4 footprint is the CDS g/r/i color HiPS spatial extent; STMOC time metadata is evidence only.",
-      "modalities": ["imaging", "photometry", "catalog"],
+      "modalities": [
+        "imaging",
+        "photometry",
+        "catalog"
+      ],
       "releases": [
         {
           "id": "skymapper-dr4",
           "label": "DR4",
           "kind": "public_release",
           "releasedYear": 2024,
-          "modalities": ["imaging", "photometry", "catalog"],
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
           "products": [
             {
               "name": "DR4 g/r/i color footprint",
@@ -1685,14 +2039,22 @@
       "mission": "ESO Visible and Infrared Survey Telescope",
       "color": "#8e7dbe",
       "description": "ESO near-infrared VIKING products. The bundled J-band footprint is a CDS HiPS spatial extent with estimated precision.",
-      "modalities": ["imaging", "photometry", "infrared"],
+      "modalities": [
+        "imaging",
+        "photometry",
+        "infrared"
+      ],
       "releases": [
         {
           "id": "viking",
           "label": "VIKING",
           "kind": "public_release",
           "releasedYear": 2019,
-          "modalities": ["imaging", "photometry", "infrared"],
+          "modalities": [
+            "imaging",
+            "photometry",
+            "infrared"
+          ],
           "products": [
             {
               "name": "VIKING J footprint",
@@ -1708,6 +2070,89 @@
               "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVIKING%2FJ&get=smoc&order=10&fmt=fits"
             }
           ]
+        },
+        {
+          "id": "vista-vvv-dr4",
+          "label": "Vista Vvv Dr4",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "infrared"
+          ],
+          "products": [
+            {
+              "name": "VVV DR4 J/Y/Z color imaging",
+              "modality": "infrared",
+              "description": "VVV DR4 J/Y/Z color imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FColorJYZ&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "VVV DR4 H bulge imaging",
+              "modality": "infrared",
+              "description": "VVV DR4 H bulge imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FH%2FBulge&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "VVV DR4 H disk imaging",
+              "modality": "infrared",
+              "description": "VVV DR4 H disk imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FH%2FDisk&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "VVV DR4 J-band imaging",
+              "modality": "infrared",
+              "description": "VVV DR4 J-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FJ&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "VVV DR4 Y-band imaging",
+              "modality": "infrared",
+              "description": "VVV DR4 Y-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FY&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "VVV DR4 Z-band imaging",
+              "modality": "infrared",
+              "description": "VVV DR4 Z-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FZ&get=smoc&order=10&fmt=fits"
+            }
+          ]
         }
       ]
     },
@@ -1717,14 +2162,22 @@
       "mission": "Dark Energy Camera Legacy Survey",
       "color": "#4ea8de",
       "description": "Legacy Survey optical imaging. The bundled DR5 g/r/z footprint represents CDS color HiPS availability, not DESI spectroscopy or Tractor selection.",
-      "modalities": ["imaging", "photometry", "catalog"],
+      "modalities": [
+        "imaging",
+        "photometry",
+        "catalog"
+      ],
       "releases": [
         {
           "id": "decals-dr5",
           "label": "DR5",
           "kind": "public_release",
           "releasedYear": 2017,
-          "modalities": ["imaging", "photometry", "catalog"],
+          "modalities": [
+            "imaging",
+            "photometry",
+            "catalog"
+          ],
           "products": [
             {
               "name": "DR5 g/r/z color footprint",
@@ -1815,6 +2268,750 @@
               "status": "acquired",
               "sourceUrl": "https://www.cv.nrao.edu/nvss/",
               "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FNVSS&get=smoc&order=4&fmt=json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "decaps",
+      "name": "DECaPS",
+      "mission": "DECam Plane Survey",
+      "color": "#e6a15c",
+      "description": "Public DECaPS coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "releases": [
+        {
+          "id": "decaps-dr2",
+          "label": "Decaps Dr2",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "DECaPS DR2 color imaging",
+              "modality": "imaging",
+              "description": "DECaPS DR2 color imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://decaps.skymaps.info/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaPS%2FDR2%2Fcolor&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fds",
+      "name": "FDS",
+      "mission": "Fornax Deep Survey",
+      "color": "#e59a9c",
+      "description": "Public FDS coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "releases": [
+        {
+          "id": "fds-dr1",
+          "label": "Fds Dr1",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "FDS DR1 color imaging",
+              "modality": "imaging",
+              "description": "FDS DR1 color imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fcolor&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "FDS DR1 g-band imaging",
+              "modality": "imaging",
+              "description": "FDS DR1 g-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fg&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "FDS DR1 i-band imaging",
+              "modality": "imaging",
+              "description": "FDS DR1 i-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fi&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "FDS DR1 r-band imaging",
+              "modality": "imaging",
+              "description": "FDS DR1 r-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fr&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "FDS DR1 u-band imaging",
+              "modality": "imaging",
+              "description": "FDS DR1 u-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fu&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "iphas",
+      "name": "IPHAS",
+      "mission": "INT Photometric H-alpha Survey",
+      "color": "#a6d189",
+      "description": "Public IPHAS coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "releases": [
+        {
+          "id": "iphas-dr2",
+          "label": "Iphas Dr2",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "IPHAS DR2 H-alpha imaging",
+              "modality": "imaging",
+              "description": "IPHAS DR2 H-alpha imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.iphas.org/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FIPHAS%2FDR2%2Fhalpha&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "IPHAS DR2 i-band imaging",
+              "modality": "imaging",
+              "description": "IPHAS DR2 i-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.iphas.org/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FIPHAS%2FDR2%2Fi&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "IPHAS DR2 r-band imaging",
+              "modality": "imaging",
+              "description": "IPHAS DR2 r-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.iphas.org/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FIPHAS%2FDR2%2Fr&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vphas",
+      "name": "VPHAS+",
+      "mission": "VST Photometric H-alpha Survey",
+      "color": "#d9a0ff",
+      "description": "Public VPHAS+ coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "releases": [
+        {
+          "id": "vphas-dr4",
+          "label": "Vphas Dr4",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "VPHAS+ DR4 H-alpha imaging",
+              "modality": "imaging",
+              "description": "VPHAS+ DR4 H-alpha imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.vphasplus.org/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2FHalpha&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "VPHAS+ DR4 color imaging",
+              "modality": "imaging",
+              "description": "VPHAS+ DR4 color imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.vphasplus.org/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "VPHAS+ DR4 g-band imaging",
+              "modality": "imaging",
+              "description": "VPHAS+ DR4 g-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.vphasplus.org/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fg&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "VPHAS+ DR4 i-band imaging",
+              "modality": "imaging",
+              "description": "VPHAS+ DR4 i-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.vphasplus.org/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fi&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "VPHAS+ DR4 r-band imaging",
+              "modality": "imaging",
+              "description": "VPHAS+ DR4 r-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.vphasplus.org/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fr&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "VPHAS+ DR4 u-band imaging",
+              "modality": "imaging",
+              "description": "VPHAS+ DR4 u-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.vphasplus.org/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fu&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ztf",
+      "name": "ZTF",
+      "mission": "Zwicky Transient Facility",
+      "color": "#f7c873",
+      "description": "Public ZTF coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "releases": [
+        {
+          "id": "ztf-dr7",
+          "label": "Ztf Dr7",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "ZTF DR7 color imaging",
+              "modality": "imaging",
+              "description": "ZTF DR7 color imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ztf.caltech.edu/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fcolor&get=smoc&order=9&fmt=fits"
+            },
+            {
+              "name": "ZTF DR7 g-band imaging",
+              "modality": "imaging",
+              "description": "ZTF DR7 g-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ztf.caltech.edu/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fg&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "ZTF DR7 i-band imaging",
+              "modality": "imaging",
+              "description": "ZTF DR7 i-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ztf.caltech.edu/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fi&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "ZTF DR7 r-band imaging",
+              "modality": "imaging",
+              "description": "ZTF DR7 r-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ztf.caltech.edu/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fr&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spherex",
+      "name": "SPHEREx",
+      "mission": "Spectro-Photometer for the History of the Universe",
+      "color": "#8fd7d2",
+      "description": "Public SPHEREx coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "infrared"
+      ],
+      "releases": [
+        {
+          "id": "spherex-qr2",
+          "label": "Spherex Qr2",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "infrared"
+          ],
+          "products": [
+            {
+              "name": "SPHEREx QR2 color coverage",
+              "modality": "infrared",
+              "description": "SPHEREx QR2 color coverage public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2Fcolor&get=smoc&order=7&fmt=fits"
+            },
+            {
+              "name": "SPHEREx QR2 D1 coverage",
+              "modality": "infrared",
+              "description": "SPHEREx QR2 D1 coverage public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD1&get=smoc&order=7&fmt=fits"
+            },
+            {
+              "name": "SPHEREx QR2 D2 coverage",
+              "modality": "infrared",
+              "description": "SPHEREx QR2 D2 coverage public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD2&get=smoc&order=7&fmt=fits"
+            },
+            {
+              "name": "SPHEREx QR2 D3 coverage",
+              "modality": "infrared",
+              "description": "SPHEREx QR2 D3 coverage public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD3&get=smoc&order=7&fmt=fits"
+            },
+            {
+              "name": "SPHEREx QR2 D4 coverage",
+              "modality": "infrared",
+              "description": "SPHEREx QR2 D4 coverage public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD4&get=smoc&order=7&fmt=fits"
+            },
+            {
+              "name": "SPHEREx QR2 D5 coverage",
+              "modality": "infrared",
+              "description": "SPHEREx QR2 D5 coverage public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD5&get=smoc&order=7&fmt=fits"
+            },
+            {
+              "name": "SPHEREx QR2 D6 coverage",
+              "modality": "infrared",
+              "description": "SPHEREx QR2 D6 coverage public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD6&get=smoc&order=7&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rubin",
+      "name": "Rubin",
+      "mission": "Vera C. Rubin Observatory",
+      "color": "#f08b7c",
+      "description": "Public Rubin coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "releases": [
+        {
+          "id": "rubin-firstlook",
+          "label": "Rubin Firstlook",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "Rubin First Look imaging",
+              "modality": "imaging",
+              "description": "Rubin First Look imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://rubinobservatory.org/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FRubin%2FFirstLook&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sumss",
+      "name": "SUMSS",
+      "mission": "Sydney University Molonglo Sky Survey",
+      "color": "#b8b5ff",
+      "description": "Public SUMSS coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "releases": [
+        {
+          "id": "sumss-final",
+          "label": "Sumss Final",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "SUMSS 843 MHz imaging",
+              "modality": "imaging",
+              "description": "SUMSS 843 MHz imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.astrop.physics.usyd.edu.au/SUMSS/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSUMSS&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wenss",
+      "name": "WENSS",
+      "mission": "Westerbork Northern Sky Survey",
+      "color": "#8cc8ff",
+      "description": "Public WENSS coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "releases": [
+        {
+          "id": "wenss-final",
+          "label": "Wenss Final",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "WENSS 325 MHz imaging",
+              "modality": "imaging",
+              "description": "WENSS 325 MHz imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.astron.nl/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FWENSS&get=smoc&order=5&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cfhtls",
+      "name": "CFHTLS",
+      "mission": "Canada-France-Hawaii Telescope Legacy Survey",
+      "color": "#e8c07d",
+      "description": "Public CFHTLS coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "releases": [
+        {
+          "id": "cfhtls-wide",
+          "label": "Cfhtls Wide",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "CFHTLS Wide u/g/i color imaging",
+              "modality": "imaging",
+              "description": "CFHTLS Wide u/g/i color imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2FColor%2Fugi&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "CFHTLS Wide g-band imaging",
+              "modality": "imaging",
+              "description": "CFHTLS Wide g-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fg&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "CFHTLS Wide i-band imaging",
+              "modality": "imaging",
+              "description": "CFHTLS Wide i-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fi&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "CFHTLS Wide r-band imaging",
+              "modality": "imaging",
+              "description": "CFHTLS Wide r-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fr&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "CFHTLS Wide u-band imaging",
+              "modality": "imaging",
+              "description": "CFHTLS Wide u-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fu&get=smoc&order=10&fmt=fits"
+            },
+            {
+              "name": "CFHTLS Wide z-band imaging",
+              "modality": "imaging",
+              "description": "CFHTLS Wide z-band imaging public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fz&get=smoc&order=10&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "act",
+      "name": "ACT",
+      "mission": "Atacama Cosmology Telescope",
+      "color": "#d78cf0",
+      "description": "Public ACT coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "radio"
+      ],
+      "releases": [
+        {
+          "id": "act-dr5",
+          "label": "Act Dr5",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "radio"
+          ],
+          "products": [
+            {
+              "name": "ACT DR5 90 GHz coverage",
+              "modality": "radio",
+              "description": "ACT DR5 90 GHz coverage public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://lambda.gsfc.nasa.gov/product/act/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff90&get=smoc&order=7&fmt=fits"
+            },
+            {
+              "name": "ACT DR5 150 GHz coverage",
+              "modality": "radio",
+              "description": "ACT DR5 150 GHz coverage public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://lambda.gsfc.nasa.gov/product/act/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff150&get=smoc&order=7&fmt=fits"
+            },
+            {
+              "name": "ACT DR5 220 GHz coverage",
+              "modality": "radio",
+              "description": "ACT DR5 220 GHz coverage public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://lambda.gsfc.nasa.gov/product/act/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff220&get=smoc&order=7&fmt=fits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "akari",
+      "name": "AKARI",
+      "mission": "AKARI infrared all-sky survey",
+      "color": "#b1d8a6",
+      "description": "Public AKARI coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "infrared"
+      ],
+      "releases": [
+        {
+          "id": "akari-fis",
+          "label": "Akari Fis",
+          "kind": "public_release",
+          "releasedYear": 2025,
+          "modalities": [
+            "infrared"
+          ],
+          "products": [
+            {
+              "name": "AKARI FIS color coverage",
+              "modality": "infrared",
+              "description": "AKARI FIS color coverage public CDS HiPS/MOC availability extent.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "third_party_moc",
+              "sourceLabel": "CDS public HiPS/MOC",
+              "sourceUrl": "https://www.ir.isas.jaxa.jp/AKARI/",
+              "geometrySourceLabel": "CDS MocServer spatial MOC",
+              "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FAKARI%2FFIS%2FColor&get=smoc&order=5&fmt=fits"
             }
           ]
         }

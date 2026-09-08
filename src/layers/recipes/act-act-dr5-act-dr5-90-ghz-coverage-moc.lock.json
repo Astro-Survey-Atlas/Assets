@@ -1,0 +1,50 @@
+{
+  "layerId": "act-act-dr5-act-dr5-90-ghz-coverage-moc",
+  "surveyId": "act",
+  "releaseId": "act-dr5",
+  "product": "ACT DR5 90 GHz coverage",
+  "modality": "radio",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 7,
+  "queryOrder": 7,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://lambda.gsfc.nasa.gov/product/act/",
+  "input": "artifacts/public-survey-footprints/raw/moc/act-act-dr5-act-dr5-90-ghz-coverage-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/ACT/DR5/f90",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff90&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff90&get=smoc&order=7&fmt=fits",
+    "sourceRecordSha256": "de5a02d345c2f02b3f78476b3860dcff3377b6f5c754d56833550693a52d4fb2",
+    "nativeSpatialOrder": 7,
+    "exportOrder": 7,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "8a06badae549b4df5835c6bad2a4de2c52e6797919b87e663cfd4b743283eac2",
+    "sizeBytes": 17280,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff90&get=smoc&order=7&fmt=fits",
+    "recordSha256": "de5a02d345c2f02b3f78476b3860dcff3377b6f5c754d56833550693a52d4fb2",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

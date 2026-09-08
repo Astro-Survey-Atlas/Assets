@@ -1,0 +1,53 @@
+{
+  "layerId": "vphas-vphas-dr4-vphas-dr4-u-band-imaging-moc",
+  "surveyId": "vphas",
+  "releaseId": "vphas-dr4",
+  "product": "VPHAS+ DR4 u-band imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.vphasplus.org/",
+  "input": "artifacts/public-survey-footprints/raw/moc/vphas-vphas-dr4-vphas-dr4-u-band-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/VPHAS/DR4/u",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fu&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fu&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "0066e1fa73fa1583154b67c765b93c35576339dd6ff5025fb36f544fc935ac02",
+    "nativeSpatialOrder": 11,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "8d021d2852011bc6ddd5cd1348e597a04c954f2b145b72e177939592be590ea4",
+    "sizeBytes": 60480,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fu&get=smoc&order=10&fmt=fits",
+    "recordSha256": "0066e1fa73fa1583154b67c765b93c35576339dd6ff5025fb36f544fc935ac02",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

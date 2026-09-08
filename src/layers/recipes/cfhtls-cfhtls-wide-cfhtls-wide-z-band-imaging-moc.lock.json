@@ -1,0 +1,53 @@
+{
+  "layerId": "cfhtls-cfhtls-wide-cfhtls-wide-z-band-imaging-moc",
+  "surveyId": "cfhtls",
+  "releaseId": "cfhtls-wide",
+  "product": "CFHTLS Wide z-band imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+  "input": "artifacts/public-survey-footprints/raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-z-band-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/CFHTLS/W/z",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fz&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fz&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "c4da4e3b481ad9e18b4ad2bf3ce290897681a661e4e7572a7d3eaea1a0ee9900",
+    "nativeSpatialOrder": 11,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "1f7389448dbcf97f429146a286b3ad348139b108b0f9b524bf0b4f09128c3401",
+    "sizeBytes": 17280,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fz&get=smoc&order=10&fmt=fits",
+    "recordSha256": "c4da4e3b481ad9e18b4ad2bf3ce290897681a661e4e7572a7d3eaea1a0ee9900",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

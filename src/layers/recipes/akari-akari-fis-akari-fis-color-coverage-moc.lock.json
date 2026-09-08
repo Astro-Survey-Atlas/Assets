@@ -1,0 +1,48 @@
+{
+  "layerId": "akari-akari-fis-akari-fis-color-coverage-moc",
+  "surveyId": "akari",
+  "releaseId": "akari-fis",
+  "product": "AKARI FIS color coverage",
+  "modality": "infrared",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 5,
+  "queryOrder": 5,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.ir.isas.jaxa.jp/AKARI/",
+  "input": "artifacts/public-survey-footprints/raw/moc/akari-akari-fis-akari-fis-color-coverage-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/AKARI/FIS/Color",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FAKARI%2FFIS%2FColor&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FAKARI%2FFIS%2FColor&get=smoc&order=5&fmt=fits",
+    "sourceRecordSha256": "b4ca34a224ce438aa9a4542d4a87e5282f6cd6aaca59448f84f29244e71ebe27",
+    "nativeSpatialOrder": 5,
+    "exportOrder": 5,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "f3b7c8cbd92841d7f0bd468c8b47b7a5554efaf91c3919c0db0a36e6d7816ede",
+    "sizeBytes": 8640,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FAKARI%2FFIS%2FColor&get=smoc&order=5&fmt=fits",
+    "recordSha256": "b4ca34a224ce438aa9a4542d4a87e5282f6cd6aaca59448f84f29244e71ebe27",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

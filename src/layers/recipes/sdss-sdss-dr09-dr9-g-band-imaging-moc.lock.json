@@ -1,0 +1,50 @@
+{
+  "layerId": "sdss-sdss-dr09-dr9-g-band-imaging-moc",
+  "surveyId": "sdss",
+  "releaseId": "sdss-dr09",
+  "product": "DR9 g-band imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 7,
+  "queryOrder": 7,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.sdss.org/dr9/",
+  "input": "artifacts/public-survey-footprints/raw/moc/sdss-sdss-dr09-dr9-g-band-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/SDSS9/g",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fg&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fg&get=smoc&order=7&fmt=fits",
+    "sourceRecordSha256": "fd8213b358aecedc53c8311e45f4b1db9982977f81cc245001c4b773c956f55b",
+    "nativeSpatialOrder": 7,
+    "exportOrder": 7,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "e7a3767a59156e6940b072111ba4d7fcc01130a908b35628984e49693f91eb64",
+    "sizeBytes": 37440,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fg&get=smoc&order=7&fmt=fits",
+    "recordSha256": "fd8213b358aecedc53c8311e45f4b1db9982977f81cc245001c4b773c956f55b",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

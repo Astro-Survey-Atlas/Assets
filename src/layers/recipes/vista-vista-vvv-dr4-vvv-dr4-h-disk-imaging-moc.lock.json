@@ -1,0 +1,53 @@
+{
+  "layerId": "vista-vista-vvv-dr4-vvv-dr4-h-disk-imaging-moc",
+  "surveyId": "vista",
+  "releaseId": "vista-vvv-dr4",
+  "product": "VVV DR4 H disk imaging",
+  "modality": "infrared",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+  "input": "artifacts/public-survey-footprints/raw/moc/vista-vista-vvv-dr4-vvv-dr4-h-disk-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/VISTA/VVV/DR4/H/Disk",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FH%2FDisk&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FH%2FDisk&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "c56c6bf03b69584935d490b0f5f323c7a785e8b2d065772c78e94f8849931788",
+    "nativeSpatialOrder": 11,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "9bfd2058bfd90b34c32e4c9a3fb1d89485540a81210ebb6804de66a1629a18a4",
+    "sizeBytes": 20160,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FH%2FDisk&get=smoc&order=10&fmt=fits",
+    "recordSha256": "c56c6bf03b69584935d490b0f5f323c7a785e8b2d065772c78e94f8849931788",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

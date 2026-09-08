@@ -1,0 +1,51 @@
+{
+  "layerId": "galex-galex-gr6-ais-galex-ais-fuv-imaging-moc",
+  "surveyId": "galex",
+  "releaseId": "galex-gr6-ais",
+  "product": "GALEX AIS FUV imaging",
+  "modality": "ultraviolet",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 8,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://galex.stsci.edu/",
+  "input": "artifacts/public-survey-footprints/raw/moc/galex-galex-gr6-ais-galex-ais-fuv-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/GALEXGR6/AIS/FUV",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2FFUV&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2FFUV&get=smoc&order=8&fmt=fits",
+    "sourceRecordSha256": "be23ff18f32c267d5d4cfdeed3c20fe723676dba5b8c762f9d9ad79503f5264b",
+    "nativeSpatialOrder": 8,
+    "exportOrder": 8,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "ab11c5bd3b08d45d86f38b28d7114a4899023c9ffc75ea7ac9ea1b5b3da35549",
+    "sizeBytes": 290880,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2FFUV&get=smoc&order=8&fmt=fits",
+    "recordSha256": "be23ff18f32c267d5d4cfdeed3c20fe723676dba5b8c762f9d9ad79503f5264b",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

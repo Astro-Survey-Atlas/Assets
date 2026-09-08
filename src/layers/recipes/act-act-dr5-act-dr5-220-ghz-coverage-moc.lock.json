@@ -1,0 +1,50 @@
+{
+  "layerId": "act-act-dr5-act-dr5-220-ghz-coverage-moc",
+  "surveyId": "act",
+  "releaseId": "act-dr5",
+  "product": "ACT DR5 220 GHz coverage",
+  "modality": "radio",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 7,
+  "queryOrder": 7,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://lambda.gsfc.nasa.gov/product/act/",
+  "input": "artifacts/public-survey-footprints/raw/moc/act-act-dr5-act-dr5-220-ghz-coverage-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/ACT/DR5/f220",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff220&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff220&get=smoc&order=7&fmt=fits",
+    "sourceRecordSha256": "faaf4c9bd6be4bdba7961b03595363c7b0fe9eba62de7847ae98d436116a077a",
+    "nativeSpatialOrder": 7,
+    "exportOrder": 7,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "53354fac673dcc693450eee89e56999fa0e99342f0d5e9891e5065706ed349c0",
+    "sizeBytes": 14400,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff220&get=smoc&order=7&fmt=fits",
+    "recordSha256": "faaf4c9bd6be4bdba7961b03595363c7b0fe9eba62de7847ae98d436116a077a",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

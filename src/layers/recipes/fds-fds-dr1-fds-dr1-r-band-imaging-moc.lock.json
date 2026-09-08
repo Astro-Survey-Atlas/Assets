@@ -1,0 +1,53 @@
+{
+  "layerId": "fds-fds-dr1-fds-dr1-r-band-imaging-moc",
+  "surveyId": "fds",
+  "releaseId": "fds-dr1",
+  "product": "FDS DR1 r-band imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+  "input": "artifacts/public-survey-footprints/raw/moc/fds-fds-dr1-fds-dr1-r-band-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/FDS/DR1/r",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fr&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fr&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "096911e9a0f33e16fd35883b4d3c9c1511034058a3d7920ad45bb2675d0c558c",
+    "nativeSpatialOrder": 12,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "c9a519261209c13ec3a520387e07a1a56f6d51d7a856677b190f091a8a7fe643",
+    "sizeBytes": 8640,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fr&get=smoc&order=10&fmt=fits",
+    "recordSha256": "096911e9a0f33e16fd35883b4d3c9c1511034058a3d7920ad45bb2675d0c558c",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

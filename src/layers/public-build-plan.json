@@ -3,6 +3,71 @@
   "sourceDateEpoch": 1787184000,
   "builds": [
     {
+      "spec": "src/layers/recipes/2mass-2mass-6x-2mass-6x-h-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/2mass-2mass-6x-2mass-6x-h-band-imaging-moc",
+      "expectedSha256": "e3502bcc21f7ffac2b8493c631936d0a0fc29399b5d4aa00d50a1e0fc7e89164"
+    },
+    {
+      "spec": "src/layers/recipes/2mass-2mass-6x-2mass-6x-j-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/2mass-2mass-6x-2mass-6x-j-band-imaging-moc",
+      "expectedSha256": "fb8b49cae488e051f0495e97815e031d86dcd38df453ceec7da41b7b8d12831b"
+    },
+    {
+      "spec": "src/layers/recipes/2mass-2mass-6x-2mass-6x-k-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/2mass-2mass-6x-2mass-6x-k-band-imaging-moc",
+      "expectedSha256": "c5077962dd6b8a32d79a79ed074a2622ad321b2cd02406d02b5e4a06b999f4de"
+    },
+    {
+      "spec": "src/layers/recipes/act-act-dr5-act-dr5-150-ghz-coverage-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/act-act-dr5-act-dr5-150-ghz-coverage-moc",
+      "expectedSha256": "289c43ed146d97836047ad0bf4bf3bb746a058411776cd370381e9d992b34b2b"
+    },
+    {
+      "spec": "src/layers/recipes/act-act-dr5-act-dr5-220-ghz-coverage-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/act-act-dr5-act-dr5-220-ghz-coverage-moc",
+      "expectedSha256": "f5580b9737122c178d8bd8bd35d57c2fcf0b89b18b4c0e8cb8b94fe4498bd514"
+    },
+    {
+      "spec": "src/layers/recipes/act-act-dr5-act-dr5-90-ghz-coverage-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/act-act-dr5-act-dr5-90-ghz-coverage-moc",
+      "expectedSha256": "1b58ff701dde59a75a213cd078d1b6c08c6607b36a4ba347b5838c07efa9ace6"
+    },
+    {
+      "spec": "src/layers/recipes/akari-akari-fis-akari-fis-color-coverage-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/akari-akari-fis-akari-fis-color-coverage-moc",
+      "expectedSha256": "19d182e8ce52b8ded13ca18246ffb58dfb44d519f3aacfa0b55f74a1e01fbf41"
+    },
+    {
+      "spec": "src/layers/recipes/cfhtls-cfhtls-wide-cfhtls-wide-g-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/cfhtls-cfhtls-wide-cfhtls-wide-g-band-imaging-moc",
+      "expectedSha256": "6c49a7f3d8b9235ee5320d8e0463988783272baf803cf3b488105781a79250e1"
+    },
+    {
+      "spec": "src/layers/recipes/cfhtls-cfhtls-wide-cfhtls-wide-i-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/cfhtls-cfhtls-wide-cfhtls-wide-i-band-imaging-moc",
+      "expectedSha256": "6c49a7f3d8b9235ee5320d8e0463988783272baf803cf3b488105781a79250e1"
+    },
+    {
+      "spec": "src/layers/recipes/cfhtls-cfhtls-wide-cfhtls-wide-r-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/cfhtls-cfhtls-wide-cfhtls-wide-r-band-imaging-moc",
+      "expectedSha256": "6c49a7f3d8b9235ee5320d8e0463988783272baf803cf3b488105781a79250e1"
+    },
+    {
+      "spec": "src/layers/recipes/cfhtls-cfhtls-wide-cfhtls-wide-u-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/cfhtls-cfhtls-wide-cfhtls-wide-u-band-imaging-moc",
+      "expectedSha256": "6c49a7f3d8b9235ee5320d8e0463988783272baf803cf3b488105781a79250e1"
+    },
+    {
+      "spec": "src/layers/recipes/cfhtls-cfhtls-wide-cfhtls-wide-u-g-i-color-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/cfhtls-cfhtls-wide-cfhtls-wide-u-g-i-color-imaging-moc",
+      "expectedSha256": "6c49a7f3d8b9235ee5320d8e0463988783272baf803cf3b488105781a79250e1"
+    },
+    {
+      "spec": "src/layers/recipes/cfhtls-cfhtls-wide-cfhtls-wide-z-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/cfhtls-cfhtls-wide-cfhtls-wide-z-band-imaging-moc",
+      "expectedSha256": "6c49a7f3d8b9235ee5320d8e0463988783272baf803cf3b488105781a79250e1"
+    },
+    {
       "spec": "src/layers/recipes/csst-sim-w2-image-extent.lock.json",
       "output": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent",
       "expectedSha256": "909ec26a41a54d2ad41444366a340e71fd5c7bc3da7a36cfc44a18ce5c21225b"
@@ -23,6 +88,36 @@
       "expectedSha256": "eba092ee08b30e986bae089e72c0ff8a6bc27eb91d2d7e314376565c64f8b4fa"
     },
     {
+      "spec": "src/layers/recipes/decaps-decaps-dr2-decaps-dr2-color-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/decaps-decaps-dr2-decaps-dr2-color-imaging-moc",
+      "expectedSha256": "790bad182c174e0d33a0ff7790467655ffed3095e8c78e385f0e1ccb2c90d803"
+    },
+    {
+      "spec": "src/layers/recipes/des-des-dr2-dr2-g-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/des-des-dr2-dr2-g-band-imaging-moc",
+      "expectedSha256": "2b7f8ff55723a804188d9a616f5d69aff4d7d6d10b90451b1ec68f3b973b8cfe"
+    },
+    {
+      "spec": "src/layers/recipes/des-des-dr2-dr2-i-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/des-des-dr2-dr2-i-band-imaging-moc",
+      "expectedSha256": "2b7f8ff55723a804188d9a616f5d69aff4d7d6d10b90451b1ec68f3b973b8cfe"
+    },
+    {
+      "spec": "src/layers/recipes/des-des-dr2-dr2-r-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/des-des-dr2-dr2-r-band-imaging-moc",
+      "expectedSha256": "2b7f8ff55723a804188d9a616f5d69aff4d7d6d10b90451b1ec68f3b973b8cfe"
+    },
+    {
+      "spec": "src/layers/recipes/des-des-dr2-dr2-y-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/des-des-dr2-dr2-y-band-imaging-moc",
+      "expectedSha256": "2b7f8ff55723a804188d9a616f5d69aff4d7d6d10b90451b1ec68f3b973b8cfe"
+    },
+    {
+      "spec": "src/layers/recipes/des-des-dr2-dr2-z-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/des-des-dr2-dr2-z-band-imaging-moc",
+      "expectedSha256": "2b7f8ff55723a804188d9a616f5d69aff4d7d6d10b90451b1ec68f3b973b8cfe"
+    },
+    {
       "spec": "src/layers/recipes/desi-dr1-spectra-footprint.lock.json",
       "output": "artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint",
       "expectedSha256": "e3fb86b871d2e24e3fd40724ea241d222988d8fd7262fa6b3855f59b3aae9c40"
@@ -33,9 +128,89 @@
       "expectedSha256": "c1ef0b3ee9b18ca1d9dd1d10c08630850823c3f3ac4f3a0f22e86a58c177833f"
     },
     {
+      "spec": "src/layers/recipes/euclid-euclid-ero-ero-color-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-euclid-ero-ero-color-imaging-moc",
+      "expectedSha256": "3216873736f072ae7a22e2bbb7aaf7ec913581e4f394f1199e5536bd599c2bd4"
+    },
+    {
+      "spec": "src/layers/recipes/euclid-euclid-ero-ero-first-images-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-euclid-ero-ero-first-images-moc",
+      "expectedSha256": "fcee9e76d0ff6ecadb87c2ffec78a6f10a3f40c00a92585e9c8ba5923bdf0e6f"
+    },
+    {
+      "spec": "src/layers/recipes/euclid-euclid-ero-ero-nisp-h-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-euclid-ero-ero-nisp-h-moc",
+      "expectedSha256": "012f95d89282e9b86b93173e9795b2411a369d0b3a74e918cf3a7d7ecb9a7640"
+    },
+    {
+      "spec": "src/layers/recipes/euclid-euclid-ero-ero-nisp-j-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-euclid-ero-ero-nisp-j-moc",
+      "expectedSha256": "ebcd0714d21101161d162cfb64e4bf94c477c21866513876666beba36f50b8da"
+    },
+    {
+      "spec": "src/layers/recipes/euclid-euclid-ero-ero-nisp-y-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-euclid-ero-ero-nisp-y-moc",
+      "expectedSha256": "012f95d89282e9b86b93173e9795b2411a369d0b3a74e918cf3a7d7ecb9a7640"
+    },
+    {
+      "spec": "src/layers/recipes/euclid-euclid-ero-ero-vis-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-euclid-ero-ero-vis-moc",
+      "expectedSha256": "28900f6521fafcd1d0db448bb241425f4e5afa899c894675a775b328001632c1"
+    },
+    {
+      "spec": "src/layers/recipes/euclid-euclid-q1-euclid-q1-color-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-euclid-q1-euclid-q1-color-imaging-moc",
+      "expectedSha256": "1a5fd7fa0c75a000c94c53ce2c667df2f275178d7fa33bf1119fd86b3f59189c"
+    },
+    {
+      "spec": "src/layers/recipes/euclid-euclid-q1-euclid-q1-nisp-h-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-euclid-q1-euclid-q1-nisp-h-moc",
+      "expectedSha256": "1a5fd7fa0c75a000c94c53ce2c667df2f275178d7fa33bf1119fd86b3f59189c"
+    },
+    {
+      "spec": "src/layers/recipes/euclid-euclid-q1-euclid-q1-nisp-j-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-euclid-q1-euclid-q1-nisp-j-moc",
+      "expectedSha256": "fa03ef4d29025b1e2e9fd620aed04b33d473e149515effd486172a2efa2b5864"
+    },
+    {
+      "spec": "src/layers/recipes/euclid-euclid-q1-euclid-q1-nisp-y-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-euclid-q1-euclid-q1-nisp-y-moc",
+      "expectedSha256": "665110dc2799744215a1582c9c2c768b7c112d20bf01014da7317f40cffff9f6"
+    },
+    {
+      "spec": "src/layers/recipes/euclid-euclid-q1-euclid-q1-vis-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-euclid-q1-euclid-q1-vis-moc",
+      "expectedSha256": "7f8906442664691417d5314b7cbaf2dbdeafabc4fe9f7aa32b560280cb9af5f6"
+    },
+    {
       "spec": "src/layers/recipes/euclid-q1-deep-fields-image-extent.lock.json",
       "output": "artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent",
       "expectedSha256": "e1c38cd2abe21035deae79efdf13f003fb0421f14a780d3061dbc8a52d2da75e"
+    },
+    {
+      "spec": "src/layers/recipes/fds-fds-dr1-fds-dr1-color-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/fds-fds-dr1-fds-dr1-color-imaging-moc",
+      "expectedSha256": "f3ad45871e475978c8eb889387d66c8308b690af561aa4415b1920245744c177"
+    },
+    {
+      "spec": "src/layers/recipes/fds-fds-dr1-fds-dr1-g-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/fds-fds-dr1-fds-dr1-g-band-imaging-moc",
+      "expectedSha256": "5b530c27663464bdf96f098f2d82a72b0822295c3b48456aad49a54893a0a5b4"
+    },
+    {
+      "spec": "src/layers/recipes/fds-fds-dr1-fds-dr1-i-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/fds-fds-dr1-fds-dr1-i-band-imaging-moc",
+      "expectedSha256": "f3ad45871e475978c8eb889387d66c8308b690af561aa4415b1920245744c177"
+    },
+    {
+      "spec": "src/layers/recipes/fds-fds-dr1-fds-dr1-r-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/fds-fds-dr1-fds-dr1-r-band-imaging-moc",
+      "expectedSha256": "24b5bdb83ac2aba2bd20c034050a30aea1f66a164bae545c7214a219b1eb9a86"
+    },
+    {
+      "spec": "src/layers/recipes/fds-fds-dr1-fds-dr1-u-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/fds-fds-dr1-fds-dr1-u-band-imaging-moc",
+      "expectedSha256": "62e37024cb7f139a1327321033fb0c4eec09012d71d8c483e4129fd9bd79e17b"
     },
     {
       "spec": "src/layers/recipes/gaia-dr3-main-source-presence.lock.json",
@@ -43,9 +218,69 @@
       "expectedSha256": "b0fa6948ab98c540d8f79e08ae699b406bb857c68233ebb3f33666be9869f16f"
     },
     {
+      "spec": "src/layers/recipes/galex-galex-gr6-ais-galex-ais-color-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/galex-galex-gr6-ais-galex-ais-color-imaging-moc",
+      "expectedSha256": "d2ea43794493760352d5e9a28e785e288b2d6713521906bdbfc65d465479feb0"
+    },
+    {
+      "spec": "src/layers/recipes/galex-galex-gr6-ais-galex-ais-fuv-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/galex-galex-gr6-ais-galex-ais-fuv-imaging-moc",
+      "expectedSha256": "1ac03fb9ddcfe27ef1f80c28dcf50168e4bbe7ebfa68926ea72cc7bb17fe5489"
+    },
+    {
+      "spec": "src/layers/recipes/galex-galex-gr6-ais-galex-ais-nuv-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/galex-galex-gr6-ais-galex-ais-nuv-imaging-moc",
+      "expectedSha256": "2a22dfc49c93467f53783fdcd1e59322b5eb3953d8f8e2979cdd110538fde312"
+    },
+    {
+      "spec": "src/layers/recipes/iphas-iphas-dr2-iphas-dr2-h-alpha-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/iphas-iphas-dr2-iphas-dr2-h-alpha-imaging-moc",
+      "expectedSha256": "2189404edc74199dc2399455aa05bed8bac7824fe52d3c2b7805049237676142"
+    },
+    {
+      "spec": "src/layers/recipes/iphas-iphas-dr2-iphas-dr2-i-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/iphas-iphas-dr2-iphas-dr2-i-band-imaging-moc",
+      "expectedSha256": "0148499f037c22b3c169aa823f30d3a9f50d49f2e7b3080e82ed3adbcb3d8721"
+    },
+    {
+      "spec": "src/layers/recipes/iphas-iphas-dr2-iphas-dr2-r-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/iphas-iphas-dr2-iphas-dr2-r-band-imaging-moc",
+      "expectedSha256": "8117efcfe375306ef62fb0562e75204c8877866a6eb06a71363b4a8002b38ac1"
+    },
+    {
       "spec": "src/layers/recipes/kids-dr5-color-footprint.lock.json",
       "output": "artifacts/public-survey-footprints/layers/kids-dr5-color-footprint",
       "expectedSha256": "0e4db99b72bf0b6f4478d099c7b7e008e2ec90c04f997f67b4a88880da1d8cb9"
+    },
+    {
+      "spec": "src/layers/recipes/rubin-rubin-firstlook-rubin-first-look-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/rubin-rubin-firstlook-rubin-first-look-imaging-moc",
+      "expectedSha256": "9d07843f26fb0e652a934cd16475f16100ed04598c3d65fd9c41d55b03d764df"
+    },
+    {
+      "spec": "src/layers/recipes/sdss-sdss-dr09-dr9-g-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/sdss-sdss-dr09-dr9-g-band-imaging-moc",
+      "expectedSha256": "7a89ac5c526794e813064583d718ac95a94aeb43e49c2750a892a262a0301b7d"
+    },
+    {
+      "spec": "src/layers/recipes/sdss-sdss-dr09-dr9-i-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/sdss-sdss-dr09-dr9-i-band-imaging-moc",
+      "expectedSha256": "a456364d7bc660287f6f90d2d93beee843b28b6e15c7218f5ae6deaefb7bbea6"
+    },
+    {
+      "spec": "src/layers/recipes/sdss-sdss-dr09-dr9-r-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/sdss-sdss-dr09-dr9-r-band-imaging-moc",
+      "expectedSha256": "d45db6b56fde81607545f4d90824299396b4a875c343431dbcea1c5d3fd1e567"
+    },
+    {
+      "spec": "src/layers/recipes/sdss-sdss-dr09-dr9-u-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/sdss-sdss-dr09-dr9-u-band-imaging-moc",
+      "expectedSha256": "14df94b734350298a4a2529107f973abef60fbcf38c6cdd8133d1a3f069dbd5e"
+    },
+    {
+      "spec": "src/layers/recipes/sdss-sdss-dr09-dr9-z-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/sdss-sdss-dr09-dr9-z-band-imaging-moc",
+      "expectedSha256": "5be96ec20a12bf3795a4175a023bbd5e196251c29be9086d6a7d482965ffac90"
     },
     {
       "spec": "src/layers/recipes/skymapper-dr4-color-footprint.lock.json",
@@ -53,9 +288,134 @@
       "expectedSha256": "fd815fc5e90d8e3b851bee763202cb4725ec0d45d91a9b763fa9bed025d9fd1d"
     },
     {
+      "spec": "src/layers/recipes/spherex-spherex-qr2-spherex-qr2-color-coverage-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/spherex-spherex-qr2-spherex-qr2-color-coverage-moc",
+      "expectedSha256": "631ef5925374951387c1923a23e9114751429cd2a2c778e37a1dc013ebdcf96d"
+    },
+    {
+      "spec": "src/layers/recipes/spherex-spherex-qr2-spherex-qr2-d1-coverage-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/spherex-spherex-qr2-spherex-qr2-d1-coverage-moc",
+      "expectedSha256": "1f959ab8a7edbc7fb32e038210e0272a95a299301ec996adb336c4980e66689e"
+    },
+    {
+      "spec": "src/layers/recipes/spherex-spherex-qr2-spherex-qr2-d2-coverage-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/spherex-spherex-qr2-spherex-qr2-d2-coverage-moc",
+      "expectedSha256": "340d3388651b5c9e9d5b805b3f71474f2d3f8f17459bc3b7a8b84bd8b06b4e0c"
+    },
+    {
+      "spec": "src/layers/recipes/spherex-spherex-qr2-spherex-qr2-d3-coverage-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/spherex-spherex-qr2-spherex-qr2-d3-coverage-moc",
+      "expectedSha256": "76a27af806caaef8a7bac558d4344d6ab0f566bf2e97aedb37d5e827411e3b6c"
+    },
+    {
+      "spec": "src/layers/recipes/spherex-spherex-qr2-spherex-qr2-d4-coverage-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/spherex-spherex-qr2-spherex-qr2-d4-coverage-moc",
+      "expectedSha256": "4a7628b8d82a95f8f2375e9e7423a2877e7ea5545a8dbb5e74546899395be084"
+    },
+    {
+      "spec": "src/layers/recipes/spherex-spherex-qr2-spherex-qr2-d5-coverage-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/spherex-spherex-qr2-spherex-qr2-d5-coverage-moc",
+      "expectedSha256": "011d5ae8f2c3124ff14026bf5c60ac6f86b624b73ea15a2eae9b3da7d58ef3c2"
+    },
+    {
+      "spec": "src/layers/recipes/spherex-spherex-qr2-spherex-qr2-d6-coverage-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/spherex-spherex-qr2-spherex-qr2-d6-coverage-moc",
+      "expectedSha256": "45c41383383d01045fd43b6882d2c7777e5792b2eabb80a6d26b13f4fe1d6244"
+    },
+    {
+      "spec": "src/layers/recipes/sumss-sumss-final-sumss-843-mhz-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/sumss-sumss-final-sumss-843-mhz-imaging-moc",
+      "expectedSha256": "adfb622c8e41712915a490807fdd7272d97609bc3eb706151bdaf148efc67769"
+    },
+    {
       "spec": "src/layers/recipes/vista-viking-j-footprint.lock.json",
       "output": "artifacts/public-survey-footprints/layers/vista-viking-j-footprint",
       "expectedSha256": "36a195db1280fc27271cf562aab951a80cd7bef2db5cb5f943fbeda393017411"
+    },
+    {
+      "spec": "src/layers/recipes/vista-vista-vvv-dr4-vvv-dr4-h-bulge-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vista-vista-vvv-dr4-vvv-dr4-h-bulge-imaging-moc",
+      "expectedSha256": "e9bf38c7681c327cbad4a500ab61f3eb27eb112893328d34e77ebc92f3c40b11"
+    },
+    {
+      "spec": "src/layers/recipes/vista-vista-vvv-dr4-vvv-dr4-h-disk-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vista-vista-vvv-dr4-vvv-dr4-h-disk-imaging-moc",
+      "expectedSha256": "834d607b2d404c72905053954a247df2b53c257e675fba9a65e6df22c600635f"
+    },
+    {
+      "spec": "src/layers/recipes/vista-vista-vvv-dr4-vvv-dr4-j-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vista-vista-vvv-dr4-vvv-dr4-j-band-imaging-moc",
+      "expectedSha256": "81bec6bc0e5fb5011e4089fedf01f235322bdad97d2d4390ffcaeac9bbc5e5b8"
+    },
+    {
+      "spec": "src/layers/recipes/vista-vista-vvv-dr4-vvv-dr4-j-y-z-color-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vista-vista-vvv-dr4-vvv-dr4-j-y-z-color-imaging-moc",
+      "expectedSha256": "179ce5b1fa40f4b0209590a9f1d152f8d6f1d433e8689a950cfb16ca1374d330"
+    },
+    {
+      "spec": "src/layers/recipes/vista-vista-vvv-dr4-vvv-dr4-y-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vista-vista-vvv-dr4-vvv-dr4-y-band-imaging-moc",
+      "expectedSha256": "24427368c85d8d72ebc01626d0038a6b80484156188e5f0903606215d02227a7"
+    },
+    {
+      "spec": "src/layers/recipes/vista-vista-vvv-dr4-vvv-dr4-z-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vista-vista-vvv-dr4-vvv-dr4-z-band-imaging-moc",
+      "expectedSha256": "31b99ac5604a97bfe1f037fe6d9358cf045b0e0d597144fe1d60ba63240b8bb3"
+    },
+    {
+      "spec": "src/layers/recipes/vphas-vphas-dr4-vphas-dr4-color-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vphas-vphas-dr4-vphas-dr4-color-imaging-moc",
+      "expectedSha256": "15f424d743b8286e61d9cd1b39109aee0fb1075cced011cd8a7d83b0493a1423"
+    },
+    {
+      "spec": "src/layers/recipes/vphas-vphas-dr4-vphas-dr4-g-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vphas-vphas-dr4-vphas-dr4-g-band-imaging-moc",
+      "expectedSha256": "b38c2721281859644e18fd700002230425888373de278a0e10307504e4fd30f9"
+    },
+    {
+      "spec": "src/layers/recipes/vphas-vphas-dr4-vphas-dr4-h-alpha-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vphas-vphas-dr4-vphas-dr4-h-alpha-imaging-moc",
+      "expectedSha256": "6ccbeb54e3ac744caa8fd6eec4b12c144e572dd40dcae322ff0ccb9709c838d6"
+    },
+    {
+      "spec": "src/layers/recipes/vphas-vphas-dr4-vphas-dr4-i-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vphas-vphas-dr4-vphas-dr4-i-band-imaging-moc",
+      "expectedSha256": "dc57c4fcff02f8c6043ca3e21ea321dee260291e0e4cd85b536e003ad6c9f2d4"
+    },
+    {
+      "spec": "src/layers/recipes/vphas-vphas-dr4-vphas-dr4-r-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vphas-vphas-dr4-vphas-dr4-r-band-imaging-moc",
+      "expectedSha256": "9871388e11f48db0599db8a42bbc99932810682315710700d26bd252a1b9bea2"
+    },
+    {
+      "spec": "src/layers/recipes/vphas-vphas-dr4-vphas-dr4-u-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/vphas-vphas-dr4-vphas-dr4-u-band-imaging-moc",
+      "expectedSha256": "0159d8fa32bc6e1aef3e6a19114b52a5174abcfb9e9ebbec2e919b5321ee362a"
+    },
+    {
+      "spec": "src/layers/recipes/wenss-wenss-final-wenss-325-mhz-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/wenss-wenss-final-wenss-325-mhz-imaging-moc",
+      "expectedSha256": "16f31d0aab69b75b9f381ccadffb42e5f370d6641bf5ecdb613b300a88b2199c"
+    },
+    {
+      "spec": "src/layers/recipes/ztf-ztf-dr7-ztf-dr7-color-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/ztf-ztf-dr7-ztf-dr7-color-imaging-moc",
+      "expectedSha256": "36ad51363fee137327ae235c1eb5981849626be116a4e7bd42a202497e8de5fa"
+    },
+    {
+      "spec": "src/layers/recipes/ztf-ztf-dr7-ztf-dr7-g-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/ztf-ztf-dr7-ztf-dr7-g-band-imaging-moc",
+      "expectedSha256": "34133080a6c02c03921cf753d1b338e92fa0307f6a74d374f3805b63513e4d05"
+    },
+    {
+      "spec": "src/layers/recipes/ztf-ztf-dr7-ztf-dr7-i-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/ztf-ztf-dr7-ztf-dr7-i-band-imaging-moc",
+      "expectedSha256": "f36046a219045af36dbf55a05ccf124dcd8077a14247bd0eff37935ba3d7d1c6"
+    },
+    {
+      "spec": "src/layers/recipes/ztf-ztf-dr7-ztf-dr7-r-band-imaging-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/ztf-ztf-dr7-ztf-dr7-r-band-imaging-moc",
+      "expectedSha256": "9b68286be6630b97a7d762f55b4eb8a3b7b215fc5df82cb7f0a06ba85d79a829"
     }
   ]
 }

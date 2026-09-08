@@ -1,0 +1,53 @@
+{
+  "layerId": "euclid-euclid-q1-euclid-q1-nisp-y-moc",
+  "surveyId": "euclid",
+  "releaseId": "euclid-q1",
+  "product": "Euclid Q1 NISP.Y",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid",
+  "input": "artifacts/public-survey-footprints/raw/moc/euclid-euclid-q1-euclid-q1-nisp-y-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-smoc",
+    "sourceId": "CDS/P/Euclid/Q1/NISP.Y",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2FNISP.Y&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2FNISP.Y&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "65fac833751c3c7dd46c94a6715b553abada796702c40dc82b235128aff6bb24",
+    "nativeSpatialOrder": 13,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "35ae372ecbf98f5706c0a0e850001059e6c323a8bebc2ef4e2c7c1219ea6a4aa",
+    "sizeBytes": 11520,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2FNISP.Y&get=smoc&order=10&fmt=fits",
+    "recordSha256": "65fac833751c3c7dd46c94a6715b553abada796702c40dc82b235128aff6bb24",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

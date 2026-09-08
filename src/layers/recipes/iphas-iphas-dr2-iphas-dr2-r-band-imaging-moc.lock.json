@@ -1,0 +1,53 @@
+{
+  "layerId": "iphas-iphas-dr2-iphas-dr2-r-band-imaging-moc",
+  "surveyId": "iphas",
+  "releaseId": "iphas-dr2",
+  "product": "IPHAS DR2 r-band imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.iphas.org/",
+  "input": "artifacts/public-survey-footprints/raw/moc/iphas-iphas-dr2-iphas-dr2-r-band-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/IPHAS/DR2/r",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FIPHAS%2FDR2%2Fr&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FIPHAS%2FDR2%2Fr&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "1433ba5a4e38b2fcf59390c6fb36389a90d0cd99b9172a79ff6a783df49e0eb2",
+    "nativeSpatialOrder": 10,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "dc35be27a1ca4da79b7eaa2bd2c9946b2201875a07a20cc4ee2f2c21da4a7724",
+    "sizeBytes": 103680,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FIPHAS%2FDR2%2Fr&get=smoc&order=10&fmt=fits",
+    "recordSha256": "1433ba5a4e38b2fcf59390c6fb36389a90d0cd99b9172a79ff6a783df49e0eb2",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "layerId": "rubin-rubin-firstlook-rubin-first-look-imaging-moc",
+  "surveyId": "rubin",
+  "releaseId": "rubin-firstlook",
+  "product": "Rubin First Look imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://rubinobservatory.org/",
+  "input": "artifacts/public-survey-footprints/raw/moc/rubin-rubin-firstlook-rubin-first-look-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-smoc",
+    "sourceId": "CDS/P/Rubin/FirstLook",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FRubin%2FFirstLook&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FRubin%2FFirstLook&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "93e62dc483ef4234617575788ab239482461b525cc532357e9586fb067c3f8f4",
+    "nativeSpatialOrder": 12,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "7c1a0595f1d7e14cd1c3faa7ca19a792e4e7707fdb2c79630eb76f1800c5f8f0",
+    "sizeBytes": 8640,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FRubin%2FFirstLook&get=smoc&order=10&fmt=fits",
+    "recordSha256": "93e62dc483ef4234617575788ab239482461b525cc532357e9586fb067c3f8f4",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

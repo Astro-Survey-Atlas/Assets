@@ -1,0 +1,48 @@
+{
+  "layerId": "wenss-wenss-final-wenss-325-mhz-imaging-moc",
+  "surveyId": "wenss",
+  "releaseId": "wenss-final",
+  "product": "WENSS 325 MHz imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 5,
+  "queryOrder": 5,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.astron.nl/",
+  "input": "artifacts/public-survey-footprints/raw/moc/wenss-wenss-final-wenss-325-mhz-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/WENSS",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FWENSS&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FWENSS&get=smoc&order=5&fmt=fits",
+    "sourceRecordSha256": "f1ca5cb144cd95ed8d1f54aedac04f1c4d747c538b897fe9d377d640a5167c0f",
+    "nativeSpatialOrder": 5,
+    "exportOrder": 5,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "d832b6dbf238a253b373c43a85030bb04a8948707894904a46ef6950ab52cbd0",
+    "sizeBytes": 8640,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FWENSS&get=smoc&order=5&fmt=fits",
+    "recordSha256": "f1ca5cb144cd95ed8d1f54aedac04f1c4d747c538b897fe9d377d640a5167c0f",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

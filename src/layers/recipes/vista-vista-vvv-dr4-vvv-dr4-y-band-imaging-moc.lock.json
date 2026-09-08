@@ -1,0 +1,53 @@
+{
+  "layerId": "vista-vista-vvv-dr4-vvv-dr4-y-band-imaging-moc",
+  "surveyId": "vista",
+  "releaseId": "vista-vvv-dr4",
+  "product": "VVV DR4 Y-band imaging",
+  "modality": "infrared",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+  "input": "artifacts/public-survey-footprints/raw/moc/vista-vista-vvv-dr4-vvv-dr4-y-band-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/VISTA/VVV/DR4/Y",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FY&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FY&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "0b3f600e0195b258c72ffe912a56a74dc631a23044f5c81669ad77316084890b",
+    "nativeSpatialOrder": 10,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "c69cb85da145f2a85f38814ae7474ad0de83fffb4a77c8434859c6f544957220",
+    "sizeBytes": 23040,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FY&get=smoc&order=10&fmt=fits",
+    "recordSha256": "0b3f600e0195b258c72ffe912a56a74dc631a23044f5c81669ad77316084890b",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

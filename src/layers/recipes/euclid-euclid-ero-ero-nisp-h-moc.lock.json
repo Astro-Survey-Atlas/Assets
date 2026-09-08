@@ -1,0 +1,53 @@
+{
+  "layerId": "euclid-euclid-ero-ero-nisp-h-moc",
+  "surveyId": "euclid",
+  "releaseId": "euclid-ero",
+  "product": "ERO NISP.H",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+  "input": "artifacts/public-survey-footprints/raw/moc/euclid-euclid-ero-ero-nisp-h-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-smoc",
+    "sourceId": "CDS/P/Euclid/ERO/NISP.H",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.H&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.H&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "9188d13105c9fb0848235b29e3cc4402e81d35faddd578aca51dc341fc45990e",
+    "nativeSpatialOrder": 12,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "6eb2ce04004593c6b303f40f68923fd5828dfb3638c985b9eebc11937f8bafb5",
+    "sizeBytes": 11520,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.H&get=smoc&order=10&fmt=fits",
+    "recordSha256": "9188d13105c9fb0848235b29e3cc4402e81d35faddd578aca51dc341fc45990e",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

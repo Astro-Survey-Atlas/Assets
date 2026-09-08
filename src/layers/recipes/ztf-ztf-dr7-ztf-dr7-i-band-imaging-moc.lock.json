@@ -1,0 +1,53 @@
+{
+  "layerId": "ztf-ztf-dr7-ztf-dr7-i-band-imaging-moc",
+  "surveyId": "ztf",
+  "releaseId": "ztf-dr7",
+  "product": "ZTF DR7 i-band imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.ztf.caltech.edu/",
+  "input": "artifacts/public-survey-footprints/raw/moc/ztf-ztf-dr7-ztf-dr7-i-band-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/ZTF/DR7/i",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fi&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fi&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "0b1c7b86af72973891d865ec4d05e9ecb0a007aa09ea7cb1d089d6d96216aacb",
+    "nativeSpatialOrder": 10,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "18f24c77dd221ddb0fc65f281bf27be8a17a35c8df88878098f09d3cc9ef3ed7",
+    "sizeBytes": 2655360,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fi&get=smoc&order=10&fmt=fits",
+    "recordSha256": "0b1c7b86af72973891d865ec4d05e9ecb0a007aa09ea7cb1d089d6d96216aacb",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

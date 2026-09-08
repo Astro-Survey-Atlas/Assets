@@ -1,0 +1,52 @@
+{
+  "layerId": "2mass-2mass-6x-2mass-6x-j-band-imaging-moc",
+  "surveyId": "2mass",
+  "releaseId": "2mass-6x",
+  "product": "2MASS 6X J-band imaging",
+  "modality": "infrared",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 9,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+  "input": "artifacts/public-survey-footprints/raw/moc/2mass-2mass-6x-2mass-6x-j-band-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/2MASS6X/J",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS6X%2FJ&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS6X%2FJ&get=smoc&order=9&fmt=fits",
+    "sourceRecordSha256": "423051f4a3d3cc9c0a72976905e743ce3161752055da5623507837dec2fbd652",
+    "nativeSpatialOrder": 9,
+    "exportOrder": 9,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "ba23df7e8dd6d6e9ad3ac24033406b1e7f79e4729219a50aaf4a3478b19debaf",
+    "sizeBytes": 23040,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS6X%2FJ&get=smoc&order=9&fmt=fits",
+    "recordSha256": "423051f4a3d3cc9c0a72976905e743ce3161752055da5623507837dec2fbd652",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

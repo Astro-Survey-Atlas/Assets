@@ -1,0 +1,53 @@
+{
+  "layerId": "vista-vista-vvv-dr4-vvv-dr4-h-bulge-imaging-moc",
+  "surveyId": "vista",
+  "releaseId": "vista-vvv-dr4",
+  "product": "VVV DR4 H bulge imaging",
+  "modality": "infrared",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+  "input": "artifacts/public-survey-footprints/raw/moc/vista-vista-vvv-dr4-vvv-dr4-h-bulge-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/VISTA/VVV/DR4/H/Bulge",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FH%2FBulge&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FH%2FBulge&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "5c8c94f494a146b1c1f93ba457552df2218285c36cef5d6b5d25e685f7aeaac4",
+    "nativeSpatialOrder": 10,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "e1063ea1b2d765a1707c145a7da2dceb5d43b0aa5e091689bd10c9f6dcb9ccb6",
+    "sizeBytes": 14400,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FH%2FBulge&get=smoc&order=10&fmt=fits",
+    "recordSha256": "5c8c94f494a146b1c1f93ba457552df2218285c36cef5d6b5d25e685f7aeaac4",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

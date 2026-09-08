@@ -1,0 +1,53 @@
+{
+  "layerId": "des-des-dr2-dr2-r-band-imaging-moc",
+  "surveyId": "des",
+  "releaseId": "des-dr2",
+  "product": "DR2 r-band imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.darkenergysurvey.org/the-des-project/data-access/",
+  "input": "artifacts/public-survey-footprints/raw/moc/des-des-dr2-dr2-r-band-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/DES-DR2/r",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2Fr&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2Fr&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "a759543c875dc38a333792395164ff21edb200d9ab522ef7120723d8365058a7",
+    "nativeSpatialOrder": 11,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "bbdeea649c096afb123d131826c7c336bb45d3794468d61831f26b91c96bd241",
+    "sizeBytes": 66240,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2Fr&get=smoc&order=10&fmt=fits",
+    "recordSha256": "a759543c875dc38a333792395164ff21edb200d9ab522ef7120723d8365058a7",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

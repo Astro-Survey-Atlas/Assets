@@ -1,0 +1,53 @@
+{
+  "layerId": "euclid-euclid-ero-ero-nisp-j-moc",
+  "surveyId": "euclid",
+  "releaseId": "euclid-ero",
+  "product": "ERO NISP.J",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+  "input": "artifacts/public-survey-footprints/raw/moc/euclid-euclid-ero-ero-nisp-j-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-smoc",
+    "sourceId": "CDS/P/Euclid/ERO/NISP.J",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.J&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.J&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "29ce7c1e62af06f8436b441d22eebfa95b7545fa477ff11087a34bfc777eddfb",
+    "nativeSpatialOrder": 12,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "97ac6d45f65d2b54cc68577558cce4dc2ef448c98732eb9f381c578f6a095272",
+    "sizeBytes": 11520,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.J&get=smoc&order=10&fmt=fits",
+    "recordSha256": "29ce7c1e62af06f8436b441d22eebfa95b7545fa477ff11087a34bfc777eddfb",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "layerId": "sumss-sumss-final-sumss-843-mhz-imaging-moc",
+  "surveyId": "sumss",
+  "releaseId": "sumss-final",
+  "product": "SUMSS 843 MHz imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.astrop.physics.usyd.edu.au/SUMSS/",
+  "input": "artifacts/public-survey-footprints/raw/moc/sumss-sumss-final-sumss-843-mhz-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/SUMSS",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSUMSS&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSUMSS&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "18f127b36ecce3ceca72186aff327e863ffb4138ae058525fcc4213620f862f5",
+    "nativeSpatialOrder": 11,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "d6e91db6aa285a29e91ac290edfbf8389bece0467d811a8baacd877d53177190",
+    "sizeBytes": 40320,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSUMSS&get=smoc&order=10&fmt=fits",
+    "recordSha256": "18f127b36ecce3ceca72186aff327e863ffb4138ae058525fcc4213620f862f5",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

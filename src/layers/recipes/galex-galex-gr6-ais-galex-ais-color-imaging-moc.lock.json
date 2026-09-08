@@ -1,0 +1,51 @@
+{
+  "layerId": "galex-galex-gr6-ais-galex-ais-color-imaging-moc",
+  "surveyId": "galex",
+  "releaseId": "galex-gr6-ais",
+  "product": "GALEX AIS color imaging",
+  "modality": "ultraviolet",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 8,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://galex.stsci.edu/",
+  "input": "artifacts/public-survey-footprints/raw/moc/galex-galex-gr6-ais-galex-ais-color-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/GALEXGR6/AIS/color",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2Fcolor&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2Fcolor&get=smoc&order=8&fmt=fits",
+    "sourceRecordSha256": "817d125fd16f93ec57ca44f3d882d70414b32046ab351e1145dc749b503e0200",
+    "nativeSpatialOrder": 8,
+    "exportOrder": 8,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "44e81da2c20b9ea9ae9258e5b5b8ffea6f99867cf07346d428e5d1f30aa86537",
+    "sizeBytes": 293760,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2Fcolor&get=smoc&order=8&fmt=fits",
+    "recordSha256": "817d125fd16f93ec57ca44f3d882d70414b32046ab351e1145dc749b503e0200",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

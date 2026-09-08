@@ -4,6 +4,188 @@
   "auditPolicy": "Acquired denotes an exact product MOC; overview_only denotes an official or artifact-backed overview; awaiting_geometry denotes a product requiring exact geometry.",
   "releases": [
     {
+      "surveyId": "2mass",
+      "releaseId": "2mass-6x",
+      "products": [
+        {
+          "product": "2MASS 6X H-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS6X%2FH&get=smoc&order=9&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "2MASS 6X J-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS6X%2FJ&get=smoc&order=9&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "2MASS 6X K-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS6X%2FK&get=smoc&order=9&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "2mass",
+      "releaseId": "2mass-all-sky",
+      "products": [
+        {
+          "product": "J-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FJ&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "H-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FH&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "K-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FK&get=smoc&order=4&fmt=json"
+        }
+      ]
+    },
+    {
+      "surveyId": "act",
+      "releaseId": "act-dr5",
+      "products": [
+        {
+          "product": "ACT DR5 90 GHz coverage",
+          "status": "acquired",
+          "sourceUrl": "https://lambda.gsfc.nasa.gov/product/act/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff90&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "ACT DR5 150 GHz coverage",
+          "status": "acquired",
+          "sourceUrl": "https://lambda.gsfc.nasa.gov/product/act/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff150&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "ACT DR5 220 GHz coverage",
+          "status": "acquired",
+          "sourceUrl": "https://lambda.gsfc.nasa.gov/product/act/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FACT%2FDR5%2Ff220&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "akari",
+      "releaseId": "akari-fis",
+      "products": [
+        {
+          "product": "AKARI FIS color coverage",
+          "status": "acquired",
+          "sourceUrl": "https://www.ir.isas.jaxa.jp/AKARI/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FAKARI%2FFIS%2FColor&get=smoc&order=5&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "allwise",
+      "releaseId": "allwise",
+      "products": [
+        {
+          "product": "W1 imaging",
+          "status": "acquired",
+          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW1&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "W2 imaging",
+          "status": "acquired",
+          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW2&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "W3 imaging",
+          "status": "acquired",
+          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW3&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "W4 imaging",
+          "status": "acquired",
+          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW4&get=smoc&order=4&fmt=json"
+        }
+      ]
+    },
+    {
+      "surveyId": "cfhtls",
+      "releaseId": "cfhtls-wide",
+      "products": [
+        {
+          "product": "CFHTLS Wide u/g/i color imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2FColor%2Fugi&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "CFHTLS Wide g-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fg&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "CFHTLS Wide i-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fi&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "CFHTLS Wide r-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fr&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "CFHTLS Wide u-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fu&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "CFHTLS Wide z-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FCFHTLS%2FW%2Fz&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
       "surveyId": "csst",
       "releaseId": "csst-sim-w1-20250731",
       "products": [
@@ -18,6 +200,152 @@
       ]
     },
     {
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w2-20250731",
+      "products": [
+        {
+          "product": "W2 simulated wide-field images",
+          "status": "acquired",
+          "sourceUrl": "https://nadc.china-vo.org/data/",
+          "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
+          "coverageRole": "image_extent",
+          "notes": "data-warehouse run workspace-coverage-ec9448e73ced-retry4 matched 182736 files and processed 182736 FITS-WCS documents; Core MOC area 8091.630033 deg2."
+        }
+      ]
+    },
+    {
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w3-20250731",
+      "products": [
+        {
+          "product": "W3 simulated wide-field images",
+          "status": "acquired",
+          "sourceUrl": "https://nadc.china-vo.org/data/",
+          "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
+          "coverageRole": "image_extent",
+          "notes": "data-warehouse run workspace-coverage-ee904e0f11af-retry3 matched 188136 files and processed 188136 FITS-WCS documents; Core MOC area 397.038350 deg2."
+        }
+      ]
+    },
+    {
+      "surveyId": "csst",
+      "releaseId": "csst-sim-w4-20250731",
+      "products": [
+        {
+          "product": "W4 simulated wide-field images",
+          "status": "acquired",
+          "sourceUrl": "https://nadc.china-vo.org/data/",
+          "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
+          "coverageRole": "image_extent",
+          "notes": "data-warehouse run workspace-coverage-dbf269d0f221-retry3 matched 211824 files and processed 211824 FITS-WCS documents; Core MOC area 447.605792 deg2."
+        }
+      ]
+    },
+    {
+      "surveyId": "decals",
+      "releaseId": "decals-dr5",
+      "products": [
+        {
+          "product": "DR5 g/r/z color footprint",
+          "status": "acquired",
+          "sourceUrl": "https://www.legacysurvey.org/dr5/",
+          "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed CDS ICRS/NUNIQ order-10 spatial MOC; native STMOC time metadata is evidence-only and precision is estimated."
+        }
+      ]
+    },
+    {
+      "surveyId": "decaps",
+      "releaseId": "decaps-dr2",
+      "products": [
+        {
+          "product": "DECaPS DR2 color imaging",
+          "status": "acquired",
+          "sourceUrl": "https://decaps.skymaps.info/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaPS%2FDR2%2Fcolor&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "des",
+      "releaseId": "des-dr2",
+      "products": [
+        {
+          "product": "DR2 color imaging",
+          "status": "acquired",
+          "sourceUrl": "https://des.ncsa.illinois.edu/releases/dr2",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2FColorIRG&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "DR2 Y-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.darkenergysurvey.org/the-des-project/data-access/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2FY&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "DR2 g-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.darkenergysurvey.org/the-des-project/data-access/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2Fg&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "DR2 i-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.darkenergysurvey.org/the-des-project/data-access/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2Fi&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "DR2 r-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.darkenergysurvey.org/the-des-project/data-access/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2Fr&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "DR2 z-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.darkenergysurvey.org/the-des-project/data-access/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2Fz&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "desi",
+      "releaseId": "desi-dr1",
+      "products": [
+        {
+          "product": "DR1 spectra and redshifts",
+          "status": "acquired",
+          "sourceUrl": "https://data.desi.lbl.gov/doc/releases/dr1/",
+          "geometrySourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits"
+        }
+      ]
+    },
+    {
+      "surveyId": "desi",
+      "releaseId": "desi-edr",
+      "products": [
+        {
+          "product": "Early Data Release spectra",
+          "status": "acquired",
+          "sourceUrl": "https://data.desi.lbl.gov/doc/releases/edr/",
+          "geometrySourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits"
+        }
+      ]
+    },
+    {
       "surveyId": "euclid",
       "releaseId": "euclid-ero",
       "products": [
@@ -28,6 +356,54 @@
           "reason": "The official ERO release and field definitions are public, but their exact field geometry has not been converted to an acquired product MOC.",
           "geometrySourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-fields",
           "manualStep": "Extract every field boundary listed by the official ERO fields page, convert each boundary to ICRS polygons, and union the polygons into the Early Release Observations MOC."
+        },
+        {
+          "product": "ERO color imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2Fcolor&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "ERO First Images",
+          "status": "acquired",
+          "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FFirstImages&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "ERO NISP.H",
+          "status": "acquired",
+          "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.H&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "ERO NISP.J",
+          "status": "acquired",
+          "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.J&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "ERO NISP.Y",
+          "status": "acquired",
+          "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FNISP.Y&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "ERO VIS",
+          "status": "acquired",
+          "sourceUrl": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FERO%2FVIS&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
         }
       ]
     },
@@ -40,6 +416,46 @@
           "status": "acquired",
           "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid/Euclid_opens_data_treasure_trove_offers_glimpse_of_deep_fields",
           "geometrySourceUrl": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip"
+        },
+        {
+          "product": "Euclid Q1 color imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2Fcolor&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "Euclid Q1 NISP.H",
+          "status": "acquired",
+          "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2FNISP.H&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "Euclid Q1 NISP.J",
+          "status": "acquired",
+          "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2FNISP.J&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "Euclid Q1 NISP.Y",
+          "status": "acquired",
+          "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2FNISP.Y&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "Euclid Q1 VIS",
+          "status": "acquired",
+          "sourceUrl": "https://www.esa.int/Science_Exploration/Space_Science/Euclid",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FEuclid%2FQ1%2FVIS&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
         }
       ]
     },
@@ -58,281 +474,63 @@
       ]
     },
     {
-      "surveyId": "desi",
-      "releaseId": "desi-edr",
+      "surveyId": "fds",
+      "releaseId": "fds-dr1",
       "products": [
         {
-          "product": "Early Data Release spectra",
+          "product": "FDS DR1 color imaging",
           "status": "acquired",
-          "sourceUrl": "https://data.desi.lbl.gov/doc/releases/edr/",
-          "geometrySourceUrl": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits"
-        }
-      ]
-    },
-    {
-      "surveyId": "desi",
-      "releaseId": "desi-dr1",
-      "products": [
-        {
-          "product": "DR1 spectra and redshifts",
-          "status": "acquired",
-          "sourceUrl": "https://data.desi.lbl.gov/doc/releases/dr1/",
-          "geometrySourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits"
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr01",
-      "products": [
-        {
-          "product": "SDSS-I/II release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr1/",
-          "reason": "The official DR1 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR1 catalogs, convert all DR1 imaging run/camcol/field corners and all DR1 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr02",
-      "products": [
-        {
-          "product": "SDSS-I/II release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr2/",
-          "reason": "The official DR2 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR2 catalogs, convert all DR2 imaging run/camcol/field corners and all DR2 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr03",
-      "products": [
-        {
-          "product": "SDSS-I/II release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr3/",
-          "reason": "The official DR3 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR3 catalogs, convert all DR3 imaging run/camcol/field corners and all DR3 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr04",
-      "products": [
-        {
-          "product": "SDSS-I/II release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr4/",
-          "reason": "The official DR4 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR4 catalogs, convert all DR4 imaging run/camcol/field corners and all DR4 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr05",
-      "products": [
-        {
-          "product": "SDSS-I/II release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr5/",
-          "reason": "The official DR5 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR5 catalogs, convert all DR5 imaging run/camcol/field corners and all DR5 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr06",
-      "products": [
-        {
-          "product": "SDSS-I/II release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr6/",
-          "reason": "The official DR6 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR6 catalogs, convert all DR6 imaging run/camcol/field corners and all DR6 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr07",
-      "products": [
-        {
-          "product": "SDSS-I/II release catalog",
-          "status": "overview_only",
-          "sourceUrl": "https://www.sdss.org/dr7/",
-          "reason": "Official DR7 imaging and spectroscopy coverage is documented, but the distinct field and plate geometries have not been acquired as an exact release-catalog MOC.",
-          "geometrySourceUrl": "https://classic.sdss.org/dr7/coverage/",
-          "manualStep": "Using the official DR7 coverage resources, convert all DR7 imaging run/camcol/field boundaries and all DR7 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr08",
-      "products": [
-        {
-          "product": "SDSS-III release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr8/",
-          "reason": "The official DR8 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR8 catalogs, convert all DR8 imaging run/camcol/field corners and all DR8 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr09",
-      "products": [
-        {
-          "product": "SDSS-III release catalog",
-          "status": "overview_only",
-          "sourceUrl": "https://www.sdss.org/dr9/",
-          "reason": "The exact DR9 color-imaging MOC covers only imaging and is therefore an overview for the broader release catalog; DR9 spectroscopy plate geometry is not included.",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=smoc&order=4&fmt=json",
-          "manualStep": "From the official DR9 catalogs, convert all DR9 imaging run/camcol/field corners and all DR9 spectroscopy plate footprints to separate MOCs, then union them to replace the imaging-only overview."
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fcolor&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
         },
         {
-          "product": "DR9 color imaging",
+          "product": "FDS DR1 g-band imaging",
           "status": "acquired",
-          "sourceUrl": "https://www.sdss.org/dr9/",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=smoc&order=4&fmt=json"
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fg&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "FDS DR1 i-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fi&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "FDS DR1 r-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fr&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "FDS DR1 u-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FFDS%2FDR1%2Fu&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
         }
       ]
     },
     {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr10",
+      "surveyId": "gaia",
+      "releaseId": "gaia-dr3",
       "products": [
         {
-          "product": "SDSS-III release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr10/",
-          "reason": "The official DR10 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR10 catalogs, convert all DR10 imaging run/camcol/field corners and all DR10 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr11",
-      "products": [
-        {
-          "product": "SDSS-III release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr11/",
-          "reason": "The official DR11 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR11 catalogs, convert all DR11 imaging run/camcol/field corners and all DR11 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr12",
-      "products": [
-        {
-          "product": "SDSS-III release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr12/",
-          "reason": "The official DR12 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR12 catalogs, convert all DR12 imaging run/camcol/field corners and all DR12 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr13",
-      "products": [
-        {
-          "product": "SDSS-IV release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr13/",
-          "reason": "The official DR13 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR13 catalogs, convert all DR13 imaging run/camcol/field corners and all DR13 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr14",
-      "products": [
-        {
-          "product": "SDSS-IV release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr14/",
-          "reason": "The official DR14 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR14 catalogs, convert all DR14 imaging run/camcol/field corners and all DR14 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr15",
-      "products": [
-        {
-          "product": "SDSS-IV release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr15/",
-          "reason": "The official DR15 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR15 catalogs, convert all DR15 imaging run/camcol/field corners and all DR15 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr16",
-      "products": [
-        {
-          "product": "SDSS-IV release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr16/",
-          "reason": "The official DR16 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR16 catalogs, convert all DR16 imaging run/camcol/field corners and all DR16 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr17",
-      "products": [
-        {
-          "product": "SDSS-IV release catalog",
-          "status": "overview_only",
-          "sourceUrl": "https://www.sdss.org/dr17/",
-          "reason": "The official final-release overview covers imaging and spectroscopy products with distinct footprints; no exact combined release-catalog MOC is acquired.",
-          "manualStep": "From the official DR17 catalogs, convert all DR17 imaging run/camcol/field corners and all DR17 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr18",
-      "products": [
-        {
-          "product": "SDSS-V release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr18/",
-          "reason": "The official DR18 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR18 catalogs, convert all DR18 imaging run/camcol/field corners and all DR18 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
-        }
-      ]
-    },
-    {
-      "surveyId": "sdss",
-      "releaseId": "sdss-dr19",
-      "products": [
-        {
-          "product": "SDSS-V release catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.sdss.org/dr19/",
-          "reason": "The official DR19 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
-          "manualStep": "From the official DR19 catalogs, convert all DR19 imaging run/camcol/field corners and all DR19 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+          "product": "Gaia DR3 main source presence",
+          "status": "acquired",
+          "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits",
+          "coverageRole": "object_presence",
+          "attributionUrl": "https://www.cosmos.esa.int/web/gaia-users/credits",
+          "notes": "Reviewed Gaia DR3 main-source catalog row-presence SMOC in ICRS/NUNIQ. This is an exact catalog presence map, not an imaging or scanning-law footprint."
         }
       ]
     },
@@ -380,6 +578,36 @@
     },
     {
       "surveyId": "galex",
+      "releaseId": "galex-gr6-ais",
+      "products": [
+        {
+          "product": "GALEX AIS color imaging",
+          "status": "acquired",
+          "sourceUrl": "https://galex.stsci.edu/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2Fcolor&get=smoc&order=8&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "GALEX AIS FUV imaging",
+          "status": "acquired",
+          "sourceUrl": "https://galex.stsci.edu/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2FFUV&get=smoc&order=8&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "GALEX AIS NUV imaging",
+          "status": "acquired",
+          "sourceUrl": "https://galex.stsci.edu/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6%2FAIS%2FNUV&get=smoc&order=8&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "galex",
       "releaseId": "galex-gr6-gr7",
       "products": [
         {
@@ -411,6 +639,162 @@
       ]
     },
     {
+      "surveyId": "hsc-ssp",
+      "releaseId": "hsc-pdr1",
+      "products": [
+        {
+          "product": "HSC-SSP PDR1",
+          "status": "overview_only",
+          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/top-page-3/",
+          "reason": "The official area summary supports an overview, but release tract/patch geometry has not been converted to an exact product MOC.",
+          "geometrySourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/top-page-3/",
+          "manualStep": "Read the official PDR1 Wide, Deep, and UltraDeep tract/patch lists, convert every listed patch boundary through the HSC sky map to ICRS polygons, and union all release-layer polygons into the product MOC."
+        }
+      ]
+    },
+    {
+      "surveyId": "hsc-ssp",
+      "releaseId": "hsc-pdr2",
+      "products": [
+        {
+          "product": "HSC-SSP PDR2",
+          "status": "overview_only",
+          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+          "reason": "The official area summary and Wide + Deep image MOC are an overview for the broader PDR2 product; release tract/patch geometry has not been converted to an exact all-layer MOC.",
+          "geometrySourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+          "manualStep": "Read the official PDR2 Wide, Deep, and UltraDeep tract/patch lists, convert every listed patch boundary through the HSC sky map to ICRS polygons, and union all release-layer polygons into the PDR2 product MOC."
+        },
+        {
+          "product": "PDR2 Wide + Deep image coverage",
+          "status": "acquired",
+          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fcolor-i-r-g%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fcolor-i-r-g&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "PDR2 g-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fg%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fg&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "PDR2 r-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fr%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fr&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "PDR2 i-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fi%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fi&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "PDR2 z-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fz%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fz&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "PDR2 y-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fy%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fy&get=smoc&order=4&fmt=json"
+        }
+      ]
+    },
+    {
+      "surveyId": "hsc-ssp",
+      "releaseId": "hsc-pdr3",
+      "products": [
+        {
+          "product": "HSC-SSP Wide/Deep/UltraDeep",
+          "status": "overview_only",
+          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/survey__pdr3/",
+          "reason": "The official layer and area summary supports an overview, but release tract/patch geometry has not been converted to an exact product MOC.",
+          "geometrySourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/survey__pdr3/",
+          "manualStep": "Read the official PDR3 Wide, Deep, and UltraDeep tract/patch lists, convert every listed patch boundary through the HSC sky map to ICRS polygons, and union all release-layer polygons into the product MOC."
+        }
+      ]
+    },
+    {
+      "surveyId": "hst",
+      "releaseId": "hst-mast-snapshot-2026",
+      "products": [
+        {
+          "product": "Instrument archive",
+          "status": "overview_only",
+          "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
+          "reason": "The aggregate published-pointings MOC is a discovery overview; exact instrument observation footprints for the audited snapshot have not been converted to an archive MOC.",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=smoc&order=4&fmt=json",
+          "manualStep": "Query MAST for all public HST instrument observations available on 2026-08-12, parse each observation s_region footprint in ICRS, and union the footprints into the Instrument archive snapshot MOC."
+        },
+        {
+          "product": "Hubble Source Catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
+          "reason": "Published HiPS pointings do not establish exact Hubble Source Catalog coverage, and source-detection footprints for the audited snapshot have not been acquired.",
+          "manualStep": "Query the Hubble Source Catalog available on 2026-08-12, collect the unique contributing HST observation identifiers, resolve each observation s_region footprint from MAST, and union those ICRS footprints into the catalog MOC."
+        },
+        {
+          "product": "Hubble Advanced Products",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
+          "reason": "Published HiPS pointings do not establish exact Hubble Advanced Products coverage, and product footprints for the audited snapshot have not been acquired.",
+          "manualStep": "Query MAST for all public Hubble Advanced Products available on 2026-08-12, parse each product s_region footprint in ICRS, and union the footprints into the product MOC."
+        },
+        {
+          "product": "published HST HiPS pointings",
+          "status": "acquired",
+          "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=smoc&order=4&fmt=json"
+        }
+      ]
+    },
+    {
+      "surveyId": "iphas",
+      "releaseId": "iphas-dr2",
+      "products": [
+        {
+          "product": "IPHAS DR2 H-alpha imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.iphas.org/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FIPHAS%2FDR2%2Fhalpha&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "IPHAS DR2 i-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.iphas.org/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FIPHAS%2FDR2%2Fi&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "IPHAS DR2 r-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.iphas.org/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FIPHAS%2FDR2%2Fr&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "kids",
+      "releaseId": "kids-dr5",
+      "products": [
+        {
+          "product": "DR5 gri imaging",
+          "status": "acquired",
+          "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
+          "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed CDS ICRS/NUNIQ order-10 spatial MOC; native STMOC time metadata is evidence-only and precision is estimated."
+        }
+      ]
+    },
+    {
       "surveyId": "legacy-surveys",
       "releaseId": "legacy-dr1",
       "products": [
@@ -429,6 +813,34 @@
           "reason": "The official DR1 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
           "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/survey-bricks.fits.gz",
           "manualStep": "From the DR1 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+        }
+      ]
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr10",
+      "products": [
+        {
+          "product": "Coadded imaging",
+          "status": "overview_only",
+          "sourceUrl": "https://www.legacysurvey.org/dr10/",
+          "reason": "The exact DR10 color-imaging MOC is an overview, while accepted-CCD coadded-imaging geometry has not been converted to the identity-exact product MOC.",
+          "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/survey-bricks.fits.gz",
+          "manualStep": "Use the DR10 survey-bricks catalog and official DR10 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them to replace the coadded-imaging overview."
+        },
+        {
+          "product": "Tractor catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.legacysurvey.org/dr10/",
+          "reason": "The acquired DR10 color-imaging MOC does not establish survey_primary observed Tractor brick coverage, which has not been converted to an exact catalog MOC.",
+          "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/survey-bricks.fits.gz",
+          "manualStep": "From the DR10 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+        },
+        {
+          "product": "DR10 color imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.legacysurvey.org/dr10/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDESI-Legacy-Surveys%2FDR10%2Fcolor&get=smoc&order=4&fmt=json"
         }
       ]
     },
@@ -609,142 +1021,14 @@
       ]
     },
     {
-      "surveyId": "legacy-surveys",
-      "releaseId": "legacy-dr10",
+      "surveyId": "nvss",
+      "releaseId": "nvss-final",
       "products": [
         {
-          "product": "Coadded imaging",
-          "status": "overview_only",
-          "sourceUrl": "https://www.legacysurvey.org/dr10/",
-          "reason": "The exact DR10 color-imaging MOC is an overview, while accepted-CCD coadded-imaging geometry has not been converted to the identity-exact product MOC.",
-          "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/survey-bricks.fits.gz",
-          "manualStep": "Use the DR10 survey-bricks catalog and official DR10 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them to replace the coadded-imaging overview."
-        },
-        {
-          "product": "Tractor catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://www.legacysurvey.org/dr10/",
-          "reason": "The acquired DR10 color-imaging MOC does not establish survey_primary observed Tractor brick coverage, which has not been converted to an exact catalog MOC.",
-          "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/survey-bricks.fits.gz",
-          "manualStep": "From the DR10 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
-        },
-        {
-          "product": "DR10 color imaging",
+          "product": "1.4 GHz radio imaging",
           "status": "acquired",
-          "sourceUrl": "https://www.legacysurvey.org/dr10/",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDESI-Legacy-Surveys%2FDR10%2Fcolor&get=smoc&order=4&fmt=json"
-        }
-      ]
-    },
-    {
-      "surveyId": "hsc-ssp",
-      "releaseId": "hsc-pdr1",
-      "products": [
-        {
-          "product": "HSC-SSP PDR1",
-          "status": "overview_only",
-          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/top-page-3/",
-          "reason": "The official area summary supports an overview, but release tract/patch geometry has not been converted to an exact product MOC.",
-          "geometrySourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/top-page-3/",
-          "manualStep": "Read the official PDR1 Wide, Deep, and UltraDeep tract/patch lists, convert every listed patch boundary through the HSC sky map to ICRS polygons, and union all release-layer polygons into the product MOC."
-        }
-      ]
-    },
-    {
-      "surveyId": "hsc-ssp",
-      "releaseId": "hsc-pdr2",
-      "products": [
-        {
-          "product": "HSC-SSP PDR2",
-          "status": "overview_only",
-          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
-          "reason": "The official area summary and Wide + Deep image MOC are an overview for the broader PDR2 product; release tract/patch geometry has not been converted to an exact all-layer MOC.",
-          "geometrySourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
-          "manualStep": "Read the official PDR2 Wide, Deep, and UltraDeep tract/patch lists, convert every listed patch boundary through the HSC sky map to ICRS polygons, and union all release-layer polygons into the PDR2 product MOC."
-        },
-        {
-          "product": "PDR2 Wide + Deep image coverage",
-          "status": "acquired",
-          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fcolor-i-r-g%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fcolor-i-r-g&get=smoc&order=4&fmt=json"
-        },
-        {
-          "product": "PDR2 g-band imaging",
-          "status": "acquired",
-          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fg%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fg&get=smoc&order=4&fmt=json"
-        },
-        {
-          "product": "PDR2 r-band imaging",
-          "status": "acquired",
-          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fr%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fr&get=smoc&order=4&fmt=json"
-        },
-        {
-          "product": "PDR2 i-band imaging",
-          "status": "acquired",
-          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fi%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fi&get=smoc&order=4&fmt=json"
-        },
-        {
-          "product": "PDR2 z-band imaging",
-          "status": "acquired",
-          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fz%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fz&get=smoc&order=4&fmt=json"
-        },
-        {
-          "product": "PDR2 y-band imaging",
-          "status": "acquired",
-          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/sample-page/pdr2/",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fy%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fy&get=smoc&order=4&fmt=json"
-        }
-      ]
-    },
-    {
-      "surveyId": "hsc-ssp",
-      "releaseId": "hsc-pdr3",
-      "products": [
-        {
-          "product": "HSC-SSP Wide/Deep/UltraDeep",
-          "status": "overview_only",
-          "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/survey__pdr3/",
-          "reason": "The official layer and area summary supports an overview, but release tract/patch geometry has not been converted to an exact product MOC.",
-          "geometrySourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/survey__pdr3/",
-          "manualStep": "Read the official PDR3 Wide, Deep, and UltraDeep tract/patch lists, convert every listed patch boundary through the HSC sky map to ICRS polygons, and union all release-layer polygons into the product MOC."
-        }
-      ]
-    },
-    {
-      "surveyId": "hst",
-      "releaseId": "hst-mast-snapshot-2026",
-      "products": [
-        {
-          "product": "Instrument archive",
-          "status": "overview_only",
-          "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
-          "reason": "The aggregate published-pointings MOC is a discovery overview; exact instrument observation footprints for the audited snapshot have not been converted to an archive MOC.",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=smoc&order=4&fmt=json",
-          "manualStep": "Query MAST for all public HST instrument observations available on 2026-08-12, parse each observation s_region footprint in ICRS, and union the footprints into the Instrument archive snapshot MOC."
-        },
-        {
-          "product": "Hubble Source Catalog",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
-          "reason": "Published HiPS pointings do not establish exact Hubble Source Catalog coverage, and source-detection footprints for the audited snapshot have not been acquired.",
-          "manualStep": "Query the Hubble Source Catalog available on 2026-08-12, collect the unique contributing HST observation identifiers, resolve each observation s_region footprint from MAST, and union those ICRS footprints into the catalog MOC."
-        },
-        {
-          "product": "Hubble Advanced Products",
-          "status": "awaiting_geometry",
-          "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
-          "reason": "Published HiPS pointings do not establish exact Hubble Advanced Products coverage, and product footprints for the audited snapshot have not been acquired.",
-          "manualStep": "Query MAST for all public Hubble Advanced Products available on 2026-08-12, parse each product s_region footprint in ICRS, and union the footprints into the product MOC."
-        },
-        {
-          "product": "published HST HiPS pointings",
-          "status": "acquired",
-          "sourceUrl": "https://archive.stsci.edu/missions-and-data/hst",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=smoc&order=4&fmt=json"
+          "sourceUrl": "https://www.cv.nrao.edu/nvss/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FNVSS&get=smoc&order=4&fmt=json"
         }
       ]
     },
@@ -799,150 +1083,311 @@
       ]
     },
     {
-      "surveyId": "des",
-      "releaseId": "des-dr2",
+      "surveyId": "rubin",
+      "releaseId": "rubin-firstlook",
       "products": [
         {
-          "product": "DR2 color imaging",
+          "product": "Rubin First Look imaging",
           "status": "acquired",
-          "sourceUrl": "https://des.ncsa.illinois.edu/releases/dr2",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2FColorIRG&get=smoc&order=4&fmt=json"
-        }
-      ]
-    },
-    {
-      "surveyId": "2mass",
-      "releaseId": "2mass-all-sky",
-      "products": [
-        {
-          "product": "J-band imaging",
-          "status": "acquired",
-          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FJ&get=smoc&order=4&fmt=json"
-        },
-        {
-          "product": "H-band imaging",
-          "status": "acquired",
-          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FH&get=smoc&order=4&fmt=json"
-        },
-        {
-          "product": "K-band imaging",
-          "status": "acquired",
-          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FK&get=smoc&order=4&fmt=json"
-        }
-      ]
-    },
-    {
-      "surveyId": "allwise",
-      "releaseId": "allwise",
-      "products": [
-        {
-          "product": "W1 imaging",
-          "status": "acquired",
-          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW1&get=smoc&order=4&fmt=json"
-        },
-        {
-          "product": "W2 imaging",
-          "status": "acquired",
-          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW2&get=smoc&order=4&fmt=json"
-        },
-        {
-          "product": "W3 imaging",
-          "status": "acquired",
-          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW3&get=smoc&order=4&fmt=json"
-        },
-        {
-          "product": "W4 imaging",
-          "status": "acquired",
-          "sourceUrl": "https://irsa.ipac.caltech.edu/Missions/wise.html",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW4&get=smoc&order=4&fmt=json"
-        }
-      ]
-    },
-    {
-      "surveyId": "kids",
-      "releaseId": "kids-dr5",
-      "products": [
-        {
-          "product": "DR5 gri imaging",
-          "status": "acquired",
-          "sourceUrl": "https://kids.strw.leidenuniv.nl/DR5/index.php",
-          "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=smoc&order=10&fmt=fits",
+          "sourceUrl": "https://rubinobservatory.org/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FRubin%2FFirstLook&get=smoc&order=10&fmt=fits",
           "coverageRole": "footprint_extent",
-          "notes": "Reviewed CDS ICRS/NUNIQ order-10 spatial MOC; native STMOC time metadata is evidence-only and precision is estimated."
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
         }
       ]
     },
     {
-      "surveyId": "nvss",
-      "releaseId": "nvss-final",
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr01",
       "products": [
         {
-          "product": "1.4 GHz radio imaging",
-          "status": "acquired",
-          "sourceUrl": "https://www.cv.nrao.edu/nvss/",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FNVSS&get=smoc&order=4&fmt=json"
+          "product": "SDSS-I/II release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr1/",
+          "reason": "The official DR1 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR1 catalogs, convert all DR1 imaging run/camcol/field corners and all DR1 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
         }
       ]
     },
     {
-      "surveyId": "csst",
-      "releaseId": "csst-sim-w2-20250731",
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr02",
       "products": [
         {
-          "product": "W2 simulated wide-field images",
-          "status": "acquired",
-          "sourceUrl": "https://nadc.china-vo.org/data/",
-          "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W2_Phot",
-          "coverageRole": "image_extent",
-          "notes": "data-warehouse run workspace-coverage-ec9448e73ced-retry4 matched 182736 files and processed 182736 FITS-WCS documents; Core MOC area 8091.630033 deg2."
+          "product": "SDSS-I/II release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr2/",
+          "reason": "The official DR2 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR2 catalogs, convert all DR2 imaging run/camcol/field corners and all DR2 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
         }
       ]
     },
     {
-      "surveyId": "csst",
-      "releaseId": "csst-sim-w3-20250731",
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr03",
       "products": [
         {
-          "product": "W3 simulated wide-field images",
-          "status": "acquired",
-          "sourceUrl": "https://nadc.china-vo.org/data/",
-          "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W3_Phot",
-          "coverageRole": "image_extent",
-          "notes": "data-warehouse run workspace-coverage-ee904e0f11af-retry3 matched 188136 files and processed 188136 FITS-WCS documents; Core MOC area 397.038350 deg2."
+          "product": "SDSS-I/II release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr3/",
+          "reason": "The official DR3 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR3 catalogs, convert all DR3 imaging run/camcol/field corners and all DR3 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
         }
       ]
     },
     {
-      "surveyId": "csst",
-      "releaseId": "csst-sim-w4-20250731",
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr04",
       "products": [
         {
-          "product": "W4 simulated wide-field images",
-          "status": "acquired",
-          "sourceUrl": "https://nadc.china-vo.org/data/",
-          "geometrySourceUrl": "http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com/data-and-computing/projects/CSST/shared-data/simulation-1000-w1-20250731/outputs_wide1000sqdeg/W4_Phot",
-          "coverageRole": "image_extent",
-          "notes": "data-warehouse run workspace-coverage-dbf269d0f221-retry3 matched 211824 files and processed 211824 FITS-WCS documents; Core MOC area 447.605792 deg2."
+          "product": "SDSS-I/II release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr4/",
+          "reason": "The official DR4 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR4 catalogs, convert all DR4 imaging run/camcol/field corners and all DR4 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
         }
       ]
     },
     {
-      "surveyId": "decals",
-      "releaseId": "decals-dr5",
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr05",
       "products": [
         {
-          "product": "DR5 g/r/z color footprint",
+          "product": "SDSS-I/II release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr5/",
+          "reason": "The official DR5 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR5 catalogs, convert all DR5 imaging run/camcol/field corners and all DR5 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr06",
+      "products": [
+        {
+          "product": "SDSS-I/II release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr6/",
+          "reason": "The official DR6 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR6 catalogs, convert all DR6 imaging run/camcol/field corners and all DR6 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr07",
+      "products": [
+        {
+          "product": "SDSS-I/II release catalog",
+          "status": "overview_only",
+          "sourceUrl": "https://www.sdss.org/dr7/",
+          "reason": "Official DR7 imaging and spectroscopy coverage is documented, but the distinct field and plate geometries have not been acquired as an exact release-catalog MOC.",
+          "geometrySourceUrl": "https://classic.sdss.org/dr7/coverage/",
+          "manualStep": "Using the official DR7 coverage resources, convert all DR7 imaging run/camcol/field boundaries and all DR7 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr08",
+      "products": [
+        {
+          "product": "SDSS-III release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr8/",
+          "reason": "The official DR8 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR8 catalogs, convert all DR8 imaging run/camcol/field corners and all DR8 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr09",
+      "products": [
+        {
+          "product": "SDSS-III release catalog",
+          "status": "overview_only",
+          "sourceUrl": "https://www.sdss.org/dr9/",
+          "reason": "The exact DR9 color-imaging MOC covers only imaging and is therefore an overview for the broader release catalog; DR9 spectroscopy plate geometry is not included.",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=smoc&order=4&fmt=json",
+          "manualStep": "From the official DR9 catalogs, convert all DR9 imaging run/camcol/field corners and all DR9 spectroscopy plate footprints to separate MOCs, then union them to replace the imaging-only overview."
+        },
+        {
+          "product": "DR9 color imaging",
           "status": "acquired",
-          "sourceUrl": "https://www.legacysurvey.org/dr5/",
-          "geometrySourceUrl": "https://alasky.unistra.fr/MocServer/query?ID=CDS%2FP%2FDECaLS%2FDR5%2Fcolor&get=smoc&order=10&fmt=fits",
+          "sourceUrl": "https://www.sdss.org/dr9/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=smoc&order=4&fmt=json"
+        },
+        {
+          "product": "DR9 g-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.sdss.org/dr9/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fg&get=smoc&order=7&fmt=fits",
           "coverageRole": "footprint_extent",
-          "notes": "Reviewed CDS ICRS/NUNIQ order-10 spatial MOC; native STMOC time metadata is evidence-only and precision is estimated."
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "DR9 i-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.sdss.org/dr9/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fi&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "DR9 r-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.sdss.org/dr9/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fr&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "DR9 u-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.sdss.org/dr9/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fu&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "DR9 z-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.sdss.org/dr9/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fz&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr10",
+      "products": [
+        {
+          "product": "SDSS-III release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr10/",
+          "reason": "The official DR10 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR10 catalogs, convert all DR10 imaging run/camcol/field corners and all DR10 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr11",
+      "products": [
+        {
+          "product": "SDSS-III release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr11/",
+          "reason": "The official DR11 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR11 catalogs, convert all DR11 imaging run/camcol/field corners and all DR11 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr12",
+      "products": [
+        {
+          "product": "SDSS-III release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr12/",
+          "reason": "The official DR12 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR12 catalogs, convert all DR12 imaging run/camcol/field corners and all DR12 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr13",
+      "products": [
+        {
+          "product": "SDSS-IV release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr13/",
+          "reason": "The official DR13 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR13 catalogs, convert all DR13 imaging run/camcol/field corners and all DR13 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr14",
+      "products": [
+        {
+          "product": "SDSS-IV release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr14/",
+          "reason": "The official DR14 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR14 catalogs, convert all DR14 imaging run/camcol/field corners and all DR14 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr15",
+      "products": [
+        {
+          "product": "SDSS-IV release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr15/",
+          "reason": "The official DR15 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR15 catalogs, convert all DR15 imaging run/camcol/field corners and all DR15 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr16",
+      "products": [
+        {
+          "product": "SDSS-IV release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr16/",
+          "reason": "The official DR16 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR16 catalogs, convert all DR16 imaging run/camcol/field corners and all DR16 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr17",
+      "products": [
+        {
+          "product": "SDSS-IV release catalog",
+          "status": "overview_only",
+          "sourceUrl": "https://www.sdss.org/dr17/",
+          "reason": "The official final-release overview covers imaging and spectroscopy products with distinct footprints; no exact combined release-catalog MOC is acquired.",
+          "manualStep": "From the official DR17 catalogs, convert all DR17 imaging run/camcol/field corners and all DR17 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr18",
+      "products": [
+        {
+          "product": "SDSS-V release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr18/",
+          "reason": "The official DR18 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR18 catalogs, convert all DR18 imaging run/camcol/field corners and all DR18 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
+        }
+      ]
+    },
+    {
+      "surveyId": "sdss",
+      "releaseId": "sdss-dr19",
+      "products": [
+        {
+          "product": "SDSS-V release catalog",
+          "status": "awaiting_geometry",
+          "sourceUrl": "https://www.sdss.org/dr19/",
+          "reason": "The official DR19 entry is public, but release-specific imaging field and spectroscopy plate geometry has not been acquired.",
+          "manualStep": "From the official DR19 catalogs, convert all DR19 imaging run/camcol/field corners and all DR19 spectroscopy plate footprints to separate MOCs, then union the imaging and spectroscopy MOCs for the release catalog."
         }
       ]
     },
@@ -961,6 +1406,82 @@
       ]
     },
     {
+      "surveyId": "spherex",
+      "releaseId": "spherex-qr2",
+      "products": [
+        {
+          "product": "SPHEREx QR2 color coverage",
+          "status": "acquired",
+          "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2Fcolor&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "SPHEREx QR2 D1 coverage",
+          "status": "acquired",
+          "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD1&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "SPHEREx QR2 D2 coverage",
+          "status": "acquired",
+          "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD2&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "SPHEREx QR2 D3 coverage",
+          "status": "acquired",
+          "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD3&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "SPHEREx QR2 D4 coverage",
+          "status": "acquired",
+          "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD4&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "SPHEREx QR2 D5 coverage",
+          "status": "acquired",
+          "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD5&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "SPHEREx QR2 D6 coverage",
+          "status": "acquired",
+          "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD6&get=smoc&order=7&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "sumss",
+      "releaseId": "sumss-final",
+      "products": [
+        {
+          "product": "SUMSS 843 MHz imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.astrop.physics.usyd.edu.au/SUMSS/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSUMSS&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
       "surveyId": "vista",
       "releaseId": "viking",
       "products": [
@@ -975,17 +1496,162 @@
       ]
     },
     {
-      "surveyId": "gaia",
-      "releaseId": "gaia-dr3",
+      "surveyId": "vista",
+      "releaseId": "vista-vvv-dr4",
       "products": [
         {
-          "product": "Gaia DR3 main source presence",
+          "product": "VVV DR4 J/Y/Z color imaging",
           "status": "acquired",
-          "sourceUrl": "https://www.cosmos.esa.int/web/gaia/data-release-3",
-          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=smoc&order=10&fmt=fits",
-          "coverageRole": "object_presence",
-          "attributionUrl": "https://www.cosmos.esa.int/web/gaia-users/credits",
-          "notes": "Reviewed Gaia DR3 main-source catalog row-presence SMOC in ICRS/NUNIQ. This is an exact catalog presence map, not an imaging or scanning-law footprint."
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FColorJYZ&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "VVV DR4 H bulge imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FH%2FBulge&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "VVV DR4 H disk imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FH%2FDisk&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "VVV DR4 J-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FJ&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "VVV DR4 Y-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FY&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "VVV DR4 Z-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVISTA%2FVVV%2FDR4%2FZ&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "vphas",
+      "releaseId": "vphas-dr4",
+      "products": [
+        {
+          "product": "VPHAS+ DR4 H-alpha imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.vphasplus.org/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2FHalpha&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "VPHAS+ DR4 color imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.vphasplus.org/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "VPHAS+ DR4 g-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.vphasplus.org/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fg&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "VPHAS+ DR4 i-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.vphasplus.org/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fi&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "VPHAS+ DR4 r-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.vphasplus.org/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fr&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "VPHAS+ DR4 u-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.vphasplus.org/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fu&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "wenss",
+      "releaseId": "wenss-final",
+      "products": [
+        {
+          "product": "WENSS 325 MHz imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.astron.nl/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FWENSS&get=smoc&order=5&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        }
+      ]
+    },
+    {
+      "surveyId": "ztf",
+      "releaseId": "ztf-dr7",
+      "products": [
+        {
+          "product": "ZTF DR7 color imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.ztf.caltech.edu/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fcolor&get=smoc&order=9&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "ZTF DR7 g-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.ztf.caltech.edu/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fg&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "ZTF DR7 i-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.ztf.caltech.edu/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fi&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
+        },
+        {
+          "product": "ZTF DR7 r-band imaging",
+          "status": "acquired",
+          "sourceUrl": "https://www.ztf.caltech.edu/",
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fr&get=smoc&order=10&fmt=fits",
+          "coverageRole": "footprint_extent",
+          "notes": "Reviewed public CDS spatial MOC; effective precision is the locked export order."
         }
       ]
     }

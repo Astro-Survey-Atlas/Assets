@@ -1,0 +1,50 @@
+{
+  "layerId": "spherex-spherex-qr2-spherex-qr2-d3-coverage-moc",
+  "surveyId": "spherex",
+  "releaseId": "spherex-qr2",
+  "product": "SPHEREx QR2 D3 coverage",
+  "modality": "infrared",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 7,
+  "queryOrder": 7,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
+  "input": "artifacts/public-survey-footprints/raw/moc/spherex-spherex-qr2-spherex-qr2-d3-coverage-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/SPHEREx/QR2/D3",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD3&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD3&get=smoc&order=7&fmt=fits",
+    "sourceRecordSha256": "5e8ea9752ffd59c26991142c348a0f4ac2fd0a0d2b9ce4e270b0cfc358e76daf",
+    "nativeSpatialOrder": 7,
+    "exportOrder": 7,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "3b8e814d96189a60d706639256ca56f46fb07316c9ff691f53799f35b3372a19",
+    "sizeBytes": 8640,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD3&get=smoc&order=7&fmt=fits",
+    "recordSha256": "5e8ea9752ffd59c26991142c348a0f4ac2fd0a0d2b9ce4e270b0cfc358e76daf",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

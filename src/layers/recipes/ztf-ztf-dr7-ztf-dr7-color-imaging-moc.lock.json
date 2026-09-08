@@ -1,0 +1,52 @@
+{
+  "layerId": "ztf-ztf-dr7-ztf-dr7-color-imaging-moc",
+  "surveyId": "ztf",
+  "releaseId": "ztf-dr7",
+  "product": "ZTF DR7 color imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 9,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.ztf.caltech.edu/",
+  "input": "artifacts/public-survey-footprints/raw/moc/ztf-ztf-dr7-ztf-dr7-color-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/ZTF/DR7/color",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fcolor&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fcolor&get=smoc&order=9&fmt=fits",
+    "sourceRecordSha256": "8aae00352bb9127627c80f9cb8b98af23a67c4780c7d4dc17254c181731b35c2",
+    "nativeSpatialOrder": 9,
+    "exportOrder": 9,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "8dc82b0ef251b4e016d8c5944822b65b33e79c1893a5483b3b21da7762e90f11",
+    "sizeBytes": 187200,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FZTF%2FDR7%2Fcolor&get=smoc&order=9&fmt=fits",
+    "recordSha256": "8aae00352bb9127627c80f9cb8b98af23a67c4780c7d4dc17254c181731b35c2",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}

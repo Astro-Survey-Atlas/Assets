@@ -5,23 +5,23 @@
     "name": "scripts/public_footprint_artifacts.ts"
   },
   "statistics": {
-    "releases": 56,
-    "products": 91,
-    "acquired": 39,
+    "releases": 71,
+    "products": 163,
+    "acquired": 111,
     "overview_only": 11,
     "awaiting_geometry": 41,
     "not_applicable": 0,
-    "manifestFootprints": 48,
+    "manifestFootprints": 120,
     "packages": 16
   },
   "inputs": {
     "canonicalManifest": {
       "path": "../../src/footprints/survey-footprints.json",
-      "sha256": "c32c178517c65bfbb2963853a6e64d6bc28dbc5f5501e01f5e2cfcb9421c713b"
+      "sha256": "735cdba3d777dc30165f4e76207c10eaa55472f5729dc87c1e342bc70f6b260e"
     },
     "sources": {
       "path": "sources.json",
-      "sha256": "781d03dbb8cf75b121e49cc222dfafdb24c092a012e3d318f1b69a6dfb6d5498"
+      "sha256": "328e62461263809c74a26308a822a231993e76d615cb2161c806b2b172a887d0"
     },
     "manual": {
       "path": "manual/footprints.json",
@@ -29,7 +29,7 @@
     },
     "rawMocIndex": {
       "path": "raw/moc/index.json",
-      "sha256": "2f5ade6ffa3391159ebec019524b609c11b6e7d5d9fae27b87303e35ae99fdce"
+      "sha256": "ef70f86f670093e968c06083eedb3f1f67fdd9b0ff4e32d5ab1736babfd38f52"
     },
     "rawGeometryIndex": {
       "path": "raw/geometry/index.json",
@@ -54,13 +54,13 @@
   "files": {
     "manifest": {
       "path": "normalized/survey-footprints.json",
-      "sha256": "c32c178517c65bfbb2963853a6e64d6bc28dbc5f5501e01f5e2cfcb9421c713b",
-      "sizeBytes": 1019078
+      "sha256": "735cdba3d777dc30165f4e76207c10eaa55472f5729dc87c1e342bc70f6b260e",
+      "sizeBytes": 1917431
     },
     "catalog": {
       "path": "packages/catalog.json",
-      "sha256": "bfb89632babbbd1e5b9b2a94e644dddb012a5079b94ae5184e841ba6f8e734bf",
-      "sizeBytes": 23789
+      "sha256": "00fd9cbcdac0deefbe2c32b1455f6689f3aa382fa7008299d17fadbd786b977c",
+      "sizeBytes": 23790
     },
     "packages": [
       {
@@ -74,8 +74,8 @@
         "id": "public-euclid-footprints",
         "version": "3.0.0",
         "archive": "public-euclid-footprints-3.0.0.zip",
-        "sizeBytes": 5813,
-        "sha256": "f3edf15c133cbc92797821e253208d540f382b77c4fa4cef33a7db472325e872"
+        "sizeBytes": 39950,
+        "sha256": "5fb77791caf8675e63a2422afd1f60493c6cf9dfc71804a2c5a6b8d4a2dede71"
       },
       {
         "id": "public-galex-footprints",

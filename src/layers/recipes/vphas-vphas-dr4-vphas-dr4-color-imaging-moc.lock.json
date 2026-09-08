@@ -1,0 +1,53 @@
+{
+  "layerId": "vphas-vphas-dr4-vphas-dr4-color-imaging-moc",
+  "surveyId": "vphas",
+  "releaseId": "vphas-dr4",
+  "product": "VPHAS+ DR4 color imaging",
+  "modality": "imaging",
+  "mode": "native-moc",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "third_party_moc",
+  "maxOrder": 10,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://www.vphasplus.org/",
+  "input": "artifacts/public-survey-footprints/raw/moc/vphas-vphas-dr4-vphas-dr4-color-imaging-moc.fits",
+  "recipe": {
+    "sourceKind": "hips-stmoc",
+    "sourceId": "CDS/P/VPHAS/DR4/color",
+    "sourceRecordUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fcolor&get=record&fmt=json",
+    "sourceMocUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits",
+    "sourceRecordSha256": "8349270215699c7c0bb119c3d2073b35d49e93fa746d4499977fb1918f9aa658",
+    "nativeSpatialOrder": 11,
+    "exportOrder": 10,
+    "availableOrders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "precision": "estimated",
+    "precisionJustification": "CDS public HiPS spatial MOC; exported cells are preserved or coarsened to the locked maximum order and are not an accepted-CCD or depth mask.",
+    "limitations": [
+      "The MOC describes the public CDS/HiPS product extent, not a per-exposure selection function.",
+      "Temporal metadata in an STMOC source is retained in the source record but is not represented in this spatial layer."
+    ]
+  },
+  "snapshot": {
+    "sha256": "779b520e2aa23de521f2f4887d4492eb788b552d89b9d9fd744305c20f098a0f",
+    "sizeBytes": 60480,
+    "sourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FVPHAS%2FDR4%2Fcolor&get=smoc&order=10&fmt=fits",
+    "recordSha256": "8349270215699c7c0bb119c3d2073b35d49e93fa746d4499977fb1918f9aa658",
+    "retrievedAt": "2026-09-05T00:00:00Z"
+  }
+}
