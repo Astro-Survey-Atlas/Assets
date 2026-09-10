@@ -103,10 +103,9 @@ releasePublisher:
       memory: 512Mi
 
 # The init container always pulls one immutable release archive. Chart render
-# fails unless enabled/endpoint/bucket/credentialsSecret are all set; leave
+# fails unless endpoint/bucket/credentialsSecret are all set; leave
 # defaults empty so accidental deploys without an overlay cannot start.
 objectStore:
-  enabled: true
   currentKey: public/current.json
   retainReleases: 2
   cleanup: false

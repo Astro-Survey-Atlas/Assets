@@ -285,11 +285,11 @@ and inspect overlapping diffs before editing.
 - `sync-release` supports production S3 `pull`: it verifies `current.json`,
   the release manifest and every object in `/data/.staging`, activates
   `/data/releases/<sha256>` and atomically switches `/data/current`. The
-  development `deploy/k3s-values.yaml` remains filesystem-backed.
+  development values file lives outside the repo (`~/.asa/k3s-values.yaml`).
 - The runtime storage and Workspace handoff is documented in
   `docs/public-artifact-storage.md` and `docs/resource-package-integration.md`;
-  `deploy/production-values.example.yaml` contains placeholders only and does
-  not assert a real endpoint, bucket or Secret.
+  `charts/astro-survey-atlas-assets/examples/` contains sanitized templates
+  only and does not assert a real endpoint, bucket or Secret.
 - Workspace now accepts a dynamic Assets catalog's explicit `replacedBy: []`.
   A real static Euclid package and a temporary dynamically generated JWST
   package were downloaded completely, checked against catalog size/SHA-256,

@@ -25,7 +25,8 @@ vendor provenance.
 - `sourceTier` is one of `official_geometry`, `official_inventory_derived`,
   `third_party_moc`, `best_effort_derived`, or `user_file_derived`.
 - `coverageRole` is the only accepted field. `evidenceRole` was removed in Core
-  1.0.0 and is rejected at the input boundary.
+  1.0.0 and is rejected at the input boundary. Core 1.1.0 additionally accepts
+  any Resource Package `3.x.y` version.
 
 The reviewed CSST layer remains order 8 and retains its existing FITS bytes,
 pixels, measured area, and SHA-256. Its classification is `image_extent`,
@@ -64,7 +65,8 @@ implementation. Core accepts local files or already parsed normalized inputs.
 
 ## Resource Package v3
 
-New package builds produce only `3.0.0` with this closed structure:
+New package builds produce Resource Package `3.x.y` versions (bumping the
+minor for content changes) with this closed structure:
 
 ```text
 resource-package.json

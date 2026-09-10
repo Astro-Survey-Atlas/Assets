@@ -2,129 +2,381 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
-    "replicaCount": { "type": "integer", "minimum": 1, "maximum": 1 },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1
+    },
     "image": {
       "type": "object",
       "properties": {
-        "repository": { "type": "string", "minLength": 1 },
-        "tag": { "type": "string", "minLength": 1, "not": { "const": "latest" } },
-        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "const": "latest"
+          }
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
       },
-      "required": ["repository", "tag", "pullPolicy"]
+      "required": [
+        "repository",
+        "tag",
+        "pullPolicy"
+      ]
     },
     "service": {
       "type": "object",
       "properties": {
-        "type": { "type": "string", "enum": ["ClusterIP", "NodePort"] },
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "nodePort": { "type": ["integer", "null"], "minimum": 30000, "maximum": 32767 }
+        "type": {
+          "type": "string",
+          "enum": [
+            "ClusterIP",
+            "NodePort"
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "nodePort": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 30000,
+          "maximum": 32767
+        }
       },
-      "required": ["type", "port"]
+      "required": [
+        "type",
+        "port"
+      ]
     },
     "persistence": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "existingClaim": { "type": "string" },
-        "storageClass": { "type": "string" },
-        "accessModes": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["ReadWriteOnce", "ReadWriteMany"] } },
-        "size": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$" }
+        "enabled": {
+          "type": "boolean"
+        },
+        "existingClaim": {
+          "type": "string"
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "accessModes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "ReadWriteOnce",
+              "ReadWriteMany"
+            ]
+          }
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(Mi|Gi)$"
+        }
       },
-      "required": ["enabled", "existingClaim", "storageClass", "accessModes", "size"]
+      "required": [
+        "enabled",
+        "existingClaim",
+        "storageClass",
+        "accessModes",
+        "size"
+      ]
     },
     "contentPersistence": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "existingClaim": { "type": "string" },
-        "storageClass": { "type": "string" },
-        "accessModes": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["ReadWriteOnce", "ReadWriteMany"] } },
-        "size": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$" }
+        "enabled": {
+          "type": "boolean"
+        },
+        "existingClaim": {
+          "type": "string"
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "accessModes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "ReadWriteOnce",
+              "ReadWriteMany"
+            ]
+          }
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(Mi|Gi)$"
+        }
       },
-      "required": ["enabled", "existingClaim", "storageClass", "accessModes", "size"]
+      "required": [
+        "enabled",
+        "existingClaim",
+        "storageClass",
+        "accessModes",
+        "size"
+      ]
     },
     "evidencePersistence": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "existingClaim": { "type": "string" },
-        "storageClass": { "type": "string" },
-        "accessModes": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["ReadWriteOnce", "ReadWriteMany"] } },
-        "size": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$" }
+        "enabled": {
+          "type": "boolean"
+        },
+        "existingClaim": {
+          "type": "string"
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "accessModes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "ReadWriteOnce",
+              "ReadWriteMany"
+            ]
+          }
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(Mi|Gi)$"
+        }
       },
-      "required": ["enabled", "existingClaim", "storageClass", "accessModes", "size"]
+      "required": [
+        "enabled",
+        "existingClaim",
+        "storageClass",
+        "accessModes",
+        "size"
+      ]
     },
     "admin": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "warehouseNamespace": { "type": "string", "minLength": 1 },
-        "warehouseScannerImage": { "type": "string", "minLength": 1 },
-        "warehouseEvidenceClaim": { "type": "string", "minLength": 1 },
-        "warehouseEvidenceMountPath": { "type": "string", "pattern": "^/[^\\s]*$" },
+        "enabled": {
+          "type": "boolean"
+        },
+        "warehouseNamespace": {
+          "type": "string",
+          "minLength": 1
+        },
+        "warehouseScannerImage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "warehouseEvidenceClaim": {
+          "type": "string",
+          "minLength": 1
+        },
+        "warehouseEvidenceMountPath": {
+          "type": "string",
+          "pattern": "^/[^\\s]*$"
+        },
         "adminTokenSecret": {
           "type": "object",
           "properties": {
-            "name": { "type": "string" },
-            "key": { "type": "string", "minLength": 1 }
+            "name": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            }
           },
-          "required": ["name", "key"]
+          "required": [
+            "name",
+            "key"
+          ]
         }
       },
-      "required": ["enabled", "warehouseNamespace", "warehouseScannerImage", "warehouseEvidenceClaim", "warehouseEvidenceMountPath", "adminTokenSecret"]
+      "required": [
+        "enabled",
+        "warehouseNamespace",
+        "warehouseScannerImage",
+        "warehouseEvidenceClaim",
+        "warehouseEvidenceMountPath",
+        "adminTokenSecret"
+      ]
     },
     "warehouse": {
       "type": "object",
       "properties": {
-        "elasticsearchUrl": { "type": "string", "format": "uri", "minLength": 1 },
-        "layerIndex": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
-        "coverageIndex": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
-        "fileIndex": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" }
+        "elasticsearchUrl": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1
+        },
+        "layerIndex": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "coverageIndex": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "fileIndex": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        }
       },
-      "required": ["elasticsearchUrl", "layerIndex", "coverageIndex", "fileIndex"]
+      "required": [
+        "elasticsearchUrl",
+        "layerIndex",
+        "coverageIndex",
+        "fileIndex"
+      ]
     },
-    "ingress": { "type": "object" },
-    "resources": { "type": "object" },
-    "syncResources": { "type": "object" },
+    "ingress": {
+      "type": "object"
+    },
+    "resources": {
+      "type": "object"
+    },
+    "syncResources": {
+      "type": "object"
+    },
     "releasePublisher": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "pollSeconds": { "type": "integer", "minimum": 1, "maximum": 300 },
-        "resources": { "type": "object" }
+        "enabled": {
+          "type": "boolean"
+        },
+        "pollSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "resources": {
+          "type": "object"
+        }
       },
-      "required": ["enabled", "pollSeconds", "resources"]
+      "required": [
+        "enabled",
+        "pollSeconds",
+        "resources"
+      ]
     },
     "objectStore": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "currentKey": { "type": "string", "pattern": "^[^/].*[^/]$" },
-        "retainReleases": { "type": "integer", "minimum": 1, "maximum": 20 },
-        "cleanup": { "type": "boolean" },
-        "endpoint": { "type": "string" },
-        "bucket": { "type": "string" },
-        "prefix": { "type": "string" },
-        "region": { "type": "string", "minLength": 1 },
-        "forcePathStyle": { "type": "boolean" },
+        "currentKey": {
+          "type": "string",
+          "pattern": "^[^/].*[^/]$"
+        },
+        "retainReleases": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "cleanup": {
+          "type": "boolean"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "bucket": {
+          "type": "string"
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "region": {
+          "type": "string",
+          "minLength": 1
+        },
+        "forcePathStyle": {
+          "type": "boolean"
+        },
         "credentialsSecret": {
           "type": "object",
           "properties": {
-            "name": { "type": "string" },
-            "accessKeyIdKey": { "type": "string", "minLength": 1 },
-            "secretAccessKeyKey": { "type": "string", "minLength": 1 },
-            "sessionTokenKey": { "type": "string" }
+            "name": {
+              "type": "string"
+            },
+            "accessKeyIdKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "secretAccessKeyKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sessionTokenKey": {
+              "type": "string"
+            }
           },
-          "required": ["name", "accessKeyIdKey", "secretAccessKeyKey", "sessionTokenKey"]
+          "required": [
+            "name",
+            "accessKeyIdKey",
+            "secretAccessKeyKey",
+            "sessionTokenKey"
+          ]
         }
       },
-      "required": ["enabled", "currentKey", "retainReleases", "cleanup", "endpoint", "bucket", "prefix", "region", "forcePathStyle", "credentialsSecret"]
+      "required": [
+        "currentKey",
+        "retainReleases",
+        "cleanup",
+        "endpoint",
+        "bucket",
+        "prefix",
+        "region",
+        "forcePathStyle",
+        "credentialsSecret"
+      ]
     },
-    "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
-    "tolerations": { "type": "array" },
-    "affinity": { "type": "object" },
-    "podSecurityContext": { "type": "object" },
-    "containerSecurityContext": { "type": "object" }
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "tolerations": {
+      "type": "array"
+    },
+    "affinity": {
+      "type": "object"
+    },
+    "podSecurityContext": {
+      "type": "object"
+    },
+    "containerSecurityContext": {
+      "type": "object"
+    }
   },
-  "required": ["replicaCount", "image", "service", "persistence", "contentPersistence", "evidencePersistence", "admin", "warehouse", "objectStore", "releasePublisher"]
+  "required": [
+    "replicaCount",
+    "image",
+    "service",
+    "persistence",
+    "contentPersistence",
+    "evidencePersistence",
+    "admin",
+    "warehouse",
+    "objectStore",
+    "releasePublisher"
+  ]
 }

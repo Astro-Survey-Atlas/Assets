@@ -18,6 +18,6 @@ Example entry:
 }
 ```
 
-Run `npm run artifacts:footprints` to validate submissions. Validation does not publish or load a manual footprint automatically; reviewed geometry must still be promoted into the canonical manifest and rebuilt resource package.
+Run `npm run artifacts:validate` to validate submissions. Validation does not publish or load a manual footprint automatically; reviewed geometry must still be promoted into the canonical manifest and rebuilt resource package.
 
 Do not submit geometry inferred from area summaries, field counts, illustrations, or another release/product. Keep the high-resolution official source separately and describe all coordinate conversion, polygon union, masking, and rasterization decisions in `method`.

@@ -68,9 +68,24 @@ catalog 投影、provenance 摘要和 hash。版本化 MOC、资源包和大型 
 不可变 URL/hash 契约、evidence 边界和切换流程。输入 manifest、normalized scan 等
 始终属于 evidence，不会进入浏览器初始请求或公共 release allowlist。
 
-发布同步任务现在包含 filesystem fallback，也提供可选的 S3-compatible 发布适配器。
-只有在配置 endpoint、bucket 和 credential Secret 后才启用；在明确批准对象存储切换
-之前，线上服务仍从经过校验的 PVC bundle 读取。配置说明见[存储契约](docs/public-artifact-storage.md)。
+发布同步任务必须配置 S3-compatible 对象存储。若同步失败，启动时会回退到 PVC 上
+最近一次已安装且校验通过 的 release；不存在纯 filesystem 的发布路径。首次 rollout
+前请按[存储契约](docs/public-artifact-storage.md)配置 endpoint、bucket 和
+credential Secret。
+
+## 部署
+
+服务只通过 Helm chart 部署：
+
+```bash
+helm upgrade --install astro-survey-atlas-assets \
+  charts/astro-survey-atlas-assets \
+  --namespace astro-survey-atlas-assets --create-namespace \
+  --values <environment-values.yaml>
+```
+
+真实环境 values 保存在仓库之外；脱敏模板见
+`charts/astro-survey-atlas-assets/examples/`。
 
 ## 本地开发
 

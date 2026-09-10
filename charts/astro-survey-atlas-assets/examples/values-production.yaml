@@ -1,6 +1,5 @@
 # Production overlay template. Replace every angle-bracket placeholder during
 # the release review; do not commit real endpoints, bucket names or Secrets.
-# Keep deploy/k3s-values.yaml for the development archive canary overlay.
 
 image:
   repository: <immutable-image-repository>
@@ -8,7 +7,6 @@ image:
   pullPolicy: Always
 
 objectStore:
-  enabled: true
   endpoint: <production-s3-endpoint>
   bucket: <production-bucket>
   currentKey: public/current.json

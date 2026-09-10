@@ -5,10 +5,16 @@ coverage
 *.log
 .env
 .env.*
+.info
+.tmp-screens
+.opencode
+.codex
+.venv
+.assets-content
+.asa
 
 artifacts/public-survey-footprints/packages/*.zip
-artifacts/public-survey-footprints/moc-core/astro_survey_atlas_assets-*.whl
-!artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.0.0-py3-none-any.whl
+!artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.1.0-py3-none-any.whl
 artifacts/public-survey-footprints/csst/
 artifacts/public-survey-footprints/raw/
 artifacts/public-survey-footprints/normalized/

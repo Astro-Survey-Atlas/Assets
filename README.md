@@ -82,11 +82,25 @@ cutover procedure. In particular, input manifests and normalized scans remain
 evidence and are never part of the browser's initial request or the public
 release allowlist.
 
-The release sync job includes a filesystem fallback and an optional
-S3-compatible publication adapter. Enable it only after configuring the
-endpoint, bucket and credential Secret described in the storage contract; the
-active service continues to read the verified PVC bundle until an object-backed
-cutover is explicitly approved.
+The release sync job requires a configured S3-compatible object store. If the
+sync cannot reach the store, startup falls back to the most recent
+already-installed verified release on the PVC; there is no filesystem-only
+publication path. Configure the endpoint, bucket and credential Secret as
+described in the storage contract before the first rollout.
+
+## Deployment
+
+The service is deployed exclusively through the Helm chart:
+
+```bash
+helm upgrade --install astro-survey-atlas-assets \
+  charts/astro-survey-atlas-assets \
+  --namespace astro-survey-atlas-assets --create-namespace \
+  --values <environment-values.yaml>
+```
+
+Keep real environment values outside this repository; sanitized templates are
+provided under `charts/astro-survey-atlas-assets/examples/`.
 
 ## Local development
 

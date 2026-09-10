@@ -48,10 +48,6 @@ function appendText(parent: Element, tag: string, text: string, className?: stri
   return node;
 }
 
-function assetsFor(survey: Survey, releaseId: string, productName: string): Asset[] {
-  return survey.assets.filter((asset) => asset.releaseId === releaseId && (!asset.product || asset.product === productName));
-}
-
 function render(): void {
   const host = byId("resource-surveys");
   host.replaceChildren();

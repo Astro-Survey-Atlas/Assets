@@ -782,17 +782,6 @@ function taskStatsMarkup(status: TaskStatus): string {
   ].join("");
 }
 
-function artifactIcon(label: string): string {
-  const value = label.toLowerCase();
-  if (value.includes("moc")) return "globe-2";
-  if (value.includes("preview")) return "image";
-  if (value.includes("manifest")) return "file-check-2";
-  if (value.includes("stat")) return "chart-no-axes-combined";
-  if (value.includes("evidence")) return "shield-check";
-  if (value.includes("scan")) return "scan-line";
-  return "file-text";
-}
-
 function lifecycleMarkup(lifecycle?: ProductLifecycle, fallbackPublication?: string, nativeOrders?: number[]): string {
   const publication = lifecycleStateLabel(lifecycle?.publication?.state ?? fallbackPublication);
   const runtime = lifecycleStateLabel(lifecycle?.runtime?.state);

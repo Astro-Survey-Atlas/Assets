@@ -4,7 +4,6 @@
 {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}{{ fail "persistence.enabled and persistence.existingClaim cannot both provision storage" }}{{- end }}
 {{- if and .Values.admin.enabled (not .Values.admin.warehouseNamespace) }}{{ fail "admin.warehouseNamespace is required when admin.enabled is true" }}{{- end }}
 {{- /* Init always pulls the immutable archive; object-store settings are mandatory. */ -}}
-{{- if not .Values.objectStore.enabled }}{{ fail "objectStore.enabled must be true: the init container always pulls a release archive" }}{{- end }}
 {{- if not .Values.objectStore.endpoint }}{{ fail "objectStore.endpoint is required" }}{{- end }}
 {{- if not .Values.objectStore.bucket }}{{ fail "objectStore.bucket is required" }}{{- end }}
 {{- if not .Values.objectStore.credentialsSecret.name }}{{ fail "objectStore.credentialsSecret.name is required" }}{{- end }}

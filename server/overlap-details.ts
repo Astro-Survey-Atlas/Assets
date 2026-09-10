@@ -104,10 +104,6 @@ function claimKind(product: string, geometryUrl?: string): CoverageClaimKind {
   return "overview";
 }
 
-function detailPrecision(value: string | undefined): DetailPrecision {
-  return value === "exact" || value === "estimated" || value === "entrypoint-only" || value === "truncated" ? value : "exact";
-}
-
 function selectedLayers(layers: readonly CoverageCellLayer[], result: OverlapResult, component: OverlapComponent): CoverageCellLayer[] {
   const componentCells = new Set(component.cells);
   return layers.filter((layer) => result.surveyIds.includes(layer.surveyId) && Boolean(layer.cells.get(component.order)?.some((cell) => componentCells.has(cell))));

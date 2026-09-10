@@ -50,7 +50,7 @@ public/current.json
 | 镜像 | Dockerfile 已改为 code-only runtime；public release tree 不再复制进运行时镜像。 |
 | 测试 | `test/artifact-store.test.ts` 等覆盖确定性归档、immutable upload、下载校验、原子激活和 hash cache。 |
 
-注意：当前工作树中 `sync-release.ts` 已拒绝非 S3 store，而 `deploy/k3s-values.yaml` 仍可能是 `objectStore.enabled: false` 且 endpoint/bucket 为空。因此在未配置 MinIO 前，按当前 archive-only chart 直接 rollout 会使 `publish-assets` init container 失败。这是明确的预部署阻塞项，不是已完成部署。
+注意：当前工作树中 `sync-release.ts` 已拒绝非 S3 store，而环境 values 文件（chart 外部维护，模板见 `charts/astro-survey-atlas-assets/examples/`）仍可能是 endpoint/bucket 为空。因此在未配置 MinIO 前，按当前 archive-only chart 直接 rollout 会使 `publish-assets` init container 失败。这是明确的预部署阻塞项，不是已完成部署。
 
 ## 尚未完成
 
@@ -164,7 +164,7 @@ ASSETS_RELEASE_ARCHIVE_METADATA=/srv/releases/<bundle-sha256>.tar.gz.json
 
 1. 读取 `AGENTS.md`、`HANDOFF.md`、`docs/coverage-workflow.md` 和 coverage workflow skill。
 2. 保存当前 `git status --short`、当前 release manifest hash 和 package catalog hash；不要清理工作树。
-3. 先修正或确认 `deploy/k3s-values.yaml`：在没有 MinIO 前不得按 archive-only 配置 rollout。
+3. 先修正或确认环境 values 文件（chart 外部维护）：在没有 MinIO 前不得按 archive-only 配置 rollout。
 4. 准备非生产 MinIO bucket、TLS、最小权限 Secret 和连通性检查；不填写生产凭据。
 5. 用外部 `ASSETS_PACKAGE_STAGING_ROOT` 重建并验证 15 个 ZIP，再生成 release archive。
 6. 执行非生产上传和 pointer 校验，随后才做开发 Helm canary。

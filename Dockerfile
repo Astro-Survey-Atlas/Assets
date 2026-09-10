@@ -12,7 +12,7 @@ COPY scripts ./scripts
 COPY site ./site
 COPY test ./test
 COPY requirements ./requirements
-COPY artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.0.0-py3-none-any.whl /tmp/astro_survey_moc_core-1.0.0-py3-none-any.whl
+COPY artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.1.0-py3-none-any.whl /tmp/astro_survey_moc_core-1.1.0-py3-none-any.whl
 RUN if [ "$FRONTEND_ONLY" = "true" ]; then \
       echo "FRONTEND_ONLY=true is incompatible with the archive-only runtime image (dist/server is required)" >&2; \
       exit 1; \
@@ -39,11 +39,12 @@ RUN apt-get update \
     && mkdir -p /data /tmp \
     && chown -R atlas:atlas /data /tmp
 COPY --from=build /app/requirements/requirements.lock /tmp/moc-requirements.lock
-COPY --from=build /tmp/astro_survey_moc_core-1.0.0-py3-none-any.whl /tmp/astro_survey_moc_core-1.0.0-py3-none-any.whl
+COPY --from=build /tmp/astro_survey_moc_core-1.1.0-py3-none-any.whl /tmp/astro_survey_moc_core-1.1.0-py3-none-any.whl
 RUN python3 -m pip install --break-system-packages --no-cache-dir -r /tmp/moc-requirements.lock \
-    && python3 -m pip install --break-system-packages --no-cache-dir --no-deps /tmp/astro_survey_moc_core-1.0.0-py3-none-any.whl \
-    && rm -f /tmp/moc-requirements.lock /tmp/astro_survey_moc_core-1.0.0-py3-none-any.whl
+    && python3 -m pip install --break-system-packages --no-cache-dir --no-deps /tmp/astro_survey_moc_core-1.1.0-py3-none-any.whl \
+    && rm -f /tmp/moc-requirements.lock /tmp/astro_survey_moc_core-1.1.0-py3-none-any.whl
 COPY --from=build --chown=atlas:atlas /app/dist/server ./dist/server
+COPY --from=build --chown=atlas:atlas /app/dist/scripts ./dist/scripts
 COPY --from=build --chown=atlas:atlas /app/dist/site ./site
 COPY --from=build --chown=atlas:atlas /app/scripts ./scripts
 COPY --from=build --chown=atlas:atlas /app/package.json ./package.json

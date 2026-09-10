@@ -1,0 +1,68 @@
+# Development overlay template for a single-node k3s cluster.
+# Replace every angle-bracket placeholder before use; never commit real
+# endpoints, node names, or Secret names. Real environment values live
+# outside this repository.
+
+image:
+  repository: <image-repository>
+  tag: <image-tag>
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: <pull-secret-name>
+
+admin:
+  enabled: false
+
+warehouse:
+  elasticsearchUrl: http://warehouse.example.org:9200  # replace with the Warehouse Elasticsearch endpoint
+
+service:
+  type: NodePort
+  port: 80
+  nodePort: 32000  # replace with the node port allocated for this environment
+
+ingress:
+  enabled: false
+  className: <ingress-class>
+  host: <development-hostname>
+
+persistence:
+  enabled: true
+  storageClass: <storage-class>
+  size: 20Gi
+
+contentPersistence:
+  enabled: true
+  storageClass: <storage-class>
+  size: 20Gi
+
+evidencePersistence:
+  enabled: true
+  storageClass: <storage-class>
+  size: 20Gi
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+objectStore:
+  endpoint: <object-store-endpoint>
+  bucket: <object-store-bucket>
+  currentKey: public/current.json
+  retainReleases: 2
+  cleanup: true
+  prefix: ""
+  region: us-east-1
+  forcePathStyle: true
+  credentialsSecret:
+    name: <object-store-secret-name>
+    accessKeyIdKey: access-key-id
+    secretAccessKeyKey: secret-access-key
+
+nodeSelector:
+  kubernetes.io/hostname: <node-name>

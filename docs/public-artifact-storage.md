@@ -126,8 +126,11 @@ The first migration is deliberately one-way:
    `X-Content-SHA256`.
 
 Rollback changes `public/current.json` to a previously verified immutable
-archive and restarts the deployment. It does not delete release objects or
-the PVC's previous release directories.
+archive and re-runs the Helm installation (`helm upgrade --install
+astro-survey-atlas-assets charts/astro-survey-atlas-assets --values
+<environment-values.yaml>`) so the init container re-syncs the pointed-to
+release. It does not delete release objects or the PVC's previous release
+directories.
 
 The server reads only `/data/current`; it never reads S3 at request time and
 never uses the Git checkout as a runtime data source.
