@@ -1,0 +1,145 @@
+# Copyright 2026 Astro Survey Atlas contributors.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Tag-triggered publication: container image (GHCR + Aliyun mirror), Helm
+# chart (GHCR OCI) and Resource Package release assets (GitHub Release).
+# Push a tag like v1.0.0 to publish; the tag must match package.json and
+# Chart.yaml version/appVersion.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Resolve release coordinates
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          case "$TAG" in
+            v[0-9]*.[0-9]*.[0-9]*) VERSION="${TAG#v}" ;;
+            *) echo "tag $TAG is not a strict semver tag (vX.Y.Z)"; exit 1 ;;
+          esac
+          PKG="$(node -p "require('./package.json').version")"
+          CHART="$(awk '/^version:/ {print $2}' charts/astro-survey-atlas-assets/Chart.yaml)"
+          APP="$(awk '/^appVersion:/ {gsub(/"/,""); print $2}' charts/astro-survey-atlas-assets/Chart.yaml)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          [ "$VERSION" = "$PKG" ] || { echo "package.json is $PKG, expected $VERSION"; exit 1; }
+          [ "$VERSION" = "$CHART" ] || { echo "Chart.yaml version is $CHART, expected $VERSION"; exit 1; }
+          [ "$VERSION" = "$APP" ] || { echo "Chart.yaml appVersion is $APP, expected $VERSION"; exit 1; }
+          # GHCR requires lowercase repositories.
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "chart=oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts/astro-survey-atlas-assets" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: |
+          npm ci
+          npm run test:node
+        env:
+          # Fresh checkouts lack gitignored generated release files; tests
+          # verify every file that is present.
+          ASSETS_TOLERATE_MISSING_RELEASE_FILES: "1"
+
+      - name: Verify pinned MOC Core wheel
+        run: npm run test:core
+
+      - name: Typecheck and build
+        run: |
+          npx tsc -p tsconfig.server.json --noEmit
+          npx tsc --noEmit -p tsconfig.site.json
+          npx vite build
+
+      - name: Lint and template Helm chart
+        run: |
+          helm lint charts/astro-survey-atlas-assets \
+            -f charts/astro-survey-atlas-assets/examples/values-development.yaml
+          helm lint charts/astro-survey-atlas-assets \
+            -f charts/astro-survey-atlas-assets/examples/values-production.yaml
+          helm template release-audit charts/astro-survey-atlas-assets \
+            --namespace astro-survey-atlas-assets \
+            -f charts/astro-survey-atlas-assets/examples/values-development.yaml > /dev/null
+
+      - name: Build and push image (GHCR)
+        id: image
+        env:
+          GHCR_IMAGE: ${{ steps.version.outputs.image }}:${{ steps.version.outputs.tag }}
+          GHCR_SHA_IMAGE: ${{ steps.version.outputs.image }}:sha-${{ github.sha }}
+        run: |
+          docker login ghcr.io -u "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}"
+          docker buildx build \
+            --platform linux/amd64 \
+            --tag "${GHCR_IMAGE}" \
+            --tag "${GHCR_SHA_IMAGE}" \
+            --push \
+            .
+          DIGEST="$(docker buildx imagetools inspect "${GHCR_IMAGE}" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Mirror image to Aliyun registry
+        env:
+          GHCR_IMAGE: ${{ steps.version.outputs.image }}:${{ steps.version.outputs.tag }}
+          ALIYUN_REGISTRY: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com
+          ALIYUN_IMAGE: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/astro-survery-atlas/astro-survey-atlas-assets
+        run: |
+          docker login "${ALIYUN_REGISTRY}" -u "${{ secrets.ALIYUN_REGISTRY_USERNAME }}" --password "${{ secrets.ALIYUN_REGISTRY_PASSWORD }}"
+          docker buildx imagetools create --tag "${ALIYUN_IMAGE}:${{ steps.version.outputs.tag }}" "${GHCR_IMAGE}"
+          docker buildx imagetools create --tag "${ALIYUN_IMAGE}:sha-${{ github.sha }}" "${GHCR_IMAGE}"
+
+      - name: Package and push Helm chart (GHCR OCI)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          mkdir -p dist/chart
+          helm package charts/astro-survey-atlas-assets --destination dist/chart
+          helm push dist/chart/*.tgz ${{ steps.version.outputs.chart }}
+
+      - name: Stage release assets and notes
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_IMAGE: ${{ steps.version.outputs.image }}:${{ steps.version.outputs.tag }}
+          RELEASE_IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          RELEASE_IMAGE_MIRROR: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/astro-survery-atlas/astro-survey-atlas-assets:${{ steps.version.outputs.tag }}
+          RELEASE_CHART: ${{ steps.version.outputs.chart }}
+        run: |
+          node --import tsx scripts/stage-release-assets.ts
+          cp dist/chart/*.tgz dist/release-assets/
+
+      - name: Checksums
+        run: |
+          cd dist/release-assets
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "Astro Survey Atlas Assets ${{ steps.version.outputs.version }}" \
+            --notes-file dist/RELEASE-NOTES.md \
+            dist/release-assets/*

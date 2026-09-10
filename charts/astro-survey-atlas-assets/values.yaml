@@ -1,7 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets
+  # Public mirrors: ghcr.io/astro-survey-atlas/assets (identical digest).
+  repository: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/astro-survery-atlas/astro-survey-atlas-assets
   tag: "1.0.0"
   pullPolicy: IfNotPresent
 
