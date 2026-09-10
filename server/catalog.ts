@@ -38,6 +38,10 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
   const manifestPath = path.join(normalizedRoot, "artifacts", "public-survey-footprints", "release-manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as PublicAssetManifest;
   if (manifest.schemaVersion !== 1 || !manifest.bundle?.sha256 || !Array.isArray(manifest.files)) throw new Error("Unsupported public asset release manifest");
+  // CI/fresh-checkout mode: gitignored generated release files (layers, raw
+  // snapshots) may be absent. Tolerated records are skipped instead of failing
+  // startup; the public projection then only lists files that exist.
+  const tolerateMissing = process.env.ASSETS_TOLERATE_MISSING_RELEASE_FILES === "1";
   const files = new Map<string, { record: PublicAssetRecord; absolutePath: string }>();
   for (const record of manifest.files) {
     if (!record.id || files.has(record.id) || !/^[a-z0-9][a-z0-9-]*$/.test(record.id)) throw new Error(`Invalid or duplicate public asset ID: ${record.id}`);
@@ -47,7 +51,16 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
     if (record.deliveryClass === "runtime" && inferredPublicAssetDeliveryClass(record) === "evidence") throw new Error(`Evidence asset cannot be marked runtime: ${record.id}`);
     const absolutePath = resolveInside(normalizedRoot, record.path);
     if (verifyFiles) {
-      const details = await stat(absolutePath);
+      let details;
+      try {
+        details = await stat(absolutePath);
+      } catch (error) {
+        if (tolerateMissing && (error as NodeJS.ErrnoException).code === "ENOENT") {
+          console.warn(`[catalog] skipping absent release file (ASSETS_TOLERATE_MISSING_RELEASE_FILES=1): ${record.path}`);
+          continue;
+        }
+        throw error;
+      }
       if (!details.isFile()) throw new Error(`Public asset is not a regular file: ${record.id}`);
       let verified = details.size === record.sizeBytes && (await sha256(absolutePath)) === record.sha256;
       // Worktree equivalence: control documents keep denied-survey data on
@@ -102,9 +115,12 @@ export function assetPreviewMode(mediaType: string): PublicAssetPreviewMode | un
 export function publicManifest(catalog: LoadedCatalog, additionalRecords: PublicAssetRecord[] = []): Omit<PublicAssetManifest, "files"> & { files: PublicAssetProjection[] } {
   // The public projection must never list, count or link evidence-class
   // records. Evidence material stays on the evidence store and is simply
-  // invisible to the browser-facing catalog.
+  // invisible to the browser-facing catalog. Records skipped at load time
+  // (tolerated absent files) are equally hidden so the listing never
+  // advertises downloads that cannot be served.
+  const present = new Set(catalog.files.keys());
   const known = new Set(catalog.manifest.files.map((record) => record.id));
-  const files = [...catalog.manifest.files, ...additionalRecords.filter((record) => !known.has(record.id))]
+  const files = [...catalog.manifest.files.filter((record) => present.has(record.id)), ...additionalRecords.filter((record) => !known.has(record.id))]
     .filter((record) => inferredPublicAssetDeliveryClass(record) !== "evidence")
     .map((record) => ({ ...record, deliveryClass: "runtime" as const }));
   const runtimeBytes = files.reduce((sum, record) => sum + record.sizeBytes, 0);

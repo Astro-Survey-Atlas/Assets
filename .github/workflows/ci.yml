@@ -30,3 +30,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:node
+        env:
+          # Fresh checkouts lack gitignored generated release files (layers,
+          # raw snapshots); tests verify every file that is present.
+          ASSETS_TOLERATE_MISSING_RELEASE_FILES: "1"

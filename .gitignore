@@ -9,9 +9,10 @@ __pycache__/
 .env.*
 !.env.example
 artifacts/public-survey-footprints/csst/input-manifest.json
-# Resource Package ZIPs live in external staging (ASSETS_PACKAGE_STAGING_ROOT).
-# Keep local copies only as a cache; do not commit. Catalog/manifest retain size+sha256.
-artifacts/public-survey-footprints/packages/*.zip
+# Public Resource Package ZIPs are release artifacts referenced by the
+# manifest/history and must be present in fresh checkouts (CI, integrators).
+# The denied CSST package stays private.
+artifacts/public-survey-footprints/packages/public-csst-footprints-*.zip
 artifacts/moc-source-probe.json
 .tmp-screens
 .tmp-ui
