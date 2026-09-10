@@ -276,8 +276,20 @@ export class S3ArtifactStore implements ArtifactStore {
     const existing = await this.head(logical);
     if (!existing) return null;
     const selected = validateRange(range, existing.sizeBytes);
+    if (!selected) {
+      // Whole-object reads of large objects are downloaded in retried ranged
+      // chunks: single-shot GETs of very large bodies are dropped by some
+      // object-store gateways (observed 503 aborts around 200 MB).
+      try {
+        const body = await this.#downloadBytes(logical, existing.sizeBytes);
+        return { ...existing, body };
+      } catch (error) {
+        if (error instanceof ArtifactStoreError) throw error;
+        throw new ArtifactStoreError(`S3 GET failed for ${logical}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     try {
-      const result = await this.#client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.physicalKey(logical), ...(selected ? { Range: `bytes=${selected.start}-${selected.end}` } : {}) }));
+      const result = await this.#client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.physicalKey(logical), Range: `bytes=${selected.start}-${selected.end}` }));
       if (!result.Body || typeof result.Body.transformToByteArray !== "function") throw new ArtifactStoreError(`S3 object has no readable body: ${logical}`);
       const body = Buffer.from(await result.Body.transformToByteArray());
       return { ...existing, body };
@@ -285,6 +297,38 @@ export class S3ArtifactStore implements ArtifactStore {
       if (error instanceof ArtifactStoreError) throw error;
       throw new ArtifactStoreError(`S3 GET failed for ${logical}: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  async #downloadBytes(logical: string, sizeBytes: number): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    const chunkSize = 8 * 1024 * 1024;
+    for (let start = 0; start < sizeBytes; start += chunkSize) {
+      const end = Math.min(start + chunkSize, sizeBytes) - 1;
+      let lastError: unknown;
+      let bytes: Buffer | undefined;
+      for (let attempt = 1; attempt <= 4; attempt += 1) {
+        try {
+          const result = await this.#client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.physicalKey(logical), Range: `bytes=${start}-${end}` }));
+          if (!result.Body) throw new Error("object has no readable body");
+          const parts: Buffer[] = [];
+          for await (const chunk of result.Body as AsyncIterable<Uint8Array>) parts.push(Buffer.from(chunk));
+          const candidate = Buffer.concat(parts);
+          if (candidate.length !== end - start + 1) throw new Error(`range read returned ${candidate.length} bytes, expected ${end - start + 1}`);
+          bytes = candidate;
+          break;
+        } catch (error) {
+          lastError = error;
+          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+        }
+      }
+      if (!bytes) {
+        throw new ArtifactStoreError(`S3 ranged download failed for ${logical} (range ${start}-${end}): ${lastError instanceof Error ? lastError.message : String(lastError)}`, 503);
+      }
+      chunks.push(bytes);
+    }
+    const body = Buffer.concat(chunks);
+    if (body.length !== sizeBytes) throw new ArtifactStoreError(`S3 download returned ${body.length} bytes for ${logical}, expected ${sizeBytes}`, 409);
+    return body;
   }
 
   async putImmutable(key: string, body: Uint8Array | string, options: ArtifactPutOptions = {}): Promise<ArtifactObject> {
