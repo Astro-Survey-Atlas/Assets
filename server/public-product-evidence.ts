@@ -125,7 +125,7 @@ function codeFor(mode: string, kind: string): PublicProductCodeEvidence | undefi
   const snippets: Record<string, { snippet: string; implementationRef: string }> = {
     "*:input": {
       snippet: "input_digest = hashlib.sha256(input_path.read_bytes()).hexdigest() if input_path else None\nif rebuild and input_digest != spec.snapshot.get(\"sha256\"):\n    raise ValueError(\"Locked snapshot SHA-256 does not match the local input\")",
-      implementationRef: "astro_survey_moc_core.core:build_layer (MOC-Core-SDK@2ebc395)",
+      implementationRef: "astro_survey_moc_core.core:build_layer (MOC-Core-SDK@a539dfe)",
     },
     "*:filter": {
       snippet: "for path in sorted(source_paths):\n    if allowed_suffixes and path.suffix.lower() not in allowed_suffixes:\n        continue\n    selected.append(path)",

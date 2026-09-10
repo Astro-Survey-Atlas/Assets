@@ -7,6 +7,7 @@ import { pipeline } from "node:stream/promises";
 import yazl from "yazl";
 
 import type { MocPublication } from "./moc-build.js";
+import { deriveAccessModes, sourceAuthorityForUrl, sourceTierAuthority } from "./package-access-policy.js";
 import { isDeniedSurvey } from "./publication-policy.js";
 import type { ProductContent, ProductRecord } from "./products.js";
 
@@ -429,7 +430,17 @@ export class DynamicResourcePackageStore {
     const first = layers[0]!;
     const releases = [...new Set(layers.map((layer) => layer.publication.releaseId))].sort();
     const releaseLabels = Object.fromEntries(layers.map((layer) => [layer.publication.releaseId, text(layer.product.publicRelease?.label, layer.publication.releaseId)]));
-    const sources = layers.map((layer) => ({ releaseId: layer.publication.releaseId, label: text(layer.product.publicRelease?.label, layer.publication.product), url: layer.publication.sourceUrl, authority: "CDS MOC" })).sort((left, right) => left.releaseId.localeCompare(right.releaseId));
+    const sources = [...layers.reduce((unique, layer) => {
+      if (!unique.has(layer.publication.releaseId)) {
+        unique.set(layer.publication.releaseId, {
+          releaseId: layer.publication.releaseId,
+          label: text(layer.product.publicRelease?.label, layer.publication.product),
+          url: layer.publication.sourceUrl,
+          authority: sourceAuthorityForUrl(layer.publication.sourceUrl),
+        });
+      }
+      return unique;
+    }, new Map<string, { releaseId: string; label: string; url: string; authority: string }>()).values()].sort((left, right) => left.releaseId.localeCompare(right.releaseId));
     const layerRecords = layers.map(({ publication, product, moc }) => ({
       layerId: publication.layerId,
       surveyId,
@@ -477,8 +488,8 @@ export class DynamicResourcePackageStore {
       wavelengths: ["multi-band"],
       productTypes: ["native-MOC"],
       facilities: [text(first.product.publicSurvey?.mission, "Assets MOC publication")],
-      coverageAuthorities: ["CDS MOC"],
-      accessModes: ["CDS MOC", "Resource Package v3"],
+      coverageAuthorities: [...new Set(layers.map((layer) => sourceTierAuthority(layer.product.sourceTier ?? "third_party_moc")))].sort(),
+      accessModes: deriveAccessModes(sources),
       releases,
       releaseLabels,
       sources,
