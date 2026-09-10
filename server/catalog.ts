@@ -94,7 +94,7 @@ export async function assertExactReleaseTree(root: string, catalog: LoadedCatalo
 
 export function assetPreviewMode(mediaType: string): PublicAssetPreviewMode | undefined {
   const type = mediaType.split(";", 1)[0]!.trim().toLowerCase();
-  if (type === "application/json" || type === "application/fits" || type === "application/zip" || type.startsWith("text/")) return "text";
+  if (type === "application/json" || type === "application/xml" || type === "application/fits" || type === "application/zip" || type.startsWith("text/")) return "text";
   if (["image/png", "image/svg+xml", "image/webp"].includes(type)) return "image";
   return undefined;
 }

@@ -14,6 +14,8 @@ import {
   isSanitizableControlDocument,
   sanitizeReleaseControlDocument,
 } from "./publication-policy.js";
+import { loadSurveyLookups, projectResourcePackage, type ProjectedPackageSource } from "./resource-package-projection.js";
+import { buildResourcePackageCollection } from "./resource-package-collection.js";
 import type { ProductRecord } from "./products.js";
 import { inferredPublicAssetDeliveryClass, type PublicAssetRecord } from "./types.js";
 
@@ -21,10 +23,45 @@ const MANIFEST_RELATIVE_PATH = "artifacts/public-survey-footprints/release-manif
 const PACKAGE_CATALOG_RELATIVE_PATH = "artifacts/public-survey-footprints/packages/catalog.json";
 const RELEASE_HISTORY_RELATIVE_PATH = "artifacts/public-survey-footprints/release-history.json";
 
+export interface ReleaseHistorySurvey {
+  id: string;
+  displayName: string;
+  mission?: string;
+}
+
+export interface ReleaseHistoryRelease {
+  id: string;
+  label: string;
+  kind?: string;
+  releasedYear?: number;
+  modalities: string[];
+  layerCount: number;
+}
+
+export interface ReleaseHistorySource {
+  releaseId: string;
+  label: string;
+  url: string;
+  authority: string;
+}
+
 export interface ReleaseHistoryPackage {
   id: string;
   version: string;
   name: string;
+  sizeBytes: number;
+  sha256: string;
+  downloadUrl: string;
+  survey?: ReleaseHistorySurvey;
+  facilities?: string[];
+  modalities?: string[];
+  accessModes?: string[];
+  sources?: ReleaseHistorySource[];
+  releases?: ReleaseHistoryRelease[];
+}
+
+export interface ReleaseHistoryCollection {
+  fileName: string;
   sizeBytes: number;
   sha256: string;
   downloadUrl: string;
@@ -36,11 +73,14 @@ export interface ReleaseHistoryEntry {
   bundleId: string;
   releasedAt: string;
   notes?: string;
+  catalogSha256?: string;
+  collection?: ReleaseHistoryCollection;
   packages: ReleaseHistoryPackage[];
 }
 
 export interface ReleaseHistoryDocument {
-  schemaVersion: 1;
+  schemaVersion: 2;
+  latestReleaseId: string;
   releases: ReleaseHistoryEntry[];
 }
 
@@ -156,6 +196,10 @@ async function latestPackages(packages: PackageProvider): Promise<Map<string, La
 function packageMinor(version: string): number {
   const match = /^3\.(\d+)\.\d+$/.exec(version);
   return match ? Number(match[1]) : -1;
+}
+
+function slugifyReleaseId(releaseId: string): string {
+  return releaseId.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 96);
 }
 
 function digest(value: unknown): string {
@@ -488,7 +532,89 @@ export class PublicReleasePublisher {
 
     const generatedAt = new Date().toISOString();
     const bundleId = `public-survey-footprints-${generatedAt.slice(0, 10)}`;
-    const history = await this.#appendedReleaseHistory(bundleId, generatedAt, runId, files, mergedCatalog.packages);
+    const baselineHistory = await this.#readBaselineHistory();
+    const sequence = baselineHistory.releases.reduce((max, entry) => Math.max(max, entry.sequence), 0) + 1;
+    const releaseId = `${bundleId}-${sequence}`;
+
+    const surveyLookups = await loadSurveyLookups(path.resolve(this.#options.baselineRoot, "src", "surveys", "survey-catalog.json"));
+    const catalogByDownloadName = new Map<string, Record<string, unknown> & { id: string; surveyId?: string; version: string; name: string }>();
+    for (const entry of mergedCatalog.packages) {
+      catalogByDownloadName.set(`${entry.id}-${entry.version}.zip`, entry);
+    }
+    const collectionInputs: Array<{ downloadName: string; zipBytes: Buffer; projection: Awaited<ReturnType<typeof projectResourcePackage>> }> = [];
+    const historyPackages: ReleaseHistoryPackage[] = [];
+    for (const record of files.filter((candidate) => candidate.kind === "package").sort((left, right) => left.path.localeCompare(right.path))) {
+      const catalogEntry = catalogByDownloadName.get(record.downloadName);
+      if (!catalogEntry) continue;
+      const surveyId = catalogEntry.surveyId;
+      if (!surveyId || isDeniedSurvey(surveyId)) continue;
+      if (catalogEntry.deprecated === true) continue;
+      const zipBytes = await readFile(this.#inside(stagingRoot, record.path));
+      const projection = await projectResourcePackage({
+        id: catalogEntry.id,
+        version: catalogEntry.version,
+        name: catalogEntry.name,
+        surveyId,
+        sizeBytes: record.sizeBytes,
+        sha256: record.sha256,
+        facilities: typeof catalogEntry.facilities === "object" && catalogEntry.facilities !== null && Array.isArray(catalogEntry.facilities)
+          ? (catalogEntry.facilities as string[])
+          : undefined,
+        accessModes: Array.isArray(catalogEntry.accessModes) ? (catalogEntry.accessModes as string[]) : undefined,
+        sources: Array.isArray(catalogEntry.sources) ? (catalogEntry.sources as ProjectedPackageSource[]) : undefined,
+        zipBytes,
+      }, surveyLookups);
+      collectionInputs.push({ downloadName: record.downloadName, zipBytes, projection });
+      historyPackages.push({
+        ...projection,
+        downloadUrl: `/api/v1/resource-packages/${projection.id}/versions/${projection.version}/download`,
+      });
+    }
+    const collection = await buildResourcePackageCollection({
+      releaseId,
+      sequence,
+      bundleId,
+      releasedAt: generatedAt,
+      notes: `Publication run ${runId}`,
+      catalogBytes,
+      packages: collectionInputs,
+    });
+    const collectionPath = `artifacts/public-survey-footprints/collections/${collection.fileName}`;
+    const collectionDestination = this.#inside(stagingRoot, collectionPath);
+    await mkdir(path.dirname(collectionDestination), { recursive: true });
+    await writeFile(collectionDestination, collection.bytes);
+    files.push({
+      id: `collection-${slugifyReleaseId(releaseId)}`,
+      kind: "package-collection",
+      label: "Resource package collection",
+      description: `All ${collectionInputs.length} public resource packages of release ${releaseId} in one deterministic archive.`,
+      path: collectionPath,
+      downloadName: collection.fileName,
+      mediaType: "application/zip",
+      sizeBytes: collection.sizeBytes,
+      sha256: collection.sha256,
+      deliveryClass: "runtime",
+    });
+
+    const history: ReleaseHistoryDocument = {
+      schemaVersion: 2,
+      latestReleaseId: releaseId,
+      releases: [...baselineHistory.releases, {
+        releaseId,
+        sequence,
+        bundleId,
+        releasedAt: generatedAt,
+        notes: `Publication run ${runId}`,
+        catalogSha256: createHash("sha256").update(catalogBytes).digest("hex"),
+        collection: {
+          fileName: collection.fileName,
+          sizeBytes: collection.sizeBytes,
+          sha256: collection.sha256,
+          downloadUrl: `/api/v1/releases/${releaseId}/download`,
+        },
+        packages: historyPackages,
+      }],
+    };
     const historyBytes = Buffer.from(`${JSON.stringify(history, null, 2)}\n`, "utf8");
     const historyRecord = baseline.files.find((record) => record.path === RELEASE_HISTORY_RELATIVE_PATH);
     files.push({
@@ -557,45 +683,32 @@ export class PublicReleasePublisher {
     return result.sort((left, right) => left.entry.id.localeCompare(right.entry.id) || packageMinor(left.entry.version) - packageMinor(right.entry.version));
   }
 
-  async #appendedReleaseHistory(
-    bundleId: string,
-    releasedAt: string,
-    runId: string,
-    files: PublicAssetRecord[],
-    catalogPackages: Array<{ id: string; version: string; name: string }>,
-  ): Promise<ReleaseHistoryDocument> {
-    let history: ReleaseHistoryDocument = { schemaVersion: 1, releases: [] };
+  async #readBaselineHistory(): Promise<ReleaseHistoryDocument> {
+    let parsed: ReleaseHistoryDocument | undefined;
     try {
       const source = await readFile(path.resolve(this.#options.baselineRoot, RELEASE_HISTORY_RELATIVE_PATH), "utf8");
-      const parsed = JSON.parse(source) as ReleaseHistoryDocument;
-      if (parsed.schemaVersion === 1 && Array.isArray(parsed.releases)) history = parsed;
+      parsed = JSON.parse(source) as ReleaseHistoryDocument;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return { schemaVersion: 2, latestReleaseId: "", releases: [] };
+      }
+      throw error;
     }
-    const sequence = history.releases.reduce((max, entry) => Math.max(max, entry.sequence), 0) + 1;
-    const packages: ReleaseHistoryPackage[] = [];
-    for (const catalogEntry of catalogPackages) {
-      if (isDeniedSurvey((catalogEntry as { surveyId?: string }).surveyId)) continue;
-      const record = files.find((candidate) => candidate.kind === "package" && candidate.path.endsWith(`/${catalogEntry.id}-${catalogEntry.version}.zip`));
-      if (!record) continue;
-      packages.push({
-        id: catalogEntry.id,
-        version: catalogEntry.version,
-        name: catalogEntry.name,
-        sizeBytes: record.sizeBytes,
-        sha256: record.sha256,
-        downloadUrl: `/api/v1/resource-packages/${catalogEntry.id}/versions/${catalogEntry.version}/download`,
-      });
+    if (!parsed || !Array.isArray(parsed.releases)) {
+      throw new PublicationConflictError("Baseline release history is malformed", 500);
     }
-    history.releases.push({
-      releaseId: `${bundleId}-${sequence}`,
-      sequence,
-      bundleId,
-      releasedAt,
-      notes: `Publication run ${runId}`,
-      packages,
-    });
-    return history;
+    if (parsed.schemaVersion === 2) {
+      return {
+        schemaVersion: 2,
+        latestReleaseId: parsed.latestReleaseId ?? parsed.releases.at(-1)?.releaseId ?? "",
+        releases: parsed.releases,
+      };
+    }
+    return {
+      schemaVersion: 2,
+      latestReleaseId: parsed.releases.at(-1)?.releaseId ?? "",
+      releases: parsed.releases,
+    };
   }
 
   #layerRecordIds(publication: MocPublication): string[] {

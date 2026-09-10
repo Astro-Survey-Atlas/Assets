@@ -46,10 +46,52 @@
 
       <section class="resource-band release-api-band">
         <p class="public-kicker" data-i18n="page.releases.apiSyncTitle">API sync</p>
-        <p class="release-api-hint" data-i18n="page.releases.apiSyncHint">List releases as JSON, then download a pinned package version and verify its SHA-256:</p>
-        <pre class="release-api-snippet"><code>curl /api/v1/releases
-curl -O /api/v1/resource-packages/&lt;package-id&gt;/versions/&lt;version&gt;/download
-sha256sum &lt;package-id&gt;-&lt;version&gt;.zip</code></pre>
+        <p class="release-api-hint" data-i18n="page.releases.apiSyncHint">Every release exposes a collection ZIP plus version-pinned packages. Download and verify bytes end to end:</p>
+        <div class="release-code-panel" id="release-example-panel">
+          <div class="release-code-tabs" role="tablist" data-i18n-aria-label="page.releases.examplesTitle">
+            <div class="release-code-tab-buttons">
+              <button class="release-code-tab is-active" type="button" role="tab" aria-selected="true" id="release-tab-curl" aria-controls="release-pane-curl" data-code-tab="curl">cURL</button>
+              <button class="release-code-tab" type="button" role="tab" aria-selected="false" id="release-tab-python" aria-controls="release-pane-python" data-code-tab="python">Python</button>
+              <button class="release-code-tab" type="button" role="tab" aria-selected="false" id="release-tab-java" aria-controls="release-pane-java" data-code-tab="java">Java</button>
+            </div>
+            <button class="release-code-copy" type="button" id="release-code-copy"><i data-lucide="copy"></i><span data-i18n="page.releases.copyCode">Copy</span></button>
+          </div>
+          <div class="release-code-pane is-active" role="tabpanel" id="release-pane-curl" aria-labelledby="release-tab-curl">
+            <pre class="release-code-block"><code class="release-code" data-lang="bash">BASE="https://astro.assets.dev.72602.space"   # or any Assets deployment
+
+# 1. List releases; pick releaseId and its collection entry
+curl -fsS "$BASE/api/v1/releases" | python3 -m json.tool | less
+
+# 2. Download the whole resource-package collection and verify it
+REL="public-survey-footprints-2026-09-09-2"
+SHA=$(curl -fsS "$BASE/api/v1/releases/$REL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["collection"]["sha256"])')
+curl -fL "$BASE/api/v1/releases/$REL/download" -o "$REL-resource-packages.zip"
+echo "$SHA  $REL-resource-packages.zip" | sha256sum -c -
+
+# 3. Or pin one package version and verify it
+PKG="public-desi-footprints"; VER="3.0.0"
+SHA=$(curl -fsS "$BASE/api/v1/releases/$REL" | python3 -c 'import json,sys;print([p["sha256"] for p in json.load(sys.stdin)["packages"] if p["id"]=="public-desi-footprints"][0])')
+curl -fL "$BASE/api/v1/resource-packages/$PKG/versions/$VER/download" -o "$PKG-$VER.zip"
+echo "$SHA  $PKG-$VER.zip" | sha256sum -c -</code></pre>
+          </div>
+          <div class="release-code-pane" role="tabpanel" id="release-pane-python" aria-labelledby="release-tab-python" hidden>
+            <pre class="release-code-block"><code class="release-code" data-lang="python" data-src="/api/v1/assets/documentation-sync-example-python/preview">import urllib.request, hashlib, json, os, tempfile, argparse
+
+# Full runnable client: https://&lt;host&gt;/api/v1/assets/documentation-sync-example-python/download</code></pre>
+          </div>
+          <div class="release-code-pane" role="tabpanel" id="release-pane-java" aria-labelledby="release-tab-java" hidden>
+            <pre class="release-code-block"><code class="release-code" data-lang="java" data-src="/api/v1/assets/documentation-sync-example-java-main/preview">// Full runnable client: https://&lt;host&gt;/api/v1/assets/documentation-sync-example-java-main/download
+// Build with Maven: see documentation-sync-example-java-pom (pom.xml)</code></pre>
+          </div>
+          <p class="release-code-footnote">
+            <span data-i18n="page.releases.examplesHint">Ready-to-run clients with retry, atomic rename and hash verification:</span>
+            <a class="release-example-link" href="/api/v1/assets/documentation-sync-example-python/download">asa_package_sync.py</a>
+            <span aria-hidden="true">·</span>
+            <a class="release-example-link" href="/api/v1/assets/documentation-sync-example-java-main/download">AsaPackageSync.java</a>
+            <span aria-hidden="true">·</span>
+            <a class="release-example-link" href="/api/v1/assets/documentation-sync-example-java-pom/download">pom.xml</a>
+          </p>
+        </div>
       </section>
     </main>
 

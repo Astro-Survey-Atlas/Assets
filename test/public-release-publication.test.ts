@@ -9,6 +9,7 @@ const execFileAsync = promisify(execFile);
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import yazl from "yazl";
 
 import { FilesystemArtifactStore } from "../server/artifact-store.js";
 import { PublicReleasePublisher, type PublicReleasePublisherOptions } from "../server/public-release-publication.js";
@@ -27,6 +28,25 @@ interface TestHarness {
   packageAssets: DynamicResourcePackageAsset[];
 }
 
+function sha256Of(content: string | Buffer): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function packageZipBuffer(manifest: Record<string, unknown>): Promise<Buffer> {
+  const zip = new yazl.ZipFile();
+  zip.addBuffer(Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"), "resource-package.json", {
+    mtime: new Date("1980-01-01T00:00:00.000Z"),
+    mode: 0o100644,
+  });
+  const chunks: Buffer[] = [];
+  return new Promise((resolve, reject) => {
+    zip.outputStream.on("data", (chunk: Buffer) => chunks.push(chunk));
+    zip.outputStream.on("error", reject);
+    zip.outputStream.on("end", () => resolve(Buffer.concat(chunks)));
+    zip.end();
+  });
+}
+
 async function harness(): Promise<TestHarness> {
   const base = await mkdtemp(path.join(tmpdir(), "release-publisher-"));
   const baselineRoot = path.join(base, "baseline");
@@ -34,12 +54,73 @@ async function harness(): Promise<TestHarness> {
   await mkdir(path.join(baselineRoot, "artifacts/public-survey-footprints/packages"), { recursive: true });
   await mkdir(contentRoot, { recursive: true });
 
-  const layerFile: MocPublicationFile = { path: "moc/m42.fits", sha256: createHash("sha256").update("moc-data").digest("hex"), sizeBytes: 8, mediaType: "application/fits" };
+  const layerFile: MocPublicationFile = { path: "moc/m42.fits", sha256: sha256Of("moc-data"), sizeBytes: 8, mediaType: "application/fits" };
   const mocPath = path.join(contentRoot, "moc/m42.fits");
   await mkdir(path.dirname(mocPath), { recursive: true });
   await writeFile(mocPath, "moc-data");
-  const zipContent = "PK\x03\x04";
-  const zipSha256 = createHash("sha256").update(zipContent).digest("hex");
+  const legacyZipBytes = await packageZipBuffer({
+    schemaVersion: 3,
+    id: "public-legacy-footprints",
+    version: "3.0.0",
+    surveyId: "m42",
+    layers: [
+      {
+        layerId: "legacy-layer",
+        surveyId: "m42",
+        releaseId: "m42-dr0",
+        modality: "image",
+        coverageRole: "image_extent",
+        dataOrigin: "observed",
+        sourceTier: "official",
+        path: "layers/legacy-layer/moc.fits",
+        sizeBytes: 4,
+        sha256: sha256Of("legs"),
+      },
+    ],
+    files: [],
+  });
+  const dynamicZipBytes = await packageZipBuffer({
+    schemaVersion: 3,
+    id: "public-m42-footprints",
+    version: "3.1.0",
+    surveyId: "m42",
+    layers: [
+      {
+        layerId: "m42-halpha",
+        surveyId: "m42",
+        releaseId: "m42-dr1",
+        modality: "image",
+        coverageRole: "image_extent",
+        dataOrigin: "observed",
+        sourceTier: "official",
+        path: "layers/m42-halpha/moc.fits",
+        sizeBytes: 8,
+        sha256: sha256Of("moc-data"),
+      },
+    ],
+    files: [],
+  });
+  const zipSha256 = sha256Of(dynamicZipBytes);
+  const surveyCatalog = {
+    schemaVersion: 1,
+    generatedAt: "2026-01-01T00:00:00.000Z",
+    surveys: [
+      {
+        id: "m42",
+        name: "Messier 42",
+        mission: "Orion Nebula Survey",
+        color: "#7c5cff",
+        description: "Test survey",
+        modalities: ["image"],
+        releases: [
+          { id: "m42-dr0", label: "DR0", kind: "public_release", releasedYear: 2025, modalities: ["image"], products: [] },
+          { id: "m42-dr1", label: "DR1", kind: "public_release", releasedYear: 2026, modalities: ["image"], products: [] },
+        ],
+      },
+    ],
+  };
+  await mkdir(path.join(baselineRoot, "src/surveys"), { recursive: true });
+  await writeFile(path.join(baselineRoot, "src/surveys/survey-catalog.json"), JSON.stringify(surveyCatalog, null, 2));
 
   const publications: MocPublication[] = [
     {
@@ -74,7 +155,7 @@ async function harness(): Promise<TestHarness> {
       sources: [{ releaseId: "m42-dr1", label: "DR1", url: "https://example.org/m42", authority: "M42" }],
       version: "3.1.0",
       archiveUrl: "/api/v1/assets/package-public-m42-footprints-3-1-0/download",
-      sizeBytes: 4,
+      sizeBytes: dynamicZipBytes.byteLength,
       sha256: zipSha256,
       updatedAt: "2026-01-01T00:00:00.000Z",
       hidden: false,
@@ -89,7 +170,7 @@ async function harness(): Promise<TestHarness> {
       id: "package-public-m42-footprints-3-1-0",
       path: "resource-packages/public-m42-footprints/3.1.0/public-m42-footprints-3.1.0.zip",
       downloadName: "public-m42-footprints-3.1.0.zip",
-      sizeBytes: 4,
+      sizeBytes: dynamicZipBytes.byteLength,
       sha256: zipSha256,
       surveyId: "m42",
       releaseId: "m42-dr1",
@@ -99,7 +180,7 @@ async function harness(): Promise<TestHarness> {
   ];
   const zipPath = path.join(contentRoot, packageAssets[0]!.path);
   await mkdir(path.dirname(zipPath), { recursive: true });
-  await writeFile(zipPath, zipContent);
+  await writeFile(zipPath, dynamicZipBytes);
 
   const baselineLayerRecord: PublicAssetRecord = {
     id: "layer-legacy-moc",
@@ -110,12 +191,11 @@ async function harness(): Promise<TestHarness> {
     downloadName: "moc.fits",
     mediaType: "application/fits",
     sizeBytes: 4,
-    sha256: createHash("sha256").update("legs").digest("hex"),
+    sha256: sha256Of("legs"),
     deliveryClass: "runtime",
   };
   await mkdir(path.join(baselineRoot, path.dirname(baselineLayerRecord.path)), { recursive: true });
   await writeFile(path.join(baselineRoot, baselineLayerRecord.path), "legs");
-  const legacyZipBytes = "legacy-archive-bytes";
 
   const baselineManifest: PublicAssetManifest = {
     schemaVersion: 1,
@@ -141,7 +221,6 @@ async function harness(): Promise<TestHarness> {
     version: "3.0.0",
     packages: [{ id: "public-legacy-footprints", version: "3.0.0", name: "Legacy footprints", surveyId: "m42" }],
   });
-  const zipBytes = zipContent;
   baselineManifest.files = [
     baselineLayerRecord,
     {
@@ -153,7 +232,7 @@ async function harness(): Promise<TestHarness> {
       downloadName: "catalog.json",
       mediaType: "application/json",
       sizeBytes: Buffer.byteLength(catalogBytes),
-      sha256: createHash("sha256").update(catalogBytes).digest("hex"),
+      sha256: sha256Of(catalogBytes),
       deliveryClass: "runtime",
     },
     {
@@ -164,8 +243,8 @@ async function harness(): Promise<TestHarness> {
       path: "artifacts/public-survey-footprints/packages/public-legacy-footprints-3.0.0.zip",
       downloadName: "public-legacy-footprints-3.0.0.zip",
       mediaType: "application/zip",
-      sizeBytes: Buffer.byteLength(legacyZipBytes),
-      sha256: createHash("sha256").update(legacyZipBytes).digest("hex"),
+      sizeBytes: legacyZipBytes.byteLength,
+      sha256: sha256Of(legacyZipBytes),
       surveyId: "m42",
       version: "3.0.0",
       deliveryClass: "runtime",
@@ -257,7 +336,7 @@ test("publisher executes a queued run into a verified archive and pointer", asyn
     const finished = await publisher.execute(run.runId);
     assert.equal(finished.status, "published", finished.error);
     assert.ok(finished.archiveKey?.startsWith("public/releases/"));
-    assert.equal(finished.files, 6);
+    assert.equal(finished.files, 7);
     assert.equal(finished.packages, 1);
 
     const pointer = JSON.parse((await readFile(path.join(objectRoot, "public/current.json"), "utf8")));
@@ -280,11 +359,29 @@ test("publisher executes a queued run into a verified archive and pointer", asyn
     const dynamicEntry = mergedCatalog.packages.find((entry: { id: string }) => entry.id === "public-m42-footprints");
     assert.equal(dynamicEntry.archiveUrl, "/api/v1/resource-packages/public-m42-footprints/versions/3.1.0/download");
     const history = JSON.parse(await readFile(path.join(extractRoot, "artifacts/public-survey-footprints/release-history.json"), "utf8"));
-    assert.equal(history.schemaVersion, 1);
+    assert.equal(history.schemaVersion, 2);
+    assert.ok(history.latestReleaseId);
     assert.equal(history.releases.length, 1);
     assert.equal(history.releases[0].sequence, 1);
     assert.equal(history.releases[0].packages.length, 2);
     assert.ok(history.releases[0].packages.every((entry: { downloadUrl: string }) => entry.downloadUrl.startsWith("/api/v1/resource-packages/") && entry.downloadUrl.includes("/versions/")));
+    const collection = history.releases[0].collection;
+    assert.ok(collection, "history entry must carry collection metadata");
+    assert.match(collection.fileName, /-resource-packages\.zip$/);
+    assert.equal(collection.downloadUrl, `/api/v1/releases/${history.releases[0].releaseId}/download`);
+    const collectionOnDisk = await readFile(path.join(extractRoot, "artifacts/public-survey-footprints/collections", collection.fileName));
+    assert.equal(collectionOnDisk.byteLength, collection.sizeBytes);
+    assert.equal(sha256Of(collectionOnDisk), collection.sha256);
+    const legacyEntry = history.releases[0].packages.find((entry: { id: string }) => entry.id === "public-legacy-footprints");
+    assert.ok(legacyEntry, "legacy package must be projected into history");
+    assert.equal(legacyEntry.survey?.displayName, "Messier 42");
+    assert.deepEqual(legacyEntry.modalities, ["image"]);
+    assert.deepEqual(legacyEntry.releases.map((release: { id: string }) => release.id), ["m42-dr0"]);
+    assert.equal(legacyEntry.releases[0].label, "DR0");
+    assert.equal(legacyEntry.releases[0].layerCount, 1);
+    const dynamicHistoryEntry = history.releases[0].packages.find((entry: { id: string }) => entry.id === "public-m42-footprints");
+    assert.ok(dynamicHistoryEntry);
+    assert.deepEqual(dynamicHistoryEntry.releases.map((release: { id: string }) => release.id), ["m42-dr1"]);
   } finally {
     await rm(base, { recursive: true, force: true });
   }

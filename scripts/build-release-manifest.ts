@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { inferredPublicAssetDeliveryClass, type PublicAssetManifest, type PublicAssetRecord } from "../server/types.js";
 import { publicReleaseBundleDigest } from "../server/catalog.js";
 import { assertRecordPublishable, isDeniedLayerId, isDeniedSurvey, sanitizeReleaseControlDocument } from "../server/publication-policy.js";
+import { loadSurveyLookups, projectResourcePackage, type ProjectedResourcePackage } from "../server/resource-package-projection.js";
+import { buildResourcePackageCollection } from "../server/resource-package-collection.js";
+import type { ReleaseHistoryDocument } from "../server/public-release-publication.js";
 
 const root = path.resolve(process.env.ASSET_WORKTREE_ROOT ?? process.cwd());
 const artifactRoot = path.join(root, "artifacts", "public-survey-footprints");
@@ -53,6 +56,13 @@ interface GeometryIndex {
   }>;
 }
 
+interface PackageCatalogSource {
+  releaseId: string;
+  label: string;
+  url: string;
+  authority: string;
+}
+
 interface PackageCatalog {
   packages: Array<{
     id: string;
@@ -63,9 +73,35 @@ interface PackageCatalog {
     archiveUrl: string;
     sizeBytes: number;
     sha256: string;
+    facilities?: string[];
     releases?: string[];
-    sources?: Array<{ releaseId: string; url: string }>;
+    accessModes?: string[];
+    sources?: PackageCatalogSource[];
   }>;
+}
+
+function validatePublicPackageContract(packages: PackageCatalog["packages"]): void {
+  for (const entry of packages) {
+    const releaseSet = new Set(entry.releases ?? []);
+    if (releaseSet.size === 0) throw new Error(`Package ${entry.id} declares no releases`);
+    if (!Array.isArray(entry.accessModes) || entry.accessModes.length === 0) {
+      throw new Error(`Package ${entry.id}@${entry.version} declares empty accessModes`);
+    }
+    if (!Array.isArray(entry.sources) || entry.sources.length === 0) {
+      throw new Error(`Package ${entry.id}@${entry.version} declares no coverage sources`);
+    }
+    const sourceReleaseIds = new Set<string>();
+    for (const source of entry.sources!) {
+      if (!source.releaseId) throw new Error(`Package ${entry.id} has a source without releaseId`);
+      if (!/^https?:\/\//.test(source.url)) throw new Error(`Package ${entry.id} source ${source.releaseId} has a non-HTTP url`);
+      sourceReleaseIds.add(source.releaseId);
+    }
+    if (sourceReleaseIds.size !== releaseSet.size || [...releaseSet].some((id) => !sourceReleaseIds.has(id))) {
+      throw new Error(
+        `Package ${entry.id}@${entry.version} sources (${[...sourceReleaseIds].join(", ")}) do not cover declared releases (${[...releaseSet].join(", ")})`,
+      );
+    }
+  }
 }
 
 interface LayerBuildPlan {
@@ -104,18 +140,6 @@ interface LayerProvenance {
     preview: LayerFileRecord;
     statistics: LayerFileRecord;
   };
-}
-
-interface ReleaseHistoryDocument {
-  schemaVersion: number;
-  releases: Array<{
-    releaseId: string;
-    sequence: number;
-    bundleId: string;
-    releasedAt: string;
-    notes?: string;
-    packages: Array<{ id: string; version: string; name: string; sizeBytes: number; sha256: string; downloadUrl: string }>;
-  }>;
 }
 
 async function json<T>(filePath: string): Promise<T> {
@@ -239,14 +263,25 @@ async function build(): Promise<PublicAssetManifest> {
     filePath: path.join(root, "docs", "data-warehouse-requirements.md"), downloadName: "data-warehouse-requirements.md", mediaType: "text/markdown; charset=utf-8",
   });
   await push({
+    id: "documentation-sync-example-python", kind: "documentation", label: "Resource Package sync example (Python)",
+    description: "Standard-library sync client: lists releases, downloads collection or pinned package versions, verifies size and SHA-256 atomically.",
+    filePath: path.join(root, "docs", "examples", "python", "asa_package_sync.py"), downloadName: "asa_package_sync.py", mediaType: "text/x-python; charset=utf-8",
+  });
+  await push({
+    id: "documentation-sync-example-java-pom", kind: "documentation", label: "Resource Package sync example (Java pom)",
+    description: "Maven project descriptor for the Java sync client (Java 17, Jackson, exec plugin).",
+    filePath: path.join(root, "docs", "examples", "java", "pom.xml"), downloadName: "pom.xml", mediaType: "application/xml",
+  });
+  await push({
+    id: "documentation-sync-example-java-main", kind: "documentation", label: "Resource Package sync example (Java client)",
+    description: "Java 17 HttpClient sync client: lists releases, downloads collection or pinned package versions, verifies size and SHA-256 atomically.",
+    filePath: path.join(root, "docs", "examples", "java", "src", "main", "java", "space", "_72602", "astro", "sync", "AsaPackageSync.java"),
+    downloadName: "AsaPackageSync.java", mediaType: "text/x-java-source; charset=utf-8",
+  });
+  await push({
     id: "metadata-resource-package-v3-schema", kind: "metadata", label: "Resource Package v3 JSON Schema",
     description: "Machine-readable manifest shape used by public package installers and conformance tooling.",
     filePath: path.join(root, "contracts", "resource-package-v3.schema.json"), downloadName: "resource-package-v3.schema.json", mediaType: "application/json",
-  });
-  await push({
-    id: "metadata-coverage-task-schema", kind: "metadata", label: "Public coverage task handoff schema",
-    description: "Assets-side input used to render standard data-warehouse CRDs; credential storage, sink semantics and task history remain outside this schema.",
-    filePath: path.join(root, "contracts", "coverage-task-v1.schema.json"), downloadName: "coverage-task-v1.schema.json", mediaType: "application/json",
   });
   await push({
     id: "metadata-layer-registry", kind: "metadata", label: "Stable coverage layer registry",
@@ -259,22 +294,23 @@ async function build(): Promise<PublicAssetManifest> {
     description: "Allowlisted MOC/HiPS discovery records, locked orders, coverage roles, provenance requirements and attribution status.",
     filePath: path.join(root, "src", "moc-sources", "source-registry.json"), downloadName: "moc-source-registry.json", mediaType: "application/json",
   });
+  const mocCoreSource = await json<{ version: string; wheel: string; wheelSha256: string }>(path.join(root, "requirements", "moc-core-source.json"));
   await push({
     id: "sdk-moc-core-lock", kind: "sdk", label: "MOC Core dependency lock",
     description: "Pinned scientific dependencies for the shared Astro Survey MOC Core build environment.",
-    filePath: path.join(root, "requirements", "requirements.lock"), downloadName: "requirements.lock", mediaType: "text/plain; charset=utf-8", version: "1.0.0",
+    filePath: path.join(root, "requirements", "requirements.lock"), downloadName: "requirements.lock", mediaType: "text/plain; charset=utf-8", version: mocCoreSource.version,
   });
   await push({
     id: "sdk-moc-core-source", kind: "sdk", label: "MOC Core source provenance",
     description: "Repository commit and wheel hash for the organization-level Astro Survey MOC Core.",
-    filePath: path.join(root, "requirements", "moc-core-source.json"), downloadName: "moc-core-source.json", mediaType: "application/json", version: "1.0.0",
+    filePath: path.join(root, "requirements", "moc-core-source.json"), downloadName: "moc-core-source.json", mediaType: "application/json", version: mocCoreSource.version,
   });
   await push({
-    id: "sdk-moc-core-wheel-1-0-0", kind: "sdk", label: "Astro Survey MOC Core Python wheel",
+    id: "sdk-moc-core-wheel", kind: "sdk", label: "Astro Survey MOC Core Python wheel",
     description: "Pinned offline shared MOC Core wheel for deterministic Assets and Workspace layer builds and validation.",
-    filePath: path.join(artifactRoot, "moc-core", "astro_survey_moc_core-1.0.0-py3-none-any.whl"),
-    downloadName: "astro_survey_moc_core-1.0.0-py3-none-any.whl", mediaType: "application/zip", version: "1.0.0",
-    expectedSha256: "66d0d07c3afaf74141f967c80eaf359180d06a07f6805494a4aea086d6339642",
+    filePath: path.join(artifactRoot, "moc-core", mocCoreSource.wheel),
+    downloadName: mocCoreSource.wheel, mediaType: "application/zip", version: mocCoreSource.version,
+    expectedSha256: mocCoreSource.wheelSha256,
   });
   await push({
     id: "metadata-public-build-plan", kind: "metadata", label: "Locked public Core build plan",
@@ -358,48 +394,161 @@ async function build(): Promise<PublicAssetManifest> {
   const provenancePackages = new Map(provenance.files.packages.map((entry) => [`${entry.id}@${entry.version}`, entry]));
   const packageStagingRoot = process.env.ASSETS_PACKAGE_STAGING_ROOT ? path.resolve(process.env.ASSETS_PACKAGE_STAGING_ROOT) : undefined;
   const publicPackages = packageCatalog.packages.filter((record) => !isDeniedSurvey(record.surveyId));
-  for (const record of publicPackages) {
-    const expected = provenancePackages.get(`${record.id}@${record.version}`);
-    if (!expected) throw new Error(`Package is absent from provenance: ${record.id}@${record.version}`);
-    const packagePath = packageStagingRoot
-      ? path.join(packageStagingRoot, path.basename(record.archiveUrl))
-      : path.join(artifactRoot, "packages", record.archiveUrl);
-    await push({
-      id: `package-${slug(`${record.id}-${record.version}`)}`, kind: "package", label: record.name, description: record.description,
-      filePath: packagePath, pathOverride: path.join("artifacts", "public-survey-footprints", "packages", path.basename(record.archiveUrl)),
-      downloadName: path.basename(record.archiveUrl), mediaType: "application/zip", allowMissing: !packageStagingRoot,
-      expectedBytes: record.sizeBytes, expectedSha256: record.sha256, surveyId: record.surveyId,
-      releaseId: record.sources?.[0]?.releaseId ?? record.releases?.[0], version: record.version, sourceUrl: record.sources?.[0]?.url,
-    });
+  const catalogById = new Map(publicPackages.map((record) => [record.id, record]));
+
+  // Include every archive on disk (current and superseded versions) so version-pinned
+  // downloads of earlier releases keep working; the catalog lists only the latest.
+  const packageRecordsRoot = packageStagingRoot ?? path.join(artifactRoot, "packages");
+  for (const zipName of (await readdir(packageRecordsRoot)).filter((name) => name.endsWith(".zip")).sort()) {
+    const parsed = /^(.+)-(\d+\.\d+\.\d+)\.zip$/.exec(zipName);
+    if (!parsed) throw new Error(`Unexpected file in resource package directory: ${zipName}`);
+    const packageId = parsed[1]!;
+    const version = parsed[2]!;
+    const catalogEntry = catalogById.get(packageId);
+    const surveyId = catalogEntry?.surveyId ?? /^public-(.+)-footprints$/.exec(packageId)?.[1] ?? packageId;
+    if (isDeniedSurvey(surveyId)) continue;
+    const filePath = path.join(packageRecordsRoot, zipName);
+    if (catalogEntry && catalogEntry.version === version) {
+      const expected = provenancePackages.get(`${packageId}@${version}`);
+      if (!expected) throw new Error(`Package is absent from provenance: ${packageId}@${version}`);
+      await push({
+        id: `package-${slug(`${packageId}-${version}`)}`, kind: "package", label: catalogEntry.name, description: catalogEntry.description,
+        filePath, pathOverride: path.join("artifacts", "public-survey-footprints", "packages", zipName),
+        downloadName: zipName, mediaType: "application/zip",
+        expectedBytes: catalogEntry.sizeBytes, expectedSha256: catalogEntry.sha256, surveyId,
+        releaseId: catalogEntry.sources?.[0]?.releaseId ?? catalogEntry.releases?.[0], version, sourceUrl: catalogEntry.sources?.[0]?.url,
+      });
+    } else {
+      await push({
+        id: `package-${slug(`${packageId}-${version}`)}`, kind: "package",
+        label: `${catalogEntry?.name ?? packageId} · superseded ${version}`,
+        description: "Superseded resource package version retained for version-pinned synchronization of earlier releases.",
+        filePath, pathOverride: path.join("artifacts", "public-survey-footprints", "packages", zipName),
+        downloadName: zipName, mediaType: "application/zip", surveyId, version,
+      });
+    }
   }
 
   const bundleId = `public-survey-footprints-${provenance.generatedAt.slice(0, 10)}`;
   const historyPath = path.join(artifactRoot, "release-history.json");
-  let history: ReleaseHistoryDocument;
+  let priorHistory: ReleaseHistoryDocument | undefined;
   if (existsSync(historyPath)) {
-    history = await json<ReleaseHistoryDocument>(historyPath);
-    if (history.schemaVersion !== 1 || !Array.isArray(history.releases)) {
-      throw new Error("Release history document is malformed");
+    const existing = await json<ReleaseHistoryDocument>(historyPath);
+    if (existing.schemaVersion === 2 && Array.isArray(existing.releases)) {
+      priorHistory = existing;
+    } else {
+      console.warn(`Re-seeding release history from schema version ${String(existing.schemaVersion)} to 2`);
     }
+  }
+  const lastPrior = priorHistory?.releases[priorHistory.releases.length - 1];
+  validatePublicPackageContract(publicPackages);
+  const rawCatalogBytesEarly = await readFile(packageCatalogPath);
+  const currentCatalogSha = createHash("sha256").update(
+    sanitizeReleaseControlDocument(relative(packageCatalogPath), rawCatalogBytesEarly) ?? rawCatalogBytesEarly,
+  ).digest("hex");
+  const packageFingerprint = (bundle: string, packages: Array<{ id: string; version: string; sha256: string }>) =>
+    JSON.stringify([bundle, packages.slice().sort((left, right) => left.id.localeCompare(right.id)).map((entry) => [entry.id, entry.version, entry.sha256])]);
+  const unchanged = lastPrior !== undefined
+    && lastPrior.collection !== undefined
+    && lastPrior.catalogSha256 === currentCatalogSha
+    && packageFingerprint(lastPrior.bundleId, lastPrior.packages) === packageFingerprint(bundleId, publicPackages);
+
+  let history: ReleaseHistoryDocument;
+  if (unchanged && priorHistory) {
+    history = priorHistory;
   } else {
+    const sequence = (lastPrior?.sequence ?? 0) + 1;
+    const releaseId = `${bundleId}-${sequence}`;
+    const surveyLookups = await loadSurveyLookups(path.join(root, "src", "surveys", "survey-catalog.json"));
+    const rawCatalogBytes = await readFile(packageCatalogPath);
+    const catalogBytes = sanitizeReleaseControlDocument(relative(packageCatalogPath), rawCatalogBytes) ?? rawCatalogBytes;
+    const projectionInputs: Array<{ downloadName: string; zipBytes: Buffer; projection: ProjectedResourcePackage }> = [];
+    for (const record of publicPackages) {
+      const packagePath = packageStagingRoot
+        ? path.join(packageStagingRoot, path.basename(record.archiveUrl))
+        : path.join(artifactRoot, "packages", record.archiveUrl);
+      let zipBytes: Buffer;
+      try {
+        zipBytes = await readFile(packagePath);
+      } catch {
+        throw new Error(`Unable to read resource package archive for projection: ${relative(packagePath)} (set ASSETS_PACKAGE_STAGING_ROOT or restore the archive)`);
+      }
+      const projection = await projectResourcePackage({
+        id: record.id,
+        version: record.version,
+        name: record.name,
+        surveyId: record.surveyId,
+        sizeBytes: record.sizeBytes,
+        sha256: record.sha256,
+        facilities: record.facilities,
+        accessModes: record.accessModes,
+        sources: record.sources,
+        zipBytes,
+      }, surveyLookups);
+      const projectedReleases = projection.releases.map((entry) => entry.id).sort().join(",");
+      const catalogReleases = [...(record.releases ?? [])].sort().join(",");
+      if (projectedReleases !== catalogReleases) {
+        throw new Error(`Package ${record.id}@${record.version} archive releases [${projectedReleases}] do not match catalog releases [${catalogReleases}]`);
+      }
+      projectionInputs.push({ downloadName: path.basename(record.archiveUrl), zipBytes, projection });
+    }
+    const collection = await buildResourcePackageCollection({
+      releaseId,
+      sequence,
+      bundleId,
+      releasedAt: provenance.generatedAt,
+      catalogBytes,
+      packages: projectionInputs,
+    });
+    const collectionsRoot = path.join(artifactRoot, "collections");
+    await mkdir(collectionsRoot, { recursive: true });
+    await writeFile(path.join(collectionsRoot, collection.fileName), collection.bytes);
     history = {
-      schemaVersion: 1,
-      releases: [{
-        releaseId: `${bundleId}-1`,
-        sequence: 1,
-        bundleId,
-        releasedAt: provenance.generatedAt,
-        packages: publicPackages.map((record) => ({
-          id: record.id,
-          version: record.version,
-          name: record.name,
-          sizeBytes: record.sizeBytes,
-          sha256: record.sha256,
-          downloadUrl: `/api/v1/resource-packages/${record.id}/versions/${record.version}/download`,
-        })),
-      }],
+      schemaVersion: 2,
+      latestReleaseId: releaseId,
+      releases: [
+        ...(priorHistory?.releases ?? []),
+        {
+          releaseId,
+          sequence,
+          bundleId,
+          releasedAt: provenance.generatedAt,
+          catalogSha256: currentCatalogSha,
+          collection: {
+            fileName: collection.fileName,
+            sizeBytes: collection.sizeBytes,
+            sha256: collection.sha256,
+            downloadUrl: `/api/v1/releases/${releaseId}/download`,
+          },
+          packages: projectionInputs
+            .slice()
+            .sort((left, right) => left.projection.id.localeCompare(right.projection.id))
+            .map(({ projection }) => ({
+              ...projection,
+              downloadUrl: `/api/v1/resource-packages/${projection.id}/versions/${projection.version}/download`,
+            })),
+        },
+      ],
     };
-    await writeFile(historyPath, `${JSON.stringify(history, null, 2)}\n`, "utf8");
+  }
+  await writeFile(historyPath, `${JSON.stringify(history, null, 2)}\n`, "utf8");
+
+  // Every collection archive on disk stays published so historical release cards
+  // keep their whole-package download.
+  const collectionsRoot = path.join(artifactRoot, "collections");
+  await mkdir(collectionsRoot, { recursive: true });
+  const collectionEntries = history.releases.filter((entry) => entry.collection);
+  const collectionByFileName = new Map(collectionEntries.map((entry) => [entry.collection!.fileName, entry]));
+  for (const fileName of (await readdir(collectionsRoot)).filter((name) => name.endsWith(".zip")).sort()) {
+    const entry = collectionByFileName.get(fileName);
+    if (!entry?.collection) throw new Error(`Collection archive is absent from release history: ${fileName}`);
+    await push({
+      id: `collection-${slug(fileName.replace(/\.zip$/, ""))}`, kind: "package-collection", label: "Resource package collection",
+      description: `All ${entry.packages.length} public resource packages of release ${entry.releaseId} in one deterministic archive.`,
+      filePath: path.join(collectionsRoot, fileName), pathOverride: path.join("artifacts", "public-survey-footprints", "collections", fileName),
+      downloadName: fileName, mediaType: "application/zip",
+      expectedBytes: entry.collection.sizeBytes, expectedSha256: entry.collection.sha256,
+    });
   }
   await push({
     id: "metadata-release-history", kind: "metadata", label: "Release history",
@@ -414,6 +563,9 @@ async function build(): Promise<PublicAssetManifest> {
   for (const entry of files) assertRecordPublishable(entry);
   const canonicalFootprints = await json<{ footprints: Array<{ surveyId: string }> }>(path.join(root, "src", "footprints", "survey-footprints.json"));
   const publicFootprintCount = canonicalFootprints.footprints.filter((entry) => !isDeniedSurvey(entry.surveyId)).length;
+  const sourceAudit = await json<{ releases: Array<{ surveyId: string; products: Array<{ status: string }> }> }>(path.join(artifactRoot, "sources.json"));
+  const publicSourceReleases = sourceAudit.releases.filter((entry) => !isDeniedSurvey(entry.surveyId));
+  const publicSourceProducts = publicSourceReleases.flatMap((entry) => entry.products);
   const bundleSha256 = publicReleaseBundleDigest(files);
   const totalBytes = files.reduce((sum, entry) => sum + entry.sizeBytes, 0);
   const runtimeBytes = files.filter((entry) => entry.deliveryClass === "runtime").reduce((sum, entry) => sum + entry.sizeBytes, 0);
@@ -423,11 +575,11 @@ async function build(): Promise<PublicAssetManifest> {
     generatedAt: provenance.generatedAt,
     bundle: { id: bundleId, sha256: bundleSha256 },
     statistics: {
-      releases: provenance.statistics.releases,
-      products: provenance.statistics.products,
-      acquired: provenance.statistics.acquired,
-      overviewOnly: provenance.statistics.overview_only,
-      awaitingGeometry: provenance.statistics.awaiting_geometry,
+      releases: publicSourceReleases.length,
+      products: publicSourceProducts.length,
+      acquired: publicSourceProducts.filter((entry) => entry.status === "acquired").length,
+      overviewOnly: publicSourceProducts.filter((entry) => entry.status === "overview_only").length,
+      awaitingGeometry: publicSourceProducts.filter((entry) => entry.status === "awaiting_geometry").length,
       footprints: publicFootprintCount,
       packages: publicPackages.length,
       rawMocFiles: files.filter((entry) => entry.kind === "moc").length,

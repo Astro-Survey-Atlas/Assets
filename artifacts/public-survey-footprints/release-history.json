@@ -1,90 +1,48 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "latestReleaseId": "public-survey-footprints-2026-09-09-2",
   "releases": [
     {
       "releaseId": "public-survey-footprints-2026-08-20-1",
       "sequence": 1,
       "bundleId": "public-survey-footprints-2026-08-20",
       "releasedAt": "2026-08-20T05:11:37.055Z",
+      "collection": {
+        "fileName": "public-survey-footprints-2026-08-20-1-resource-packages.zip",
+        "sizeBytes": 569695,
+        "sha256": "60a7d7779a90ecf5a73c09bfe2e978e81f6327bd6eebccf2225b9e0cd8cd196a",
+        "downloadUrl": "/api/v1/releases/public-survey-footprints-2026-08-20-1/download"
+      },
       "packages": [
-        {
-          "id": "public-euclid-footprints",
-          "version": "3.0.0",
-          "name": "Euclid",
-          "sizeBytes": 39950,
-          "sha256": "5fb77791caf8675e63a2422afd1f60493c6cf9dfc71804a2c5a6b8d4a2dede71",
-          "downloadUrl": "/api/v1/resource-packages/public-euclid-footprints/versions/3.0.0/download"
-        },
-        {
-          "id": "public-galex-footprints",
-          "version": "3.0.0",
-          "name": "GALEX",
-          "sizeBytes": 12978,
-          "sha256": "ef58ea7d32143e9135a7a1447f3f3678459e5ead0a75e277568fd64f100ff1dd",
-          "downloadUrl": "/api/v1/resource-packages/public-galex-footprints/versions/3.0.0/download"
-        },
-        {
-          "id": "public-desi-footprints",
-          "version": "3.0.0",
-          "name": "DESI Spectroscopy",
-          "sizeBytes": 385410,
-          "sha256": "5da8651a6e43ffae1428d3edacff2e033a71aee276834c10f79829c9ed6d3f18",
-          "downloadUrl": "/api/v1/resource-packages/public-desi-footprints/versions/3.0.0/download"
-        },
-        {
-          "id": "public-legacy-surveys-footprints",
-          "version": "3.0.0",
-          "name": "DESI Legacy Surveys",
-          "sizeBytes": 21903,
-          "sha256": "c50ef2ae3956dec250733336d1698c24acf17a9afa28dbbd79f8439a7f13c9c4",
-          "downloadUrl": "/api/v1/resource-packages/public-legacy-surveys-footprints/versions/3.0.0/download"
-        },
-        {
-          "id": "public-sdss-footprints",
-          "version": "3.0.0",
-          "name": "SDSS",
-          "sizeBytes": 7292,
-          "sha256": "15640a9f7786bae150a64d8ad5a821f91020912923d79807b3342ac271c6a22b",
-          "downloadUrl": "/api/v1/resource-packages/public-sdss-footprints/versions/3.0.0/download"
-        },
-        {
-          "id": "public-hsc-ssp-footprints",
-          "version": "3.0.0",
-          "name": "HSC-SSP",
-          "sizeBytes": 8251,
-          "sha256": "678dc507722d69687fc359712afd975b84477d444f6b3e521896ef3857f04704",
-          "downloadUrl": "/api/v1/resource-packages/public-hsc-ssp-footprints/versions/3.0.0/download"
-        },
-        {
-          "id": "public-hst-footprints",
-          "version": "3.0.0",
-          "name": "HST",
-          "sizeBytes": 10736,
-          "sha256": "9fc806f5e246111b6d6b0c9b6fe1316cf502eaaad6a1faae5c7c671c3ac9bcbd",
-          "downloadUrl": "/api/v1/resource-packages/public-hst-footprints/versions/3.0.0/download"
-        },
-        {
-          "id": "public-panstarrs-footprints",
-          "version": "3.0.0",
-          "name": "Pan-STARRS1",
-          "sizeBytes": 13616,
-          "sha256": "2d4db6eb978bae76e765d3fabde52aaf20d75f33810c40c00503ab9165b33af0",
-          "downloadUrl": "/api/v1/resource-packages/public-panstarrs-footprints/versions/3.0.0/download"
-        },
-        {
-          "id": "public-des-footprints",
-          "version": "3.0.0",
-          "name": "DES",
-          "sizeBytes": 3670,
-          "sha256": "824da6e75d4756540e9ed4182cae6f4a36fe29006bdf0bb23fc652d96a1e117e",
-          "downloadUrl": "/api/v1/resource-packages/public-des-footprints/versions/3.0.0/download"
-        },
         {
           "id": "public-2mass-footprints",
           "version": "3.0.0",
           "name": "2MASS",
           "sizeBytes": 10994,
           "sha256": "e565b90b1f6cc5cc75da5440a53ce77f95c87d9d91120f125ec9d421c36551c5",
+          "survey": {
+            "id": "2mass",
+            "displayName": "2MASS",
+            "mission": "Two Micron All Sky Survey"
+          },
+          "facilities": [
+            "2MASS"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "releases": [
+            {
+              "id": "2mass-all-sky",
+              "label": "All-Sky Release",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 3,
+              "kind": "public_release",
+              "releasedYear": 2003
+            }
+          ],
           "downloadUrl": "/api/v1/resource-packages/public-2mass-footprints/versions/3.0.0/download"
         },
         {
@@ -93,15 +51,145 @@
           "name": "AllWISE",
           "sizeBytes": 11767,
           "sha256": "3b3697edba5e163a80628977c9b6b571965910397eb1524c9a1e9e77fe4832e0",
+          "survey": {
+            "id": "allwise",
+            "displayName": "AllWISE",
+            "mission": "WISE / NASA IPAC Infrared Science Archive"
+          },
+          "facilities": [
+            "IRSA",
+            "WISE"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "releases": [
+            {
+              "id": "allwise",
+              "label": "AllWISE",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 4,
+              "kind": "public_release",
+              "releasedYear": 2013
+            }
+          ],
           "downloadUrl": "/api/v1/resource-packages/public-allwise-footprints/versions/3.0.0/download"
         },
         {
-          "id": "public-kids-footprints",
+          "id": "public-des-footprints",
           "version": "3.0.0",
-          "name": "KiDS",
-          "sizeBytes": 3017,
-          "sha256": "723c1e15e9518c1e7e68ef9305d1c3a7c5578c97c4b1271618effee320da706f",
-          "downloadUrl": "/api/v1/resource-packages/public-kids-footprints/versions/3.0.0/download"
+          "name": "DES",
+          "sizeBytes": 3670,
+          "sha256": "824da6e75d4756540e9ed4182cae6f4a36fe29006bdf0bb23fc652d96a1e117e",
+          "survey": {
+            "id": "des",
+            "displayName": "DES",
+            "mission": "Dark Energy Survey"
+          },
+          "facilities": [
+            "DECam"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "releases": [
+            {
+              "id": "des-dr2",
+              "label": "DR2",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2021
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-des-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-desi-footprints",
+          "version": "3.0.0",
+          "name": "DESI Spectroscopy",
+          "sizeBytes": 385410,
+          "sha256": "5da8651a6e43ffae1428d3edacff2e033a71aee276834c10f79829c9ed6d3f18",
+          "survey": {
+            "id": "desi",
+            "displayName": "DESI",
+            "mission": "Dark Energy Spectroscopic Instrument"
+          },
+          "facilities": [
+            "DESI",
+            "Mayall 4-meter Telescope"
+          ],
+          "modalities": [
+            "spectroscopy"
+          ],
+          "releases": [
+            {
+              "id": "desi-dr1",
+              "label": "DR1",
+              "modalities": [
+                "spectroscopy"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2025
+            },
+            {
+              "id": "desi-edr",
+              "label": "EDR",
+              "modalities": [
+                "spectroscopy"
+              ],
+              "layerCount": 1,
+              "kind": "early_release",
+              "releasedYear": 2023
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-desi-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-euclid-footprints",
+          "version": "3.0.0",
+          "name": "Euclid",
+          "sizeBytes": 39950,
+          "sha256": "5fb77791caf8675e63a2422afd1f60493c6cf9dfc71804a2c5a6b8d4a2dede71",
+          "survey": {
+            "id": "euclid",
+            "displayName": "Euclid",
+            "mission": "ESA Euclid"
+          },
+          "facilities": [
+            "ESA Euclid"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "releases": [
+            {
+              "id": "euclid-ero",
+              "label": "ERO",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 6,
+              "kind": "early_release",
+              "releasedYear": 2024
+            },
+            {
+              "id": "euclid-q1",
+              "label": "Q1",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 6,
+              "kind": "quick_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-euclid-footprints/versions/3.0.0/download"
         },
         {
           "id": "public-gaia-footprints",
@@ -109,7 +197,270 @@
           "name": "Gaia DR3",
           "sizeBytes": 22801,
           "sha256": "47a473da1e55b7f44c865bbf5512c3ba953d389bdce4704ff4b840d5aa69872b",
+          "survey": {
+            "id": "gaia",
+            "displayName": "Gaia",
+            "mission": "ESA Gaia"
+          },
+          "facilities": [
+            "ESA Gaia / DPAC"
+          ],
+          "modalities": [
+            "catalog"
+          ],
+          "releases": [
+            {
+              "id": "gaia-dr3",
+              "label": "DR3",
+              "modalities": [
+                "catalog"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2022
+            }
+          ],
           "downloadUrl": "/api/v1/resource-packages/public-gaia-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-galex-footprints",
+          "version": "3.0.0",
+          "name": "GALEX",
+          "sizeBytes": 12978,
+          "sha256": "ef58ea7d32143e9135a7a1447f3f3678459e5ead0a75e277568fd64f100ff1dd",
+          "survey": {
+            "id": "galex",
+            "displayName": "GALEX",
+            "mission": "Galaxy Evolution Explorer"
+          },
+          "facilities": [
+            "MAST",
+            "NASA GALEX"
+          ],
+          "modalities": [
+            "imaging",
+            "ultraviolet"
+          ],
+          "releases": [
+            {
+              "id": "galex-gr6-gr7",
+              "label": "GR6/GR7",
+              "modalities": [
+                "imaging",
+                "ultraviolet"
+              ],
+              "layerCount": 3,
+              "kind": "public_release"
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-galex-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-hsc-ssp-footprints",
+          "version": "3.0.0",
+          "name": "HSC-SSP",
+          "sizeBytes": 8251,
+          "sha256": "678dc507722d69687fc359712afd975b84477d444f6b3e521896ef3857f04704",
+          "survey": {
+            "id": "hsc-ssp",
+            "displayName": "HSC-SSP",
+            "mission": "Subaru Hyper Suprime-Cam"
+          },
+          "facilities": [
+            "Subaru Hyper Suprime-Cam"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "releases": [
+            {
+              "id": "hsc-pdr2",
+              "label": "PDR2",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 6,
+              "kind": "public_release",
+              "releasedYear": 2019
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-hsc-ssp-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-hst-footprints",
+          "version": "3.0.0",
+          "name": "HST",
+          "sizeBytes": 10736,
+          "sha256": "9fc806f5e246111b6d6b0c9b6fe1316cf502eaaad6a1faae5c7c671c3ac9bcbd",
+          "survey": {
+            "id": "hst",
+            "displayName": "HST",
+            "mission": "Hubble Space Telescope / MAST"
+          },
+          "facilities": [
+            "Hubble Space Telescope",
+            "MAST"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "releases": [
+            {
+              "id": "hst-mast-snapshot-2026",
+              "label": "MAST archive snapshot 2026",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "archive_snapshot",
+              "releasedYear": 2026
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-hst-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-kids-footprints",
+          "version": "3.0.0",
+          "name": "KiDS",
+          "sizeBytes": 3017,
+          "sha256": "723c1e15e9518c1e7e68ef9305d1c3a7c5578c97c4b1271618effee320da706f",
+          "survey": {
+            "id": "kids",
+            "displayName": "KiDS",
+            "mission": "Kilo-Degree Survey / ESO VST"
+          },
+          "facilities": [
+            "ESO VST/OmegaCAM"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "releases": [
+            {
+              "id": "kids-dr5",
+              "label": "DR5",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-kids-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-legacy-surveys-footprints",
+          "version": "3.0.0",
+          "name": "DESI Legacy Surveys",
+          "sizeBytes": 21903,
+          "sha256": "c50ef2ae3956dec250733336d1698c24acf17a9afa28dbbd79f8439a7f13c9c4",
+          "survey": {
+            "id": "legacy-surveys",
+            "displayName": "DESI Legacy Surveys",
+            "mission": "DECaLS, BASS and MzLS"
+          },
+          "facilities": [
+            "BASS",
+            "DECam",
+            "MzLS"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "releases": [
+            {
+              "id": "legacy-dr1",
+              "label": "DR1",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr10",
+              "label": "DR10",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr2",
+              "label": "DR2",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr3",
+              "label": "DR3",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr4",
+              "label": "DR4",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr5",
+              "label": "DR5",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr6",
+              "label": "DR6",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr7",
+              "label": "DR7",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr8",
+              "label": "DR8",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr9",
+              "label": "DR9",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-legacy-surveys-footprints/versions/3.0.0/download"
         },
         {
           "id": "public-nvss-footprints",
@@ -117,7 +468,1574 @@
           "name": "NVSS",
           "sizeBytes": 8620,
           "sha256": "ee74ffa811c75501ef80850d22d02ba7b21f6f4f28ed10ef41974b2f2893bdf7",
+          "survey": {
+            "id": "nvss",
+            "displayName": "NVSS",
+            "mission": "NRAO VLA Sky Survey"
+          },
+          "facilities": [
+            "NRAO VLA"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "releases": [
+            {
+              "id": "nvss-final",
+              "label": "Final survey",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 1998
+            }
+          ],
           "downloadUrl": "/api/v1/resource-packages/public-nvss-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-panstarrs-footprints",
+          "version": "3.0.0",
+          "name": "Pan-STARRS1",
+          "sizeBytes": 13616,
+          "sha256": "2d4db6eb978bae76e765d3fabde52aaf20d75f33810c40c00503ab9165b33af0",
+          "survey": {
+            "id": "panstarrs",
+            "displayName": "Pan-STARRS1",
+            "mission": "Panoramic Survey Telescope and Rapid Response System"
+          },
+          "facilities": [
+            "Pan-STARRS1"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "releases": [
+            {
+              "id": "panstarrs-dr1",
+              "label": "DR1",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 6,
+              "kind": "public_release",
+              "releasedYear": 2016
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-panstarrs-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-sdss-footprints",
+          "version": "3.0.0",
+          "name": "SDSS",
+          "sizeBytes": 7292,
+          "sha256": "15640a9f7786bae150a64d8ad5a821f91020912923d79807b3342ac271c6a22b",
+          "survey": {
+            "id": "sdss",
+            "displayName": "SDSS",
+            "mission": "Sloan Digital Sky Survey I-V"
+          },
+          "facilities": [
+            "Sloan Foundation Telescope"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "releases": [
+            {
+              "id": "sdss-dr09",
+              "label": "DR9",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-sdss-footprints/versions/3.0.0/download"
+        }
+      ]
+    },
+    {
+      "releaseId": "public-survey-footprints-2026-09-09-2",
+      "sequence": 2,
+      "bundleId": "public-survey-footprints-2026-09-09",
+      "releasedAt": "2026-09-09T10:48:25.113Z",
+      "catalogSha256": "cb5293b03855269df3c1a927be45b4d78e25a5934561eea6e1c5ad40a7bf82ac",
+      "collection": {
+        "fileName": "public-survey-footprints-2026-09-09-2-resource-packages.zip",
+        "sizeBytes": 7039811,
+        "sha256": "fea46e5317c722d25fdecb37ece785268981c4a0811ec033ee9ce47ba6bde905",
+        "downloadUrl": "/api/v1/releases/public-survey-footprints-2026-09-09-2/download"
+      },
+      "packages": [
+        {
+          "id": "public-2mass-footprints",
+          "version": "3.1.0",
+          "name": "2MASS",
+          "sizeBytes": 29672,
+          "sha256": "ca0dd9ab2ebbcad4c4c731b82e21408eba394ff2683707d6f1458679ef28cddb",
+          "survey": {
+            "id": "2mass",
+            "displayName": "2MASS",
+            "mission": "Two Micron All Sky Survey"
+          },
+          "facilities": [
+            "Two Micron All Sky Survey"
+          ],
+          "modalities": [
+            "infrared"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "IRSA",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "2mass-6x",
+              "label": "2MASS 2Mass 6X coverage source",
+              "url": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "2mass-6x",
+              "label": "2Mass 6X",
+              "modalities": [
+                "infrared"
+              ],
+              "layerCount": 3,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-2mass-footprints/versions/3.1.0/download"
+        },
+        {
+          "id": "public-act-footprints",
+          "version": "3.0.0",
+          "name": "ACT",
+          "sizeBytes": 23487,
+          "sha256": "2cfcce7cc0b099e7fce9c74c2b828e4fbb0fa9707e1361e5e8d0abc4c361ec51",
+          "survey": {
+            "id": "act",
+            "displayName": "ACT",
+            "mission": "Atacama Cosmology Telescope"
+          },
+          "facilities": [
+            "Atacama Cosmology Telescope"
+          ],
+          "modalities": [
+            "radio"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "act-dr5",
+              "label": "ACT Act Dr5 coverage source",
+              "url": "https://lambda.gsfc.nasa.gov/product/act/",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "act-dr5",
+              "label": "Act Dr5",
+              "modalities": [
+                "radio"
+              ],
+              "layerCount": 3,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-act-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-akari-footprints",
+          "version": "3.0.0",
+          "name": "AKARI",
+          "sizeBytes": 10458,
+          "sha256": "0135595748f3fb302207bcbb86476b885b5817aa016425197fdd99f30e98896e",
+          "survey": {
+            "id": "akari",
+            "displayName": "AKARI",
+            "mission": "AKARI infrared all-sky survey"
+          },
+          "facilities": [
+            "AKARI infrared all-sky survey"
+          ],
+          "modalities": [
+            "infrared"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "akari-fis",
+              "label": "AKARI Akari Fis coverage source",
+              "url": "https://www.ir.isas.jaxa.jp/AKARI/",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "akari-fis",
+              "label": "Akari Fis",
+              "modalities": [
+                "infrared"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-akari-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-allwise-footprints",
+          "version": "3.0.0",
+          "name": "AllWISE",
+          "sizeBytes": 11767,
+          "sha256": "3b3697edba5e163a80628977c9b6b571965910397eb1524c9a1e9e77fe4832e0",
+          "survey": {
+            "id": "allwise",
+            "displayName": "AllWISE",
+            "mission": "WISE / NASA IPAC Infrared Science Archive"
+          },
+          "facilities": [
+            "IRSA",
+            "WISE"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "IRSA",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "allwise",
+              "label": "AllWISE W1 HiPS MOC",
+              "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW1&get=record&fmt=json",
+              "authority": "CDS/IRSA",
+              "license": "ODbL-1.0 derivative"
+            }
+          ],
+          "releases": [
+            {
+              "id": "allwise",
+              "label": "AllWISE",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 4,
+              "kind": "public_release",
+              "releasedYear": 2013
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-allwise-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-cfhtls-footprints",
+          "version": "3.0.0",
+          "name": "CFHTLS",
+          "sizeBytes": 38164,
+          "sha256": "20533dd66d8b62afa9ab6f0de0ffb0414bf135bed21a4353ea6619e7afd2c8d6",
+          "survey": {
+            "id": "cfhtls",
+            "displayName": "CFHTLS",
+            "mission": "Canada-France-Hawaii Telescope Legacy Survey"
+          },
+          "facilities": [
+            "Canada-France-Hawaii Telescope Legacy Survey"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "cfhtls-wide",
+              "label": "CFHTLS Cfhtls Wide coverage source",
+              "url": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "cfhtls-wide",
+              "label": "Cfhtls Wide",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 6,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-cfhtls-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-decals-footprints",
+          "version": "3.0.0",
+          "name": "DECaLS",
+          "sizeBytes": 118566,
+          "sha256": "69aead3ee874e2aa0cbcc62e53138bf9b1c9e1b24f2dbcb5b8574a6008376609",
+          "survey": {
+            "id": "decals",
+            "displayName": "DECaLS",
+            "mission": "Dark Energy Camera Legacy Survey"
+          },
+          "facilities": [
+            "Dark Energy Camera Legacy Survey"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "Legacy Survey viewer",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "decals-dr5",
+              "label": "DECaLS DR5 coverage source",
+              "url": "https://www.legacysurvey.org/dr5/",
+              "authority": "DECam Legacy Survey DR5"
+            }
+          ],
+          "releases": [
+            {
+              "id": "decals-dr5",
+              "label": "DR5",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2017
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-decals-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-decaps-footprints",
+          "version": "3.0.0",
+          "name": "DECaPS",
+          "sizeBytes": 30232,
+          "sha256": "61c9da44fc9020ca75036d2248f18ed0deacafca0f340b721da4d13212ac00f2",
+          "survey": {
+            "id": "decaps",
+            "displayName": "DECaPS",
+            "mission": "DECam Plane Survey"
+          },
+          "facilities": [
+            "DECam Plane Survey"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "decaps-dr2",
+              "label": "DECaPS Decaps Dr2 coverage source",
+              "url": "https://decaps.skymaps.info/",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "decaps-dr2",
+              "label": "Decaps Dr2",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-decaps-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-des-footprints",
+          "version": "3.1.0",
+          "name": "DES",
+          "sizeBytes": 187075,
+          "sha256": "d96e36cd017ce2eb0ea9de2d83136e22c8eca5095d28901ae19d13da9a091da0",
+          "survey": {
+            "id": "des",
+            "displayName": "DES",
+            "mission": "Dark Energy Survey"
+          },
+          "facilities": [
+            "Dark Energy Survey"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Dark Energy Survey",
+            "DES Data Management",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "des-dr2",
+              "label": "DES DR2 coverage source",
+              "url": "https://des.ncsa.illinois.edu/releases/dr2",
+              "authority": "Dark Energy Survey"
+            }
+          ],
+          "releases": [
+            {
+              "id": "des-dr2",
+              "label": "DR2",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 5,
+              "kind": "public_release",
+              "releasedYear": 2021
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-des-footprints/versions/3.1.0/download"
+        },
+        {
+          "id": "public-desi-footprints",
+          "version": "3.0.0",
+          "name": "DESI",
+          "sizeBytes": 385410,
+          "sha256": "5da8651a6e43ffae1428d3edacff2e033a71aee276834c10f79829c9ed6d3f18",
+          "survey": {
+            "id": "desi",
+            "displayName": "DESI",
+            "mission": "Dark Energy Spectroscopic Instrument"
+          },
+          "facilities": [
+            "Dark Energy Spectroscopic Instrument"
+          ],
+          "modalities": [
+            "spectroscopy"
+          ],
+          "accessModes": [
+            "Dark Energy Spectroscopic Instrument",
+            "DESI Data Release",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "desi-dr1",
+              "label": "DESI DR1 coverage source",
+              "url": "https://data.desi.lbl.gov/doc/releases/dr1/",
+              "authority": "Dark Energy Spectroscopic Instrument"
+            },
+            {
+              "releaseId": "desi-edr",
+              "label": "DESI EDR coverage source",
+              "url": "https://data.desi.lbl.gov/doc/releases/edr/",
+              "authority": "Dark Energy Spectroscopic Instrument"
+            }
+          ],
+          "releases": [
+            {
+              "id": "desi-dr1",
+              "label": "DR1",
+              "modalities": [
+                "spectroscopy"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2025
+            },
+            {
+              "id": "desi-edr",
+              "label": "EDR",
+              "modalities": [
+                "spectroscopy"
+              ],
+              "layerCount": 1,
+              "kind": "early_release",
+              "releasedYear": 2023
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-desi-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-euclid-footprints",
+          "version": "3.0.0",
+          "name": "Euclid",
+          "sizeBytes": 39950,
+          "sha256": "5fb77791caf8675e63a2422afd1f60493c6cf9dfc71804a2c5a6b8d4a2dede71",
+          "survey": {
+            "id": "euclid",
+            "displayName": "Euclid",
+            "mission": "ESA Euclid"
+          },
+          "facilities": [
+            "ESA Euclid"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "ESA Euclid",
+            "ESA Science Archive",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "euclid-ero",
+              "label": "Euclid ERO coverage source",
+              "url": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+              "authority": "ESA Euclid"
+            },
+            {
+              "releaseId": "euclid-q1",
+              "label": "Euclid Q1 coverage source",
+              "url": "https://www.esa.int/Science_Exploration/Space_Science/Euclid/Euclid_opens_data_treasure_trove_offers_glimpse_of_deep_fields",
+              "authority": "ESA Euclid"
+            }
+          ],
+          "releases": [
+            {
+              "id": "euclid-ero",
+              "label": "ERO",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 6,
+              "kind": "early_release",
+              "releasedYear": 2024
+            },
+            {
+              "id": "euclid-q1",
+              "label": "Q1",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 6,
+              "kind": "quick_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-euclid-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-fds-footprints",
+          "version": "3.0.0",
+          "name": "FDS",
+          "sizeBytes": 11709,
+          "sha256": "f5be8243a1dafeb675033cfdc72152a26998d461cbc36b9c87d11c764b3b15b3",
+          "survey": {
+            "id": "fds",
+            "displayName": "FDS",
+            "mission": "Fornax Deep Survey"
+          },
+          "facilities": [
+            "Fornax Deep Survey"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "fds-dr1",
+              "label": "FDS Fds Dr1 coverage source",
+              "url": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "fds-dr1",
+              "label": "Fds Dr1",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 5,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-fds-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-gaia-footprints",
+          "version": "3.0.0",
+          "name": "Gaia",
+          "sizeBytes": 22801,
+          "sha256": "47a473da1e55b7f44c865bbf5512c3ba953d389bdce4704ff4b840d5aa69872b",
+          "survey": {
+            "id": "gaia",
+            "displayName": "Gaia",
+            "mission": "ESA Gaia"
+          },
+          "facilities": [
+            "ESA Gaia"
+          ],
+          "modalities": [
+            "catalog"
+          ],
+          "accessModes": [
+            "CDS VizieR",
+            "ESA Gaia / DPAC DR3",
+            "Gaia Archive",
+            "Gaia Archive TAP",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "gaia-dr3",
+              "label": "Gaia DR3 coverage source",
+              "url": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+              "authority": "ESA Gaia / DPAC DR3"
+            }
+          ],
+          "releases": [
+            {
+              "id": "gaia-dr3",
+              "label": "DR3",
+              "modalities": [
+                "catalog"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2022
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-gaia-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-galex-footprints",
+          "version": "3.1.0",
+          "name": "GALEX",
+          "sizeBytes": 615035,
+          "sha256": "f989ace247d41db8091334960a3d7da329f02bb7e8f1a70031b542f61a7009db",
+          "survey": {
+            "id": "galex",
+            "displayName": "GALEX",
+            "mission": "Galaxy Evolution Explorer"
+          },
+          "facilities": [
+            "Galaxy Evolution Explorer"
+          ],
+          "modalities": [
+            "ultraviolet"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "MAST",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "galex-gr6-ais",
+              "label": "GALEX Galex Gr6 Ais coverage source",
+              "url": "https://galex.stsci.edu/",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "galex-gr6-ais",
+              "label": "Galex Gr6 Ais",
+              "modalities": [
+                "ultraviolet"
+              ],
+              "layerCount": 3,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-galex-footprints/versions/3.1.0/download"
+        },
+        {
+          "id": "public-hsc-ssp-footprints",
+          "version": "3.0.0",
+          "name": "HSC-SSP",
+          "sizeBytes": 8251,
+          "sha256": "678dc507722d69687fc359712afd975b84477d444f6b3e521896ef3857f04704",
+          "survey": {
+            "id": "hsc-ssp",
+            "displayName": "HSC-SSP",
+            "mission": "Subaru Hyper Suprime-Cam"
+          },
+          "facilities": [
+            "Subaru Hyper Suprime-Cam"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "HSC archive",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "hsc-pdr2",
+              "label": "HSC-SSP PDR2 HiPS MOCs",
+              "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fcolor-i-r-g%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fcolor-i-r-g&get=record&fmt=json",
+              "authority": "CDS",
+              "license": "ODbL-1.0 derivative"
+            }
+          ],
+          "releases": [
+            {
+              "id": "hsc-pdr2",
+              "label": "PDR2",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 6,
+              "kind": "public_release",
+              "releasedYear": 2019
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-hsc-ssp-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-hst-footprints",
+          "version": "3.0.0",
+          "name": "HST",
+          "sizeBytes": 10736,
+          "sha256": "9fc806f5e246111b6d6b0c9b6fe1316cf502eaaad6a1faae5c7c671c3ac9bcbd",
+          "survey": {
+            "id": "hst",
+            "displayName": "HST",
+            "mission": "Hubble Space Telescope / MAST"
+          },
+          "facilities": [
+            "Hubble Space Telescope",
+            "MAST"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "MAST",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "hst-mast-snapshot-2026",
+              "label": "Published HST HiPS MOC union",
+              "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=record&fmt=json",
+              "authority": "CDS",
+              "license": "ODbL-1.0 derivative"
+            }
+          ],
+          "releases": [
+            {
+              "id": "hst-mast-snapshot-2026",
+              "label": "MAST archive snapshot 2026",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "archive_snapshot",
+              "releasedYear": 2026
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-hst-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-iphas-footprints",
+          "version": "3.0.0",
+          "name": "IPHAS",
+          "sizeBytes": 184777,
+          "sha256": "88b019903d8a2339dc051c389d31657e6b7eea9ffebbbd6f0b9fe32906c08816",
+          "survey": {
+            "id": "iphas",
+            "displayName": "IPHAS",
+            "mission": "INT Photometric H-alpha Survey"
+          },
+          "facilities": [
+            "INT Photometric H-alpha Survey"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "iphas-dr2",
+              "label": "IPHAS Iphas Dr2 coverage source",
+              "url": "https://www.iphas.org/",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "iphas-dr2",
+              "label": "Iphas Dr2",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 3,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-iphas-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-kids-footprints",
+          "version": "3.1.0",
+          "name": "KiDS",
+          "sizeBytes": 20915,
+          "sha256": "c39952632506a0faa6612d9dd5babbc7a2d207091a4744be0b1514c58dec8b3d",
+          "survey": {
+            "id": "kids",
+            "displayName": "KiDS",
+            "mission": "Kilo-Degree Survey / ESO VST"
+          },
+          "facilities": [
+            "Kilo-Degree Survey / ESO VST"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "KiDS archive",
+            "Kilo-Degree Survey / ESO VST",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "kids-dr5",
+              "label": "KiDS DR5 coverage source",
+              "url": "https://kids.strw.leidenuniv.nl/DR5/index.php",
+              "authority": "Kilo-Degree Survey / ESO VST"
+            }
+          ],
+          "releases": [
+            {
+              "id": "kids-dr5",
+              "label": "DR5",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-kids-footprints/versions/3.1.0/download"
+        },
+        {
+          "id": "public-legacy-surveys-footprints",
+          "version": "3.0.0",
+          "name": "DESI Legacy Surveys",
+          "sizeBytes": 21903,
+          "sha256": "c50ef2ae3956dec250733336d1698c24acf17a9afa28dbbd79f8439a7f13c9c4",
+          "survey": {
+            "id": "legacy-surveys",
+            "displayName": "DESI Legacy Surveys",
+            "mission": "DECaLS, BASS and MzLS"
+          },
+          "facilities": [
+            "BASS",
+            "DECam",
+            "MzLS"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Legacy Survey viewer",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "legacy-dr1",
+              "label": "Legacy Surveys DR1 observed-brick coverage",
+              "url": "https://www.legacysurvey.org/dr1/",
+              "authority": "Legacy Surveys",
+              "license": "Legacy Surveys public data"
+            },
+            {
+              "releaseId": "legacy-dr2",
+              "label": "Legacy Surveys DR2 observed-brick coverage",
+              "url": "https://www.legacysurvey.org/dr2/",
+              "authority": "Legacy Surveys",
+              "license": "Legacy Surveys public data"
+            },
+            {
+              "releaseId": "legacy-dr3",
+              "label": "Legacy Surveys DR3 observed-brick coverage",
+              "url": "https://www.legacysurvey.org/dr3/",
+              "authority": "Legacy Surveys",
+              "license": "Legacy Surveys public data"
+            },
+            {
+              "releaseId": "legacy-dr4",
+              "label": "Legacy Surveys DR4 observed-brick coverage",
+              "url": "https://www.legacysurvey.org/dr4/",
+              "authority": "Legacy Surveys",
+              "license": "Legacy Surveys public data"
+            },
+            {
+              "releaseId": "legacy-dr5",
+              "label": "Legacy Surveys DR5 observed-brick coverage",
+              "url": "https://www.legacysurvey.org/dr5/",
+              "authority": "Legacy Surveys",
+              "license": "Legacy Surveys public data"
+            },
+            {
+              "releaseId": "legacy-dr6",
+              "label": "Legacy Surveys DR6 observed-brick coverage",
+              "url": "https://www.legacysurvey.org/dr6/",
+              "authority": "Legacy Surveys",
+              "license": "Legacy Surveys public data"
+            },
+            {
+              "releaseId": "legacy-dr7",
+              "label": "Legacy Surveys DR7 observed-brick coverage",
+              "url": "https://www.legacysurvey.org/dr7/",
+              "authority": "Legacy Surveys",
+              "license": "Legacy Surveys public data"
+            },
+            {
+              "releaseId": "legacy-dr8",
+              "label": "Legacy Surveys DR8 observed-brick coverage",
+              "url": "https://www.legacysurvey.org/dr8/",
+              "authority": "Legacy Surveys",
+              "license": "Legacy Surveys public data"
+            },
+            {
+              "releaseId": "legacy-dr9",
+              "label": "Legacy Surveys DR9 observed-brick coverage",
+              "url": "https://www.legacysurvey.org/dr9/",
+              "authority": "Legacy Surveys",
+              "license": "Legacy Surveys public data"
+            },
+            {
+              "releaseId": "legacy-dr10",
+              "label": "Legacy Surveys DR10 observed-brick coverage",
+              "url": "https://www.legacysurvey.org/dr10/",
+              "authority": "Legacy Surveys",
+              "license": "Legacy Surveys public data"
+            }
+          ],
+          "releases": [
+            {
+              "id": "legacy-dr1",
+              "label": "DR1",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr10",
+              "label": "DR10",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr2",
+              "label": "DR2",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr3",
+              "label": "DR3",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr4",
+              "label": "DR4",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr5",
+              "label": "DR5",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr6",
+              "label": "DR6",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr7",
+              "label": "DR7",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr8",
+              "label": "DR8",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            },
+            {
+              "id": "legacy-dr9",
+              "label": "DR9",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release"
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-legacy-surveys-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-nvss-footprints",
+          "version": "3.0.0",
+          "name": "NVSS",
+          "sizeBytes": 8620,
+          "sha256": "ee74ffa811c75501ef80850d22d02ba7b21f6f4f28ed10ef41974b2f2893bdf7",
+          "survey": {
+            "id": "nvss",
+            "displayName": "NVSS",
+            "mission": "NRAO VLA Sky Survey"
+          },
+          "facilities": [
+            "NRAO VLA"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "NRAO archive",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "nvss-final",
+              "label": "NVSS HiPS MOC",
+              "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FNVSS&get=record&fmt=json",
+              "authority": "CDS",
+              "license": "ODbL-1.0 derivative"
+            }
+          ],
+          "releases": [
+            {
+              "id": "nvss-final",
+              "label": "Final survey",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 1998
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-nvss-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-panstarrs-footprints",
+          "version": "3.0.0",
+          "name": "Pan-STARRS1",
+          "sizeBytes": 13616,
+          "sha256": "2d4db6eb978bae76e765d3fabde52aaf20d75f33810c40c00503ab9165b33af0",
+          "survey": {
+            "id": "panstarrs",
+            "displayName": "Pan-STARRS1",
+            "mission": "Panoramic Survey Telescope and Rapid Response System"
+          },
+          "facilities": [
+            "Pan-STARRS1"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "MAST",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "panstarrs-dr1",
+              "label": "Pan-STARRS1 DR1 HiPS MOC",
+              "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FPanSTARRS%2FDR1%2Fcolor-i-r-g&get=record&fmt=json",
+              "authority": "CDS",
+              "license": "ODbL-1.0 derivative"
+            }
+          ],
+          "releases": [
+            {
+              "id": "panstarrs-dr1",
+              "label": "DR1",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 6,
+              "kind": "public_release",
+              "releasedYear": 2016
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-panstarrs-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-rubin-footprints",
+          "version": "3.0.0",
+          "name": "Rubin",
+          "sizeBytes": 4340,
+          "sha256": "4244d4a08764bcf24db043e73321edf620fc734528d23858ac833eda13f3e896",
+          "survey": {
+            "id": "rubin",
+            "displayName": "Rubin",
+            "mission": "Vera C. Rubin Observatory"
+          },
+          "facilities": [
+            "Vera C. Rubin Observatory"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "rubin-firstlook",
+              "label": "Rubin Rubin Firstlook coverage source",
+              "url": "https://rubinobservatory.org/",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "rubin-firstlook",
+              "label": "Rubin Firstlook",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-rubin-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-sdss-footprints",
+          "version": "3.1.0",
+          "name": "SDSS",
+          "sizeBytes": 517425,
+          "sha256": "f2c9cc5734d5abd76d767ad761276e3e4aca6b297963b3cce4cd087ed189a12e",
+          "survey": {
+            "id": "sdss",
+            "displayName": "SDSS",
+            "mission": "Sloan Digital Sky Survey I-V"
+          },
+          "facilities": [
+            "Sloan Digital Sky Survey I-V"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3",
+            "SkyServer",
+            "Sloan Digital Sky Survey I-V"
+          ],
+          "sources": [
+            {
+              "releaseId": "sdss-dr09",
+              "label": "SDSS DR9 coverage source",
+              "url": "https://www.sdss.org/dr9/",
+              "authority": "Sloan Digital Sky Survey I-V"
+            }
+          ],
+          "releases": [
+            {
+              "id": "sdss-dr09",
+              "label": "DR9",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 5,
+              "kind": "public_release"
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-sdss-footprints/versions/3.1.0/download"
+        },
+        {
+          "id": "public-skymapper-footprints",
+          "version": "3.0.0",
+          "name": "SkyMapper",
+          "sizeBytes": 84489,
+          "sha256": "a850c2fbf748af217e0e69a0f2eb06eadfd0dc27c43053c838bf3f0a011f9a84",
+          "survey": {
+            "id": "skymapper",
+            "displayName": "SkyMapper",
+            "mission": "Australian National University SkyMapper"
+          },
+          "facilities": [
+            "Australian National University SkyMapper"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "Resource Package v3",
+            "SkyMapper data release"
+          ],
+          "sources": [
+            {
+              "releaseId": "skymapper-dr4",
+              "label": "SkyMapper DR4 coverage source",
+              "url": "https://skymapper.anu.edu.au/data-release/dr4/",
+              "authority": "ANU SkyMapper DR4"
+            }
+          ],
+          "releases": [
+            {
+              "id": "skymapper-dr4",
+              "label": "DR4",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2024
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-skymapper-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-spherex-footprints",
+          "version": "3.0.0",
+          "name": "SPHEREx",
+          "sizeBytes": 61484,
+          "sha256": "f1f93fc6200c71305df1409f8b3d49612636ff21ee3abb259a8aa0909616b06a",
+          "survey": {
+            "id": "spherex",
+            "displayName": "SPHEREx",
+            "mission": "Spectro-Photometer for the History of the Universe"
+          },
+          "facilities": [
+            "Spectro-Photometer for the History of the Universe"
+          ],
+          "modalities": [
+            "infrared"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "spherex-qr2",
+              "label": "SPHEREx Spherex Qr2 coverage source",
+              "url": "https://www.ipac.caltech.edu/project/spherex",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "spherex-qr2",
+              "label": "Spherex Qr2",
+              "modalities": [
+                "infrared"
+              ],
+              "layerCount": 7,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-spherex-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-sumss-footprints",
+          "version": "3.0.0",
+          "name": "SUMSS",
+          "sizeBytes": 24913,
+          "sha256": "a992644faa36c72722f7aeec1e5c3d1b46ab53c9d28d76b3a47df9848d1b6a3e",
+          "survey": {
+            "id": "sumss",
+            "displayName": "SUMSS",
+            "mission": "Sydney University Molonglo Sky Survey"
+          },
+          "facilities": [
+            "Sydney University Molonglo Sky Survey"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "sumss-final",
+              "label": "SUMSS Sumss Final coverage source",
+              "url": "https://www.astrop.physics.usyd.edu.au/SUMSS/",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "sumss-final",
+              "label": "Sumss Final",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-sumss-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-vista-footprints",
+          "version": "3.0.0",
+          "name": "VISTA VIKING",
+          "sizeBytes": 84696,
+          "sha256": "99d3f8021fed553bcb3c1ffa9dd01cf1fe3f8caaa6acbb387209ef5015a966f3",
+          "survey": {
+            "id": "vista",
+            "displayName": "VISTA VIKING",
+            "mission": "ESO Visible and Infrared Survey Telescope"
+          },
+          "facilities": [
+            "ESO Visible and Infrared Survey Telescope"
+          ],
+          "modalities": [
+            "imaging",
+            "infrared"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "ESO Phase 3 archive",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "viking",
+              "label": "VISTA VIKING VIKING coverage source",
+              "url": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "authority": "ESO VISTA Phase 3"
+            },
+            {
+              "releaseId": "vista-vvv-dr4",
+              "label": "VISTA VIKING Vista Vvv Dr4 coverage source",
+              "url": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "viking",
+              "label": "VIKING",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2019
+            },
+            {
+              "id": "vista-vvv-dr4",
+              "label": "Vista Vvv Dr4",
+              "modalities": [
+                "infrared"
+              ],
+              "layerCount": 6,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-vista-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-vphas-footprints",
+          "version": "3.0.0",
+          "name": "VPHAS+",
+          "sizeBytes": 192494,
+          "sha256": "24616af84dd18d52ac4017c7b2852f51ccb20c243bfc9594b27dd38b8598f0ee",
+          "survey": {
+            "id": "vphas",
+            "displayName": "VPHAS+",
+            "mission": "VST Photometric H-alpha Survey"
+          },
+          "facilities": [
+            "VST Photometric H-alpha Survey"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "vphas-dr4",
+              "label": "VPHAS+ Vphas Dr4 coverage source",
+              "url": "https://www.vphasplus.org/",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "vphas-dr4",
+              "label": "Vphas Dr4",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 6,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-vphas-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-wenss-footprints",
+          "version": "3.0.0",
+          "name": "WENSS",
+          "sizeBytes": 5535,
+          "sha256": "0a1db5b032c4d23c70f36a7404aa9ab2e1b9a0424acd7c7250d96ac18f826983",
+          "survey": {
+            "id": "wenss",
+            "displayName": "WENSS",
+            "mission": "Westerbork Northern Sky Survey"
+          },
+          "facilities": [
+            "Westerbork Northern Sky Survey"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "wenss-final",
+              "label": "WENSS Wenss Final coverage source",
+              "url": "https://www.astron.nl/",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "wenss-final",
+              "label": "Wenss Final",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 1,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-wenss-footprints/versions/3.0.0/download"
+        },
+        {
+          "id": "public-ztf-footprints",
+          "version": "3.0.0",
+          "name": "ZTF",
+          "sizeBytes": 4254298,
+          "sha256": "ebbd56cfd8dd8e64fb7bca9815ca2db0d2c9f3865eaafa39477a804e1e23a728",
+          "survey": {
+            "id": "ztf",
+            "displayName": "ZTF",
+            "mission": "Zwicky Transient Facility"
+          },
+          "facilities": [
+            "Zwicky Transient Facility"
+          ],
+          "modalities": [
+            "imaging"
+          ],
+          "accessModes": [
+            "CDS HiPS",
+            "Resource Package v3"
+          ],
+          "sources": [
+            {
+              "releaseId": "ztf-dr7",
+              "label": "ZTF Ztf Dr7 coverage source",
+              "url": "https://www.ztf.caltech.edu/",
+              "authority": "CDS public HiPS/MOC"
+            }
+          ],
+          "releases": [
+            {
+              "id": "ztf-dr7",
+              "label": "Ztf Dr7",
+              "modalities": [
+                "imaging"
+              ],
+              "layerCount": 4,
+              "kind": "public_release",
+              "releasedYear": 2025
+            }
+          ],
+          "downloadUrl": "/api/v1/resource-packages/public-ztf-footprints/versions/3.0.0/download"
         }
       ]
     }

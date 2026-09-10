@@ -6,15 +6,18 @@ import path from "node:path";
 import test from "node:test";
 
 import { loadCatalog, publicManifest } from "../server/catalog.js";
+import { readZipEntry } from "../server/resource-package-inspection.js";
 import { projectRoot } from "../server/paths.js";
 
 test("release catalog verifies every public file and bundle digest", async () => {
   const catalog = await loadCatalog(projectRoot);
   assert.equal(catalog.manifest.schemaVersion, 1);
-  assert.equal(catalog.manifest.statistics.packages, 14);
+  assert.equal(catalog.manifest.statistics.packages, 29);
   assert.equal(catalog.manifest.statistics.rawMocFiles, 80);
   assert.equal(catalog.manifest.statistics.footprints, 116);
-  assert.equal(catalog.manifest.statistics.acquired, 111);
+  assert.equal(catalog.manifest.statistics.acquired, 107);
+  assert.equal(catalog.manifest.statistics.releases, 67);
+  assert.equal(catalog.manifest.statistics.products, 159);
   assert.equal(catalog.files.size, catalog.manifest.files.length);
   assert.ok(catalog.manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)));
 });
@@ -59,17 +62,55 @@ test("release history ships as a public manifest record without sensitive packag
   assert.match(history.path, /release-history\.json$/);
   const document = JSON.parse(await readFile(path.join(projectRoot, history.path), "utf8")) as {
     schemaVersion: number;
-    releases: Array<{ releaseId: string; sequence: number; bundleId: string; releasedAt: string; packages: Array<{ id: string; version: string; downloadUrl: string }> }>;
+    latestReleaseId: string;
+    releases: Array<{
+      releaseId: string;
+      sequence: number;
+      bundleId: string;
+      releasedAt: string;
+      collection?: { fileName: string; sizeBytes: number; sha256: string; downloadUrl: string };
+      packages: Array<{
+        id: string;
+        version: string;
+        downloadUrl: string;
+        survey?: { id: string; displayName: string };
+        modalities?: string[];
+        releases?: Array<{ id: string; label: string; layerCount: number }>;
+      }>;
+    }>;
   };
-  assert.equal(document.schemaVersion, 1);
-  assert.equal(document.releases.length, 1);
-  const release = document.releases[0]!;
-  assert.equal(release.sequence, 1);
-  assert.ok(release.releaseId.endsWith("-1"));
-  assert.equal(release.bundleId, catalog.manifest.bundle.id);
-  assert.equal(release.packages.length, 14);
-  assert.ok(release.packages.every((entry) => !/csst/.test(entry.id)));
-  assert.ok(release.packages.every((entry) => entry.downloadUrl === `/api/v1/resource-packages/${entry.id}/versions/${entry.version}/download`));
+  assert.equal(document.schemaVersion, 2);
+  assert.ok(document.latestReleaseId);
+  assert.equal(document.releases.length, 2);
+  const [priorRelease, release] = document.releases;
+  assert.ok(priorRelease && priorRelease.sequence < release!.sequence, "history must keep earlier releases cumulative");
+  assert.equal(priorRelease!.packages.length, 14);
+  assert.equal(release!.sequence, 2);
+  assert.ok(release!.releaseId.endsWith("-2"));
+  assert.equal(document.latestReleaseId, release!.releaseId);
+  assert.equal(release!.bundleId, catalog.manifest.bundle.id);
+  assert.equal(release!.packages.length, 29);
+  assert.ok(release!.packages.every((entry) => !/csst/.test(entry.id)));
+  assert.ok(release!.packages.every((entry) => entry.downloadUrl === `/api/v1/resource-packages/${entry.id}/versions/${entry.version}/download`));
+
+  const collection = release!.collection;
+  assert.ok(collection, "history entry must carry the collection archive");
+  assert.match(collection.fileName, /-resource-packages\.zip$/);
+  assert.equal(collection.downloadUrl, `/api/v1/releases/${release!.releaseId}/download`);
+  const collectionRecords = catalog.manifest.files.filter((entry) => entry.kind === "package-collection");
+  assert.equal(collectionRecords.length, 2, "every published collection archive stays downloadable");
+  const collectionRecord = collectionRecords.find((entry) => entry.path.endsWith(collection.fileName));
+  assert.ok(collectionRecord, "collection ZIP must be a public manifest record");
+  assert.equal(collectionRecord.sizeBytes, collection.sizeBytes);
+  assert.equal(collectionRecord.sha256, collection.sha256);
+
+  const desi = release!.packages.find((entry) => entry.id === "public-desi-footprints");
+  assert.ok(desi?.survey, "packages must carry survey projections");
+  assert.ok(desi.survey!.displayName.length > 0);
+  assert.ok((desi.modalities ?? []).length > 0, "survey modalities are the union of release modalities");
+  const releaseIds = (desi.releases ?? []).map((entry) => entry.id);
+  assert.ok(releaseIds.includes("desi-dr1"));
+  assert.ok((desi.releases ?? []).every((entry) => entry.layerCount >= 1 && entry.label.length > 0));
 });
 
 test("public release manifest and API projection expose no evidence records", async () => {
@@ -115,12 +156,17 @@ test("release catalog rejects evidence records misclassified as runtime", async 
   }
 });
 
-test("current package catalog publishes only referenced release versions", async () => {
+test("package records keep current and superseded versions cumulative", async () => {
   const catalog = await loadCatalog(projectRoot, false);
   const packages = catalog.manifest.files.filter((entry) => entry.kind === "package");
-  assert.equal(packages.length, 14);
-  assert.equal(packages.filter((entry) => entry.version === "3.0.0").length, 14);
-  assert.equal(packages.some((entry) => entry.version !== "3.0.0"), false);
+  assert.equal(packages.length, 34);
+  assert.equal(packages.filter((entry) => /superseded/.test(entry.label)).length, 5);
+  assert.ok(packages.every((entry) => /^3\.\d+\.\d+$/.test(entry.version ?? "")));
+  assert.ok(packages.every((entry) => entry.downloadName?.endsWith(`-${entry.version}.zip`) ?? false));
+  assert.equal(new Set(packages.map((entry) => entry.id)).size, packages.length);
+  const bumped = packages.find((entry) => entry.id === "package-public-sdss-footprints-3-1-0");
+  const superseded = packages.find((entry) => entry.id === "package-public-sdss-footprints-3-0-0");
+  assert.ok(bumped && superseded, "changed packages get a new version while the old one stays downloadable");
 });
 
 test("DESI official tile tables and resource package are downloadable release assets", async () => {
@@ -193,6 +239,76 @@ test("cross-step MOC registration dialog is not nested in a hidden admin panel",
   }
   assert.ok(ancestors, "registration dialog markup should be present");
   assert.equal(ancestors!.includes("admin-step-review"), false, "registration dialog must not inherit the hidden review panel");
+});
+
+test("every public package declares access modes and release-aligned coverage sources", async () => {
+  type CatalogSource = { releaseId: string; label: string; url: string; authority: string };
+  type CatalogEntry = {
+    id: string;
+    version: string;
+    releases: string[];
+    accessModes: string[];
+    sources: CatalogSource[];
+  };
+  const document = JSON.parse(
+    await readFile(path.join(projectRoot, "artifacts/public-survey-footprints/packages/catalog.json"), "utf8"),
+  ) as { schemaVersion: number; packages: CatalogEntry[] };
+  assert.equal(document.schemaVersion, 3);
+  const publicEntries = document.packages.filter((entry) => !/csst/.test(entry.id));
+  assert.equal(publicEntries.length, 29);
+  for (const entry of publicEntries) {
+    assert.ok(entry.releases.length > 0, `${entry.id} must declare releases`);
+    assert.ok(entry.accessModes.length > 0, `${entry.id} must declare non-empty accessModes`);
+    assert.ok(entry.sources.length > 0, `${entry.id} must declare non-empty sources`);
+    const releaseSet = new Set(entry.releases);
+    const sourceReleaseIds = new Set(entry.sources.map((source) => source.releaseId));
+    assert.equal(sourceReleaseIds.size, entry.releases.length, `${entry.id} sources must cover every release exactly once`);
+    for (const releaseId of releaseSet) {
+      assert.ok(sourceReleaseIds.has(releaseId), `${entry.id} sources must reference declared release ${releaseId}`);
+    }
+    for (const source of entry.sources) {
+      assert.ok(source.label.length > 0 && source.authority.length > 0, `${entry.id} sources must carry label and authority`);
+      assert.match(source.url, /^https?:\/\//, `${entry.id} source url must be public`);
+    }
+    assert.ok(entry.accessModes.includes("Resource Package v3"), `${entry.id} accessModes must include the package channel`);
+  }
+  const twomass = publicEntries.find((entry) => entry.id === "public-2mass-footprints");
+  assert.ok(twomass);
+  assert.deepEqual(twomass.releases, ["2mass-6x"]);
+  assert.equal(twomass.sources[0]?.releaseId, "2mass-6x", "2MASS sources must follow the current release, not the retired all-sky release");
+});
+
+test("latest release history carries access metadata and the collection embeds the same catalog", async () => {
+  const historyPath = path.join(projectRoot, "artifacts/public-survey-footprints/release-history.json");
+  const document = JSON.parse(await readFile(historyPath, "utf8")) as {
+    releases: Array<{
+      releaseId: string;
+      catalogSha256?: string;
+      collection?: { fileName: string; sha256: string };
+      packages: Array<{ id: string; accessModes?: string[]; sources?: Array<{ releaseId: string; url: string }> }>;
+    }>;
+  };
+  const latest = document.releases.at(-1)!;
+  assert.ok(latest.catalogSha256, "history entries must fingerprint the embedded catalog");
+  for (const pkg of latest.packages) {
+    assert.ok((pkg.accessModes ?? []).length > 0, `${pkg.id} in history must carry accessModes`);
+    assert.ok((pkg.sources ?? []).length > 0, `${pkg.id} in history must carry sources`);
+    for (const source of pkg.sources ?? []) assert.match(source.url, /^https?:\/\//);
+  }
+  const twomass = latest.packages.find((pkg) => pkg.id === "public-2mass-footprints");
+  assert.equal(twomass?.sources?.[0]?.releaseId, "2mass-6x");
+
+  const collectionPath = path.join(projectRoot, "artifacts/public-survey-footprints/collections", latest.collection!.fileName);
+  const embedded = JSON.parse(
+    (await readZipEntry(await readFile(collectionPath), "catalog.json")).toString("utf8"),
+  ) as { packages: Array<{ id: string; accessModes: string[]; sources: Array<{ releaseId: string }> }> };
+  assert.equal(embedded.packages.length, 29);
+  assert.ok(embedded.packages.every((entry) => !/csst/.test(entry.id)));
+  for (const entry of embedded.packages) {
+    assert.ok(entry.accessModes.length > 0, `${entry.id} embedded catalog must keep accessModes`);
+    const releaseSet = new Set(latest.packages.find((pkg) => pkg.id === entry.id)?.sources?.map((source) => source.releaseId) ?? []);
+    for (const source of entry.sources) assert.ok(releaseSet.has(source.releaseId), `${entry.id} embedded sources must match history`);
+  }
 });
 
 test("organization and SDK pages expose the shared Core repository", async () => {

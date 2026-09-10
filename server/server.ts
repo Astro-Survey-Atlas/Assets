@@ -482,7 +482,6 @@ async function sourceUnitsReadyWithin(timeoutMs: number): Promise<SourceUnitWork
 }
 
 function productCoverage(record: ProductRecord): Record<string, unknown> | undefined {
-  const content = record.published ?? record.draft;
   const layer = productCoverageLayer(record);
   if (!layer) return undefined;
   return { layerId: layer.layerId, availableOrders: layer.availableOrders, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder, coverageRole: layer.coverageRole, areaDeg2: layer.areaDeg2 };
@@ -850,29 +849,6 @@ function adminProductView(record: ProductRecord): Record<string, unknown> {
   return { ...record, ...(productCoverage(record) ? { coverage: productCoverage(record) } : {}), ...(mocBuild ? { mocBuild } : {}), lifecycle: adminProductLifecycle(record, mocBuild ? mocBuildStore.get(String(mocBuild.name)) : undefined) };
 }
 
-function adminProductSummaries(records: ProductRecord[]): Array<Record<string, unknown>> {
-  const grouped = new Map<string, { surveyId: string; productCount: number; publishedCount: number; releases: Set<string>; availableOrders: Set<number>; maxOrder: number | null }>();
-  for (const record of records) {
-    const surveyId = record.draft.surveyId;
-    const summary = grouped.get(surveyId) ?? { surveyId, productCount: 0, publishedCount: 0, releases: new Set<string>(), availableOrders: new Set<number>(), maxOrder: null };
-    summary.productCount += 1;
-    if (record.published) summary.publishedCount += 1;
-    summary.releases.add(record.draft.releaseId);
-    const coverage = productCoverage(record);
-    if (coverage && Array.isArray(coverage.availableOrders)) coverage.availableOrders.forEach((order) => summary.availableOrders.add(order as number));
-    if (coverage && typeof coverage.maxOrder === "number") summary.maxOrder = Math.max(summary.maxOrder ?? 0, coverage.maxOrder);
-    grouped.set(surveyId, summary);
-  }
-  return [...grouped.values()].sort((a, b) => a.surveyId.localeCompare(b.surveyId)).map((summary) => ({
-    surveyId: summary.surveyId,
-    productCount: summary.productCount,
-    publishedCount: summary.publishedCount,
-    releaseCount: summary.releases.size,
-    availableOrders: [...summary.availableOrders].sort((a, b) => a - b),
-    maxOrder: summary.maxOrder,
-  }));
-}
-
 function adminProductSurveys(records: ProductRecord[], index: typeof runtimeSurveyIndex): Array<Record<string, unknown>> {
   const byProductId = new Map(records.map((record) => [record.productId, record]));
   const seen = new Set<string>();
@@ -1047,23 +1023,31 @@ async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<st
 }
 
 /**
- * Public release history from the current immutable release, with a
- * fail-closed serve-time policy filter: packages of denied surveys are
- * never listed even if a stale history document slipped through.
+ * Public release history from the current immutable release, coerced to the
+ * v2 projection, with a fail-closed serve-time policy filter: packages of
+ * denied surveys are never listed even if a stale history document slipped
+ * through. `latestReleaseId` is recomputed from the highest sequence so the
+ * serve-time answer never depends on a stale stored pointer.
  */
 async function releaseHistory(loaded: LoadedCatalog): Promise<ReleaseHistoryDocument> {
   const historyFile = [...loaded.files.values()].find(({ record }) => record.path.endsWith("/release-history.json"));
-  if (!historyFile) return { schemaVersion: 1, releases: [] };
-  const document = JSON.parse(await readFile(historyFile.absolutePath, "utf8")) as ReleaseHistoryDocument;
-  if (document?.schemaVersion !== 1 || !Array.isArray(document.releases)) {
-    throw new Error("Release history document is not v1");
+  if (!historyFile) return { schemaVersion: 2, latestReleaseId: "", releases: [] };
+  const raw = JSON.parse(await readFile(historyFile.absolutePath, "utf8")) as ReleaseHistoryDocument & { schemaVersion: number };
+  if (!raw || !Array.isArray(raw.releases)) {
+    throw new Error("Release history document is malformed");
   }
-  return {
-    schemaVersion: 1,
-    releases: document.releases.map((entry) => ({
+  const releases = raw.releases
+    .map((entry) => ({
       ...entry,
-      packages: entry.packages.filter((pkg) => !isDeniedPackageId(pkg.id)),
-    })),
+      packages: entry.packages.filter((pkg) => !isDeniedPackageId(pkg.id) && !(pkg.survey && isDeniedSurvey(pkg.survey.id))),
+    }))
+    .sort((left, right) => right.sequence - left.sequence);
+  const latest = releases[0];
+  const storedLatest = raw.schemaVersion === 2 ? raw.latestReleaseId : undefined;
+  return {
+    schemaVersion: 2,
+    latestReleaseId: latest?.releaseId ?? storedLatest ?? "",
+    releases,
   };
 }
 
@@ -1991,15 +1975,52 @@ const server = http.createServer((request, response) => {
       if (!entry) return json(response, 404, { error: "Release not found" });
       return compressedJson(request, response, 200, entry, "public, max-age=60, stale-while-revalidate=300");
     }
+    const releaseDownload = /^\/api\/v1\/releases\/([^/]+)\/download$/.exec(pathname);
+    if (releaseDownload?.[1]) {
+      const releaseId = decodeURIComponent(releaseDownload[1]);
+      const entry = (await releaseHistory(catalog)).releases.find((candidate) => candidate.releaseId === releaseId);
+      if (!entry) return json(response, 404, { error: "Release not found" });
+      const collection = entry.collection;
+      if (!collection) return json(response, 404, { error: "Release collection not available" });
+      const match = [...catalog.files.values()].find(({ record }) => record.kind === "package-collection"
+        && record.path.endsWith(`/${collection.fileName}`));
+      if (!match) return json(response, 404, { error: "Release collection not available" });
+      return sendDownload(request, response, catalog, match.record.id);
+    }
     const releaseCatalogRoute = /^\/api\/v1\/releases\/([^/]+)\/resource-packages\/catalog\.json$/.exec(pathname);
     if (releaseCatalogRoute?.[1]) {
       const releaseId = decodeURIComponent(releaseCatalogRoute[1]);
       const history = await releaseHistory(catalog);
+      const entry = history.releases.find((candidate) => candidate.releaseId === releaseId);
+      if (!entry) return json(response, 404, { error: "Release not found" });
       const currentEntry = [...history.releases].reverse().find((candidate) => candidate.bundleId === catalog.manifest.bundle.id);
-      if (!currentEntry || currentEntry.releaseId !== releaseId) {
-        return json(response, 404, { error: "Only the current release catalog is served online; historical catalogs live inside the immutable release archive" });
+      if (currentEntry?.releaseId === releaseId) {
+        return json(response, 200, await resourcePackageCatalog(catalog));
       }
-      return json(response, 200, await resourcePackageCatalog(catalog));
+      // Historical entries serve a catalog projection from the immutable
+      // history record; every referenced archive stays downloadable because
+      // prior package versions are retained cumulatively in the release tree.
+      return json(response, 200, {
+        schemaVersion: 3,
+        version: "3.0.0",
+        releaseId: entry.releaseId,
+        bundleId: entry.bundleId,
+        generatedAt: entry.releasedAt,
+        packages: entry.packages.map((pkg) => ({
+          id: pkg.id,
+          surveyId: pkg.survey?.id,
+          name: pkg.name,
+          version: pkg.version,
+          modalities: pkg.modalities ?? [],
+          facilities: pkg.facilities ?? [],
+          releases: (pkg.releases ?? []).map((release) => release.id),
+          releaseLabels: Object.fromEntries((pkg.releases ?? []).map((release) => [release.id, release.label])),
+          archiveUrl: pkg.downloadUrl,
+          sizeBytes: pkg.sizeBytes,
+          sha256: pkg.sha256,
+          updatedAt: entry.releasedAt,
+        })),
+      });
     }
     const packageVersionDownload = /^\/api\/v1\/resource-packages\/([^/]+)\/versions\/([^/]+)\/download$/.exec(pathname);
     if (packageVersionDownload?.[1] && packageVersionDownload[2]) {

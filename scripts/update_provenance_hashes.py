@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,7 +51,9 @@ def main() -> None:
         "awaiting_geometry": sum(product.get("status") == "awaiting_geometry" for product in products),
         "not_applicable": sum(product.get("status") == "not_applicable" for product in products),
         "manifestFootprints": len(manifest.get("footprints", [])),
+        "packages": len(value["files"]["packages"]),
     })
+    value["generatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") + f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 

@@ -21,13 +21,14 @@ against the published package metadata and upstream license files.
 | Component | Use | License |
 | --- | --- | --- |
 | `@aws-sdk/client-s3` | S3-compatible publication adapter | Apache-2.0 |
+| `yauzl` | ZIP reading for resource-package and release validation | MIT |
+| `yazl` | Deterministic ZIP writing for collections and packages | MIT |
 | `three` | Site 3D / sky rendering | MIT |
 | `lucide` | Site icons | ISC |
 | `typescript` | TypeScript compiler (dev) | Apache-2.0 |
 | `vite` | Site build (dev) | MIT |
 | `tsx` | TypeScript execution for scripts and tests (dev) | MIT |
-| `pngjs` | PNG generation / validation (dev) | MIT |
-| `@types/node`, `@types/pngjs`, `@types/three` | TypeScript type packages (dev) | MIT |
+| `@types/node`, `@types/three` | TypeScript type packages (dev) | MIT |
 | `healpixjs` | HEALPix pixelization in Node | **Not OSI-approved.** Dual commercial / non-commercial source-available license (Fabrizio Giordano). See [healpixjs LICENSE.md](https://github.com/fab77/healpixjs/blob/master/LICENSE.md). |
 
 ## Category X: healpixjs

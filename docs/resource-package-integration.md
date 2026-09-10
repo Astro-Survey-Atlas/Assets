@@ -7,22 +7,43 @@ or Elasticsearch to install and query the published MOCs.
 ## Trust and download
 
 Read the public package catalog, choose a package, download its immutable
-archive, and compare its SHA-256 with the catalog before extracting anything:
+versioned archive, and verify its SHA-256 before extracting anything:
 
 ```bash
+BASE=https://assets.example
+
 curl --fail --silent --show-error \
-  https://assets.example/api/v1/resource-packages/catalog.json \
+  "$BASE/api/v1/resource-packages/catalog.json" \
   --output catalog.json
 
+# packages[].archiveUrl is the pinned version route:
+#   /api/v1/resource-packages/{id}/versions/{version}/download
 curl --fail --silent --show-error \
-  https://assets.example/api/v1/assets/<package-asset-id>/download \
-  --output package.zip
+  "$BASE/api/v1/resource-packages/public-desi-footprints/versions/3.0.0/download" \
+  --output public-desi-footprints-3.0.0.zip
 
-sha256sum package.zip
+printf '%s  %s\n' "<packages[].sha256>" public-desi-footprints-3.0.0.zip \
+  | sha256sum --check -
 ```
 
 The catalog's `packages[].sha256` is the trust anchor. HTTP `ETag` and object
 storage multipart ETags are not substitutes for the content hash.
+
+Every publication also exposes a whole-release **resource package collection**
+ZIP (catalog + all survey package ZIPs of that release) through the release
+history:
+
+```bash
+curl --fail --silent --show-error "$BASE/api/v1/releases" --output releases.json
+# releases[].collection.downloadUrl -> /api/v1/releases/{releaseId}/download
+# releases[].collection.sizeBytes / .sha256 -> verify after download
+```
+
+Ready-to-run clients with retry, atomic rename and hash verification are
+published as release artifacts and linked from the `/releases/` page:
+
+- Python 3 (stdlib only): `docs/examples/python/asa_package_sync.py`
+- Java 17: `docs/examples/java/` (Maven, Jackson)
 
 Assets rebuilds packages from the acquired/frozen layer registry. For the
 current DESI and Euclid refresh, the reproducible local command is:
@@ -103,7 +124,7 @@ Install the pinned MOC Core wheel published by `/api/v1/assets`, then validate
 the archive against the downloaded public catalog:
 
 ```bash
-python3 -m pip install astro_survey_moc_core-1.0.0-py3-none-any.whl
+python3 -m pip install astro_survey_moc_core-1.1.0-py3-none-any.whl
 python3 -m astro_survey_moc_core.cli package validate package.zip \
   --public-catalog catalog.json
 ```

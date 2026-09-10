@@ -425,6 +425,43 @@ scan 或错误文件。重提创建新的不可变 ScanRequest、run ID 和 evid
 layer 按 layer identity 覆盖或追加。Warehouse 不可用时保留静态 catalog，并将
 模式报告为 `degraded`。
 
+## Release History And Resource Package Downloads
+
+```http
+GET  /api/v1/releases
+GET  /api/v1/releases/{releaseId}
+GET|HEAD /api/v1/releases/{releaseId}/download
+GET  /api/v1/releases/{releaseId}/resource-packages/catalog.json
+GET  /api/v1/resource-packages/catalog.json
+GET|HEAD /api/v1/resource-packages/{packageId}/versions/{version}/download
+```
+
+`/api/v1/releases` 返回 schema v2 发布历史：`latestReleaseId` 和按 `sequence`
+倒序的 `releases[]`。每个 release 包含 `releaseId`、`sequence`、`bundleId`、
+`releasedAt`、可选 `notes`、`collection`（该次发布的全量资源包合集 ZIP 的
+`fileName`/`sizeBytes`/`sha256`/`downloadUrl`）和 `packages[]`。`packages[]`
+是按 ZIP 内 `resource-package.json.layers` 实际内容投影的条目：稳定
+`id`/`version`、`survey`（`id`、`displayName`、`mission`）、`facilities[]`、
+巡天级 `modalities[]`（其下所有 DR 模态的并集）和 `releases[]`
+（`id`、`label`、`kind`、`releasedYear`、DR 级 `modalities[]`、`layerCount`）。
+被发布策略排除的巡天（当前为 CSST）不会出现在任何字段或下载路由中。
+
+`/{releaseId}/download` 使用与 `/api/v1/assets/{assetId}/download` 相同的
+`ETag`/`X-Content-SHA256`/单 Range 语义提供合集 ZIP；没有合集的 release 返回
+`404`。`/{releaseId}/resource-packages/catalog.json` 对当前 release 返回与
+`/api/v1/resource-packages/catalog.json` 相同的合并目录；历史 release 返回
+由历史条目派生的只读目录，未知 `releaseId` 返回 `404`。
+
+版本化包下载 `/{packageId}/versions/{version}/download` 返回确切的
+`{packageId}-{version}.zip`，同样支持 Range、不可变缓存与内容哈希头；包或
+版本不存在、或被发布策略排除时返回 `404`。这些路由取代旧的
+`/api/v1/assets/<package-asset-id>/download` 包下载方式；`archiveUrl` 现在
+始终指向版本化路由，便于离线校验与复现。
+
+可执行同步客户端（Python 3 标准库与 Java 17）作为发布制品发布，并在
+`/releases/` 页面链接；它们演示 latest 选择、合集或单包下载、
+`Content-Length` 与 SHA-256 校验和原子改名安装。
+
 ## Download
 
 ```http

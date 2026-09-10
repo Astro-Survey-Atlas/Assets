@@ -1,9 +1,15 @@
-"""Rebuild the public Resource Package v3 archives for selected surveys.
+"""Rebuild the public Resource Package v3 archives for every eligible survey.
 
 The layer registry is the only identity/classification authority.  The script
 keeps the v3 archive shape stable, writes support files in a temporary
 directory, and refreshes the package catalog with the resulting archive hash.
 It never includes input manifests, normalized scans, or task snapshots.
+
+Surveys without acquired registry layers keep their existing migrated
+archives untouched.  Content changes bump the package minor version and keep
+the previous archive on disk so older release-history entries stay
+downloadable.  Surveys listed in ASSETS_DENIED_SURVEYS (default ``csst``) are
+never rebuilt or cataloged.
 """
 
 from __future__ import annotations
@@ -11,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -23,21 +30,67 @@ from astro_survey_moc_core.resource_package import build_resource_package
 ARTIFACT_ROOT = ROOT / "artifacts/public-survey-footprints"
 REGISTRY_PATH = ROOT / "src/layers/layer-registry.json"
 FOOTPRINT_PATH = ROOT / "src/footprints/survey-footprints.json"
+SURVEY_CATALOG_PATH = ROOT / "src/surveys/survey-catalog.json"
 CATALOG_PATH = ARTIFACT_ROOT / "packages/catalog.json"
 SOURCE_DATE_EPOCH = 1787184000
-TARGETS = {
-    "public-desi-footprints": "desi",
-    "public-euclid-footprints": "euclid",
-    "public-gaia-footprints": "gaia",
+DENIED_SURVEYS = {
+    item.strip().lower()
+    for item in os.environ.get("ASSETS_DENIED_SURVEYS", "csst").split(",")
+    if item.strip()
 }
+REGIME_WAVELENGTHS = {
+    "ultraviolet": "ultraviolet",
+    "far-ultraviolet": "far-ultraviolet",
+    "optical": "optical",
+    "infrared": "infrared",
+    "near-infrared": "near-infrared",
+    "far-infrared": "far-infrared",
+    "radio": "radio",
+    "millimeter": "millimeter",
+    "submillimeter": "submillimeter",
+}
+COVERAGE_ROLE_PRODUCT_TYPES = {
+    "image_extent": "image-extent-MOC",
+    "object_presence": "object-presence-MOC",
+    "footprint_extent": "footprint-extent-MOC",
+}
+SOURCE_TIER_AUTHORITIES = {
+    "third_party_moc": "third-party-moc",
+    "official_geometry": "official-geometry",
+    "official_table": "official-tile-table",
+}
+ACCESS_MODE_BY_AUTHORITY = {
+    "CDS public HiPS/MOC": "CDS HiPS",
+    "DECam Legacy Survey DR5": "Legacy Survey viewer",
+    "ANU SkyMapper DR4": "SkyMapper data release",
+    "ESO VISTA Phase 3": "ESO Phase 3 archive",
+}
+UNIVERSAL_ACCESS_MODE = "Resource Package v3"
+
+
+def derive_access_modes(sources: list[dict[str, Any]], curated: list[str] | None) -> list[str]:
+    modes = list(curated or [])
+    for source in sources:
+        authority = str(source.get("authority") or "").strip()
+        if authority:
+            modes.append(ACCESS_MODE_BY_AUTHORITY.get(authority, authority))
+    modes.append(UNIVERSAL_ACCESS_MODE)
+    return sorted({mode for mode in modes if mode})
 
 
 def read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def next_version(version: str) -> str:
+    match = re.match(r"^3\.(\d+)\.0$", version)
+    if not match:
+        return "3.1.0"
+    return f"3.{int(match.group(1)) + 1}.0"
 
 
 def package_layers(registry: dict[str, Any], survey_id: str) -> list[dict[str, Any]]:
@@ -53,7 +106,14 @@ def package_layers(registry: dict[str, Any], survey_id: str) -> list[dict[str, A
     return sorted(layers, key=lambda layer: layer["layerId"])
 
 
-def support_documents(package_id: str, survey_id: str, layers: list[dict[str, Any]], footprint: dict[str, Any], registry: dict[str, Any]) -> tuple[dict[str, Any], str, str]:
+def support_documents(
+    package_id: str,
+    package_version: str,
+    survey_id: str,
+    layers: list[dict[str, Any]],
+    footprint: dict[str, Any],
+    registry: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], str]:
     layer_keys = {(layer["surveyId"], layer["releaseId"], layer["product"]) for layer in layers}
     selected = [
         item for item in footprint.get("footprints", [])
@@ -96,7 +156,7 @@ def support_documents(package_id: str, survey_id: str, layers: list[dict[str, An
     provenance_doc = {
         "schemaVersion": 1,
         "packageId": package_id,
-        "packageVersion": "3.0.0",
+        "packageVersion": package_version,
         "generatedAt": footprint["generatedAt"],
         "coordinateFrame": "ICRS",
         "ordering": "NESTED",
@@ -107,60 +167,201 @@ def support_documents(package_id: str, survey_id: str, layers: list[dict[str, An
     return footprint_doc, provenance_doc, readme
 
 
+def build_archive(
+    support_root: Path,
+    package_id: str,
+    package_version: str,
+    survey_id: str,
+    layers: list[dict[str, Any]],
+    footprint: dict[str, Any],
+    registry: dict[str, Any],
+    output: Path,
+) -> None:
+    footprint_doc, provenance_doc, readme = support_documents(
+        package_id, package_version, survey_id, layers, footprint, registry,
+    )
+    support = support_root / f"{package_id}-{package_version}"
+    support.mkdir(exist_ok=True)
+    footprint_file = support / "footprints.json"
+    provenance_file = support / "provenance.json"
+    readme_file = support / "README.md"
+    footprint_file.write_text(json.dumps(footprint_doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    provenance_file.write_text(json.dumps(provenance_doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    readme_file.write_text(readme, encoding="utf-8")
+    spec = {
+        "id": package_id,
+        "version": package_version,
+        "surveyId": survey_id,
+        "footprintPath": str(footprint_file),
+        "provenancePath": str(provenance_file),
+        "readmePath": str(readme_file),
+        "layers": [
+            {
+                "layerId": layer["layerId"],
+                "surveyId": layer["surveyId"],
+                "releaseId": layer["releaseId"],
+                "modality": layer["modality"],
+                "coverageRole": layer["coverageRole"],
+                "dataOrigin": layer["dataOrigin"],
+                "sourceTier": layer["sourceTier"],
+                "sourcePath": str(ROOT / layer["artifactPath"]),
+            }
+            for layer in layers
+        ],
+    }
+    result = build_resource_package(spec, output, base_dir=ROOT)
+    if result.manifest["id"] != package_id or result.manifest["version"] != package_version:
+        raise RuntimeError(f"Unexpected manifest identity for {package_id}")
+
+
+def derive_catalog_entry(
+    package_id: str,
+    survey_id: str,
+    survey: dict[str, Any],
+    layers: list[dict[str, Any]],
+    footprint_generated_at: str,
+    version: str,
+    archive: Path,
+) -> dict[str, Any]:
+    releases = sorted({layer["releaseId"] for layer in layers})
+    release_by_id = {release["id"]: release for release in survey.get("releases", [])}
+    release_labels: dict[str, str] = {}
+    for release_id in releases:
+        release = release_by_id.get(release_id)
+        release_labels[release_id] = (release or {}).get("label") or release_id
+    modalities = sorted({layer["modality"] for layer in layers})
+    survey_modalities = sorted({
+        modality
+        for release_id in releases
+        for modality in (release_by_id.get(release_id) or {}).get("modalities", [])
+    })
+    wavelengths = sorted({
+        REGIME_WAVELENGTHS[modality]
+        for modality in survey_modalities + modalities
+        if modality in REGIME_WAVELENGTHS
+    })
+    if not wavelengths:
+        wavelengths = ["optical"]
+    product_types = sorted({
+        COVERAGE_ROLE_PRODUCT_TYPES.get(layer["coverageRole"], "coverage-MOC")
+        for layer in layers
+    })
+    authorities = sorted({
+        SOURCE_TIER_AUTHORITIES.get(layer.get("sourceTier", ""), layer.get("sourceTier", ""))
+        for layer in layers
+    } - {""})
+    sources = []
+    for release_id in releases:
+        release = release_by_id.get(release_id) or {}
+        product = next(
+            (item for item in release.get("products", []) if item.get("sourceUrl")),
+            None,
+        )
+        if product is None:
+            continue
+        sources.append({
+            "releaseId": release_id,
+            "label": f"{survey['name']} {release_labels[release_id]} coverage source",
+            "url": product["sourceUrl"],
+            "authority": product.get("sourceLabel") or survey.get("mission") or survey["name"],
+        })
+    if not sources:
+        raise RuntimeError(f"Unable to derive coverage sources for {survey_id}")
+    return {
+        "surveyId": survey_id,
+        "name": survey["name"],
+        "description": survey.get("description", f"{survey['name']} public coverage layers."),
+        "modalities": modalities,
+        "wavelengths": wavelengths,
+        "productTypes": product_types,
+        "facilities": [survey["mission"]] if survey.get("mission") else [],
+        "coverageAuthorities": authorities,
+        "accessModes": derive_access_modes(sources, []),
+        "version": version,
+        "sources": sources,
+        "id": package_id,
+        "releases": releases,
+        "releaseLabels": release_labels,
+        "archiveUrl": archive.name,
+        "sizeBytes": archive.stat().st_size,
+        "sha256": sha256_bytes(archive.read_bytes()),
+        "updatedAt": footprint_generated_at,
+    }
+
+
 def main() -> None:
     os.environ.setdefault("SOURCE_DATE_EPOCH", str(SOURCE_DATE_EPOCH))
     registry = read_json(REGISTRY_PATH)
     footprint = read_json(FOOTPRINT_PATH)
+    survey_catalog = read_json(SURVEY_CATALOG_PATH)
     catalog = read_json(CATALOG_PATH)
     catalog_by_id = {entry["id"]: entry for entry in catalog["packages"]}
-    generated: list[tuple[str, str, int]] = []
+    survey_by_id = {entry["id"]: entry for entry in survey_catalog["surveys"]}
+
+    survey_ids = sorted({
+        layer["surveyId"]
+        for layer in registry["layers"]
+        if layer.get("status") in {"acquired", "frozen-review-exception"}
+        and layer.get("artifactPath")
+        and layer["surveyId"] not in DENIED_SURVEYS
+    })
+    print(f"rebuilding {len(survey_ids)} surveys: {', '.join(survey_ids)}")
+
+    generated: list[tuple[str, str, str, int, bool]] = []
     with tempfile.TemporaryDirectory(prefix="assets-package-support-") as temp_dir:
         support_root = Path(temp_dir)
-        for package_id, survey_id in TARGETS.items():
+        for survey_id in survey_ids:
+            package_id = f"public-{survey_id}-footprints"
+            survey = survey_by_id.get(survey_id)
+            if survey is None:
+                raise RuntimeError(f"Survey catalog lacks {survey_id}")
             layers = package_layers(registry, survey_id)
-            footprint_doc, provenance_doc, readme = support_documents(package_id, survey_id, layers, footprint, registry)
-            support = support_root / package_id
-            support.mkdir()
-            footprint_file = support / "footprints.json"
-            provenance_file = support / "provenance.json"
-            readme_file = support / "README.md"
-            footprint_file.write_text(json.dumps(footprint_doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            provenance_file.write_text(json.dumps(provenance_doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            readme_file.write_text(readme, encoding="utf-8")
-            spec = {
-                "id": package_id,
-                "version": "3.0.0",
-                "surveyId": survey_id,
-                "footprintPath": str(footprint_file),
-                "provenancePath": str(provenance_file),
-                "readmePath": str(readme_file),
-                "layers": [
-                    {
-                        "layerId": layer["layerId"],
-                        "surveyId": layer["surveyId"],
-                        "releaseId": layer["releaseId"],
-                        "modality": layer["modality"],
-                        "coverageRole": layer["coverageRole"],
-                        "dataOrigin": layer["dataOrigin"],
-                        "sourceTier": layer["sourceTier"],
-                        "sourcePath": str(ROOT / layer["artifactPath"]),
-                    }
-                    for layer in layers
-                ],
-            }
-            archive = ARTIFACT_ROOT / "packages" / f"{package_id}-3.0.0.zip"
-            result = build_resource_package(spec, archive, base_dir=ROOT)
-            if result.manifest["id"] != package_id or result.manifest["version"] != "3.0.0":
-                raise RuntimeError(f"Unexpected manifest identity for {package_id}")
-            catalog_entry = catalog_by_id.get(package_id)
-            if catalog_entry is None:
-                raise RuntimeError(f"Package catalog lacks {package_id}")
-            catalog_entry["sizeBytes"] = archive.stat().st_size
-            catalog_entry["sha256"] = sha256(archive)
-            generated.append((package_id, catalog_entry["sha256"], catalog_entry["sizeBytes"]))
+            existing = catalog_by_id.get(package_id)
+            current_version = existing["version"] if existing else "3.0.0"
+            probe_root = support_root / "probe"
+            probe_root.mkdir(exist_ok=True)
+            probe = probe_root / f"{package_id}-{current_version}.zip"
+            build_archive(support_root, package_id, current_version, survey_id, layers, footprint, registry, probe)
+            new_sha = sha256_bytes(probe.read_bytes())
+            archive = ARTIFACT_ROOT / "packages" / f"{package_id}-{current_version}.zip"
+            changed = existing is None or existing["sha256"] != new_sha
+            if not changed:
+                archive.write_bytes(probe.read_bytes())
+                fresh = derive_catalog_entry(
+                    package_id, survey_id, survey, layers, footprint["generatedAt"], current_version, archive,
+                )
+                curated = existing.get("accessModes") or []
+                existing.clear()
+                existing.update(fresh)
+                existing["accessModes"] = derive_access_modes(fresh["sources"], curated)
+                catalog_by_id[package_id] = existing
+                generated.append((package_id, current_version, new_sha, archive.stat().st_size, False))
+                continue
+
+            version = next_version(current_version) if existing else current_version
+            archive = ARTIFACT_ROOT / "packages" / f"{package_id}-{version}.zip"
+            build_archive(support_root, package_id, version, survey_id, layers, footprint, registry, archive)
+            fresh = derive_catalog_entry(
+                package_id, survey_id, survey, layers, footprint["generatedAt"], version, archive,
+            )
+            if existing is None:
+                catalog["packages"].append(fresh)
+                entry = fresh
+            else:
+                curated = existing.get("accessModes") or []
+                existing.clear()
+                existing.update(fresh)
+                existing["accessModes"] = derive_access_modes(fresh["sources"], curated)
+                entry = existing
+            catalog_by_id[package_id] = entry
+            generated.append((package_id, version, entry["sha256"], entry["sizeBytes"], True))
+
+    catalog["packages"].sort(key=lambda entry: entry["id"])
+    catalog["generatedAt"] = footprint["generatedAt"]
     CATALOG_PATH.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    for package_id, archive_hash, size in generated:
-        print(f"rebuilt {package_id}: {size} bytes sha256={archive_hash}")
+    for package_id, version, archive_hash, size, changed_flag in generated:
+        marker = "rebuilt" if changed_flag else "unchanged"
+        print(f"{marker} {package_id}@{version}: {size} bytes sha256={archive_hash}")
 
 
 if __name__ == "__main__":

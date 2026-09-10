@@ -4,6 +4,232 @@
   "generatedAt": "2026-08-20T04:48:22.554910Z",
   "packages": [
     {
+      "surveyId": "2mass",
+      "name": "2MASS",
+      "description": "Near-infrared all-sky imaging and source catalogs. The bundled artifact is specifically the All-Sky J-band image coverage.",
+      "modalities": [
+        "infrared"
+      ],
+      "wavelengths": [
+        "infrared"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Two Micron All Sky Survey"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "IRSA",
+        "Resource Package v3"
+      ],
+      "version": "3.1.0",
+      "sources": [
+        {
+          "releaseId": "2mass-6x",
+          "label": "2MASS 2Mass 6X coverage source",
+          "url": "https://irsa.ipac.caltech.edu/Missions/2mass.html",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-2mass-footprints",
+      "releases": [
+        "2mass-6x"
+      ],
+      "releaseLabels": {
+        "2mass-6x": "2Mass 6X"
+      },
+      "archiveUrl": "public-2mass-footprints-3.1.0.zip",
+      "sizeBytes": 29672,
+      "sha256": "ca0dd9ab2ebbcad4c4c731b82e21408eba394ff2683707d6f1458679ef28cddb",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "act",
+      "name": "ACT",
+      "description": "Public ACT coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "radio"
+      ],
+      "wavelengths": [
+        "radio"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Atacama Cosmology Telescope"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "act-dr5",
+          "label": "ACT Act Dr5 coverage source",
+          "url": "https://lambda.gsfc.nasa.gov/product/act/",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-act-footprints",
+      "releases": [
+        "act-dr5"
+      ],
+      "releaseLabels": {
+        "act-dr5": "Act Dr5"
+      },
+      "archiveUrl": "public-act-footprints-3.0.0.zip",
+      "sizeBytes": 23487,
+      "sha256": "2cfcce7cc0b099e7fce9c74c2b828e4fbb0fa9707e1361e5e8d0abc4c361ec51",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "akari",
+      "name": "AKARI",
+      "description": "Public AKARI coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "infrared"
+      ],
+      "wavelengths": [
+        "infrared"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "AKARI infrared all-sky survey"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "akari-fis",
+          "label": "AKARI Akari Fis coverage source",
+          "url": "https://www.ir.isas.jaxa.jp/AKARI/",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-akari-footprints",
+      "releases": [
+        "akari-fis"
+      ],
+      "releaseLabels": {
+        "akari-fis": "Akari Fis"
+      },
+      "archiveUrl": "public-akari-footprints-3.0.0.zip",
+      "sizeBytes": 10458,
+      "sha256": "0135595748f3fb302207bcbb86476b885b5817aa016425197fdd99f30e98896e",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "allwise",
+      "name": "AllWISE",
+      "description": "AllWISE W1-W4 静态图像覆盖，不表达 NEOWISE 时间完整性。",
+      "modalities": [
+        "imaging",
+        "photometry",
+        "infrared"
+      ],
+      "wavelengths": [
+        "mid-infrared"
+      ],
+      "productTypes": [
+        "HiPS-image"
+      ],
+      "facilities": [
+        "WISE",
+        "IRSA"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "IRSA",
+        "Resource Package v3"
+      ],
+      "sources": [
+        {
+          "releaseId": "allwise",
+          "label": "AllWISE W1 HiPS MOC",
+          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW1&get=record&fmt=json",
+          "authority": "CDS/IRSA",
+          "license": "ODbL-1.0 derivative"
+        }
+      ],
+      "id": "public-allwise-footprints",
+      "releases": [
+        "allwise"
+      ],
+      "releaseLabels": {
+        "allwise": "AllWISE"
+      },
+      "version": "3.0.0",
+      "archiveUrl": "public-allwise-footprints-3.0.0.zip",
+      "sizeBytes": 11767,
+      "sha256": "3b3697edba5e163a80628977c9b6b571965910397eb1524c9a1e9e77fe4832e0",
+      "updatedAt": "2026-08-19T01:00:38.290Z"
+    },
+    {
+      "surveyId": "cfhtls",
+      "name": "CFHTLS",
+      "description": "Public CFHTLS coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Canada-France-Hawaii Telescope Legacy Survey"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "cfhtls-wide",
+          "label": "CFHTLS Cfhtls Wide coverage source",
+          "url": "https://www.cfht.hawaii.edu/Science/CFHTLS/",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-cfhtls-footprints",
+      "releases": [
+        "cfhtls-wide"
+      ],
+      "releaseLabels": {
+        "cfhtls-wide": "Cfhtls Wide"
+      },
+      "archiveUrl": "public-cfhtls-footprints-3.0.0.zip",
+      "sizeBytes": 38164,
+      "sha256": "20533dd66d8b62afa9ab6f0de0ffb0414bf135bed21a4353ea6619e7afd2c8d6",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
       "surveyId": "csst",
       "name": "CSST W1-W4 Simulation",
       "description": "CSST W1/W2/W3/W4 simulated wide-field image-extent MOCs generated from data-warehouse FITS-WCS coverage tasks and finalized by Assets MOC Core.",
@@ -25,6 +251,7 @@
         "data-warehouse-reviewed-wcs"
       ],
       "accessModes": [
+        "Resource Package v3",
         "task-configured source"
       ],
       "version": "3.0.0",
@@ -50,7 +277,6 @@
       ],
       "id": "public-csst-footprints",
       "releases": [
-        "csst-sim-w1-20250731",
         "csst-sim-w2-20250731",
         "csst-sim-w3-20250731",
         "csst-sim-w4-20250731"
@@ -66,150 +292,568 @@
       "updatedAt": "2026-08-21T22:57:05.370160Z"
     },
     {
-      "surveyId": "euclid",
-      "name": "Euclid",
-      "description": "Euclid Q1 三个深场的官方 DS9 ICRS 边界导出 MOC。",
+      "surveyId": "decals",
+      "name": "DECaLS",
+      "description": "Legacy Survey optical imaging. The bundled DR5 g/r/z footprint represents CDS color HiPS availability, not DESI spectroscopy or Tractor selection.",
       "modalities": [
-        "imaging",
-        "photometry"
+        "imaging"
       ],
       "wavelengths": [
-        "optical",
-        "near-infrared"
+        "optical"
       ],
       "productTypes": [
-        "field-polygon-MOC"
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Dark Energy Camera Legacy Survey"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "Legacy Survey viewer",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "decals-dr5",
+          "label": "DECaLS DR5 coverage source",
+          "url": "https://www.legacysurvey.org/dr5/",
+          "authority": "DECam Legacy Survey DR5"
+        }
+      ],
+      "id": "public-decals-footprints",
+      "releases": [
+        "decals-dr5"
+      ],
+      "releaseLabels": {
+        "decals-dr5": "DR5"
+      },
+      "archiveUrl": "public-decals-footprints-3.0.0.zip",
+      "sizeBytes": 118566,
+      "sha256": "69aead3ee874e2aa0cbcc62e53138bf9b1c9e1b24f2dbcb5b8574a6008376609",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "decaps",
+      "name": "DECaPS",
+      "description": "Public DECaPS coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "DECam Plane Survey"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "decaps-dr2",
+          "label": "DECaPS Decaps Dr2 coverage source",
+          "url": "https://decaps.skymaps.info/",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-decaps-footprints",
+      "releases": [
+        "decaps-dr2"
+      ],
+      "releaseLabels": {
+        "decaps-dr2": "Decaps Dr2"
+      },
+      "archiveUrl": "public-decaps-footprints-3.0.0.zip",
+      "sizeBytes": 30232,
+      "sha256": "61c9da44fc9020ca75036d2248f18ed0deacafca0f340b721da4d13212ac00f2",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "des",
+      "name": "DES",
+      "description": "Southern-sky optical imaging, catalogs and time-domain supernova fields. The bundled footprint represents the DR2 color image product.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Dark Energy Survey"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "DES Data Management",
+        "Dark Energy Survey",
+        "Resource Package v3"
+      ],
+      "version": "3.1.0",
+      "sources": [
+        {
+          "releaseId": "des-dr2",
+          "label": "DES DR2 coverage source",
+          "url": "https://des.ncsa.illinois.edu/releases/dr2",
+          "authority": "Dark Energy Survey"
+        }
+      ],
+      "id": "public-des-footprints",
+      "releases": [
+        "des-dr2"
+      ],
+      "releaseLabels": {
+        "des-dr2": "DR2"
+      },
+      "archiveUrl": "public-des-footprints-3.1.0.zip",
+      "sizeBytes": 187075,
+      "sha256": "d96e36cd017ce2eb0ea9de2d83136e22c8eca5095d28901ae19d13da9a091da0",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "desi",
+      "name": "DESI",
+      "description": "Public DESI spectroscopic release families. Local COSMOS-derived volume data remains a separate registered artifact, not a proxy for this footprint.",
+      "modalities": [
+        "spectroscopy"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Dark Energy Spectroscopic Instrument"
+      ],
+      "coverageAuthorities": [
+        "official_inventory_derived"
+      ],
+      "accessModes": [
+        "DESI Data Release",
+        "Dark Energy Spectroscopic Instrument",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "desi-dr1",
+          "label": "DESI DR1 coverage source",
+          "url": "https://data.desi.lbl.gov/doc/releases/dr1/",
+          "authority": "Dark Energy Spectroscopic Instrument"
+        },
+        {
+          "releaseId": "desi-edr",
+          "label": "DESI EDR coverage source",
+          "url": "https://data.desi.lbl.gov/doc/releases/edr/",
+          "authority": "Dark Energy Spectroscopic Instrument"
+        }
+      ],
+      "id": "public-desi-footprints",
+      "releases": [
+        "desi-dr1",
+        "desi-edr"
+      ],
+      "releaseLabels": {
+        "desi-dr1": "DR1",
+        "desi-edr": "EDR"
+      },
+      "archiveUrl": "public-desi-footprints-3.0.0.zip",
+      "sizeBytes": 385410,
+      "sha256": "5da8651a6e43ffae1428d3edacff2e033a71aee276834c10f79829c9ed6d3f18",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "euclid",
+      "name": "Euclid",
+      "description": "ESA visible and near-infrared space survey releases, represented by their actual release families rather than a fabricated radial shell.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC",
+        "image-extent-MOC"
       ],
       "facilities": [
         "ESA Euclid"
       ],
       "coverageAuthorities": [
-        "official-boundary"
+        "official-geometry",
+        "third-party-moc"
       ],
       "accessModes": [
-        "ESA Science Archive"
+        "ESA Euclid",
+        "ESA Science Archive",
+        "Resource Package v3"
       ],
+      "version": "3.0.0",
       "sources": [
         {
+          "releaseId": "euclid-ero",
+          "label": "Euclid ERO coverage source",
+          "url": "https://www.cosmos.esa.int/web/euclid/ero-public-release",
+          "authority": "ESA Euclid"
+        },
+        {
           "releaseId": "euclid-q1",
-          "label": "Euclid Q1 DS9 field boundaries",
-          "url": "https://www.euclid-ec.org/wp-content/uploads/q1_region_files.zip",
-          "authority": "Euclid Consortium"
+          "label": "Euclid Q1 coverage source",
+          "url": "https://www.esa.int/Science_Exploration/Space_Science/Euclid/Euclid_opens_data_treasure_trove_offers_glimpse_of_deep_fields",
+          "authority": "ESA Euclid"
         }
       ],
       "id": "public-euclid-footprints",
       "releases": [
+        "euclid-ero",
         "euclid-q1"
       ],
       "releaseLabels": {
+        "euclid-ero": "ERO",
         "euclid-q1": "Q1"
       },
-      "version": "3.0.0",
       "archiveUrl": "public-euclid-footprints-3.0.0.zip",
       "sizeBytes": 39950,
       "sha256": "5fb77791caf8675e63a2422afd1f60493c6cf9dfc71804a2c5a6b8d4a2dede71",
-      "updatedAt": "2026-08-19T01:00:38.290Z"
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "fds",
+      "name": "FDS",
+      "description": "Public FDS coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Fornax Deep Survey"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "fds-dr1",
+          "label": "FDS Fds Dr1 coverage source",
+          "url": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-fds-footprints",
+      "releases": [
+        "fds-dr1"
+      ],
+      "releaseLabels": {
+        "fds-dr1": "Fds Dr1"
+      },
+      "archiveUrl": "public-fds-footprints-3.0.0.zip",
+      "sizeBytes": 11709,
+      "sha256": "f5be8243a1dafeb675033cfdc72152a26998d461cbc36b9c87d11c764b3b15b3",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "gaia",
+      "name": "Gaia",
+      "description": "ESA Gaia DR3 astrometric and photometric source catalog. The published coverage is the exact CDS catalog-row object-presence MOC and covers the full sky at overview order.",
+      "modalities": [
+        "catalog"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "object-presence-MOC"
+      ],
+      "facilities": [
+        "ESA Gaia"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS VizieR",
+        "ESA Gaia / DPAC DR3",
+        "Gaia Archive",
+        "Gaia Archive TAP",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "gaia-dr3",
+          "label": "Gaia DR3 coverage source",
+          "url": "https://www.cosmos.esa.int/web/gaia/data-release-3",
+          "authority": "ESA Gaia / DPAC DR3"
+        }
+      ],
+      "id": "public-gaia-footprints",
+      "releases": [
+        "gaia-dr3"
+      ],
+      "releaseLabels": {
+        "gaia-dr3": "DR3"
+      },
+      "archiveUrl": "public-gaia-footprints-3.0.0.zip",
+      "sizeBytes": 22801,
+      "sha256": "47a473da1e55b7f44c865bbf5512c3ba953d389bdce4704ff4b840d5aa69872b",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
     },
     {
       "surveyId": "galex",
       "name": "GALEX",
-      "description": "GALEX GR6/GR7 FUV、NUV 与彩色 HiPS 图像的公开覆盖。",
+      "description": "Ultraviolet imaging, grism spectroscopy and time-domain survey archive releases.",
       "modalities": [
-        "imaging",
         "ultraviolet"
       ],
       "wavelengths": [
-        "far-ultraviolet",
-        "near-ultraviolet"
+        "ultraviolet"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Galaxy Evolution Explorer"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "MAST",
+        "Resource Package v3"
+      ],
+      "version": "3.1.0",
+      "sources": [
+        {
+          "releaseId": "galex-gr6-ais",
+          "label": "GALEX Galex Gr6 Ais coverage source",
+          "url": "https://galex.stsci.edu/",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-galex-footprints",
+      "releases": [
+        "galex-gr6-ais"
+      ],
+      "releaseLabels": {
+        "galex-gr6-ais": "Galex Gr6 Ais"
+      },
+      "archiveUrl": "public-galex-footprints-3.1.0.zip",
+      "sizeBytes": 615035,
+      "sha256": "f989ace247d41db8091334960a3d7da329f02bb7e8f1a70031b542f61a7009db",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "hsc-ssp",
+      "name": "HSC-SSP",
+      "description": "HSC-SSP PDR2 Wide 与 Deep 的彩色及 grizy 图像 MOC 并集。",
+      "modalities": [
+        "imaging",
+        "photometry"
+      ],
+      "wavelengths": [
+        "optical"
       ],
       "productTypes": [
         "HiPS-image"
       ],
       "facilities": [
-        "NASA GALEX",
+        "Subaru Hyper Suprime-Cam"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "HSC archive",
+        "Resource Package v3"
+      ],
+      "sources": [
+        {
+          "releaseId": "hsc-pdr2",
+          "label": "HSC-SSP PDR2 HiPS MOCs",
+          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fcolor-i-r-g%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fcolor-i-r-g&get=record&fmt=json",
+          "authority": "CDS",
+          "license": "ODbL-1.0 derivative"
+        }
+      ],
+      "id": "public-hsc-ssp-footprints",
+      "releases": [
+        "hsc-pdr2"
+      ],
+      "releaseLabels": {
+        "hsc-pdr2": "PDR2"
+      },
+      "version": "3.0.0",
+      "archiveUrl": "public-hsc-ssp-footprints-3.0.0.zip",
+      "sizeBytes": 8251,
+      "sha256": "678dc507722d69687fc359712afd975b84477d444f6b3e521896ef3857f04704",
+      "updatedAt": "2026-08-19T01:00:38.290Z"
+    },
+    {
+      "surveyId": "hst",
+      "name": "HST",
+      "description": "CDS 已发布 HST HiPS 产品的档案快照覆盖，不等同于完整 MAST 产品并集。",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "ultraviolet",
+        "optical",
+        "near-infrared"
+      ],
+      "productTypes": [
+        "archive-snapshot"
+      ],
+      "facilities": [
+        "Hubble Space Telescope",
         "MAST"
       ],
       "coverageAuthorities": [
         "third-party-moc"
       ],
       "accessModes": [
+        "CDS HiPS",
         "MAST",
-        "CDS HiPS"
+        "Resource Package v3"
       ],
       "sources": [
         {
-          "releaseId": "galex-gr6-gr7",
-          "label": "GALEX GR6/GR7 HiPS MOC",
-          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FGALEXGR6_7%2Fcolor&get=record&fmt=json",
+          "releaseId": "hst-mast-snapshot-2026",
+          "label": "Published HST HiPS MOC union",
+          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=record&fmt=json",
           "authority": "CDS",
           "license": "ODbL-1.0 derivative"
         }
       ],
-      "id": "public-galex-footprints",
+      "id": "public-hst-footprints",
       "releases": [
-        "galex-gr6-gr7"
+        "hst-mast-snapshot-2026"
       ],
       "releaseLabels": {
-        "galex-gr6-gr7": "GR6/GR7"
+        "hst-mast-snapshot-2026": "MAST archive snapshot 2026"
       },
       "version": "3.0.0",
-      "archiveUrl": "public-galex-footprints-3.0.0.zip",
-      "sizeBytes": 12978,
-      "sha256": "ef58ea7d32143e9135a7a1447f3f3678459e5ead0a75e277568fd64f100ff1dd",
+      "archiveUrl": "public-hst-footprints-3.0.0.zip",
+      "sizeBytes": 10736,
+      "sha256": "9fc806f5e246111b6d6b0c9b6fe1316cf502eaaad6a1faae5c7c671c3ac9bcbd",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
-      "surveyId": "desi",
-      "name": "DESI Spectroscopy",
-      "description": "DESI EDR and DR1 observed spectroscopic tile coverage derived from the official Fuji and Iron TILE_COMPLETENESS tables; this is separate from Legacy Surveys imaging.",
+      "surveyId": "iphas",
+      "name": "IPHAS",
+      "description": "Public IPHAS coverage represented by reviewed CDS HiPS/MOC products.",
       "modalities": [
-        "spectroscopy",
-        "catalog"
+        "imaging"
       ],
       "wavelengths": [
-        "optical-spectroscopy"
+        "optical"
       ],
       "productTypes": [
-        "observed-tile-MOC"
+        "footprint-extent-MOC"
       ],
       "facilities": [
-        "DESI",
-        "Mayall 4-meter Telescope"
+        "INT Photometric H-alpha Survey"
       ],
       "coverageAuthorities": [
-        "official-tile-table"
+        "third-party-moc"
       ],
       "accessModes": [
-        "DESI Data Release"
+        "CDS HiPS",
+        "Resource Package v3"
       ],
       "version": "3.0.0",
       "sources": [
         {
-          "releaseId": "desi-edr",
-          "label": "DESI EDR Fuji observed tiles",
-          "url": "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/tiles-fuji.fits",
-          "authority": "DESI Collaboration"
-        },
-        {
-          "releaseId": "desi-dr1",
-          "label": "DESI DR1 Iron observed tiles",
-          "url": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits",
-          "authority": "DESI Collaboration"
+          "releaseId": "iphas-dr2",
+          "label": "IPHAS Iphas Dr2 coverage source",
+          "url": "https://www.iphas.org/",
+          "authority": "CDS public HiPS/MOC"
         }
       ],
-      "id": "public-desi-footprints",
+      "id": "public-iphas-footprints",
       "releases": [
-        "desi-edr",
-        "desi-dr1"
+        "iphas-dr2"
       ],
       "releaseLabels": {
-        "desi-edr": "EDR",
-        "desi-dr1": "DR1"
+        "iphas-dr2": "Iphas Dr2"
       },
-      "archiveUrl": "public-desi-footprints-3.0.0.zip",
-      "sizeBytes": 385410,
-      "sha256": "5da8651a6e43ffae1428d3edacff2e033a71aee276834c10f79829c9ed6d3f18",
-      "updatedAt": "2026-08-19T01:00:38.290Z"
+      "archiveUrl": "public-iphas-footprints-3.0.0.zip",
+      "sizeBytes": 184777,
+      "sha256": "88b019903d8a2339dc051c389d31657e6b7eea9ffebbbd6f0b9fe32906c08816",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "kids",
+      "name": "KiDS",
+      "description": "ESO optical imaging and weak-lensing survey products. The bundled footprint represents the DR5 gri color image product.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Kilo-Degree Survey / ESO VST"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "KiDS archive",
+        "Kilo-Degree Survey / ESO VST",
+        "Resource Package v3"
+      ],
+      "version": "3.1.0",
+      "sources": [
+        {
+          "releaseId": "kids-dr5",
+          "label": "KiDS DR5 coverage source",
+          "url": "https://kids.strw.leidenuniv.nl/DR5/index.php",
+          "authority": "Kilo-Degree Survey / ESO VST"
+        }
+      ],
+      "id": "public-kids-footprints",
+      "releases": [
+        "kids-dr5"
+      ],
+      "releaseLabels": {
+        "kids-dr5": "DR5"
+      },
+      "archiveUrl": "public-kids-footprints-3.1.0.zip",
+      "sizeBytes": 20915,
+      "sha256": "c39952632506a0faa6612d9dd5babbc7a2d207091a4744be0b1514c58dec8b3d",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
     },
     {
       "surveyId": "legacy-surveys",
@@ -235,8 +879,9 @@
         "third-party-moc"
       ],
       "accessModes": [
+        "CDS HiPS",
         "Legacy Survey viewer",
-        "CDS HiPS"
+        "Resource Package v3"
       ],
       "version": "3.0.0",
       "sources": [
@@ -342,143 +987,49 @@
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
-      "surveyId": "sdss",
-      "name": "SDSS",
-      "description": "SDSS DR9 彩色成像覆盖；光谱和后续数据发布需独立覆盖制品。",
-      "modalities": [
-        "imaging",
-        "photometry"
-      ],
-      "wavelengths": [
-        "optical"
-      ],
-      "productTypes": [
-        "HiPS-image"
-      ],
-      "facilities": [
-        "Sloan Foundation Telescope"
-      ],
-      "coverageAuthorities": [
-        "third-party-moc"
-      ],
-      "accessModes": [
-        "SkyServer",
-        "CDS HiPS"
-      ],
-      "sources": [
-        {
-          "releaseId": "sdss-dr09",
-          "label": "SDSS DR9 HiPS MOC",
-          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSDSS9%2Fcolor&get=record&fmt=json",
-          "authority": "CDS",
-          "license": "ODbL-1.0 derivative"
-        }
-      ],
-      "id": "public-sdss-footprints",
-      "releases": [
-        "sdss-dr09"
-      ],
-      "releaseLabels": {
-        "sdss-dr09": "DR9"
-      },
-      "version": "3.0.0",
-      "archiveUrl": "public-sdss-footprints-3.0.0.zip",
-      "sizeBytes": 7292,
-      "sha256": "15640a9f7786bae150a64d8ad5a821f91020912923d79807b3342ac271c6a22b",
-      "updatedAt": "2026-08-19T01:00:38.290Z"
-    },
-    {
-      "surveyId": "hsc-ssp",
-      "name": "HSC-SSP",
-      "description": "HSC-SSP PDR2 Wide 与 Deep 的彩色及 grizy 图像 MOC 并集。",
-      "modalities": [
-        "imaging",
-        "photometry"
-      ],
-      "wavelengths": [
-        "optical"
-      ],
-      "productTypes": [
-        "HiPS-image"
-      ],
-      "facilities": [
-        "Subaru Hyper Suprime-Cam"
-      ],
-      "coverageAuthorities": [
-        "third-party-moc"
-      ],
-      "accessModes": [
-        "HSC archive",
-        "CDS HiPS"
-      ],
-      "sources": [
-        {
-          "releaseId": "hsc-pdr2",
-          "label": "HSC-SSP PDR2 HiPS MOCs",
-          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FHSC%2FDR2%2Fwide%2Fcolor-i-r-g%2CCDS%2FP%2FHSC%2FDR2%2Fdeep%2Fcolor-i-r-g&get=record&fmt=json",
-          "authority": "CDS",
-          "license": "ODbL-1.0 derivative"
-        }
-      ],
-      "id": "public-hsc-ssp-footprints",
-      "releases": [
-        "hsc-pdr2"
-      ],
-      "releaseLabels": {
-        "hsc-pdr2": "PDR2"
-      },
-      "version": "3.0.0",
-      "archiveUrl": "public-hsc-ssp-footprints-3.0.0.zip",
-      "sizeBytes": 8251,
-      "sha256": "678dc507722d69687fc359712afd975b84477d444f6b3e521896ef3857f04704",
-      "updatedAt": "2026-08-19T01:00:38.290Z"
-    },
-    {
-      "surveyId": "hst",
-      "name": "HST",
-      "description": "CDS 已发布 HST HiPS 产品的档案快照覆盖，不等同于完整 MAST 产品并集。",
+      "surveyId": "nvss",
+      "name": "NVSS",
+      "description": "NVSS 1.4 GHz 图像网格覆盖。",
       "modalities": [
         "imaging"
       ],
       "wavelengths": [
-        "ultraviolet",
-        "optical",
-        "near-infrared"
+        "radio-1.4GHz"
       ],
       "productTypes": [
-        "archive-snapshot"
+        "HiPS-image"
       ],
       "facilities": [
-        "Hubble Space Telescope",
-        "MAST"
+        "NRAO VLA"
       ],
       "coverageAuthorities": [
         "third-party-moc"
       ],
       "accessModes": [
-        "MAST",
-        "CDS HiPS"
+        "CDS HiPS",
+        "NRAO archive",
+        "Resource Package v3"
       ],
       "sources": [
         {
-          "releaseId": "hst-mast-snapshot-2026",
-          "label": "Published HST HiPS MOC union",
-          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=*P%2FHST%2F*&get=record&fmt=json",
+          "releaseId": "nvss-final",
+          "label": "NVSS HiPS MOC",
+          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FNVSS&get=record&fmt=json",
           "authority": "CDS",
           "license": "ODbL-1.0 derivative"
         }
       ],
-      "id": "public-hst-footprints",
+      "id": "public-nvss-footprints",
       "releases": [
-        "hst-mast-snapshot-2026"
+        "nvss-final"
       ],
       "releaseLabels": {
-        "hst-mast-snapshot-2026": "MAST archive snapshot 2026"
+        "nvss-final": "Final survey"
       },
       "version": "3.0.0",
-      "archiveUrl": "public-hst-footprints-3.0.0.zip",
-      "sizeBytes": 10736,
-      "sha256": "9fc806f5e246111b6d6b0c9b6fe1316cf502eaaad6a1faae5c7c671c3ac9bcbd",
+      "archiveUrl": "public-nvss-footprints-3.0.0.zip",
+      "sizeBytes": 8620,
+      "sha256": "ee74ffa811c75501ef80850d22d02ba7b21f6f4f28ed10ef41974b2f2893bdf7",
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
@@ -502,8 +1053,9 @@
         "third-party-moc"
       ],
       "accessModes": [
+        "CDS HiPS",
         "MAST",
-        "CDS HiPS"
+        "Resource Package v3"
       ],
       "sources": [
         {
@@ -528,285 +1080,412 @@
       "updatedAt": "2026-08-19T01:00:38.290Z"
     },
     {
-      "surveyId": "des",
-      "name": "DES",
-      "description": "Dark Energy Survey DR2 彩色成像覆盖。",
-      "modalities": [
-        "imaging",
-        "photometry"
-      ],
-      "wavelengths": [
-        "optical"
-      ],
-      "productTypes": [
-        "HiPS-image"
-      ],
-      "facilities": [
-        "DECam"
-      ],
-      "coverageAuthorities": [
-        "third-party-moc"
-      ],
-      "accessModes": [
-        "DES Data Management",
-        "CDS HiPS"
-      ],
-      "sources": [
-        {
-          "releaseId": "des-dr2",
-          "label": "DES DR2 HiPS MOC",
-          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDES-DR2%2FColorIRG&get=record&fmt=json",
-          "authority": "CDS",
-          "license": "ODbL-1.0 derivative"
-        }
-      ],
-      "id": "public-des-footprints",
-      "releases": [
-        "des-dr2"
-      ],
-      "releaseLabels": {
-        "des-dr2": "DR2"
-      },
-      "version": "3.0.0",
-      "archiveUrl": "public-des-footprints-3.0.0.zip",
-      "sizeBytes": 3670,
-      "sha256": "824da6e75d4756540e9ed4182cae6f4a36fe29006bdf0bb23fc652d96a1e117e",
-      "updatedAt": "2026-08-19T01:00:38.290Z"
-    },
-    {
-      "surveyId": "2mass",
-      "name": "2MASS",
-      "description": "2MASS All-Sky J、H、K 波段图像覆盖。",
-      "modalities": [
-        "imaging",
-        "photometry",
-        "infrared"
-      ],
-      "wavelengths": [
-        "near-infrared"
-      ],
-      "productTypes": [
-        "HiPS-image"
-      ],
-      "facilities": [
-        "2MASS"
-      ],
-      "coverageAuthorities": [
-        "third-party-moc"
-      ],
-      "accessModes": [
-        "IRSA",
-        "CDS HiPS"
-      ],
-      "sources": [
-        {
-          "releaseId": "2mass-all-sky",
-          "label": "2MASS J-band HiPS MOC",
-          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FJ&get=record&fmt=json",
-          "authority": "CDS/IRSA",
-          "license": "ODbL-1.0 derivative"
-        }
-      ],
-      "id": "public-2mass-footprints",
-      "releases": [
-        "2mass-all-sky"
-      ],
-      "releaseLabels": {
-        "2mass-all-sky": "All-Sky Release"
-      },
-      "version": "3.0.0",
-      "archiveUrl": "public-2mass-footprints-3.0.0.zip",
-      "sizeBytes": 10994,
-      "sha256": "e565b90b1f6cc5cc75da5440a53ce77f95c87d9d91120f125ec9d421c36551c5",
-      "updatedAt": "2026-08-19T01:00:38.290Z"
-    },
-    {
-      "surveyId": "allwise",
-      "name": "AllWISE",
-      "description": "AllWISE W1-W4 静态图像覆盖，不表达 NEOWISE 时间完整性。",
-      "modalities": [
-        "imaging",
-        "photometry",
-        "infrared"
-      ],
-      "wavelengths": [
-        "mid-infrared"
-      ],
-      "productTypes": [
-        "HiPS-image"
-      ],
-      "facilities": [
-        "WISE",
-        "IRSA"
-      ],
-      "coverageAuthorities": [
-        "third-party-moc"
-      ],
-      "accessModes": [
-        "IRSA",
-        "CDS HiPS"
-      ],
-      "sources": [
-        {
-          "releaseId": "allwise",
-          "label": "AllWISE W1 HiPS MOC",
-          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FallWISE%2FW1&get=record&fmt=json",
-          "authority": "CDS/IRSA",
-          "license": "ODbL-1.0 derivative"
-        }
-      ],
-      "id": "public-allwise-footprints",
-      "releases": [
-        "allwise"
-      ],
-      "releaseLabels": {
-        "allwise": "AllWISE"
-      },
-      "version": "3.0.0",
-      "archiveUrl": "public-allwise-footprints-3.0.0.zip",
-      "sizeBytes": 11767,
-      "sha256": "3b3697edba5e163a80628977c9b6b571965910397eb1524c9a1e9e77fe4832e0",
-      "updatedAt": "2026-08-19T01:00:38.290Z"
-    },
-    {
-      "surveyId": "kids",
-      "name": "KiDS",
-      "description": "KiDS DR5 gri 彩色成像覆盖。",
-      "modalities": [
-        "imaging",
-        "photometry"
-      ],
-      "wavelengths": [
-        "optical"
-      ],
-      "productTypes": [
-        "HiPS-image"
-      ],
-      "facilities": [
-        "ESO VST/OmegaCAM"
-      ],
-      "coverageAuthorities": [
-        "survey-endorsed-moc"
-      ],
-      "accessModes": [
-        "KiDS archive",
-        "CDS HiPS"
-      ],
-      "sources": [
-        {
-          "releaseId": "kids-dr5",
-          "label": "KiDS DR5 gri HiPS MOC",
-          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FKiDS%2FDR5%2Fcolor-gri&get=record&fmt=json",
-          "authority": "KiDS/CDS",
-          "license": "CC BY 4.0 upstream; ODbL-1.0 derivative"
-        }
-      ],
-      "id": "public-kids-footprints",
-      "releases": [
-        "kids-dr5"
-      ],
-      "releaseLabels": {
-        "kids-dr5": "DR5"
-      },
-      "version": "3.0.0",
-      "archiveUrl": "public-kids-footprints-3.0.0.zip",
-      "sizeBytes": 3017,
-      "sha256": "723c1e15e9518c1e7e68ef9305d1c3a7c5578c97c4b1271618effee320da706f",
-      "updatedAt": "2026-08-19T01:00:38.290Z"
-    },
-    {
-      "surveyId": "gaia",
-      "name": "Gaia DR3",
-      "description": "Gaia DR3 main-source catalog object-presence coverage from the reviewed CDS ICRS/NUNIQ MOC. This package contains coverage geometry and provenance, not the Gaia catalog rows.",
-      "modalities": [
-        "catalog",
-        "astrometry",
-        "photometry"
-      ],
-      "wavelengths": [
-        "optical"
-      ],
-      "productTypes": [
-        "catalog-object-presence-MOC"
-      ],
-      "facilities": [
-        "ESA Gaia / DPAC"
-      ],
-      "coverageAuthorities": [
-        "CDS Gaia DR3 catalog MOC"
-      ],
-      "accessModes": [
-        "Gaia Archive",
-        "Gaia Archive TAP",
-        "CDS VizieR"
-      ],
-      "sources": [
-        {
-          "releaseId": "gaia-dr3",
-          "label": "Gaia DR3 main-source catalog MOC",
-          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FI%2F355%2Fgaiadr3&get=record&fmt=json",
-          "authority": "ESA Gaia / DPAC / CDS",
-          "license": "Gaia/DPAC attribution and CDS public data terms",
-          "attributionUrl": "https://www.cosmos.esa.int/web/gaia-users/credits"
-        }
-      ],
-      "id": "public-gaia-footprints",
-      "releases": [
-        "gaia-dr3"
-      ],
-      "releaseLabels": {
-        "gaia-dr3": "DR3"
-      },
-      "version": "3.0.0",
-      "archiveUrl": "public-gaia-footprints-3.0.0.zip",
-      "sizeBytes": 22801,
-      "sha256": "47a473da1e55b7f44c865bbf5512c3ba953d389bdce4704ff4b840d5aa69872b",
-      "updatedAt": "2026-09-02T02:59:38Z"
-    },
-    {
-      "surveyId": "nvss",
-      "name": "NVSS",
-      "description": "NVSS 1.4 GHz 图像网格覆盖。",
+      "surveyId": "rubin",
+      "name": "Rubin",
+      "description": "Public Rubin coverage represented by reviewed CDS HiPS/MOC products.",
       "modalities": [
         "imaging"
       ],
       "wavelengths": [
-        "radio-1.4GHz"
+        "optical"
       ],
       "productTypes": [
-        "HiPS-image"
+        "footprint-extent-MOC"
       ],
       "facilities": [
-        "NRAO VLA"
+        "Vera C. Rubin Observatory"
       ],
       "coverageAuthorities": [
         "third-party-moc"
       ],
       "accessModes": [
-        "NRAO archive",
-        "CDS HiPS"
+        "CDS HiPS",
+        "Resource Package v3"
       ],
+      "version": "3.0.0",
       "sources": [
         {
-          "releaseId": "nvss-final",
-          "label": "NVSS HiPS MOC",
-          "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FNVSS&get=record&fmt=json",
-          "authority": "CDS",
-          "license": "ODbL-1.0 derivative"
+          "releaseId": "rubin-firstlook",
+          "label": "Rubin Rubin Firstlook coverage source",
+          "url": "https://rubinobservatory.org/",
+          "authority": "CDS public HiPS/MOC"
         }
       ],
-      "id": "public-nvss-footprints",
+      "id": "public-rubin-footprints",
       "releases": [
-        "nvss-final"
+        "rubin-firstlook"
       ],
       "releaseLabels": {
-        "nvss-final": "Final survey"
+        "rubin-firstlook": "Rubin Firstlook"
       },
+      "archiveUrl": "public-rubin-footprints-3.0.0.zip",
+      "sizeBytes": 4340,
+      "sha256": "4244d4a08764bcf24db043e73321edf620fc734528d23858ac833eda13f3e896",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "sdss",
+      "name": "SDSS",
+      "description": "Nineteen public data releases grouped under one survey card. A release may contain several products with different sky footprints.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "infrared"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Sloan Digital Sky Survey I-V"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "Resource Package v3",
+        "SkyServer",
+        "Sloan Digital Sky Survey I-V"
+      ],
+      "version": "3.1.0",
+      "sources": [
+        {
+          "releaseId": "sdss-dr09",
+          "label": "SDSS DR9 coverage source",
+          "url": "https://www.sdss.org/dr9/",
+          "authority": "Sloan Digital Sky Survey I-V"
+        }
+      ],
+      "id": "public-sdss-footprints",
+      "releases": [
+        "sdss-dr09"
+      ],
+      "releaseLabels": {
+        "sdss-dr09": "DR9"
+      },
+      "archiveUrl": "public-sdss-footprints-3.1.0.zip",
+      "sizeBytes": 517425,
+      "sha256": "f2c9cc5734d5abd76d767ad761276e3e4aca6b297963b3cce4cd087ed189a12e",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "skymapper",
+      "name": "SkyMapper",
+      "description": "Southern-sky optical imaging. The bundled DR4 footprint is the CDS g/r/i color HiPS spatial extent; STMOC time metadata is evidence only.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Australian National University SkyMapper"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "Resource Package v3",
+        "SkyMapper data release"
+      ],
       "version": "3.0.0",
-      "archiveUrl": "public-nvss-footprints-3.0.0.zip",
-      "sizeBytes": 8620,
-      "sha256": "ee74ffa811c75501ef80850d22d02ba7b21f6f4f28ed10ef41974b2f2893bdf7",
-      "updatedAt": "2026-08-19T01:00:38.290Z"
+      "sources": [
+        {
+          "releaseId": "skymapper-dr4",
+          "label": "SkyMapper DR4 coverage source",
+          "url": "https://skymapper.anu.edu.au/data-release/dr4/",
+          "authority": "ANU SkyMapper DR4"
+        }
+      ],
+      "id": "public-skymapper-footprints",
+      "releases": [
+        "skymapper-dr4"
+      ],
+      "releaseLabels": {
+        "skymapper-dr4": "DR4"
+      },
+      "archiveUrl": "public-skymapper-footprints-3.0.0.zip",
+      "sizeBytes": 84489,
+      "sha256": "a850c2fbf748af217e0e69a0f2eb06eadfd0dc27c43053c838bf3f0a011f9a84",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "spherex",
+      "name": "SPHEREx",
+      "description": "Public SPHEREx coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "infrared"
+      ],
+      "wavelengths": [
+        "infrared"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Spectro-Photometer for the History of the Universe"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "spherex-qr2",
+          "label": "SPHEREx Spherex Qr2 coverage source",
+          "url": "https://www.ipac.caltech.edu/project/spherex",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-spherex-footprints",
+      "releases": [
+        "spherex-qr2"
+      ],
+      "releaseLabels": {
+        "spherex-qr2": "Spherex Qr2"
+      },
+      "archiveUrl": "public-spherex-footprints-3.0.0.zip",
+      "sizeBytes": 61484,
+      "sha256": "f1f93fc6200c71305df1409f8b3d49612636ff21ee3abb259a8aa0909616b06a",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "sumss",
+      "name": "SUMSS",
+      "description": "Public SUMSS coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Sydney University Molonglo Sky Survey"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "sumss-final",
+          "label": "SUMSS Sumss Final coverage source",
+          "url": "https://www.astrop.physics.usyd.edu.au/SUMSS/",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-sumss-footprints",
+      "releases": [
+        "sumss-final"
+      ],
+      "releaseLabels": {
+        "sumss-final": "Sumss Final"
+      },
+      "archiveUrl": "public-sumss-footprints-3.0.0.zip",
+      "sizeBytes": 24913,
+      "sha256": "a992644faa36c72722f7aeec1e5c3d1b46ab53c9d28d76b3a47df9848d1b6a3e",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "vista",
+      "name": "VISTA VIKING",
+      "description": "ESO near-infrared VIKING products. The bundled J-band footprint is a CDS HiPS spatial extent with estimated precision.",
+      "modalities": [
+        "imaging",
+        "infrared"
+      ],
+      "wavelengths": [
+        "infrared"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "ESO Visible and Infrared Survey Telescope"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "ESO Phase 3 archive",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "viking",
+          "label": "VISTA VIKING VIKING coverage source",
+          "url": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "authority": "ESO VISTA Phase 3"
+        },
+        {
+          "releaseId": "vista-vvv-dr4",
+          "label": "VISTA VIKING Vista Vvv Dr4 coverage source",
+          "url": "https://www.eso.org/sci/observing/phase3/data_releases.html",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-vista-footprints",
+      "releases": [
+        "viking",
+        "vista-vvv-dr4"
+      ],
+      "releaseLabels": {
+        "viking": "VIKING",
+        "vista-vvv-dr4": "Vista Vvv Dr4"
+      },
+      "archiveUrl": "public-vista-footprints-3.0.0.zip",
+      "sizeBytes": 84696,
+      "sha256": "99d3f8021fed553bcb3c1ffa9dd01cf1fe3f8caaa6acbb387209ef5015a966f3",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "vphas",
+      "name": "VPHAS+",
+      "description": "Public VPHAS+ coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "VST Photometric H-alpha Survey"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "vphas-dr4",
+          "label": "VPHAS+ Vphas Dr4 coverage source",
+          "url": "https://www.vphasplus.org/",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-vphas-footprints",
+      "releases": [
+        "vphas-dr4"
+      ],
+      "releaseLabels": {
+        "vphas-dr4": "Vphas Dr4"
+      },
+      "archiveUrl": "public-vphas-footprints-3.0.0.zip",
+      "sizeBytes": 192494,
+      "sha256": "24616af84dd18d52ac4017c7b2852f51ccb20c243bfc9594b27dd38b8598f0ee",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "wenss",
+      "name": "WENSS",
+      "description": "Public WENSS coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Westerbork Northern Sky Survey"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "wenss-final",
+          "label": "WENSS Wenss Final coverage source",
+          "url": "https://www.astron.nl/",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-wenss-footprints",
+      "releases": [
+        "wenss-final"
+      ],
+      "releaseLabels": {
+        "wenss-final": "Wenss Final"
+      },
+      "archiveUrl": "public-wenss-footprints-3.0.0.zip",
+      "sizeBytes": 5535,
+      "sha256": "0a1db5b032c4d23c70f36a7404aa9ab2e1b9a0424acd7c7250d96ac18f826983",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
+    },
+    {
+      "surveyId": "ztf",
+      "name": "ZTF",
+      "description": "Public ZTF coverage represented by reviewed CDS HiPS/MOC products.",
+      "modalities": [
+        "imaging"
+      ],
+      "wavelengths": [
+        "optical"
+      ],
+      "productTypes": [
+        "footprint-extent-MOC"
+      ],
+      "facilities": [
+        "Zwicky Transient Facility"
+      ],
+      "coverageAuthorities": [
+        "third-party-moc"
+      ],
+      "accessModes": [
+        "CDS HiPS",
+        "Resource Package v3"
+      ],
+      "version": "3.0.0",
+      "sources": [
+        {
+          "releaseId": "ztf-dr7",
+          "label": "ZTF Ztf Dr7 coverage source",
+          "url": "https://www.ztf.caltech.edu/",
+          "authority": "CDS public HiPS/MOC"
+        }
+      ],
+      "id": "public-ztf-footprints",
+      "releases": [
+        "ztf-dr7"
+      ],
+      "releaseLabels": {
+        "ztf-dr7": "Ztf Dr7"
+      },
+      "archiveUrl": "public-ztf-footprints-3.0.0.zip",
+      "sizeBytes": 4254298,
+      "sha256": "ebbd56cfd8dd8e64fb7bca9815ca2db0d2c9f3865eaafa39477a804e1e23a728",
+      "updatedAt": "2026-08-20T04:48:22.554910Z"
     }
   ]
 }

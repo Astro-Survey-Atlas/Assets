@@ -871,14 +871,36 @@ test("HTTP release history serves versioned package downloads and hides sensitiv
   assert.equal(releasesResponse.status, 200);
   const history = await releasesResponse.json() as {
     schemaVersion: number;
-    releases: Array<{ releaseId: string; sequence: number; bundleId: string; packages: Array<{ id: string; version: string; sizeBytes: number; sha256: string; downloadUrl: string }> }>;
+    latestReleaseId?: string;
+    releases: Array<{
+      releaseId: string;
+      sequence: number;
+      bundleId: string;
+      collection?: { fileName: string; sizeBytes: number; sha256: string; downloadUrl: string };
+      packages: Array<{ id: string; version: string; sizeBytes: number; sha256: string; downloadUrl: string; survey?: { displayName: string }; releases?: Array<{ id: string }> }>;
+    }>;
   };
-  assert.equal(history.schemaVersion, 1);
-  assert.ok(history.releases.length >= 1);
+  assert.equal(history.schemaVersion, 2);
+  assert.equal(history.releases.length, 2, "release history must retain both published releases");
   const newest = history.releases[0]!;
-  assert.ok(newest.packages.length >= 14);
+  const prior = history.releases[1]!;
+  assert.ok(newest.sequence > prior.sequence, "releases must be served newest first");
+  assert.equal(history.latestReleaseId, newest.releaseId);
+  assert.equal(newest.packages.length, 29, "second release covers every public survey");
+  assert.equal(prior.packages.length, 14, "prior release keeps its original package set");
   assert.ok(newest.packages.every((entry) => !/csst/.test(entry.id)), "sensitive surveys must never appear in public release history");
   assert.ok(newest.packages.every((entry) => entry.downloadUrl.startsWith(`/api/v1/resource-packages/${entry.id}/versions/${entry.version}/download`)));
+  const desi = newest.packages.find((entry) => entry.id === "public-desi-footprints");
+  assert.ok(desi?.survey?.displayName, "history packages must carry survey projections");
+  assert.ok((desi?.releases ?? []).some((release) => release.id === "desi-dr1"));
+
+  const collection = newest.collection;
+  assert.ok(collection, "current release must expose a collection archive");
+  const collectionDownload = await fetch(`http://127.0.0.1:${port}${collection.downloadUrl}`);
+  assert.equal(collectionDownload.status, 200);
+  assert.equal(collectionDownload.headers.get("x-content-sha256"), collection.sha256);
+  assert.equal(Number(collectionDownload.headers.get("content-length")), collection.sizeBytes);
+  assert.equal(sha256(new Uint8Array(await collectionDownload.arrayBuffer())), collection.sha256);
 
   const detailResponse = await fetch(`http://127.0.0.1:${port}/api/v1/releases/${newest.releaseId}`);
   assert.equal(detailResponse.status, 200);
@@ -889,8 +911,28 @@ test("HTTP release history serves versioned package downloads and hides sensitiv
 
   const perReleaseCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/releases/${newest.releaseId}/resource-packages/catalog.json`);
   assert.equal(perReleaseCatalogResponse.status, 200);
-  const perReleaseCatalog = await perReleaseCatalogResponse.json() as { packages: Array<{ id: string }> };
+  const perReleaseCatalog = await perReleaseCatalogResponse.json() as { packages: Array<{ id: string; version: string }> };
   assert.equal(perReleaseCatalog.packages.filter((entry) => /csst/.test(entry.id)).length, 0);
+  const sdssCurrent = perReleaseCatalog.packages.find((entry) => entry.id === "public-sdss-footprints");
+  assert.equal(sdssCurrent?.version, "3.1.0", "repackaged surveys publish a bumped version");
+
+  const priorCatalogResponse = await fetch(`http://127.0.0.1:${port}/api/v1/releases/${prior.releaseId}/resource-packages/catalog.json`);
+  assert.equal(priorCatalogResponse.status, 200, "historical catalogs stay online via history projection");
+  const priorCatalog = await priorCatalogResponse.json() as { packages: Array<{ id: string; version: string; sha256: string; archiveUrl: string }> };
+  assert.equal(priorCatalog.packages.length, 14);
+  assert.equal(priorCatalog.packages.filter((entry) => /csst/.test(entry.id)).length, 0);
+  const sdssPrior = priorCatalog.packages.find((entry) => entry.id === "public-sdss-footprints");
+  assert.equal(sdssPrior?.version, "3.0.0", "historical catalog pins the version published at that time");
+
+  assert.ok(prior.collection, "prior release must keep its collection archive");
+  const priorCollectionDownload = await fetch(`http://127.0.0.1:${port}${prior.collection!.downloadUrl}`);
+  assert.equal(priorCollectionDownload.status, 200);
+  assert.equal(priorCollectionDownload.headers.get("x-content-sha256"), prior.collection!.sha256);
+  assert.equal(sha256(new Uint8Array(await priorCollectionDownload.arrayBuffer())), prior.collection!.sha256, "prior collection bytes stay downloadable");
+
+  const supersededDownload = await fetch(`http://127.0.0.1:${port}/api/v1/resource-packages/public-sdss-footprints/versions/3.0.0/download`);
+  assert.equal(supersededDownload.status, 200, "superseded package versions remain version-pinned downloadable");
+  assert.equal(supersededDownload.headers.get("x-content-sha256"), priorCatalog.packages.find((entry) => entry.id === "public-sdss-footprints")?.sha256 ?? "");
 
   const target = newest.packages.find((entry) => entry.id.includes("gaia")) ?? newest.packages[0]!;
   const download = await fetch(`http://127.0.0.1:${port}${target.downloadUrl}`);
@@ -905,4 +947,27 @@ test("HTTP release history serves versioned package downloads and hides sensitiv
 
   const denied = await fetch(`http://127.0.0.1:${port}/api/v1/resource-packages/public-csst-footprints/versions/3.0.0/download`);
   assert.equal(denied.status, 404);
+
+  const pythonClient = path.resolve("docs/examples/python/asa_package_sync.py");
+  const listing = await new Promise<string>((resolve, reject) => {
+    const child = spawn("python3", [pythonClient, "--base", `http://127.0.0.1:${port}`, "--list"]);
+    let out = "";
+    child.stdout.on("data", (chunk: Buffer) => { out += chunk.toString("utf8"); });
+    child.stderr.on("data", (chunk: Buffer) => { out += chunk.toString("utf8"); });
+    child.on("error", reject);
+    child.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error(`python client exited ${code}: ${out}`))));
+  });
+  assert.match(listing, new RegExp(newest.releaseId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(listing, /public-desi-footprints@/);
+  const downloadDir = await mkdtemp(path.join(os.tmpdir(), "asa-sync-"));
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("python3", [pythonClient, "--base", `http://127.0.0.1:${port}`, "--release", newest.releaseId, "--out", downloadDir]);
+    let out = "";
+    child.stdout.on("data", (chunk: Buffer) => { out += chunk.toString("utf8"); });
+    child.stderr.on("data", (chunk: Buffer) => { out += chunk.toString("utf8"); });
+    child.on("error", reject);
+    child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`python download exited ${code}: ${out}`))));
+  });
+  const saved = await readFile(path.join(downloadDir, collection.fileName));
+  assert.equal(sha256(new Uint8Array(saved)), collection.sha256, "python client must save a hash-verified collection");
 });
