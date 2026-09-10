@@ -377,6 +377,14 @@ diffs before editing them.
   evidence. They stay on the evidence PVC/object store and out of the browser's
   initial request. In particular, CSST `input-manifest.json` is not a public
   Git release artifact.
+- Since 2026-09-10 repository evidence (raw MOC snapshots under `raw/moc/`,
+  the Euclid Q1 region ZIP, and the CSST working set except the three
+  conformance keepers) is not stored in Git. Its durable copies live in the
+  production object store under the `repo-evidence` prefix; the tracked
+  `artifacts/public-survey-footprints/evidence-index.json` pins the active
+  snapshot and every object's SHA-256. Validation accepts a missing local
+  evidence input only when its hash matches that index. See
+  `docs/public-artifact-storage.md` for sync/restore commands.
 
 ## Current Implementation
 

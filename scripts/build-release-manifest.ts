@@ -154,6 +154,21 @@ async function digest(filePath: string): Promise<string> {
   return createHash("sha256").update(await readFile(filePath)).digest("hex");
 }
 
+interface EvidenceIndexObject { path: string; sizeBytes: number; sha256: string }
+let evidenceIndexObjects: Promise<Map<string, EvidenceIndexObject>> | null = null;
+function loadEvidenceIndex(): Promise<Map<string, EvidenceIndexObject>> {
+  evidenceIndexObjects ??= (async () => {
+    try {
+      const index = await json<{ schemaVersion: number; objects: EvidenceIndexObject[] }>(path.join(artifactRoot, "evidence-index.json"));
+      if (index.schemaVersion !== 1) throw new Error(`Unsupported evidence index schema: ${index.schemaVersion}`);
+      return new Map(index.objects.map((object) => [object.path, object]));
+    } catch {
+      return new Map();
+    }
+  })();
+  return evidenceIndexObjects;
+}
+
 function relative(filePath: string): string {
   return path.relative(root, filePath).split(path.sep).join("/");
 }
@@ -194,9 +209,16 @@ async function asset(input: Omit<PublicAssetRecord, "path" | "sizeBytes" | "sha2
 
 async function verifiedProvenanceFiles(provenance: ProvenanceDocument): Promise<void> {
   const records = [...Object.values(provenance.inputs), provenance.files.manifest, provenance.files.catalog];
+  const archived = await loadEvidenceIndex();
   for (const record of records) {
     const filePath = path.resolve(artifactRoot, record.path);
-    if (await digest(filePath) !== record.sha256) throw new Error(`Provenance mismatch: ${record.path}`);
+    try {
+      if (await digest(filePath) !== record.sha256) throw new Error(`Provenance mismatch: ${record.path}`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const object = archived.get(record.path);
+      if (!object || object.sha256 !== record.sha256) throw error;
+    }
   }
 }
 

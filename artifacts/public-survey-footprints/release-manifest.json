@@ -3,7 +3,7 @@
   "generatedAt": "2026-09-09T10:48:25.113Z",
   "bundle": {
     "id": "public-survey-footprints-2026-09-09",
-    "sha256": "b98fcf1fed4768c52f72ad07ac85e8f57719891b95a35a2748b7745b111ed05d"
+    "sha256": "adace67a9c7bcbae0044ced06352be7263b91dade2cb0bc8a4bc1415539ee407"
   },
   "statistics": {
     "releases": 67,
@@ -14,8 +14,8 @@
     "footprints": 116,
     "packages": 29,
     "rawMocFiles": 80,
-    "totalBytes": 104534130,
-    "runtimeBytes": 104534130,
+    "totalBytes": 104536092,
+    "runtimeBytes": 104536092,
     "evidenceBytes": 0
   },
   "files": [
@@ -76,8 +76,8 @@
       "mediaType": "text/markdown; charset=utf-8",
       "deliveryClass": "runtime",
       "path": "docs/public-artifact-storage.md",
-      "sizeBytes": 5628,
-      "sha256": "1102524a225f2737e756fc144d6daf5cb74589a96ff5895941a791935de060b0"
+      "sizeBytes": 7590,
+      "sha256": "4790589b4659bc5f6d2c630d687847e37921354dc72986ffde827200ab934987"
     },
     {
       "id": "documentation-sync-example-java-main",

@@ -1,0 +1,1259 @@
+{
+  "schemaVersion": 1,
+  "namespace": "repo-evidence",
+  "snapshot": "9ffec99fbb30995f5bb7af6878e878c1050f02acebd0478700457e9df3155b69",
+  "generatedAt": "2026-09-10T00:00:00.000Z",
+  "store": "object-store prefix repo-evidence on the production release bucket; restore via: node --import tsx scripts/content-archive.ts restore evidence --root <dir>",
+  "objects": [
+    {
+      "path": "csst/README.md",
+      "sizeBytes": 976,
+      "sha256": "437b56e4c59996bb8ac9519784604776a1dc40f6d9cb609d72a693a852bcc830"
+    },
+    {
+      "path": "csst/coverage-job-snapshot.json",
+      "sizeBytes": 1593,
+      "sha256": "6dadfd8959a71a16dedcfc9ac111c4c31967cd4a1d7726ec30db895a29a7c6af"
+    },
+    {
+      "path": "csst/csst-w1-image-extent-order8.fits",
+      "sizeBytes": 60480,
+      "sha256": "caa6a5287efa0ba9abc406261d4e653730b062e49282ffc82549f7d2735dbf3c"
+    },
+    {
+      "path": "csst/display-footprint-nside16.json",
+      "sizeBytes": 839,
+      "sha256": "afad98385bbab785512dfb5730ae8d68d429d4f21466a74ce3a05e32c1e57dbc"
+    },
+    {
+      "path": "csst/healpix-order8.json",
+      "sizeBytes": 81542,
+      "sha256": "6fa692751862f8d0f487d5869913e571f47470adf5aaa97e9d5a793b54597cbc"
+    },
+    {
+      "path": "csst/input-manifest.json",
+      "sizeBytes": 205265415,
+      "sha256": "dda4306e2ee89afd7ce30d4ee31ee8b3dcca65cb2a693145180c9c6baa2ebb1f"
+    },
+    {
+      "path": "csst/package-README.md",
+      "sizeBytes": 289,
+      "sha256": "5778fb8cb60bb2b9bbc9c4a52c0003a1b8c1a243ebebb65104694be88e63ff6d"
+    },
+    {
+      "path": "csst/package-footprints.json",
+      "sizeBytes": 14485,
+      "sha256": "a5a44ebf3e06cca0d345a2f559a485ba787f4eaf34ab11d367168e77c417cded"
+    },
+    {
+      "path": "csst/package-provenance.json",
+      "sizeBytes": 2228,
+      "sha256": "8c7ba16debccd4456b577e101768dd9a7cfb904d3724758173de420a7406adb2"
+    },
+    {
+      "path": "csst/provenance.json",
+      "sizeBytes": 2253,
+      "sha256": "7894e9c1489d4e3915123517dae994059a11536b81669f39dc44a9c24bd214b4"
+    },
+    {
+      "path": "csst/run-statistics.json",
+      "sizeBytes": 523,
+      "sha256": "72a5d45ef537d6a9f3afcd9108bfa4a4c0db76cc0bfe3c2bba2aae662af48fda"
+    },
+    {
+      "path": "csst/sample-report.json",
+      "sizeBytes": 2090,
+      "sha256": "764e85df2658745456ebad85379f0ea5c86769e4206d94548e70cce171912cde"
+    },
+    {
+      "path": "csst/w2-coverage-job-snapshot.json",
+      "sizeBytes": 819,
+      "sha256": "e6243116529bd17cdf590dcc6a48420c98d71e3df32942b587e5134da757fbfb"
+    },
+    {
+      "path": "csst/w2-normalized-scan.json",
+      "sizeBytes": 8020409,
+      "sha256": "5e11a3cb14973bfe0a0d5e4a406f33630c35455c8c4995003d6f28d808709ab2"
+    },
+    {
+      "path": "csst/w2-provenance.json",
+      "sizeBytes": 1326,
+      "sha256": "e49c5e41768302a1fc1b9a1794197068a62179a4c92af6690e931d85071ab94b"
+    },
+    {
+      "path": "csst/w2-run-statistics.json",
+      "sizeBytes": 403,
+      "sha256": "122698c2838d931608f46604ecbaa79e26cf9d3becf29beec3aae76c9c03c107"
+    },
+    {
+      "path": "csst/w2-sample-report.json",
+      "sizeBytes": 1662,
+      "sha256": "3e290f4e6ab517f52eb8351863ab401e9befeefc886cfb2a9f595946975964c0"
+    },
+    {
+      "path": "csst/w3-coverage-job-snapshot.json",
+      "sizeBytes": 817,
+      "sha256": "e171890b6186abc1645a50b4623c67a1b3c5205edcb746b8928f5341f1c32547"
+    },
+    {
+      "path": "csst/w3-normalized-scan.json",
+      "sizeBytes": 394093,
+      "sha256": "db1890db4e5d374b97d5feedb2d51fce3ce2c532f3e301a5a0f4ef11688890cf"
+    },
+    {
+      "path": "csst/w3-provenance.json",
+      "sizeBytes": 1325,
+      "sha256": "a1bdfe82364ff07bbb31e21ac31014c58ff26bd13a4952bdff2030827e9a259b"
+    },
+    {
+      "path": "csst/w3-run-statistics.json",
+      "sizeBytes": 397,
+      "sha256": "a9e3daf15df7c6085a79d5f53598b0bae2d9614adcd6525df893bbc436ae78ef"
+    },
+    {
+      "path": "csst/w3-sample-report.json",
+      "sizeBytes": 1677,
+      "sha256": "b21f2d37f3b6741a26673d1a6093a718fa121787413ec8169cd3f5471a17af0c"
+    },
+    {
+      "path": "csst/w4-coverage-job-snapshot.json",
+      "sizeBytes": 817,
+      "sha256": "7e5af042957e1dc5ca427ddc2c6aaa72264a39efa4aa63daf2464f9285407d0f"
+    },
+    {
+      "path": "csst/w4-normalized-scan.json",
+      "sizeBytes": 444221,
+      "sha256": "9efd8d43cd5349458f5681907c8958d378514770b9a5389ad7e370f77f5b8be8"
+    },
+    {
+      "path": "csst/w4-provenance.json",
+      "sizeBytes": 1325,
+      "sha256": "2f2b30b1f19a1299923917e79023fa551d7985d5edc351c0bf83d544db113260"
+    },
+    {
+      "path": "csst/w4-run-statistics.json",
+      "sizeBytes": 398,
+      "sha256": "39385b4cad6fad490627ebca3d37f793e08c22fad434d9ed6509f244c81ac2f2"
+    },
+    {
+      "path": "csst/w4-sample-report.json",
+      "sizeBytes": 1670,
+      "sha256": "902b7239b27b5a9ec32ded282a8fa292bcb24aefa5b0cea44a35180cdbcfe860"
+    },
+    {
+      "path": "csst/wcs-geometry-summary.json",
+      "sizeBytes": 2482,
+      "sha256": "cc2a9cd408cf793a93b0c962e9853d84bb0f17cd9de4edfd3c5005d9ab894cd1"
+    },
+    {
+      "path": "raw/geometry/euclid-q1-region-files.zip",
+      "sizeBytes": 5272,
+      "sha256": "1cf306fab4995179219fbefd32b9648ce0455b65c48cab9246138cc72eff20ef"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-6x-2mass-6x-h-band-imaging-moc.fits",
+      "sizeBytes": 23040,
+      "sha256": "018b625a25237b0af412076fc4f243a2bb899f6526621cb548e43ade107c149b"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-6x-2mass-6x-h-band-imaging-moc.record.json",
+      "sizeBytes": 3254,
+      "sha256": "963399083d65b90dbce2e8c5fa37338194851eb9382ca5a62ba320b5fbbebffb"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-6x-2mass-6x-j-band-imaging-moc.fits",
+      "sizeBytes": 23040,
+      "sha256": "ba23df7e8dd6d6e9ad3ac24033406b1e7f79e4729219a50aaf4a3478b19debaf"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-6x-2mass-6x-j-band-imaging-moc.record.json",
+      "sizeBytes": 3251,
+      "sha256": "423051f4a3d3cc9c0a72976905e743ce3161752055da5623507837dec2fbd652"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-6x-2mass-6x-k-band-imaging-moc.fits",
+      "sizeBytes": 23040,
+      "sha256": "eda6d2caecf1d30ed4bfbdfd48afe32c7d11cabc534b1eb90ab3a40f140b9c43"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-6x-2mass-6x-k-band-imaging-moc.record.json",
+      "sizeBytes": 3238,
+      "sha256": "1ccf273bec1b628fde21ae2294455f70cd464d343e6b1e99df6d4bea6b48d6b7"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-all-sky-h-band-imaging.fits",
+      "sizeBytes": 8640,
+      "sha256": "50aa8351b1153c4967f1b3f04f2c992518bf0a4e104e7789c76f6017a7722542"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-all-sky-h-band-imaging.record.json",
+      "sizeBytes": 3994,
+      "sha256": "aa8dbc93b79f19f1402f15a56b445126f59654f85d177a80574dca028c582a98"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-all-sky-j-band-imaging.fits",
+      "sizeBytes": 8640,
+      "sha256": "1f13dbb8123587118a4ad1ccbc17a6f7e32127139162cb583bd07f4935dd7fbc"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-all-sky-j-band-imaging.record.json",
+      "sizeBytes": 4072,
+      "sha256": "9d6e78623986f40c99bde511af8f394b2fc9a8f64cfa7c7b0c013a96a0c73661"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-all-sky-k-band-imaging.fits",
+      "sizeBytes": 8640,
+      "sha256": "1f13dbb8123587118a4ad1ccbc17a6f7e32127139162cb583bd07f4935dd7fbc"
+    },
+    {
+      "path": "raw/moc/2mass-2mass-all-sky-k-band-imaging.record.json",
+      "sizeBytes": 4015,
+      "sha256": "64e6089514597e2a946f1cefc833f1f176086603f54609f055b0afedd596aedd"
+    },
+    {
+      "path": "raw/moc/act-act-dr5-act-dr5-150-ghz-coverage-moc.fits",
+      "sizeBytes": 14400,
+      "sha256": "98c40a71502a0bf144a956e4b588337e4c9a9abd9702a7fb2743829815cba737"
+    },
+    {
+      "path": "raw/moc/act-act-dr5-act-dr5-150-ghz-coverage-moc.record.json",
+      "sizeBytes": 3095,
+      "sha256": "90f3dafd484c6debafe8bce44a4f2b8d8c2908397201fa7af428d6a289515f1e"
+    },
+    {
+      "path": "raw/moc/act-act-dr5-act-dr5-220-ghz-coverage-moc.fits",
+      "sizeBytes": 14400,
+      "sha256": "53354fac673dcc693450eee89e56999fa0e99342f0d5e9891e5065706ed349c0"
+    },
+    {
+      "path": "raw/moc/act-act-dr5-act-dr5-220-ghz-coverage-moc.record.json",
+      "sizeBytes": 3091,
+      "sha256": "faaf4c9bd6be4bdba7961b03595363c7b0fe9eba62de7847ae98d436116a077a"
+    },
+    {
+      "path": "raw/moc/act-act-dr5-act-dr5-90-ghz-coverage-moc.fits",
+      "sizeBytes": 17280,
+      "sha256": "8a06badae549b4df5835c6bad2a4de2c52e6797919b87e663cfd4b743283eac2"
+    },
+    {
+      "path": "raw/moc/act-act-dr5-act-dr5-90-ghz-coverage-moc.record.json",
+      "sizeBytes": 3089,
+      "sha256": "de5a02d345c2f02b3f78476b3860dcff3377b6f5c754d56833550693a52d4fb2"
+    },
+    {
+      "path": "raw/moc/akari-akari-fis-akari-fis-color-coverage-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "f3b7c8cbd92841d7f0bd468c8b47b7a5554efaf91c3919c0db0a36e6d7816ede"
+    },
+    {
+      "path": "raw/moc/akari-akari-fis-akari-fis-color-coverage-moc.record.json",
+      "sizeBytes": 3249,
+      "sha256": "b4ca34a224ce438aa9a4542d4a87e5282f6cd6aaca59448f84f29244e71ebe27"
+    },
+    {
+      "path": "raw/moc/allwise-allwise-w1-imaging.fits",
+      "sizeBytes": 8640,
+      "sha256": "1f13dbb8123587118a4ad1ccbc17a6f7e32127139162cb583bd07f4935dd7fbc"
+    },
+    {
+      "path": "raw/moc/allwise-allwise-w1-imaging.record.json",
+      "sizeBytes": 3585,
+      "sha256": "57f4f117c76d759affa86afeabd5cfc933d39b08c7091cb89cf4e56592c46c67"
+    },
+    {
+      "path": "raw/moc/allwise-allwise-w2-imaging.fits",
+      "sizeBytes": 8640,
+      "sha256": "1f13dbb8123587118a4ad1ccbc17a6f7e32127139162cb583bd07f4935dd7fbc"
+    },
+    {
+      "path": "raw/moc/allwise-allwise-w2-imaging.record.json",
+      "sizeBytes": 3607,
+      "sha256": "f4630dbc190c8e4a7d161bdc524d0f85406a0a5d4487970a7cc6a2bad1b75749"
+    },
+    {
+      "path": "raw/moc/allwise-allwise-w3-imaging.fits",
+      "sizeBytes": 8640,
+      "sha256": "fc02f6efb262a33d10863c1e189e7d2008856ea4ec68f42d2d2393c34f18b449"
+    },
+    {
+      "path": "raw/moc/allwise-allwise-w3-imaging.record.json",
+      "sizeBytes": 3613,
+      "sha256": "92e544c48982af04476982b449f01eb498253ebfb7b3c45f29b8019fcb721dc7"
+    },
+    {
+      "path": "raw/moc/allwise-allwise-w4-imaging.fits",
+      "sizeBytes": 8640,
+      "sha256": "05e43bb7a0cd9e01a00e156e632aeeb17812098a67e9896e24365c970afa646e"
+    },
+    {
+      "path": "raw/moc/allwise-allwise-w4-imaging.record.json",
+      "sizeBytes": 3608,
+      "sha256": "a5d28c6a95d3092b888a60d9e97bf403b74c314fc0b1874aea56e8d6fb2428a6"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-g-band-imaging-moc.fits",
+      "sizeBytes": 17280,
+      "sha256": "1f7389448dbcf97f429146a286b3ad348139b108b0f9b524bf0b4f09128c3401"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-g-band-imaging-moc.record.json",
+      "sizeBytes": 2711,
+      "sha256": "bbdb1c03665ed98d181d95c43ba1ee0fd02ab4d18ee5ef00aa6e2dfa1e4f3e0f"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-i-band-imaging-moc.fits",
+      "sizeBytes": 17280,
+      "sha256": "1f7389448dbcf97f429146a286b3ad348139b108b0f9b524bf0b4f09128c3401"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-i-band-imaging-moc.record.json",
+      "sizeBytes": 2720,
+      "sha256": "60b5e9784d91433db05c12dbb08ce96b35a30ba3e9d3023402a2b24fd86815be"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-r-band-imaging-moc.fits",
+      "sizeBytes": 17280,
+      "sha256": "1f7389448dbcf97f429146a286b3ad348139b108b0f9b524bf0b4f09128c3401"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-r-band-imaging-moc.record.json",
+      "sizeBytes": 2721,
+      "sha256": "100074cdd3ad6be66c069c9d93dea4f0fa58a38a6e8d2cff509d097c00e2d97b"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-u-band-imaging-moc.fits",
+      "sizeBytes": 17280,
+      "sha256": "1f7389448dbcf97f429146a286b3ad348139b108b0f9b524bf0b4f09128c3401"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-u-band-imaging-moc.record.json",
+      "sizeBytes": 2721,
+      "sha256": "9e29ebcd8086c8212ac6b66e9ef529a61ad7f99b95a6936467c552c1be8e9079"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-u-g-i-color-imaging-moc.fits",
+      "sizeBytes": 17280,
+      "sha256": "1f7389448dbcf97f429146a286b3ad348139b108b0f9b524bf0b4f09128c3401"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-u-g-i-color-imaging-moc.record.json",
+      "sizeBytes": 2687,
+      "sha256": "f85bb8a3c0a6dfd72fa831ece595d8af84e3022883d0b8aaba495907dacf3110"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-z-band-imaging-moc.fits",
+      "sizeBytes": 17280,
+      "sha256": "1f7389448dbcf97f429146a286b3ad348139b108b0f9b524bf0b4f09128c3401"
+    },
+    {
+      "path": "raw/moc/cfhtls-cfhtls-wide-cfhtls-wide-z-band-imaging-moc.record.json",
+      "sizeBytes": 2722,
+      "sha256": "c4da4e3b481ad9e18b4ad2bf3ce290897681a661e4e7572a7d3eaea1a0ee9900"
+    },
+    {
+      "path": "raw/moc/decals-decals-dr5-dr5-grz-color-footprint.fits",
+      "sizeBytes": 192960,
+      "sha256": "592fbf29361a7de3efc29b4b2d904cbd80525224da7cbb60a3d23b3e4845d677"
+    },
+    {
+      "path": "raw/moc/decals-decals-dr5-dr5-grz-color-footprint.record.json",
+      "sizeBytes": 3242,
+      "sha256": "c2733e37d872f763ba17900d284feeabb09ca99b43fdca31c6656f584981f4fd"
+    },
+    {
+      "path": "raw/moc/decaps-decaps-dr2-decaps-dr2-color-imaging-moc.fits",
+      "sizeBytes": 54720,
+      "sha256": "2236194653ca81aec6af74a51ea0586911e91b4d884b763b397eae06c779aaa9"
+    },
+    {
+      "path": "raw/moc/decaps-decaps-dr2-decaps-dr2-color-imaging-moc.record.json",
+      "sizeBytes": 3486,
+      "sha256": "e015a33711a15bb3a3b54d0726b3d927532f45df0a43b1ab525c146533fe8ca8"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-color-imaging.fits",
+      "sizeBytes": 126720,
+      "sha256": "59bfe8e901d19e1fdd6fcb9793e97e21558423973b7ef841906aaf2fe6a8e335"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-color-imaging.record.json",
+      "sizeBytes": 3247,
+      "sha256": "170a6bc6f67f750d93dd26db82a92febb6d2644a8d639ba888c88f5911605179"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-g-band-imaging-moc.fits",
+      "sizeBytes": 66240,
+      "sha256": "bbdeea649c096afb123d131826c7c336bb45d3794468d61831f26b91c96bd241"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-g-band-imaging-moc.record.json",
+      "sizeBytes": 2735,
+      "sha256": "29ee18634a849d81729a1267421951f2697c974cb1a80d1b9242c1a72be2e3c5"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-i-band-imaging-moc.fits",
+      "sizeBytes": 66240,
+      "sha256": "bbdeea649c096afb123d131826c7c336bb45d3794468d61831f26b91c96bd241"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-i-band-imaging-moc.record.json",
+      "sizeBytes": 2907,
+      "sha256": "87b9a471acc014c547caec78e9e8bdfd716f203a7795129994dd984bb85f69ed"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-r-band-imaging-moc.fits",
+      "sizeBytes": 66240,
+      "sha256": "bbdeea649c096afb123d131826c7c336bb45d3794468d61831f26b91c96bd241"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-r-band-imaging-moc.record.json",
+      "sizeBytes": 2732,
+      "sha256": "a759543c875dc38a333792395164ff21edb200d9ab522ef7120723d8365058a7"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-y-band-imaging-moc.fits",
+      "sizeBytes": 66240,
+      "sha256": "bbdeea649c096afb123d131826c7c336bb45d3794468d61831f26b91c96bd241"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-y-band-imaging-moc.record.json",
+      "sizeBytes": 2963,
+      "sha256": "cc0cb9ef175e53d779009118a89754e707eaf80e0f6eddbc5c0ddd7130d565bc"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-z-band-imaging-moc.fits",
+      "sizeBytes": 66240,
+      "sha256": "bbdeea649c096afb123d131826c7c336bb45d3794468d61831f26b91c96bd241"
+    },
+    {
+      "path": "raw/moc/des-des-dr2-dr2-z-band-imaging-moc.record.json",
+      "sizeBytes": 2954,
+      "sha256": "9d48efbd22b75be88a72d2cba39daa135f1fabe68ed1d25381d533fa5b2f3197"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-color-imaging-moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "cfb78cf35e9704002868e72f1f5fa32790e07ff707239c17e2c1dc44efe7df41"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-color-imaging-moc.record.json",
+      "sizeBytes": 2602,
+      "sha256": "eebdf2e664eccdaafc204d22c36909501b64a1220b6cfcdaf1b7139f265f8521"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-first-images-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "3ce45ce0e9fb2843cf51c60bcc460634db089dfbb5d7cbdb6fea15ad669c501a"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-first-images-moc.record.json",
+      "sizeBytes": 2706,
+      "sha256": "1e8981fda48186277e90089458dd8f0131f9805dbd592d750a651635575ae5ed"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-nisp-h-moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "6eb2ce04004593c6b303f40f68923fd5828dfb3638c985b9eebc11937f8bafb5"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-nisp-h-moc.record.json",
+      "sizeBytes": 2447,
+      "sha256": "9188d13105c9fb0848235b29e3cc4402e81d35faddd578aca51dc341fc45990e"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-nisp-j-moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "97ac6d45f65d2b54cc68577558cce4dc2ef448c98732eb9f381c578f6a095272"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-nisp-j-moc.record.json",
+      "sizeBytes": 2439,
+      "sha256": "29ce7c1e62af06f8436b441d22eebfa95b7545fa477ff11087a34bfc777eddfb"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-nisp-y-moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "6eb2ce04004593c6b303f40f68923fd5828dfb3638c985b9eebc11937f8bafb5"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-nisp-y-moc.record.json",
+      "sizeBytes": 2449,
+      "sha256": "dea71c1cccfc1eff2a556f1220e5f7343914d51846fc886d6921d105959f5e5f"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-vis-moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "a1dc8c4123b8bb8940518c0bf86f1d7442251be23556acb9836a04cfee7c2d13"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-ero-ero-vis-moc.record.json",
+      "sizeBytes": 2424,
+      "sha256": "020ced8766f47d2ec63472bc0b5542ece65a874f751e9851cf5251361ca56ebd"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-q1-euclid-q1-color-imaging-moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "4a0b49b37e16ff380bd8d8477f582b8bbb867824ec9d5d906641f765b76f6c75"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-q1-euclid-q1-color-imaging-moc.record.json",
+      "sizeBytes": 2752,
+      "sha256": "69307bccd794357255524b1624d08a2d93b492e289e7b8a18cc4163255963fe9"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-q1-euclid-q1-nisp-h-moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "4a0b49b37e16ff380bd8d8477f582b8bbb867824ec9d5d906641f765b76f6c75"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-q1-euclid-q1-nisp-h-moc.record.json",
+      "sizeBytes": 3289,
+      "sha256": "b1fcc61997a85b6d7b890a4e0f8b05543dfa56479427b4adc7f46afca4542a2f"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-q1-euclid-q1-nisp-j-moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "4862dcaadefdfa8216f75333ee7264bd9119f75e3ec95876b94e2b0e93db514e"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-q1-euclid-q1-nisp-j-moc.record.json",
+      "sizeBytes": 3114,
+      "sha256": "8f9a6230ca156db0b2082d617d46dab64d6278626ac33b778a08ce80f2450194"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-q1-euclid-q1-nisp-y-moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "35ae372ecbf98f5706c0a0e850001059e6c323a8bebc2ef4e2c7c1219ea6a4aa"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-q1-euclid-q1-nisp-y-moc.record.json",
+      "sizeBytes": 3122,
+      "sha256": "65fac833751c3c7dd46c94a6715b553abada796702c40dc82b235128aff6bb24"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-q1-euclid-q1-vis-moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "e530f77eb7a0973d36b3715123b1bcc72f28c0958cf7edef3b3848e95a3dae63"
+    },
+    {
+      "path": "raw/moc/euclid-euclid-q1-euclid-q1-vis-moc.record.json",
+      "sizeBytes": 2939,
+      "sha256": "b9d30873eef554396d3f5026269291f2a2feba43b0a2a51cc4d86406eefa2726"
+    },
+    {
+      "path": "raw/moc/fds-fds-dr1-fds-dr1-color-imaging-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "b8107a219fabac733c6f5a7acf1e3650026c38943f3a3bba7b5d2f8f0cfd97bd"
+    },
+    {
+      "path": "raw/moc/fds-fds-dr1-fds-dr1-color-imaging-moc.record.json",
+      "sizeBytes": 2668,
+      "sha256": "dbf9f933441eb2778cb636ba70944c66565ff4981fd30ee0d829f8c4841f26d9"
+    },
+    {
+      "path": "raw/moc/fds-fds-dr1-fds-dr1-g-band-imaging-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "8c66f0179e0046e2fc3d9d782994dca7a1d26d587ba3556c22b41156e2a70652"
+    },
+    {
+      "path": "raw/moc/fds-fds-dr1-fds-dr1-g-band-imaging-moc.record.json",
+      "sizeBytes": 3585,
+      "sha256": "229629c632b2d6b8a65f3c8abcc9b0f055071a83c134481e32d28472f06edc54"
+    },
+    {
+      "path": "raw/moc/fds-fds-dr1-fds-dr1-i-band-imaging-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "b8107a219fabac733c6f5a7acf1e3650026c38943f3a3bba7b5d2f8f0cfd97bd"
+    },
+    {
+      "path": "raw/moc/fds-fds-dr1-fds-dr1-i-band-imaging-moc.record.json",
+      "sizeBytes": 3365,
+      "sha256": "fbcf5a823b66c6c8649b3782528b365f0f228704fc7f8a5c6cc7e96cb218e628"
+    },
+    {
+      "path": "raw/moc/fds-fds-dr1-fds-dr1-r-band-imaging-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "c9a519261209c13ec3a520387e07a1a56f6d51d7a856677b190f091a8a7fe643"
+    },
+    {
+      "path": "raw/moc/fds-fds-dr1-fds-dr1-r-band-imaging-moc.record.json",
+      "sizeBytes": 3236,
+      "sha256": "096911e9a0f33e16fd35883b4d3c9c1511034058a3d7920ad45bb2675d0c558c"
+    },
+    {
+      "path": "raw/moc/fds-fds-dr1-fds-dr1-u-band-imaging-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "7926b988b2baae2b3569c3f4fd2c5fa167a8d237f56e01151c29e6f26ab859fb"
+    },
+    {
+      "path": "raw/moc/fds-fds-dr1-fds-dr1-u-band-imaging-moc.record.json",
+      "sizeBytes": 3236,
+      "sha256": "81ab537e97812963309c74e39945ee50fb019eedd89c6f398ffee9472fab15d2"
+    },
+    {
+      "path": "raw/moc/gaia-gaia-dr3-main-source-presence.fits",
+      "sizeBytes": 25920,
+      "sha256": "ea7f15e3e2c54daf034a99caf754147d35f0c7353e2925d1dd02c1664f6562f9"
+    },
+    {
+      "path": "raw/moc/gaia-gaia-dr3-main-source-presence.record.json",
+      "sizeBytes": 3080,
+      "sha256": "ce1bcf6beb9b7f49340dd16777a25852eee0682a993002455a0c43d8e60b062a"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-ais-galex-ais-color-imaging-moc.fits",
+      "sizeBytes": 293760,
+      "sha256": "44e81da2c20b9ea9ae9258e5b5b8ffea6f99867cf07346d428e5d1f30aa86537"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-ais-galex-ais-color-imaging-moc.record.json",
+      "sizeBytes": 4625,
+      "sha256": "817d125fd16f93ec57ca44f3d882d70414b32046ab351e1145dc749b503e0200"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-ais-galex-ais-fuv-imaging-moc.fits",
+      "sizeBytes": 290880,
+      "sha256": "ab11c5bd3b08d45d86f38b28d7114a4899023c9ffc75ea7ac9ea1b5b3da35549"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-ais-galex-ais-fuv-imaging-moc.record.json",
+      "sizeBytes": 4098,
+      "sha256": "be23ff18f32c267d5d4cfdeed3c20fe723676dba5b8c762f9d9ad79503f5264b"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-ais-galex-ais-nuv-imaging-moc.fits",
+      "sizeBytes": 293760,
+      "sha256": "db2079a8f0e0f94e8f835a76c98d24563be050007527acd3be5074c806801354"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-ais-galex-ais-nuv-imaging-moc.record.json",
+      "sizeBytes": 4101,
+      "sha256": "25f17865a56a72909946a5e690b8026a610f54104861b9ff4e67b985811bfa15"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-gr7-fuv-imaging.fits",
+      "sizeBytes": 630720,
+      "sha256": "4f2df9c3baade74206707acdd80ad4e71e734a25098dcaf59bc326644562b1a1"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-gr7-fuv-imaging.record.json",
+      "sizeBytes": 4348,
+      "sha256": "df34333385e2fff9d00e26c2687e34adeedd8c9376aac90117b5349935e2fe7c"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-gr7-nuv-imaging.fits",
+      "sizeBytes": 619200,
+      "sha256": "8a6c5bd77318ebb99c430412e7ba4634d443b462892d4c62fbbe2d400b18760b"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-gr7-nuv-imaging.record.json",
+      "sizeBytes": 4184,
+      "sha256": "3d9d1e96a4b9025f552fe5589c91fefc1af389f496f6c78b03dd121fd580742d"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-gr7-ultraviolet-image-coverage.fits",
+      "sizeBytes": 619200,
+      "sha256": "f4b4a512b363e100cc20c4afeed96514f3d1adf1b2bd3399522132cb67d6be81"
+    },
+    {
+      "path": "raw/moc/galex-galex-gr6-gr7-ultraviolet-image-coverage.record.json",
+      "sizeBytes": 5498,
+      "sha256": "da2f1938d01678c626aab27a4c58269bffa241b958798e5227548e8cfa6c6965"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-g-band-imaging-deep.fits",
+      "sizeBytes": 25920,
+      "sha256": "8bb56469279dcd98f105ec4019899e8f282c01bfa801da9a6a10ee43afb79ba6"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-g-band-imaging-deep.record.json",
+      "sizeBytes": 4601,
+      "sha256": "ce0a9058e8c0fbf54b3b520a9df69d9bdb258716214a8e0826024a7974e3238d"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-g-band-imaging-wide.fits",
+      "sizeBytes": 250560,
+      "sha256": "26cc4320e331485c464e01a323701063c7683c9226fda3ec1c431a871ac18ce6"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-g-band-imaging-wide.record.json",
+      "sizeBytes": 3959,
+      "sha256": "7938e1b2eca2439b4cc08f4329db06c7671a5f3e57c65a85314fe3af2a54c3aa"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-i-band-imaging-deep.fits",
+      "sizeBytes": 25920,
+      "sha256": "ff8496d941bcaccb134daf94eda6c0aab4f2e76bb43edc2159dfb947c0dc7d1b"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-i-band-imaging-deep.record.json",
+      "sizeBytes": 3707,
+      "sha256": "e66ee7310a5af937be47dba23c817cb2ef22903143d5f07dae50d5059ff0f5ea"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-i-band-imaging-wide.fits",
+      "sizeBytes": 233280,
+      "sha256": "6807d0f6280e65592ace029c4ac0ac2d95095881df9b9b9e7393ac6650ed73ee"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-i-band-imaging-wide.record.json",
+      "sizeBytes": 3905,
+      "sha256": "882065d0c95ca173fd3ef58753dfef3ae3519d6b5bb7e00419d57b93aca5afa3"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-r-band-imaging-deep.fits",
+      "sizeBytes": 25920,
+      "sha256": "f1019b171eafcefaa5f568c367be39a9aac2dd1fdfb47b32a5bb956183182fad"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-r-band-imaging-deep.record.json",
+      "sizeBytes": 3708,
+      "sha256": "b783220b0203174bf9878b0a13a2fc1fea33b7b3f04b0f143cdc6f20d2b88016"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-r-band-imaging-wide.fits",
+      "sizeBytes": 270720,
+      "sha256": "d444e0ac65426762543916ab3e1fc5b6f7f876448a50f8d499fd3a4129bc67d3"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-r-band-imaging-wide.record.json",
+      "sizeBytes": 3899,
+      "sha256": "eb805d0a52fa30d2b926303e5017de7db9c182c5d65584c838e6c0a3d14e84ec"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-wide-deep-image-coverage-deep.fits",
+      "sizeBytes": 25920,
+      "sha256": "64ff449acaf269f4ccc56c4af2f28a43b066733711dbabf0bc9bd131fbe202c5"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-wide-deep-image-coverage-deep.record.json",
+      "sizeBytes": 3892,
+      "sha256": "6764b62273e3897c2509c90576ff48dafb193b5fad57e3326ba3573dab144629"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-wide-deep-image-coverage-wide.fits",
+      "sizeBytes": 233280,
+      "sha256": "af30626b0856c10217cbb903700a70edfab2b41df87e5408d7eb2c0701fbe6a3"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-wide-deep-image-coverage-wide.record.json",
+      "sizeBytes": 3872,
+      "sha256": "f775b4bb48bcb17507c0bcdafee379bc63142deff8a677847251a2b1eaeb59ff"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-y-band-imaging-deep.fits",
+      "sizeBytes": 25920,
+      "sha256": "8c7c6db0b5d93f8121359838ed5afd220be5d9be5e5a2684351fed6d8acfbde6"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-y-band-imaging-deep.record.json",
+      "sizeBytes": 3721,
+      "sha256": "205ee78cad09e0172c844cf1c2eb7f5a08add274239b9812decf4cd6495aa0fb"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-y-band-imaging-wide.fits",
+      "sizeBytes": 239040,
+      "sha256": "52456d46f4b6f65177408a42837b993a90161a71d9ba20fff500ffcf43a85729"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-y-band-imaging-wide.record.json",
+      "sizeBytes": 3992,
+      "sha256": "ea3a944b92c944801594a3b1ba63668b9312ae8b0fbf3670ae34555a7ca27de2"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-z-band-imaging-deep.fits",
+      "sizeBytes": 25920,
+      "sha256": "055faaf24194f662bc96d4ec6e1e3c51259248e64da449414ba25a7c6b4203a0"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-z-band-imaging-deep.record.json",
+      "sizeBytes": 3792,
+      "sha256": "647da62376252be8d2f760ac00f6d9a5253c0a17a39595640370e86726ed226d"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-z-band-imaging-wide.fits",
+      "sizeBytes": 210240,
+      "sha256": "cd215e5a501edd55b8bff81c6406ee5c265e82e43f914332827a70813f728554"
+    },
+    {
+      "path": "raw/moc/hsc-ssp-hsc-pdr2-pdr2-z-band-imaging-wide.record.json",
+      "sizeBytes": 3834,
+      "sha256": "5e776de082638c926e9db298dedfb305a013d8550d18128b2ed8f5e74ebf53cb"
+    },
+    {
+      "path": "raw/moc/hst-hst-mast-snapshot-2026-published-hst-hips-pointings.fits",
+      "sizeBytes": 6897600,
+      "sha256": "297748486ef7a1632339dae3c22f4bef88bfa13b5ca316181cc9207f3423d33e"
+    },
+    {
+      "path": "raw/moc/hst-hst-mast-snapshot-2026-published-hst-hips-pointings.record.json",
+      "sizeBytes": 167838,
+      "sha256": "f9908c61d85a42735eac642f9ceecbc4a7f92230db526c2833b2e08d9fd3fd1b"
+    },
+    {
+      "path": "raw/moc/index.json",
+      "sizeBytes": 81654,
+      "sha256": "ef70f86f670093e968c06083eedb3f1f67fdd9b0ff4e32d5ab1736babfd38f52"
+    },
+    {
+      "path": "raw/moc/iphas-iphas-dr2-iphas-dr2-h-alpha-imaging-moc.fits",
+      "sizeBytes": 103680,
+      "sha256": "b803d12d4464be137d1fa50cc570860c9fd1272f98fbc392197dda478c74e93b"
+    },
+    {
+      "path": "raw/moc/iphas-iphas-dr2-iphas-dr2-h-alpha-imaging-moc.record.json",
+      "sizeBytes": 3205,
+      "sha256": "a75fb25f477db8db64912d66095f7a7b26c1a6c6d126903e0bf6196f592cf55e"
+    },
+    {
+      "path": "raw/moc/iphas-iphas-dr2-iphas-dr2-i-band-imaging-moc.fits",
+      "sizeBytes": 103680,
+      "sha256": "24058128f2f93dafd6fffb4bab5b9289923ef26c80c5d631cde16057a93d4a21"
+    },
+    {
+      "path": "raw/moc/iphas-iphas-dr2-iphas-dr2-i-band-imaging-moc.record.json",
+      "sizeBytes": 2778,
+      "sha256": "9609f4670385c0621c6a9be62290821e76829c946f4179f17f3229129e9bc5a3"
+    },
+    {
+      "path": "raw/moc/iphas-iphas-dr2-iphas-dr2-r-band-imaging-moc.fits",
+      "sizeBytes": 103680,
+      "sha256": "dc35be27a1ca4da79b7eaa2bd2c9946b2201875a07a20cc4ee2f2c21da4a7724"
+    },
+    {
+      "path": "raw/moc/iphas-iphas-dr2-iphas-dr2-r-band-imaging-moc.record.json",
+      "sizeBytes": 3243,
+      "sha256": "1433ba5a4e38b2fcf59390c6fb36389a90d0cd99b9172a79ff6a783df49e0eb2"
+    },
+    {
+      "path": "raw/moc/kids-kids-dr5-dr5-gri-imaging.fits",
+      "sizeBytes": 34560,
+      "sha256": "05814db03135f15e36228c4c3b743ef4da12857d0fedc645f66d2ca43a20fabd"
+    },
+    {
+      "path": "raw/moc/kids-kids-dr5-dr5-gri-imaging.record.json",
+      "sizeBytes": 2803,
+      "sha256": "617b8cea873c021ec7c5839cb6af03aa5560290769002340e2840d1844d9ffe1"
+    },
+    {
+      "path": "raw/moc/legacy-surveys-legacy-dr10-dr10-color-imaging.fits",
+      "sizeBytes": 290880,
+      "sha256": "3c6347e296511f5c6a3f39fd6fa482a50e40000a31ce5e8c94e08e72545d914c"
+    },
+    {
+      "path": "raw/moc/legacy-surveys-legacy-dr10-dr10-color-imaging.record.json",
+      "sizeBytes": 4676,
+      "sha256": "9d5281fbc60721da542a460ddc79464bc07c6d8a2ce5a3c8ae8fff11e61a3b4b"
+    },
+    {
+      "path": "raw/moc/nvss-nvss-final-1-4-ghz-radio-imaging.fits",
+      "sizeBytes": 14400,
+      "sha256": "aca99dfcbcf13d6717060a48efd192389a244dee6261aa3f53583d1bd6144e13"
+    },
+    {
+      "path": "raw/moc/nvss-nvss-final-1-4-ghz-radio-imaging.record.json",
+      "sizeBytes": 3034,
+      "sha256": "9dfba8bb6e64cb3f84d06067c58410be76a807ca1d048d74690334905ed61d8a"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-color-imaging.fits",
+      "sizeBytes": 95040,
+      "sha256": "edcd8642b18a693f4d729589b030f736b6dfa9cae9caf43816f2a56693381e6c"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-color-imaging.record.json",
+      "sizeBytes": 4745,
+      "sha256": "48a337195b7b682f087b9998902d4f0766d1ebb6f74515e912d2a83073f1222f"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-g-band-imaging.fits",
+      "sizeBytes": 95040,
+      "sha256": "4f047e30a31bf1d2527978f96388d3d9e140ee4f76b939cbe3505cf2b6cb9edd"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-g-band-imaging.record.json",
+      "sizeBytes": 4953,
+      "sha256": "a3bac457843e140a3db0350067876ba5423846f350527fce9bdeb285ac74533c"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-i-band-imaging.fits",
+      "sizeBytes": 106560,
+      "sha256": "df84ea37a5a015f6d63378c9bdfab2148db6c7be0a095c40f8578524b42f2646"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-i-band-imaging.record.json",
+      "sizeBytes": 6435,
+      "sha256": "8029b3c2c9eb72f772d48b2176eb6de369da1776e8cddf272049976cb25d2eda"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-r-band-imaging.fits",
+      "sizeBytes": 115200,
+      "sha256": "1c8ec31dffd3aa770b65703e60999fd56bb51fcda5d4c33bc42fe92d2068f620"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-r-band-imaging.record.json",
+      "sizeBytes": 3874,
+      "sha256": "ed609703fee1b3f14d2ccb78923dbf7b02341fa0eec7148a9f872e6ab3ba87a6"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-y-band-imaging.fits",
+      "sizeBytes": 11520,
+      "sha256": "ff4abe1c62deb575fe35fad6f63be1ff33df6309a63188b7a68b3cc0ab88d96f"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-y-band-imaging.record.json",
+      "sizeBytes": 4074,
+      "sha256": "a8ec8b6fc6a8a0bff800784e4988b0d9f37deb10b4ff4a7ca73a304ec6048922"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-z-band-imaging.fits",
+      "sizeBytes": 11520,
+      "sha256": "cfc7b7100277ddef102e32fe46bc24ab8df1873b30950398c440a46f79248606"
+    },
+    {
+      "path": "raw/moc/panstarrs-panstarrs-dr1-dr1-z-band-imaging.record.json",
+      "sizeBytes": 5044,
+      "sha256": "a32a7491d75d01a1335ac872c57e3cbe48ddd5c6ae237b2130a46078f25b549e"
+    },
+    {
+      "path": "raw/moc/rubin-rubin-firstlook-rubin-first-look-imaging-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "7c1a0595f1d7e14cd1c3faa7ca19a792e4e7707fdb2c79630eb76f1800c5f8f0"
+    },
+    {
+      "path": "raw/moc/rubin-rubin-firstlook-rubin-first-look-imaging-moc.record.json",
+      "sizeBytes": 2321,
+      "sha256": "93e62dc483ef4234617575788ab239482461b525cc532357e9586fb067c3f8f4"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-color-imaging.fits",
+      "sizeBytes": 2998080,
+      "sha256": "33eeaeb394e3049c3109358c56d9a3ac2e1d0e6e7fdde76d695c707176a695c3"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-color-imaging.record.json",
+      "sizeBytes": 3026,
+      "sha256": "fbbcbb0da5eecf0047d1b71e6950f630288e5305256a2f82a473dff132241316"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-g-band-imaging-moc.fits",
+      "sizeBytes": 37440,
+      "sha256": "e7a3767a59156e6940b072111ba4d7fcc01130a908b35628984e49693f91eb64"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-g-band-imaging-moc.record.json",
+      "sizeBytes": 3823,
+      "sha256": "fd8213b358aecedc53c8311e45f4b1db9982977f81cc245001c4b773c956f55b"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-i-band-imaging-moc.fits",
+      "sizeBytes": 650880,
+      "sha256": "45cb68b9a394bd347bf3700c4a6cade5005c6824069f132954e1acede707397e"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-i-band-imaging-moc.record.json",
+      "sizeBytes": 3660,
+      "sha256": "c3fab96cbf15b8eb5c5493045c434c30b6eaebb3d6b414fbda8ea03762b8571f"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-r-band-imaging-moc.fits",
+      "sizeBytes": 37440,
+      "sha256": "4132bd4c07b229661a052a10a4ce623283d667183aa41620f2ad8ebbf6086742"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-r-band-imaging-moc.record.json",
+      "sizeBytes": 3763,
+      "sha256": "4e6c392ffcd4436feeaaa48ba5857a558ebf1a9f9b66c163f45f131b3efb0d71"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-u-band-imaging-moc.fits",
+      "sizeBytes": 37440,
+      "sha256": "c4cd668e294b4fe8ebe87bfe6143d1590111f1a5e4bf8bb7b81b786704ff0ed9"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-u-band-imaging-moc.record.json",
+      "sizeBytes": 3660,
+      "sha256": "fb61d49bd6712271496ab57667ab98d299a5d2ddc89916a3a45e529c9214bd33"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-z-band-imaging-moc.fits",
+      "sizeBytes": 37440,
+      "sha256": "78cf71f610b29bf80e1676ed77a6ccc0d2c152d2a74a06ab2deb51815e787aaa"
+    },
+    {
+      "path": "raw/moc/sdss-sdss-dr09-dr9-z-band-imaging-moc.record.json",
+      "sizeBytes": 3658,
+      "sha256": "e1923fc864c9d55917de9c0520b25961ef79eac2a41586c25c5214874eb4553d"
+    },
+    {
+      "path": "raw/moc/skymapper-skymapper-dr4-dr4-gri-color-footprint.fits",
+      "sizeBytes": 129600,
+      "sha256": "d89b39f1036dbad020b0a472e05aa6e7442e0552e27255b81fabd6991cf02f20"
+    },
+    {
+      "path": "raw/moc/skymapper-skymapper-dr4-dr4-gri-color-footprint.record.json",
+      "sizeBytes": 4292,
+      "sha256": "6bbcdeb4f9b278f7a87fee185f850a10dced55eea23b1bf4423d7a0aab6e4cf3"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-color-coverage-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "04291a0c14fcd21eb0cd9900978ff737f5a8b4c4edb719012f7140bad36016a1"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-color-coverage-moc.record.json",
+      "sizeBytes": 2164,
+      "sha256": "bc01c937be47cde53aceb1a0022326047002c611e3b0e8f58773c185b3cecea1"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d1-coverage-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "e8b1a092746a2ada8d276b215535750af96108ffda141d2ead7a2747881d609f"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d1-coverage-moc.record.json",
+      "sizeBytes": 3498,
+      "sha256": "04d2c9e48b40438f5c31d86d61f5c9f0148ea3ca329c2574553413c6dd74c440"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d2-coverage-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "1e32a2ddb31d9810a9391c0a8dd5fccd9a496fad7f96c999661f1e27aa77941e"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d2-coverage-moc.record.json",
+      "sizeBytes": 2995,
+      "sha256": "fc46bfa1cea69e499c3c9b2549d9f5607b41426751ace8822ca2f2bb4d4a9727"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d3-coverage-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "3b8e814d96189a60d706639256ca56f46fb07316c9ff691f53799f35b3372a19"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d3-coverage-moc.record.json",
+      "sizeBytes": 2995,
+      "sha256": "5e8ea9752ffd59c26991142c348a0f4ac2fd0a0d2b9ce4e270b0cfc358e76daf"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d4-coverage-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "8c258536b97af74582fa95c0de6803651ab8ec793a6430a6f6ca6b5e7593bc08"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d4-coverage-moc.record.json",
+      "sizeBytes": 2989,
+      "sha256": "74966f97478233ad52f1a1c1f032f43abc5ebb175fa384c8ad716c36a165ebcc"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d5-coverage-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "8c842376e45d47f0a681dfbfbbf311e7d0ce5f148e56ac2ff0cc81b25dc9beb5"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d5-coverage-moc.record.json",
+      "sizeBytes": 3049,
+      "sha256": "1860e576a8ea81c0e19fe1bad1ad9db93ad0759a0f0977e1440cb47e8f9c4e2a"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d6-coverage-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "3fb716926674cab27eca88620af56c6d1ff3f6709c2594ae9125653474c5a0bf"
+    },
+    {
+      "path": "raw/moc/spherex-spherex-qr2-spherex-qr2-d6-coverage-moc.record.json",
+      "sizeBytes": 2917,
+      "sha256": "e1b68efe56e983bedcd6b8676b5d07996c3cfa308bb78ffa55f4c94a3ae4f5cf"
+    },
+    {
+      "path": "raw/moc/sumss-sumss-final-sumss-843-mhz-imaging-moc.fits",
+      "sizeBytes": 40320,
+      "sha256": "d6e91db6aa285a29e91ac290edfbf8389bece0467d811a8baacd877d53177190"
+    },
+    {
+      "path": "raw/moc/sumss-sumss-final-sumss-843-mhz-imaging-moc.record.json",
+      "sizeBytes": 2816,
+      "sha256": "18f127b36ecce3ceca72186aff327e863ffb4138ae058525fcc4213620f862f5"
+    },
+    {
+      "path": "raw/moc/vista-vista-viking-viking-j-footprint.fits",
+      "sizeBytes": 51840,
+      "sha256": "90981ae15adb2f018775e98948780fa5dd18afc719366f638194f880e1526ca3"
+    },
+    {
+      "path": "raw/moc/vista-vista-viking-viking-j-footprint.record.json",
+      "sizeBytes": 3448,
+      "sha256": "2a516175fcb6750319534b71be7719ff4ba8b71674c8e77a61480ace5495d1a5"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-h-bulge-imaging-moc.fits",
+      "sizeBytes": 14400,
+      "sha256": "e1063ea1b2d765a1707c145a7da2dceb5d43b0aa5e091689bd10c9f6dcb9ccb6"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-h-bulge-imaging-moc.record.json",
+      "sizeBytes": 4833,
+      "sha256": "5c8c94f494a146b1c1f93ba457552df2218285c36cef5d6b5d25e685f7aeaac4"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-h-disk-imaging-moc.fits",
+      "sizeBytes": 20160,
+      "sha256": "9bfd2058bfd90b34c32e4c9a3fb1d89485540a81210ebb6804de66a1629a18a4"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-h-disk-imaging-moc.record.json",
+      "sizeBytes": 4600,
+      "sha256": "c56c6bf03b69584935d490b0f5f323c7a785e8b2d065772c78e94f8849931788"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-j-band-imaging-moc.fits",
+      "sizeBytes": 23040,
+      "sha256": "3dbcf7e75cb4b5fcb893f3a2d1b40c45fe17d755ae071e4f2e3cd48f8af203cc"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-j-band-imaging-moc.record.json",
+      "sizeBytes": 4865,
+      "sha256": "d5d7a8f06b41e4d22fae8eff6ad0a92577c5f0c2c5daacf1f33cdae34719f643"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-j-y-z-color-imaging-moc.fits",
+      "sizeBytes": 23040,
+      "sha256": "4aa582b36de79bb357ee0d5177b309bbb5cfe53f65e7697c4037a15da20b870c"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-j-y-z-color-imaging-moc.record.json",
+      "sizeBytes": 4201,
+      "sha256": "637212a0472e5d656de2dc8161be2439978429c2a1f4670d3f1015c52bfac490"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-y-band-imaging-moc.fits",
+      "sizeBytes": 23040,
+      "sha256": "c69cb85da145f2a85f38814ae7474ad0de83fffb4a77c8434859c6f544957220"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-y-band-imaging-moc.record.json",
+      "sizeBytes": 4541,
+      "sha256": "0b3f600e0195b258c72ffe912a56a74dc631a23044f5c81669ad77316084890b"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-z-band-imaging-moc.fits",
+      "sizeBytes": 23040,
+      "sha256": "cc7d6425940482470c52d5fbd30e214db267026c9ece671b265212791184defe"
+    },
+    {
+      "path": "raw/moc/vista-vista-vvv-dr4-vvv-dr4-z-band-imaging-moc.record.json",
+      "sizeBytes": 4536,
+      "sha256": "f61c4598e9aa42586cc8640149c17818d7552a54a21a3a2568651b4b9000186a"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-color-imaging-moc.fits",
+      "sizeBytes": 60480,
+      "sha256": "779b520e2aa23de521f2f4887d4492eb788b552d89b9d9fd744305c20f098a0f"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-color-imaging-moc.record.json",
+      "sizeBytes": 3013,
+      "sha256": "8349270215699c7c0bb119c3d2073b35d49e93fa746d4499977fb1918f9aa658"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-g-band-imaging-moc.fits",
+      "sizeBytes": 60480,
+      "sha256": "c10510f533f9be578c1251c226d4d96f0b958e7c1c605addb23389cb84045e48"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-g-band-imaging-moc.record.json",
+      "sizeBytes": 3196,
+      "sha256": "acd23c45e8c9e5e82a66655abe7bcbc17ba65a0a329b0f5d7ae97efd72220d62"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-h-alpha-imaging-moc.fits",
+      "sizeBytes": 60480,
+      "sha256": "7a34367b799f84b3560393e99d6ac979c610c709341be15641a180638fc02a40"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-h-alpha-imaging-moc.record.json",
+      "sizeBytes": 10089,
+      "sha256": "69c9048bc1b4f3e878faa1dca553f8b350f0da41a58fd3fbf1415ec63a8cf8b4"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-i-band-imaging-moc.fits",
+      "sizeBytes": 60480,
+      "sha256": "b6fbda4cdf6e5491eb759c0acc9f11b11fdbf8dc56da27d5aab94df8b9c800c0"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-i-band-imaging-moc.record.json",
+      "sizeBytes": 3198,
+      "sha256": "9c7c7750d672997e30139189cff0a388cdf8b63afc60906f00e4c7de25dbd7e1"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-r-band-imaging-moc.fits",
+      "sizeBytes": 57600,
+      "sha256": "e8287b04b9eb05170355db2806914b5c13ba73d4339c747c7892672bb8cc0ceb"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-r-band-imaging-moc.record.json",
+      "sizeBytes": 3063,
+      "sha256": "b62d547555179e393171811f99be522e85e3c15340657c6b0f97902cfee8726c"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-u-band-imaging-moc.fits",
+      "sizeBytes": 60480,
+      "sha256": "8d021d2852011bc6ddd5cd1348e597a04c954f2b145b72e177939592be590ea4"
+    },
+    {
+      "path": "raw/moc/vphas-vphas-dr4-vphas-dr4-u-band-imaging-moc.record.json",
+      "sizeBytes": 3183,
+      "sha256": "0066e1fa73fa1583154b67c765b93c35576339dd6ff5025fb36f544fc935ac02"
+    },
+    {
+      "path": "raw/moc/wenss-wenss-final-wenss-325-mhz-imaging-moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "d832b6dbf238a253b373c43a85030bb04a8948707894904a46ef6950ab52cbd0"
+    },
+    {
+      "path": "raw/moc/wenss-wenss-final-wenss-325-mhz-imaging-moc.record.json",
+      "sizeBytes": 2689,
+      "sha256": "f1ca5cb144cd95ed8d1f54aedac04f1c4d747c538b897fe9d377d640a5167c0f"
+    },
+    {
+      "path": "raw/moc/ztf-ztf-dr7-ztf-dr7-color-imaging-moc.fits",
+      "sizeBytes": 187200,
+      "sha256": "8dc82b0ef251b4e016d8c5944822b65b33e79c1893a5483b3b21da7762e90f11"
+    },
+    {
+      "path": "raw/moc/ztf-ztf-dr7-ztf-dr7-color-imaging-moc.record.json",
+      "sizeBytes": 4138,
+      "sha256": "8aae00352bb9127627c80f9cb8b98af23a67c4780c7d4dc17254c181731b35c2"
+    },
+    {
+      "path": "raw/moc/ztf-ztf-dr7-ztf-dr7-g-band-imaging-moc.fits",
+      "sizeBytes": 1860480,
+      "sha256": "492e6baffb23c44b7b508edaca8fb8f78d44f9aca245d172b579021a8e0eca94"
+    },
+    {
+      "path": "raw/moc/ztf-ztf-dr7-ztf-dr7-g-band-imaging-moc.record.json",
+      "sizeBytes": 3887,
+      "sha256": "e21fe30144a70e57d743e38711ed1f742cb4beaff513f4580334e548a2aa984c"
+    },
+    {
+      "path": "raw/moc/ztf-ztf-dr7-ztf-dr7-i-band-imaging-moc.fits",
+      "sizeBytes": 2655360,
+      "sha256": "18f24c77dd221ddb0fc65f281bf27be8a17a35c8df88878098f09d3cc9ef3ed7"
+    },
+    {
+      "path": "raw/moc/ztf-ztf-dr7-ztf-dr7-i-band-imaging-moc.record.json",
+      "sizeBytes": 4105,
+      "sha256": "0b1c7b86af72973891d865ec4d05e9ecb0a007aa09ea7cb1d089d6d96216aacb"
+    },
+    {
+      "path": "raw/moc/ztf-ztf-dr7-ztf-dr7-r-band-imaging-moc.fits",
+      "sizeBytes": 1589760,
+      "sha256": "35bf589646b29d545a3270d03ae3d6b86b948130ad314399b8efa89c4b7b844d"
+    },
+    {
+      "path": "raw/moc/ztf-ztf-dr7-ztf-dr7-r-band-imaging-moc.record.json",
+      "sizeBytes": 3843,
+      "sha256": "1e04895b6cff5b5ab79e5e70f01feb5e255e887943e642b41266fd903b78fc14"
+    }
+  ]
+}

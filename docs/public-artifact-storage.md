@@ -113,6 +113,45 @@ written to logs. The chart always runs archive pull; its default values are
 intentionally incomplete until an endpoint, bucket and least-privilege Secret
 are supplied.
 
+## Evidence storage (repository evidence)
+
+Upstream MOC source snapshots (`raw/moc/`), the Euclid Q1 region ZIP and the
+bulk of the CSST working set (input manifest, normalized scans, job/task
+snapshots, reports) are evidence, not runtime data. Their durable copies live
+in the production object store under the `repo-evidence` key prefix, separate
+from both `public/releases/` and the in-cluster evidence PVC namespace:
+
+```text
+repo-evidence/evidence/objects/<sha256>       content-addressed objects
+repo-evidence/evidence/snapshots/<id>.json    immutable snapshot manifests
+repo-evidence/evidence/current.json           mutable pointer
+```
+
+`artifacts/public-survey-footprints/evidence-index.json` is the tracked ledger:
+it pins the active snapshot and lists every archived object's repository
+relative path, size and SHA-256. Release validation
+(`npm run artifacts:validate`, `npm run catalog:build`) accepts a locally
+missing evidence input only when its hash matches this index, so a fresh
+workspace stays verifiable while bulk evidence stays out of Git. Conformance
+keepers (`csst/README.md`, `csst/provenance.json`,
+`csst/csst-w1-image-extent-order8.fits`), the public DESI tile tables and all
+generated layer outputs remain tracked locally.
+
+Restore a working evidence tree with:
+
+```bash
+node --import tsx scripts/content-archive.ts sync evidence --include "<families>"   # publish
+node --import tsx scripts/content-archive.ts restore evidence --root <target-dir>   # verify+restore
+```
+
+Both commands take their store configuration from `ASSETS_OBJECT_STORE_*` plus
+`ASSETS_OBJECT_STORE_PREFIX=repo-evidence` and scan the root configured by
+`ASSETS_EVIDENCE_ROOT`. After any future evidence re-sync, regenerate
+`evidence-index.json` from the verified restore so validation keeps accepting
+the archived inputs. Active snapshot:
+`9ffec99fbb30995f5bb7af6878e878c1050f02acebd0478700457e9df3155b69`
+(250 objects, 239,337,574 bytes, published 2026-09-10).
+
 ## Migration and rollback
 
 The first migration is deliberately one-way:

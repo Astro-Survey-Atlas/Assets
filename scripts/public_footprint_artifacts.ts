@@ -64,6 +64,41 @@ async function verifyRecord(record: FileRecord, label: string, base = artifactRo
   if (await sha256(filePath) !== record.sha256) throw new Error(`${label} SHA-256 mismatch`);
 }
 
+// Evidence inputs (raw MOC snapshots, CSST scans, Euclid region archive) are
+// stored in the object-store evidence namespace instead of this checkout;
+// evidence-index.json pins their hashes so validation still proves that the
+// archived bytes match every locked record.
+interface EvidenceObjectRecord { path: string; sizeBytes: number; sha256: string }
+let evidenceIndex: Promise<Map<string, EvidenceObjectRecord>> | undefined;
+
+function loadEvidenceIndex(): Promise<Map<string, EvidenceObjectRecord>> {
+  evidenceIndex ??= (async () => {
+    const doc = await json<{ schemaVersion: number; objects: EvidenceObjectRecord[] }>(path.join(artifactRoot, "evidence-index.json"));
+    if (doc.schemaVersion !== 1) throw new Error("Unsupported evidence index schema");
+    return new Map(doc.objects.map((entry) => [entry.path, entry]));
+  })();
+  return evidenceIndex;
+}
+
+async function archivedRecord(relativePath: string): Promise<EvidenceObjectRecord | undefined> {
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) return undefined;
+  try {
+    return (await loadEvidenceIndex()).get(relativePath);
+  } catch {
+    return undefined;
+  }
+}
+
+async function verifyRecordAllowArchived(record: FileRecord, label: string, base = artifactRoot, containmentRoot: string = root): Promise<void> {
+  try {
+    await verifyRecord(record, label, base, containmentRoot);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const archived = await archivedRecord(path.relative(artifactRoot, path.resolve(base, record.path)));
+    if (!archived || archived.sha256 !== record.sha256 || (record.sizeBytes !== undefined && archived.sizeBytes !== record.sizeBytes)) throw error;
+  }
+}
+
 function fitsCard(bytes: Buffer, keyword: string): string | undefined {
   for (let offset = 0; offset + 80 <= Math.min(bytes.length, 64 * 1024); offset += 80) {
     const card = bytes.toString("ascii", offset, offset + 80);
@@ -124,7 +159,7 @@ export async function validate(): Promise<PublicFootprintStatistics> {
 
   const provenance = await json<{ inputs: Record<string, FileRecord>; files: { manifest: FileRecord; catalog: FileRecord; packages: Array<{ id: string; version: string; archive: string; sizeBytes: number; sha256: string }> } }>(path.join(artifactRoot, "provenance.json"));
   for (const [name, record] of Object.entries(provenance.inputs ?? {})) {
-    try { await verifyRecord(record, `provenance input ${name}`); } catch (error) { errors.push(String(error)); }
+    try { await verifyRecordAllowArchived(record, `provenance input ${name}`); } catch (error) { errors.push(String(error)); }
   }
   for (const [name, record] of Object.entries({ manifest: provenance.files?.manifest, catalog: provenance.files?.catalog })) {
     try { await verifyRecord(record, `provenance output ${name}`); } catch (error) { errors.push(String(error)); }
@@ -177,13 +212,25 @@ export async function validate(): Promise<PublicFootprintStatistics> {
 
   for (const indexName of ["raw/moc/index.json", "raw/geometry/index.json"] as const) {
     const indexPath = path.join(artifactRoot, indexName);
-    const index = await json<{ artifacts: Array<{ fitsPath?: string; metadataPath?: string; filePath?: string; byteLength: number; sha256: string }> }>(indexPath);
+    let index: { artifacts: Array<{ fitsPath?: string; metadataPath?: string; filePath?: string; byteLength: number; sha256: string }> };
+    try {
+      index = await json(indexPath);
+    } catch (error) {
+      // The whole raw index family may live in evidence storage now.
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT" || !(await archivedRecord(indexName))) throw error;
+      continue;
+    }
     for (const artifact of index.artifacts ?? []) {
       const fileName = artifact.fitsPath ?? artifact.filePath;
       if (!fileName || path.basename(fileName) !== fileName) { errors.push(`Invalid raw artifact path in ${indexName}`); continue; }
-      try { await verifyRecord({ path: fileName, sizeBytes: artifact.byteLength, sha256: artifact.sha256 }, `raw artifact ${fileName}`, path.dirname(indexPath)); } catch (error) { errors.push(String(error)); }
+      try { await verifyRecordAllowArchived({ path: fileName, sizeBytes: artifact.byteLength, sha256: artifact.sha256 }, `raw artifact ${fileName}`, path.dirname(indexPath)); } catch (error) { errors.push(String(error)); }
       if (artifact.metadataPath) {
-        try { await json(path.join(path.dirname(indexPath), artifact.metadataPath)); } catch { errors.push(`Invalid raw metadata: ${artifact.metadataPath}`); }
+        try {
+          await json(path.join(path.dirname(indexPath), artifact.metadataPath));
+        } catch {
+          const metadataRelative = path.relative(artifactRoot, path.join(path.dirname(indexPath), artifact.metadataPath));
+          if (!(await archivedRecord(metadataRelative))) errors.push(`Invalid raw metadata: ${artifact.metadataPath}`);
+        }
       }
     }
   }
@@ -213,7 +260,7 @@ export async function validate(): Promise<PublicFootprintStatistics> {
       const layer = registry.layers.find((entry) => entry.layerId === spec.layerId);
       if (!layer || layer.status !== "acquired") throw new Error(`Build plan layer is not acquired: ${spec.layerId}`);
       if (layer.recipePath !== build.spec || layer.artifactPath !== path.join(build.output, `${spec.layerId}.moc.fits`) || layer.expectedSha256 !== build.expectedSha256) throw new Error(`Layer registry lock mismatch: ${spec.layerId}`);
-      await verifyRecord({ path: spec.input, ...spec.snapshot }, `locked input ${spec.layerId}`, root);
+      await verifyRecordAllowArchived({ path: spec.input, ...spec.snapshot }, `locked input ${spec.layerId}`, root);
       await validateFitsMoc(path.join(outputRoot, `${spec.layerId}.moc.fits`), build.expectedSha256);
       const outputProvenance = await json<{ coreVersion: string; layerId: string; coverageRole: string; dataOrigin: string; sourceTier: string; outputs: { moc: FileRecord; query: FileRecord; preview: FileRecord; statistics: FileRecord } }>(path.join(outputRoot, "provenance.json"));
       if (outputProvenance.coreVersion !== registry.coreVersion || outputProvenance.layerId !== layer.layerId || outputProvenance.coverageRole !== layer.coverageRole || outputProvenance.dataOrigin !== layer.dataOrigin || outputProvenance.sourceTier !== layer.sourceTier || outputProvenance.outputs.moc.sha256 !== build.expectedSha256) throw new Error(`Generated layer provenance mismatch: ${spec.layerId}`);

@@ -8,7 +8,12 @@ __pycache__/
 .env
 .env.*
 !.env.example
-artifacts/public-survey-footprints/csst/input-manifest.json
+# CSST evidence lives in object storage (prefix repo-evidence); only the
+# conformance-fixture keepers stay tracked.
+artifacts/public-survey-footprints/csst/*
+!artifacts/public-survey-footprints/csst/README.md
+!artifacts/public-survey-footprints/csst/provenance.json
+!artifacts/public-survey-footprints/csst/csst-w1-image-extent-order8.fits
 # Public Resource Package ZIPs are release artifacts referenced by the
 # manifest/history and must be present in fresh checkouts (CI, integrators).
 # The denied CSST package stays private.
