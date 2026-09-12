@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { AdminHttpError } from "./admin.js";
 import type { MocDiscoveryCandidate } from "./moc-discovery.js";
+import { queueStateSnapshot, queueStateSnapshotFile, stateSnapshotFileKey, type StateSnapshotSink } from "./state-snapshot.js";
 
 export const MOC_BUILD_PHASES = [
   "QUEUED", "FETCHING", "SNAPSHOT_LOCKED", "VALIDATING", "BUILDING", "PROJECTING", "BUNDLING", "STAGED", "FAILED", "DUPLICATE",
@@ -20,12 +21,19 @@ export interface MocBuildProgress {
   message?: string;
 }
 
+export interface MocBuildOutputFile {
+  ref: string;
+  sha256?: string;
+  sizeBytes?: number;
+  objectKey?: string;
+}
+
 export interface MocBuildOutput {
-  moc?: { ref: string; sha256: string; sizeBytes?: number };
-  query?: { ref: string; sha256?: string; sizeBytes?: number; order: number };
-  preview?: { ref: string; sha256?: string; sizeBytes?: number; order: number };
-  statistics?: { ref: string; sha256?: string; sizeBytes?: number };
-  manifest?: { ref: string; sha256?: string; sizeBytes?: number };
+  moc?: MocBuildOutputFile & { sha256: string };
+  query?: MocBuildOutputFile & { order: number };
+  preview?: MocBuildOutputFile & { order: number };
+  statistics?: MocBuildOutputFile;
+  manifest?: MocBuildOutputFile;
   cellCount?: number;
   availableOrders?: number[];
   maxOrder?: number;
@@ -36,6 +44,7 @@ export interface MocPublicationFile {
   sha256: string;
   sizeBytes: number;
   mediaType: string;
+  objectKey?: string;
 }
 
 export interface MocPublication {
@@ -148,34 +157,132 @@ function immutableRef(root: string, value: string): string {
   return resolved;
 }
 
+async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
+  const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+  await rename(temporary, filePath);
+}
+
+async function localFileMatches(filePath: string, expected: { sha256: string; sizeBytes: number }): Promise<"valid" | "missing" | "invalid"> {
+  try {
+    const details = await lstat(filePath);
+    if (!details.isFile() || details.isSymbolicLink()) return "invalid";
+    if (details.size !== expected.sizeBytes) return "invalid";
+    return hash(await readFile(filePath)) === expected.sha256 ? "valid" : "invalid";
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing";
+    return "invalid";
+  }
+}
+
 /** Durable Assets-owned state for MOC acquisition and build attempts. */
 export class MocBuildStore {
   #root: string;
+  #evidenceRoot: string;
   #records = new Map<string, MocBuildRequest>();
   #initialized = false;
   #writeQueue: Promise<void> = Promise.resolve();
+  readonly #snapshotSink: StateSnapshotSink | undefined;
 
-  constructor(root = process.env.ASSETS_CONTENT_ROOT || "/var/lib/assets-content") {
+  constructor(root = process.env.ASSETS_CONTENT_ROOT || "/var/lib/assets-content", snapshotSink?: StateSnapshotSink, evidenceRoot = process.env.ASSETS_EVIDENCE_ROOT || "/var/lib/assets-evidence") {
     this.#root = path.resolve(root);
+    this.#evidenceRoot = path.resolve(evidenceRoot);
+    this.#snapshotSink = snapshotSink;
   }
 
   private file(): string { return path.join(this.#root, "moc-build-requests-v1.json"); }
 
   async initialize(): Promise<void> {
     if (this.#initialized) return;
+    await mkdir(this.#root, { recursive: true });
+    let value: { requests?: MocBuildRequest[] } | undefined;
     try {
-      const value = JSON.parse(await readFile(this.file(), "utf8")) as { requests?: MocBuildRequest[] };
-      for (const request of value.requests ?? []) if (request?.name) this.#records.set(request.name, request);
-    } catch { /* first boot */ }
+      value = JSON.parse(await readFile(this.file(), "utf8")) as { requests?: MocBuildRequest[] };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" && this.#snapshotSink?.restore) {
+        const restored = await this.#snapshotSink.restore("moc-build");
+        if (restored && restored.state && typeof restored.state === "object" && Array.isArray((restored.state as { requests?: unknown }).requests)) {
+          value = restored.state as { requests: MocBuildRequest[] };
+          await writeJsonAtomic(this.file(), value);
+        }
+      }
+    }
+    for (const request of value?.requests ?? []) {
+      if (!request?.name || !(await this.restoreOutputFiles(request))) continue;
+      this.#records.set(request.name, request);
+    }
     this.#initialized = true;
+  }
+
+  private async restoreOutputFiles(request: MocBuildRequest): Promise<boolean> {
+    if (request.phase !== "STAGED" || !request.outputs) return true;
+    for (const value of Object.values(request.outputs)) {
+      if (!value || typeof value !== "object" || value.objectKey === undefined) continue;
+      if (!value.objectKey) return false;
+      if (!value.sha256 || value.sizeBytes === undefined) return false;
+      let target: string;
+      try { target = immutableRef(this.#evidenceRoot, path.resolve(this.#evidenceRoot, value.ref)); }
+      catch { return false; }
+      const state = await localFileMatches(target, { sha256: value.sha256, sizeBytes: value.sizeBytes });
+      if (state === "valid") continue;
+      if (state === "invalid" || !this.#snapshotSink?.restoreFile) return false;
+      try {
+        const restored = await this.#snapshotSink.restoreFile({
+          namespace: "moc-build",
+          objectKey: value.objectKey,
+          destinationPath: target,
+          sha256: value.sha256,
+          sizeBytes: value.sizeBytes,
+        });
+        if (!restored || await localFileMatches(target, { sha256: value.sha256, sizeBytes: value.sizeBytes }) !== "valid") return false;
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  objectKeyForFile(sha256: string): string | undefined {
+    return this.#snapshotSink?.enqueueFile ? stateSnapshotFileKey("moc-build", sha256) : undefined;
+  }
+
+  queueOutputFiles(request: MocBuildRequest, evidenceRoot: string): void {
+    if (!this.#snapshotSink?.enqueueFile || !request.outputs) return;
+    const outputFiles: Array<{ file: MocBuildOutputFile | undefined; contentType: string }> = [
+      { file: request.outputs.moc, contentType: "application/fits" },
+      { file: request.outputs.query, contentType: "application/json" },
+      { file: request.outputs.preview, contentType: "application/json" },
+      { file: request.outputs.statistics, contentType: "application/json" },
+      { file: request.outputs.manifest, contentType: "application/json" },
+    ];
+    for (const { file, contentType } of outputFiles) {
+      if (!file?.sha256 || file.sizeBytes === undefined) continue;
+      let sourcePath: string;
+      try { sourcePath = immutableRef(evidenceRoot, path.resolve(evidenceRoot, file.ref)); }
+      catch (error) {
+        console.warn(`MOC build output enqueue skipped: ${error instanceof Error ? error.message : String(error)}`);
+        continue;
+      }
+      queueStateSnapshotFile(this.#snapshotSink, {
+        namespace: "moc-build",
+        sourcePath,
+        objectKey: file.objectKey ?? stateSnapshotFileKey("moc-build", file.sha256),
+        kind: "moc-build-output",
+        contentType,
+        expectedSha256: file.sha256,
+        expectedSizeBytes: file.sizeBytes,
+      });
+    }
   }
 
   private async persist(): Promise<void> {
     await mkdir(this.#root, { recursive: true });
     const target = this.file();
     const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify({ schemaVersion: 1, requests: [...this.#records.values()] }, null, 2)}\n`, { flag: "wx" });
+    const state = { schemaVersion: 1, requests: [...this.#records.values()] };
+    await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { flag: "wx" });
     await rename(temporary, target);
+    queueStateSnapshot(this.#snapshotSink, "moc-build", state);
   }
 
   private async queuedPersist(): Promise<void> {
@@ -352,10 +459,11 @@ export class MocBuildService {
       await this.store.update(name, { phase: "BUILDING", progress: { phase: "BUILDING", step: 4, totalSteps: DEFAULT_TOTAL_STEPS, percent: 58, message: "生成规范化 MOC" } });
       const build = await this.runner.build(sourcePath, root, { maxOrder: this.maxOrder, queryOrder: this.queryOrder, previewOrder: this.previewOrder });
       await this.store.update(name, { phase: "PROJECTING", progress: { phase: "PROJECTING", step: 5, totalSteps: DEFAULT_TOTAL_STEPS, percent: 74, message: "生成 query / preview 投影" } });
-      const output = await outputSummary(root, this.evidenceRoot, build, this.queryOrder, this.previewOrder);
+      const output = await outputSummary(root, this.evidenceRoot, build, this.queryOrder, this.previewOrder, (sha256) => this.store.objectKeyForFile(sha256));
       await this.store.update(name, { phase: "BUNDLING", progress: { phase: "BUNDLING", step: 6, totalSteps: DEFAULT_TOTAL_STEPS, percent: 88, message: "写入证据 manifest 和不可变构建产物" }, outputs: output });
       await writeJsonImmutable(path.join(root, "build-manifest.json"), { schemaVersion: 1, kind: "moc-build-evidence", requestName: name, candidateId: candidate.candidate.candidateId, provider: candidate.provider, source: { url, sha256: snapshotSha256, sizeBytes: body.length }, outputs: output });
-      await this.store.update(name, { phase: "STAGED", progress: { phase: "STAGED", step: DEFAULT_TOTAL_STEPS, totalSteps: DEFAULT_TOTAL_STEPS, percent: 100, message: "构建完成，等待产品审核与发布" }, outputs: { ...output, manifest: await fileObject(root, this.evidenceRoot, "build-manifest.json") } });
+      const staged = await this.store.update(name, { phase: "STAGED", progress: { phase: "STAGED", step: DEFAULT_TOTAL_STEPS, totalSteps: DEFAULT_TOTAL_STEPS, percent: 100, message: "构建完成，等待产品审核与发布" }, outputs: { ...output, manifest: await fileObject(root, this.evidenceRoot, "build-manifest.json", (sha256) => this.store.objectKeyForFile(sha256)) } });
+      this.store.queueOutputFiles(staged, this.evidenceRoot);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       try { await this.store.update(name, { phase: "FAILED", progress: { phase: "FAILED", step: 0, totalSteps: DEFAULT_TOTAL_STEPS, message }, error: { reason: "BuildFailed", message } }); }
@@ -382,21 +490,62 @@ export class MocPublicationStore {
   #records = new Map<string, MocPublication>();
   #initialized = false;
   #writeQueue: Promise<void> = Promise.resolve();
+  readonly #snapshotSink: StateSnapshotSink | undefined;
 
-  constructor(contentRoot = process.env.ASSETS_CONTENT_ROOT || "/var/lib/assets-content", evidenceRoot = process.env.ASSETS_EVIDENCE_ROOT || "/var/lib/assets-evidence") {
+  constructor(contentRoot = process.env.ASSETS_CONTENT_ROOT || "/var/lib/assets-content", evidenceRoot = process.env.ASSETS_EVIDENCE_ROOT || "/var/lib/assets-evidence", snapshotSink?: StateSnapshotSink) {
     this.contentRoot = path.resolve(contentRoot);
     this.evidenceRoot = path.resolve(evidenceRoot);
+    this.#snapshotSink = snapshotSink;
   }
 
   private file(): string { return path.join(this.contentRoot, "moc-publications-v1.json"); }
 
   async initialize(): Promise<void> {
     if (this.#initialized) return;
+    await mkdir(this.contentRoot, { recursive: true });
+    let value: { publications?: MocPublication[] } | undefined;
     try {
-      const value = JSON.parse(await readFile(this.file(), "utf8")) as { publications?: MocPublication[] };
-      for (const publication of value.publications ?? []) if (publication?.id && publication.buildName) this.#records.set(publication.id, publication);
-    } catch { /* first boot */ }
+      value = JSON.parse(await readFile(this.file(), "utf8")) as { publications?: MocPublication[] };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" && this.#snapshotSink?.restore) {
+        const restored = await this.#snapshotSink.restore("moc-publications");
+        if (restored && restored.state && typeof restored.state === "object" && Array.isArray((restored.state as { publications?: unknown }).publications)) {
+          value = restored.state as { publications: MocPublication[] };
+          await writeJsonAtomic(this.file(), value);
+        }
+      }
+    }
+    for (const publication of value?.publications ?? []) {
+      if (!publication?.id || !publication.buildName) continue;
+      const files = publication.files && typeof publication.files === "object" ? Object.values(publication.files) : [];
+      const available = await Promise.all(files.map((file) => this.restoreFileIfNeeded(file)));
+      if (available.every(Boolean)) this.#records.set(publication.id, publication);
+    }
     this.#initialized = true;
+  }
+
+  private async restoreFileIfNeeded(value: MocPublicationFile): Promise<boolean> {
+    if (!value || typeof value !== "object" || typeof value.path !== "string" || typeof value.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(value.sha256) || !Number.isSafeInteger(value.sizeBytes) || value.sizeBytes < 0) return false;
+    if (value.objectKey !== undefined && (typeof value.objectKey !== "string" || !value.objectKey)) return false;
+    let state: "valid" | "missing" | "invalid";
+    try { state = await localFileMatches(this.absolutePath(value), { sha256: value.sha256, sizeBytes: value.sizeBytes }); }
+    catch { return false; }
+    if (state === "valid") return true;
+    if (state === "invalid") return false;
+    if (!value.objectKey || !this.#snapshotSink?.restoreFile) return true;
+    try {
+      const restored = await this.#snapshotSink.restoreFile({
+        namespace: "moc-publications",
+        objectKey: value.objectKey,
+        destinationPath: this.absolutePath(value),
+        sha256: value.sha256,
+        sizeBytes: value.sizeBytes,
+      });
+      if (!restored) return false;
+      return await localFileMatches(this.absolutePath(value), { sha256: value.sha256, sizeBytes: value.sizeBytes }) === "valid";
+    } catch {
+      return false;
+    }
   }
 
   list(): MocPublication[] { return [...this.#records.values()].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)); }
@@ -424,7 +573,8 @@ export class MocPublicationStore {
       const file = value as Partial<MocPublicationFile>;
       const sizeBytes = file.sizeBytes;
       if (typeof file.path !== "string" || !file.path || typeof file.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(file.sha256)
-        || typeof sizeBytes !== "number" || !Number.isSafeInteger(sizeBytes) || sizeBytes < 0) {
+        || typeof sizeBytes !== "number" || !Number.isSafeInteger(sizeBytes) || sizeBytes < 0
+        || (file.objectKey !== undefined && (typeof file.objectKey !== "string" || !file.objectKey))) {
         return { valid: false, reason: "publication contains an invalid file record" };
       }
       try {
@@ -445,8 +595,10 @@ export class MocPublicationStore {
     await mkdir(this.contentRoot, { recursive: true });
     const target = this.file();
     const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify({ schemaVersion: 1, publications: this.list() }, null, 2)}\n`, { flag: "wx" });
+    const state = { schemaVersion: 1, publications: this.list() };
+    await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { flag: "wx" });
     await rename(temporary, target);
+    queueStateSnapshot(this.#snapshotSink, "moc-publications", state);
   }
 
   private async queuedPersist(): Promise<void> {
@@ -491,7 +643,8 @@ export class MocPublicationStore {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         await copyFile(source, destination);
       }
-      return { path: path.posix.join(relativeRoot, targetName), sha256: sourceSha, sizeBytes: sourceBody.length, mediaType };
+      const objectKey = this.#snapshotSink?.enqueueFile ? stateSnapshotFileKey("moc-publications", sourceSha) : undefined;
+      return { path: path.posix.join(relativeRoot, targetName), sha256: sourceSha, sizeBytes: sourceBody.length, mediaType, ...(objectKey ? { objectKey } : {}) };
     };
 
     const files: MocPublication["files"] = {
@@ -525,15 +678,26 @@ export class MocPublicationStore {
       else this.#records.delete(id);
       throw error;
     }
+    for (const file of Object.values(files)) {
+      queueStateSnapshotFile(this.#snapshotSink, {
+        namespace: "moc-publications",
+        sourcePath: this.absolutePath(file),
+        objectKey: file.objectKey ?? stateSnapshotFileKey("moc-publications", file.sha256),
+        kind: "moc-publication-file",
+        contentType: file.mediaType,
+        expectedSha256: file.sha256,
+        expectedSizeBytes: file.sizeBytes,
+      });
+    }
     return publication;
   }
 }
 
-async function outputSummary(root: string, evidenceRoot: string, build: Record<string, unknown>, queryOrder: number, previewOrder: number): Promise<MocBuildOutput> {
-  const moc = await fileObject(root, evidenceRoot, "moc.fits");
-  const query = await fileObject(root, evidenceRoot, `query-order${queryOrder}.json`).catch(() => undefined);
-  const preview = await fileObject(root, evidenceRoot, `preview-order${previewOrder}.json`).catch(() => undefined);
-  const statistics = await fileObject(root, evidenceRoot, "statistics.json").catch(() => undefined);
+async function outputSummary(root: string, evidenceRoot: string, build: Record<string, unknown>, queryOrder: number, previewOrder: number, objectKeyFor?: (sha256: string) => string | undefined): Promise<MocBuildOutput> {
+  const moc = await fileObject(root, evidenceRoot, "moc.fits", objectKeyFor);
+  const query = await fileObject(root, evidenceRoot, `query-order${queryOrder}.json`, objectKeyFor).catch(() => undefined);
+  const preview = await fileObject(root, evidenceRoot, `preview-order${previewOrder}.json`, objectKeyFor).catch(() => undefined);
+  const statistics = await fileObject(root, evidenceRoot, "statistics.json", objectKeyFor).catch(() => undefined);
   const result: MocBuildOutput = {
     moc,
     ...(query ? { query: { ...query, order: queryOrder } } : {}),
@@ -546,10 +710,12 @@ async function outputSummary(root: string, evidenceRoot: string, build: Record<s
   return result;
 }
 
-async function fileObject(root: string, evidenceRoot: string, name: string): Promise<{ ref: string; sha256: string; sizeBytes: number }> {
+async function fileObject(root: string, evidenceRoot: string, name: string, objectKeyFor?: (sha256: string) => string | undefined): Promise<{ ref: string; sha256: string; sizeBytes: number; objectKey?: string }> {
   const absolute = immutableRef(root, path.join(root, name));
   const body = await readFile(absolute);
-  return { ref: path.relative(path.resolve(evidenceRoot), absolute), sha256: hash(body), sizeBytes: body.length };
+  const sha256 = hash(body);
+  const objectKey = objectKeyFor?.(sha256);
+  return { ref: path.relative(path.resolve(evidenceRoot), absolute), sha256, sizeBytes: body.length, ...(objectKey ? { objectKey } : {}) };
 }
 
 async function writeJsonImmutable(target: string, value: unknown): Promise<void> {

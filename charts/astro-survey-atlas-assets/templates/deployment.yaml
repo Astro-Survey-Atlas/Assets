@@ -37,6 +37,8 @@ spec:
               value: /data
             - name: ASSETS_OBJECT_STORE_CURRENT_KEY
               value: {{ .Values.objectStore.currentKey | quote }}
+            - name: ASSETS_OBJECT_STORE_REQUIRED
+              value: "1"
             - name: ASSETS_RELEASE_RETENTION
               value: {{ .Values.objectStore.retainReleases | quote }}
             - name: ASSETS_RELEASE_CLEANUP
@@ -98,6 +100,40 @@ spec:
               value: /var/lib/assets-content
             - name: ASSETS_EVIDENCE_ROOT
               value: /var/lib/assets-evidence
+            - name: ASSETS_UPLOAD_SPOOL_ROOT
+              value: {{ .Values.releasePublisher.uploadSpoolRoot | quote }}
+            - name: ASSETS_OBJECT_STORE_REQUIRED
+              value: "1"
+            - name: ASSETS_OBJECT_STORE_CURRENT_KEY
+              value: {{ .Values.objectStore.currentKey | quote }}
+            - name: ASSETS_OBJECT_STORE_ENDPOINT
+              value: {{ .Values.objectStore.endpoint | quote }}
+            - name: ASSETS_OBJECT_STORE_BUCKET
+              value: {{ .Values.objectStore.bucket | quote }}
+            - name: ASSETS_OBJECT_STORE_PREFIX
+              value: {{ .Values.objectStore.prefix | quote }}
+            - name: ASSETS_OBJECT_STORE_REGION
+              value: {{ .Values.objectStore.region | quote }}
+            - name: ASSETS_OBJECT_STORE_FORCE_PATH_STYLE
+              value: {{ .Values.objectStore.forcePathStyle | quote }}
+            - name: ASSETS_OBJECT_STORE_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "objectStore.credentialsSecret.name is required for the site" .Values.objectStore.credentialsSecret.name }}
+                  key: {{ .Values.objectStore.credentialsSecret.accessKeyIdKey | quote }}
+            - name: ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.objectStore.credentialsSecret.name }}
+                  key: {{ .Values.objectStore.credentialsSecret.secretAccessKeyKey | quote }}
+            {{- if .Values.objectStore.credentialsSecret.sessionTokenKey }}
+            - name: ASSETS_OBJECT_STORE_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.objectStore.credentialsSecret.name }}
+                  key: {{ .Values.objectStore.credentialsSecret.sessionTokenKey | quote }}
+                  optional: true
+            {{- end }}
             - name: MOC_BUILDER_SCRIPT
               value: /app/scripts/moc_build_worker.py
             - name: ASSETS_ADMIN_ENABLED
@@ -155,6 +191,9 @@ spec:
             - name: evidence
               mountPath: /var/lib/assets-evidence
               readOnly: false
+            - name: upload-spool
+              mountPath: {{ .Values.releasePublisher.uploadSpoolRoot }}
+              readOnly: false
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -172,6 +211,13 @@ spec:
           {{- if .Values.evidencePersistence.enabled }}
           persistentVolumeClaim:
             claimName: {{ default (printf "%s-evidence" (include "astro-survey-atlas-assets.fullname" .)) .Values.evidencePersistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: upload-spool
+          {{- if .Values.uploadSpoolPersistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-upload-spool" (include "astro-survey-atlas-assets.fullname" .)) .Values.uploadSpoolPersistence.existingClaim }}
           {{- else }}
           emptyDir: {}
           {{- end }}

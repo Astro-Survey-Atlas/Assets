@@ -57,13 +57,45 @@ jobs:
           echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           echo "chart=oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts/astro-survey-atlas-assets" >> "$GITHUB_OUTPUT"
 
-      - name: Test
-        run: |
-          npm ci
-          npm run test:node
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Hydrate release data from production S3
         env:
-          # Fresh checkouts lack gitignored generated release files; tests
-          # verify every file that is present.
+          ASSETS_OBJECT_STORE_ENDPOINT: ${{ secrets.ASSETS_OBJECT_STORE_ENDPOINT }}
+          ASSETS_OBJECT_STORE_BUCKET: ${{ secrets.ASSETS_OBJECT_STORE_BUCKET }}
+          ASSETS_OBJECT_STORE_ACCESS_KEY_ID: ${{ secrets.ASSETS_OBJECT_STORE_ACCESS_KEY_ID }}
+          ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY: ${{ secrets.ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY }}
+          ASSETS_OBJECT_STORE_CURRENT_KEY: public/current.json
+          ASSETS_OBJECT_STORE_FORCE_PATH_STYLE: "true"
+          ASSETS_LOCAL_ROOT: ${{ runner.temp }}/assets-hydrate
+        run: |
+          npm run hydrate -- --root "$ASSETS_LOCAL_ROOT" --retain 1
+          echo "ASSET_WORKTREE_ROOT=$ASSETS_LOCAL_ROOT/cache/current" >> "$GITHUB_ENV"
+          echo "ASSET_TEST_DATA_ROOT=$ASSETS_LOCAL_ROOT/cache/current" >> "$GITHUB_ENV"
+          echo "ASSET_TEST_ARTIFACT_ROOT=$RUNNER_TEMP/authority-test/artifacts/public-survey-footprints" >> "$GITHUB_ENV"
+          echo "ASSET_RUNTIME_HYDRATE=1" >> "$GITHUB_ENV"
+
+      - name: Restore private artifact authority for validation
+        env:
+          ASSETS_OBJECT_STORE_ENDPOINT: ${{ secrets.ASSETS_OBJECT_STORE_ENDPOINT }}
+          ASSETS_OBJECT_STORE_BUCKET: ${{ secrets.ASSETS_OBJECT_STORE_BUCKET }}
+          ASSETS_OBJECT_STORE_ACCESS_KEY_ID: ${{ secrets.ASSETS_OBJECT_STORE_ACCESS_KEY_ID }}
+          ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY: ${{ secrets.ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY }}
+          ASSETS_OBJECT_STORE_PREFIX: authority
+          ASSETS_OBJECT_STORE_CURRENT_KEY: evidence/current.json
+          ASSETS_OBJECT_STORE_FORCE_PATH_STYLE: "true"
+          ASSETS_EVIDENCE_ROOT: ${{ runner.temp }}/authority-test/artifacts/public-survey-footprints
+        run: |
+          mkdir -p "$ASSETS_EVIDENCE_ROOT"
+          node --import tsx scripts/content-archive.ts restore evidence \
+            --root "$ASSETS_EVIDENCE_ROOT" --overwrite
+
+      - name: Test
+        run: npm run test:node
+        env:
+          # Hydrated release files are the test data root; this remains useful
+          # for any optional files absent from the public release archive.
           ASSETS_TOLERATE_MISSING_RELEASE_FILES: "1"
 
       - name: Verify pinned MOC Core wheel
@@ -120,6 +152,9 @@ jobs:
 
       - name: Stage release assets and notes
         env:
+          ASSET_WORKTREE_ROOT: ${{ runner.temp }}/assets-hydrate/cache/current
+          ASSETS_RELEASE_ASSET_OUTPUT_ROOT: ${{ github.workspace }}/dist/release-assets
+          ASSETS_RELEASE_NOTES_PATH: ${{ github.workspace }}/dist/RELEASE-NOTES.md
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           RELEASE_IMAGE: ${{ steps.version.outputs.image }}:${{ steps.version.outputs.tag }}
           RELEASE_IMAGE_DIGEST: ${{ steps.image.outputs.digest }}

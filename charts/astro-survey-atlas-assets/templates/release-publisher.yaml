@@ -36,8 +36,12 @@ spec:
               value: /data/current
             - name: ASSETS_CONTENT_ROOT
               value: /var/lib/assets-content
+            - name: ASSETS_UPLOAD_SPOOL_ROOT
+              value: {{ .Values.releasePublisher.uploadSpoolRoot | quote }}
             - name: ASSETS_PUBLICATION_POLL_SECONDS
               value: {{ .Values.releasePublisher.pollSeconds | quote }}
+            - name: ASSETS_OBJECT_STORE_REQUIRED
+              value: "1"
             - name: ASSETS_OBJECT_STORE_CURRENT_KEY
               value: {{ .Values.objectStore.currentKey | quote }}
             - name: ASSETS_OBJECT_STORE_ENDPOINT
@@ -77,6 +81,9 @@ spec:
             - name: content
               mountPath: /var/lib/assets-content
               readOnly: false
+            - name: upload-spool
+              mountPath: {{ .Values.releasePublisher.uploadSpoolRoot }}
+              readOnly: false
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -87,6 +94,13 @@ spec:
           {{- if .Values.contentPersistence.enabled }}
           persistentVolumeClaim:
             claimName: {{ default (printf "%s-content" (include "astro-survey-atlas-assets.fullname" .)) .Values.contentPersistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: upload-spool
+          {{- if .Values.uploadSpoolPersistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-upload-spool" (include "astro-survey-atlas-assets.fullname" .)) .Values.uploadSpoolPersistence.existingClaim }}
           {{- else }}
           emptyDir: {}
           {{- end }}

@@ -15,6 +15,7 @@
     "archive:restore": "tsx scripts/content-archive.ts restore",
     "archive:status": "tsx scripts/content-archive.ts status",
     "archive:diff": "tsx scripts/content-archive.ts diff",
+    "hydrate": "tsx scripts/hydrate-release.ts",
     "artifacts:validate": "tsx scripts/public_footprint_artifacts.ts validate",
     "moc:validate": "tsx scripts/validate-moc-source-registry.ts",
     "moc:probe": "tsx scripts/validate-moc-source-registry.ts --probe --output=artifacts/moc-source-probe.json",

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream, readFileSync as readFileSyncFromFs } from "node:fs";
-import { readFile, stat, mkdir, rename, writeFile, unlink } from "node:fs/promises";
+import { readFile, stat, mkdir, open, rename, writeFile, unlink } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import path from "node:path";
@@ -299,32 +299,31 @@ export class S3ArtifactStore implements ArtifactStore {
     }
   }
 
+  async #downloadRange(logical: string, start: number, end: number): Promise<Buffer> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      try {
+        const result = await this.#client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.physicalKey(logical), Range: `bytes=${start}-${end}` }));
+        if (!result.Body) throw new Error("object has no readable body");
+        const parts: Buffer[] = [];
+        for await (const chunk of result.Body as AsyncIterable<Uint8Array>) parts.push(Buffer.from(chunk));
+        const candidate = Buffer.concat(parts);
+        if (candidate.length !== end - start + 1) throw new Error(`range read returned ${candidate.length} bytes, expected ${end - start + 1}`);
+        return candidate;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+      }
+    }
+    throw new ArtifactStoreError(`S3 ranged download failed for ${logical} (range ${start}-${end}): ${lastError instanceof Error ? lastError.message : String(lastError)}`, 503);
+  }
+
   async #downloadBytes(logical: string, sizeBytes: number): Promise<Buffer> {
     const chunks: Buffer[] = [];
     const chunkSize = 8 * 1024 * 1024;
     for (let start = 0; start < sizeBytes; start += chunkSize) {
       const end = Math.min(start + chunkSize, sizeBytes) - 1;
-      let lastError: unknown;
-      let bytes: Buffer | undefined;
-      for (let attempt = 1; attempt <= 4; attempt += 1) {
-        try {
-          const result = await this.#client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.physicalKey(logical), Range: `bytes=${start}-${end}` }));
-          if (!result.Body) throw new Error("object has no readable body");
-          const parts: Buffer[] = [];
-          for await (const chunk of result.Body as AsyncIterable<Uint8Array>) parts.push(Buffer.from(chunk));
-          const candidate = Buffer.concat(parts);
-          if (candidate.length !== end - start + 1) throw new Error(`range read returned ${candidate.length} bytes, expected ${end - start + 1}`);
-          bytes = candidate;
-          break;
-        } catch (error) {
-          lastError = error;
-          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
-        }
-      }
-      if (!bytes) {
-        throw new ArtifactStoreError(`S3 ranged download failed for ${logical} (range ${start}-${end}): ${lastError instanceof Error ? lastError.message : String(lastError)}`, 503);
-      }
-      chunks.push(bytes);
+      chunks.push(await this.#downloadRange(logical, start, end));
     }
     const body = Buffer.concat(chunks);
     if (body.length !== sizeBytes) throw new ArtifactStoreError(`S3 download returned ${body.length} bytes for ${logical}, expected ${sizeBytes}`, 409);
@@ -409,18 +408,27 @@ export class S3ArtifactStore implements ArtifactStore {
     const existing = await this.head(logical);
     if (!existing) return null;
     await mkdir(path.dirname(filePath), { recursive: true });
+    const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    let handle: Awaited<ReturnType<typeof open>> | undefined;
     try {
-      const result = await this.#client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.physicalKey(logical) }));
-      if (!result.Body) throw new ArtifactStoreError(`S3 object has no readable body: ${logical}`);
-      await pipeline(Readable.from(result.Body as AsyncIterable<Uint8Array>), createWriteStream(filePath, { flags: "wx" }));
-      const details = await fileDigest(filePath);
+      handle = await open(temporary, "wx", 0o600);
+      const chunkSize = 8 * 1024 * 1024;
+      for (let start = 0; start < existing.sizeBytes; start += chunkSize) {
+        const end = Math.min(start + chunkSize, existing.sizeBytes) - 1;
+        const bytes = await this.#downloadRange(logical, start, end);
+        await handle.write(bytes, 0, bytes.length, start);
+      }
+      await handle.close();
+      handle = undefined;
+      const details = await fileDigest(temporary);
       if (details.sizeBytes !== existing.sizeBytes || (existing.sha256 && details.sha256 !== existing.sha256)) {
-        await unlink(filePath).catch(() => undefined);
         throw new ArtifactStoreError(`S3 object checksum mismatch for ${logical}`, 409);
       }
+      await rename(temporary, filePath);
       return { ...existing, ...details };
     } catch (error) {
-      await unlink(filePath).catch(() => undefined);
+      await handle?.close().catch(() => undefined);
+      await unlink(temporary).catch(() => undefined);
       if (error instanceof ArtifactStoreError) throw error;
       throw new ArtifactStoreError(`S3 download failed for ${logical}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -515,6 +523,7 @@ export interface ArtifactStoreEnvironment {
   sessionToken?: string;
   secretJson?: string;
   secretFile?: string;
+  requireS3?: boolean;
 }
 
 function optional(value: string | undefined): string | undefined {
@@ -556,6 +565,7 @@ export function createArtifactStore(environment: ArtifactStoreEnvironment = {}, 
       credentials: secretCredentials(environment),
     });
   }
+  if (environment.requireS3) throw new ArtifactStoreError("ASSETS_OBJECT_STORE_ENDPOINT and ASSETS_OBJECT_STORE_BUCKET are required; refusing filesystem fallback", 500);
   return new FilesystemArtifactStore(fallbackRoot, optional(environment.prefix));
 }
 
@@ -577,6 +587,7 @@ export function artifactStoreEnvironmentFromProcess(environment: NodeJS.ProcessE
     sessionToken: environment.ASSETS_OBJECT_STORE_SESSION_TOKEN,
     secretJson: environment.ASSETS_OBJECT_STORE_SECRET_JSON,
     secretFile: environment.ASSETS_OBJECT_STORE_SECRET_FILE,
+    requireS3: environmentBoolean(environment.ASSETS_OBJECT_STORE_REQUIRED, false),
   };
 }
 

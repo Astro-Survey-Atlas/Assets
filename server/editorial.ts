@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { AdminHttpError } from "./admin.js";
 import { productId } from "./products.js";
+import { queueStateSnapshot, type StateSnapshotSink } from "./state-snapshot.js";
 import type { PublicSurveyProduct, PublicSurveyRecord } from "./types.js";
 
 /**
@@ -309,10 +310,12 @@ export class SurveyEditorialStore {
   #contentRoot: string;
   #fallbackRoot: string | undefined;
   #persistQueue: Promise<void> = Promise.resolve();
+  readonly #snapshotSink: StateSnapshotSink | undefined;
 
-  constructor(contentRoot = configuredContentRoot, fallbackRoot?: string) {
+  constructor(contentRoot = configuredContentRoot, fallbackRoot?: string, snapshotSink?: StateSnapshotSink) {
     this.#contentRoot = path.resolve(contentRoot);
     this.#fallbackRoot = fallbackRoot ? path.resolve(fallbackRoot) : undefined;
+    this.#snapshotSink = snapshotSink;
   }
 
   #contentFile(): string {
@@ -336,12 +339,24 @@ export class SurveyEditorialStore {
       await mkdir(this.#contentRoot, { recursive: true });
     }
     const previous = new Map<string, SurveyEditorialRecord>();
+    let restoredDocument: Partial<PersistedEditorialDocument> | undefined;
     try {
       const document = JSON.parse(await readFile(this.#contentFile(), "utf8")) as Partial<PersistedEditorialDocument>;
       if (document.schemaVersion === 1 && Array.isArray(document.surveys)) {
         for (const entry of document.surveys) if (isRecord(entry) && typeof entry.surveyId === "string") previous.set(entry.surveyId, entry as unknown as SurveyEditorialRecord);
       }
-    } catch { /* first boot or a partially written optional editorial file */ }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" && this.#snapshotSink?.restore) {
+        const restored = await this.#snapshotSink.restore("editorial");
+        if (restored && restored.state && typeof restored.state === "object" && Array.isArray((restored.state as Partial<PersistedEditorialDocument>).surveys)) {
+          restoredDocument = restored.state as Partial<PersistedEditorialDocument>;
+          await writeFile(this.#contentFile(), `${JSON.stringify(restoredDocument, null, 2)}\n`, "utf8");
+          if (restoredDocument.schemaVersion === 1 && Array.isArray(restoredDocument.surveys)) {
+            for (const entry of restoredDocument.surveys) if (isRecord(entry) && typeof entry.surveyId === "string") previous.set(entry.surveyId, entry as unknown as SurveyEditorialRecord);
+          }
+        }
+      }
+    }
     for (const survey of surveys) {
       const base = baselineContent(survey);
       this.#baselines.set(survey.id, base);
@@ -451,6 +466,7 @@ export class SurveyEditorialStore {
     const operation = this.#persistQueue.then(async () => {
       await writeFile(temporaryFile, `${JSON.stringify(document, null, 2)}\n`);
       await rename(temporaryFile, this.#contentFile());
+      queueStateSnapshot(this.#snapshotSink, "editorial", document);
     });
     this.#persistQueue = operation.catch(() => undefined);
     await operation;

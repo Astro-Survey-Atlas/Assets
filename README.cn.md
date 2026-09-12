@@ -61,17 +61,27 @@ Assets 不会把 preview 当成更高精度的测量。每个响应都会返回�
 ## 公共发布与 evidence 存储
 
 Git 保存小型、可审阅的发布元数据：survey/layer registry、recipe lock、schema、
-catalog 投影、provenance 摘要和 hash。版本化 MOC、资源包和大型 evidence 计划放入
-对象存储发布桶。当前仓库仍保留迁移设计阶段的工作制品，本轮不会删除任何 artifact。
+catalog 投影、provenance 摘要和 hash。版本化 MOC、资源包和大型 evidence 由生产
+S3 保存；当前 checkout 只保留三个 CSST conformance fixture、Core wheel 和
+`evidence-index.json`。生成的 release、layer、raw、content、probe 和 staging 副本
+已在独立 S3 恢复及 SHA-256/size 校验后删除。
 
 详见[公共制品存储与迁移](docs/public-artifact-storage.md)，其中定义 bucket 目录、
 不可变 URL/hash 契约、evidence 边界和切换流程。输入 manifest、normalized scan 等
 始终属于 evidence，不会进入浏览器初始请求或公共 release allowlist。
 
-发布同步任务必须配置 S3-compatible 对象存储。若同步失败，启动时会回退到 PVC 上
-最近一次已安装且校验通过 的 release；不存在纯 filesystem 的发布路径。首次 rollout
-前请按[存储契约](docs/public-artifact-storage.md)配置 endpoint、bucket 和
-credential Secret。
+发布同步任务和 hydrate 必须配置 S3-compatible 对象存储；新环境无法访问 S3 时
+会失败关闭，不会使用源码目录或隐藏的本地 release 兜底。HTTP 请求继续读取已经
+校验并激活的 `/data/current`，不在每次请求时访问 S3。请按[存储契约](docs/public-artifact-storage.md)
+配置 endpoint、bucket 和 credential Secret。
+
+## 存储改造目标
+
+[S3 唯一权威实施计划](docs/s3-authority-implementation-plan.md) 记录：生产 S3
+保存已上传业务数据和已同步控制状态，本地只保留可删除的恢复缓存、可重算
+scratch 和独立待上传目录。已确认的 authority 是 gitignored `.info` 描述的
+MinIO，不是当前 Helm 公开桶。P2/P3 耐久性缺口仍在；P5 的线上消费者切换、
+开发桶退役及旧 PVC 清理仍待完成。
 
 ## 部署
 

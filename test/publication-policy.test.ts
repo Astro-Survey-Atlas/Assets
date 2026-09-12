@@ -10,7 +10,7 @@ import {
   sanitizeReleaseControlDocument,
 } from "../server/publication-policy.js";
 
-const projectRoot = join(import.meta.dirname, "..");
+import { testArtifactRoot, testSourceRoot } from "./test-data-root.js";
 
 type ControlDocumentCheck = {
   path: string;
@@ -30,7 +30,9 @@ test("publication policy sanitizes every control document that references denied
       isSanitizableControlDocument(check.path),
       `${check.path} must be a registered control document`,
     );
-    const bytes = await readFile(join(projectRoot, check.path));
+    const bytes = await readFile(check.path.startsWith("artifacts/public-survey-footprints/")
+      ? join(testArtifactRoot, check.path.slice("artifacts/public-survey-footprints/".length))
+      : join(testSourceRoot, check.path));
     const sanitized = sanitizeReleaseControlDocument(check.path, bytes);
     assert.ok(sanitized, `${check.path} references a denied survey and must change`);
     const document = JSON.parse(sanitized.toString("utf8")) as Record<string, unknown>;
@@ -48,7 +50,9 @@ test("publication policy sanitizes every control document that references denied
     "src/footprints/survey-footprints.json",
     "artifacts/public-survey-footprints/normalized/survey-footprints.json",
   ]) {
-    const bytes = await readFile(join(projectRoot, path));
+    const bytes = await readFile(path === "artifacts/public-survey-footprints/normalized/survey-footprints.json"
+      ? join(testArtifactRoot, "normalized/survey-footprints.json")
+      : join(testSourceRoot, path));
     const sanitized = sanitizeReleaseControlDocument(path, bytes);
     assert.ok(sanitized, `${path} references a denied survey and must change`);
     const document = JSON.parse(sanitized.toString("utf8")) as { footprints: Array<{ surveyId: string }> };
@@ -56,7 +60,7 @@ test("publication policy sanitizes every control document that references denied
   }
 
   const buildPlanPath = "src/layers/public-build-plan.json";
-  const buildPlanBytes = await readFile(join(projectRoot, buildPlanPath));
+  const buildPlanBytes = await readFile(join(testSourceRoot, buildPlanPath));
   const sanitizedPlan = sanitizeReleaseControlDocument(buildPlanPath, buildPlanBytes);
   assert.ok(sanitizedPlan, `${buildPlanPath} references a denied survey and must change`);
   const plan = JSON.parse(sanitizedPlan.toString("utf8")) as { builds: Array<{ spec: string }> };

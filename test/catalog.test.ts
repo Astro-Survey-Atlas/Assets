@@ -7,10 +7,10 @@ import test from "node:test";
 
 import { loadCatalog, publicManifest } from "../server/catalog.js";
 import { readZipEntry } from "../server/resource-package-inspection.js";
-import { projectRoot } from "../server/paths.js";
+import { testArtifactRoot, testDataRoot } from "./test-data-root.js";
 
 test("release catalog verifies every public file and bundle digest", async () => {
-  const catalog = await loadCatalog(projectRoot);
+  const catalog = await loadCatalog(testDataRoot);
   assert.equal(catalog.manifest.schemaVersion, 1);
   assert.equal(catalog.manifest.statistics.packages, 29);
   assert.equal(catalog.manifest.statistics.rawMocFiles, 80);
@@ -30,7 +30,7 @@ test("release catalog verifies every public file and bundle digest", async () =>
 });
 
 test("release catalog labels projections with their locked order", async () => {
-  const catalog = await loadCatalog(projectRoot, false);
+  const catalog = await loadCatalog(testDataRoot, false);
   for (const order of [5, 7]) {
     const entries = catalog.manifest.files.filter((entry) => entry.kind === "geometry" && entry.path.endsWith(`/query-order${order}.json`));
     assert.ok(entries.length > 0, `missing order-${order} query projections`);
@@ -43,7 +43,7 @@ test("release catalog labels projections with their locked order", async () => {
 });
 
 test("publication policy keeps sensitive CSST surveys off the public release", async () => {
-  const catalog = await loadCatalog(projectRoot, false);
+  const catalog = await loadCatalog(testDataRoot, false);
   const files = catalog.manifest.files;
   assert.equal(files.filter((entry) => entry.surveyId === "csst").length, 0);
   const ids = new Set(files.map((entry) => entry.id));
@@ -63,11 +63,11 @@ test("publication policy keeps sensitive CSST surveys off the public release", a
 });
 
 test("release history ships as a public manifest record without sensitive packages", async () => {
-  const catalog = await loadCatalog(projectRoot, false);
+  const catalog = await loadCatalog(testDataRoot, false);
   const history = catalog.manifest.files.find((entry) => entry.id === "metadata-release-history");
   assert.ok(history, "release-history.json must be a public manifest record");
   assert.match(history.path, /release-history\.json$/);
-  const document = JSON.parse(await readFile(path.join(projectRoot, history.path), "utf8")) as {
+  const document = JSON.parse(await readFile(path.join(testDataRoot, history.path), "utf8")) as {
     schemaVersion: number;
     latestReleaseId: string;
     releases: Array<{
@@ -121,7 +121,7 @@ test("release history ships as a public manifest record without sensitive packag
 });
 
 test("public release manifest and API projection expose no evidence records", async () => {
-  const catalog = await loadCatalog(projectRoot);
+  const catalog = await loadCatalog(testDataRoot);
   assert.equal(catalog.manifest.files.filter((entry) => entry.deliveryClass === "evidence").length, 0);
   const projection = publicManifest(catalog);
   if (process.env.ASSETS_TOLERATE_MISSING_RELEASE_FILES === "1") {
@@ -135,7 +135,7 @@ test("public release manifest and API projection expose no evidence records", as
 });
 
 test("public API projection hides filesystem paths and exposes stable downloads", async () => {
-  const response = publicManifest(await loadCatalog(projectRoot, false));
+  const response = publicManifest(await loadCatalog(testDataRoot, false));
   assert.ok(response.files.length > 50);
   assert.ok(response.files.every((entry) => !("path" in entry)));
   assert.ok(response.files.every((entry) => entry.downloadUrl === `/api/v1/assets/${entry.id}/download`));
@@ -168,7 +168,7 @@ test("release catalog rejects evidence records misclassified as runtime", async 
 });
 
 test("package records keep current and superseded versions cumulative", async () => {
-  const catalog = await loadCatalog(projectRoot, false);
+  const catalog = await loadCatalog(testDataRoot, false);
   const packages = catalog.manifest.files.filter((entry) => entry.kind === "package");
   assert.equal(packages.length, 34);
   assert.equal(packages.filter((entry) => /superseded/.test(entry.label)).length, 5);
@@ -181,7 +181,7 @@ test("package records keep current and superseded versions cumulative", async ()
 });
 
 test("DESI official tile tables and resource package are downloadable release assets", async () => {
-  const catalog = await loadCatalog(projectRoot, false);
+  const catalog = await loadCatalog(testDataRoot, false);
   const files = catalog.manifest.files.filter((entry) => entry.surveyId === "desi");
   const downloads = new Set(files.map((entry) => entry.downloadName));
   for (const downloadName of [
@@ -262,7 +262,7 @@ test("every public package declares access modes and release-aligned coverage so
     sources: CatalogSource[];
   };
   const document = JSON.parse(
-    await readFile(path.join(projectRoot, "artifacts/public-survey-footprints/packages/catalog.json"), "utf8"),
+    await readFile(path.join(testArtifactRoot, "packages/catalog.json"), "utf8"),
   ) as { schemaVersion: number; packages: CatalogEntry[] };
   assert.equal(document.schemaVersion, 3);
   const publicEntries = document.packages.filter((entry) => !/csst/.test(entry.id));
@@ -290,7 +290,7 @@ test("every public package declares access modes and release-aligned coverage so
 });
 
 test("latest release history carries access metadata and the collection embeds the same catalog", async () => {
-  const historyPath = path.join(projectRoot, "artifacts/public-survey-footprints/release-history.json");
+  const historyPath = path.join(testArtifactRoot, "release-history.json");
   const document = JSON.parse(await readFile(historyPath, "utf8")) as {
     releases: Array<{
       releaseId: string;
@@ -309,7 +309,7 @@ test("latest release history carries access metadata and the collection embeds t
   const twomass = latest.packages.find((pkg) => pkg.id === "public-2mass-footprints");
   assert.equal(twomass?.sources?.[0]?.releaseId, "2mass-6x");
 
-  const collectionPath = path.join(projectRoot, "artifacts/public-survey-footprints/collections", latest.collection!.fileName);
+  const collectionPath = path.join(testArtifactRoot, "collections", latest.collection!.fileName);
   const embedded = JSON.parse(
     (await readZipEntry(await readFile(collectionPath), "catalog.json")).toString("utf8"),
   ) as { packages: Array<{ id: string; accessModes: string[]; sources: Array<{ releaseId: string }> }> };

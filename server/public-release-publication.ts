@@ -17,6 +17,7 @@ import {
 import { loadSurveyLookups, projectResourcePackage, type ProjectedPackageSource } from "./resource-package-projection.js";
 import { buildResourcePackageCollection } from "./resource-package-collection.js";
 import type { ProductRecord } from "./products.js";
+import { queueStateSnapshot, type StateSnapshotSink } from "./state-snapshot.js";
 import { inferredPublicAssetDeliveryClass, type PublicAssetRecord } from "./types.js";
 
 const MANIFEST_RELATIVE_PATH = "artifacts/public-survey-footprints/release-manifest.json";
@@ -148,7 +149,7 @@ export class PublicationConflictError extends Error {
   }
 }
 
-type PublicPackageEntry = Omit<DynamicResourcePackageEntry, "archivePath" | "contentFingerprint">;
+type PublicPackageEntry = Omit<DynamicResourcePackageEntry, "archivePath" | "objectKey" | "contentFingerprint">;
 
 interface PackageProvider {
   list(): PublicPackageEntry[] | Promise<PublicPackageEntry[]>;
@@ -171,6 +172,7 @@ export interface PublicReleasePublisherOptions {
   loadProducts?: () => Promise<ProductRecord[]> | ProductRecord[];
   store?: ArtifactStore;
   allowFilesystemStore?: boolean;
+  snapshotSink?: StateSnapshotSink;
 }
 
 interface LatestPackage {
@@ -211,12 +213,14 @@ export class PublicReleasePublisher {
   readonly #options: PublicReleasePublisherOptions;
   readonly #runsDir: string;
   readonly #queueDir: string;
+  readonly #snapshotSink: StateSnapshotSink | undefined;
 
   constructor(options: PublicReleasePublisherOptions) {
     this.#options = options;
     const publicationRoot = path.join(path.resolve(options.contentRoot), "publication");
     this.#runsDir = path.join(publicationRoot, "runs");
     this.#queueDir = path.join(publicationRoot, "queue");
+    this.#snapshotSink = options.snapshotSink;
   }
 
   async plan(): Promise<PublicationPlan> {
@@ -797,5 +801,6 @@ export class PublicReleasePublisher {
   async #writeRun(run: PublicationRun): Promise<void> {
     await mkdir(this.#runsDir, { recursive: true });
     await writeFile(path.join(this.#runsDir, `${run.runId}.json`), `${JSON.stringify(run, null, 2)}\n`, "utf8");
+    queueStateSnapshot(this.#snapshotSink, "publication-runs", { schemaVersion: 1, run });
   }
 }

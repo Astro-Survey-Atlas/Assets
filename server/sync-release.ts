@@ -216,7 +216,7 @@ async function useInstalledCurrent(targetRoot: string, reason: string): Promise<
 }
 
 /** Download one versioned tar.gz release, validate it and atomically activate it. */
-export async function syncReleaseFromObjectStore(store: ArtifactStore, targetRoot: string, options: { currentKey?: string; retainReleases?: number; cleanup?: boolean } = {}): Promise<{ bundle: { id: string; sha256: string }; archiveKey: string; installedTarget: string; files: number }> {
+export async function syncReleaseFromObjectStore(store: ArtifactStore, targetRoot: string, options: { currentKey?: string; retainReleases?: number; cleanup?: boolean; allowInstalledFallback?: boolean } = {}): Promise<{ bundle: { id: string; sha256: string }; archiveKey: string; installedTarget: string; files: number }> {
   if (store.kind !== "s3") throw new Error("Archive release synchronization requires an S3-compatible object store");
   const resolvedRoot = path.resolve(targetRoot);
   if (resolvedRoot === "/") throw new Error("Unsafe public asset synchronization paths");
@@ -229,6 +229,7 @@ export async function syncReleaseFromObjectStore(store: ArtifactStore, targetRoo
       pointer = parseCurrent(pointerObject.body);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
+      if (options.allowInstalledFallback === false) throw error instanceof Error ? error : new Error(reason);
       try {
         return await useInstalledCurrent(resolvedRoot, reason);
       } catch {
@@ -298,6 +299,7 @@ async function main(): Promise<void> {
     currentKey: process.env.ASSETS_OBJECT_STORE_CURRENT_KEY,
     retainReleases: Number(process.env.ASSETS_RELEASE_RETENTION ?? "2"),
     cleanup: /^(1|true|yes|on)$/i.test(process.env.ASSETS_RELEASE_CLEANUP ?? ""),
+    allowInstalledFallback: /^(1|true|yes|on)$/i.test(process.env.ASSETS_RELEASE_ALLOW_INSTALLED_FALLBACK ?? ""),
   });
   console.log(`Activated release archive ${synced.bundle.id} (${synced.bundle.sha256}) at ${synced.installedTarget}`);
 }

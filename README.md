@@ -71,10 +71,11 @@ organization does not currently promise a general-purpose online SDK.
 
 Git is the source of truth for small, reviewable release metadata: survey and
 layer registries, recipe locks, schemas, catalog projections, provenance
-summaries and hashes. Versioned MOCs, packages and large evidence are intended
-for an object-storage release bucket. The repository currently contains the
-working artifact set while this migration is designed; no artifact is deleted
-as part of the design work.
+summaries and hashes. Production S3 stores versioned MOCs, packages and large
+evidence. The current checkout retains only three CSST conformance fixtures, the
+Core wheel and `evidence-index.json`; generated release, layer, raw, content,
+probe and staging copies were removed after independent S3 restore and exact
+SHA-256/size checks.
 
 See [Public artifact storage and migration](docs/public-artifact-storage.md)
 for the bucket layout, immutable URL/hash contract, evidence boundary and
@@ -82,11 +83,21 @@ cutover procedure. In particular, input manifests and normalized scans remain
 evidence and are never part of the browser's initial request or the public
 release allowlist.
 
-The release sync job requires a configured S3-compatible object store. If the
-sync cannot reach the store, startup falls back to the most recent
-already-installed verified release on the PVC; there is no filesystem-only
-publication path. Configure the endpoint, bucket and credential Secret as
-described in the storage contract before the first rollout.
+The release sync job and hydrate command require a configured S3-compatible
+object store. A fresh environment fails closed when S3 is unavailable; it does
+not fall back to source-tree artifacts or hidden local release data. HTTP serves
+the verified `/data/current` release without reading S3 per request. Configure
+the endpoint, bucket and credential Secret as described in the storage contract.
+
+## Storage migration target
+
+The [S3 authority implementation plan](docs/s3-authority-implementation-plan.md)
+records production S3 as the sole authority for uploaded business data and
+synced control state, with disposable local caches and separate pending
+uploads. The confirmed authority is the MinIO described by gitignored `.info`,
+not the currently deployed Helm public bucket. P2/P3 durability gaps remain;
+P5 remains for online consumer retargeting, development-bucket retirement and
+old-PVC decommissioning.
 
 ## Deployment
 

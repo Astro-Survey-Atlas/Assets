@@ -7,6 +7,7 @@ import net from "node:net";
 import path from "node:path";
 import os from "node:os";
 import test from "node:test";
+import { testArtifactRoot } from "./test-data-root.js";
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -283,11 +284,15 @@ test("HTTP service exposes metadata and range-enabled allowlisted downloads", as
   assert.equal(denied.status, 404);
 });
 
-test("admin endpoints require a token and expose the configured control-plane boundary", async (context) => {
+test("admin endpoints require a token and expose the configured control-plane boundary", {
+  skip: process.env.ASSET_WORKTREE_ROOT ? "requires the local synthetic control-plane baseline" : false,
+}, async (context) => {
   const port = await freePort();
+  const childEnv = { ...process.env };
+  delete childEnv.ASSET_WORKTREE_ROOT;
   const child = spawn(process.execPath, [path.resolve("node_modules/tsx/dist/cli.mjs"), "server/server.ts"], {
     cwd: process.cwd(),
-    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), PUBLIC_SITE_ROOT: path.resolve("site"), ASSETS_ADMIN_ENABLED: "true", ASSETS_ADMIN_TOKEN: "test-admin-token", ASSETS_KUBE_API_URL: "http://127.0.0.1:9" },
+    env: { ...childEnv, HOST: "127.0.0.1", PORT: String(port), PUBLIC_SITE_ROOT: path.resolve("site"), ASSETS_ADMIN_ENABLED: "true", ASSETS_ADMIN_TOKEN: "test-admin-token", ASSETS_KUBE_API_URL: "http://127.0.0.1:9" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   context.after(() => { child.kill("SIGTERM"); });
@@ -708,7 +713,7 @@ test("HTTP publication activates dynamic MOC assets and restores them after rest
   const buildRoot = path.join(evidenceRoot, "moc-build", buildName);
   await mkdir(buildRoot, { recursive: true });
   const outputBytes = {
-    moc: await readFile(path.resolve("artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/euclid-q1-deep-fields-image-extent.moc.fits")),
+    moc: await readFile(path.join(testArtifactRoot, "layers", "euclid-q1-deep-fields-image-extent", "euclid-q1-deep-fields-image-extent.moc.fits")),
     query: Buffer.from(JSON.stringify({ order: 8, ordering: "NESTED", pixels: [1, 2] })),
     preview: Buffer.from(JSON.stringify({ order: 4, ordering: "NESTED", pixels: [0] })),
     statistics: Buffer.from(JSON.stringify({ cells: 2 })),

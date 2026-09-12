@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("ASSET_WORKTREE_ROOT", SCRIPT_ROOT)).resolve()
 ARTIFACT_ROOT = ROOT / "artifacts/public-survey-footprints"
 
 

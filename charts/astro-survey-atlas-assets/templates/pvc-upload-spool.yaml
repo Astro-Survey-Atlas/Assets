@@ -1,0 +1,16 @@
+{{- if and .Values.uploadSpoolPersistence.enabled (not .Values.uploadSpoolPersistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "astro-survey-atlas-assets.fullname" . }}-upload-spool
+  labels:
+    {{- include "astro-survey-atlas-assets.labels" . | nindent 4 }}
+spec:
+  accessModes: {{ toYaml .Values.uploadSpoolPersistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.uploadSpoolPersistence.size }}
+  {{- with .Values.uploadSpoolPersistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}

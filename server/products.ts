@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AdminHttpError } from "./admin.js";
+import { queueStateSnapshot, type StateSnapshotSink } from "./state-snapshot.js";
 
 export type { PublicProductDossier, PublicProductLink, PublicProductLinkKind, PublicProductVerificationStatus } from "./types.js";
 
@@ -182,6 +183,11 @@ export class ProductStore {
   #records = new Map<string, ProductRecord>();
   #initialized = false;
   #contentRoot = configuredContentRoot;
+  readonly #snapshotSink: StateSnapshotSink | undefined;
+
+  constructor(snapshotSink?: StateSnapshotSink) {
+    this.#snapshotSink = snapshotSink;
+  }
 
   #contentFile(): string { return path.join(this.#contentRoot, "product-content-v1.json"); }
   #historyFile(): string { return path.join(this.#contentRoot, "product-content-history.ndjson"); }
@@ -191,10 +197,19 @@ export class ProductStore {
     const migrationHistory: string[] = [];
     try { await mkdir(this.#contentRoot, { recursive: true }); }
     catch { this.#contentRoot = path.join(root, ".assets-content"); await mkdir(this.#contentRoot, { recursive: true }); }
+    let data: { products?: ProductRecord[] } | undefined;
     try {
-      const data = JSON.parse(await readFile(this.#contentFile(), "utf8")) as { products?: ProductRecord[] };
-      for (const record of data.products ?? []) this.#records.set(record.productId, record);
-    } catch { /* first boot */ }
+      data = JSON.parse(await readFile(this.#contentFile(), "utf8")) as { products?: ProductRecord[] };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" && this.#snapshotSink?.restore) {
+        const restored = await this.#snapshotSink.restore("products");
+        if (restored && restored.state && typeof restored.state === "object" && Array.isArray((restored.state as { products?: unknown }).products)) {
+          data = restored.state as { products: ProductRecord[] };
+          await writeFile(this.#contentFile(), `${JSON.stringify(data, null, 2)}\n`, "utf8");
+        }
+      }
+    }
+    for (const record of data?.products ?? []) this.#records.set(record.productId, record);
     const catalog = JSON.parse(await readFile(path.join(root, "src", "surveys", "survey-catalog.json"), "utf8")) as { surveys?: Array<{ id: string; releases: Array<{ id: string; products: Array<{ name: string; modality: string; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string }> }> }> };
     const registry = JSON.parse(await readFile(path.join(root, "src", "layers", "layer-registry.json"), "utf8")) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; coverageRole?: ProductContent["coverageRole"]; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; plannedMode?: string; mode?: string; recipePath?: string; status?: string; maxOrder?: number }> };
     const definitions = new Map((registry.layers ?? []).map((layer) => [`${layer.surveyId}:${layer.releaseId}:${layer.product}`, layer]));
@@ -257,7 +272,11 @@ export class ProductStore {
     this.#initialized = true;
   }
 
-  async persist(): Promise<void> { await writeFile(this.#contentFile(), `${JSON.stringify({ schemaVersion: 1, products: [...this.#records.values()] }, null, 2)}\n`, "utf8"); }
+  async persist(): Promise<void> {
+    const state = { schemaVersion: 1, products: [...this.#records.values()] };
+    await writeFile(this.#contentFile(), `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    queueStateSnapshot(this.#snapshotSink, "products", state);
+  }
   list(): ProductRecord[] { return [...this.#records.values()].sort((a, b) => `${a.draft.surveyId}:${a.draft.releaseId}:${a.draft.name}`.localeCompare(`${b.draft.surveyId}:${b.draft.releaseId}:${b.draft.name}`)); }
   get(id: string): ProductRecord { const record = this.#records.get(id); if (!record) throw new AdminHttpError(404, "Product not found"); return record; }
 

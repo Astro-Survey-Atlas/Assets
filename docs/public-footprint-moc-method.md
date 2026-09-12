@@ -1,13 +1,18 @@
 # 公开巡天覆盖 MOC 的来源与计算方法
 
+> 历史方法记录：下文产品数量、路径和脚本命令描述当时的生成过程，不是当前完整 DR 清单或现行操作指令。批量 CSST 证据、raw/moc 和 Euclid 源 ZIP 已迁入 S3，按 evidence-index.json 恢复；“保存于”指历史逻辑路径。下文 build:footprints、build:resource-packages、build:desi-footprints、artifacts:footprints 已不在当前 package.json 中。当前从已有 layer 产物重建包使用 `npm run packages:rebuild`，验证使用 `npm run artifacts:validate`；源数据重算必须先恢复实际输入并遵循锁定配方。存储现状见 [存储说明](public-artifact-storage.md)，后续施工见 [S3 唯一权威实施计划](s3-authority-implementation-plan.md)。
+
 本文记录 `src/footprints/survey-footprints.json` 中新增覆盖的来源、坐标处理和可复现计算。它只描述天空覆盖，不包含星表行、图像像素或观测深度模型。
 
 ## 证据等级
 
-产品级台账、生成流程和校验流程均由本 Assets 仓库维护，台账位于
-`artifacts/public-survey-footprints/`。
-
-`artifacts/public-survey-footprints/sources.json` 是产品级台账。只有存在产品级几何来源、且原始制品已保存并通过校验的记录才标为 `acquired`。本次新增的 CDS 产品直接来自公开的 CDS MocServer/HiPS MOC；Euclid Q1 使用 Euclid Consortium 发布的 DS9 区域文件计算。尚未有产品几何的记录仍是 `overview_only` 或 `awaiting_geometry`，没有用面积、中心点、示意图或相邻产品代填。
+产品级台账、生成流程和校验流程均由本 Assets 仓库维护。历史生成台账位于
+`artifacts/public-survey-footprints/`，但生成的 `sources.json` 已从本地 checkout
+移除；重新计算前必须先从其 evidence snapshot 恢复输入。只有存在产品级几何来源、且
+原始制品已保存并通过校验的记录才标为 `acquired`。本次新增的 CDS 产品直接来自公开
+的 CDS MocServer/HiPS MOC；Euclid Q1 使用 Euclid Consortium 发布的 DS9 区域文件计算。
+尚未有产品几何的记录仍是 `overview_only` 或 `awaiting_geometry`，没有用面积、中心点、
+示意图或相邻产品代填。
 
 ## CSST W1 仿真图像覆盖
 
@@ -17,7 +22,7 @@ WCS 边界使用包容性 NESTED HEALPix polygon rasterization，原生发布分
 
 审核后的 178,055 个文件并集包含 6,763 个 order-8 像元，面积为 354.7589326601951 平方度。项目路径中的“1000 平方度”只是仿真项目标签，不能作为当前文件集合的实测覆盖面积。官网使用的 46 个 NSIDE 16 像元是从原生 order-8 MOC 归并父像元所得的 display-resolution reduction，不是重新计算的高精度边界。
 
-完整输入 manifest、任务快照、统计、异常说明、order-8 JSON、FITS NUNIQ MOC、NSIDE 16 HEALPix 单元预览和各文件 SHA-256 位于 `artifacts/public-survey-footprints/csst/`。OSS ETag 只作为对象版本证据，不冒充内容 SHA-256；这些静态制品不包含原始远程凭据，凭据的存储和解析不属于 MOC 计算方法。
+完整输入 manifest、任务快照、统计、异常说明、order-8 JSON、FITS NUNIQ MOC、NSIDE 16 HEALPix 单元预览和各文件 SHA-256 历史上位于 `artifacts/public-survey-footprints/csst/`；批量 evidence 已由 S3 保存，当前 checkout 只保留三个 conformance keeper。OSS ETag 只作为对象版本证据，不冒充内容 SHA-256；这些静态制品不包含原始远程凭据，凭据的存储和解析不属于 MOC 计算方法。
 
 ## CDS MOC 产品
 
@@ -31,7 +36,9 @@ WCS 边界使用包容性 NESTED HEALPix polygon rasterization，原生发布分
 
 已有的 Legacy Surveys DR10、SDSS DR9、HST HiPS、DES DR2、KiDS DR5 和 NVSS 产品沿用同一证据规则。脚本还把每个请求的原生 FITS MOC 和 `record` 元数据保存在 `artifacts/public-survey-footprints/raw/moc/`，`raw/moc/index.json` 记录 URL、抓取时间、字节数和 SHA-256。
 
-CDS 返回的是分层 NESTED MOC。显示目录统一到 NSIDE 16（order 4），算法对每个源单元执行：
+CDS 返回的是分层 NESTED MOC。历史抓取的 raw MOC 位于可删除的
+`artifacts/public-survey-footprints/raw/moc/` build/evidence 路径；它不是 runtime
+authority，重新计算前必须按 evidence-index 恢复。显示目录统一到 NSIDE 16（order 4），算法对每个源单元执行：
 
 1. 源 order 不大于 4 时，把源像素 `p` 展开为 `p * 4^(4-order)` 到 `p * 4^(4-order) + 4^(4-order) - 1`。
 2. 源 order 大于 4 时，用 `floor(p / 4^(order-4))` 归并到父像素。
@@ -47,7 +54,7 @@ CDS 返回的是分层 NESTED MOC。显示目录统一到 NSIDE 16（order 4）�
 
 每个顶点从 ICRS 度数转换为 `theta = (90 - Dec) * pi/180`、`phi = RA * pi/180`，再交给 `healpixjs` 的 `queryPolygonInclusive`。计算参数为 NSIDE 16、`fact = 8`，即用过采样的 HEALPix 多边形查询保留所有与官方边界相交的像素；三份文件的像素集合合并、去重并排序。该结果是由官方边界导出的 MOC，不是由 63.1 deg2 和场中心反推的圆形近似。
 
-原始 ZIP 保存在 `artifacts/public-survey-footprints/raw/geometry/euclid-q1-region-files.zip`，索引 `raw/geometry/index.json` 记录来源、抓取时间、文件大小、SHA-256、多边形数量和解析器参数。`npm run artifacts:footprints` 会再次校验 ZIP 的大小与哈希；校验失败时不会生成可发布的 provenance。
+历史原始 ZIP 保存在可删除的 `artifacts/public-survey-footprints/raw/geometry/euclid-q1-region-files.zip`，索引 `raw/geometry/index.json` 记录来源、抓取时间、文件大小、SHA-256、多边形数量和解析器参数。它们属于 S3-backed evidence/build inputs，不是当前 checkout 的 runtime 数据；`npm run artifacts:footprints` 会再次校验 ZIP 的大小与哈希，校验失败时不会生成可发布的 provenance。
 
 ## DESI EDR 与 DR1 光谱 tile 覆盖
 
@@ -58,7 +65,10 @@ DESI 光谱覆盖使用官方发布的 `TILE_COMPLETENESS` FITS 表，而不是 
 
 生成器 `scripts/build_desi_footprints.ts` 只保留 `NEXP > 0` 的实际观测 tile，并读取 `TILERA`、`TILEDEC` 作为 ICRS 圆心。本次两张表的全部行都满足该筛选。每个 tile 使用 DESI 官方焦平面几何所给的 413.4839307227412 mm 半径；通过 `desimodel 0.20.0` 的焦平面到天空换算得到 1.6280324520485583 度角半径。生成器用 `Healpix.queryDiscInclusive`、NSIDE 16、`fact = 8` 将圆盘并集栅格化为固定分辨率 NESTED 覆盖。
 
-原始 FITS 保存在 `artifacts/public-survey-footprints/raw/geometry/`。`raw/geometry/index.json` 记录官方 URL、行数、筛选条件、坐标列、半径、`desimodel` 版本、字节数和 SHA-256。这个制品表达已观测 tile 的焦平面包络，不表达每根光纤是否成功、目标选择函数、曝光深度或红移成功率。
+历史原始 FITS 保存在可删除的 `artifacts/public-survey-footprints/raw/geometry/`；恢复后
+`raw/geometry/index.json` 记录官方 URL、行数、筛选条件、坐标列、半径、`desimodel`
+版本、字节数和 SHA-256。这个制品表达已观测 tile 的焦平面包络，不表达每根光纤是否成功、
+目标选择函数、曝光深度或红移成功率。
 
 可复现命令：
 

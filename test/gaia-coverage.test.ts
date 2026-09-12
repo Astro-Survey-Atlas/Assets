@@ -1,17 +1,20 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 
-const layerRoot = "artifacts/public-survey-footprints/layers/gaia-dr3-main-source-presence";
+import { testArtifactRoot, testDataRoot } from "./test-data-root.js";
+
+const layerRoot = path.join(testArtifactRoot, "layers", "gaia-dr3-main-source-presence");
 
 test("Gaia DR3 coverage is a locked full-sky catalog-presence layer", async () => {
   const [recipe, preview, query, statistics, registry, layerProvenance] = await Promise.all([
-    readFile("src/layers/recipes/gaia-dr3-main-source-presence.lock.json", "utf8").then(JSON.parse),
+    readFile(path.join(testDataRoot, "src/layers/recipes/gaia-dr3-main-source-presence.lock.json"), "utf8").then(JSON.parse),
     readFile(`${layerRoot}/preview-order4.json`, "utf8").then(JSON.parse),
     readFile(`${layerRoot}/query-order8.json`, "utf8").then(JSON.parse),
     readFile(`${layerRoot}/statistics.json`, "utf8").then(JSON.parse),
-    readFile("src/layers/layer-registry.json", "utf8").then(JSON.parse),
-    readFile("artifacts/public-survey-footprints/layers/gaia-dr3-main-source-presence/provenance.json", "utf8").then(JSON.parse),
+    readFile(path.join(testDataRoot, "src/layers/layer-registry.json"), "utf8").then(JSON.parse),
+    readFile(path.join(layerRoot, "provenance.json"), "utf8").then(JSON.parse),
   ]);
 
   assert.equal(recipe.coordinateFrame, "ICRS");

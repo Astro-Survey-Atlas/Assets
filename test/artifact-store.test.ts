@@ -5,8 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { FilesystemArtifactStore, type ArtifactStore, publishReleaseArchive } from "../server/artifact-store.js";
+import { createArtifactStore, FilesystemArtifactStore, type ArtifactStore, publishReleaseArchive } from "../server/artifact-store.js";
 import { packageRelease } from "../scripts/release-archive.js";
+import { storageLayout } from "../server/storage-layout.js";
 import { cleanupReleaseHistory, syncReleaseFromObjectStore } from "../server/sync-release.js";
 import { publicReleaseBundleDigest } from "../server/catalog.js";
 
@@ -196,6 +197,47 @@ test("offline restart reuses a validated installed current when the pointer is u
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("strict archive pull does not reuse an installed cache when the object store is unavailable", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-archive-strict-offline-"));
+  try {
+    await makeSource(root);
+    const descriptor = await packageRelease({ root, outputPath: path.join(root, "release.tar.gz") });
+    const store = new LocalS3Store(new FilesystemArtifactStore(path.join(root, "objects")));
+    await publishReleaseArchive(descriptor, store);
+    const target = path.join(root, "target");
+    await syncReleaseFromObjectStore(store, target);
+    const offline: ArtifactStore = {
+      kind: "s3",
+      head: async () => null,
+      get: async () => { throw new Error("object store offline"); },
+      putImmutable: async () => { throw new Error("object store offline"); },
+      putMutable: async () => { throw new Error("object store offline"); },
+      putFileImmutable: async () => { throw new Error("object store offline"); },
+      downloadToFile: async () => { throw new Error("object store offline"); },
+    };
+    await assert.rejects(
+      () => syncReleaseFromObjectStore(offline, target, { allowInstalledFallback: false }),
+      /object store offline/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("strict artifact stores reject an unconfigured object store", () => {
+  assert.throws(() => createArtifactStore({ requireS3: true }), /ENDPOINT and .*BUCKET.*required/);
+});
+
+test("local storage layout keeps cache, scratch and uploads separate", async () => {
+  const layout = storageLayout(path.join(os.tmpdir(), "asa-local-storage-test"));
+  assert.equal(layout.cacheRoot, path.join(layout.root, "cache"));
+  assert.equal(layout.scratchRoot, path.join(layout.root, "scratch"));
+  assert.equal(layout.uploadsRoot, path.join(layout.root, "uploads"));
+  assert.notEqual(layout.cacheRoot, layout.scratchRoot);
+  assert.notEqual(layout.scratchRoot, layout.uploadsRoot);
+  assert.throws(() => storageLayout(path.parse(layout.root).root), /must not be a filesystem root/);
 });
 
 test("corrupt cached release directory is discarded and re-downloaded", async () => {

@@ -1,13 +1,44 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { FilesystemArtifactStore, type ArtifactObject, type ArtifactObjectWithBody, type ArtifactPutOptions, type ArtifactStore } from "../server/artifact-store.js";
 import { DynamicResourcePackageStore } from "../server/resource-package-publication.js";
 import type { MocPublication } from "../server/moc-build.js";
 import type { ProductRecord } from "../server/products.js";
+import { StateSnapshotCoordinator, stateSnapshotFileKey } from "../server/state-snapshot.js";
+import { testArtifactRoot } from "./test-data-root.js";
+import { UploadSpool } from "../server/upload-spool.js";
+
+class LocalS3Adapter implements ArtifactStore {
+  readonly kind = "s3" as const;
+
+  constructor(private readonly delegate: FilesystemArtifactStore) {}
+
+  head(key: string): Promise<ArtifactObject | null> { return this.delegate.head(key); }
+  get(key: string, range?: { start: number; end: number }): Promise<ArtifactObjectWithBody | null> { return this.delegate.get(key, range); }
+  putImmutable(key: string, body: Uint8Array | string, options?: ArtifactPutOptions): Promise<ArtifactObject> { return this.delegate.putImmutable(key, body, options); }
+  putMutable(key: string, body: Uint8Array | string, options?: ArtifactPutOptions): Promise<ArtifactObject> { return this.delegate.putMutable(key, body, options); }
+  putFileImmutable(key: string, filePath: string, options?: ArtifactPutOptions): Promise<ArtifactObject> { return this.delegate.putFileImmutable(key, filePath, options); }
+  downloadToFile(key: string, filePath: string): Promise<ArtifactObject | null> { return this.delegate.downloadToFile(key, filePath); }
+}
+
+async function waitForUploadKind(root: string, kind: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    for (const entry of await readdir(path.join(root, "jobs"), { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      try {
+        const manifest = JSON.parse(await readFile(path.join(root, "jobs", entry.name, "manifest.json"), "utf8")) as { kind?: string };
+        if (manifest.kind === kind) return;
+      } catch { /* enqueue is still copying the job */ }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`Timed out waiting for upload kind ${kind}`);
+}
 
 function sha256(value: Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
@@ -55,7 +86,7 @@ test("dynamic publications produce immutable hash-addressed Resource Package v3 
   const contentRoot = await mkdtemp(path.join(os.tmpdir(), "assets-dynamic-package-"));
   const buildRoot = path.join(contentRoot, "moc-releases", "jwst-build");
   await import("node:fs/promises").then(({ mkdir }) => mkdir(buildRoot, { recursive: true }));
-  const moc = await readFile(path.resolve("artifacts/public-survey-footprints/layers/euclid-q1-deep-fields-image-extent/euclid-q1-deep-fields-image-extent.moc.fits"));
+const moc = await readFile(path.join(testArtifactRoot, "layers", "euclid-q1-deep-fields-image-extent", "euclid-q1-deep-fields-image-extent.moc.fits"));
   const query = Buffer.from(JSON.stringify({ order: 8, pixels: [64, 65] }));
   const preview = Buffer.from(JSON.stringify({ order: 4, pixels: [4] }));
   await writeFile(path.join(buildRoot, "moc.fits"), moc);
@@ -76,7 +107,7 @@ test("dynamic publications produce immutable hash-addressed Resource Package v3 
   assert.equal((await stat(path.join(contentRoot, archive.path))).size, archive.sizeBytes);
   assert.equal(sha256(await readFile(path.join(contentRoot, archive.path))), archive.sha256);
 
-  const changedMoc = await readFile(path.resolve("artifacts/public-survey-footprints/layers/desi-dr1-spectra-footprint/desi-dr1-spectra-footprint.moc.fits"));
+  const changedMoc = await readFile(path.join(testArtifactRoot, "layers", "desi-dr1-spectra-footprint", "desi-dr1-spectra-footprint.moc.fits"));
   await writeFile(path.join(buildRoot, "moc.fits"), changedMoc);
   const second = publication(contentRoot, "jwst-build-v2", changedMoc, "2026-09-01T00:00:00.000Z");
   second.files.query!.sha256 = sha256(query); second.files.query!.sizeBytes = query.length;
@@ -102,4 +133,47 @@ test("dynamic publications produce immutable hash-addressed Resource Package v3 
   await store.sync([second], [product()], (file) => path.join(contentRoot, file.path));
   assert.equal(store.list().length, 2);
   assert.equal(store.latest("public-jwst-footprints")?.version, "3.2.0");
+});
+
+test("dynamic package metadata queues and restores a missing archive", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "assets-dynamic-package-durable-"));
+  try {
+    const contentRoot = path.join(base, "content");
+    const buildRoot = path.join(contentRoot, "moc-releases", "jwst-build");
+    await (await import("node:fs/promises")).mkdir(buildRoot, { recursive: true });
+    const moc = await readFile(path.join(testArtifactRoot, "layers", "euclid-q1-deep-fields-image-extent", "euclid-q1-deep-fields-image-extent.moc.fits"));
+    const query = Buffer.from(JSON.stringify({ order: 8, pixels: [64, 65] }));
+    const preview = Buffer.from(JSON.stringify({ order: 4, pixels: [4] }));
+    await writeFile(path.join(buildRoot, "moc.fits"), moc);
+    await writeFile(path.join(buildRoot, "query.json"), query);
+    await writeFile(path.join(buildRoot, "preview.json"), preview);
+    const source = publication(contentRoot, "jwst-build", moc, "2026-08-31T00:00:00.000Z");
+    source.files.query!.sha256 = sha256(query); source.files.query!.sizeBytes = query.length;
+    source.files.preview!.sha256 = sha256(preview); source.files.preview!.sizeBytes = preview.length;
+
+    const objectStore = new LocalS3Adapter(new FilesystemArtifactStore(path.join(base, "objects")));
+    const spool = new UploadSpool({ root: path.join(base, "uploads"), store: objectStore });
+    await spool.initialize();
+    const snapshots = new StateSnapshotCoordinator({ root: path.join(base, "state"), store: objectStore, spool });
+    await snapshots.initialize(["resource-packages"]);
+    const packages = new DynamicResourcePackageStore(contentRoot, snapshots);
+    await packages.sync([source], [product()], (file) => path.join(contentRoot, file.path));
+    const asset = packages.assets()[0]!;
+    const persisted = JSON.parse(await readFile(path.join(contentRoot, "resource-package-publications-v1.json"), "utf8")) as { packages: Array<{ objectKey?: string; sha256: string; sizeBytes: number; archivePath: string }> };
+    assert.equal(persisted.packages[0]?.objectKey, stateSnapshotFileKey("resource-packages", persisted.packages[0]!.sha256));
+    await waitForUploadKind(path.join(base, "uploads"), "resource-package");
+    await waitForUploadKind(path.join(base, "uploads"), "state-snapshot");
+    const uploads = await spool.processPending();
+    await snapshots.reconcileUploaded(uploads.uploadedManifests);
+
+    await rm(path.join(contentRoot, asset.path));
+    await rm(path.join(contentRoot, "resource-package-publications-v1.json"));
+    const restored = new DynamicResourcePackageStore(contentRoot, snapshots);
+    await restored.initialize();
+    assert.equal(restored.list().length, 1);
+    assert.equal(await stat(path.join(contentRoot, asset.path)).then((details) => details.size), asset.sizeBytes);
+    assert.equal(sha256(await readFile(path.join(contentRoot, asset.path))), asset.sha256);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
 });

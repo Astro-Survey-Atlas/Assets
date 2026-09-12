@@ -1,6 +1,27 @@
 # Assets Session Handoff
 
-Updated: 2026-09-03
+Updated: 2026-09-12 (S3 authority location confirmed; P2/P3 gaps remain)
+
+## Active implementation handoff
+
+Read [S3 authority implementation plan](docs/s3-authority-implementation-plan.md)
+before changing storage behavior. The confirmed production authority is the
+MinIO described by gitignored `.info`, not the currently deployed Helm
+`storage/minio` public bucket. Do not print `.info` credentials. P1 public
+hydrate works against the Helm public bucket. P2/P3 spool, CAS pointer,
+corrupt-local restore and API sync-status gaps remain; P4 workflow still uses
+missing-file tolerance and does not restore from `.info`. P5 online cutover
+must retarget consumers to the `.info` bucket after those fixes. Do not add
+automatic scan-to-MOC/package conversion or change DR membership/coverage
+precision as part of storage migration.
+
+Old resource-package migration plan/handoff documents were removed; use the new
+plan for implementation and Git history for former migration records. Historical
+deployment values and counts below must be rechecked in P0. Manifest-listed
+documentation changed in this round: rebuild and validate the release manifest
+before starting a server against this worktree or publishing it.
+
+## Historical session records (not current operating instructions)
 
 Repository: `/home/aaron/Repo/Astro-Survey-Atlas-Assets`
 
@@ -437,10 +458,11 @@ diffs before editing them.
 - The overlap UI forwards the right-drawer viewport inset through
   `AtlasCoverageGlobe` to the Three.js viewer, so a successful overlap response
   can be rendered without a post-response runtime exception.
-- `server/artifact-store.ts` provides an immutable filesystem fallback and an
-  optional S3-compatible publication adapter. `sync-release.ts` keeps the PVC
-  symlink as the active read path and only publishes to object storage when it
-  is explicitly configured; runtime and evidence prefixes remain separate.
+- `server/artifact-store.ts` retains its filesystem adapter for explicit local
+  and test tooling, while runtime hydrate and release publication require
+  `ASSETS_OBJECT_STORE_REQUIRED=1`. `sync-release.ts` verifies the selected
+  S3 release before activating the local `/data/current` read path; runtime
+  HTTP serving remains local and does not read S3 per request.
 - MOC discovery is v2 and evidence-only: Warehouse returns at most 50 candidate
   summaries from a 51-record bounded search, while Assets performs the separate
   `MocBuildRequest` acquisition/build flow. Discovery has no probe or review
@@ -585,8 +607,9 @@ The deployed Assets `/api/v1/coverage` now retains that public base and adds the
 ACTIVE layers from the current Warehouse endpoint; while the CSST retry is
 `UPDATING`, the live response contains 56 footprints across the public surveys
 plus the ACTIVE CSST, DESI, Euclid and Assets-owned controlled smoke layers.
-The 2026-08-28 rollout activated the rebuilt bundle; object-store publication
-remains disabled, so the service still reads the verified PVC release.
+At the 2026-08-28 pre-authority rollout checkpoint, object-store publication
+was disabled and the service read the verified PVC release. Current runtime
+hydrate and publication use the required S3 path described above.
 
 On 2026-08-29 the local-source contract was completed and verified in the
 development cluster. Warehouse Infra revision 2 now owns the scanner source

@@ -1,34 +1,37 @@
 # Coverage workflow and evidence boundary
 
-Astro Survey Atlas Assets has one fixed workflow for every survey and release.
-The recipe may choose the input format, but it may not skip provenance or
-silently change the coordinate/order contract.
+Every coverage recipe must retain provenance and its coordinate/order contract.
+Warehouse scanning and Assets MOC/package construction are separate workflows;
+a completed scan does not automatically generate a MOC or Resource Package.
+Storage migration follows the [S3 authority implementation plan](s3-authority-implementation-plan.md). Production S3 is the authority for uploaded business data; P2/P3 durability gaps and P5 online cutover remain.
 
 ```mermaid
 flowchart LR
-  A[Source inventory snapshot] --> B[File/catalog filter]
-  B --> C[Metadata or FITS-WCS read]
-  C --> D[Validate ICRS]
-  D --> E[Extract geometry]
-  E --> F[NESTED HEALPix rasterization]
-  F --> G[Normalize order/ipix]
-  G --> H[Union and deduplicate]
-  H --> I[MOC/query/preview/statistics]
-  I --> J[Manifest + coverage edges]
-  J --> K[Warehouse ES]
-  J --> L[Evidence Parquet/PVC]
-  I --> M[SHA-256 release]
+  A[Warehouse ScanPlan] --> B[File and coverage documents]
+  B --> C[Configured ES sink and scan evidence]
+  D[Assets selected DR/product and locked source] --> E[Recipe and Core computation]
+  E --> F[MOC/query/preview/statistics]
+  F --> G[Explicit package and release construction]
+  G --> H[Verified public release]
 ```
 
 The recipe lock must list each step, implementation reference, source snapshot,
-scan run, available orders, overview order and maximum order. `order 4` is an
-NSIDE 16 overview; it is not an order 8 measurement. A layer can expose order
-8 only when the source scan actually produced order-8 cells.
+scan run when applicable, available orders, overview order and maximum order.
+`order 4` is an NSIDE 16 overview; expanding it to order 8 adds no boundary
+information. Order-8 output may come from a native MOC or an explicit geometry
+recipe as well as a scan, but must state the actual source precision. Preserve
+DR/product/layer membership and partial-coverage limitations; never merge
+unrelated DRs or infer full coverage from a partial file set. Catalog RA/Dec
+positions describe source distributions, not image footprints without WCS or
+other justified field geometry.
 
 Runtime assets are the catalog, layer metadata, overview/query blocks, previews
 and published products. Evidence assets are input manifests, normalized scans,
-task snapshots, raw MOCs and provenance. Evidence remains downloadable and
-auditable but is not part of the initial home-page request.
+task snapshots, raw MOCs and provenance. Retained evidence is recoverable under
+its access policy and is not part of the initial home-page request. Purged
+intermediates must not be advertised as byte-for-byte reproducible. In the target
+storage model, compute completion and asynchronous upload completion are separate;
+pending-upload data is the explicit exception to recovery from S3.
 
 ## Reverse lookup and overlap
 

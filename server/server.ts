@@ -5,6 +5,7 @@ import path from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 
 import { AdminHttpError, AssetsAdmin, KubernetesApiError, SUPPORTED_COVERAGE_MODES, adminFromRequest, type ConnectorInput, type CoverageTaskInput, type MocDiscoveryInput } from "./admin.js";
+import { createArtifactStoreFromProcess } from "./artifact-store.js";
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
@@ -22,11 +23,13 @@ import { PublicReleasePublisher, PublicationConflictError, type ReleaseHistoryDo
 import { isDeniedPackageId, isDeniedSurvey } from "./publication-policy.js";
 import { ContentArchiveError } from "./content-archive.js";
 import { buildPublicProductEvidence } from "./public-product-evidence.js";
+import { StateSnapshotCoordinator, STATE_SNAPSHOT_NAMESPACES, type StateSnapshotSink } from "./state-snapshot.js";
+import { UploadSpool } from "./upload-spool.js";
 import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductVerificationStatus, PublicSurveyModality } from "./types.js";
 
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
-const releaseRoot = path.resolve(process.env.ASSET_RELEASE_ROOT ?? projectRoot);
+const releaseRoot = path.resolve(process.env.ASSET_RELEASE_ROOT ?? process.env.ASSET_WORKTREE_ROOT ?? projectRoot);
 const siteRoot = path.resolve(process.env.PUBLIC_SITE_ROOT ?? path.join(projectRoot, "dist", "site"));
 const catalog = await loadCatalog(releaseRoot);
 let coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src", "footprints", "survey-footprints.json"), "utf8")) as {
@@ -42,14 +45,25 @@ const evidenceStore = new CoverageEvidenceStore({
   coverageIndex: process.env.ASSETS_WAREHOUSE_COVERAGE_INDEX,
   fileIndex: process.env.ASSETS_WAREHOUSE_FILE_INDEX,
 });
-const contentRoot = path.resolve(process.env.ASSETS_CONTENT_ROOT ?? "/var/lib/assets-content");
+const contentRoot = path.resolve(process.env.ASSETS_CONTENT_ROOT ?? path.join(releaseRoot, ".assets-content"));
 const evidenceRoot = path.resolve(process.env.ASSETS_EVIDENCE_ROOT ?? "/var/lib/assets-evidence");
-const editorial = new SurveyEditorialStore(contentRoot, releaseRoot);
-const mocBuildStore = new MocBuildStore(contentRoot);
+const uploadSpoolRoot = path.resolve(process.env.ASSETS_UPLOAD_SPOOL_ROOT ?? "/var/lib/assets-upload-spool");
+let stateSnapshotSink: StateSnapshotSink | undefined;
+const objectStoreRequired = /^(1|true|yes|on)$/i.test(process.env.ASSETS_OBJECT_STORE_REQUIRED ?? "");
+if (objectStoreRequired || process.env.ASSETS_OBJECT_STORE_ENDPOINT?.trim() || process.env.ASSETS_OBJECT_STORE_BUCKET?.trim()) {
+  const objectStore = createArtifactStoreFromProcess(process.env);
+  const uploadSpool = new UploadSpool({ root: uploadSpoolRoot, store: objectStore });
+  await uploadSpool.initialize();
+  const stateSnapshots = new StateSnapshotCoordinator({ root: path.join(uploadSpoolRoot, "state"), store: objectStore, spool: uploadSpool });
+  await stateSnapshots.initialize(STATE_SNAPSHOT_NAMESPACES);
+  stateSnapshotSink = stateSnapshots;
+}
+const editorial = new SurveyEditorialStore(contentRoot, releaseRoot, stateSnapshotSink);
+const mocBuildStore = new MocBuildStore(contentRoot, stateSnapshotSink);
 await mocBuildStore.initialize();
-const mocPublicationStore = new MocPublicationStore(contentRoot, evidenceRoot);
+const mocPublicationStore = new MocPublicationStore(contentRoot, evidenceRoot, stateSnapshotSink);
 await mocPublicationStore.initialize();
-const dynamicResourcePackages = new DynamicResourcePackageStore(contentRoot);
+const dynamicResourcePackages = new DynamicResourcePackageStore(contentRoot, stateSnapshotSink);
 await dynamicResourcePackages.initialize();
 const publishedPublicAssets = new Map<string, { record: PublicAssetRecord; absolutePath: string }>();
 const publishedAssetIds = new Set<string>();
@@ -256,7 +270,7 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
 
 await reloadRuntimeCoverage();
 const admin = new AssetsAdmin();
-const products = new ProductStore();
+const products = new ProductStore(stateSnapshotSink);
 await products.initialize(releaseRoot, coverageCatalog.layers);
 const publisher = new PublicReleasePublisher({
   contentRoot,
@@ -265,6 +279,7 @@ const publisher = new PublicReleasePublisher({
   publicationFile: (file) => mocPublicationStore.absolutePath(file),
   loadPackages: dynamicResourcePackages,
   loadProducts: () => products.list(),
+  snapshotSink: stateSnapshotSink,
 });
 const mocBuildService = new MocBuildService({
   store: mocBuildStore,

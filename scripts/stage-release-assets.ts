@@ -20,7 +20,8 @@ import { sanitizeReleaseControlDocument } from "../server/publication-policy.js"
 
 const root = path.resolve(process.env.ASSET_WORKTREE_ROOT ?? process.cwd());
 const artifactRoot = path.join(root, "artifacts", "public-survey-footprints");
-const destination = path.join(root, "dist", "release-assets");
+const destination = path.resolve(process.env.ASSETS_RELEASE_ASSET_OUTPUT_ROOT ?? path.join(root, "dist", "release-assets"));
+const notesPath = path.resolve(process.env.ASSETS_RELEASE_NOTES_PATH ?? path.join(root, "dist", "RELEASE-NOTES.md"));
 
 const releaseVersion = process.env.RELEASE_VERSION ?? "";
 const imageReference = process.env.RELEASE_IMAGE ?? "";
@@ -109,7 +110,8 @@ async function main() {
     "for the release id, bundle digest and package count, and SHA256SUMS for asset checksums.",
     "",
   ];
-  await writeFile(path.join(root, "dist", "RELEASE-NOTES.md"), `${lines.join("\n")}\n`);
+  await mkdir(path.dirname(notesPath), { recursive: true });
+  await writeFile(notesPath, `${lines.join("\n")}\n`);
 
   console.log(`staged ${latest.collection.fileName} (${latest.packages.length} packages, release ${latest.releaseId})`);
 }

@@ -14,19 +14,27 @@ artifacts/public-survey-footprints/csst/*
 !artifacts/public-survey-footprints/csst/README.md
 !artifacts/public-survey-footprints/csst/provenance.json
 !artifacts/public-survey-footprints/csst/csst-w1-image-extent-order8.fits
-# Public Resource Package ZIPs are release artifacts referenced by the
-# manifest/history and must be present in fresh checkouts (CI, integrators).
-# The denied CSST package stays private.
-artifacts/public-survey-footprints/packages/public-csst-footprints-*.zip
+# Public release bytes are hydrated from the S3 authority into a disposable
+# local cache. Generated packages and release metadata must not re-enter Git.
+artifacts/public-survey-footprints/collections/
+artifacts/public-survey-footprints/layers/
+artifacts/public-survey-footprints/manual/
+artifacts/public-survey-footprints/normalized/
+artifacts/public-survey-footprints/packages/
+artifacts/public-survey-footprints/raw/
+artifacts/public-survey-footprints/provenance.json
+artifacts/public-survey-footprints/release-history.json
+artifacts/public-survey-footprints/release-manifest.json
+artifacts/public-survey-footprints/sources.json
 artifacts/moc-source-probe.json
+artifacts/moc-source-probe-*.json
 .tmp-screens
 .tmp-ui
 tmp/*
 .opencode/
-.assets-content/survey-editorial-v1.json
-.assets-content/survey-editorial-history.ndjson
-.assets-content/resource-package-publications-v1.json
+.assets-content/
 .info
+.assets-local/
 
 # Private evidence families: durable copies live in object storage
 # (content-archive evidence namespace); keep them out of git status.

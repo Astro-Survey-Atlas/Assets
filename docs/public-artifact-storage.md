@@ -1,5 +1,21 @@
 # Public artifact storage and release archives
 
+This document describes the **current storage contract**. The scope, remaining
+P2/P3 durability gaps and P5 online steps are in the [S3 authority
+implementation plan](s3-authority-implementation-plan.md). Production S3 is the
+sole authority for uploaded business bytes and synced control state. The
+confirmed authority endpoint is the MinIO described by gitignored `.info`, not
+the currently deployed Helm `storage/minio` public-release bucket. Local
+`cache/` is a verified, disposable restore; `scratch/` is recomputable work;
+and `uploads/` is an explicit pending-upload spool. Compute completion does not
+wait for upload completion. P5 online cutover, development-bucket retirement
+and old-PVC decommissioning are not complete.
+
+The generated release tree, local dynamic content state, dated probe and release
+staging output were removed from this checkout after independent S3 restore and
+size/SHA-256 checks. The source checkout retains only small software/conformance
+fixtures and the evidence ledger; release validation must hydrate its data roots.
+
 Assets v1 uses one deployment path: the release data is built as a complete,
 immutable `tar.gz`, uploaded to S3-compatible object storage, and downloaded by
 the `publish-assets` init container before the server starts. The runtime image
@@ -26,7 +42,7 @@ public/releases/<bundle-id>/<bundle-sha256>/release.tar.gz
 public/current.json
 ```
 
-`public/current.json` has this v1 shape:
+`public/current.json` currently uses schema version 2:
 
 ```json
 {
@@ -69,8 +85,9 @@ optimization; there is no image-data fallback or per-file object download.
 
 ## Build and publish
 
-Build and validate the local release data first. The 15 Resource Package v3
-archives can live outside the repository:
+Build and validate the local release data first. Resource Package v3 archives
+can live outside the repository; use the selected catalog for the package set,
+not a historical fixed count:
 
 ```bash
 ASSETS_PACKAGE_STAGING_ROOT=/srv/asa-resource-packages npm run catalog:build
@@ -132,10 +149,13 @@ it pins the active snapshot and lists every archived object's repository
 relative path, size and SHA-256. Release validation
 (`npm run artifacts:validate`, `npm run catalog:build`) accepts a locally
 missing evidence input only when its hash matches this index, so a fresh
-workspace stays verifiable while bulk evidence stays out of Git. Conformance
-keepers (`csst/README.md`, `csst/provenance.json`,
-`csst/csst-w1-image-extent-order8.fits`), the public DESI tile tables and all
-generated layer outputs remain tracked locally.
+workspace stays verifiable while bulk evidence stays out of Git. The checkout
+retains only the three CSST conformance keepers, the Core wheel and this
+evidence index. Generated release trees, layer outputs, raw inputs, dynamic
+content, probe output and staging directories were removed only after
+independent S3 restore plus exact SHA-256 and size checks. Recomputing a
+product requires restoring its indexed inputs first; those historical build
+paths are not runtime authority.
 
 Restore a working evidence tree with:
 
@@ -151,6 +171,32 @@ Both commands take their store configuration from `ASSETS_OBJECT_STORE_*` plus
 the archived inputs. Active snapshot:
 `9ffec99fbb30995f5bb7af6878e878c1050f02acebd0478700457e9df3155b69`
 (250 objects, 239,337,574 bytes, published 2026-09-10).
+
+The P0-P4 authority restore checks were also completed against production S3:
+
+| Prefix | Snapshot | Files | Bytes | Restore check |
+| --- | --- | ---: | ---: | --- |
+| `authority` | `b5be3ff04a8baf6b7516ef5a45800238730a37cc740d27e16a308af418f49ff3` | 468 | 104,141,186 | exact SHA-256 and size |
+| `authority-content` | `7abda54ff00eb14d4a9562d7bd4b99663c90d80b24af3d36862b2c67711a4519` | 4 | 854,957 | exact SHA-256 and size |
+| `authority-probe` | `f532707a285fc407926830c255d4bd36242f70179ffe5d281846604182890526` | 1 | 4,873 | exact SHA-256 and size |
+
+The local generated release tree, content state, dated probe and staging copies
+were removed only after those independent restores. Production S3 objects were
+not deleted. P5 remains: verify the online production consumer, retire any
+development-bucket references, and decommission old PVC copies only after the
+online restore and pending-upload drills succeed.
+
+On 2026-09-12, a read-only listing through the currently deployed Helm
+object-store configuration found only `public/current.json`. That cluster
+bucket is the live public-release consumer, not the authority source. The same
+day, a read-only listing of the gitignored `.info` MinIO found the recorded
+`authority`, `authority-content`, `authority-probe` and `repo-evidence`
+pointers at `authority/evidence/current.json`,
+`authority-content/content/current.json`,
+`authority-probe/evidence/current.json` and
+`repo-evidence/evidence/current.json`. Do not print `.info` credentials. P5
+must retarget online consumers to that authority bucket after P2/P3 durability
+fixes; do not look for authority snapshots in the Helm public bucket.
 
 ## Migration and rollback
 
@@ -171,5 +217,11 @@ astro-survey-atlas-assets charts/astro-survey-atlas-assets --values
 release. It does not delete release objects or the PVC's previous release
 directories.
 
-The server reads only `/data/current`; it never reads S3 at request time and
-never uses the Git checkout as a runtime data source.
+Static public release downloads read the verified `/data/current` tree; dynamic
+publications read the configured local content root. The server does not read S3
+for each HTTP request, so Range, ETag and `X-Content-SHA256` remain local file
+serving contracts. Hydrate and the Helm init container require the configured
+S3 store and fail closed on a fresh environment rather than silently using the
+source checkout. A plain Helm upgrade with unchanged Pod configuration may not
+rerun init; rollback must verify an actual Pod recreation and the resulting
+bundle hash. The remaining P5 online cutover is tracked above.

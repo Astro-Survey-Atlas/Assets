@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { link, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { link } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 
@@ -10,6 +11,7 @@ import type { MocPublication } from "./moc-build.js";
 import { deriveAccessModes, sourceAuthorityForUrl, sourceTierAuthority } from "./package-access-policy.js";
 import { isDeniedSurvey } from "./publication-policy.js";
 import type { ProductContent, ProductRecord } from "./products.js";
+import { queueStateSnapshot, queueStateSnapshotFile, stateSnapshotFileKey, type StateSnapshotSink } from "./state-snapshot.js";
 
 const PACKAGE_SCHEMA_VERSION = 3;
 /** Baseline package format; dynamic packages increment the minor version per release. */
@@ -45,6 +47,8 @@ export interface DynamicResourcePackageEntry {
   replacedBy: string[];
   /** Content-volume path; never included in the public catalog response. */
   archivePath: string;
+  /** Content-addressed object-store copy; never included in the public catalog response. */
+  objectKey?: string;
   /** Fingerprint of the publication/product inputs used to build this archive. */
   contentFingerprint: string;
 }
@@ -145,6 +149,29 @@ function packageMinorVersion(version: string): number | undefined {
   return PACKAGE_VERSION_PATTERN.exec(version)?.[1] === undefined ? undefined : Number(PACKAGE_VERSION_PATTERN.exec(version)![1]);
 }
 
+function validObjectKey(value: string): boolean {
+  if (!value || value.includes("\0") || value.startsWith("/")) return false;
+  const normalized = path.posix.normalize(value);
+  return normalized === value && value.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+}
+
+async function localArchiveState(filePath: string, expected: { sha256: string; sizeBytes: number }): Promise<"valid" | "missing" | "invalid"> {
+  try {
+    const details = await lstat(filePath);
+    if (!details.isFile() || details.isSymbolicLink() || details.size !== expected.sizeBytes) return "invalid";
+    return hash(await readFile(filePath)) === expected.sha256 ? "valid" : "invalid";
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing";
+    return "invalid";
+  }
+}
+
+async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
+  const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+  await rename(temporary, filePath);
+}
+
 export function stableResourcePackageId(surveyId: string): string {
   return `public-${slug(surveyId).slice(0, 40)}-footprints`;
 }
@@ -177,6 +204,7 @@ function persistedPackageEntry(value: unknown): DynamicResourcePackageEntry | un
   if (typeof sizeBytes !== "number" || !Number.isSafeInteger(sizeBytes) || sizeBytes <= 0 || typeof entry.sha256 !== "string" || !SHA256_PATTERN.test(entry.sha256)) return undefined;
   if (typeof entry.updatedAt !== "string" || !Number.isFinite(Date.parse(entry.updatedAt))) return undefined;
   if (entry.hidden !== false || entry.deprecated !== false || !Array.isArray(entry.replacedBy) || !entry.replacedBy.every((id) => typeof id === "string" && PACKAGE_ID_PATTERN.test(id))) return undefined;
+  if (entry.objectKey !== undefined && (typeof entry.objectKey !== "string" || !validObjectKey(entry.objectKey))) return undefined;
   if (typeof entry.contentFingerprint !== "string" || !SHA256_PATTERN.test(entry.contentFingerprint)) return undefined;
   return entry as DynamicResourcePackageEntry;
 }
@@ -293,8 +321,8 @@ async function zipEntries(entries: ReadonlyMap<string, Buffer>, destination: str
   await pipeline(zip.outputStream as NodeJS.ReadableStream, createWriteStream(destination, { flags: "wx", mode: 0o644 }));
 }
 
-function publicEntry(entry: DynamicResourcePackageEntry): Omit<DynamicResourcePackageEntry, "archivePath" | "contentFingerprint"> {
-  const { archivePath: _archivePath, contentFingerprint: _contentFingerprint, ...result } = entry;
+function publicEntry(entry: DynamicResourcePackageEntry): Omit<DynamicResourcePackageEntry, "archivePath" | "objectKey" | "contentFingerprint"> {
+  const { archivePath: _archivePath, objectKey: _objectKey, contentFingerprint: _contentFingerprint, ...result } = entry;
   return result;
 }
 
@@ -315,39 +343,59 @@ export class DynamicResourcePackageStore {
   /** Keyed by `<id>@<version>`; one content lineage may carry several versions. */
   #entries = new Map<string, DynamicResourcePackageEntry>();
   #initialized = false;
+  readonly #snapshotSink: StateSnapshotSink | undefined;
 
-  constructor(contentRoot: string) {
+  constructor(contentRoot: string, snapshotSink?: StateSnapshotSink) {
     this.contentRoot = path.resolve(contentRoot);
+    this.#snapshotSink = snapshotSink;
   }
 
   private file(): string { return path.join(this.contentRoot, "resource-package-publications-v1.json"); }
 
   async initialize(): Promise<void> {
     if (this.#initialized) return;
+    await mkdir(this.contentRoot, { recursive: true });
+    let value: Partial<PersistedStore> | undefined;
     try {
-      const value = JSON.parse(await readFile(this.file(), "utf8")) as Partial<PersistedStore>;
-      if (value.schemaVersion === STORE_SCHEMA_VERSION && Array.isArray(value.packages)) {
-        const seen = new Set<string>();
-        for (const raw of value.packages) {
-          const entry = persistedPackageEntry(raw);
-          if (!entry || seen.has(packageEntryKey(entry.id, entry.version))) continue;
-          seen.add(packageEntryKey(entry.id, entry.version));
-          try {
-            const archivePath = path.resolve(this.contentRoot, entry.archivePath);
-            const relative = path.relative(this.contentRoot, archivePath);
-            if (relative.startsWith("..") || path.isAbsolute(relative)) continue;
-            const details = await stat(archivePath);
-            if (!details.isFile() || details.size !== entry.sizeBytes) continue;
-            if (hash(await readFile(archivePath)) !== entry.sha256) continue;
-            this.#entries.set(packageEntryKey(entry.id, entry.version), entry);
-          } catch { /* stale generated package */ }
+      value = JSON.parse(await readFile(this.file(), "utf8")) as Partial<PersistedStore>;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" && this.#snapshotSink?.restore) {
+        const restored = await this.#snapshotSink.restore("resource-packages");
+        if (restored && restored.state && typeof restored.state === "object" && Array.isArray((restored.state as Partial<PersistedStore>).packages)) {
+          value = restored.state as Partial<PersistedStore>;
+          await writeJsonAtomic(this.file(), value);
         }
       }
-    } catch { /* first boot */ }
+    }
+    if (value?.schemaVersion === STORE_SCHEMA_VERSION && Array.isArray(value.packages)) {
+      const seen = new Set<string>();
+      for (const raw of value.packages) {
+        const entry = persistedPackageEntry(raw);
+        if (!entry || seen.has(packageEntryKey(entry.id, entry.version))) continue;
+        seen.add(packageEntryKey(entry.id, entry.version));
+        const archivePath = path.resolve(this.contentRoot, entry.archivePath);
+        const relative = path.relative(this.contentRoot, archivePath);
+        if (relative.startsWith("..") || path.isAbsolute(relative)) continue;
+        let state = await localArchiveState(archivePath, entry);
+        if (state === "missing" && entry.objectKey && this.#snapshotSink?.restoreFile) {
+          try {
+            const restored = await this.#snapshotSink.restoreFile({
+              namespace: "resource-packages",
+              objectKey: entry.objectKey,
+              destinationPath: archivePath,
+              sha256: entry.sha256,
+              sizeBytes: entry.sizeBytes,
+            });
+            if (restored) state = await localArchiveState(archivePath, entry);
+          } catch { state = "invalid"; }
+        }
+        if (state === "valid") this.#entries.set(packageEntryKey(entry.id, entry.version), entry);
+      }
+    }
     this.#initialized = true;
   }
 
-  list(): Array<Omit<DynamicResourcePackageEntry, "archivePath" | "contentFingerprint">> {
+  list(): Array<Omit<DynamicResourcePackageEntry, "archivePath" | "objectKey" | "contentFingerprint">> {
     return [...this.#entries.values()]
       .sort((left, right) => left.id.localeCompare(right.id)
         || (packageMinorVersion(left.version) ?? 0) - (packageMinorVersion(right.version) ?? 0))
@@ -355,7 +403,7 @@ export class DynamicResourcePackageStore {
   }
 
   /** Latest non-deprecated entry for a stable package ID, if any. */
-  latest(id: string): Omit<DynamicResourcePackageEntry, "archivePath" | "contentFingerprint"> | undefined {
+  latest(id: string): Omit<DynamicResourcePackageEntry, "archivePath" | "objectKey" | "contentFingerprint"> | undefined {
     const candidates = [...this.#entries.values()].filter((entry) => entry.id === id);
     if (!candidates.length) return undefined;
     const live = candidates.filter((entry) => !entry.deprecated);
@@ -395,13 +443,28 @@ export class DynamicResourcePackageStore {
       current.push(layer);
       grouped.set(publication.surveyId, current);
     }
-    for (const [surveyId, layers] of grouped) await this.syncSurvey(surveyId, layers);
+    const created: DynamicResourcePackageEntry[] = [];
+    for (const [surveyId, layers] of grouped) {
+      const entry = await this.syncSurvey(surveyId, layers);
+      if (entry) created.push(entry);
+    }
     await this.persist();
+    for (const entry of created) {
+      queueStateSnapshotFile(this.#snapshotSink, {
+        namespace: "resource-packages",
+        sourcePath: path.resolve(this.contentRoot, entry.archivePath),
+        objectKey: entry.objectKey ?? stateSnapshotFileKey("resource-packages", entry.sha256),
+        kind: "resource-package",
+        contentType: "application/zip",
+        expectedSha256: entry.sha256,
+        expectedSizeBytes: entry.sizeBytes,
+      });
+    }
   }
 
-  private async syncSurvey(surveyId: string, layers: readonly LayerBytes[]): Promise<void> {
+  private async syncSurvey(surveyId: string, layers: readonly LayerBytes[]): Promise<DynamicResourcePackageEntry | undefined> {
     const orders = layers.flatMap((layer) => [layer.preview?.order, layer.query?.order]).filter((order): order is number => order !== undefined);
-    if (!orders.length) return;
+    if (!orders.length) return undefined;
     const overviewOrder = Math.min(4, ...orders);
     const fingerprint = hash(JSON.stringify(layers.map(({ publication, product, query, preview, moc }) => ({
       id: publication.id,
@@ -414,7 +477,7 @@ export class DynamicResourcePackageStore {
     const packageId = stableResourcePackageId(surveyId);
     const lineage = [...this.#entries.values()].filter((entry) => entry.id === packageId);
     const existingPackage = lineage.find((entry) => entry.contentFingerprint === fingerprint && !entry.deprecated);
-    if (existingPackage) return;
+    if (existingPackage) return undefined;
     // Stable package IDs carry incrementing content versions: static seed
     // packages are 3.0.0, the first dynamic rebuild becomes 3.1.0, and every
     // changed fingerprint bumps the minor version again.
@@ -502,6 +565,7 @@ export class DynamicResourcePackageStore {
       deprecated: false,
       replacedBy: [],
       archivePath: path.relative(this.contentRoot, packagePath).split(path.sep).join("/"),
+      ...(this.#snapshotSink?.enqueueFile ? { objectKey: stateSnapshotFileKey("resource-packages", archiveSha) } : {}),
       contentFingerprint: fingerprint,
     };
     for (const previous of this.#entries.values()) {
@@ -510,13 +574,16 @@ export class DynamicResourcePackageStore {
       previous.replacedBy = [...new Set([...previous.replacedBy, packageId])];
     }
     this.#entries.set(entryKey, entry);
+    return entry;
   }
 
   private async persist(): Promise<void> {
     await mkdir(this.contentRoot, { recursive: true });
     const target = this.file();
     const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify({ schemaVersion: STORE_SCHEMA_VERSION, packages: [...this.#entries.values()] }, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    const state = { schemaVersion: STORE_SCHEMA_VERSION, packages: [...this.#entries.values()] };
+    await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { flag: "wx", mode: 0o600 });
     await rename(temporary, target);
+    queueStateSnapshot(this.#snapshotSink, "resource-packages", state);
   }
 }

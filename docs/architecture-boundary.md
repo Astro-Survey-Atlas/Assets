@@ -58,10 +58,14 @@ order 投影负责空间计算，Resource Package v3 负责离线安装，官方
 
 ## 任务生命周期
 
-公共 MOC、Resource Package 和大型 query projection 的目标发布位置是版本化
+公共 MOC、Resource Package 和大型 query projection 的权威发布位置是版本化
 对象存储；Git 保留 catalog、recipe lock、provenance 摘要和 hash。输入 manifest、
-normalized scan、任务快照和错误继续留在 evidence PVC/object store。迁移契约见
-[公共制品存储与迁移](public-artifact-storage.md)，本轮不执行上传或删除。
+normalized scan、任务快照和错误继续留在 evidence PVC/object store。已确认的
+authority 是 gitignored `.info` 描述的 MinIO，不是当前 Helm `storage/minio`
+公开桶。P1 公开 hydrate 可用；P2/P3 spool/CAS/restore 缺口仍在；P4 workflow
+尚未按 `.info` 验收。本地生成 release、layer、raw、content 和 probe 副本在
+独立恢复及 SHA-256/size 校验后清理。P5 须把线上消费者切到 `.info` 桶后再退役
+开发桶和旧 PVC。迁移契约见[公共制品存储与迁移](public-artifact-storage.md)。
 
 ```text
 Assets 管理页面
@@ -83,3 +87,21 @@ Assets 管理页面
 必须定义 `depthMetric`、单位、波段、统计方法、HEALPix order/resolution、
 输入和算法版本，并记录 depth map SHA-256。没有科学定义前，validator 和
 发布流程不会接受虚假的深度文件。
+# Storage implementation handoff
+
+The [S3 authority implementation plan](s3-authority-implementation-plan.md)
+records the confirmed authority as the MinIO described by gitignored `.info`,
+not the currently deployed Helm `storage/minio` public bucket. Production S3 is
+the authority for uploaded business bytes and synced control state. `cache/`
+contains disposable verified restores, `scratch/` contains recomputable work,
+and `uploads/` contains explicit pending payloads that cleanup must not remove.
+Hydrate and Helm startup require S3 and fail closed in a fresh environment;
+HTTP still serves verified `/data/current` and the configured local content
+root without reading S3 per request.
+
+P2/P3 durability gaps (atomic spool enqueue, CAS pointers, corrupt-local
+restore, honest API sync status) remain. P5 remains pending: retarget online
+consumers to the `.info` bucket, retire the development bucket, and
+decommission old PVC data only after restore and pending-upload drills. This
+work does not add automatic scan-to-MOC/package conversion or change
+Warehouse's execution/index responsibilities or coverage semantics.

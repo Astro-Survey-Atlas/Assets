@@ -173,6 +173,42 @@
         "size"
       ]
     },
+    "uploadSpoolPersistence": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "existingClaim": {
+          "type": "string"
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "accessModes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "ReadWriteOnce",
+              "ReadWriteMany"
+            ]
+          }
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(Mi|Gi)$"
+        }
+      },
+      "required": [
+        "enabled",
+        "existingClaim",
+        "storageClass",
+        "accessModes",
+        "size"
+      ]
+    },
     "admin": {
       "type": "object",
       "properties": {
@@ -374,6 +410,7 @@
     "persistence",
     "contentPersistence",
     "evidencePersistence",
+    "uploadSpoolPersistence",
     "admin",
     "warehouse",
     "objectStore",

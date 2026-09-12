@@ -9,6 +9,7 @@ import { buildOverlapHighlight } from "../site/src/atlas/overlap-highlight.js";
 import { largestConnectedPixelComponent, recenteredOrbitPose } from "../site/src/atlas/survey-layer-viewer.js";
 import { cameraDistanceForAngularRadius, cameraDistanceForEffectiveFov, CENTERED_DATA_FOV_DEG } from "../site/src/atlas/survey-layer-viewer.js";
 import { coverageEscapeIntent } from "../site/src/atlas/coverage-interaction.js";
+import { testDataRoot } from "./test-data-root.js";
 import * as THREE from "three";
 
 function layer(layerId: string, surveyId: string, orders: Record<number, number[]>): CoverageCellLayer {
@@ -110,7 +111,7 @@ test("exiting overlap rebases the orbit around the celestial sphere", () => {
 });
 
 test("DESI source units are reconstructed from the locked TILE_COMPLETENESS snapshots", async () => {
-  const store = await SourceUnitStore.load(process.cwd());
+  const store = await SourceUnitStore.load(testDataRoot);
   const requestedCells = [1087, 1130, 1173, 1216];
   const match = store.match("desi-dr1-spectra-footprint", 4, requestedCells);
   assert.ok(match);
@@ -122,7 +123,7 @@ test("DESI source units are reconstructed from the locked TILE_COMPLETENESS snap
 });
 
 test("DESI source-unit matches retain each tile's exact finer-order cell subset", async () => {
-  const store = await SourceUnitStore.load(process.cwd());
+  const store = await SourceUnitStore.load(testDataRoot);
   const coarseMatch = store.match("desi-dr1-spectra-footprint", 4, [1087], 1);
   assert.ok(coarseMatch?.units[0]);
   const unit = coarseMatch.units[0];
