@@ -80,8 +80,8 @@ S3 保存；当前 checkout 只保留三个 CSST conformance fixture、Core whee
 [S3 唯一权威实施计划](docs/s3-authority-implementation-plan.md) 记录：生产 S3
 保存已上传业务数据和已同步控制状态，本地只保留可删除的恢复缓存、可重算
 scratch 和独立待上传目录。已确认的 authority 是 gitignored `.info` 描述的
-MinIO，不是当前 Helm 公开桶。P2/P3 耐久性缺口仍在；P5 的线上消费者切换、
-开发桶退役及旧 PVC 清理仍待完成。
+MinIO，不是当前 Helm 公开桶。P0-P6 迁移和线上消费者切换已完成；仍在使用的
+PVC 按迁移收据保留，待单独完成证据化退役评估。
 
 ## 部署
 

@@ -1,13 +1,15 @@
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { createArtifactStoreFromProcess } from "../server/artifact-store.js";
 import { ensureStorageLayout, storageLayoutFromProcess } from "../server/storage-layout.js";
-import { syncReleaseFromObjectStore } from "../server/sync-release.js";
+import { parseCurrentPointer, syncReleaseFromObjectStore } from "../server/sync-release.js";
 
 interface HydrateOptions {
   root?: string;
   currentKey?: string;
+  pointerFile?: string;
   retainReleases?: number;
 }
 
@@ -15,11 +17,12 @@ function parseArgs(argv: string[]): HydrateOptions {
   const options: HydrateOptions = {};
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--root" || argument === "--current-key" || argument === "--retain") {
+    if (argument === "--root" || argument === "--current-key" || argument === "--retain" || argument === "--pointer-file") {
       const value = argv[index + 1];
       if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value`);
       index += 1;
       if (argument === "--root") options.root = value;
+      else if (argument === "--pointer-file") options.pointerFile = value;
       else if (argument === "--current-key") options.currentKey = value;
       else {
         const retain = Number(value);
@@ -29,7 +32,7 @@ function parseArgs(argv: string[]): HydrateOptions {
       continue;
     }
     if (argument === "--help" || argument === "-h") {
-      console.log("Usage: npm run hydrate -- [--root <local-root>] [--current-key <key>] [--retain <count>]");
+      console.log("Usage: npm run hydrate -- [--root <local-root>] [--current-key <key>] [--pointer-file <json>] [--retain <count>]");
       process.exit(0);
     }
     throw new Error(`Unknown argument: ${argument}`);
@@ -43,8 +46,10 @@ export async function hydrateRelease(argv = process.argv.slice(2), environment: 
   const layout = await ensureStorageLayout(options.root ? storageLayoutFromProcess({ ...scopedEnvironment, ASSETS_LOCAL_ROOT: options.root }) : storageLayoutFromProcess(scopedEnvironment));
   const store = createArtifactStoreFromProcess(scopedEnvironment, layout.scratchRoot);
   if (store.kind !== "s3") throw new Error("hydrate requires an S3-compatible object store");
+  const pinnedPointer = options.pointerFile ? parseCurrentPointer(await readFile(path.resolve(options.pointerFile))) : undefined;
   const synced = await syncReleaseFromObjectStore(store, layout.cacheRoot, {
     currentKey: options.currentKey,
+    ...(pinnedPointer ? { pinnedPointer } : {}),
     retainReleases: options.retainReleases ?? 1,
     cleanup: true,
     allowInstalledFallback: false,

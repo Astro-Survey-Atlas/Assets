@@ -19,6 +19,41 @@ import type { ProductRecord } from "../server/products.js";
 import { publicReleaseBundleDigest, type LoadedCatalog } from "../server/catalog.js";
 import { type PublicAssetManifest } from "../server/types.js";
 import type { PublicAssetRecord } from "../server/types.js";
+import type { StateSnapshotJob, StateSnapshotRestore, StateSnapshotSink } from "../server/state-snapshot.js";
+
+class MemoryStateSnapshotSink implements StateSnapshotSink {
+  #generation = 0;
+  #latest: { namespace: string; state: unknown } | undefined;
+
+  async enqueue(namespace: string, state: unknown): Promise<StateSnapshotJob> {
+    this.#latest = { namespace, state };
+    this.#generation += 1;
+    return {
+      namespace,
+      generation: this.#generation,
+      snapshotKey: `state/${namespace}/snapshots/${this.#generation}-${"0".repeat(64)}.json`,
+      snapshotSha256: "0".repeat(64),
+      sizeBytes: 0,
+      uploadId: `memory-${this.#generation}`,
+    };
+  }
+
+  async restore(namespace: string): Promise<StateSnapshotRestore | null> {
+    if (!this.#latest || this.#latest.namespace !== namespace) return null;
+    return {
+      pointer: {
+        schemaVersion: 1,
+        namespace,
+        generation: this.#generation,
+        snapshotKey: "memory",
+        snapshotSha256: "0".repeat(64),
+        sizeBytes: 0,
+        updatedAt: new Date().toISOString(),
+      },
+      state: this.#latest.state,
+    };
+  }
+}
 
 interface TestHarness {
   options: PublicReleasePublisherOptions;
@@ -318,6 +353,26 @@ test("publication plan reports changed surveys and submit rejects stale plans", 
     assert.equal(claimed, run.runId);
     assert.equal(await publisher.claimQueuedRun(), undefined);
     void base;
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("publication runs restore the complete queue state after local loss", async () => {
+  const context = await harness();
+  const base = path.dirname(context.options.contentRoot);
+  const snapshotSink = new MemoryStateSnapshotSink();
+  try {
+    const publisher = new PublicReleasePublisher({ ...context.options, snapshotSink });
+    const plan = await publisher.plan();
+    const run = await publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["m42"] });
+    await rm(path.join(context.options.contentRoot, "publication"), { recursive: true, force: true });
+
+    const restarted = new PublicReleasePublisher({ ...context.options, snapshotSink });
+    const restored = await restarted.list();
+    assert.equal(restored.length, 1);
+    assert.equal(restored[0]?.runId, run.runId);
+    assert.equal(await restarted.claimQueuedRun(), run.runId);
   } finally {
     await rm(base, { recursive: true, force: true });
   }

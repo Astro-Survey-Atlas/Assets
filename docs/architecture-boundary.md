@@ -62,10 +62,10 @@ order 投影负责空间计算，Resource Package v3 负责离线安装，官方
 对象存储；Git 保留 catalog、recipe lock、provenance 摘要和 hash。输入 manifest、
 normalized scan、任务快照和错误继续留在 evidence PVC/object store。已确认的
 authority 是 gitignored `.info` 描述的 MinIO，不是当前 Helm `storage/minio`
-公开桶。P1 公开 hydrate 可用；P2/P3 spool/CAS/restore 缺口仍在；P4 workflow
-尚未按 `.info` 验收。本地生成 release、layer、raw、content 和 probe 副本在
-独立恢复及 SHA-256/size 校验后清理。P5 须把线上消费者切到 `.info` 桶后再退役
-开发桶和旧 PVC。迁移契约见[公共制品存储与迁移](public-artifact-storage.md)。
+公开桶。P0-P5 的盘点、恢复、队列、CAS、workflow 和线上切换均已验收；本地
+生成 release、layer、raw、content 和 probe 副本在独立恢复及 SHA-256/size 校验
+后清理。旧开发桶对象和 Secret 已退役，仍在使用的 PVC 按迁移收据保留。迁移契约
+见[公共制品存储与迁移](public-artifact-storage.md)。
 
 ```text
 Assets 管理页面
@@ -99,9 +99,10 @@ Hydrate and Helm startup require S3 and fail closed in a fresh environment;
 HTTP still serves verified `/data/current` and the configured local content
 root without reading S3 per request.
 
-P2/P3 durability gaps (atomic spool enqueue, CAS pointers, corrupt-local
-restore, honest API sync status) remain. P5 remains pending: retarget online
-consumers to the `.info` bucket, retire the development bucket, and
-decommission old PVC data only after restore and pending-upload drills. This
-work does not add automatic scan-to-MOC/package conversion or change
-Warehouse's execution/index responsibilities or coverage semantics.
+P2/P3 durability work (atomic spool enqueue, CAS pointers, corrupt-local
+restore and honest API sync status) and the P5 online cutover are complete.
+The old development bucket and Secret were removed after hash and consumer
+checks; active release/content/evidence/upload-spool PVCs remain because they
+are still mounted or can contain recoverable state. This work does not add
+automatic scan-to-MOC/package conversion or change Warehouse's execution/index
+responsibilities or coverage semantics.

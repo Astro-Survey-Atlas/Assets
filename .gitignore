@@ -16,16 +16,7 @@ artifacts/public-survey-footprints/csst/*
 !artifacts/public-survey-footprints/csst/csst-w1-image-extent-order8.fits
 # Public release bytes are hydrated from the S3 authority into a disposable
 # local cache. Generated packages and release metadata must not re-enter Git.
-artifacts/public-survey-footprints/collections/
-artifacts/public-survey-footprints/layers/
-artifacts/public-survey-footprints/manual/
-artifacts/public-survey-footprints/normalized/
-artifacts/public-survey-footprints/packages/
-artifacts/public-survey-footprints/raw/
-artifacts/public-survey-footprints/provenance.json
-artifacts/public-survey-footprints/release-history.json
-artifacts/public-survey-footprints/release-manifest.json
-artifacts/public-survey-footprints/sources.json
+artifacts/public-survey-footprints/*
 artifacts/moc-source-probe.json
 artifacts/moc-source-probe-*.json
 .tmp-screens
@@ -49,3 +40,4 @@ artifacts/public-survey-footprints/layers/*/preview-order*.json
 artifacts/public-survey-footprints/layers/*/query-order*.json
 artifacts/public-survey-footprints/layers/*/statistics.json
 ses_f8594a790ffeMr2di6FUm54Gag
+.tmp-build-root*

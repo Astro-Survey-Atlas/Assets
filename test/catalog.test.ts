@@ -18,14 +18,7 @@ test("release catalog verifies every public file and bundle digest", async () =>
   assert.equal(catalog.manifest.statistics.acquired, 107);
   assert.equal(catalog.manifest.statistics.releases, 67);
   assert.equal(catalog.manifest.statistics.products, 159);
-  // Fresh checkouts (CI) tolerate absent gitignored generated files; every
-  // present file is still hash-verified, only the exact-count claim depends
-  // on the complete worktree.
-  if (process.env.ASSETS_TOLERATE_MISSING_RELEASE_FILES === "1") {
-    assert.ok(catalog.files.size > 0 && catalog.files.size <= catalog.manifest.files.length);
-  } else {
-    assert.equal(catalog.files.size, catalog.manifest.files.length);
-  }
+  assert.equal(catalog.files.size, catalog.manifest.files.length);
   assert.ok(catalog.manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)));
 });
 
@@ -124,11 +117,7 @@ test("public release manifest and API projection expose no evidence records", as
   const catalog = await loadCatalog(testDataRoot);
   assert.equal(catalog.manifest.files.filter((entry) => entry.deliveryClass === "evidence").length, 0);
   const projection = publicManifest(catalog);
-  if (process.env.ASSETS_TOLERATE_MISSING_RELEASE_FILES === "1") {
-    assert.ok(projection.files.length > 0 && projection.files.length <= catalog.manifest.files.length);
-  } else {
-    assert.equal(projection.files.length, catalog.manifest.files.length);
-  }
+  assert.equal(projection.files.length, catalog.manifest.files.length);
   assert.equal(projection.statistics.evidenceBytes, 0);
   assert.ok(projection.files.every((entry) => entry.deliveryClass === "runtime"));
   assert.ok(projection.files.every((entry) => !/\/(raw|csst-evidence)\//.test(entry.downloadUrl)));

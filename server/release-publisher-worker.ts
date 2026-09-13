@@ -21,7 +21,7 @@ await stateSnapshots.initialize(STATE_SNAPSHOT_NAMESPACES);
 
 const mocPublicationStore = new MocPublicationStore(contentRoot, undefined, stateSnapshots);
 const dynamicResourcePackages = new DynamicResourcePackageStore(contentRoot, stateSnapshots);
-const products = new ProductStore(stateSnapshots);
+const products = new ProductStore(stateSnapshots, contentRoot);
 
 await mocPublicationStore.initialize();
 await dynamicResourcePackages.initialize();
@@ -48,9 +48,10 @@ for (;;) {
   try {
     const uploads = await uploadSpool.processPending();
     const advanced = await stateSnapshots.reconcileUploaded(uploads.uploadedManifests);
+    const reconciled = await uploadSpool.markReconciled(uploads.uploadedManifests.map((manifest) => manifest.uploadId));
     const cleaned = await uploadSpool.cleanupUploaded();
-    if (uploads.uploaded.length || uploads.retryable.length || uploads.conflicts.length || advanced.length || cleaned) {
-      log(`uploads scanned=${uploads.scanned} uploaded=${uploads.uploaded.length} retryable=${uploads.retryable.length} conflicts=${uploads.conflicts.length} pointers=${advanced.length} cleaned=${cleaned}`);
+    if (uploads.uploaded.length || uploads.retryable.length || uploads.conflicts.length || uploads.quarantined.length || advanced.length || reconciled || cleaned) {
+      log(`uploads scanned=${uploads.scanned} uploaded=${uploads.uploaded.length} retryable=${uploads.retryable.length} conflicts=${uploads.conflicts.length} quarantined=${uploads.quarantined.length} pointers=${advanced.length} reconciled=${reconciled} cleaned=${cleaned}`);
     }
     const runId = await publisher.claimQueuedRun();
     if (runId) {

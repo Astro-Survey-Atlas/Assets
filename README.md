@@ -95,9 +95,9 @@ The [S3 authority implementation plan](docs/s3-authority-implementation-plan.md)
 records production S3 as the sole authority for uploaded business data and
 synced control state, with disposable local caches and separate pending
 uploads. The confirmed authority is the MinIO described by gitignored `.info`,
-not the currently deployed Helm public bucket. P2/P3 durability gaps remain;
-P5 remains for online consumer retargeting, development-bucket retirement and
-old-PVC decommissioning.
+not the currently deployed Helm public bucket. P0-P6 migration and online
+consumer cutover are complete; active PVCs remain under the migration receipt
+until separately retired.
 
 ## Deployment
 

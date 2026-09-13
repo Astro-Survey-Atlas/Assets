@@ -24,6 +24,13 @@ export interface ProductPublicRelease { label: string; kind: string; releasedYea
 export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix" | "regions" | "tile-table" | "native-moc"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: ProductPublicSurvey; publicRelease?: ProductPublicRelease; publicDescription?: string; publicStatus?: ProductPublicStatus; presentation: ProductPresentation }
 export interface ProductRecord { productId: string; draft: ProductContent; published: ProductContent | null; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; contentSha256: string; }
 
+interface PersistedProductDocument {
+  schemaVersion: 1;
+  products: ProductRecord[];
+  /** Full audit events make the control state recoverable without the local NDJSON cache. */
+  history?: unknown[];
+}
+
 export interface MocProductRegistrationInput {
   surveyId: string;
   surveyName: string;
@@ -181,12 +188,14 @@ function validateContent(value: unknown, existing: ProductRecord): ProductConten
 
 export class ProductStore {
   #records = new Map<string, ProductRecord>();
+  #history: unknown[] = [];
   #initialized = false;
-  #contentRoot = configuredContentRoot;
+  #contentRoot: string;
   readonly #snapshotSink: StateSnapshotSink | undefined;
 
-  constructor(snapshotSink?: StateSnapshotSink) {
+  constructor(snapshotSink?: StateSnapshotSink, contentRoot = configuredContentRoot) {
     this.#snapshotSink = snapshotSink;
+    this.#contentRoot = path.resolve(contentRoot);
   }
 
   #contentFile(): string { return path.join(this.#contentRoot, "product-content-v1.json"); }
@@ -195,20 +204,22 @@ export class ProductStore {
   async initialize(root: string, coverageLayers: Array<{ surveyId: string; releaseId: string; product: string; recipe?: { recipeVersion: number; mode: string; steps: Array<Omit<ProductFlowNode, "evidenceRefs">> } }> = []): Promise<void> {
     if (this.#initialized) return;
     const migrationHistory: string[] = [];
-    try { await mkdir(this.#contentRoot, { recursive: true }); }
-    catch { this.#contentRoot = path.join(root, ".assets-content"); await mkdir(this.#contentRoot, { recursive: true }); }
-    let data: { products?: ProductRecord[] } | undefined;
+    await mkdir(this.#contentRoot, { recursive: true });
+    let data: Partial<PersistedProductDocument> | undefined;
     try {
-      data = JSON.parse(await readFile(this.#contentFile(), "utf8")) as { products?: ProductRecord[] };
+      data = JSON.parse(await readFile(this.#contentFile(), "utf8")) as Partial<PersistedProductDocument>;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT" && this.#snapshotSink?.restore) {
+      if (this.#snapshotSink?.restore) {
         const restored = await this.#snapshotSink.restore("products");
         if (restored && restored.state && typeof restored.state === "object" && Array.isArray((restored.state as { products?: unknown }).products)) {
-          data = restored.state as { products: ProductRecord[] };
+          data = restored.state as Partial<PersistedProductDocument>;
           await writeFile(this.#contentFile(), `${JSON.stringify(data, null, 2)}\n`, "utf8");
-        }
+        } else if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      } else if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
       }
     }
+    this.#history = Array.isArray(data?.history) ? data.history : await this.readHistoryCache();
     for (const record of data?.products ?? []) this.#records.set(record.productId, record);
     const catalog = JSON.parse(await readFile(path.join(root, "src", "surveys", "survey-catalog.json"), "utf8")) as { surveys?: Array<{ id: string; releases: Array<{ id: string; products: Array<{ name: string; modality: string; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string }> }> }> };
     const registry = JSON.parse(await readFile(path.join(root, "src", "layers", "layer-registry.json"), "utf8")) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; coverageRole?: ProductContent["coverageRole"]; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; plannedMode?: string; mode?: string; recipePath?: string; status?: string; maxOrder?: number }> };
@@ -267,15 +278,16 @@ export class ProductStore {
       }
       this.#records.set(id, { productId: id, draft, published: null, revision: 1, publishedRevision: null, updatedAt: new Date().toISOString(), publishedAt: null, contentSha256: hashContent(draft) });
     }
+    if (migrationHistory.length) this.#history.push(...migrationHistory.map((entry) => JSON.parse(entry)));
     await this.persist();
     if (migrationHistory.length) await appendFile(this.#historyFile(), `${migrationHistory.join("\n")}\n`);
     this.#initialized = true;
   }
 
   async persist(): Promise<void> {
-    const state = { schemaVersion: 1, products: [...this.#records.values()] };
+    const state: PersistedProductDocument = { schemaVersion: 1, products: [...this.#records.values()], history: this.#history };
     await writeFile(this.#contentFile(), `${JSON.stringify(state, null, 2)}\n`, "utf8");
-    queueStateSnapshot(this.#snapshotSink, "products", state);
+    await queueStateSnapshot(this.#snapshotSink, "products", state);
   }
   list(): ProductRecord[] { return [...this.#records.values()].sort((a, b) => `${a.draft.surveyId}:${a.draft.releaseId}:${a.draft.name}`.localeCompare(`${b.draft.surveyId}:${b.draft.releaseId}:${b.draft.name}`)); }
   get(id: string): ProductRecord { const record = this.#records.get(id); if (!record) throw new AdminHttpError(404, "Product not found"); return record; }
@@ -349,8 +361,10 @@ export class ProductStore {
     const now = new Date().toISOString();
     const record: ProductRecord = { productId: id, draft, published: null, revision: 1, publishedRevision: null, updatedAt: now, publishedAt: null, contentSha256: hashContent(draft) };
     this.#records.set(id, record);
+    const audit = { action: "moc-registration", productId: id, revision: record.revision, at: now, content: draft };
+    this.#history.push(audit);
     await this.persist();
-    await appendFile(this.#historyFile(), `${JSON.stringify({ action: "moc-registration", productId: id, revision: record.revision, at: now, content: draft })}\n`);
+    await appendFile(this.#historyFile(), `${JSON.stringify(audit)}\n`);
     return record;
   }
 
@@ -361,8 +375,10 @@ export class ProductStore {
     record.revision += 1;
     record.updatedAt = new Date().toISOString();
     record.contentSha256 = hashContent(record.draft);
+    const audit = { action: "draft", productId: id, revision: record.revision, at: record.updatedAt, content: record.draft };
+    this.#history.push(audit);
     await this.persist();
-    await appendFile(this.#historyFile(), `${JSON.stringify({ action: "draft", productId: id, revision: record.revision, at: record.updatedAt, content: record.draft })}\n`);
+    await appendFile(this.#historyFile(), `${JSON.stringify(audit)}\n`);
     return record;
   }
   async publish(id: string, expectedRevision?: number): Promise<ProductRecord> {
@@ -373,14 +389,21 @@ export class ProductStore {
     record.publishedAt = new Date().toISOString();
     record.updatedAt = record.publishedAt;
     record.contentSha256 = hashContent(record.draft);
+    const audit = { action: "publish", productId: id, revision: record.revision, at: record.publishedAt, content: record.published };
+    this.#history.push(audit);
     await this.persist();
-    await appendFile(this.#historyFile(), `${JSON.stringify({ action: "publish", productId: id, revision: record.revision, at: record.publishedAt, content: record.published })}\n`);
+    await appendFile(this.#historyFile(), `${JSON.stringify(audit)}\n`);
     return record;
   }
   async history(id: string): Promise<unknown[]> {
+    return this.#history.filter((entry) => Boolean(entry) && typeof entry === "object" && (entry as { productId?: unknown }).productId === id);
+  }
+
+  private async readHistoryCache(): Promise<unknown[]> {
     try {
-      const lines = (await readFile(this.#historyFile(), "utf8")).trim().split("\n").filter(Boolean);
-      return lines.map((line) => JSON.parse(line)).filter((entry) => entry.productId === id);
+      const content = (await readFile(this.#historyFile(), "utf8")).trim();
+      if (!content) return [];
+      return content.split("\n").filter(Boolean).map((line) => JSON.parse(line));
     } catch { return []; }
   }
 }

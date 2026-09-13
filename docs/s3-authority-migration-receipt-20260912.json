@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "completedAt": "2026-09-12T23:27:56+08:00",
+  "authority": {
+    "endpoint": "https://api.minio.72602.space",
+    "bucket": "asa-resource"
+  },
+  "retiredDevelopmentStore": {
+    "bucket": "asa-assets-dev",
+    "secret": "asa-assets-object-store",
+    "objectCount": 10,
+    "bytes": 322924556,
+    "objects": [
+      {
+        "key": "public/current.json",
+        "sizeBytes": 489,
+        "sha256": "1052de4564fdbb4103c34abc23150baabe201aa9e6a194384fb5c9fac4d3e6dd",
+        "authoritySha256": "6ce73eb49c57cdb97852bb6647fb8ea82280620eee635801671ed574256bb827",
+        "authorityEquivalent": "same bundle/archive; publishedAt differed"
+      },
+      {
+        "key": "public/releases/public-survey-footprints-2026-08-20/2e2de27260a3f5c95a18883cca779695e04fd11a3bcf4fd31c3c0372c4a8e0f8/release.tar.gz",
+        "sizeBytes": 28722479,
+        "sha256": "197a21af45b4b6358a72885b9908cdbc3553db0c6baf573780425445e8c9eaad"
+      },
+      {
+        "key": "public/releases/public-survey-footprints-2026-08-20/6ab043e7feec2a8f25eafc82795723cac1b17d5f4631f25d17aa652f808a6878/release.tar.gz",
+        "sizeBytes": 29147018,
+        "sha256": "0a3aae6797c7cd8619bdb710dd7467b8d6cd83d3ba221d1ee853d9ab796a5dd5"
+      },
+      {
+        "key": "public/releases/public-survey-footprints-2026-08-20/ecec57db4856e6c4d477e22adc6bdda40f54c8f317c36686d3c4d8953a185b1d/release.tar.gz",
+        "sizeBytes": 29230362,
+        "sha256": "dbe0b9c2b19086d78c291cc773e3fa2c1fc660cc5b366d962c542193998a5013"
+      },
+      {
+        "key": "public/releases/public-survey-footprints-2026-08-20/faa916b0bda5054dbcbd682211fced56681ebfc4e3b7853d448b794f54652154/release.tar.gz",
+        "sizeBytes": 29230811,
+        "sha256": "599c4b7b736b4b4ccc863157e3c8c49b9919611b60fd213a8a3b6ad1ed6ae003"
+      },
+      {
+        "key": "public/releases/public-survey-footprints-2026-09-09/7bdf8590dbb8d622d46512e91a749a0a7785acf048747a14cec0ef4483bbad11/release.tar.gz",
+        "sizeBytes": 41313331,
+        "sha256": "70a3d84fbc0bce1f660b0e97ed7e4df55b3d72ad403ad3b6659d806671b7bacb"
+      },
+      {
+        "key": "public/releases/public-survey-footprints-2026-09-09/847ea499edebfc8d74257098195d82597f951356c713ef1761ba4db191a465f9/release.tar.gz",
+        "sizeBytes": 41337614,
+        "sha256": "9ccec950d1ec856d514183609d2f7b70f992846d0faf0680ac7e99c2255ac01a"
+      },
+      {
+        "key": "public/releases/public-survey-footprints-2026-09-09/8eb98e4ab92ee2d53c07f4c516458af5f9749f9a6db51c7c22ce650c48a5abaa/release.tar.gz",
+        "sizeBytes": 41314594,
+        "sha256": "3a559671c79ed34f5693c88094188bc34800e324418d77c034427403cd229e60"
+      },
+      {
+        "key": "public/releases/public-survey-footprints-2026-09-09/adace67a9c7bcbae0044ced06352be7263b91dade2cb0bc8a4bc1415539ee407/release.tar.gz",
+        "sizeBytes": 41314426,
+        "sha256": "20feac031e2af4954ce41a9b9a0902ffd4512eea785cdab6574f76a69ca6b135"
+      },
+      {
+        "key": "public/releases/public-survey-footprints-2026-09-09/b98fcf1fed4768c52f72ad07ac85e8f57719891b95a35a2748b7745b111ed05d/release.tar.gz",
+        "sizeBytes": 41313432,
+        "sha256": "89336adc7c22b41bfe84b3dd5d2dd049ee6f0497360c0cf4c2f3caaadcc91884"
+      }
+    ]
+  },
+  "verification": {
+    "workloadScan": "Assets site and release-publisher are the only workloads with object-store settings; both use asa-resource and asa-assets-authority-object-store.",
+    "authorityObjectCheck": "All nine immutable release archives matched authority by size and SHA-256 metadata.",
+    "pvcPolicy": "Release, content, evidence and upload-spool PVCs retained; each is still mounted or may contain pending/recoverable state."
+  },
+  "actions": {
+    "developmentObjectsDeleted": true,
+    "developmentSecretDeleted": true,
+    "authorityObjectsDeleted": false
+  }
+}

@@ -23,7 +23,7 @@ import { PublicReleasePublisher, PublicationConflictError, type ReleaseHistoryDo
 import { isDeniedPackageId, isDeniedSurvey } from "./publication-policy.js";
 import { ContentArchiveError } from "./content-archive.js";
 import { buildPublicProductEvidence } from "./public-product-evidence.js";
-import { StateSnapshotCoordinator, STATE_SNAPSHOT_NAMESPACES, type StateSnapshotSink } from "./state-snapshot.js";
+import { StateSnapshotCoordinator, STATE_SNAPSHOT_NAMESPACES, type StateSnapshotSink, type StateSnapshotSyncStatus } from "./state-snapshot.js";
 import { UploadSpool } from "./upload-spool.js";
 import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductVerificationStatus, PublicSurveyModality } from "./types.js";
 
@@ -58,7 +58,23 @@ if (objectStoreRequired || process.env.ASSETS_OBJECT_STORE_ENDPOINT?.trim() || p
   await stateSnapshots.initialize(STATE_SNAPSHOT_NAMESPACES);
   stateSnapshotSink = stateSnapshots;
 }
-const editorial = new SurveyEditorialStore(contentRoot, releaseRoot, stateSnapshotSink);
+
+/**
+ * Mutating admin APIs report whether the control document is only local,
+ * admitted to the durable upload spool, or reflected by the S3 pointer. A
+ * status read is best-effort so a successful local edit is never hidden by a
+ * transient status probe failure.
+ */
+async function apiSyncStatus(namespace: string): Promise<StateSnapshotSyncStatus> {
+  if (!stateSnapshotSink?.syncStatus) return { namespace, status: "local" };
+  try {
+    return await stateSnapshotSink.syncStatus(namespace);
+  } catch (error) {
+    return { namespace, status: "failed", error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+const editorial = new SurveyEditorialStore(contentRoot, stateSnapshotSink);
 const mocBuildStore = new MocBuildStore(contentRoot, stateSnapshotSink);
 await mocBuildStore.initialize();
 const mocPublicationStore = new MocPublicationStore(contentRoot, evidenceRoot, stateSnapshotSink);
@@ -270,7 +286,7 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
 
 await reloadRuntimeCoverage();
 const admin = new AssetsAdmin();
-const products = new ProductStore(stateSnapshotSink);
+const products = new ProductStore(stateSnapshotSink, contentRoot);
 await products.initialize(releaseRoot, coverageCatalog.layers);
 const publisher = new PublicReleasePublisher({
   contentRoot,
@@ -1569,18 +1585,18 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       return json(response, 200, { request: await admin.getMocDiscoveryRequest(decodeURIComponent(mocMatch[1])) });
     }
     if (pathname === "/api/v1/admin/moc-builds" && request.method === "GET") {
-      return json(response, 200, { requests: mocBuildStore.list().map(adminMocBuildView) });
+      return json(response, 200, { requests: mocBuildStore.list().map(adminMocBuildView), syncStatus: await apiSyncStatus("moc-build") });
     }
     if (pathname === "/api/v1/admin/moc-builds" && request.method === "POST") {
-      return json(response, 201, { request: await createMocBuild(await requestJsonBody(request)) });
+      return json(response, 201, { request: await createMocBuild(await requestJsonBody(request)), syncStatus: await apiSyncStatus("moc-build") });
     }
     const mocBuildRetryMatch = /^\/api\/v1\/admin\/moc-builds\/([^/]+)\/retry$/.exec(pathname);
     if (mocBuildRetryMatch?.[1] && request.method === "POST") {
-      return json(response, 201, { request: await retryMocBuild(decodeURIComponent(mocBuildRetryMatch[1])) });
+      return json(response, 201, { request: await retryMocBuild(decodeURIComponent(mocBuildRetryMatch[1])), syncStatus: await apiSyncStatus("moc-build") });
     }
     const mocBuildRegisterMatch = /^\/api\/v1\/admin\/moc-builds\/([^/]+)\/register-product$/.exec(pathname);
     if (mocBuildRegisterMatch?.[1] && request.method === "POST") {
-      return json(response, 201, await registerMocBuildProduct(decodeURIComponent(mocBuildRegisterMatch[1]), await requestJsonBody(request)));
+      return json(response, 201, { ...(await registerMocBuildProduct(decodeURIComponent(mocBuildRegisterMatch[1]), await requestJsonBody(request))), syncStatus: await apiSyncStatus("products") });
     }
     const mocBuildMatch = /^\/api\/v1\/admin\/moc-builds\/([^/]+)$/.exec(pathname);
     if (mocBuildMatch?.[1] && request.method === "GET") {
@@ -1606,41 +1622,41 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     if (pathname === "/api/v1/admin/products" && request.method === "GET") {
       const records = products.list();
       const query = requestQuery(request);
-      if (query.get("view") === "surveys") return json(response, 200, { surveys: adminProductSurveys(records, adminSurveyIndex()) });
+      if (query.get("view") === "surveys") return json(response, 200, { surveys: adminProductSurveys(records, adminSurveyIndex()), syncStatus: await apiSyncStatus("products") });
       const surveyId = query.get("surveyId")?.trim();
       const filtered = surveyId ? records.filter((record) => record.draft.surveyId === surveyId) : records;
-      return json(response, 200, { products: filtered.map(adminProductView) });
+      return json(response, 200, { products: filtered.map(adminProductView), syncStatus: await apiSyncStatus("products") });
     }
     const editorialMatch = /^\/api\/v1\/admin\/catalog\/surveys\/([^/]+)\/editorial(?:\/(draft|publish))?$/.exec(pathname);
     if (editorialMatch?.[1]) {
       const surveyId = decodeAdminPathSegment(editorialMatch[1]);
       const action = editorialMatch[2];
-      if (!action && request.method === "GET") return json(response, 200, { editorial: editorialApiRecord(editorial.get(surveyId)) });
+      if (!action && request.method === "GET") return json(response, 200, { editorial: editorialApiRecord(editorial.get(surveyId)), syncStatus: await apiSyncStatus("editorial") });
       if (action === "draft" && request.method === "PUT") {
         const body = await requestJsonBody(request);
         const envelope = "content" in body || "draft" in body;
         if (envelope && Object.keys(body).some((key) => !["content", "draft", "revision"].includes(key))) throw new AdminHttpError(400, "editorial draft request contains unsupported field");
         if ("content" in body && "draft" in body) throw new AdminHttpError(400, "editorial draft request cannot contain both content and draft");
         const content = body.content ?? body.draft ?? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "revision"));
-        return json(response, 200, { editorial: editorialApiRecord(await editorial.updateDraft(surveyId, content, editorialExpectedRevision(request, body))) });
+        return json(response, 200, { editorial: editorialApiRecord(await editorial.updateDraft(surveyId, content, editorialExpectedRevision(request, body))), syncStatus: await apiSyncStatus("editorial") });
       }
       if (action === "publish" && request.method === "POST") {
         const body = await requestJsonBody(request);
         if (Object.keys(body).some((key) => key !== "revision")) throw new AdminHttpError(400, "editorial publish request contains unsupported field");
         const record = await editorial.publish(surveyId, editorialExpectedRevision(request, body));
-        return json(response, 200, { editorial: editorialApiRecord(record) });
+        return json(response, 200, { editorial: editorialApiRecord(record), syncStatus: await apiSyncStatus("editorial") });
       }
     }
     const productMatch = /^\/api\/v1\/admin\/products\/([^/]+)$/.exec(pathname);
     const draftMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/draft$/.exec(pathname);
     if (productMatch?.[1] && request.method === "GET") {
       const record = products.get(decodeAdminPathSegment(productMatch[1]));
-      return json(response, 200, { product: adminProductView(record) });
+      return json(response, 200, { product: adminProductView(record), syncStatus: await apiSyncStatus("products") });
     }
     if ((productMatch?.[1] || draftMatch?.[1]) && request.method === "PUT") {
       const body = await requestJsonBody(request);
       const productId = productMatch?.[1] ?? draftMatch?.[1]!;
-      return json(response, 200, { product: await products.updateDraft(decodeAdminPathSegment(productId), body.content ?? body, expectedRevision(request, body)) });
+      return json(response, 200, { product: await products.updateDraft(decodeAdminPathSegment(productId), body.content ?? body, expectedRevision(request, body)), syncStatus: await apiSyncStatus("products") });
     }
     const publishMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/publish$/.exec(pathname);
     if (publishMatch?.[1] && request.method === "POST") {
@@ -1665,7 +1681,16 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       runtimeSurveyIndex = applyPublishedProductMetadata(runtimeSurveyIndex);
       await editorial.sync(runtimeSurveyIndex.surveys);
       const publishedBuild = mocBuildStore.list().find((build) => build.productId === productId);
-      return json(response, 200, { product, lifecycle: adminProductLifecycle(product, publishedBuild) });
+      return json(response, 200, {
+        product,
+        lifecycle: adminProductLifecycle(product, publishedBuild),
+        syncStatus: await apiSyncStatus("products"),
+        syncStatuses: {
+          products: await apiSyncStatus("products"),
+          "moc-publications": await apiSyncStatus("moc-publications"),
+          editorial: await apiSyncStatus("editorial"),
+        },
+      });
     }
     const historyMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/history$/.exec(pathname);
     if (historyMatch?.[1] && request.method === "GET") return json(response, 200, { history: await products.history(decodeAdminPathSegment(historyMatch[1])) });
@@ -1673,7 +1698,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       return json(response, 200, { plan: await publisher.plan() });
     }
     if (pathname === "/api/v1/admin/publications" && request.method === "GET") {
-      return json(response, 200, { runs: await publisher.list() });
+      return json(response, 200, { runs: await publisher.list(), syncStatus: await apiSyncStatus("publication-runs") });
     }
     if (pathname === "/api/v1/admin/publications" && request.method === "POST") {
       const body = await requestJsonBody(request);
@@ -1683,13 +1708,13 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         expectedBaselineSha256: typeof body.expectedBaselineSha256 === "string" ? body.expectedBaselineSha256 : "",
         surveyIds,
       }, adminFromRequest(request));
-      return json(response, 202, { run });
+      return json(response, 202, { run, syncStatus: await apiSyncStatus("publication-runs") });
     }
     const publicationMatch = /^\/api\/v1\/admin\/publications\/([^/]+)$/.exec(pathname);
     if (publicationMatch?.[1] && request.method === "GET") {
       const run = await publisher.get(decodeAdminPathSegment(publicationMatch[1]));
       if (!run) return json(response, 404, { error: "Publication run not found" });
-      return json(response, 200, { run });
+      return json(response, 200, { run, syncStatus: await apiSyncStatus("publication-runs") });
     }
     return json(response, 404, { error: "Admin endpoint not found" });
   } catch (error) {

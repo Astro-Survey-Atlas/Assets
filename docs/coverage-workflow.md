@@ -3,7 +3,7 @@
 Every coverage recipe must retain provenance and its coordinate/order contract.
 Warehouse scanning and Assets MOC/package construction are separate workflows;
 a completed scan does not automatically generate a MOC or Resource Package.
-Storage migration follows the [S3 authority implementation plan](s3-authority-implementation-plan.md). Production S3 is the authority for uploaded business data; P2/P3 durability gaps and P5 online cutover remain.
+Storage migration follows the [S3 authority implementation plan](s3-authority-implementation-plan.md). Production S3 is the authority for uploaded business data; P0-P6 migration work is complete and pending-upload data remains the explicit exception.
 
 ```mermaid
 flowchart LR

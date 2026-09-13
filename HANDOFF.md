@@ -1,25 +1,67 @@
 # Assets Session Handoff
 
-Updated: 2026-09-12 (S3 authority location confirmed; P2/P3 gaps remain)
+Updated: 2026-09-13 (P0-P6 authority migration and final verification closure)
 
 ## Active implementation handoff
 
 Read [S3 authority implementation plan](docs/s3-authority-implementation-plan.md)
-before changing storage behavior. The confirmed production authority is the
-MinIO described by gitignored `.info`, not the currently deployed Helm
-`storage/minio` public bucket. Do not print `.info` credentials. P1 public
-hydrate works against the Helm public bucket. P2/P3 spool, CAS pointer,
-corrupt-local restore and API sync-status gaps remain; P4 workflow still uses
-missing-file tolerance and does not restore from `.info`. P5 online cutover
-must retarget consumers to the `.info` bucket after those fixes. Do not add
-automatic scan-to-MOC/package conversion or change DR membership/coverage
-precision as part of storage migration.
+before changing storage. That plan’s **完成 / 未完成** table is the stage
+scorecard. P0-P6 are complete for this migration; preserve the receipts and
+rerun the verification gates before a future release.
 
-Old resource-package migration plan/handoff documents were removed; use the new
-plan for implementation and Git history for former migration records. Historical
-deployment values and counts below must be rechecked in P0. Manifest-listed
-documentation changed in this round: rebuild and validate the release manifest
-before starting a server against this worktree or publishing it.
+Confirmed production authority is the MinIO in gitignored `.info`, not the
+deployed Helm `storage/minio` public bucket. Do not print `.info` credentials.
+The live public pointer is `public/current.json` for bundle
+`public-survey-footprints-2026-09-09` with manifest SHA
+`adace67a9c7bcbae0044ced06352be7263b91dade2cb0bc8a4bc1415539ee407`.
+Physical evidence pointers: `authority/evidence/current.json` snapshot
+`b5be3ff04a8baf6b7516ef5a45800238730a37cc740d27e16a308af418f49ff3` (468 /
+104,141,186), `authority-content/content/current.json`
+`7abda54ff00eb14d4a9562d7bd4b99663c90d80b24af3d36862b2c67711a4519` (4 /
+854,957), `authority-probe/evidence/current.json`
+`f532707a285fc407926830c255d4bd36242f70179ffe5d281846604182890526` (1 /
+4,873), and `repo-evidence/evidence/current.json`
+`9ffec99fbb30995f5bb7af6878e878c1050f02acebd0478700457e9df3155b69` (250 /
+239,337,574). The current content pointer is `content/current.json` snapshot
+`7e27395888bda1902553761dd13230bfed7e506a71588d743a676258833baeee` (19 /
+975,170). Read-only restores of the authority snapshots succeeded under
+`/tmp/opencode/authority-test-info`, `authority-content-test-info`,
+`authority-probe-test-info`. Helm public hydrate restored
+`public-survey-footprints-2026-09-09` manifest
+`adace67a9c7bcbae0044ced06352be7263b91dade2cb0bc8a4bc1415539ee407` under
+`/tmp/opencode/assets-hydrate-3/cache/current`. Authority writes were limited
+to the documented content/state migration and live consumer cutover; authority
+history objects were not deleted.
+
+Checkout keepers only: three CSST conformance files, Core 1.1.0 wheel,
+`evidence-index.json`. Generated release/layer/raw/package/content/probe data
+was deleted after those restores.
+
+Completed in this handoff: P2 atomic/idempotent upload spool, P3 CAS state
+snapshots and restore, P4 pinned hydrate-first workflow, P5 authority cutover
+and old development-store cleanup, and P6 API `syncStatus` plus explicit
+offline fallback. Do not add scan-to-MOC/package conversion or change
+DR/coverage precision.
+
+Live deployment: Helm revision `135`, image
+`0.1.0-20260913-002759`, digest
+`sha256:5cecb399c7cf6a39f497ca2083a841428024b2da2967dc3a030b49aa50822da3`;
+site and release-publisher use `asa-resource` via
+`asa-assets-authority-object-store`. Products authority pointer is generation
+8 (`322cd73ca79d46cf9612356d78494262e40356ef756318054f63ba90802e1e28`);
+resource-packages is generation 4
+(`1a444a0384659bbdf175a9b24f723a0180724fc467e38bcef7aad5ff4a2bbda4`).
+Migration deletion details are in
+`docs/s3-authority-migration-receipt-20260912.json`.
+
+Final verification: the hydrated release-root Node suite passed 158 tests
+with 2 intentional skips; Core wheel, server/site TypeScript, Vite, Helm
+lint/templates and `git diff --check` also passed. The live public and
+authority pointers were re-read after verification and matched the hashes
+above.
+
+Historical sections below are not current operating instructions. Recheck
+live values in P0 instead of copying old revision/hash numbers.
 
 ## Historical session records (not current operating instructions)
 
@@ -368,12 +410,10 @@ Read `AGENTS.md`, `docs/coverage-workflow.md`, and
 MOC, evidence, overlap, or reverse-lookup behavior. The Warehouse handoff is
 `/home/aaron/Repo/Astro-Survey-Atlas-Warehouse/HANDOFF.md`.
 
-The working tree is intentionally dirty. Preserve all current changes shown by
-`git status --short`, including `.assets-content` product records, `.codex`
-configuration, the Warehouse endpoint integration, evidence and admin tests,
-Helm/deployment values, MOC discovery code and public MOC research notes.
-These are working changes, not disposable generated output; inspect overlapping
-diffs before editing them.
+HEAD is `022a791` on `main`; the current worktree contains the post-cutover
+code, tests and documentation edits and is intentionally uncommitted. Do not
+restore generated packages/layers into Git. Inspect overlapping diffs before
+editing storage files.
 
 ## Fixed Product Decisions
 
@@ -767,27 +807,16 @@ three-way overlap at O8 or after Gaia's O4 visual coarsening.
 
 ## Next Session
 
-Work in this order:
+Storage migration is complete. Before a future release, read the plan matrix,
+rerun the hydrate/build/test/Helm gates in a clean worktree, and verify the
+authority pointer pair from `.info` without printing credentials. Keep the
+release/content/evidence/upload-spool PVCs until a separate evidence-backed
+retirement decision; the old development bucket and Secret were already
+removed (see the migration receipt).
 
-1. Preserve all dirty files in all repositories and keep the static-plus-
-   Warehouse merge, pagination, admin reload/status behavior, object-store
-   publication and overlap viewport forwarding regression-tested.
-2. If an object-backed release is desired, run a staged dual-read validation
-   against a non-production bucket before changing the active PVC read path.
-3. Coordinate with Warehouse on the terminal CSST retry: inspect its evidence
-   and layer state, then submit a new bounded retry only after choosing the
-   scanner plan. Do not treat the current `UPDATING` layer as public coverage.
-4. Once a successful CSST layer is genuinely `ACTIVE`, call
-   `POST /api/v1/admin/catalog/reload` with the admin token and inspect
-   `GET /api/v1/admin/catalog/status`; the status must show the current load
-   mode, timestamp, counts and Warehouse connectivity.
-5. The long Warehouse task is no longer active. The `mocdiscovery` Operator
-   rollout and evidence/status path are verified; retain the completed Gaia,
-   SkyMapper, KiDS, VISTA VIKING, DECaLS, and JWST discovery evidence while
-   Assets continues to submit intent-only requests.
-6. Rerun direct catalog, overlap, details and reverse-lookup smokes against
-   bounded CSST, DESI and Euclid layers after future Warehouse image or
-   mapping changes. Keep failed ScanRequests and evidence for diagnosis.
+Warehouse items remain but are not this session’s storage path: do not treat
+the terminal CSST `UPDATING` layer as public coverage; keep failed
+ScanRequests as evidence.
 
 ## Warehouse MOC Discovery Rollout
 

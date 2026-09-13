@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -69,6 +69,29 @@ test("state snapshots upload asynchronously and restore from the remote pointer"
   }
 });
 
+test("state sync status distinguishes queued snapshots from an acknowledged pointer", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "state-snapshot-status-"));
+  try {
+    const store = new LocalS3Adapter(new FilesystemArtifactStore(path.join(base, "remote")));
+    const { coordinator, spool } = await makeCoordinator(base, store);
+    await coordinator.initialize(["products"]);
+    await coordinator.enqueue("products", { revision: 1 });
+    const queued = await coordinator.syncStatus("products");
+    assert.equal(queued.status, "pending");
+    assert.equal(queued.generation, 1);
+    assert.ok(queued.uploadId);
+
+    const uploads = await spool.processPending();
+    await coordinator.reconcileUploaded(uploads.uploadedManifests);
+    const synced = await coordinator.syncStatus("products");
+    assert.equal(synced.status, "synced");
+    assert.equal(synced.generation, 1);
+    assert.equal(synced.snapshotSha256, uploads.uploadedManifests[0]?.sha256);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
 test("state pointer never regresses when uploaded snapshots arrive out of order", async () => {
   const base = await mkdtemp(path.join(os.tmpdir(), "state-snapshot-order-"));
   try {
@@ -111,6 +134,23 @@ test("same-namespace snapshot enqueue is serialized into distinct generations", 
   }
 });
 
+test("separate coordinators sharing a spool root allocate distinct generations", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "state-snapshot-cross-process-"));
+  try {
+    const store = new LocalS3Adapter(new FilesystemArtifactStore(path.join(base, "remote")));
+    const first = await makeCoordinator(base, store);
+    const second = await makeCoordinator(base, store);
+    await Promise.all([first.coordinator.initialize(["products"]), second.coordinator.initialize(["products"]) ]);
+    const jobs = await Promise.all([
+      first.coordinator.enqueue("products", { writer: 1 }),
+      second.coordinator.enqueue("products", { writer: 2 }),
+    ]);
+    assert.deepEqual(jobs.map((job) => job.generation).sort((left, right) => left - right), [1, 2]);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
 test("state files use content-addressed keys and restore only verified bytes", async () => {
   const base = await mkdtemp(path.join(os.tmpdir(), "state-file-"));
   try {
@@ -138,6 +178,13 @@ test("state files use content-addressed keys and restore only verified bytes", a
       /checksum|mismatch/i,
     );
     await assert.rejects(() => stat(badDestination), { code: "ENOENT" });
+
+    const corruptedDestination = path.join(base, "corrupted", "package.zip");
+    await mkdir(path.dirname(corruptedDestination), { recursive: true });
+    await writeFile(corruptedDestination, "stale local bytes\n");
+    const repaired = await coordinator.restoreFile({ objectKey: job.objectKey, destinationPath: corruptedDestination, sha256: digest, sizeBytes: bytes.length });
+    assert.deepEqual(repaired, { objectKey: job.objectKey, sha256: digest, sizeBytes: bytes.length });
+    assert.deepEqual(await readFile(corruptedDestination), bytes);
   } finally {
     await rm(base, { recursive: true, force: true });
   }

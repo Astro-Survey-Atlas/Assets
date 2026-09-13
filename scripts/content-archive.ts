@@ -2,7 +2,7 @@ import { FilesystemArtifactStore, createArtifactStoreFromProcess } from "../serv
 import { ContentArchiveSync, namespaceRootFromProcess, type ContentArchiveNamespace } from "../server/content-archive.js";
 
 function usage(): never {
-  console.error("Usage: content-archive.ts <sync|restore|status|diff> <content|evidence> [--root <dir>] [--local <dir>] [--overwrite] [--include <regex>] [--all]");
+  console.error("Usage: content-archive.ts <sync|restore|status|diff> <content|evidence> [--root <dir>] [--local <dir>] [--overwrite] [--snapshot <sha256>] [--include <regex>] [--all]");
   process.exit(2);
 }
 
@@ -23,6 +23,7 @@ function hasFlag(name: string): boolean {
 const rootOverride = flagValue("--root");
 const localOverride = flagValue("--local");
 const includePattern = flagValue("--include");
+const snapshot = flagValue("--snapshot");
 const store = localOverride
   ? new FilesystemArtifactStore(localOverride)
   : createArtifactStoreFromProcess(process.env, `/tmp/opencode/content-archive-${namespace}`);
@@ -43,7 +44,7 @@ if (command === "sync") {
   const result = await archive.snapshot();
   console.log(`${result.skipped ? "unchanged" : "published"} ${namespace} snapshot ${result.snapshot}: ${result.files} files, ${result.bytes} bytes, uploaded ${result.uploadedObjects}, unchanged ${result.unchangedObjects}`);
 } else if (command === "restore") {
-  const result = await archive.restore({ overwrite: hasFlag("--overwrite") });
+  const result = await archive.restore({ overwrite: hasFlag("--overwrite"), ...(snapshot ? { snapshot } : {}) });
   console.log(`restored ${namespace} snapshot ${result.snapshot}: ${result.restored} files written, ${result.skippedIdentical} identical, ${result.bytes} bytes`);
 } else if (command === "status") {
   const pointer = await archive.readPointer();

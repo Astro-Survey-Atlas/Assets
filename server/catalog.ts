@@ -38,10 +38,6 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
   const manifestPath = path.join(normalizedRoot, "artifacts", "public-survey-footprints", "release-manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as PublicAssetManifest;
   if (manifest.schemaVersion !== 1 || !manifest.bundle?.sha256 || !Array.isArray(manifest.files)) throw new Error("Unsupported public asset release manifest");
-  // CI/fresh-checkout mode: gitignored generated release files (layers, raw
-  // snapshots) may be absent. Tolerated records are skipped instead of failing
-  // startup; the public projection then only lists files that exist.
-  const tolerateMissing = process.env.ASSETS_TOLERATE_MISSING_RELEASE_FILES === "1";
   const files = new Map<string, { record: PublicAssetRecord; absolutePath: string }>();
   for (const record of manifest.files) {
     if (!record.id || files.has(record.id) || !/^[a-z0-9][a-z0-9-]*$/.test(record.id)) throw new Error(`Invalid or duplicate public asset ID: ${record.id}`);
@@ -55,10 +51,6 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
       try {
         details = await stat(absolutePath);
       } catch (error) {
-        if (tolerateMissing && (error as NodeJS.ErrnoException).code === "ENOENT") {
-          console.warn(`[catalog] skipping absent release file (ASSETS_TOLERATE_MISSING_RELEASE_FILES=1): ${record.path}`);
-          continue;
-        }
         throw error;
       }
       if (!details.isFile()) throw new Error(`Public asset is not a regular file: ${record.id}`);

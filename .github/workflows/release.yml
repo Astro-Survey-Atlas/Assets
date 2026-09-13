@@ -66,14 +66,19 @@ jobs:
           ASSETS_OBJECT_STORE_BUCKET: ${{ secrets.ASSETS_OBJECT_STORE_BUCKET }}
           ASSETS_OBJECT_STORE_ACCESS_KEY_ID: ${{ secrets.ASSETS_OBJECT_STORE_ACCESS_KEY_ID }}
           ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY: ${{ secrets.ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY }}
+          ASSETS_OBJECT_STORE_PREFIX: ""
+          ASSETS_PUBLIC_OBJECT_STORE_CURRENT_KEY: public/current.json
+          ASSETS_AUTHORITY_EVIDENCE_CURRENT_KEY: authority/evidence/current.json
           ASSETS_OBJECT_STORE_CURRENT_KEY: public/current.json
           ASSETS_OBJECT_STORE_FORCE_PATH_STYLE: "true"
           ASSETS_LOCAL_ROOT: ${{ runner.temp }}/assets-hydrate
         run: |
-          npm run hydrate -- --root "$ASSETS_LOCAL_ROOT" --retain 1
+          npm run storage:pin -- "$RUNNER_TEMP/storage-snapshot-lock"
+          npm run hydrate -- --root "$ASSETS_LOCAL_ROOT" --pointer-file "$RUNNER_TEMP/storage-snapshot-lock/public-current.json" --retain 1
           echo "ASSET_WORKTREE_ROOT=$ASSETS_LOCAL_ROOT/cache/current" >> "$GITHUB_ENV"
           echo "ASSET_TEST_DATA_ROOT=$ASSETS_LOCAL_ROOT/cache/current" >> "$GITHUB_ENV"
-          echo "ASSET_TEST_ARTIFACT_ROOT=$RUNNER_TEMP/authority-test/artifacts/public-survey-footprints" >> "$GITHUB_ENV"
+          echo "AUTHORITY_WORKTREE_ROOT=$RUNNER_TEMP/authority-worktree" >> "$GITHUB_ENV"
+          echo "ASSET_TEST_ARTIFACT_ROOT=$RUNNER_TEMP/authority-worktree/artifacts/public-survey-footprints" >> "$GITHUB_ENV"
           echo "ASSET_RUNTIME_HYDRATE=1" >> "$GITHUB_ENV"
 
       - name: Restore private artifact authority for validation
@@ -83,20 +88,23 @@ jobs:
           ASSETS_OBJECT_STORE_ACCESS_KEY_ID: ${{ secrets.ASSETS_OBJECT_STORE_ACCESS_KEY_ID }}
           ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY: ${{ secrets.ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY }}
           ASSETS_OBJECT_STORE_PREFIX: authority
-          ASSETS_OBJECT_STORE_CURRENT_KEY: evidence/current.json
           ASSETS_OBJECT_STORE_FORCE_PATH_STYLE: "true"
-          ASSETS_EVIDENCE_ROOT: ${{ runner.temp }}/authority-test/artifacts/public-survey-footprints
+          ASSETS_EVIDENCE_ROOT: ${{ runner.temp }}/authority-worktree/artifacts/public-survey-footprints
         run: |
+          mkdir -p "$AUTHORITY_WORKTREE_ROOT"
+          cp -a "$GITHUB_WORKSPACE/src" "$AUTHORITY_WORKTREE_ROOT/src"
           mkdir -p "$ASSETS_EVIDENCE_ROOT"
+          AUTHORITY_SNAPSHOT="$(node -e 'const fs=require("node:fs"); console.log(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).authorityEvidence.snapshot)' "$RUNNER_TEMP/storage-snapshot-lock/lock.json")"
           node --import tsx scripts/content-archive.ts restore evidence \
-            --root "$ASSETS_EVIDENCE_ROOT" --overwrite
+            --root "$ASSETS_EVIDENCE_ROOT" --snapshot "$AUTHORITY_SNAPSHOT" --overwrite
+
+      - name: Validate hydrated authority evidence
+        env:
+          ASSET_WORKTREE_ROOT: ${{ runner.temp }}/authority-worktree
+        run: npm run artifacts:validate
 
       - name: Test
         run: npm run test:node
-        env:
-          # Hydrated release files are the test data root; this remains useful
-          # for any optional files absent from the public release archive.
-          ASSETS_TOLERATE_MISSING_RELEASE_FILES: "1"
 
       - name: Verify pinned MOC Core wheel
         run: npm run test:core

@@ -238,6 +238,13 @@ GET /api/v1/products
 
 草稿和版本控制只在管理员认证边界内：`GET /api/v1/admin/products`、`GET /api/v1/admin/products?view=surveys`、`GET /api/v1/admin/products?surveyId=<surveyId>`、`GET /api/v1/admin/products/{productId}`、`PUT /api/v1/admin/products/{productId}/draft`、`POST /api/v1/admin/products/{productId}/publish` 和 `GET /api/v1/admin/products/{productId}/history`。产品 ID 固定由 `surveyId + releaseId + product name` 生成；流程图节点的实现引用由 recipe 固定，管理员只能修改解释文本和证据链接。产品记录包含已发布 coverage layer 的可用 HEALPix order。
 
+管理员写入接口同时返回 `syncStatus`，用于区分本地保存和生产 S3
+权威状态：`status` 为 `local`（未配置持久化）、`pending`（已进入待上传队列）、
+`synced`（权威指针已读回验证）或 `failed`（上传/指针冲突需要重试）。字段还会
+带上可用的 `generation`、快照 SHA-256、`uploadId` 和错误摘要；发布产品这类一次
+触及多个命名空间的操作另带 `syncStatuses`。`PUBLISHED`/`ACTIVE` 仍只表示公开
+发布生命周期，不代表控制状态已经同步。
+
 所有 admin product 请求都必须带 `Authorization: Bearer <admin-token>`。错误语义固定如下：
 
 | 条件 | HTTP | JSON |

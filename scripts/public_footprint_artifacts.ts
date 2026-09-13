@@ -3,7 +3,7 @@ import { lstat, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 const root = path.resolve(process.env.ASSET_WORKTREE_ROOT ?? process.cwd());
-const artifactRoot = path.join(root, "artifacts", "public-survey-footprints");
+const artifactRoot = path.resolve(process.env.ASSET_ARTIFACT_ROOT ?? path.join(root, "artifacts", "public-survey-footprints"));
 const SHA256 = /^[a-f0-9]{64}$/;
 const STATUSES = new Set(["acquired", "overview_only", "awaiting_geometry", "not_applicable"]);
 
@@ -53,7 +53,12 @@ function resolveArtifact(relativePath: string): string {
   return absolute;
 }
 
-async function verifyRecord(record: FileRecord, label: string, base = artifactRoot, containmentRoot: string = root): Promise<void> {
+function defaultContainmentRoot(base: string): string {
+  const resolved = path.resolve(base);
+  return resolved === root || resolved.startsWith(`${root}${path.sep}`) ? root : artifactRoot;
+}
+
+async function verifyRecord(record: FileRecord, label: string, base = artifactRoot, containmentRoot = defaultContainmentRoot(base)): Promise<void> {
   if (!record?.path || !SHA256.test(record.sha256)) throw new Error(`Invalid ${label} file record`);
   const filePath = path.resolve(base, record.path);
   const relative = path.relative(containmentRoot, filePath);
@@ -89,7 +94,7 @@ async function archivedRecord(relativePath: string): Promise<EvidenceObjectRecor
   }
 }
 
-async function verifyRecordAllowArchived(record: FileRecord, label: string, base = artifactRoot, containmentRoot: string = root): Promise<void> {
+async function verifyRecordAllowArchived(record: FileRecord, label: string, base = artifactRoot, containmentRoot = defaultContainmentRoot(base)): Promise<void> {
   try {
     await verifyRecord(record, label, base, containmentRoot);
   } catch (error) {
@@ -203,7 +208,7 @@ export async function validate(): Promise<PublicFootprintStatistics> {
         { path: stagedArchive ? path.basename(entry.archiveUrl) : entry.archiveUrl, sizeBytes: entry.sizeBytes, sha256: entry.sha256 },
         `package ${entry.id}`,
         stagedArchive ? packageStagingRoot : path.join(artifactRoot, "packages"),
-        stagedArchive ? packageStagingRoot : root,
+        stagedArchive ? packageStagingRoot : artifactRoot,
       );
     } catch (error) {
       if (stagedArchive || (error as NodeJS.ErrnoException).code !== "ENOENT") errors.push(String(error));

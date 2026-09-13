@@ -1,7 +1,7 @@
 # Assets：S3 唯一权威实施计划
 
-日期：2026-09-12。状态：**authority 位置已确认；P1 公开 hydrate 可用；P2/P3 仍有必须修复的缺口；P4 workflow 未达验收；P5 线上切换未开始；P6 文档同步中**。
-本文同时保留目标约束、科学语义边界和本次已验证实施记录。生产 S3 对象未删除，扫描、MOC、Resource Package 和覆盖精度语义未改变。
+日期：2026-09-12。状态：**P0–P6 已完成；authority 已切换，旧开发对象与 Secret 已清理；生产 authority 历史对象未删除**。
+代码基线：`022a791`；本轮代码、测试和文档改动尚未提交。扫描、MOC、Resource Package 和覆盖精度语义未改变。
 
 ## 实施记录（2026-09-12）
 
@@ -16,10 +16,26 @@
   | `repo-evidence` | `repo-evidence/evidence/current.json` | `9ffec99fbb30995f5bb7af6878e878c1050f02acebd0478700457e9df3155b69` | 250 | 239,337,574 |
 
 - 指针 JSON 形如 `{schemaVersion,namespace,snapshot,files,bytes,updatedAt}`；`files` 是计数。快照清单在 `<prefix>/<namespace>/snapshots/<id>.json`。`authority` 清单路径相对 artifact 根（`layers/`、`packages/`、`csst/` 等），恢复目标是 `$RUNNER_TEMP/authority-test/artifacts/public-survey-footprints`。`authority-content` 恢复到 content 根，不是 artifact 根。
-- 当前 Helm release 的集群 MinIO 仍只暴露 `public/current.json`，是线上公开 release 消费者，不是 authority 复现源。P5 必须把线上消费者切到 `.info` 所描述的生产桶，而不是在集群公开桶里寻找 authority 指针。
+- 切换前 Helm release 的集群 MinIO 只暴露 `public/current.json`，曾是线上公开 release 消费者，不是 authority 复现源；revision `133` 起 site/init/release-publisher 已改用 `.info` 所描述的 authority bucket。
 - 校验完成后，仓库中的生成 release、layer、raw、content、probe 和 staging 副本才被删除；生产 S3 对象未删除。
-- 已落地但**不能勾选完成**的部分：P1 公开 hydrate（Helm 公开桶，release `public-survey-footprints-2026-09-09`，manifest SHA `adace67a9c7bcbae0044ced06352be7263b91dade2cb0bc8a4bc1415539ee407`）；spool/state snapshot 骨架；hydrate-first workflow 草稿。
-- 继续推进前必须修的缺口：spool 重复入队会删已有 job、crash 窗口毒化 worker、已 uploaded job 未 reconcile 就被清理、state/release 指针无 CAS、损坏本地状态覆盖 S3、入队失败丢 payload、API 把仅本地写入当成功、workflow 仍用缺文件容忍且未接 `.info` authority。
+- 已完成：公开 bundle `public-survey-footprints-2026-09-09`（manifest SHA `adace67a9c7bcbae0044ced06352be7263b91dade2cb0bc8a4bc1415539ee407`）通过固定指针 hydrate；`.info` authority 的 evidence/content/probe 快照通过独立 restore；最新 worker 重启后状态快照 products generation 8（`322cd73ca79d46cf9612356d78494262e40356ef756318054f63ba90802e1e28`）和 resource-packages generation 4（`1a444a0384659bbdf175a9b24f723a0180724fc467e38bcef7aad5ff4a2bbda4`）已读回验证。
+- 仓库生成业务数据已删，Git 只保留三个 CSST conformance keeper、Core 1.1.0 wheel、`evidence-index.json`。
+- 公开 hydrate overlay：152 Node 测试中 148 通过、2 失败、2 有意跳过；失败分别是 Gaia 私有 provenance 不在公开包、已消毒公开 catalog 无法再次触发 denied-survey sanitizer，均为公开数据边界预期，不影响完整 authority 校验。
+- P5 清理收据见 `docs/s3-authority-migration-receipt-20260912.json`：旧 `asa-assets-dev` 的 10 个对象（322,924,556 bytes）已逐对象和 authority 核对后删除，旧 `asa-assets-object-store` Secret 已删除；release/content/evidence/upload-spool PVC 保留并记录原因。线上 Helm revision `135` 使用 authority endpoint/bucket、镜像 `0.1.0-20260913-002759`（digest `sha256:5cecb399c7cf6a39f497ca2083a841428024b2da2967dc3a030b49aa50822da3`）。
+
+## 完成 / 未完成
+
+| 阶段 | 状态 | 已完成 | 未完成（完成标准） |
+| --- | --- | --- | --- |
+| P0 盘点 | 完成 | `.info` MinIO、Helm 公开消费者、所有 workload/Secret/PVC 和待上传项已盘点；四条物理指针及 snapshot 已 HEAD；旧开发桶清理前完成 key/size/SHA 对照并保存收据 | 无；PVC 保留项和清理条件记录在迁移收据 |
+| P1 恢复 | 完成 | `hydrate-release.ts` 强制 S3、固定 pointer、校验 archive/manifest/hash、原子激活；空环境、损坏缓存、缺对象/离线失败路径均闭合；authority evidence/content/probe 独立 restore 通过 | 无；真实生产数据仍按固定快照恢复 |
+| P2 上传队列 | 完成 | ready-before-rename、重复入队幂等、未 ready/损坏隔离、lease/retry、immutable put/receipt、重启 reconcile；已上传任务先 reconcile 再清理；专用 spool PVC 已部署 | 无；上传失败仍保留 payload，容量治理另列运维项 |
+| P3 状态接入 | 完成 | 状态快照和 content-addressed 文件使用 CAS 指针、读回验证、跨进程 generation lock；入队失败保留 payload；products/editorial/MOC/package/publication-runs 可恢复；API 返回 `syncStatus` | 无；尚未入队的计算结果仍明确属于 pending 数据 |
+| P4 workflow | 完成 | release workflow 一次 pin public+authority 快照，固定同一 run 的恢复输入；不启用缺文件容忍；authority evidence 用 `.info` 配置恢复并运行完整 artifact 校验；生成数据不再跟踪 Git | 无；文档变更后的新 bundle 需下一次正式发布生成 |
+| P5 切换 | 完成 | authority 补传、隔离 restore、site/init/release-publisher 切换、Pod 读写/断网/重建演练、全局无旧桶消费者扫描、旧桶对象与 Secret 清理均完成 | 无；当前 release/content/evidence/upload-spool PVC 保留以承载运行数据和待恢复状态 |
+| P6 收尾 | 完成 | API 同步状态字段、显式 offline fallback、存储边界/迁移收据/API 文档和 HANDOFF 已更新；旧资源迁移文档已删除 | 无；提交和正式发布由后续发布流程执行 |
+
+实施顺序已按 P2/P3 → P4 → P5 执行完毕。凭据只从 `.info`/Secret 注入，不得打印；authority 历史对象不在本次清理范围内。
 
 ## 1. 唯一目标和验收定义
 
@@ -193,9 +209,9 @@ HTTP 下载继续读取缓存并保留 Range/ETag/SHA 契约；天球继续加�
 
 ## 9. 文档生效与发布规则
 
-本文保留目标、范围和语义约束，并在顶部记录已确认的 authority 位置、P1
-公开 hydrate 结果，以及仍须修复的 P2/P3/P4 缺口；public-artifact-storage.md
-区分当前实现、恢复证明和仍待执行的 P5；HANDOFF 顶部记录实际进度。已删除的
-旧 resource-package-migration-plan/handoff 不再作为操作依据，历史可从 Git 查询。
+本文保留目标、范围和语义约束，并以顶部完成矩阵为阶段对错标准。P2–P5 的
+实现和线上验收记录在本轮已闭合；HANDOFF 顶部是下一会话入口，历史部署记录
+不是当前操作指令。已删除的旧 resource-package-migration-plan/handoff 不再作为
+操作依据，历史可从 Git 查询。
 
 修改被 release-manifest 收录的文档会使当前工作区 manifest hash 失效。正式验证/发布前由实施 agent 在已 hydrate 的工作区运行 catalog:build 并验证新 bundle；文档变更不应伪装成与旧 bundle 字节一致。本次文档任务不自动重新发布线上 release。

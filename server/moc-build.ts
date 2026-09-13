@@ -199,12 +199,14 @@ export class MocBuildStore {
     try {
       value = JSON.parse(await readFile(this.file(), "utf8")) as { requests?: MocBuildRequest[] };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT" && this.#snapshotSink?.restore) {
+      if (this.#snapshotSink?.restore) {
         const restored = await this.#snapshotSink.restore("moc-build");
         if (restored && restored.state && typeof restored.state === "object" && Array.isArray((restored.state as { requests?: unknown }).requests)) {
           value = restored.state as { requests: MocBuildRequest[] };
           await writeJsonAtomic(this.file(), value);
-        }
+        } else if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      } else if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
       }
     }
     for (const request of value?.requests ?? []) {
@@ -225,7 +227,7 @@ export class MocBuildStore {
       catch { return false; }
       const state = await localFileMatches(target, { sha256: value.sha256, sizeBytes: value.sizeBytes });
       if (state === "valid") continue;
-      if (state === "invalid" || !this.#snapshotSink?.restoreFile) return false;
+      if (!this.#snapshotSink?.restoreFile) return false;
       try {
         const restored = await this.#snapshotSink.restoreFile({
           namespace: "moc-build",
@@ -246,7 +248,7 @@ export class MocBuildStore {
     return this.#snapshotSink?.enqueueFile ? stateSnapshotFileKey("moc-build", sha256) : undefined;
   }
 
-  queueOutputFiles(request: MocBuildRequest, evidenceRoot: string): void {
+  async queueOutputFiles(request: MocBuildRequest, evidenceRoot: string): Promise<void> {
     if (!this.#snapshotSink?.enqueueFile || !request.outputs) return;
     const outputFiles: Array<{ file: MocBuildOutputFile | undefined; contentType: string }> = [
       { file: request.outputs.moc, contentType: "application/fits" },
@@ -260,10 +262,9 @@ export class MocBuildStore {
       let sourcePath: string;
       try { sourcePath = immutableRef(evidenceRoot, path.resolve(evidenceRoot, file.ref)); }
       catch (error) {
-        console.warn(`MOC build output enqueue skipped: ${error instanceof Error ? error.message : String(error)}`);
-        continue;
+        throw new Error(`MOC build output enqueue failed: ${error instanceof Error ? error.message : String(error)}`);
       }
-      queueStateSnapshotFile(this.#snapshotSink, {
+      await queueStateSnapshotFile(this.#snapshotSink, {
         namespace: "moc-build",
         sourcePath,
         objectKey: file.objectKey ?? stateSnapshotFileKey("moc-build", file.sha256),
@@ -282,7 +283,7 @@ export class MocBuildStore {
     const state = { schemaVersion: 1, requests: [...this.#records.values()] };
     await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { flag: "wx" });
     await rename(temporary, target);
-    queueStateSnapshot(this.#snapshotSink, "moc-build", state);
+    await queueStateSnapshot(this.#snapshotSink, "moc-build", state);
   }
 
   private async queuedPersist(): Promise<void> {
@@ -463,7 +464,7 @@ export class MocBuildService {
       await this.store.update(name, { phase: "BUNDLING", progress: { phase: "BUNDLING", step: 6, totalSteps: DEFAULT_TOTAL_STEPS, percent: 88, message: "写入证据 manifest 和不可变构建产物" }, outputs: output });
       await writeJsonImmutable(path.join(root, "build-manifest.json"), { schemaVersion: 1, kind: "moc-build-evidence", requestName: name, candidateId: candidate.candidate.candidateId, provider: candidate.provider, source: { url, sha256: snapshotSha256, sizeBytes: body.length }, outputs: output });
       const staged = await this.store.update(name, { phase: "STAGED", progress: { phase: "STAGED", step: DEFAULT_TOTAL_STEPS, totalSteps: DEFAULT_TOTAL_STEPS, percent: 100, message: "构建完成，等待产品审核与发布" }, outputs: { ...output, manifest: await fileObject(root, this.evidenceRoot, "build-manifest.json", (sha256) => this.store.objectKeyForFile(sha256)) } });
-      this.store.queueOutputFiles(staged, this.evidenceRoot);
+      await this.store.queueOutputFiles(staged, this.evidenceRoot);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       try { await this.store.update(name, { phase: "FAILED", progress: { phase: "FAILED", step: 0, totalSteps: DEFAULT_TOTAL_STEPS, message }, error: { reason: "BuildFailed", message } }); }
@@ -507,12 +508,14 @@ export class MocPublicationStore {
     try {
       value = JSON.parse(await readFile(this.file(), "utf8")) as { publications?: MocPublication[] };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT" && this.#snapshotSink?.restore) {
+      if (this.#snapshotSink?.restore) {
         const restored = await this.#snapshotSink.restore("moc-publications");
         if (restored && restored.state && typeof restored.state === "object" && Array.isArray((restored.state as { publications?: unknown }).publications)) {
           value = restored.state as { publications: MocPublication[] };
           await writeJsonAtomic(this.file(), value);
-        }
+        } else if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      } else if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
       }
     }
     for (const publication of value?.publications ?? []) {
@@ -531,7 +534,8 @@ export class MocPublicationStore {
     try { state = await localFileMatches(this.absolutePath(value), { sha256: value.sha256, sizeBytes: value.sizeBytes }); }
     catch { return false; }
     if (state === "valid") return true;
-    if (state === "invalid") return false;
+    if (state === "invalid" && (!this.#snapshotSink?.restoreFile || !value.objectKey)) return false;
+    if (state === "missing" && (!this.#snapshotSink?.restoreFile || !value.objectKey)) return false;
     if (!value.objectKey || !this.#snapshotSink?.restoreFile) return true;
     try {
       const restored = await this.#snapshotSink.restoreFile({
@@ -598,7 +602,7 @@ export class MocPublicationStore {
     const state = { schemaVersion: 1, publications: this.list() };
     await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { flag: "wx" });
     await rename(temporary, target);
-    queueStateSnapshot(this.#snapshotSink, "moc-publications", state);
+    await queueStateSnapshot(this.#snapshotSink, "moc-publications", state);
   }
 
   private async queuedPersist(): Promise<void> {
@@ -679,7 +683,7 @@ export class MocPublicationStore {
       throw error;
     }
     for (const file of Object.values(files)) {
-      queueStateSnapshotFile(this.#snapshotSink, {
+      await queueStateSnapshotFile(this.#snapshotSink, {
         namespace: "moc-publications",
         sourcePath: this.absolutePath(file),
         objectKey: file.objectKey ?? stateSnapshotFileKey("moc-publications", file.sha256),

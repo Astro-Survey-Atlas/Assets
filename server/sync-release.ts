@@ -9,7 +9,7 @@ import { assertExactReleaseTree, loadCatalog } from "./catalog.js";
 
 const execFile = promisify(execFileCallback);
 
-interface CurrentPointer {
+export interface CurrentPointer {
   schemaVersion: 2;
   bundle: { id: string; sha256: string };
   archiveKey: string;
@@ -25,8 +25,8 @@ function cleanArchiveKey(value: unknown): string {
   return value;
 }
 
-function parseCurrent(bytes: Buffer): CurrentPointer {
-  const value = JSON.parse(bytes.toString("utf8")) as Partial<CurrentPointer>;
+export function parseCurrentPointer(bytes: Uint8Array): CurrentPointer {
+  const value = JSON.parse(Buffer.from(bytes).toString("utf8")) as Partial<CurrentPointer>;
   if (value.schemaVersion !== 2 || !value.bundle || typeof value.bundle.id !== "string" || !/^[a-f0-9]{64}$/.test(value.bundle.sha256 ?? "") || !/^[a-f0-9]+$/.test(value.archiveSha256 ?? "") || !Number.isSafeInteger(value.archiveSizeBytes) || (value.archiveSizeBytes ?? 0) < 1) {
     throw new Error("Object-store current pointer is invalid");
   }
@@ -216,7 +216,7 @@ async function useInstalledCurrent(targetRoot: string, reason: string): Promise<
 }
 
 /** Download one versioned tar.gz release, validate it and atomically activate it. */
-export async function syncReleaseFromObjectStore(store: ArtifactStore, targetRoot: string, options: { currentKey?: string; retainReleases?: number; cleanup?: boolean; allowInstalledFallback?: boolean } = {}): Promise<{ bundle: { id: string; sha256: string }; archiveKey: string; installedTarget: string; files: number }> {
+export async function syncReleaseFromObjectStore(store: ArtifactStore, targetRoot: string, options: { currentKey?: string; pinnedPointer?: CurrentPointer; retainReleases?: number; cleanup?: boolean; allowInstalledFallback?: boolean } = {}): Promise<{ bundle: { id: string; sha256: string }; archiveKey: string; installedTarget: string; files: number }> {
   if (store.kind !== "s3") throw new Error("Archive release synchronization requires an S3-compatible object store");
   const resolvedRoot = path.resolve(targetRoot);
   if (resolvedRoot === "/") throw new Error("Unsafe public asset synchronization paths");
@@ -224,12 +224,17 @@ export async function syncReleaseFromObjectStore(store: ArtifactStore, targetRoo
     const currentKey = options.currentKey ?? "public/current.json";
     let pointer: CurrentPointer;
     try {
-      const pointerObject = await store.get(currentKey);
-      if (!pointerObject) throw new Error(`Object-store current pointer is unavailable: ${currentKey}`);
-      pointer = parseCurrent(pointerObject.body);
+      if (options.pinnedPointer) pointer = options.pinnedPointer;
+      else {
+        const pointerObject = await store.get(currentKey);
+        if (!pointerObject) throw new Error(`Object-store current pointer is unavailable: ${currentKey}`);
+        pointer = parseCurrentPointer(pointerObject.body);
+      }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      if (options.allowInstalledFallback === false) throw error instanceof Error ? error : new Error(reason);
+      // Installed-cache reuse is a deliberate offline mode, never an implicit
+      // substitute for a missing authority pointer.
+      if (options.allowInstalledFallback !== true) throw error instanceof Error ? error : new Error(reason);
       try {
         return await useInstalledCurrent(resolvedRoot, reason);
       } catch {

@@ -65,8 +65,10 @@ test("upload spool enqueues atomically and uploads an idempotent job", async () 
   try {
     const spool = new UploadSpool({ root: spoolRoot, store });
     const manifest = await spool.enqueueFile({ kind: "moc", sourcePath: source, objectKey: "evidence/objects/test-a", uploadId: "job-a", contentType: "application/octet-stream" });
+    const duplicate = await spool.enqueueFile({ kind: "moc", sourcePath: source, objectKey: "evidence/objects/test-a", uploadId: "job-a", contentType: "application/octet-stream" });
     const jobRoot = path.join(spoolRoot, "jobs", "job-a");
     assert.equal(manifest.status, "pending");
+    assert.equal(duplicate.uploadId, manifest.uploadId);
     assert.equal((await readFile(path.join(jobRoot, ".ready"), "utf8")), "job-a\n");
     assert.equal(await readFile(path.join(jobRoot, "payload"), "utf8"), "payload bytes\n");
     assert.deepEqual((await readdir(path.join(spoolRoot, "jobs"))).sort(), ["job-a"]);
@@ -76,6 +78,19 @@ test("upload spool enqueues atomically and uploads an idempotent job", async () 
     assert.equal((await spool.processPending()).skipped.includes("job-a"), true);
     assert.ok(await store.head("evidence/objects/test-a"));
     assert.equal((await readFile(path.join(jobRoot, "receipt.json"), "utf8")).includes('"sha256"'), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("upload spool replays an existing job when the original source is gone", async () => {
+  const { root, spoolRoot, source, store } = await fixture("upload-spool-replay-");
+  try {
+    const spool = new UploadSpool({ root: spoolRoot, store });
+    const original = await spool.enqueueFile({ kind: "moc", sourcePath: source, objectKey: "evidence/replay", uploadId: "job-replay" });
+    await rm(source, { force: true });
+    const replay = await spool.enqueueFile({ kind: "moc", sourcePath: source, objectKey: "evidence/replay", uploadId: "job-replay" });
+    assert.deepEqual(replay, original);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -106,6 +121,21 @@ test("upload spool records a conflicting immutable key as terminal conflict", as
     assert.equal(manifest.status, "conflict");
     assert.equal(await stat(path.join(spoolRoot, "jobs", "job-conflict", "payload")).then(() => true), true);
     assert.equal((await spool.processPending()).skipped.includes("job-conflict"), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("upload spool refuses a payload changed after enqueue without publishing it", async () => {
+  const { root, spoolRoot, source, store } = await fixture("upload-spool-tamper-");
+  try {
+    const spool = new UploadSpool({ root: spoolRoot, store });
+    await spool.enqueueFile({ kind: "scan", sourcePath: source, objectKey: "evidence/objects/tampered", uploadId: "job-tampered" });
+    await writeFile(path.join(spoolRoot, "jobs", "job-tampered", "payload"), "tampered bytes\n", "utf8");
+    const result = await spool.processPending();
+    assert.deepEqual(result.conflicts, ["job-tampered"]);
+    assert.equal(await store.head("evidence/objects/tampered"), null);
+    assert.equal(await readFile(path.join(spoolRoot, "jobs", "job-tampered", "payload"), "utf8"), "tampered bytes\n");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -175,11 +205,57 @@ test("upload cleanup removes only acknowledged jobs, not failed jobs or sibling 
     await spool.enqueueFile({ kind: "moc", sourcePath: source, objectKey: "evidence/failed", uploadId: "job-failed" });
     assert.deepEqual((await spool.processPending()).uploaded, ["job-clean"]);
     assert.equal((await spool.processPending()).skipped.includes("job-failed"), true, "backoff must defer the failed job");
+    assert.equal(await spool.cleanupUploaded(), 0);
+    assert.equal(await spool.markReconciled(["job-clean"]), 1);
     assert.equal(await spool.cleanupUploaded(), 1);
     await assert.rejects(() => stat(path.join(uploadsRoot, "jobs", "job-clean")), { code: "ENOENT" });
     assert.equal(await stat(path.join(uploadsRoot, "jobs", "job-failed")).then(() => true), true);
     assert.equal(await readFile(path.join(root, "cache", "keep"), "utf8"), "cache");
     assert.equal(await readFile(path.join(root, "scratch", "keep"), "utf8"), "scratch");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("upload spool quarantines jobs that are not ready or have corrupt manifests", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "upload-spool-quarantine-"));
+  try {
+    const uploadsRoot = path.join(root, "uploads");
+    const jobsRoot = path.join(uploadsRoot, "jobs");
+    await mkdir(path.join(jobsRoot, "job-unready"), { recursive: true });
+    await writeFile(path.join(jobsRoot, "job-unready", "manifest.json"), "{}\n");
+    await mkdir(path.join(jobsRoot, "job-corrupt"), { recursive: true });
+    await writeFile(path.join(jobsRoot, "job-corrupt", ".ready"), "job-corrupt\n");
+    await writeFile(path.join(jobsRoot, "job-corrupt", "manifest.json"), "not-json\n");
+    const source = path.join(root, "source.bin");
+    await writeFile(source, "payload\n");
+    const store = new LocalS3Adapter(new FilesystemArtifactStore(path.join(root, "objects")));
+    const spool = new UploadSpool({ root: uploadsRoot, store });
+    await spool.enqueueFile({ kind: "state", sourcePath: source, objectKey: "state/unready", uploadId: "job-unready-valid" });
+    await rm(path.join(jobsRoot, "job-unready-valid", ".ready"));
+    const result = await spool.processPending();
+    assert.deepEqual(result.quarantined.sort(), ["job-corrupt", "job-unready", "job-unready-valid"]);
+    assert.deepEqual(await readdir(jobsRoot), []);
+    assert.equal((await readdir(path.join(uploadsRoot, "quarantine"))).length, 3);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("uploaded jobs are replayed for reconciliation after a worker restart", async () => {
+  const { root, spoolRoot, source, store } = await fixture("upload-spool-reconcile-");
+  try {
+    const spool = new UploadSpool({ root: spoolRoot, store });
+    await spool.enqueueFile({ kind: "state-snapshot", sourcePath: source, objectKey: "state/products/snap", uploadId: "job-reconcile" });
+    const first = await spool.processPending();
+    assert.deepEqual(first.uploaded, ["job-reconcile"]);
+    const restarted = new UploadSpool({ root: spoolRoot, store });
+    const replay = await restarted.processPending();
+    assert.deepEqual(replay.uploaded, []);
+    assert.deepEqual(replay.uploadedManifests.map((manifest) => manifest.uploadId), ["job-reconcile"]);
+    assert.equal(await restarted.cleanupUploaded(), 0);
+    assert.equal(await restarted.markReconciled(["job-reconcile"]), 1);
+    assert.equal(await restarted.cleanupUploaded(), 1);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

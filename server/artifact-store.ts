@@ -23,6 +23,10 @@ export interface ArtifactPutOptions {
   contentType?: string;
   cacheControl?: string;
   metadata?: Record<string, string>;
+  /** Conditional write token returned by head/get. */
+  ifMatch?: string;
+  /** Use `*` to create the object only when it does not already exist. */
+  ifNoneMatch?: string;
 }
 
 export interface ByteRange {
@@ -60,6 +64,10 @@ function bytesOf(body: Uint8Array | string): Buffer {
 
 function digest(body: Uint8Array): string {
   return createHash("sha256").update(body).digest("hex");
+}
+
+function etagToken(value: string): string {
+  return `"${value.replace(/^"|"$/g, "")}"`;
 }
 
 async function fileDigest(filePath: string): Promise<{ sizeBytes: number; sha256: string }> {
@@ -133,7 +141,8 @@ export class FilesystemArtifactStore implements ArtifactStore {
     if (!details.isFile()) throw new ArtifactStoreError(`Object key is not a file: ${key}`);
     const body = await readFile(filePath);
     const options = await readMetadata(filePath);
-    return { key: cleanKey(key), sizeBytes: details.size, sha256: digest(body), ...(options.contentType ? { contentType: options.contentType } : {}) };
+    const sha256 = digest(body);
+    return { key: cleanKey(key), sizeBytes: details.size, sha256, etag: sha256, ...(options.contentType ? { contentType: options.contentType } : {}) };
   }
 
   async get(key: string, range?: ByteRange): Promise<ArtifactObjectWithBody | null> {
@@ -150,6 +159,10 @@ export class FilesystemArtifactStore implements ArtifactStore {
     const bytes = bytesOf(body);
     const existing = await this.head(logical);
     const sha256 = digest(bytes);
+    if (options.ifNoneMatch === "*" && existing) throw new ArtifactStoreConflictError(`Conditional object create failed: ${logical}`);
+    if (options.ifMatch !== undefined && (!existing || (existing.etag ?? existing.sha256) !== options.ifMatch)) {
+      throw new ArtifactStoreConflictError(`Conditional object update failed: ${logical}`);
+    }
     if (existing) {
       if (existing.sizeBytes === bytes.length && existing.sha256 === sha256) return existing;
       throw new ArtifactStoreConflictError(`Immutable object already exists with different bytes: ${logical}`);
@@ -165,19 +178,25 @@ export class FilesystemArtifactStore implements ArtifactStore {
       throw new ArtifactStoreConflictError(`Immutable object was concurrently published with different bytes: ${logical}`);
     }
     await writeFile(metadataPath(filePath), JSON.stringify(options) + "\n", { flag: "w" });
-    return { key: logical, sizeBytes: bytes.length, sha256, ...(options.contentType ? { contentType: options.contentType } : {}) };
+    return { key: logical, sizeBytes: bytes.length, sha256, etag: sha256, ...(options.contentType ? { contentType: options.contentType } : {}) };
   }
 
   async putMutable(key: string, body: Uint8Array | string, options: ArtifactPutOptions = {}): Promise<ArtifactObject> {
     const logical = cleanKey(key);
     const bytes = bytesOf(body);
+    const existing = await this.head(logical);
+    if (options.ifNoneMatch === "*" && existing) throw new ArtifactStoreConflictError(`Conditional object create failed: ${logical}`);
+    if (options.ifMatch !== undefined && (!existing || (existing.etag ?? existing.sha256) !== options.ifMatch)) {
+      throw new ArtifactStoreConflictError(`Conditional object update failed: ${logical}`);
+    }
     const filePath = this.filePath(logical);
     await mkdir(path.dirname(filePath), { recursive: true });
     const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
     await writeFile(temporary, bytes, { flag: "wx" });
     await rename(temporary, filePath);
     await writeFile(metadataPath(filePath), JSON.stringify(options) + "\n");
-    return { key: logical, sizeBytes: bytes.length, sha256: digest(bytes), ...(options.contentType ? { contentType: options.contentType } : {}) };
+    const sha256 = digest(bytes);
+    return { key: logical, sizeBytes: bytes.length, sha256, etag: sha256, ...(options.contentType ? { contentType: options.contentType } : {}) };
   }
 
   async putFileImmutable(key: string, filePath: string, options: ArtifactPutOptions = {}): Promise<ArtifactObject> {
@@ -204,7 +223,7 @@ export class FilesystemArtifactStore implements ArtifactStore {
       throw error;
     }
     await writeFile(metadataPath(destination), JSON.stringify(options) + "\n", { flag: "w" });
-    return { key: logical, ...details, ...(options.contentType ? { contentType: options.contentType } : {}) };
+    return { key: logical, ...details, etag: details.sha256, ...(options.contentType ? { contentType: options.contentType } : {}) };
   }
 
   async downloadToFile(key: string, filePath: string): Promise<ArtifactObject | null> {
@@ -263,7 +282,7 @@ export class S3ArtifactStore implements ArtifactStore {
       const sizeBytes = Number(result.ContentLength ?? 0);
       if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 0) throw new ArtifactStoreError(`S3 object has an invalid size: ${logical}`);
       const sha256 = result.Metadata?.sha256 ?? "";
-      return { key: logical, sizeBytes, sha256, ...(result.ContentType ? { contentType: result.ContentType } : {}), ...(result.ETag ? { etag: result.ETag.replace(/^"|"$/g, "") } : {}) };
+      return { key: logical, sizeBytes, sha256, ...(result.ContentType ? { contentType: result.ContentType } : {}), ...(result.ETag ? { etag: etagToken(result.ETag) } : {}) };
     } catch (error) {
       if (isMissingS3Object(error)) return null;
       if (error instanceof ArtifactStoreError) throw error;
@@ -349,7 +368,7 @@ export class S3ArtifactStore implements ArtifactStore {
     try {
       const result = await this.#client.send(new PutObjectCommand(input));
       await this.verifyRemoteObject(logical, bytes.length, sha256);
-      return { key: logical, sizeBytes: bytes.length, sha256, ...(options.contentType ? { contentType: options.contentType } : {}), ...(result.ETag ? { etag: result.ETag.replace(/^"|"$/g, "") } : {}) };
+      return { key: logical, sizeBytes: bytes.length, sha256, ...(options.contentType ? { contentType: options.contentType } : {}), ...(result.ETag ? { etag: etagToken(result.ETag) } : {}) };
     } catch (error) {
       if (!isPreconditionFailure(error)) throw new ArtifactStoreError(`S3 immutable PUT failed for ${logical}: ${error instanceof Error ? error.message : String(error)}`);
       const raced = await this.head(logical);
@@ -361,6 +380,11 @@ export class S3ArtifactStore implements ArtifactStore {
   async putMutable(key: string, body: Uint8Array | string, options: ArtifactPutOptions = {}): Promise<ArtifactObject> {
     const logical = cleanKey(key);
     const bytes = bytesOf(body);
+    const existing = await this.head(logical);
+    if (options.ifNoneMatch === "*" && existing) throw new ArtifactStoreConflictError(`Conditional object create failed: ${logical}`);
+    if (options.ifMatch !== undefined && (!existing || (existing.etag ?? existing.sha256) !== options.ifMatch)) {
+      throw new ArtifactStoreConflictError(`Conditional object update failed: ${logical}`);
+    }
     try {
       const result = await this.#client.send(new PutObjectCommand({
         Bucket: this.bucket,
@@ -370,9 +394,12 @@ export class S3ArtifactStore implements ArtifactStore {
         ...(options.contentType ? { ContentType: options.contentType } : {}),
         ...(options.cacheControl ? { CacheControl: options.cacheControl } : {}),
         Metadata: { ...(options.metadata ?? {}), sha256: digest(bytes) },
+        ...(options.ifMatch ? { IfMatch: options.ifMatch } : {}),
+        ...(options.ifNoneMatch ? { IfNoneMatch: options.ifNoneMatch } : {}),
       }));
-      return { key: logical, sizeBytes: bytes.length, sha256: digest(bytes), ...(options.contentType ? { contentType: options.contentType } : {}), ...(result.ETag ? { etag: result.ETag.replace(/^"|"$/g, "") } : {}) };
+      return { key: logical, sizeBytes: bytes.length, sha256: digest(bytes), ...(options.contentType ? { contentType: options.contentType } : {}), ...(result.ETag ? { etag: etagToken(result.ETag) } : {}) };
     } catch (error) {
+      if (isPreconditionFailure(error)) throw new ArtifactStoreConflictError(`Conditional object update failed: ${logical}`);
       throw new ArtifactStoreError(`S3 PUT failed for ${logical}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -394,7 +421,7 @@ export class S3ArtifactStore implements ArtifactStore {
         IfNoneMatch: "*",
       }));
       await this.verifyRemoteObject(logical, details.sizeBytes, details.sha256);
-      return { key: logical, ...details, ...(options.contentType ? { contentType: options.contentType } : {}), ...(result.ETag ? { etag: result.ETag.replace(/^"|"$/g, "") } : {}) };
+      return { key: logical, ...details, ...(options.contentType ? { contentType: options.contentType } : {}), ...(result.ETag ? { etag: etagToken(result.ETag) } : {}) };
     } catch (error) {
       if (!isPreconditionFailure(error)) throw new ArtifactStoreError(`S3 immutable file PUT failed for ${logical}: ${error instanceof Error ? error.message : String(error)}`);
       const raced = await this.head(logical);
@@ -632,6 +659,13 @@ export async function publishReleaseArchive(descriptor: ReleaseArchiveDescriptor
     archiveSha256: descriptor.archiveSha256,
     publishedAt,
   };
-  await store.putMutable(currentKey, `${JSON.stringify(pointer, null, 2)}\n`, { contentType: "application/json; charset=utf-8", cacheControl: "no-cache" });
+  const existing = await store.get(currentKey);
+  await store.putMutable(currentKey, `${JSON.stringify(pointer, null, 2)}\n`, {
+    contentType: "application/json; charset=utf-8",
+    cacheControl: "no-cache",
+    ...(existing ? { ifMatch: existing.etag ?? existing.sha256 } : { ifNoneMatch: "*" }),
+  });
+  const verified = await store.get(currentKey);
+  if (!verified || verified.sha256 !== digest(Buffer.from(`${JSON.stringify(pointer, null, 2)}\n`, "utf8"))) throw new ArtifactStoreConflictError(`Release pointer verification failed: ${currentKey}`);
   return { ...pointer, currentKey };
 }

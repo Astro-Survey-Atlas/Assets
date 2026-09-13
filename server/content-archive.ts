@@ -93,8 +93,8 @@ export class ContentArchiveSync {
     const snapshot = createHash("sha256").update(encoded).digest("hex");
     const files = manifest.files.length;
     const bytes = manifest.files.reduce((sum, record) => sum + record.sizeBytes, 0);
-    const existingPointer = await this.#readPointer();
-    if (existingPointer?.snapshot === snapshot) {
+    const existingPointer = await this.#readPointerObject();
+    if (existingPointer?.pointer.snapshot === snapshot) {
       const present = await this.#store.head(this.#snapshotKey(snapshot));
       if (present) {
         return { namespace: this.namespace, snapshot, currentKey: this.currentKey, files, bytes, uploadedObjects: 0, unchangedObjects: files, skipped: true };
@@ -125,7 +125,16 @@ export class ContentArchiveSync {
       bytes,
       updatedAt: new Date().toISOString(),
     };
-    await this.#store.putMutable(this.currentKey, `${JSON.stringify(pointer, null, 2)}\n`, { contentType: "application/json; charset=utf-8", cacheControl: "no-cache" });
+    try {
+      await this.#store.putMutable(this.currentKey, `${JSON.stringify(pointer, null, 2)}\n`, {
+        contentType: "application/json; charset=utf-8",
+        cacheControl: "no-cache",
+        ...(existingPointer ? { ifMatch: existingPointer.object.etag ?? existingPointer.object.sha256 } : { ifNoneMatch: "*" }),
+      });
+    } catch (error) {
+      if (error instanceof Error && /conditional|precondition|conflict/i.test(error.message)) throw new ContentArchiveError(`Concurrent ${this.namespace} pointer update conflict`, 409);
+      throw error;
+    }
     return { namespace: this.namespace, snapshot, currentKey: this.currentKey, files, bytes, uploadedObjects, unchangedObjects, skipped: false };
   }
 
@@ -150,10 +159,11 @@ export class ContentArchiveSync {
     return { namespace: this.namespace, snapshot: pointer.snapshot, remoteFiles: remote.size, missing, changed, extra };
   }
 
-  async restore(options: { targetRoot?: string; overwrite?: boolean } = {}): Promise<ContentArchiveRestoreResult> {
-    const pointer = await this.#readPointer();
-    if (!pointer) throw new ContentArchiveError(`No ${this.namespace} snapshot has been published yet`, 404);
-    const manifest = await this.#readManifest(pointer.snapshot);
+  async restore(options: { targetRoot?: string; overwrite?: boolean; snapshot?: string } = {}): Promise<ContentArchiveRestoreResult> {
+    const pointer = options.snapshot ? undefined : await this.#readPointer();
+    const snapshot = options.snapshot ?? pointer?.snapshot;
+    if (!snapshot || !/^[a-f0-9]{64}$/.test(snapshot)) throw new ContentArchiveError(`No ${this.namespace} snapshot has been published yet`, 404);
+    const manifest = await this.#readManifest(snapshot);
     const targetRoot = path.resolve(options.targetRoot ?? this.root);
     let restored = 0;
     let skippedIdentical = 0;
@@ -189,17 +199,21 @@ export class ContentArchiveSync {
       await rename(temporary, target);
       restored += 1;
     }
-    return { namespace: this.namespace, snapshot: pointer.snapshot, restored, skippedIdentical, bytes: pointer.bytes };
+    return { namespace: this.namespace, snapshot, restored, skippedIdentical, bytes: manifest.files.reduce((sum, record) => sum + record.sizeBytes, 0) };
   }
 
   async #readPointer(): Promise<ContentArchivePointer | undefined> {
+    return (await this.#readPointerObject())?.pointer;
+  }
+
+  async #readPointerObject(): Promise<{ pointer: ContentArchivePointer; object: NonNullable<Awaited<ReturnType<ArtifactStore["get"]>>> } | undefined> {
     const object = await this.#store.get(this.currentKey);
     if (!object) return undefined;
     const value = JSON.parse(object.body.toString("utf8")) as ContentArchivePointer;
     if (value?.schemaVersion !== MANIFEST_SCHEMA_VERSION || value.namespace !== this.namespace || !/^[a-f0-9]{64}$/.test(value.snapshot ?? "")) {
       throw new ContentArchiveError(`Unsupported ${this.namespace} archive pointer`, 500);
     }
-    return value;
+    return { pointer: value, object };
   }
 
   async #readManifest(snapshot: string): Promise<ContentArchiveManifest> {

@@ -57,6 +57,8 @@ export interface SurveyEditorialRecord {
 interface PersistedEditorialDocument {
   schemaVersion: 1;
   surveys: SurveyEditorialRecord[];
+  /** Full audit events survive loss of the local NDJSON convenience log. */
+  history?: unknown[];
 }
 
 interface EditorialIndexProduct extends Pick<PublicSurveyProduct, "productId" | "name" | "description" | "reason" | "manualStep"> {}
@@ -306,15 +308,14 @@ function applyContent<T extends EditorialIndex>(index: T, surveyId: string, cont
 export class SurveyEditorialStore {
   #records = new Map<string, SurveyEditorialRecord>();
   #baselines = new Map<string, SurveyEditorialContent>();
+  #history: unknown[] = [];
   #initialized = false;
   #contentRoot: string;
-  #fallbackRoot: string | undefined;
   #persistQueue: Promise<void> = Promise.resolve();
   readonly #snapshotSink: StateSnapshotSink | undefined;
 
-  constructor(contentRoot = configuredContentRoot, fallbackRoot?: string, snapshotSink?: StateSnapshotSink) {
+  constructor(contentRoot = configuredContentRoot, snapshotSink?: StateSnapshotSink) {
     this.#contentRoot = path.resolve(contentRoot);
-    this.#fallbackRoot = fallbackRoot ? path.resolve(fallbackRoot) : undefined;
     this.#snapshotSink = snapshotSink;
   }
 
@@ -331,22 +332,17 @@ export class SurveyEditorialStore {
       await this.sync(surveys);
       return;
     }
-    try {
-      await mkdir(this.#contentRoot, { recursive: true });
-    } catch (error) {
-      if (!this.#fallbackRoot) throw error;
-      this.#contentRoot = path.join(this.#fallbackRoot, ".assets-content");
-      await mkdir(this.#contentRoot, { recursive: true });
-    }
+    await mkdir(this.#contentRoot, { recursive: true });
     const previous = new Map<string, SurveyEditorialRecord>();
     let restoredDocument: Partial<PersistedEditorialDocument> | undefined;
     try {
       const document = JSON.parse(await readFile(this.#contentFile(), "utf8")) as Partial<PersistedEditorialDocument>;
+      restoredDocument = document;
       if (document.schemaVersion === 1 && Array.isArray(document.surveys)) {
         for (const entry of document.surveys) if (isRecord(entry) && typeof entry.surveyId === "string") previous.set(entry.surveyId, entry as unknown as SurveyEditorialRecord);
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT" && this.#snapshotSink?.restore) {
+      if (this.#snapshotSink?.restore) {
         const restored = await this.#snapshotSink.restore("editorial");
         if (restored && restored.state && typeof restored.state === "object" && Array.isArray((restored.state as Partial<PersistedEditorialDocument>).surveys)) {
           restoredDocument = restored.state as Partial<PersistedEditorialDocument>;
@@ -354,9 +350,14 @@ export class SurveyEditorialStore {
           if (restoredDocument.schemaVersion === 1 && Array.isArray(restoredDocument.surveys)) {
             for (const entry of restoredDocument.surveys) if (isRecord(entry) && typeof entry.surveyId === "string") previous.set(entry.surveyId, entry as unknown as SurveyEditorialRecord);
           }
-        }
+        } else if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      } else if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
       }
     }
+    this.#history = Array.isArray(restoredDocument?.history)
+      ? restoredDocument.history
+      : await this.#readHistoryCache();
     for (const survey of surveys) {
       const base = baselineContent(survey);
       this.#baselines.set(survey.id, base);
@@ -431,8 +432,10 @@ export class SurveyEditorialStore {
     record.updatedAt = new Date().toISOString();
     const auditEntry: SurveyEditorialAuditEntry = { action: "draft", revision: record.revision, at: record.updatedAt };
     record.audit = [...record.audit, auditEntry].slice(-MAX_AUDIT_ENTRIES);
+    const historyEntry = { action: "draft", surveyId, revision: record.revision, at: record.updatedAt, content: record.draft };
+    this.#history.push(historyEntry);
     await this.#persist();
-    await appendFile(this.#historyFile(), `${JSON.stringify({ action: "draft", surveyId, revision: record.revision, at: record.updatedAt, content: record.draft })}\n`);
+    await appendFile(this.#historyFile(), `${JSON.stringify(historyEntry)}\n`);
     return structuredClone(record);
   }
 
@@ -446,30 +449,36 @@ export class SurveyEditorialStore {
     record.updatedAt = record.publishedAt;
     const auditEntry: SurveyEditorialAuditEntry = { action: "publish", revision: record.revision, at: record.publishedAt };
     record.audit = [...record.audit, auditEntry].slice(-MAX_AUDIT_ENTRIES);
+    const historyEntry = { action: "publish", surveyId, revision: record.revision, at: record.publishedAt, content: record.published };
+    this.#history.push(historyEntry);
     await this.#persist();
-    await appendFile(this.#historyFile(), `${JSON.stringify({ action: "publish", surveyId, revision: record.revision, at: record.publishedAt, content: record.published })}\n`);
+    await appendFile(this.#historyFile(), `${JSON.stringify(historyEntry)}\n`);
     return structuredClone(record);
   }
 
   async history(surveyId: string): Promise<unknown[]> {
     if (!this.#records.has(surveyId)) throw new AdminHttpError(404, "Survey editorial record not found");
-    try {
-      const content = (await readFile(this.#historyFile(), "utf8")).trim();
-      if (!content) return [];
-      return content.split("\n").map((line) => JSON.parse(line)).filter((entry) => isRecord(entry) && entry.surveyId === surveyId);
-    } catch { return []; }
+    return this.#history.filter((entry) => isRecord(entry) && entry.surveyId === surveyId);
   }
 
   async #persist(): Promise<void> {
-    const document: PersistedEditorialDocument = { schemaVersion: 1, surveys: [...this.#records.values()] };
+    const document: PersistedEditorialDocument = { schemaVersion: 1, surveys: [...this.#records.values()], history: this.#history };
     const temporaryFile = `${this.#contentFile()}.${process.pid}.${randomUUID()}.tmp`;
     const operation = this.#persistQueue.then(async () => {
       await writeFile(temporaryFile, `${JSON.stringify(document, null, 2)}\n`);
       await rename(temporaryFile, this.#contentFile());
-      queueStateSnapshot(this.#snapshotSink, "editorial", document);
+      await queueStateSnapshot(this.#snapshotSink, "editorial", document);
     });
     this.#persistQueue = operation.catch(() => undefined);
     await operation;
+  }
+
+  async #readHistoryCache(): Promise<unknown[]> {
+    try {
+      const content = (await readFile(this.#historyFile(), "utf8")).trim();
+      if (!content) return [];
+      return content.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    } catch { return []; }
   }
 }
 

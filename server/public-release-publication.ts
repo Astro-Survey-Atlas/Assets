@@ -208,12 +208,32 @@ function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+function isPublicationRun(value: unknown): value is PublicationRun {
+  if (!value || typeof value !== "object") return false;
+  const run = value as Partial<PublicationRun>;
+  return typeof run.runId === "string"
+    && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(run.runId)
+    && typeof run.planId === "string"
+    && typeof run.status === "string"
+    && ["queued", "building", "uploading", "published", "failed"].includes(run.status)
+    && Array.isArray(run.surveyIds)
+    && Array.isArray(run.log);
+}
+
+async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
+  const temporary = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+  await rename(temporary, filePath);
+}
+
 /** Deep module that plans, builds and publishes complete public release archives from dynamic content. */
 export class PublicReleasePublisher {
   readonly #options: PublicReleasePublisherOptions;
   readonly #runsDir: string;
   readonly #queueDir: string;
   readonly #snapshotSink: StateSnapshotSink | undefined;
+  #runsRestored = false;
+  #runsRestorePromise: Promise<void> | undefined;
 
   constructor(options: PublicReleasePublisherOptions) {
     this.#options = options;
@@ -339,6 +359,7 @@ export class PublicReleasePublisher {
   }
 
   async get(runId: string): Promise<PublicationRun | undefined> {
+    await this.#ensureRunsRestored();
     try {
       return JSON.parse(await readFile(path.join(this.#runsDir, `${runId}.json`), "utf8")) as PublicationRun;
     } catch (error) {
@@ -348,6 +369,7 @@ export class PublicReleasePublisher {
   }
 
   async list(): Promise<PublicationRun[]> {
+    await this.#ensureRunsRestored();
     await mkdir(this.#runsDir, { recursive: true });
     const runs: PublicationRun[] = [];
     for (const entry of (await readdir(this.#runsDir)).filter((name) => name.endsWith(".json")).sort().reverse()) {
@@ -357,6 +379,7 @@ export class PublicReleasePublisher {
   }
 
   async claimQueuedRun(): Promise<string | undefined> {
+    await this.#ensureRunsRestored();
     await mkdir(this.#queueDir, { recursive: true });
     const entries = (await readdir(this.#queueDir)).filter((name) => name.endsWith(".json") && !name.endsWith(".claimed.json")).sort();
     for (const entry of entries) {
@@ -801,6 +824,95 @@ export class PublicReleasePublisher {
   async #writeRun(run: PublicationRun): Promise<void> {
     await mkdir(this.#runsDir, { recursive: true });
     await writeFile(path.join(this.#runsDir, `${run.runId}.json`), `${JSON.stringify(run, null, 2)}\n`, "utf8");
-    queueStateSnapshot(this.#snapshotSink, "publication-runs", { schemaVersion: 1, run });
+    await queueStateSnapshot(this.#snapshotSink, "publication-runs", { schemaVersion: 1, runs: await this.#readRunsOnDisk() });
+  }
+
+  async #ensureRunsRestored(): Promise<void> {
+    if (this.#runsRestored) return;
+    if (!this.#runsRestorePromise) {
+      this.#runsRestorePromise = this.#restoreRuns().then(() => {
+        this.#runsRestored = true;
+      }).finally(() => {
+        this.#runsRestorePromise = undefined;
+      });
+    }
+    await this.#runsRestorePromise;
+  }
+
+  async #restoreRuns(): Promise<void> {
+    await mkdir(this.#runsDir, { recursive: true });
+    await mkdir(this.#queueDir, { recursive: true });
+    const localRuns: PublicationRun[] = [];
+    let needsRestore = false;
+    for (const entry of await readdir(this.#runsDir)) {
+      if (!entry.endsWith(".json")) continue;
+      const filePath = path.join(this.#runsDir, entry);
+      try {
+        const value = JSON.parse(await readFile(filePath, "utf8")) as unknown;
+        if (!isPublicationRun(value)) throw new Error("invalid publication run");
+        localRuns.push(value);
+      } catch {
+        needsRestore = true;
+        await rm(filePath, { force: true });
+      }
+    }
+    if (needsRestore || localRuns.length === 0) {
+      const restored = await this.#snapshotSink?.restore?.("publication-runs");
+      const state = restored?.state && typeof restored.state === "object" ? restored.state as { runs?: unknown; run?: unknown } : undefined;
+      const candidates = Array.isArray(state?.runs) ? state.runs : state?.run ? [state.run] : [];
+      const known = new Map(localRuns.map((run) => [run.runId, run]));
+      for (const candidate of candidates) if (isPublicationRun(candidate)) known.set(candidate.runId, candidate);
+      for (const run of known.values()) await writeJsonAtomic(path.join(this.#runsDir, `${run.runId}.json`), run);
+      localRuns.splice(0, localRuns.length, ...known.values());
+    }
+    for (const run of localRuns) {
+      if (run.status !== "queued") continue;
+      const queuedPath = path.join(this.#queueDir, `${run.runId}.json`);
+      const claimedPath = path.join(this.#queueDir, `${run.runId}.claimed.json`);
+      if (!(await stat(queuedPath).catch(() => undefined)) && !(await stat(claimedPath).catch(() => undefined))) {
+        await writeJsonAtomic(queuedPath, { runId: run.runId });
+      }
+    }
+    // A claimed marker left by a crashed worker is recoverable only during
+    // publisher initialization; subsequent claims on this instance must not
+    // steal the run currently being executed.
+    await this.#recoverClaimedQueue();
+  }
+
+  async #recoverClaimedQueue(): Promise<void> {
+    for (const entry of await readdir(this.#queueDir)) {
+      if (!entry.endsWith(".claimed.json")) continue;
+      const claimedPath = path.join(this.#queueDir, entry);
+      let runId: string | undefined;
+      try {
+        const value = JSON.parse(await readFile(claimedPath, "utf8")) as { runId?: unknown };
+        if (typeof value.runId === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value.runId)) runId = value.runId;
+      } catch { /* corrupt claim is discarded below */ }
+      if (!runId) {
+        await rm(claimedPath, { force: true });
+        continue;
+      }
+      const run = await this.get(runId);
+      if (run?.status === "queued") {
+        const queuedPath = path.join(this.#queueDir, `${runId}.json`);
+        await rename(claimedPath, queuedPath).catch(async (error: NodeJS.ErrnoException) => {
+          if (error.code !== "EEXIST" && error.code !== "ENOTEMPTY") throw error;
+          await rm(claimedPath, { force: true });
+        });
+      } else {
+        await rm(claimedPath, { force: true });
+      }
+    }
+  }
+
+  async #readRunsOnDisk(): Promise<PublicationRun[]> {
+    const runs: PublicationRun[] = [];
+    for (const entry of (await readdir(this.#runsDir).catch(() => [])).filter((name) => name.endsWith(".json"))) {
+      try {
+        const value = JSON.parse(await readFile(path.join(this.#runsDir, entry), "utf8")) as unknown;
+        if (isPublicationRun(value)) runs.push(value);
+      } catch { /* a later restore will quarantine malformed local state */ }
+    }
+    return runs.sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.runId.localeCompare(right.runId));
   }
 }

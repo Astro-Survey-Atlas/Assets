@@ -1,15 +1,16 @@
 # Public artifact storage and release archives
 
-This document describes the **current storage contract**. The scope, remaining
-P2/P3 durability gaps and P5 online steps are in the [S3 authority
-implementation plan](s3-authority-implementation-plan.md). Production S3 is the
+This document describes the **current storage contract**. The scope and
+implementation record are in the [S3 authority implementation
+plan](s3-authority-implementation-plan.md). Production S3 is the
 sole authority for uploaded business bytes and synced control state. The
 confirmed authority endpoint is the MinIO described by gitignored `.info`, not
 the currently deployed Helm `storage/minio` public-release bucket. Local
 `cache/` is a verified, disposable restore; `scratch/` is recomputable work;
 and `uploads/` is an explicit pending-upload spool. Compute completion does not
-wait for upload completion. P5 online cutover, development-bucket retirement
-and old-PVC decommissioning are not complete.
+wait for upload completion. The online authority cutover and development-bucket
+retirement are complete; active PVCs remain until a separate evidence-backed
+retirement decision.
 
 The generated release tree, local dynamic content state, dated probe and release
 staging output were removed from this checkout after independent S3 restore and
@@ -172,7 +173,7 @@ the archived inputs. Active snapshot:
 `9ffec99fbb30995f5bb7af6878e878c1050f02acebd0478700457e9df3155b69`
 (250 objects, 239,337,574 bytes, published 2026-09-10).
 
-The P0-P4 authority restore checks were also completed against production S3:
+The P0-P5 authority restore and cutover checks were also completed against production S3:
 
 | Prefix | Snapshot | Files | Bytes | Restore check |
 | --- | --- | ---: | ---: | --- |
@@ -182,21 +183,20 @@ The P0-P4 authority restore checks were also completed against production S3:
 
 The local generated release tree, content state, dated probe and staging copies
 were removed only after those independent restores. Production S3 objects were
-not deleted. P5 remains: verify the online production consumer, retire any
-development-bucket references, and decommission old PVC copies only after the
-online restore and pending-upload drills succeed.
+not deleted. The online production consumer now uses the authority bucket; the
+old development objects and Secret were removed after consumer and hash checks.
 
-On 2026-09-12, a read-only listing through the currently deployed Helm
-object-store configuration found only `public/current.json`. That cluster
-bucket is the live public-release consumer, not the authority source. The same
-day, a read-only listing of the gitignored `.info` MinIO found the recorded
+Before the authority cutover on 2026-09-12, a read-only listing through the
+Helm `storage/minio` configuration found only `public/current.json`. That
+cluster bucket was the public-release consumer, not the authority source. The
+same day, a read-only listing of the gitignored `.info` MinIO found the recorded
 `authority`, `authority-content`, `authority-probe` and `repo-evidence`
 pointers at `authority/evidence/current.json`,
 `authority-content/content/current.json`,
 `authority-probe/evidence/current.json` and
 `repo-evidence/evidence/current.json`. Do not print `.info` credentials. P5
-must retarget online consumers to that authority bucket after P2/P3 durability
-fixes; do not look for authority snapshots in the Helm public bucket.
+are now the source for online consumers; do not look for authority snapshots in
+the retired Helm public bucket.
 
 ## Migration and rollback
 
@@ -224,4 +224,4 @@ serving contracts. Hydrate and the Helm init container require the configured
 S3 store and fail closed on a fresh environment rather than silently using the
 source checkout. A plain Helm upgrade with unchanged Pod configuration may not
 rerun init; rollback must verify an actual Pod recreation and the resulting
-bundle hash. The remaining P5 online cutover is tracked above.
+bundle hash.

@@ -109,6 +109,23 @@ test("immutable filesystem put rejects conflicting bytes", async () => {
   }
 });
 
+test("mutable filesystem pointers require the version read by the writer", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-mutable-cas-"));
+  try {
+    const store = new FilesystemArtifactStore(path.join(root, "objects"));
+    const first = await store.putMutable("public/current.json", "first", { ifNoneMatch: "*" });
+    assert.equal(first.sha256.length, 64);
+    await assert.rejects(() => store.putMutable("public/current.json", "again", { ifNoneMatch: "*" }), /Conditional/);
+    const current = await store.head("public/current.json");
+    assert.ok(current?.etag);
+    await assert.rejects(() => store.putMutable("public/current.json", "stale", { ifMatch: "0" }), /Conditional/);
+    await store.putMutable("public/current.json", "second", { ifMatch: current!.etag });
+    await assert.rejects(() => store.putMutable("public/current.json", "third", { ifMatch: current!.etag }), /Conditional/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("packageRelease rejects evidence-class records", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "assets-archive-evidence-"));
   try {
@@ -190,7 +207,7 @@ test("offline restart reuses a validated installed current when the pointer is u
         throw new Error("object store offline");
       },
     };
-    const reused = await syncReleaseFromObjectStore(offline, target);
+    const reused = await syncReleaseFromObjectStore(offline, target, { allowInstalledFallback: true });
     assert.equal(reused.bundle.sha256, descriptor.bundle.sha256);
     assert.equal(reused.archiveKey, "");
     assert.equal(await readFile(path.join(target, "current", "src", "tiny.txt"), "utf8"), "archive release\n");

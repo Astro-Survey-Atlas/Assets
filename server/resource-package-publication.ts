@@ -359,12 +359,14 @@ export class DynamicResourcePackageStore {
     try {
       value = JSON.parse(await readFile(this.file(), "utf8")) as Partial<PersistedStore>;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT" && this.#snapshotSink?.restore) {
+      if (this.#snapshotSink?.restore) {
         const restored = await this.#snapshotSink.restore("resource-packages");
         if (restored && restored.state && typeof restored.state === "object" && Array.isArray((restored.state as Partial<PersistedStore>).packages)) {
           value = restored.state as Partial<PersistedStore>;
           await writeJsonAtomic(this.file(), value);
-        }
+        } else if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      } else if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
       }
     }
     if (value?.schemaVersion === STORE_SCHEMA_VERSION && Array.isArray(value.packages)) {
@@ -377,7 +379,7 @@ export class DynamicResourcePackageStore {
         const relative = path.relative(this.contentRoot, archivePath);
         if (relative.startsWith("..") || path.isAbsolute(relative)) continue;
         let state = await localArchiveState(archivePath, entry);
-        if (state === "missing" && entry.objectKey && this.#snapshotSink?.restoreFile) {
+        if ((state === "missing" || state === "invalid") && entry.objectKey && this.#snapshotSink?.restoreFile) {
           try {
             const restored = await this.#snapshotSink.restoreFile({
               namespace: "resource-packages",
@@ -450,7 +452,7 @@ export class DynamicResourcePackageStore {
     }
     await this.persist();
     for (const entry of created) {
-      queueStateSnapshotFile(this.#snapshotSink, {
+      await queueStateSnapshotFile(this.#snapshotSink, {
         namespace: "resource-packages",
         sourcePath: path.resolve(this.contentRoot, entry.archivePath),
         objectKey: entry.objectKey ?? stateSnapshotFileKey("resource-packages", entry.sha256),
@@ -584,6 +586,6 @@ export class DynamicResourcePackageStore {
     const state = { schemaVersion: STORE_SCHEMA_VERSION, packages: [...this.#entries.values()] };
     await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { flag: "wx", mode: 0o600 });
     await rename(temporary, target);
-    queueStateSnapshot(this.#snapshotSink, "resource-packages", state);
+    await queueStateSnapshot(this.#snapshotSink, "resource-packages", state);
   }
 }
