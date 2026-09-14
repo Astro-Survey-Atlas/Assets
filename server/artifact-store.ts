@@ -639,8 +639,16 @@ export interface PublishedReleaseArchive {
   publishedAt: string;
 }
 
-/** Publish one immutable release archive and advance the current pointer last. */
-export async function publishReleaseArchive(descriptor: ReleaseArchiveDescriptor, store: ArtifactStore, options: { currentKey?: string } = {}): Promise<PublishedReleaseArchive> {
+export interface UploadedReleaseArchive {
+  schemaVersion: 2;
+  bundle: { id: string; sha256: string };
+  archiveKey: string;
+  archiveSizeBytes: number;
+  archiveSha256: string;
+}
+
+/** Upload one immutable release archive without changing the public pointer. */
+export async function uploadReleaseArchive(descriptor: ReleaseArchiveDescriptor, store: ArtifactStore): Promise<UploadedReleaseArchive> {
   if (!descriptor.bundle?.id || !/^[a-f0-9]{64}$/.test(descriptor.bundle.sha256)) throw new ArtifactStoreError("Invalid release bundle identity", 400);
   if (!Number.isSafeInteger(descriptor.archiveSizeBytes) || descriptor.archiveSizeBytes < 1 || !/^[a-f0-9]{64}$/.test(descriptor.archiveSha256)) throw new ArtifactStoreError("Invalid release archive checksum", 400);
   const archiveKey = `public/releases/${cleanKey(descriptor.bundle.id)}/${descriptor.bundle.sha256}/release.tar.gz`;
@@ -649,17 +657,32 @@ export async function publishReleaseArchive(descriptor: ReleaseArchiveDescriptor
     cacheControl: "public, max-age=31536000, immutable",
   });
   if (uploaded.sizeBytes !== descriptor.archiveSizeBytes || uploaded.sha256 !== descriptor.archiveSha256) throw new ArtifactStoreError("Published release archive failed read-after-write verification", 409);
+  return { schemaVersion: 2, bundle: descriptor.bundle, archiveKey, archiveSizeBytes: descriptor.archiveSizeBytes, archiveSha256: descriptor.archiveSha256 };
+}
+
+/** Advance the public pointer only after an uploaded archive passed isolation checks. */
+export async function activateReleasePointer(uploaded: UploadedReleaseArchive, store: ArtifactStore, options: { currentKey?: string; expectedCurrentBundleSha256?: string } = {}): Promise<PublishedReleaseArchive> {
   const currentKey = options.currentKey ?? "public/current.json";
+  const existing = await store.get(currentKey);
+  if (existing && options.expectedCurrentBundleSha256) {
+    let currentBundleSha256: string | undefined;
+    try {
+      const parsed = JSON.parse(existing.body.toString("utf8")) as { bundle?: { sha256?: unknown } };
+      currentBundleSha256 = typeof parsed.bundle?.sha256 === "string" ? parsed.bundle.sha256 : undefined;
+    } catch {
+      throw new ArtifactStoreConflictError(`Current release pointer is malformed: ${currentKey}`);
+    }
+    if (currentBundleSha256 !== options.expectedCurrentBundleSha256) throw new ArtifactStoreConflictError(`Current release changed; expected ${options.expectedCurrentBundleSha256}`);
+  }
   const publishedAt = new Date().toISOString();
   const pointer = {
     schemaVersion: 2 as const,
-    bundle: descriptor.bundle,
-    archiveKey,
-    archiveSizeBytes: descriptor.archiveSizeBytes,
-    archiveSha256: descriptor.archiveSha256,
+    bundle: uploaded.bundle,
+    archiveKey: uploaded.archiveKey,
+    archiveSizeBytes: uploaded.archiveSizeBytes,
+    archiveSha256: uploaded.archiveSha256,
     publishedAt,
   };
-  const existing = await store.get(currentKey);
   await store.putMutable(currentKey, `${JSON.stringify(pointer, null, 2)}\n`, {
     contentType: "application/json; charset=utf-8",
     cacheControl: "no-cache",
@@ -668,4 +691,10 @@ export async function publishReleaseArchive(descriptor: ReleaseArchiveDescriptor
   const verified = await store.get(currentKey);
   if (!verified || verified.sha256 !== digest(Buffer.from(`${JSON.stringify(pointer, null, 2)}\n`, "utf8"))) throw new ArtifactStoreConflictError(`Release pointer verification failed: ${currentKey}`);
   return { ...pointer, currentKey };
+}
+
+/** Publish one immutable release archive and advance the current pointer last. */
+export async function publishReleaseArchive(descriptor: ReleaseArchiveDescriptor, store: ArtifactStore, options: { currentKey?: string; expectedCurrentBundleSha256?: string } = {}): Promise<PublishedReleaseArchive> {
+  const uploaded = await uploadReleaseArchive(descriptor, store);
+  return activateReleasePointer(uploaded, store, options);
 }

@@ -193,6 +193,9 @@ test("admin page is included as a separate deployable entry point", async () => 
   assert.match(html, /ScanRequest/);
   assert.match(html, /\/admin\/main\.ts/);
   assert.match(html, /product-dialog-publish/);
+  assert.match(html, /product-dialog-retire/);
+  assert.match(await (await import("node:fs/promises")).readFile("site/admin/main.ts", "utf8"), /data-readiness-action/);
+  assert.match(await (await import("node:fs/promises")).readFile("site/admin/main.ts", "utf8"), /loadProductHistory/);
   assert.match(html, /editorial-dialog/);
   assert.match(html, /editorial-diff-dialog/);
   assert.match(html, /editorial-canvas/);

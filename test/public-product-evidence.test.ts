@@ -84,6 +84,7 @@ test("evidence projection keeps explicit links and provides real step evidence",
   assert.equal(projection.sourceReferences.some((item) => item.kind === "official-data"), false);
   assert.deepEqual(projection.steps.map((step) => step.sequence), [1, 2]);
   assert.ok(projection.steps[0]?.code?.snippet.includes("input_digest"));
+  assert.equal(projection.steps[0]?.code?.classification, "method-explanation");
   assert.equal(projection.steps[1]?.outputs[0]?.sha256, "a".repeat(64));
   assert.equal(projection.steps[1]?.outputs.length, 1);
 });

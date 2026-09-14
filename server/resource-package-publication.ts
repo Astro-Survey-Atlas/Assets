@@ -439,11 +439,22 @@ export class DynamicResourcePackageStore {
     const grouped = new Map<string, LayerBytes[]>();
     for (const publication of publications) {
       if (isDeniedSurvey(publication.surveyId)) continue;
+      const productRecord = products.find((candidate) => candidate.productId === publication.productId);
+      if (productRecord?.retiredAt) continue;
       const layer = await loadLayer(publication, products, resolveContentPath);
       if (!layer) continue;
       const current = grouped.get(publication.surveyId) ?? [];
       current.push(layer);
       grouped.set(publication.surveyId, current);
+    }
+    // If a survey still has publication records but all of its products were
+    // explicitly retired, keep the old archive for history but mark it
+    // deprecated so it cannot re-enter the current release.
+    const publicationSurveys = new Set(publications.filter((publication) => !isDeniedSurvey(publication.surveyId)).map((publication) => publication.surveyId));
+    for (const entry of this.#entries.values()) {
+      if (entry.deprecated || !publicationSurveys.has(entry.surveyId) || grouped.has(entry.surveyId)) continue;
+      entry.deprecated = true;
+      entry.replacedBy = [...new Set([...entry.replacedBy, `retired-${entry.surveyId}`])];
     }
     const created: DynamicResourcePackageEntry[] = [];
     for (const [surveyId, layers] of grouped) {

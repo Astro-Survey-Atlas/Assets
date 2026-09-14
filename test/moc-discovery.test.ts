@@ -92,6 +92,12 @@ test("MOC build service locks bytes and reaches STAGED with an injected Core run
   assert.equal(store.get(build.name).phase, "STAGED");
   assert.equal(store.get(build.name).source.snapshotSha256?.length, 64);
   assert.equal(store.get(build.name).outputs?.cellCount, 3);
+  await service.verifyOutputs(build.name);
+  await writeFile(path.join(evidence, store.get(build.name).outputs!.moc!.ref), "corrupt output");
+  await assert.rejects(service.verifyOutputs(build.name), /不可读取或与锁定内容不一致/);
+  await writeFile(path.join(evidence, store.get(build.name).outputs!.moc!.ref), "moc");
+  await writeFile(path.join(evidence, store.get(build.name).source.evidenceRef!), "corrupt input");
+  await assert.rejects(service.verifyOutputs(build.name), /来源快照/);
 });
 
 test("staged MOC outputs publish immutably and can be restored", async () => {

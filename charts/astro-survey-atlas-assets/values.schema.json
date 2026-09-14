@@ -215,10 +215,18 @@
         "enabled": {
           "type": "boolean"
         },
+        "publicVerifyUrl": {
+          "type": "string",
+          "format": "uri-reference",
+          "pattern": "^(|https://)"
+        },
         "warehouseNamespace": {
           "type": "string",
           "minLength": 1
         },
+        "discoveryObserverNamespace": { "type": "string", "minLength": 1 },
+        "discoveryObserverSelector": { "type": "string", "minLength": 1 },
+        "discoveryAcceptTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
         "warehouseScannerImage": {
           "type": "string",
           "minLength": 1

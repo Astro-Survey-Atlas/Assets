@@ -1,12 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { execFile as execFileCallback } from "node:child_process";
+import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
-import { createArtifactStoreFromProcess, publishReleaseArchive, type ArtifactStore } from "./artifact-store.js";
+import { activateReleasePointer, createArtifactStoreFromProcess, uploadReleaseArchive, type ArtifactStore, type UploadedReleaseArchive } from "./artifact-store.js";
 import { publicReleaseBundleDigest } from "./catalog.js";
 import type { MocPublication, MocPublicationFile } from "./moc-build.js";
 import { dynamicResourcePackageAssetId, type DynamicResourcePackageAsset, type DynamicResourcePackageEntry } from "./resource-package-publication.js";
+import { readResourcePackageManifest } from "./resource-package-inspection.js";
 import {
   assertRecordPublishable,
   isDeniedSurvey,
@@ -23,6 +26,7 @@ import { inferredPublicAssetDeliveryClass, type PublicAssetRecord } from "./type
 const MANIFEST_RELATIVE_PATH = "artifacts/public-survey-footprints/release-manifest.json";
 const PACKAGE_CATALOG_RELATIVE_PATH = "artifacts/public-survey-footprints/packages/catalog.json";
 const RELEASE_HISTORY_RELATIVE_PATH = "artifacts/public-survey-footprints/release-history.json";
+const execFile = promisify(execFileCallback);
 
 export interface ReleaseHistorySurvey {
   id: string;
@@ -97,11 +101,24 @@ export interface PublicationSurveyPlan {
   surveyId: string;
   publishedLayers: number;
   changedProducts: number;
+  productDiffs: PublicationProductDiff[];
   currentPackage: { id: string; version: string; sha256: string; sizeBytes: number } | undefined;
   inReleasePackage: boolean;
   changed: boolean;
   blockers: string[];
   selectable: boolean;
+}
+
+export interface PublicationProductDiff {
+  productId: string;
+  surveyId: string;
+  releaseId: string;
+  name: string;
+  change: "added" | "modified" | "removed";
+  fields: string[];
+  draftRevision: number;
+  publishedRevision: number | null;
+  reviewed: boolean;
 }
 
 export interface PublicationPlan {
@@ -112,6 +129,8 @@ export interface PublicationPlan {
   dynamicPackages: number;
   dynamicLayers: number;
   createdAt: string;
+  /** Bounded identity expectations used when the configured site is verified. */
+  verification?: PublicationVerificationExpectation;
 }
 
 export interface PublicationRunRequest {
@@ -120,7 +139,35 @@ export interface PublicationRunRequest {
   surveyIds: string[];
 }
 
-export type PublicationRunStatus = "queued" | "building" | "uploading" | "published" | "failed";
+export type PublicationRunStatus = "queued" | "building" | "uploading" | "verifying" | "published" | "failed";
+export type PublicationFailureStage = "build" | "upload" | "candidate" | "activate";
+
+export type PublicationVerificationState = "pending" | "passed" | "failed" | "not-configured";
+export interface PublicationVerification {
+  overall: "authority-published" | "site-pending" | "verified" | "failed";
+  candidate: { state: PublicationVerificationState; checkedAt?: string; bundleSha256?: string; error?: string };
+  authority: { state: PublicationVerificationState; checkedAt?: string; bundleSha256?: string; error?: string };
+  site: {
+    state: PublicationVerificationState;
+    target?: string;
+    checkedAt?: string;
+    observedBundleSha256?: string;
+    checkedProducts?: number;
+    missingProducts?: string[];
+    missingLayers?: string[];
+    missingPackages?: string[];
+    unexpectedProducts?: string[];
+    unexpectedLayers?: string[];
+    unexpectedPackages?: string[];
+    error?: string;
+  };
+}
+
+export interface PublicationVerificationExpectation {
+  products: Array<{ productId: string; surveyId: string; present: boolean }>;
+  layers: Array<{ layerId: string; surveyId: string; present: boolean }>;
+  packages: Array<{ id: string; version: string; surveyId: string; present: boolean }>;
+}
 
 export interface PublicationRun {
   runId: string;
@@ -139,6 +186,11 @@ export interface PublicationRun {
   files: number | undefined;
   packages: number | undefined;
   error: string | undefined;
+  /** The durable stage at which the last attempt stopped. */
+  failureStage?: PublicationFailureStage;
+  /** Identity-level expectations captured at submit time for target-site checks. */
+  expected?: PublicationVerificationExpectation;
+  verification?: PublicationVerification;
   log: string[];
 }
 
@@ -173,6 +225,10 @@ export interface PublicReleasePublisherOptions {
   store?: ArtifactStore;
   allowFilesystemStore?: boolean;
   snapshotSink?: StateSnapshotSink;
+  /** Explicit operator-configured public site target for post-publication checks. */
+  verificationTarget?: string;
+  /** Injectable HTTP client keeps target-site checks deterministic in tests. */
+  fetchImpl?: typeof fetch;
 }
 
 interface LatestPackage {
@@ -184,7 +240,7 @@ async function latestPackages(packages: PackageProvider): Promise<Map<string, La
   const latest = new Map<string, LatestPackage>();
   const assets = await packages.assets();
   for (const entry of await packages.list()) {
-    if (entry.hidden) continue;
+    if (entry.hidden || entry.deprecated) continue;
     const existing = latest.get(entry.id);
     if (existing && !existing.entry.deprecated && entry.deprecated) continue;
     if (existing && !entry.deprecated && packageMinor(existing.entry.version) > packageMinor(entry.version)) continue;
@@ -198,6 +254,93 @@ async function latestPackages(packages: PackageProvider): Promise<Map<string, La
 function packageMinor(version: string): number {
   const match = /^3\.(\d+)\.\d+$/.exec(version);
   return match ? Number(match[1]) : -1;
+}
+
+function productDiffFields(product: ProductRecord): string[] {
+  if (product.retiredAt) return ["retirement", ...(product.retirementReason ? ["retirementReason"] : [])];
+  if (!product.published) return ["identity", "source", "coverage", "presentation"];
+  const fields = ["name", "modality", "mode", "layerId", "coverageRole", "dataOrigin", "sourceTier", "originNote", "sourceLabel", "sourceUrl", "officialDataUrl", "officialQueryUrl", "geometrySourceUrl", "publicDescription", "publicStatus", "presentation"] as const;
+  return fields.filter((field) => JSON.stringify(product.draft[field]) !== JSON.stringify(product.published?.[field]));
+}
+
+function productDiff(product: ProductRecord): PublicationProductDiff | undefined {
+  if (product.retiredAt && product.published) {
+    if (product.publishedRevision !== null && product.revision <= product.publishedRevision) return undefined;
+    return {
+      productId: product.productId,
+      surveyId: product.draft.surveyId,
+      releaseId: product.draft.releaseId,
+      name: product.draft.name,
+      change: "removed",
+      fields: productDiffFields(product),
+      draftRevision: product.revision,
+      publishedRevision: product.publishedRevision,
+      reviewed: true,
+    };
+  }
+  if (product.publishedRevision !== null && product.revision <= product.publishedRevision) return undefined;
+  return {
+    productId: product.productId,
+    surveyId: product.draft.surveyId,
+    releaseId: product.draft.releaseId,
+    name: product.draft.name,
+    change: product.published ? "modified" : "added",
+    fields: productDiffFields(product),
+    draftRevision: product.revision,
+    publishedRevision: product.publishedRevision,
+    reviewed: Boolean(product.review && product.review.revision === product.revision && product.review.contentSha256 === product.contentSha256),
+  };
+}
+
+/** Capture the identity checks a target site must satisfy for one run. */
+async function verificationExpectations(
+  surveyIds: readonly string[],
+  diffs: readonly PublicationProductDiff[],
+  products: readonly ProductRecord[],
+  publications: readonly MocPublication[],
+  packages: readonly PublicationSurveyPlan[],
+): Promise<PublicationVerificationExpectation> {
+  const selected = new Set(surveyIds);
+  const productStates = new Map<string, { productId: string; surveyId: string; present: boolean }>();
+  const layerStates = new Map<string, { layerId: string; surveyId: string; present: boolean }>();
+  for (const diff of diffs) {
+    if (!selected.has(diff.surveyId)) continue;
+    productStates.set(diff.productId, { productId: diff.productId, surveyId: diff.surveyId, present: diff.change !== "removed" });
+    const product = products.find((candidate) => candidate.productId === diff.productId);
+    const publication = publications.find((candidate) => candidate.productId === diff.productId);
+    const layerId = product?.draft.layerId ?? publication?.layerId;
+    if (layerId) layerStates.set(layerId, { layerId, surveyId: diff.surveyId, present: diff.change !== "removed" });
+  }
+  // A selected survey can change only because a new MOC layer or package was
+  // staged. Include every current product and layer for that survey so a
+  // target cannot report success after silently dropping one of those
+  // outputs. Product records without a publication still need checking: the
+  // public product API is backed by ProductStore, not the MOC publication log.
+  for (const product of products) {
+    if (!selected.has(product.draft.surveyId) || product.retiredAt) continue;
+    if (product.published || product.publishedRevision === null) {
+      productStates.set(product.productId, { productId: product.productId, surveyId: product.draft.surveyId, present: true });
+    }
+    if (product.draft.layerId) layerStates.set(product.draft.layerId, { layerId: product.draft.layerId, surveyId: product.draft.surveyId, present: true });
+  }
+  for (const publication of publications) {
+    if (!selected.has(publication.surveyId)) continue;
+    const product = products.find((candidate) => candidate.productId === publication.productId);
+    if (product?.retiredAt) continue;
+    productStates.set(publication.productId, { productId: publication.productId, surveyId: publication.surveyId, present: true });
+    layerStates.set(publication.layerId, { layerId: publication.layerId, surveyId: publication.surveyId, present: true });
+  }
+  const packageStates = new Map<string, { id: string; version: string; surveyId: string; present: boolean }>();
+  for (const survey of packages) {
+    if (!selected.has(survey.surveyId) || !survey.currentPackage) continue;
+    const key = `${survey.currentPackage.id}@${survey.currentPackage.version}`;
+    packageStates.set(key, { id: survey.currentPackage.id, version: survey.currentPackage.version, surveyId: survey.surveyId, present: true });
+  }
+  return {
+    products: [...productStates.values()].sort((left, right) => left.productId.localeCompare(right.productId)),
+    layers: [...layerStates.values()].sort((left, right) => left.layerId.localeCompare(right.layerId)),
+    packages: [...packageStates.values()].sort((left, right) => left.id.localeCompare(right.id) || left.version.localeCompare(right.version)),
+  };
 }
 
 function slugifyReleaseId(releaseId: string): string {
@@ -215,7 +358,7 @@ function isPublicationRun(value: unknown): value is PublicationRun {
     && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(run.runId)
     && typeof run.planId === "string"
     && typeof run.status === "string"
-    && ["queued", "building", "uploading", "published", "failed"].includes(run.status)
+    && ["queued", "building", "uploading", "verifying", "published", "failed"].includes(run.status)
     && Array.isArray(run.surveyIds)
     && Array.isArray(run.log);
 }
@@ -224,6 +367,184 @@ async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> 
   const temporary = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
   await rename(temporary, filePath);
+}
+
+function safeArchivePath(value: string): string {
+  if (!value || value.includes("\0") || value.startsWith("/")) throw new PublicationConflictError(`Candidate archive contains an unsafe path: ${value}`, 500);
+  const normalized = path.posix.normalize(value.replaceAll(path.sep, "/")).replace(/^\.\//, "");
+  if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../") || path.posix.isAbsolute(normalized)) {
+    throw new PublicationConflictError(`Candidate archive contains an unsafe path: ${value}`, 500);
+  }
+  return normalized;
+}
+
+async function regularFiles(root: string, relative = ""): Promise<string[]> {
+  const directory = relative ? path.join(root, relative) : root;
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    const child = relative ? `${relative}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) files.push(...await regularFiles(root, child));
+    else if (entry.isFile()) files.push(child);
+    else throw new PublicationConflictError(`Candidate archive contains a special file: ${child}`, 500);
+  }
+  return files;
+}
+
+export interface ReleaseArchiveVerification {
+  state: "passed";
+  checkedAt: string;
+  bundleSha256: string;
+  files: number;
+  packageReferences: number;
+  coverageDocuments: number;
+}
+
+interface ReleaseDocumentVerification {
+  packageReferences: number;
+  coverageDocuments: number;
+}
+
+function objectRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new PublicationConflictError(`${label} must be an object`, 500);
+  return value as Record<string, unknown>;
+}
+
+function packageManifestRecord(records: Map<string, PublicAssetRecord>, id: string, version: string): PublicAssetRecord | undefined {
+  const downloadName = `${id}-${version}.zip`;
+  return [...records.values()].find((record) => record.kind === "package"
+    && (record.downloadName === downloadName || record.path.endsWith(`/${downloadName}`)));
+}
+
+/** Validate the small runtime control documents that bind packages and coverage together. */
+async function verifyReleaseDocuments(extractRoot: string, manifest: ReleaseManifestDocument): Promise<ReleaseDocumentVerification> {
+  const manifestRecords = new Map(manifest.files.map((record) => [record.path, record]));
+  const packageCatalogPath = path.join(extractRoot, PACKAGE_CATALOG_RELATIVE_PATH);
+  let packageCatalog: Record<string, unknown>;
+  try { packageCatalog = objectRecord(JSON.parse(await readFile(packageCatalogPath, "utf8")), "Resource package catalog"); }
+  catch (error) {
+    if (error instanceof PublicationConflictError) throw error;
+    throw new PublicationConflictError(`Candidate resource package catalog is missing or invalid: ${error instanceof Error ? error.message : String(error)}`, 409);
+  }
+  if (packageCatalog.schemaVersion !== 3 || !Array.isArray(packageCatalog.packages)) throw new PublicationConflictError("Candidate resource package catalog is not v3", 500);
+  let packageReferences = 0;
+  const packageKeys = new Set<string>();
+  for (const raw of packageCatalog.packages) {
+    const entry = objectRecord(raw, "Resource package entry");
+    const id = typeof entry.id === "string" ? entry.id : "";
+    const version = typeof entry.version === "string" ? entry.version : "";
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id) || !/^3\.\d+\.\d+$/.test(version)) throw new PublicationConflictError("Resource package catalog contains an invalid identity", 500);
+    const key = `${id}@${version}`;
+    if (packageKeys.has(key)) throw new PublicationConflictError(`Resource package catalog contains duplicate ${key}`, 500);
+    packageKeys.add(key);
+    const record = packageManifestRecord(manifestRecords, id, version);
+    if (!record) throw new PublicationConflictError(`Resource package catalog entry ${key} has no manifest ZIP`, 409);
+    if (entry.sizeBytes !== undefined && entry.sizeBytes !== record.sizeBytes) throw new PublicationConflictError(`Resource package size mismatch: ${key}`, 409);
+    if (entry.sha256 !== undefined && entry.sha256 !== record.sha256) throw new PublicationConflictError(`Resource package checksum mismatch: ${key}`, 409);
+    if (entry.archiveUrl !== undefined && (typeof entry.archiveUrl !== "string" || /[\u0000-\u001f]/.test(entry.archiveUrl))) throw new PublicationConflictError(`Resource package archive URL is invalid: ${key}`, 500);
+    let packageManifest: Awaited<ReturnType<typeof readResourcePackageManifest>>;
+    try {
+      packageManifest = await readResourcePackageManifest(await readFile(path.join(extractRoot, record.path)));
+    } catch (error) {
+      throw new PublicationConflictError(`Resource package ${key} does not contain a valid resource-package.json: ${error instanceof Error ? error.message : String(error)}`, 409);
+    }
+    if (packageManifest.id !== id || packageManifest.version !== version) {
+      throw new PublicationConflictError(`Resource package manifest identity mismatch: expected ${key}, got ${packageManifest.id}@${packageManifest.version}`, 409);
+    }
+    if (typeof entry.surveyId === "string" && packageManifest.surveyId !== entry.surveyId) {
+      throw new PublicationConflictError(`Resource package survey mismatch: ${key}`, 409);
+    }
+    packageReferences += 1;
+  }
+
+  const historyPath = path.join(extractRoot, RELEASE_HISTORY_RELATIVE_PATH);
+  let history: Record<string, unknown>;
+  try { history = objectRecord(JSON.parse(await readFile(historyPath, "utf8")), "Release history"); }
+  catch (error) {
+    if (error instanceof PublicationConflictError) throw error;
+    throw new PublicationConflictError(`Candidate release history is missing or invalid: ${error instanceof Error ? error.message : String(error)}`, 409);
+  }
+  if (history.schemaVersion !== 2 || !Array.isArray(history.releases)) throw new PublicationConflictError("Candidate release history is not v2", 500);
+  for (const rawRelease of history.releases) {
+    const release = objectRecord(rawRelease, "Release history entry");
+    if (typeof release.releaseId !== "string" || typeof release.bundleId !== "string" || !Array.isArray(release.packages)) throw new PublicationConflictError("Release history entry is malformed", 500);
+    for (const rawPackage of release.packages) {
+      const entry = objectRecord(rawPackage, "Release history package");
+      const id = typeof entry.id === "string" ? entry.id : "";
+      const version = typeof entry.version === "string" ? entry.version : "";
+      const record = packageManifestRecord(manifestRecords, id, version);
+      if (!record || !packageKeys.has(`${id}@${version}`)) throw new PublicationConflictError(`Release history package ${id}@${version} has no package catalog/manifest entry`, 409);
+      if (entry.sizeBytes !== undefined && entry.sizeBytes !== record.sizeBytes) throw new PublicationConflictError(`Release history package size mismatch: ${id}@${version}`, 409);
+      if (entry.sha256 !== undefined && entry.sha256 !== record.sha256) throw new PublicationConflictError(`Release history package checksum mismatch: ${id}@${version}`, 409);
+    }
+  }
+
+  let coverageDocuments = 0;
+  for (const record of manifest.files) {
+    if (record.kind !== "geometry" || !record.path.includes("/layers/") || !record.path.endsWith(".json")) continue;
+    let document: Record<string, unknown>;
+    try { document = objectRecord(JSON.parse(await readFile(path.join(extractRoot, record.path), "utf8")), `Coverage document ${record.path}`); }
+    catch (error) {
+      if (error instanceof PublicationConflictError) throw error;
+      throw new PublicationConflictError(`Coverage document is missing or invalid: ${record.path}`, 409);
+    }
+    const order = document.order;
+    const ordering = document.ordering;
+    const pixels = document.pixels;
+    if (!Number.isSafeInteger(order) || (order as number) < 0 || (order as number) > 29 || ordering !== "NESTED" || !Array.isArray(pixels) || pixels.some((pixel) => !Number.isSafeInteger(pixel) || (pixel as number) < 0)) {
+      throw new PublicationConflictError(`Coverage document has invalid ICRS/NESTED projection metadata: ${record.path}`, 500);
+    }
+    coverageDocuments += 1;
+  }
+  return { packageReferences, coverageDocuments };
+}
+
+/** Rehydrate an uploaded archive into a clean directory and verify every manifest record. */
+export async function verifyUploadedReleaseArchive(uploaded: UploadedReleaseArchive, store: ArtifactStore): Promise<ReleaseArchiveVerification> {
+  const root = await mkdtemp(path.join(tmpdir(), "assets-release-verify-"));
+  const archivePath = path.join(root, "release.tar.gz");
+  const extractRoot = path.join(root, "extract");
+  try {
+    const downloaded = await store.downloadToFile(uploaded.archiveKey, archivePath);
+    if (!downloaded) throw new PublicationConflictError(`Uploaded release archive is missing: ${uploaded.archiveKey}`, 409);
+    if (downloaded.sizeBytes !== uploaded.archiveSizeBytes || downloaded.sha256 !== uploaded.archiveSha256) throw new PublicationConflictError("Uploaded release archive checksum mismatch", 409);
+    const listing = (await execFile("tar", ["--list", "--gzip", "--file", archivePath])).stdout
+      .split("\n").map((entry) => entry.trim()).filter(Boolean).map(safeArchivePath);
+    if (new Set(listing).size !== listing.length) throw new PublicationConflictError("Candidate archive contains duplicate paths", 500);
+    await mkdir(extractRoot, { recursive: true });
+    await execFile("tar", ["--extract", "--gzip", "--file", archivePath, "--directory", extractRoot, "--no-same-owner", "--no-same-permissions"]);
+    const manifestPath = path.join(extractRoot, MANIFEST_RELATIVE_PATH);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as ReleaseManifestDocument;
+    if (manifest.schemaVersion !== 1 || !manifest.bundle?.id || !/^[a-f0-9]{64}$/.test(manifest.bundle.sha256) || !Array.isArray(manifest.files) || !manifest.files.length) throw new PublicationConflictError("Candidate release manifest is malformed", 500);
+    if (publicReleaseBundleDigest(manifest.files) !== manifest.bundle.sha256 || manifest.bundle.sha256 !== uploaded.bundle.sha256) throw new PublicationConflictError("Candidate release bundle digest mismatch", 409);
+    const expected = new Set<string>([MANIFEST_RELATIVE_PATH]);
+    for (const record of manifest.files) {
+      const relative = safeArchivePath(record.path);
+      if (expected.has(relative)) throw new PublicationConflictError(`Candidate release contains duplicate manifest path: ${relative}`, 500);
+      if (!record.id || !Number.isSafeInteger(record.sizeBytes) || record.sizeBytes < 1 || !/^[a-f0-9]{64}$/.test(record.sha256)) throw new PublicationConflictError(`Candidate release has an invalid asset record: ${record.id ?? "unknown"}`, 500);
+      expected.add(relative);
+      const absolute = path.resolve(extractRoot, ...relative.split("/"));
+      const relativeToRoot = path.relative(extractRoot, absolute);
+      if (relativeToRoot.startsWith("..") || path.isAbsolute(relativeToRoot)) throw new PublicationConflictError(`Candidate release path escapes extraction root: ${relative}`, 500);
+      let details;
+      try { details = await lstat(absolute); } catch { throw new PublicationConflictError(`Candidate release asset is missing: ${relative}`, 409); }
+      if (!details.isFile() || details.isSymbolicLink()) throw new PublicationConflictError(`Candidate release asset is not a regular file: ${relative}`, 500);
+      if (details.size !== record.sizeBytes) throw new PublicationConflictError(`Candidate release asset size mismatch: ${record.id}`, 409);
+      const bytes = await readFile(absolute);
+      if (createHash("sha256").update(bytes).digest("hex") !== record.sha256) throw new PublicationConflictError(`Candidate release asset checksum mismatch: ${record.id}`, 409);
+    }
+    const actual = new Set((await regularFiles(extractRoot)).map(safeArchivePath));
+    if (actual.size !== expected.size || [...expected].some((entry) => !actual.has(entry)) || [...actual].some((entry) => !expected.has(entry))) {
+      throw new PublicationConflictError("Candidate archive does not exactly match its release manifest", 500);
+    }
+    const documents = await verifyReleaseDocuments(extractRoot, manifest);
+    return { state: "passed", checkedAt: new Date().toISOString(), bundleSha256: manifest.bundle.sha256, files: manifest.files.length, ...documents };
+  } catch (error) {
+    if (error instanceof PublicationConflictError) throw error;
+    throw new PublicationConflictError(`Candidate archive isolation verification failed: ${error instanceof Error ? error.message : String(error)}`, 409);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 }
 
 /** Deep module that plans, builds and publishes complete public release archives from dynamic content. */
@@ -246,21 +567,23 @@ export class PublicReleasePublisher {
   async plan(): Promise<PublicationPlan> {
     const baseline = await this.#baselineManifest();
     const publications = await this.#options.loadPublications();
+    const products = this.#options.loadProducts ? await this.#options.loadProducts() : [];
     const latestByLayer = new Map<string, MocPublication>();
     for (const publication of publications) {
+      const product = products.find((candidate) => candidate.productId === publication.productId);
+      if (product?.retiredAt) continue;
       const existing = latestByLayer.get(publication.layerId);
       if (!existing || existing.publishedAt < publication.publishedAt) latestByLayer.set(publication.layerId, publication);
     }
     const packages = await latestPackages(this.#options.loadPackages);
     const packageBySurvey = new Map<string, LatestPackage>();
     for (const entry of packages.values()) if (!packageBySurvey.has(entry.entry.surveyId)) packageBySurvey.set(entry.entry.surveyId, entry);
-    const products = this.#options.loadProducts ? await this.#options.loadProducts() : [];
-    const changedProductsBySurvey = new Map<string, number>();
-    for (const product of products) {
-      if (product.publishedRevision !== null && product.revision > product.publishedRevision) {
-        const surveyId = (product as unknown as { surveyId?: string }).surveyId ?? "";
-        changedProductsBySurvey.set(surveyId, (changedProductsBySurvey.get(surveyId) ?? 0) + 1);
-      }
+    const productDiffs = products.map(productDiff).filter((value): value is PublicationProductDiff => Boolean(value));
+    const changedProductsBySurvey = new Map<string, PublicationProductDiff[]>();
+    for (const diff of productDiffs) {
+      const entries = changedProductsBySurvey.get(diff.surveyId) ?? [];
+      entries.push(diff);
+      changedProductsBySurvey.set(diff.surveyId, entries);
     }
     const baselinePackageShas = new Set(baseline.files.filter((record) => record.kind === "package").map((record) => record.sha256));
     const baselineRecordIds = new Set(baseline.files.map((record) => record.id));
@@ -284,15 +607,18 @@ export class PublicReleasePublisher {
       }
       const current = packageBySurvey.get(surveyId);
       const dynamicLayerIds = layers.flatMap((layer) => this.#layerRecordIds(layer)).filter((id) => !baselineRecordIds.has(id));
+      const diffs = changedProductsBySurvey.get(surveyId) ?? [];
+      for (const diff of diffs) if (!diff.reviewed) blockers.push(`Product ${diff.productId} revision ${diff.draftRevision} is not reviewed`);
       const changed = Boolean(
         (current && !baselinePackageShas.has(current.asset.sha256)) ||
         dynamicLayerIds.length > 0 ||
-        (changedProductsBySurvey.get(surveyId) ?? 0) > 0,
+        diffs.length > 0,
       );
       surveys.push({
         surveyId,
         publishedLayers: layers.length,
-        changedProducts: changedProductsBySurvey.get(surveyId) ?? 0,
+        changedProducts: diffs.length,
+        productDiffs: diffs,
         currentPackage: current ? { id: current.entry.id, version: current.entry.version, sha256: current.asset.sha256, sizeBytes: current.asset.sizeBytes } : undefined,
         inReleasePackage: Boolean(current && baselinePackageShas.has(current.asset.sha256)),
         changed,
@@ -303,9 +629,17 @@ export class PublicReleasePublisher {
         surveyId,
         layers: layers.map((layer) => [layer.layerId, layer.publishedAt, layer.files.moc.sha256]),
         package: current ? [current.entry.id, current.entry.version, current.asset.sha256] : undefined,
-        changedProducts: changedProductsBySurvey.get(surveyId) ?? 0,
+        changedProducts: diffs.length,
+        productDiffs: diffs.map((diff) => [diff.productId, diff.draftRevision, diff.fields, diff.reviewed]),
       });
     }
+    const verification = await verificationExpectations(
+      surveys.filter((survey) => survey.changed).map((survey) => survey.surveyId),
+      productDiffs,
+      products,
+      publications,
+      surveys,
+    );
     return {
       planId: digest(fingerprintInputs).slice(0, 16),
       baselineBundle: baseline.bundle,
@@ -314,6 +648,7 @@ export class PublicReleasePublisher {
       dynamicPackages: packages.size,
       dynamicLayers: latestByLayer.size,
       createdAt: new Date().toISOString(),
+      verification,
     };
   }
 
@@ -349,6 +684,11 @@ export class PublicReleasePublisher {
       files: undefined,
       packages: undefined,
       error: undefined,
+      expected: {
+        products: plan.verification?.products.filter((entry) => requested.includes(entry.surveyId ?? "")) ?? [],
+        layers: plan.verification?.layers.filter((entry) => requested.includes(entry.surveyId ?? "")) ?? [],
+        packages: plan.verification?.packages.filter((entry) => requested.includes(entry.surveyId ?? "")) ?? [],
+      },
       log: [],
     };
     await mkdir(this.#runsDir, { recursive: true });
@@ -356,6 +696,15 @@ export class PublicReleasePublisher {
     await this.#writeRun(run);
     await writeFile(path.join(this.#queueDir, `${run.runId}.json`), `${JSON.stringify({ runId: run.runId }, null, 2)}\n`, { flag: "wx" });
     return run;
+  }
+
+  /** Requeue a failed attempt against a freshly computed plan and baseline. */
+  async retry(runId: string, requestedBy?: string): Promise<PublicationRun> {
+    const previous = await this.get(runId);
+    if (!previous) throw new PublicationConflictError(`Unknown publication run: ${runId}`, 404);
+    if (previous.status !== "failed") throw new PublicationConflictError(`Publication run ${runId} is ${previous.status}, not failed`);
+    const plan = await this.plan();
+    return this.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: previous.surveyIds }, requestedBy);
   }
 
   async get(runId: string): Promise<PublicationRun | undefined> {
@@ -398,13 +747,26 @@ export class PublicReleasePublisher {
   }
 
   async execute(runId: string): Promise<PublicationRun> {
-    let run = await this.get(runId);
-    if (!run) throw new PublicationConflictError(`Unknown publication run: ${runId}`, 404);
+    const existing = await this.get(runId);
+    if (!existing) throw new PublicationConflictError(`Unknown publication run: ${runId}`, 404);
+    let run: PublicationRun = existing;
     if (run.status !== "queued") throw new PublicationConflictError(`Publication run ${runId} is ${run.status}, not queued`);
 
     const stagingRoot = await mkdtemp(path.join(tmpdir(), "assets-release-publish-"));
     let archivePath: string | undefined;
-    run = { ...run, status: "building", startedAt: new Date().toISOString() };
+    let failureStage: "build" | "upload" | "candidate" | "activate" = "build";
+    const verificationTarget = this.#options.verificationTarget?.trim() || process.env.ASSETS_PUBLIC_VERIFY_URL?.trim() || undefined;
+    run = {
+      ...run,
+      status: "building",
+      startedAt: new Date().toISOString(),
+      verification: {
+        overall: "failed",
+        candidate: { state: "pending" },
+        authority: { state: "pending" },
+        site: { state: verificationTarget ? "pending" : "not-configured", ...(verificationTarget ? { target: verificationTarget } : {}) },
+      },
+    };
     await this.#writeRun(run);
     try {
       const candidate = await this.#buildCandidateTree(stagingRoot, runId);
@@ -421,7 +783,28 @@ export class PublicReleasePublisher {
       if (store.kind !== "s3" && !this.#options.allowFilesystemStore) {
         throw new PublicationConflictError("Release publication requires a configured S3 object store", 400);
       }
-      const published = await publishReleaseArchive(descriptor, store, { currentKey: process.env.ASSETS_OBJECT_STORE_CURRENT_KEY });
+      failureStage = "upload";
+      const uploaded = await uploadReleaseArchive(descriptor, store);
+      failureStage = "candidate";
+      const candidateVerification = await verifyUploadedReleaseArchive(uploaded, store);
+      run = {
+        ...run,
+        status: "verifying",
+        verification: {
+          ...(run.verification ?? { overall: "failed", candidate: { state: "pending" }, authority: { state: "pending" }, site: { state: "not-configured" } }),
+          candidate: candidateVerification,
+          authority: { state: "pending" },
+        },
+      };
+      await this.#writeRun(run);
+      failureStage = "activate";
+      const published = await activateReleasePointer(uploaded, store, {
+        currentKey: process.env.ASSETS_OBJECT_STORE_CURRENT_KEY,
+        expectedCurrentBundleSha256: run.baselineBundle.sha256,
+      });
+      const siteState = verificationTarget
+        ? { state: "pending" as const, target: verificationTarget }
+        : { state: "not-configured" as const };
       run = {
         ...run,
         status: "published",
@@ -430,22 +813,183 @@ export class PublicReleasePublisher {
         archiveKey: published.archiveKey,
         archiveSizeBytes: published.archiveSizeBytes,
         archiveSha256: published.archiveSha256,
+        verification: {
+          ...(run.verification ?? { overall: "failed", candidate: { state: "pending" }, authority: { state: "pending" }, site: { state: "not-configured" } }),
+          overall: verificationTarget ? "site-pending" : "authority-published",
+          authority: { state: "passed", checkedAt: published.publishedAt, bundleSha256: published.bundle.sha256 },
+          site: siteState,
+        },
       };
       run = this.#append(run, `published ${published.archiveKey}`);
       await this.#writeRun(run);
+      if (verificationTarget) run = await this.verifySite(run.runId);
       return run;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const verification = run.verification;
       run = {
         ...run,
         status: "failed",
         finishedAt: new Date().toISOString(),
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
+        failureStage,
+        ...(verification ? { verification: {
+          ...verification,
+          overall: "failed",
+          ...(failureStage === "candidate" ? { candidate: { ...verification.candidate, state: "failed", checkedAt: new Date().toISOString(), error: message } } : {}),
+          ...(failureStage === "activate" || failureStage === "upload" ? { authority: { ...verification.authority, state: "failed", checkedAt: new Date().toISOString(), error: message } } : {}),
+        } } : {}),
       };
       await this.#writeRun(run).catch(() => undefined);
       return run;
     } finally {
       await rm(stagingRoot, { recursive: true, force: true });
       if (archivePath) await rm(path.dirname(archivePath), { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  /** Verify a configured target site without changing the release pointer. */
+  async verifySite(runId: string): Promise<PublicationRun> {
+    let run = await this.get(runId);
+    if (!run) throw new PublicationConflictError(`Unknown publication run: ${runId}`, 404);
+    const target = this.#options.verificationTarget?.trim() || process.env.ASSETS_PUBLIC_VERIFY_URL?.trim();
+    if (!target) {
+      run = { ...run, verification: { ...(run.verification ?? { overall: "authority-published", candidate: { state: "passed" }, authority: { state: "passed" }, site: { state: "not-configured" } }), overall: run.status === "failed" ? "failed" : "authority-published", site: { state: "not-configured" } } };
+      await this.#writeRun(run);
+      return run;
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(target);
+      if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.hostname === "localhost" || /^(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(parsed.hostname)) throw new Error("target must be a public HTTPS URL");
+    } catch {
+      run = { ...run, verification: { ...(run.verification ?? { overall: "authority-published", candidate: { state: "passed" }, authority: { state: "passed" }, site: { state: "pending" } }), overall: "failed", site: { state: "failed", target, checkedAt: new Date().toISOString(), error: "Configured verification target is not a public HTTPS URL" } } };
+      await this.#writeRun(run);
+      return run;
+    }
+    const site = { state: "pending" as const, target, checkedAt: new Date().toISOString() };
+    run = { ...run, verification: { ...(run.verification ?? { overall: "authority-published", candidate: { state: "passed" }, authority: { state: "passed" }, site }), overall: "site-pending", site } };
+    await this.#writeRun(run);
+    try {
+      const base = parsed.toString().replace(/\/$/, "");
+      const fetchImpl = this.#options.fetchImpl ?? fetch;
+      const request = async (suffix: string): Promise<Record<string, unknown>> => {
+        const response = await fetchImpl(`${base}${suffix}`, { redirect: "error", headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) });
+        if (!response.ok) throw new Error(`${suffix} returned HTTP ${response.status}`);
+        const body = await response.json() as unknown;
+        if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error(`${suffix} returned an invalid JSON object`);
+        return body as Record<string, unknown>;
+      };
+      const health = await request("/healthz");
+      const bundle = health.bundle && typeof health.bundle === "object" && !Array.isArray(health.bundle) ? health.bundle as Record<string, unknown> : {};
+      const observedBundleSha256 = typeof bundle.sha256 === "string" ? bundle.sha256 : undefined;
+      if (!observedBundleSha256 || observedBundleSha256 !== run.bundle?.sha256) {
+        run = { ...run, verification: { ...(run.verification ?? { overall: "site-pending", candidate: { state: "passed" }, authority: { state: "passed" }, site }), overall: "site-pending", site: { state: "pending", target, checkedAt: new Date().toISOString(), ...(observedBundleSha256 ? { observedBundleSha256 } : {}), error: `目标站点仍未使用候选 bundle（期望 ${run.bundle?.sha256 ?? "unknown"}）` } } };
+        await this.#writeRun(run);
+        return run;
+      }
+      const products = await request("/api/v1/products");
+      const coverage = await request("/api/v1/coverage/catalog");
+      const packages = await request("/api/v1/resource-packages/catalog.json");
+      if (!Array.isArray(products.products)) throw new Error("/api/v1/products returned no products array");
+      const productList = products.products;
+      const layerList = Array.isArray(coverage.layers) ? coverage.layers : [];
+      const packageList = Array.isArray(packages.packages) ? packages.packages : [];
+      if (!Array.isArray(coverage.layers)) throw new Error("/api/v1/coverage/catalog returned no layers array");
+      if (!Array.isArray(packages.packages)) throw new Error("/api/v1/resource-packages/catalog.json returned no packages array");
+      const productIds = new Set(productList.flatMap((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        const id = (value as Record<string, unknown>).productId;
+        return typeof id === "string" && id ? [id] : [];
+      }));
+      const layerIds = new Set(layerList.flatMap((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        const id = (value as Record<string, unknown>).layerId;
+        return typeof id === "string" && id ? [id] : [];
+      }));
+      const packageKeys = new Set(packageList.flatMap((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        const entry = value as Record<string, unknown>;
+        return typeof entry.id === "string" && typeof entry.version === "string" ? [`${entry.id}@${entry.version}`] : [];
+      }));
+      const productSurveys = new Map<string, Set<string | undefined>>();
+      for (const value of productList) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+        const entry = value as Record<string, unknown>;
+        if (typeof entry.productId !== "string" || !entry.productId) continue;
+        const surveys = productSurveys.get(entry.productId) ?? new Set<string | undefined>();
+        surveys.add(typeof entry.surveyId === "string" ? entry.surveyId : undefined);
+        productSurveys.set(entry.productId, surveys);
+      }
+      const layerSurveys = new Map<string, Set<string | undefined>>();
+      for (const value of layerList) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+        const entry = value as Record<string, unknown>;
+        if (typeof entry.layerId !== "string" || !entry.layerId) continue;
+        const surveys = layerSurveys.get(entry.layerId) ?? new Set<string | undefined>();
+        surveys.add(typeof entry.surveyId === "string" ? entry.surveyId : undefined);
+        layerSurveys.set(entry.layerId, surveys);
+      }
+      const packageSurveys = new Map<string, Set<string | undefined>>();
+      for (const value of packageList) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+        const entry = value as Record<string, unknown>;
+        if (typeof entry.id !== "string" || typeof entry.version !== "string") continue;
+        const key = `${entry.id}@${entry.version}`;
+        const surveys = packageSurveys.get(key) ?? new Set<string | undefined>();
+        surveys.add(typeof entry.surveyId === "string" ? entry.surveyId : undefined);
+        packageSurveys.set(key, surveys);
+      }
+      const hasIdentity = (identities: Map<string, Set<string | undefined>>, key: string, surveyId: string): boolean => identities.get(key)?.has(surveyId) ?? false;
+      const expectation = run.expected;
+      const missingProducts = expectation?.products.filter((entry) => entry.present && !hasIdentity(productSurveys, entry.productId, entry.surveyId)).map((entry) => entry.productId) ?? [];
+      const missingLayers = expectation?.layers.filter((entry) => entry.present && !hasIdentity(layerSurveys, entry.layerId, entry.surveyId)).map((entry) => entry.layerId) ?? [];
+      const missingPackages = expectation?.packages.filter((entry) => entry.present && !hasIdentity(packageSurveys, `${entry.id}@${entry.version}`, entry.surveyId)).map((entry) => `${entry.id}@${entry.version}`) ?? [];
+      const unexpectedProducts = expectation?.products.filter((entry) => !entry.present && productIds.has(entry.productId)).map((entry) => entry.productId) ?? [];
+      const unexpectedLayers = expectation?.layers.filter((entry) => !entry.present && layerIds.has(entry.layerId)).map((entry) => entry.layerId) ?? [];
+      const unexpectedPackages = expectation?.packages.filter((entry) => !entry.present && packageKeys.has(`${entry.id}@${entry.version}`)).map((entry) => `${entry.id}@${entry.version}`) ?? [];
+      const mismatches = [...missingProducts, ...missingLayers, ...missingPackages, ...unexpectedProducts, ...unexpectedLayers, ...unexpectedPackages];
+      const affected = expectation?.products.filter((entry) => entry.present).length ?? run.surveyIds.filter((surveyId) => productList.some((value) => value && typeof value === "object" && !Array.isArray(value) && ((value as Record<string, unknown>).surveyId === surveyId || ((value as Record<string, unknown>).identity && typeof (value as Record<string, unknown>).identity === "object" && ((value as Record<string, unknown>).identity as Record<string, unknown>).surveyId === surveyId)))).length;
+      if (mismatches.length) {
+        const details = [
+          missingProducts.length ? `missing products: ${missingProducts.join(", ")}` : "",
+          missingLayers.length ? `missing layers: ${missingLayers.join(", ")}` : "",
+          missingPackages.length ? `missing packages: ${missingPackages.join(", ")}` : "",
+          unexpectedProducts.length ? `unexpected products: ${unexpectedProducts.join(", ")}` : "",
+          unexpectedLayers.length ? `unexpected layers: ${unexpectedLayers.join(", ")}` : "",
+          unexpectedPackages.length ? `unexpected packages: ${unexpectedPackages.join(", ")}` : "",
+        ].filter(Boolean).join("; ");
+        run = {
+          ...run,
+          verification: {
+            ...(run.verification ?? { overall: "site-pending", candidate: { state: "passed" }, authority: { state: "passed" }, site }),
+            overall: "failed",
+            site: {
+              state: "failed",
+              target,
+              checkedAt: new Date().toISOString(),
+              observedBundleSha256,
+              checkedProducts: affected,
+              ...(missingProducts.length ? { missingProducts } : {}),
+              ...(missingLayers.length ? { missingLayers } : {}),
+              ...(missingPackages.length ? { missingPackages } : {}),
+              ...(unexpectedProducts.length ? { unexpectedProducts } : {}),
+              ...(unexpectedLayers.length ? { unexpectedLayers } : {}),
+              ...(unexpectedPackages.length ? { unexpectedPackages } : {}),
+              error: `目标站点内容与候选身份不一致：${details}`,
+            },
+          },
+        };
+        await this.#writeRun(run);
+        return run;
+      }
+      run = { ...run, verification: { ...(run.verification ?? { overall: "site-pending", candidate: { state: "passed" }, authority: { state: "passed" }, site }), overall: "verified", site: { state: "passed", target, checkedAt: new Date().toISOString(), observedBundleSha256, checkedProducts: affected } } };
+      await this.#writeRun(run);
+      return run;
+    } catch (error) {
+      run = { ...run, verification: { ...(run.verification ?? { overall: "site-pending", candidate: { state: "passed" }, authority: { state: "passed" }, site }), overall: "failed", site: { state: "failed", target, checkedAt: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) } } };
+      await this.#writeRun(run);
+      return run;
     }
   }
 
@@ -520,8 +1064,11 @@ export class PublicReleasePublisher {
 
     const baselineRecordIds = new Set(baseline.files.map((record) => record.id));
     const publications = await this.#options.loadPublications();
+    const products = this.#options.loadProducts ? await this.#options.loadProducts() : [];
     const latestByLayer = new Map<string, MocPublication>();
     for (const publication of publications) {
+      const product = products.find((candidate) => candidate.productId === publication.productId);
+      if (product?.retiredAt) continue;
       const existing = latestByLayer.get(publication.layerId);
       if (!existing || existing.publishedAt < publication.publishedAt) latestByLayer.set(publication.layerId, publication);
     }
@@ -703,7 +1250,7 @@ export class PublicReleasePublisher {
     const assets = await this.#options.loadPackages.assets();
     const result: Array<{ entry: PublicPackageEntry; asset: DynamicResourcePackageAsset }> = [];
     for (const entry of await this.#options.loadPackages.list()) {
-      if (entry.hidden || isDeniedSurvey(entry.surveyId)) continue;
+      if (entry.hidden || entry.deprecated || isDeniedSurvey(entry.surveyId)) continue;
       const asset = assets.find((candidate) => candidate.id === dynamicResourcePackageAssetId(entry));
       if (asset) result.push({ entry, asset });
     }

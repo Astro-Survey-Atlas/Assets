@@ -1,6 +1,83 @@
 # Assets Session Handoff
 
-Updated: 2026-09-13 (P0-P6 authority migration and final verification closure)
+## Latest: dev admin polish and independent task observation (2026-09-14)
+
+Dev Helm revision **140**, image `0.1.0-20260914-171000`, digest
+`sha256:21511d2927dd8b69fc0072ca3f9bbc065f6c88a4bbe8ac791b7400f19b3c44fa`.
+Verified user URL: `http://astro.assets.dev.72602.space:32080/admin/overview`.
+Both site and publisher Ready; hydrate retains authority bundle
+`adace67a9c7bcbae0044ced06352be7263b91dade2cb0bc8a4bc1415539ee407`.
+
+Admin survey rows are 104px with 32 local project/scientific images, separate
+from coverage previews. Official public Logo, compact toolbar, whole-row
+connector connection colors and right-side inventory, and 14px preflight
+heading with distinct blocker/pending/pass colors are deployed. External
+image URLs are source references only: CSP stays self-only. Missing images
+fall back to explicit text. Existing routing and five-cycle polling protections
+remain; Escape/close on product dialogs no longer causes polling to reopen them.
+
+Discovery list/detail responses now include independent `observation` alongside
+unaltered Warehouse `status`. Default 120-second acceptance timeout is a Helm
+value. Assets reads bounded executor Pod/log diagnostics with 15-second cache;
+known error signatures are mapped to safe messages, never raw logs. Timeout
+without diagnosis remains delayed/unknown, not a fabricated executor error.
+Open task detail updates status only; failed reads retain the last known state.
+
+Warehouse recovery was implemented in the sibling Warehouse repository with
+Luna Max: list-before-watch namespace checks, bounded coalescing work queue,
+controller health probes and JVM OOM exit. Warehouse dev revision 6 uses
+`0.2.0-20260914-controller-health`. The missing `astro-data-workspace` watch
+and client failure were relevant; the earlier claim based only on the scan
+operator's RBAC was incomplete because discovery has its own controller/SA.
+Original Euclid request `euclid-moc-discovery-20260914065533` now SUCCEEDED,
+Job `euclid-moc-discovery-20260914065533-moc-discovery`, 1 candidate. Original
+requests were neither deleted nor resubmitted.
+
+Validation: Assets build, **197 Node tests**, Core wheel, TypeScript and Helm
+lint passed. Local browser regression verifies five polls, retained selection,
+OOM display, diagnosis recovery, failed status queries, pause/manual refresh.
+Live dev visual smoke verifies actual images, 104px rows, 14px preflight,
+distinct warning/blocker colors, connector layout, dark mode and mobile.
+Screenshots: `/tmp/asa-admin-visual-dev-140/` (Euclid candidate screenshot in
+`/tmp/asa-admin-visual-dev-139/`). Public health/assets/coverage and Euclid WebP
+return 200; DESI FITS Range returns 206 with content SHA. Revision 140 also
+uses overview aggregates for toolbar counts before task lists are loaded;
+the live browser verifies no placeholder dashes on overview. Production
+remains unchanged. No commit/push.
+
+Warehouse static gates and Asset caller smoke passed. Full Warehouse live
+validation remains partially limited: local fixture PVC lacks
+`/data/gz_desi_merger_samples.csv`; Workspace caller skipped because its
+namespace does not exist. These are separate from successful Euclid recovery.
+
+The older revision and diagnosis records below are historical.
+
+Updated: 2026-09-14 (admin usability deployed to dev)
+
+Latest rollout supersedes the revision 137 details below: dev Helm revision
+138, image `0.1.0-20260914-142228`, running digest
+`sha256:63967c1b9fd830cf5de1e061fb26d544a9a8676ef4a605aac9dd86d9a280d644`.
+Admin now has explicit `/admin/overview`, `/admin/sources`, `/admin/tasks`,
+`/admin/review`, `/admin/releases` routes and survey/product deep links.
+Polling is workspace-scoped with cancellation, unchanged-data suppression,
+stable overview/build DOM, a session pause toggle, and modal snapshots.
+Overview restores L0–L3 statistics; build outputs span the full work-item width.
+Validation: 193 Node tests plus Core wheel, server/site builds and types,
+browser five-cycle Euclid selection regression, pause/manual refresh and
+deep-link reload; hydrate succeeded and public API/Range checks passed.
+
+Latest usability follow-up (uncommitted, deployed to dev revision 137): survey-card overview,
+read-only product detail and registration confirmation, searchable discovery
+product tree, existing-candidate/build labels, compact connector icons and
+guided evidence checks. `POST /api/v1/admin/products/{id}/verify-build` verifies
+locked source/output bytes and Core MOC validity, persists the result and
+invalidates review; latest failed verification blocks review. Node suite:
+190 passed plus Core wheel; local workflow smoke and JWST/Roman browser fixture
+test passed. See the final usability entry in the admin refactor plan.
+Roman's pending request has no status/Job: the deployed Warehouse operator
+ServiceAccount cannot list MocDiscoveryRequests (`kubectl auth can-i` returned
+`no`); the live Role has ScanRequest permissions only. This requires Warehouse
+RBAC reconciliation; no Warehouse or cluster resource was changed here.
 
 ## Active implementation handoff
 
@@ -39,13 +116,14 @@ was deleted after those restores.
 
 Completed in this handoff: P2 atomic/idempotent upload spool, P3 CAS state
 snapshots and restore, P4 pinned hydrate-first workflow, P5 authority cutover
-and old development-store cleanup, and P6 API `syncStatus` plus explicit
-offline fallback. Do not add scan-to-MOC/package conversion or change
-DR/coverage precision.
+and old development-store cleanup, P6 API `syncStatus` plus explicit offline
+fallback, and the admin-readiness refactor first pass. The refactor plan is
+`docs/admin-readiness-refactor-plan.md`; preserve its remaining P2/P5 gates.
+Do not add scan-to-MOC/package conversion or change DR/coverage precision.
 
-Live deployment: Helm revision `135`, image
-`0.1.0-20260913-002759`, digest
-`sha256:5cecb399c7cf6a39f497ca2083a841428024b2da2967dc3a030b49aa50822da3`;
+Live development deployment: Helm revision `137`, image
+`0.1.0-20260914-125847`, running pod image digest
+`sha256:26d9d11187ed839b027d8da582c5c7f1cc02987aac2e30ea2c032334e71bdf26`;
 site and release-publisher use `asa-resource` via
 `asa-assets-authority-object-store`. Products authority pointer is generation
 8 (`322cd73ca79d46cf9612356d78494262e40356ef756318054f63ba90802e1e28`);
@@ -54,11 +132,25 @@ resource-packages is generation 4
 Migration deletion details are in
 `docs/s3-authority-migration-receipt-20260912.json`.
 
-Final verification: the hydrated release-root Node suite passed 158 tests
-with 2 intentional skips; Core wheel, server/site TypeScript, Vite, Helm
-lint/templates and `git diff --check` also passed. The live public and
-authority pointers were re-read after verification and matched the hashes
-above.
+Final verification for this handoff: the Node suite passed 190 tests; Core
+wheel, server/site TypeScript, Vite, focused target-site verification tests,
+Helm lint and `git diff --check` also passed. The local admin browser smoke
+passed against the local admin service with the explicit
+`--allow-control-plane-unavailable --workflow` flags (the local process has no
+Warehouse API). On September 14 the dev application image was upgraded using
+the live Helm values (`--reuse-values`, only `image.tag` overridden; the old
+`deploy/k3s-values.yaml` reference no longer exists). Both site and publisher
+rolled out successfully; hydrate exited 0 and retained the authority bundle
+`adace67a9c7bcbae0044ced06352be7263b91dade2cb0bc8a4bc1415539ee407`.
+Live admin browser smoke passed through `http://10.15.51.75:32083/admin/`;
+public assets/coverage returned 200 and a DESI FITS Range returned 206 with
+its content hash. The dev DNS host currently resolves to `10.15.49.212` and
+does not accept HTTP connections from this workstation; use the NodePort.
+The configured dev ingress is `astro.assets.dev.72602.space`; the separate
+`astro.assets.72602.space` site was not changed. Remaining admin gates are the
+Warehouse native/PVC inventory contract, a write-enabled end-to-end publish
+workflow in a disposable environment, and HTTPS target-site verification for
+the requested 72602 production host.
 
 Historical sections below are not current operating instructions. Recheck
 live values in P0 instead of copying old revision/hash numbers.

@@ -409,6 +409,27 @@ export class MocBuildService {
   readonly runner: MocCoreRunner;
   #running = new Set<string>();
 
+  /** Recheck actual locked bytes; never accept evidence hashes from the caller. */
+  async verifyOutputs(name: string): Promise<void> {
+    const build = this.store.get(name);
+    if (build.phase !== "STAGED" || !build.outputs?.moc) throw new AdminHttpError(409, "此产品尚无可校验的构建产物，请先从探索候选构建覆盖。");
+    const source = { ref: build.source.evidenceRef, sha256: build.source.snapshotSha256, sizeBytes: build.source.sizeBytes };
+    const outputs = Object.values(build.outputs).filter((entry): entry is MocBuildOutputFile => Boolean(entry && typeof entry === "object" && "ref" in entry));
+    for (const [label, file] of [["来源快照", source], ...outputs.map((file) => [file.ref, file] as const)] as const) {
+      if (!file.ref || !file.sha256) throw new AdminHttpError(409, `${label} 缺少锁定记录，请重新构建。`);
+      const absolute = immutableRef(this.evidenceRoot, path.resolve(this.evidenceRoot, file.ref));
+      try {
+        const info = await lstat(absolute);
+        if (!info.isFile() || info.isSymbolicLink() || (file.sizeBytes !== undefined && info.size !== file.sizeBytes)) throw new Error("文件类型或大小不匹配");
+        if (hash(await readFile(absolute)) !== file.sha256) throw new Error("内容哈希不匹配");
+      } catch {
+        throw new AdminHttpError(409, `${label} 不可读取或与锁定内容不一致。请恢复权威证据或重新构建，不要手填哈希。`);
+      }
+    }
+    const validation = await this.runner.validate(immutableRef(this.evidenceRoot, path.resolve(this.evidenceRoot, build.outputs.moc.ref)));
+    if (validation.valid === false) throw new AdminHttpError(409, "Core MOC 校验未通过，请检查构建记录并重新构建。");
+  }
+
   constructor(options: MocBuildServiceOptions) {
     this.store = options.store;
     this.evidenceRoot = path.resolve(options.evidenceRoot ?? process.env.ASSETS_EVIDENCE_ROOT ?? "/var/lib/assets-evidence");

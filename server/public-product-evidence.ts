@@ -213,7 +213,7 @@ function codeFor(mode: string, kind: string): PublicProductCodeEvidence | undefi
     },
   };
   const selected = snippets[`${mode}:${kind}`] ?? snippets[`*:${kind}`];
-  return selected ? { language: "python", snippet: selected.snippet, implementationRef: selected.implementationRef } : undefined;
+  return selected ? { language: "python", snippet: selected.snippet, implementationRef: selected.implementationRef, classification: "method-explanation" } : undefined;
 }
 
 function noteItem(label: string, description: string, reason?: string): PublicProductEvidenceItem {

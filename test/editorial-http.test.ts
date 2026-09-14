@@ -84,6 +84,10 @@ test("editorial HTTP API keeps drafts private and publishes display copy without
   const initialPublicProduct = initialPublicSurvey.releases.find((entry) => entry.id === release.releaseId)!.products.find((entry) => entry.productId === productId)!;
   const initialLayerId = initialPublicProduct.coverage?.layerId;
 
+  const productAdmin = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${encodeURIComponent(productId)}`, { headers });
+  const productAdminBody = await productAdmin.json() as { product: { revision: number; readiness?: { draft?: { gaps?: string[] } } } };
+  const productReview = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${encodeURIComponent(productId)}/review`, { method: "POST", headers, body: JSON.stringify({ revision: productAdminBody.product.revision, acceptedGaps: productAdminBody.product.readiness?.draft?.gaps ?? [] }) });
+  assert.equal(productReview.status, 200);
   const productPublish = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${encodeURIComponent(productId)}/publish`, { method: "POST", headers, body: JSON.stringify({ revision: 1 }) });
   assert.equal(productPublish.status, 200);
 

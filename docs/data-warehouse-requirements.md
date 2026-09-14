@@ -6,11 +6,19 @@
 ## 1. 调用边界
 
 Assets 通过 Kubernetes API 提交 `atlas.zhejianglab.org/v1alpha1` 的
-`ScanRequest`。远程 Connector 在 Assets 管理的 ConfigMap 中保存 endpoint、region、
-bucket、prefix 和 Secret 引用名；远程对象存储的 access key/secret key 只存
-在同 namespace 的 Secret 中。本地 Connector 只保存 Warehouse Infra 创建并标记
-`atlas.zhejianglab.org/scanner-source=true` 的 PVC 名称，以及可选的 PVC 内相对
-`basePath`；Assets 不创建 PV/PVC，也不接受节点名、hostPath、NFS 服务器或导出路径。
+`ScanRequest`。Assets 创建的远程 Connector 在自己的 ConfigMap 中保存
+endpoint、region、bucket、prefix 和 Secret 引用名；远程对象存储的 access
+key/secret key 只存在于同 namespace 的 Secret 中。本地 Connector 只保存
+Warehouse Infra 创建并标记 `atlas.zhejianglab.org/scanner-source=true` 的 PVC
+名称，以及可选的 PVC 内相对 `basePath`；Assets 不创建 PV/PVC，也不接受节点名、
+hostPath、NFS 服务器或导出路径。
+
+如果 Warehouse 安装了其原生 `org.zhejianglab.astro.metadata/v1alpha1` 的
+`AstroDataSource` CRD，Assets 管理端可以只读汇总其中的 Connector 元数据和
+`credentialSecretRef`，不会创建、更新或删除该资源。Warehouse 当前版本没有稳定的
+授权范围 inventory status/API；因此 AstroDataSource 或 PVC 的目录对象数、字节数
+在 Assets 中必须显示为 `unknown`，不能用一次 ScanRequest 的 `discoveredFiles`
+冒充总量。等 Warehouse 冻结正式 inventory 合同后，再增加对应的只读适配器。
 ScanRequest 的 `spec.plan` 是一个 ScanPlan v2，
 `spec.credentials` 只声明 Secret 名称和键名，不携带值。
 
@@ -92,9 +100,14 @@ status 只描述对应 CRD 的执行观测。它不是 Assets 与 data-warehouse
 不能因为 operator 没有及时刷新 status 就把失败任务报告为成功。
 
 Connector 的连接探测不属于 Warehouse `ScanRequest` status。Assets 管理页按需对
-单个 Connector 做只读对象存储请求，或检查 Warehouse Infra 授权源 PVC；结果只在
-页面内存中显示，不能要求 Warehouse 将 `READY`、`PENDING` 或 `ERROR` 写入
-Connector ConfigMap。
+单个 Connector 做只读对象存储请求，或检查 Warehouse Infra 授权源 PVC；探测和对象
+存储分页盘点结果由 Assets 持久化为不含凭据的状态快照。PVC 盘点在 Warehouse 提供
+正式授权范围 inventory 合同前保持 `unknown`，不能要求 Warehouse 将 `READY`、
+`PENDING` 或 `ERROR` 写入 Connector ConfigMap。
+
+凭据键名按资源来源兼容：Assets 自有 Connector 默认使用 `accessKey`/`secretKey`；
+Warehouse `AstroDataSource` 默认读取 `access-key`/`secret-key`（同时接受其显式
+配置的键名和历史兼容别名）。实际值永远不进入页面、任务快照或 evidence。
 
 MOC discovery request 使用固定的 `cds-public-moc-v2` policy，只查询 allowlisted
 CDS MocServer，写入 evidence，不下载候选 MOC、不执行 probe，也不写 `ast_*`。成功

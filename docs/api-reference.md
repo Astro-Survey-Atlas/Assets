@@ -61,6 +61,10 @@ GET /api/v1/surveys
 Survey releases and products include `coverage` order metadata when a verified
 coverage layer exists: `availableOrders`, `overviewOrder`, `maxOrder`, and
 `layerId`. Survey and release records also include aggregated `coverageOrders`.
+Published products additionally carry a `readiness` summary with the capability
+level (`L0`-`L3`), independent coverage/reverse-lookup orders and precision,
+completeness, evidence flags and explicit gaps. Products that are only catalog
+entries have no readiness claim until an Assets product revision is published.
 ```
 
 返回公开巡天、Release 和产品状态的只读索引，供 Assets 网站渲染卡片和详情。它只反映已进入当前公开目录的内容；尚未审核的登记、未发布的 MOC build 或 coverage task 不会出现在这里。
@@ -230,13 +234,21 @@ GET /api/v1/coverage
 
 ## Published Product Content
 
-公开页面可读取已发布的产品说明：
+公开页面可读取已发布的产品说明和就绪度摘要：
 
 ```http
 GET /api/v1/products
 ```
 
-草稿和版本控制只在管理员认证边界内：`GET /api/v1/admin/products`、`GET /api/v1/admin/products?view=surveys`、`GET /api/v1/admin/products?surveyId=<surveyId>`、`GET /api/v1/admin/products/{productId}`、`PUT /api/v1/admin/products/{productId}/draft`、`POST /api/v1/admin/products/{productId}/publish` 和 `GET /api/v1/admin/products/{productId}/history`。产品 ID 固定由 `surveyId + releaseId + product name` 生成；流程图节点的实现引用由 recipe 固定，管理员只能修改解释文本和证据链接。产品记录包含已发布 coverage layer 的可用 HEALPix order。
+`GET /api/v1/products`、`GET /api/v1/products/{productId}` 和
+`GET /api/v1/products/{productId}/evidence` 只返回已发布版本；未发布草稿统一
+返回 `404`。草稿和版本控制只在管理员认证边界内：`GET /api/v1/admin/products`、
+`GET /api/v1/admin/products?view=surveys`、`GET /api/v1/admin/products?surveyId=<surveyId>`、
+`GET /api/v1/admin/products/{productId}`、`PUT /api/v1/admin/products/{productId}/draft`、
+`POST /api/v1/admin/products/{productId}/publish` 和 `GET /api/v1/admin/products/{productId}/history`。
+产品 ID 固定由 `surveyId + releaseId + product name` 生成；流程图节点的实现引用由
+recipe 固定，管理员只能修改解释文本和证据链接。产品记录包含已发布 coverage layer
+的可用 HEALPix order 与 `readiness`。
 
 管理员写入接口同时返回 `syncStatus`，用于区分本地保存和生产 S3
 权威状态：`status` 为 `local`（未配置持久化）、`pending`（已进入待上传队列）、
@@ -315,12 +327,11 @@ This route uses the same media type, byte-range, immutable cache, ETag and
 Resource Package v3 archive remains the immutable multi-file boundary for
 Workspace consumers.
 
-The list endpoint intentionally remains published-only for backward
-compatibility. Detail and evidence routes are catalog-backed: a registered
-product can have a safe `entrypoint-only` or `partial` dossier before its
-editorial copy is published. Draft text is never returned verbatim; the server
-builds a structured projection from the catalog, current layer registry and
-allowlisted release assets.
+The list, detail and evidence endpoints are published-only. A registered or
+edited draft remains private until its current revision passes the Assets
+review/publication gate. Draft text is never returned verbatim; the server
+builds a structured projection from the published catalog, current layer
+registry and allowlisted release assets.
 
 ## Admin Scan Requests
 
@@ -376,14 +387,14 @@ truncation sentinel，因此 `truncated=true` 表示还有候选没有进入审�
 如果创建时没有绑定产品，`STAGED` build 会出现在
 `GET /api/v1/admin/products?view=surveys` 返回的 `__moc-builds__` 编辑队列中，
 即使它的 survey 还不在静态公共 catalog 里也不会丢失。管理员提交
-`POST /api/v1/admin/moc-builds/{name}/register-product`，填写 survey、release、
-产品公共事实和来源 URL；Assets 会创建一个未发布的草稿产品并一次性绑定该 build。
+`POST /api/v1/admin/moc-builds/{name}/register-product`，页面仅提交 `{}` 确认登记；
+Assets 从探索与构建事实创建未发布产品并一次性绑定该 build。
 其中 Release/产品事实可以省略或提交空字符串。单 build 详情
 `GET /api/v1/admin/moc-builds/{name}` 对未绑定的 `STAGED` build 会附加
-`registrationDefaults`；服务端登记时再次按同一规则兜底。已有公共 Catalog 事实优先，
+`registrationDefaults` 和只读 `surveyFacts`；服务端登记时再次按同一规则兜底。已有公共 Catalog 事实优先，
 其次使用 discovery 提示和候选标题，最后使用中性的 `public`/`Public MOC` 与来源描述。
-调用方提供的非空值始终覆盖默认值。
-之后在同一个产品审核页面编辑说明，最后调用 publish。登记不会把 discovery 候选
+巡天身份从构建/探索继承，已有巡天的名称、项目、简介、模态和颜色统一复用；请求中的巡天事实覆盖值被忽略。未知巡天使用探索名称及明确待核实的简介，并按稳定身份分配颜色。兼容 API 仍允许 Release/产品字段的非空值覆盖默认值，管理页面不提供这些字段的登记编辑。
+之后在产品详情检查系统执行证据、可选编辑说明并确认当前 revision 审核，最后调用 publish。登记不会把 discovery 候选
 直接变成公开产品，也不会修改原始 build attempt 或正常 Connector/ScanRequest 流程。
 
 产品审核发布时，`POST /api/v1/admin/products/{productId}/publish` 才会把对应的
@@ -407,18 +418,67 @@ publication 文件已存在但当前 Catalog 没有有效 layer；管理员可�
 GET  /api/v1/admin/connectors
 POST /api/v1/admin/connectors
 POST /api/v1/admin/connectors/{name}/probe
+POST /api/v1/admin/connectors/{name}/inventory
+GET  /api/v1/admin/overview
 ```
 
-Connector 是 Assets 管理的配置对象，不是 Warehouse `ScanRequest`。列表和创建
-响应的 `phase` 初始为 `NOT_CHECKED`，因为 ConfigMap 不保存连接状态。只有点击
-单个 Connector 后才执行一次按需探测；对象存储使用引用 Secret 中的凭据发送
+Connector 是 Assets 管理的配置对象，不是 Warehouse `ScanRequest`。列表同时读取
+Assets 管理的 Connector ConfigMap 和 Warehouse 原生 `AstroDataSource`（后者只读）；
+两者按名称去重，保留协议、授权范围和 `phase`，并附带 `scope`、`usage` 和 `inventory` 摘要。
+`configurationPhase` 只表示 Warehouse 对连接配置的校验结果，不能替代实际探测。
+Assets Connector 默认使用引用 Secret 的 `accessKey`/`secretKey`；Warehouse
+`AstroDataSource` 默认使用其原生 `access-key`/`secret-key`，并支持显式键名和历史
+别名兼容。凭据值不会出现在响应或状态快照中。
+`inventory`
+明确区分授权范围盘点与最近一次扫描观测：没有 Warehouse 盘点证据时为
+`state=unknown`，不能把扫描计数当成 bucket/PVC 总量，也不会在没有分母时显示百分比。
+完整清单仍留在 evidence 存储，不进入浏览器初始请求。
+
+点击单个 Connector 执行一次按需探测；对象存储使用引用 Secret 中的凭据发送
 `ListObjectsV2`，本地 Connector 检查同 namespace 的授权源 PVC 是否存在、带有
 `atlas.zhejianglab.org/scanner-source=true` 标签且为 `Bound`。探测结果的
 `phase` 为 `READY`、`PENDING` 或 `ERROR`，并带有脱敏 `message` 和 `checkedAt`。
+结果写入内容卷的 `connector-probes-v1.json`，并通过 `connector-probes` 状态快照
+同步；刷新页面或重启后仍可见。错误响应不会返回凭据、签名或 Authorization header。
 
-探测结果只在当前浏览器页面内存中展示，不写入 ConfigMap、Secret、ScanRequest、
-日志或 evidence；刷新页面后会重新显示 `NOT_CHECKED`。错误响应不会返回凭据、签名
-或 Authorization header。
+`POST /api/v1/admin/connectors/{name}/inventory` 每次推进一个对象存储分页，并将进度
+写入 `connector-inventory-v1.json` 与 `connector-inventory` 状态快照。`complete` 才表示
+授权 bucket/prefix 已遍历完并提供对象总数；`running`/`partial` 只表示已处理的有界页，
+不能当作总量。本地 PVC 返回 `unknown`，因为目录内容由 Warehouse 扫描器拥有，Assets
+不会从扫描计数推导 PVC 总量。分页 continuation token 只保存在服务端状态，不进入浏览器。
+
+`GET /api/v1/admin/overview` 返回有界的巡天 → DR → Product 总览。每个 Product 同时
+提供 `readiness.draft` 与 `readiness.published`；等级由真实来源、ICRS/NESTED 覆盖、
+单元/文件反查索引和证据推导：L0 来源已登记，L1 覆盖可查询，L2 单元可反查，L3
+文件可定位。汇总同时返回各等级/能力数量、真实 orders、精度混合状态和缺口计数，
+不会用某个产品的最高等级代表整个 DR；已退休产品保留在产品详情和历史中，
+但不计入当前能力汇总，并由 `totals.retiredProducts` 单独统计。
+
+产品详情的 `executionEvidence` 是有界的实际执行收据。也可通过
+`GET /api/v1/admin/products/{productId}/executions` 读取最近记录，或用
+`POST /api/v1/admin/products/{productId}/executions` 登记当前 revision 的输入/输出引用、
+工具版本、检查结果和失败原因。方法模板代码带有 `classification=method-explanation`，
+不代表本次执行；凭据、完整清单和 normalized scan 始终留在受控 evidence 存储。
+
+`POST /api/v1/admin/products/{productId}/verify-build` 接收 `{ "revision": 1 }`，对关联的
+STAGED MOC 构建重新读取来源快照及输出、核对大小/哈希，并调用 Core 校验 MOC。
+返回 `product`、`verification: { passed, error? }` 和 `syncStatus`；运行通过或失败均保存
+当前 revision 的实际执行记录并使旧审核失效。最近一次失败校验不能被旧成功记录覆盖。
+没有关联构建、产品版本过期或已退休时拒绝执行。此接口不接收用户提供的证据文件、哈希或目标 URL。
+页面将输入/输出引用折叠展示，将阻断项、可接受限制及发布阶段隔离恢复分别解释，不要求用户编辑 JSON。
+`GET /api/v1/admin/products/{productId}/history` 按需返回最近 128 条脱敏审计事件
+（登记、草稿、执行、审核、发布、退休）；不会把完整草稿正文或执行 evidence payload
+嵌入历史响应，超出部分以 `truncated=true` 标记。
+
+产品发布前必须先调用 `POST /api/v1/admin/products/{productId}/review`。审核记录绑定当前
+revision 与内容 SHA-256；草稿或执行证据变化会使旧审核失效。`acceptedGaps` 只能列出
+当前真实缺口，来源不可追溯、覆盖依据缺失或输出校验缺失会阻止审核和发布。发布请求
+还要求所有其余缺口都已明确接受。
+
+已发布产品可以通过 `POST /api/v1/admin/products/{productId}/retire` 显式退休，请求可带
+当前 `revision` 和结构化 `reason`。退休不会删除产品内容或历史发布记录，但会从当前公开
+产品、asset、coverage、MOC 和反查入口隐藏；后续发布计划会产生一个 `change=removed` 的
+产品级差异，供管理员审阅发布。退休后的产品不能继续编辑或重新发布。
 
 管理员控制面使用产品 recipe 生成 ScanPlan v2。任务接口为
 `GET|POST /api/v1/admin/tasks`、`GET /api/v1/admin/tasks/{name}` 和
@@ -431,6 +491,32 @@ scan 或错误文件。重提创建新的不可变 ScanRequest、run ID 和 evid
 `POST /api/v1/admin/catalog/reload` 重新加载静态公开覆盖，并用 Warehouse ACTIVE
 layer 按 layer identity 覆盖或追加。Warehouse 不可用时保留静态 catalog，并将
 模式报告为 `degraded`。
+
+发布队列接口为 `GET /api/v1/admin/publication-plan`、
+`GET|POST /api/v1/admin/publications`、`GET /api/v1/admin/publications/{runId}` 和
+失败任务的 `POST /api/v1/admin/publications/{runId}/retry`。
+计划包含每个受影响产品的 added/modified 字段差异，并在 revision 未审核时阻塞提交。
+执行阶段先把不可变 archive 上传到 hash 地址，再从对象存储下载到干净目录，逐文件校验
+manifest、目录和 SHA-256，并读取每个 Resource Package ZIP 内的
+`resource-package.json` 校验 `id/version/surveyId` 与 catalog 一致，最后使用 current
+指针的 CAS 切换。恢复、语义或基线校验失败不会切换指针。`POST /api/v1/admin/publications/{runId}/verify` 可按运维配置的固定
+`ASSETS_PUBLIC_VERIFY_URL` 重新核验目标站点 `/healthz`、公开产品、coverage catalog
+和 Resource Package catalog；目标站点仍是旧 bundle 时状态为 `site-pending`，不算闭环完成。
+失败记录保存 `failureStage`（构建、上传、候选隔离验证或权威指针切换）；重试会按当前
+计划创建新的 run，不覆盖旧记录。站点核验失败只需调用 verify，不会重新发布。
+
+发布后台的浏览器级 smoke 可在本地或目标环境运行：
+
+```bash
+ASSETS_ADMIN_URL=http://127.0.0.1:4199/admin/ \
+ASSETS_ADMIN_TOKEN=<admin-token> \
+npm run test:admin-browser
+```
+
+它真实登录管理台、切换五个工作区、检查横向溢出并验证 `admin/overview` schema；不替代
+候选归档、站点 bundle hash 或科学覆盖案例的发布验收。
+需要检查页面串联时可加 `--workflow`；该模式只读验证总览产品、详情历史、缺口跳转和发布
+记录详情，不会提交任务、审核、发布或退休产品。
 
 ## Release History And Resource Package Downloads
 
@@ -527,3 +613,12 @@ Implementation index:
 - Coverage catalog and HEALPix block projection: `server/coverage.ts`
 - Product draft/publish store: `server/products.ts`
 - Release allowlist construction: `scripts/build-release-manifest.ts`
+# 探索任务独立观察摘要
+
+管理接口 `GET /api/v1/admin/moc-discovery` 与 `GET /api/v1/admin/moc-discovery/{name}` 的请求记录附带 `observation`，原始 Warehouse `status` 保留不变。
+
+- `state`: `waiting`、`delayed`、`blocked`、`running`、`finished`。未创建 Job 且超过接单阈值为 delayed；关联到执行器故障为 blocked，不代表请求执行失败。
+- `checkedAt`、`waitedSeconds`、`lastProgressAt`: 本次请求检查、尚未接单的等待时长、最后执行进展。未知时间不补造。
+- `executor`: `health`（unknown/unavailable/error）、`checkedAt`、可选 `reason`/`source` 和脱敏 `message`。Ready 不能证明执行循环健康；诊断失败标 unavailable。
+
+观察由 Assets 服务端读取配置 namespace 中匹配标签的至多 4 个执行器 Pod，并缓存 15 秒；每个日志最多 80 行/16 KiB/最近 10 分钟。仅转换已识别的错误签名，不返回任意日志文本。Helm `admin.discoveryObserverNamespace`、`admin.discoveryObserverSelector` 指定观察对象；`admin.discoveryAcceptTimeoutSeconds` 默认 120。需要观察 namespace 的 pods 只读和 pods/log 读取权限；无权限时任务仍显示等待时长与诊断不可用。

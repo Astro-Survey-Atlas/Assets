@@ -22,7 +22,25 @@ export type ProductPublicStatus = "acquired" | "overview_only" | "awaiting_geome
 export interface ProductPublicSurvey { name: string; mission: string; description: string; color: string; modalities: string[] }
 export interface ProductPublicRelease { label: string; kind: string; releasedYear?: number }
 export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix" | "regions" | "tile-table" | "native-moc"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: ProductPublicSurvey; publicRelease?: ProductPublicRelease; publicDescription?: string; publicStatus?: ProductPublicStatus; presentation: ProductPresentation }
-export interface ProductRecord { productId: string; draft: ProductContent; published: ProductContent | null; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; contentSha256: string; }
+export interface ProductReviewRecord { revision: number; contentSha256: string; reviewedAt: string; acceptedGaps: string[] }
+export type ProductExecutionStatus = "running" | "passed" | "failed" | "skipped";
+export interface ProductEvidenceReference { label?: string; ref?: string; sha256?: string; sizeBytes?: number; }
+export interface ProductExecutionCheck { id: string; status: "passed" | "failed" | "not-applicable"; detail?: string; }
+export interface ProductExecutionRecord {
+  executionId: string;
+  revision: number;
+  stepId: string;
+  status: ProductExecutionStatus;
+  startedAt: string;
+  finishedAt?: string;
+  tool?: { name: string; version?: string; imageDigest?: string };
+  inputs: ProductEvidenceReference[];
+  parameters: Record<string, string | number | boolean>;
+  outputs: ProductEvidenceReference[];
+  checks: ProductExecutionCheck[];
+  error?: string;
+}
+export interface ProductRecord { productId: string; draft: ProductContent; published: ProductContent | null; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; contentSha256: string; review?: ProductReviewRecord; executions?: ProductExecutionRecord[]; /** A reversible retirement marker; historical published content remains addressable in release history. */ retiredAt?: string; retirementReason?: string }
 
 interface PersistedProductDocument {
   schemaVersion: 1;
@@ -90,6 +108,111 @@ function defaultFlow(product: { name: string; modality: string }, mode = "catalo
 }
 
 function hashContent(content: ProductContent): string { return createHash("sha256").update(JSON.stringify(content)).digest("hex"); }
+
+function boundedEvidenceText(value: unknown, field: string, maxLength: number, required = false): string | undefined {
+  if (value === undefined || value === null || value === "") {
+    if (required) throw new AdminHttpError(400, `${field} is required`);
+    return undefined;
+  }
+  if (typeof value !== "string") throw new AdminHttpError(400, `${field} must be a string`);
+  const normalized = value.trim();
+  if (required && !normalized) throw new AdminHttpError(400, `${field} is required`);
+  if (normalized.length > maxLength || /[\u0000-\u001f\u007f]/.test(normalized)) throw new AdminHttpError(400, `${field} is invalid`);
+  return normalized || undefined;
+}
+
+function evidenceReference(value: unknown, field: string): ProductEvidenceReference {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new AdminHttpError(400, `${field} must be an object`);
+  const input = value as Record<string, unknown>;
+  const label = boundedEvidenceText(input.label, `${field}.label`, 200);
+  const ref = boundedEvidenceText(input.ref, `${field}.ref`, 2048);
+  const sha256 = boundedEvidenceText(input.sha256, `${field}.sha256`, 64);
+  if (sha256 && !/^[a-f0-9]{64}$/.test(sha256)) throw new AdminHttpError(400, `${field}.sha256 must be a SHA-256 hex digest`);
+  const sizeValue = input.sizeBytes;
+  const sizeBytes = sizeValue === undefined || sizeValue === null || sizeValue === "" ? undefined : Number(sizeValue);
+  if (sizeBytes !== undefined && (!Number.isSafeInteger(sizeBytes) || sizeBytes < 0)) throw new AdminHttpError(400, `${field}.sizeBytes must be a non-negative integer`);
+  if (!label && !ref && !sha256) throw new AdminHttpError(400, `${field} must identify an evidence item`);
+  return { ...(label ? { label } : {}), ...(ref ? { ref } : {}), ...(sha256 ? { sha256 } : {}), ...(sizeBytes !== undefined ? { sizeBytes } : {}) };
+}
+
+function executionId(value: unknown, revision: number): string {
+  const candidate = boundedEvidenceText(value, "executionId", 128) ?? `execution-${revision}-${Date.now().toString(36)}`;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(candidate)) throw new AdminHttpError(400, "executionId is invalid");
+  return candidate;
+}
+
+function executionTimestamp(value: unknown, field: string, fallback: string): string {
+  const candidate = boundedEvidenceText(value, field, 64) ?? fallback;
+  const parsed = new Date(candidate);
+  if (!Number.isFinite(parsed.getTime())) throw new AdminHttpError(400, `${field} must be an ISO timestamp`);
+  return parsed.toISOString();
+}
+
+function normalizeExecution(value: unknown, revision: number): ProductExecutionRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new AdminHttpError(400, "execution must be an object");
+  const input = value as Record<string, unknown>;
+  const executionRevision = input.revision === undefined ? revision : Number(input.revision);
+  if (!Number.isSafeInteger(executionRevision) || executionRevision !== revision) throw new AdminHttpError(409, "Execution evidence must target the current product revision");
+  const stepId = boundedEvidenceText(input.stepId, "stepId", 128, true)!;
+  const status = boundedEvidenceText(input.status, "status", 16, true)! as ProductExecutionStatus;
+  if (!["running", "passed", "failed", "skipped"].includes(status)) throw new AdminHttpError(400, "execution status is unsupported");
+  const now = new Date().toISOString();
+  const rawInputs = input.inputs === undefined ? [] : input.inputs;
+  const rawOutputs = input.outputs === undefined ? [] : input.outputs;
+  if (!Array.isArray(rawInputs) || rawInputs.length > 32) throw new AdminHttpError(400, "execution.inputs must be an array of at most 32 items");
+  if (!Array.isArray(rawOutputs) || rawOutputs.length > 32) throw new AdminHttpError(400, "execution.outputs must be an array of at most 32 items");
+  const parameters: Record<string, string | number | boolean> = {};
+  if (input.parameters !== undefined) {
+    if (!input.parameters || typeof input.parameters !== "object" || Array.isArray(input.parameters)) throw new AdminHttpError(400, "execution.parameters must be an object");
+    for (const [key, raw] of Object.entries(input.parameters as Record<string, unknown>).slice(0, 64)) {
+      if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(key) || /(secret|token|password|credential|access.?key)/i.test(key)) throw new AdminHttpError(400, "execution.parameters contains an unsupported key");
+      if (typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") throw new AdminHttpError(400, `execution.parameters.${key} must be a scalar`);
+      if (typeof raw === "string") boundedEvidenceText(raw, `execution.parameters.${key}`, 512);
+      parameters[key] = raw;
+    }
+  }
+  let tool: ProductExecutionRecord["tool"];
+  if (input.tool !== undefined) {
+    if (!input.tool || typeof input.tool !== "object" || Array.isArray(input.tool)) throw new AdminHttpError(400, "execution.tool must be an object");
+    const toolInput = input.tool as Record<string, unknown>;
+    const name = boundedEvidenceText(toolInput.name, "execution.tool.name", 200, true)!;
+    const version = boundedEvidenceText(toolInput.version, "execution.tool.version", 128);
+    const imageDigest = boundedEvidenceText(toolInput.imageDigest, "execution.tool.imageDigest", 80);
+    if (imageDigest && !/^(?:sha256:)?[a-f0-9]{64}$/.test(imageDigest)) throw new AdminHttpError(400, "execution.tool.imageDigest is invalid");
+    tool = { name, ...(version ? { version } : {}), ...(imageDigest ? { imageDigest } : {}) };
+  }
+  const rawChecks = input.checks === undefined ? [] : input.checks;
+  if (!Array.isArray(rawChecks) || rawChecks.length > 64) throw new AdminHttpError(400, "execution.checks must be an array of at most 64 items");
+  const checks = rawChecks.map((value, index): ProductExecutionCheck => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new AdminHttpError(400, `execution.checks[${index}] must be an object`);
+    const check = value as Record<string, unknown>;
+    const id = boundedEvidenceText(check.id, `execution.checks[${index}].id`, 128, true)!;
+    const checkStatus = boundedEvidenceText(check.status, `execution.checks[${index}].status`, 24, true)! as ProductExecutionCheck["status"];
+    if (!["passed", "failed", "not-applicable"].includes(checkStatus)) throw new AdminHttpError(400, `execution.checks[${index}].status is unsupported`);
+    const detail = boundedEvidenceText(check.detail, `execution.checks[${index}].detail`, 1000);
+    return { id, status: checkStatus, ...(detail ? { detail } : {}) };
+  });
+  const error = boundedEvidenceText(input.error, "execution.error", 2000);
+  if (status === "failed" && !error) throw new AdminHttpError(400, "failed execution requires an error");
+  return {
+    executionId: executionId(input.executionId, revision),
+    revision,
+    stepId,
+    status,
+    startedAt: executionTimestamp(input.startedAt, "startedAt", now),
+    ...(input.finishedAt !== undefined ? { finishedAt: executionTimestamp(input.finishedAt, "finishedAt", now) } : {}),
+    ...(tool ? { tool } : {}),
+    inputs: rawInputs.map((item, index) => evidenceReference(item, `execution.inputs[${index}]`)),
+    parameters,
+    outputs: rawOutputs.map((item, index) => evidenceReference(item, `execution.outputs[${index}]`)),
+    checks,
+    ...(error ? { error } : {}),
+  };
+}
+
+function assertNotRetired(record: ProductRecord): void {
+  if (record.retiredAt) throw new AdminHttpError(409, "Retired product cannot be edited or published");
+}
 
 function migrateRecipeContent(existing: ProductContent, template: ProductContent): ProductContent {
   const oldNodes = new Map(existing.presentation.flow.nodes.map((node) => [node.id, node]));
@@ -370,12 +493,45 @@ export class ProductStore {
 
   async updateDraft(id: string, content: unknown, expectedRevision?: number): Promise<ProductRecord> {
     const record = this.get(id);
+    assertNotRetired(record);
     if (expectedRevision !== undefined && expectedRevision !== record.revision) throw new AdminHttpError(409, "Product revision conflict");
     record.draft = validateContent(content, record);
     record.revision += 1;
     record.updatedAt = new Date().toISOString();
     record.contentSha256 = hashContent(record.draft);
+    // A content change invalidates any approval tied to the previous revision.
+    delete record.review;
     const audit = { action: "draft", productId: id, revision: record.revision, at: record.updatedAt, content: record.draft };
+    this.#history.push(audit);
+    await this.persist();
+    await appendFile(this.#historyFile(), `${JSON.stringify(audit)}\n`);
+    return record;
+  }
+  async review(id: string, expectedRevision?: number, acceptedGaps: string[] = []): Promise<ProductRecord> {
+    const record = this.get(id);
+    assertNotRetired(record);
+    if (expectedRevision !== undefined && expectedRevision !== record.revision) throw new AdminHttpError(409, "Product revision conflict");
+    const reviewedAt = new Date().toISOString();
+    record.review = { revision: record.revision, contentSha256: record.contentSha256, reviewedAt, acceptedGaps: [...new Set(acceptedGaps)].slice(0, 64) };
+    this.#history.push({ action: "review", productId: id, revision: record.revision, at: reviewedAt, acceptedGaps: record.review.acceptedGaps });
+    await this.persist();
+    await appendFile(this.#historyFile(), `${JSON.stringify({ action: "review", productId: id, revision: record.revision, at: reviewedAt, acceptedGaps: record.review.acceptedGaps })}\n`);
+    return record;
+  }
+  async recordExecution(id: string, value: unknown, expectedRevision?: number): Promise<ProductRecord> {
+    const record = this.get(id);
+    assertNotRetired(record);
+    if (expectedRevision !== undefined && expectedRevision !== record.revision) throw new AdminHttpError(409, "Product revision conflict");
+    const execution = normalizeExecution(value, record.revision);
+    const executions = record.executions ? [...record.executions] : [];
+    if (executions.some((entry) => entry.executionId === execution.executionId)) throw new AdminHttpError(409, `Execution ${execution.executionId} already exists`);
+    executions.push(execution);
+    record.executions = executions.slice(-256);
+    // Execution evidence can change what is publishable for this revision;
+    // require the operator to acknowledge the resulting evidence state again.
+    delete record.review;
+    record.updatedAt = new Date().toISOString();
+    const audit = { action: "execution", productId: id, revision: record.revision, at: record.updatedAt, execution };
     this.#history.push(audit);
     await this.persist();
     await appendFile(this.#historyFile(), `${JSON.stringify(audit)}\n`);
@@ -383,13 +539,34 @@ export class ProductStore {
   }
   async publish(id: string, expectedRevision?: number): Promise<ProductRecord> {
     const record = this.get(id);
+    assertNotRetired(record);
     if (expectedRevision !== undefined && expectedRevision !== record.revision) throw new AdminHttpError(409, "Product revision conflict");
+    if (!record.review || record.review.revision !== record.revision || record.review.contentSha256 !== record.contentSha256) {
+      throw new AdminHttpError(409, "Product revision must be reviewed before publication");
+    }
     record.published = structuredClone(record.draft);
     record.publishedRevision = record.revision;
     record.publishedAt = new Date().toISOString();
     record.updatedAt = record.publishedAt;
     record.contentSha256 = hashContent(record.draft);
     const audit = { action: "publish", productId: id, revision: record.revision, at: record.publishedAt, content: record.published };
+    this.#history.push(audit);
+    await this.persist();
+    await appendFile(this.#historyFile(), `${JSON.stringify(audit)}\n`);
+    return record;
+  }
+  async retire(id: string, expectedRevision?: number, reason?: string): Promise<ProductRecord> {
+    const record = this.get(id);
+    if (expectedRevision !== undefined && expectedRevision !== record.revision) throw new AdminHttpError(409, "Product revision conflict");
+    if (record.retiredAt) return record;
+    const retiredAt = new Date().toISOString();
+    const normalizedReason = boundedEvidenceText(reason, "retirementReason", 2000);
+    record.retiredAt = retiredAt;
+    if (normalizedReason) record.retirementReason = normalizedReason;
+    record.revision += 1;
+    record.updatedAt = retiredAt;
+    delete record.review;
+    const audit = { action: "retire", productId: id, revision: record.revision, at: retiredAt, ...(normalizedReason ? { reason: normalizedReason } : {}) };
     this.#history.push(audit);
     await this.persist();
     await appendFile(this.#historyFile(), `${JSON.stringify(audit)}\n`);

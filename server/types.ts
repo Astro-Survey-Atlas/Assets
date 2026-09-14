@@ -83,6 +83,59 @@ export interface PublicCoverageOrderSummary {
   maxOrder: number | null;
 }
 
+/**
+ * Public, evidence-backed readiness projection.  The public API exposes the
+ * same capability level as the control room, but never includes raw manifests
+ * or execution payloads.  Counts are intentionally optional because an
+ * unknown denominator must remain unknown rather than becoming zero.
+ */
+export interface PublicProductReadiness {
+  schemaVersion: 1;
+  level: -1 | 0 | 1 | 2 | 3;
+  label: "needs-information" | "source-registered" | "coverage-queryable" | "unit-reversible" | "file-locatable";
+  geometry: {
+    orders: number[];
+    maxOrder?: number;
+    precision: "exact" | "estimated" | "entrypoint-only" | "unknown";
+    basis: "layer" | "entrypoint" | "none";
+    coordinateFrame?: string;
+    ordering?: string;
+  };
+  reverseLookup: {
+    level: -1 | 0 | 1 | 2 | 3;
+    orders: number[];
+    precision: "exact" | "estimated" | "entrypoint-only" | "unknown";
+    unitKind?: string;
+    basis: "file" | "unit" | "entrypoint" | "none";
+  };
+  completeness: {
+    state: "complete" | "partial" | "unknown";
+    processed?: number;
+    total?: number;
+    asOf?: string;
+    scope?: string;
+  };
+  evidence: {
+    inputLocked: boolean;
+    executionRecorded: boolean;
+    outputValidated: boolean;
+    isolatedRestoreValidated: boolean;
+  };
+  gaps: string[];
+}
+
+export interface PublicReadinessAggregate {
+  productCount: number;
+  levelCounts: { L0: number; L1: number; L2: number; L3: number; needsInformation: number };
+  capabilityCounts: { coverage: number; unit: number; file: number };
+  geometryOrders: number[];
+  reverseLookupOrders: number[];
+  geometryPrecision: "exact" | "estimated" | "entrypoint-only" | "unknown" | "mixed";
+  reverseLookupPrecision: "exact" | "estimated" | "entrypoint-only" | "unknown" | "mixed";
+  completeness: { complete: number; partial: number; unknown: number };
+  gapCount: number;
+}
+
 export interface PublicSurveyProduct {
   productId?: string;
   name: string;
@@ -103,6 +156,7 @@ export interface PublicSurveyProduct {
   reason?: string;
   manualStep?: string;
   coverage?: PublicCoverageOrders;
+  readiness?: PublicProductReadiness;
   detailUrl?: string;
   evidenceUrl?: string;
   links?: PublicProductLink[];
@@ -149,6 +203,8 @@ export interface PublicProductCodeEvidence {
   language: "python" | "typescript";
   snippet: string;
   implementationRef: string;
+  /** This snippet documents the method; it is never an execution receipt. */
+  classification: "method-explanation";
 }
 
 export interface PublicProductDerivationStep {
@@ -180,6 +236,8 @@ export interface PublicProductDossier {
     summary: string;
     coverageAvailable: boolean;
   };
+  /** Published-version capability summary; raw execution records stay private. */
+  readiness: PublicProductReadiness;
   coverage: {
     available: boolean;
     layerId?: string;
@@ -238,6 +296,7 @@ export interface PublicSurveyRelease {
   modalities: PublicSurveyModality[];
   products: PublicSurveyProduct[];
   coverageOrders?: PublicCoverageOrderSummary;
+  readiness?: PublicReadinessAggregate;
 }
 
 export interface PublicSurveyRecord {
@@ -249,6 +308,7 @@ export interface PublicSurveyRecord {
   modalities: PublicSurveyModality[];
   releases: PublicSurveyRelease[];
   coverageOrders?: PublicCoverageOrderSummary;
+  readiness?: PublicReadinessAggregate;
 }
 
 export interface PublicSurveyCatalog {

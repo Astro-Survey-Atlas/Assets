@@ -4,7 +4,16 @@ import { locale, mountLocaleControls, t } from "../src/i18n.js";
 import { mountSiteChrome } from "../src/site-chrome.js";
 
 interface Asset { label: string; downloadName: string; downloadUrl: string; sha256: string; sizeBytes: number; releaseId?: string; product?: string; surveyId?: string }
-interface Product { productId?: string; name: string; modality: string; description?: string; coverage?: { layerId?: string; availableOrders: number[]; overviewOrder: number; maxOrder: number; coverageRole?: string; areaDeg2?: number }; sourceUrl?: string; geometrySourceUrl?: string; sourceLabel?: string; geometrySourceLabel?: string; dataOrigin?: string; sourceTier?: string; status?: string; reason?: string; manualStep?: string; detailUrl?: string; evidenceUrl?: string; links?: ProductLink[] }
+interface Readiness {
+  level: -1 | 0 | 1 | 2 | 3;
+  label: string;
+  geometry: { orders: number[]; maxOrder?: number; precision: string };
+  reverseLookup: { level: -1 | 0 | 1 | 2 | 3; orders: number[]; precision: string; basis: string };
+  completeness: { state: "complete" | "partial" | "unknown"; processed?: number; total?: number; asOf?: string; scope?: string };
+  evidence: { inputLocked: boolean; executionRecorded: boolean; outputValidated: boolean; isolatedRestoreValidated: boolean };
+  gaps: string[];
+}
+interface Product { productId?: string; name: string; modality: string; description?: string; readiness?: Readiness; coverage?: { layerId?: string; availableOrders: number[]; overviewOrder: number; maxOrder: number; coverageRole?: string; areaDeg2?: number }; sourceUrl?: string; geometrySourceUrl?: string; sourceLabel?: string; geometrySourceLabel?: string; dataOrigin?: string; sourceTier?: string; status?: string; reason?: string; manualStep?: string; detailUrl?: string; evidenceUrl?: string; links?: ProductLink[] }
 interface ProductLink { kind: string; label: string; url: string; description?: string; mediaType?: string; sizeBytes?: number; sha256?: string }
 interface EvidenceItem { kind: string; label: string; description: string; visibility: "public" | "evidence-only" | "unavailable"; url?: string; filename?: string; mediaType?: string; sizeBytes?: number; sha256?: string; reason?: string }
 interface Release { id: string; label: string; products: Product[]; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null } }
@@ -12,15 +21,16 @@ interface Survey { id: string; name: string; mission: string; modalities: string
 interface SurveyIndex { surveys: Survey[] }
 interface FlowNode { id: string; kind: string; title: string; bodyMarkdown: string; order: number; implementationRef: string; evidenceRefs: string[] }
 interface FlowEdge { from: string; to: string; label?: string }
-interface PublishedProduct { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; coverage?: { layerId?: string; availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: FlowNode[]; edges: FlowEdge[] } } }
+interface PublishedProduct { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; readiness?: Readiness; coverage?: { layerId?: string; availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: FlowNode[]; edges: FlowEdge[] } } }
 interface ProductIndex { products: PublishedProduct[] }
 interface ProductDossier {
   schemaVersion: 1;
   identity: { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; dataOrigin?: string; sourceTier?: string };
   conclusion: { status: "complete" | "partial" | "entrypoint-only"; summary: string; coverageAvailable: boolean };
+  readiness: Readiness;
   coverage: { available: boolean; layerId?: string; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; availableOrders: number[]; overviewOrder?: number; maxOrder?: number; precision: "exact" | "estimated" | "entrypoint-only" | "truncated"; areaDeg2?: number; cellCount?: number; cellCounts?: Record<string, number>; coordinateFrame: string; ordering: string; mocUrl?: string; previewUrl?: string };
   source: { label?: string; url?: string; geometryLabel?: string; geometryUrl?: string; snapshot?: { uri?: string; sha256?: string; sizeBytes?: number }; references?: EvidenceItem[] };
-  derivation: { mode?: string; coordinateFrame: string; ordering: string; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; availableOrders: number[]; steps: Array<{ sequence: number; id: string; title: string; purpose: string; inputs: EvidenceItem[]; method: { libraries: string[]; implementationRef: string }; code?: { language: string; snippet: string; implementationRef: string }; outputs: EvidenceItem[]; status: "available" | "partial" | "unavailable"; reason?: string }> };
+  derivation: { mode?: string; coordinateFrame: string; ordering: string; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; availableOrders: number[]; steps: Array<{ sequence: number; id: string; title: string; purpose: string; inputs: EvidenceItem[]; method: { libraries: string[]; implementationRef: string }; code?: { language: string; snippet: string; implementationRef: string; classification?: "method-explanation" }; outputs: EvidenceItem[]; status: "available" | "partial" | "unavailable"; reason?: string }> };
   verification: { status: "complete" | "partial" | "entrypoint-only"; checks: Array<{ id: string; label: string; status: "passed" | "warning" | "unavailable"; detail?: string }>; outputHashes: Array<{ kind: string; sha256: string; url?: string }> };
   limitations: string[];
   actions: { official?: ProductLink; query?: ProductLink; data?: ProductLink; view?: ProductLink };
@@ -90,7 +100,7 @@ function render(): void {
         button.dataset.productId = id;
       button.title = `${localeWord("view")} ${survey.name} ${release.label} ${product.name}`;
         appendText(button, "strong", product.name);
-        appendText(button, "span", `${record?.modality ?? product.modality} · ${orderText(record?.coverage?.availableOrders ?? product.coverage?.availableOrders)} · ${record ? (locale() === "zh" ? "已发布" : "PUBLISHED") : (locale() === "zh" ? "目录" : "CATALOG")}`);
+        appendText(button, "span", `${record?.modality ?? product.modality} · ${orderText(record?.coverage?.availableOrders ?? product.coverage?.availableOrders)} · ${readinessLevelLabel(record?.readiness ?? product.readiness)} · ${record ? (locale() === "zh" ? "已发布" : "PUBLISHED") : (locale() === "zh" ? "目录" : "CATALOG")}`);
         button.addEventListener("click", () => openProduct(survey, release, product, record));
         productList.append(button);
       });
@@ -144,6 +154,28 @@ function coverageRoleLabel(role?: ProductDossier["coverage"]["coverageRole"]): s
 function precisionLabel(value: ProductDossier["coverage"]["precision"]): string {
   if (locale() === "zh") return value === "exact" ? "精确" : value === "estimated" ? "估算" : value === "truncated" ? "截断" : "只有入口";
   return value;
+}
+
+function readinessLevelLabel(readiness?: Readiness): string {
+  if (!readiness) return localized("尚未发布", "not published");
+  if (readiness.level < 0) return localized("待补充", "needs information");
+  const labels: Record<number, [string, string]> = {
+    0: ["L0 来源已登记", "L0 source registered"],
+    1: ["L1 覆盖可查询", "L1 coverage queryable"],
+    2: ["L2 单元可反查", "L2 unit reversible"],
+    3: ["L3 文件可定位", "L3 file locatable"],
+  };
+  return localized(labels[readiness.level][0], labels[readiness.level][1]);
+}
+
+function readinessPrecisionLabel(value: string): string {
+  if (locale() !== "zh") return value;
+  return ({ exact: "精确", estimated: "估算", "entrypoint-only": "只有入口", unknown: "未知", mixed: "精度不一致" } as Record<string, string>)[value] ?? value;
+}
+
+function completenessLabel(value: Readiness["completeness"]["state"]): string {
+  if (locale() !== "zh") return value;
+  return value === "complete" ? "完整" : value === "partial" ? "部分" : "未知";
 }
 
 function evidenceItemStatus(item: EvidenceItem): string {
@@ -239,6 +271,21 @@ function renderDossier(parent: HTMLElement, dossier: ProductDossier): void {
     detailRow(coverage, localized("空间精度", "Spatial precision"), precisionLabel(dossier.coverage.precision));
     conclusion.append(coverage);
   }
+  const readiness = dossier.readiness;
+  if (readiness) {
+    const readinessSection = document.createElement("section");
+    readinessSection.className = "resource-readiness-summary";
+    appendText(readinessSection, "h4", localized("数据就绪度", "DATA READINESS"));
+    const readinessGrid = document.createElement("dl");
+    readinessGrid.className = "resource-coverage-summary";
+    detailRow(readinessGrid, localized("能力等级", "Capability level"), readinessLevelLabel(readiness));
+    detailRow(readinessGrid, localized("覆盖精度", "Coverage precision"), `${formatOrders(readiness.geometry.orders)} · ${readinessPrecisionLabel(readiness.geometry.precision)}`);
+    detailRow(readinessGrid, localized("反查精度", "Reverse lookup"), `${formatOrders(readiness.reverseLookup.orders)} · ${readinessPrecisionLabel(readiness.reverseLookup.precision)}`);
+    detailRow(readinessGrid, localized("索引完整性", "Index completeness"), completenessLabel(readiness.completeness.state));
+    readinessSection.append(readinessGrid);
+    if (readiness.gaps.length) appendText(readinessSection, "p", localized(`仍有 ${readiness.gaps.length} 项证据或能力缺口。`, `${readiness.gaps.length} evidence or capability gap(s) remain.`), "resource-readiness-gaps");
+    conclusion.append(readinessSection);
+  }
   parent.append(conclusion);
 
   const actions = document.createElement("div");
@@ -281,8 +328,9 @@ function renderDossier(parent: HTMLElement, dossier: ProductDossier): void {
     }
     if (stage.code) {
       const details = document.createElement("details"); details.className = "resource-stage-code";
-      appendText(details, "summary", localized(`查看实际代码（${stage.code.language}）`, `View implementation code (${stage.code.language})`));
+      appendText(details, "summary", localized(`查看方法说明代码（${stage.code.language}）`, `View method explanation code (${stage.code.language})`));
       appendText(details, "small", stage.code.implementationRef, "resource-stage-code-ref");
+      appendText(details, "small", localized("此代码片段是方法说明，不是本次执行记录。实际执行版本和校验结论见构建证据。", "This snippet explains the method; it is not an execution receipt. See build evidence for the executed version and checks."), "resource-stage-code-note");
       const code = document.createElement("pre"); code.textContent = stage.code.snippet; details.append(code); copy.append(details);
     }
     appendText(copy, "h5", localized("输出制品", "OUTPUT ARTIFACTS"), "resource-stage-subheading");

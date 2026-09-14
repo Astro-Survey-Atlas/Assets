@@ -105,6 +105,8 @@ export interface StateSnapshotSink {
 
 export const STATE_SNAPSHOT_NAMESPACES = [
   "products",
+  "connector-probes",
+  "connector-inventory",
   "editorial",
   "moc-build",
   "moc-publications",

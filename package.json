@@ -29,6 +29,7 @@
     "build": "npm run assets:build && npm run build:server && npm run build:site",
     "dev": "tsx watch server/server.ts",
     "dev:site": "vite --host 0.0.0.0 --port 5174",
+    "test:admin-browser": "python3 scripts/admin-browser-smoke.py",
     "start": "node dist/server/server.js",
     "test:node": "tsx --test test/*.test.ts",
     "test:core": "python3 scripts/verify_core_wheel.py",

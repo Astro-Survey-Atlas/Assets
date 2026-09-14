@@ -172,6 +172,7 @@ async function harness(): Promise<TestHarness> {
       files: { moc: layerFile },
     },
   ];
+  const products: ProductRecord[] = [];
 
   const packageEntries: DynamicResourcePackageEntry[] = [
     {
@@ -310,11 +311,60 @@ async function harness(): Promise<TestHarness> {
       assets: async () => packageAssets,
       latest: (id) => packageEntries.find((entry) => entry.id === id),
     },
-    loadProducts: async () => [],
+    loadProducts: async () => products,
     allowFilesystemStore: true,
   };
   void catalog;
-  return { options, publications, products: [], packageEntries, packageAssets };
+  return { options, publications, products, packageEntries, packageAssets };
+}
+
+interface SiteVerificationPayload {
+  products: unknown;
+  layers: unknown;
+  packages: unknown;
+}
+
+async function publishedRunForSiteVerification(context: TestHarness, base: string) {
+  const options: PublicReleasePublisherOptions = {
+    ...context.options,
+    store: new FilesystemArtifactStore(path.join(base, "objects-site-verification")),
+  };
+  const publisher = new PublicReleasePublisher(options);
+  const plan = await publisher.plan();
+  const queued = await publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["m42"] });
+  await publisher.claimQueuedRun();
+  const run = await publisher.execute(queued.runId);
+  assert.equal(run.status, "published", run.error);
+  options.verificationTarget = "https://assets.example.test/";
+  return { options, publisher, run };
+}
+
+async function verifySitePayload(
+  options: PublicReleasePublisherOptions,
+  publisher: PublicReleasePublisher,
+  run: Awaited<ReturnType<PublicReleasePublisher["execute"]>>,
+  payload: SiteVerificationPayload,
+) {
+  const requests: string[] = [];
+  options.fetchImpl = async (input) => {
+    const url = typeof input === "string" ? input : input.toString();
+    const pathname = new URL(url).pathname;
+    requests.push(pathname);
+    const body = pathname === "/healthz"
+      ? { bundle: run.bundle }
+      : pathname === "/api/v1/products"
+        ? { products: payload.products }
+        : pathname === "/api/v1/coverage/catalog"
+          ? { layers: payload.layers }
+          : pathname === "/api/v1/resource-packages/catalog.json"
+            ? { packages: payload.packages }
+            : undefined;
+    return body === undefined
+      ? new Response("not found", { status: 404 })
+      : new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const verified = await publisher.verifySite(run.runId);
+  return { requests, verified };
 }
 
 test("publication plan reports changed surveys and submit rejects stale plans", async () => {
@@ -358,6 +408,72 @@ test("publication plan reports changed surveys and submit rejects stale plans", 
   }
 });
 
+test("publication plan exposes product-level diffs and blocks unreviewed revisions", async () => {
+  const context = await harness();
+  const base = path.dirname(context.options.contentRoot);
+  const content = {
+    productId: "product-1",
+    surveyId: "m42",
+    releaseId: "m42-dr1",
+    name: "M42 survey updated",
+    modality: "image",
+    sourceUrl: "https://example.org/m42",
+    presentation: { summaryMarkdown: "", methodologyMarkdown: "", limitationsMarkdown: "", flow: { nodes: [], edges: [] } },
+  } as ProductRecord["draft"];
+  const published = { ...content, name: "M42 survey" };
+  const contentSha256 = sha256Of(JSON.stringify(content));
+  context.products.push({ productId: content.productId, draft: content, published, revision: 2, publishedRevision: 1, updatedAt: "2026-01-02T00:00:00.000Z", publishedAt: "2026-01-01T00:00:00.000Z", contentSha256 });
+  try {
+    const publisher = new PublicReleasePublisher(context.options);
+    const blockedPlan = await publisher.plan();
+    const blocked = blockedPlan.surveys.find((survey) => survey.surveyId === "m42");
+    assert.equal(blocked?.productDiffs[0]?.change, "modified");
+    assert.ok(blocked?.productDiffs[0]?.fields.includes("name"));
+    assert.equal(blocked?.productDiffs[0]?.reviewed, false);
+    assert.ok(blocked?.blockers.some((value) => /not reviewed/.test(value)));
+    context.products[0]!.review = { revision: 2, contentSha256, reviewedAt: "2026-01-03T00:00:00.000Z", acceptedGaps: [] };
+    const reviewedPlan = await publisher.plan();
+    assert.equal(reviewedPlan.surveys.find((survey) => survey.surveyId === "m42")?.selectable, true);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("publication plan represents a retired published product as a reviewed removal", async () => {
+  const context = await harness();
+  const base = path.dirname(context.options.contentRoot);
+  const content = {
+    productId: "product-1",
+    surveyId: "m42",
+    releaseId: "m42-dr1",
+    name: "M42 survey",
+    modality: "image",
+    sourceUrl: "https://example.org/m42",
+    presentation: { summaryMarkdown: "", methodologyMarkdown: "", limitationsMarkdown: "", flow: { nodes: [], edges: [] } },
+  } as ProductRecord["draft"];
+  context.products.push({
+    productId: content.productId,
+    draft: content,
+    published: structuredClone(content),
+    revision: 3,
+    publishedRevision: 2,
+    updatedAt: "2026-01-03T00:00:00.000Z",
+    publishedAt: "2026-01-02T00:00:00.000Z",
+    contentSha256: sha256Of(JSON.stringify(content)),
+    retiredAt: "2026-01-03T01:00:00.000Z",
+    retirementReason: "Superseded by DR2",
+  });
+  try {
+    const plan = await new PublicReleasePublisher(context.options).plan();
+    const diff = plan.surveys.find((survey) => survey.surveyId === "m42")?.productDiffs.find((entry) => entry.productId === "product-1");
+    assert.equal(diff?.change, "removed");
+    assert.deepEqual(diff?.fields, ["retirement", "retirementReason"]);
+    assert.equal(diff?.reviewed, true);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
 test("publication runs restore the complete queue state after local loss", async () => {
   const context = await harness();
   const base = path.dirname(context.options.contentRoot);
@@ -390,6 +506,9 @@ test("publisher executes a queued run into a verified archive and pointer", asyn
     await publisher.claimQueuedRun();
     const finished = await publisher.execute(run.runId);
     assert.equal(finished.status, "published", finished.error);
+    assert.equal(finished.verification?.candidate.state, "passed");
+    assert.equal(finished.verification?.authority.state, "passed");
+    assert.equal(finished.verification?.overall, "authority-published");
     assert.ok(finished.archiveKey?.startsWith("public/releases/"));
     assert.equal(finished.files, 7);
     assert.equal(finished.packages, 1);
@@ -437,6 +556,122 @@ test("publisher executes a queued run into a verified archive and pointer", asyn
     const dynamicHistoryEntry = history.releases[0].packages.find((entry: { id: string }) => entry.id === "public-m42-footprints");
     assert.ok(dynamicHistoryEntry);
     assert.deepEqual(dynamicHistoryEntry.releases.map((release: { id: string }) => release.id), ["m42-dr1"]);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("target-site verification checks affected product, layer and package identities", async () => {
+  const context = await harness();
+  const base = path.dirname(context.options.contentRoot);
+  try {
+    const { options, publisher, run } = await publishedRunForSiteVerification(context, base);
+    assert.deepEqual(run.expected, {
+      products: [{ productId: "product-1", surveyId: "m42", present: true }],
+      layers: [{ layerId: "m42-halpha", surveyId: "m42", present: true }],
+      packages: [{ id: "public-m42-footprints", version: "3.1.0", surveyId: "m42", present: true }],
+    });
+    const result = await verifySitePayload(options, publisher, run, {
+      products: [{ productId: "product-1", surveyId: "m42" }],
+      layers: [{ layerId: "m42-halpha", surveyId: "m42" }],
+      packages: [{ id: "public-m42-footprints", version: "3.1.0", surveyId: "m42" }],
+    });
+    assert.deepEqual(result.requests, ["/healthz", "/api/v1/products", "/api/v1/coverage/catalog", "/api/v1/resource-packages/catalog.json"]);
+    assert.equal(result.verified.verification?.overall, "verified");
+    assert.equal(result.verified.verification?.site.state, "passed");
+    assert.equal(result.verified.verification?.site.checkedProducts, 1);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("target-site verification reports missing affected product, layer and package", async () => {
+  const context = await harness();
+  const base = path.dirname(context.options.contentRoot);
+  try {
+    const { options, publisher, run } = await publishedRunForSiteVerification(context, base);
+    const result = await verifySitePayload(options, publisher, run, { products: [], layers: [], packages: [] });
+    assert.equal(result.verified.verification?.overall, "failed");
+    assert.equal(result.verified.verification?.site.state, "failed");
+    assert.deepEqual(result.verified.verification?.site.missingProducts, ["product-1"]);
+    assert.deepEqual(result.verified.verification?.site.missingLayers, ["m42-halpha"]);
+    assert.deepEqual(result.verified.verification?.site.missingPackages, ["public-m42-footprints@3.1.0"]);
+    assert.match(result.verified.verification?.site.error ?? "", /missing products: product-1/);
+    assert.match(result.verified.verification?.site.error ?? "", /missing layers: m42-halpha/);
+    assert.match(result.verified.verification?.site.error ?? "", /missing packages: public-m42-footprints@3\.1\.0/);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("target-site verification rejects identities attached to the wrong survey", async () => {
+  const context = await harness();
+  const base = path.dirname(context.options.contentRoot);
+  try {
+    const { options, publisher, run } = await publishedRunForSiteVerification(context, base);
+    const result = await verifySitePayload(options, publisher, run, {
+      products: [{ productId: "product-1", surveyId: "other" }],
+      layers: [{ layerId: "m42-halpha", surveyId: "other" }],
+      packages: [{ id: "public-m42-footprints", version: "3.1.0", surveyId: "other" }],
+    });
+    assert.equal(result.verified.verification?.overall, "failed");
+    assert.deepEqual(result.verified.verification?.site.missingProducts, ["product-1"]);
+    assert.deepEqual(result.verified.verification?.site.missingLayers, ["m42-halpha"]);
+    assert.deepEqual(result.verified.verification?.site.missingPackages, ["public-m42-footprints@3.1.0"]);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("target-site verification fails closed when the product response has no array", async () => {
+  const context = await harness();
+  const base = path.dirname(context.options.contentRoot);
+  try {
+    const { options, publisher, run } = await publishedRunForSiteVerification(context, base);
+    const result = await verifySitePayload(options, publisher, run, { products: undefined, layers: [], packages: [] });
+    assert.equal(result.verified.verification?.overall, "failed");
+    assert.equal(result.verified.verification?.site.state, "failed");
+    assert.match(result.verified.verification?.site.error ?? "", /products returned no products array/);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("candidate verification rejects a package whose inner manifest identity disagrees with the catalog", async () => {
+  const context = await harness();
+  const base = path.dirname(context.options.contentRoot);
+  try {
+    const badZip = await packageZipBuffer({
+      schemaVersion: 3,
+      id: "public-wrong-footprints",
+      version: "3.1.0",
+      surveyId: "m42",
+      layers: [{ layerId: "m42-layer", surveyId: "m42", releaseId: "m42-dr1", modality: "image", path: "layers/m42-layer/moc.fits", sizeBytes: 1, sha256: sha256Of("x") }],
+      files: [],
+    });
+    const packageEntry = context.packageEntries[0]!;
+    const packageAsset = context.packageAssets[0]!;
+    await writeFile(path.join(context.options.contentRoot, packageAsset.path), badZip);
+    packageEntry.sizeBytes = badZip.byteLength;
+    packageEntry.sha256 = sha256Of(badZip);
+    packageAsset.sizeBytes = badZip.byteLength;
+    packageAsset.sha256 = sha256Of(badZip);
+
+    const objectRoot = path.join(base, "objects-package-identity");
+    const publisher = new PublicReleasePublisher({ ...context.options, store: new FilesystemArtifactStore(objectRoot) });
+    const plan = await publisher.plan();
+    const run = await publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["m42"] });
+    await publisher.claimQueuedRun();
+    const finished = await publisher.execute(run.runId);
+    assert.equal(finished.status, "failed");
+    assert.equal(finished.verification?.candidate.state, "failed");
+    assert.equal(finished.failureStage, "candidate");
+    assert.match(finished.error ?? "", /identity mismatch/i);
+    await assert.rejects(() => readFile(path.join(objectRoot, "public/current.json")));
+    const retry = await publisher.retry(finished.runId, "retry-operator");
+    assert.notEqual(retry.runId, finished.runId);
+    assert.equal(retry.status, "queued");
+    assert.equal(retry.requestedBy, "retry-operator");
   } finally {
     await rm(base, { recursive: true, force: true });
   }

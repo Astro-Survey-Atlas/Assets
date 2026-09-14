@@ -1,13 +1,27 @@
-import { Activity, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Unlock, Upload, X, Sun, createIcons } from "lucide";
+import { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Unlock, Upload, X, Sun, createIcons } from "lucide";
 import "./styles.css";
 import { mountLocaleControls, t } from "../src/i18n.js";
+import { reconcileMarkup } from "./stable-dom.js";
 import { aggregateWorkAttempts } from "./work-items.js";
+import { parseAdminRoute, routePath, type AdminStep } from "./navigation.js";
+import { WorkspaceRequests, workspaceResources, businessSignature, type Resource } from "./workspaces.js";
+import { capabilityNames, gapGuidance, discoveryProgress, discoveryObservationLabel, type DiscoveryObservation } from "./readiness-copy.js";
+import { surveyPresentationImage, surveyPresentationAttribution } from "./presentation.js";
 
 mountLocaleControls();
 
+document.addEventListener("error", event => {
+  const image = event.target;
+  if (!(image instanceof HTMLImageElement) || !image.classList.contains("survey-card-image")) return;
+  const placeholder = document.createElement("span");
+  placeholder.className = "survey-card-image survey-card-placeholder";
+  placeholder.textContent = image.alt.replace(/ 项目图片$/, "");
+  image.replaceWith(placeholder);
+}, true);
+
 type ConnectorType = "s3" | "oss" | "local";
 interface AdminConfig { enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; modalities?: string[]; connectorTypes: ConnectorType[]; backends: string[]; scanRequestApiVersion?: string } }
-interface Connector { name: string; type: ConnectorType | string; endpoint?: string; region?: string; bucket?: string; prefix?: string; accessKeyConfigured?: boolean; pvcName?: string; basePath?: string; localPath?: string; phase?: string; message?: string; checkedAt?: string; createdAt?: string }
+interface Connector { name: string; type: ConnectorType | string; endpoint?: string; region?: string; bucket?: string; prefix?: string; accessKeyConfigured?: boolean; pvcName?: string; basePath?: string; localPath?: string; phase?: string; message?: string; checkedAt?: string; createdAt?: string; resourceKind?: "ConfigMap" | "AstroDataSource"; configurationPhase?: string; scope?: { kind?: string; pvcName?: string; basePath?: string; legacyPath?: string; endpoint?: string; region?: string; bucket?: string; prefix?: string }; inventory?: { state?: "unknown" | "running" | "complete" | "partial" | "failed"; denominatorKnown?: boolean; observedObjectCount?: number; totalObjectCount?: number; totalBytes?: number; processedObjects?: number; observedAt?: string; updatedAt?: string; source?: string; note?: string }; usage?: { scanTaskCount?: number; productCount?: number; latestTask?: { name?: string; phase?: string; createdAt?: string } } }
 interface TaskStatus { phase: string; reason?: string; backend?: string; runId?: string; discoveredFiles?: number; processedHdus?: number; coverageDocuments?: number; objectDocuments?: number; errorCount?: number; availableOrders?: number[]; evidencePath?: string; sourceSnapshot?: { uri?: string; sha256: string; sizeBytes?: number }; startedAt?: string; completedAt?: string; message?: string }
 interface Task { name: string; createdAt?: string; layerId?: string; surveyId?: string; releaseId?: string; product?: string; productId?: string; modality?: string; mode?: string; backend?: string; sourceConnector?: string; sourcePaths: string[]; tags: string[]; batchId?: string; workKey?: string; workTitle?: string; recipe?: { mode?: string; outputOrder?: number; catalog?: Record<string, unknown> }; status: TaskStatus }
 interface ProductLifecycle {
@@ -15,21 +29,47 @@ interface ProductLifecycle {
   runtime?: { state?: string; layerId?: string; catalogRevision?: string; availableOrders?: number[]; overviewOrder?: number; maxOrder?: number };
   links?: { product?: string; sky?: string; catalog?: string; moc?: string };
 }
+interface ProductHistoryEntry {
+  action?: string;
+  productId?: string;
+  revision?: number;
+  at?: string;
+  reason?: string;
+  acceptedGaps?: string[];
+}
+type ReadinessLevel = -1 | 0 | 1 | 2 | 3;
+interface ProductReadiness {
+  schemaVersion: 1;
+  level: ReadinessLevel;
+  label: "needs-information" | "source-registered" | "coverage-queryable" | "unit-reversible" | "file-locatable";
+  geometry: { orders: number[]; maxOrder?: number; precision: string; basis: string; coordinateFrame?: string; ordering?: string };
+  reverseLookup: { level: ReadinessLevel; orders: number[]; precision: string; unitKind?: string; basis: string };
+  completeness: { state: "complete" | "partial" | "unknown"; processed?: number; total?: number; asOf?: string; scope?: string };
+  evidence: { inputLocked: boolean; executionRecorded: boolean; outputValidated: boolean; isolatedRestoreValidated: boolean };
+  gaps: string[];
+}
+interface ReadinessAggregate { productCount: number; levelCounts: { L0: number; L1: number; L2: number; L3: number; needsInformation: number }; capabilityCounts: { coverage: number; unit: number; file: number }; geometryOrders: number[]; reverseLookupOrders: number[]; geometryPrecision: string; reverseLookupPrecision: string; completeness: { complete: number; partial: number; unknown: number }; gapCount: number }
+interface ReadinessVersions { draft: ProductReadiness; published: ProductReadiness | null }
+interface AdminOverviewSurveyProduct { productId: string; name: string; modality?: string; status?: string; readiness?: ReadinessVersions; review?: { state?: string; draftRevision?: number; publishedRevision?: number | null; updatedAt?: string; publishedAt?: string | null } }
+interface AdminOverviewRelease { id: string; label: string; kind?: string; readiness?: { draft: ReadinessAggregate; published: ReadinessAggregate }; products: AdminOverviewSurveyProduct[] }
+interface AdminOverviewSurvey { id: string; surveyId: string; name: string; mission: string; modalities: string[]; statistics?: Record<string, number>; readiness?: { draft: ReadinessAggregate; published: ReadinessAggregate }; releases: AdminOverviewRelease[] }
+interface AdminOverview { schemaVersion: 1; generatedAt: string; coverage: CatalogStatus; totals: { surveys: number; releases: number; products: number; publishedProducts: number; retiredProducts?: number }; readiness: ReadinessAggregate; readinessVersions?: { draft: ReadinessAggregate; published: ReadinessAggregate }; surveys: AdminOverviewSurvey[]; connectors: Connector[]; workflows: { tasks: { total: number; phases: Record<string, number> }; discovery: { total: number; phases: Record<string, number> }; builds: { total: number; phases: Record<string, number> } }; syncStatus?: Record<string, unknown> }
 interface MocBuildSummary { name: string; discoveryRequestName: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; sourceUrl?: string; phase: string; progress?: { phase?: string; step?: number; totalSteps?: number; percent?: number; message?: string }; createdAt?: string; updatedAt?: string; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; query?: { order?: number }; preview?: { order?: number }; manifest?: { ref?: string; sha256?: string; sizeBytes?: number } }; error?: { reason?: string; message?: string }; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
-interface Product { productId: string; draft: { productId: string; surveyId: string; releaseId: string; name: string; layerId?: string; modality?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; sourceUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: { name: string; mission: string; description: string; color: string; modalities: string[] }; publicRelease?: { label: string; kind: string; releasedYear?: number }; publicDescription?: string; publicStatus?: string; scanDefaults?: { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }; recipeVersion?: number; recipeHash?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } } }; published: unknown; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle }
+interface Product { productId: string; draft: { productId: string; surveyId: string; releaseId: string; name: string; layerId?: string; modality?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; sourceUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: { name: string; mission: string; description: string; color: string; modalities: string[] }; publicRelease?: { label: string; kind: string; releasedYear?: number }; publicDescription?: string; publicStatus?: string; scanDefaults?: { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }; recipeVersion?: number; recipeHash?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } } }; published: unknown; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; retiredAt?: string; retirementReason?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; readiness?: ReadinessVersions; review?: { revision?: number; reviewedAt?: string; acceptedGaps?: string[] }; executionEvidence?: ExecutionEvidence[]; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle }
+interface ExecutionEvidence { executionId: string; revision: number; stepId: string; status: string; startedAt: string; finishedAt?: string; tool?: { name?: string; version?: string; imageDigest?: string }; inputs?: Array<{ label?: string; ref?: string; sha256?: string; sizeBytes?: number }>; parameters?: Record<string, string | number | boolean>; outputs?: Array<{ label?: string; ref?: string; sha256?: string; sizeBytes?: number }>; checks?: Array<{ id: string; status: string; detail?: string }>; error?: string }
 interface CatalogStatus { mode: string; loadedAt: string; revision?: string; layers: number; footprints: number; warehouseConfigured: boolean }
 interface MocCandidateSummary { candidateId: string; title?: string; recordUrl?: string; mocUrl?: string; hipsUrl?: string }
 interface MocReviewSummary { schemaVersion: 2; truncated: boolean; summaryTruncated: boolean; searchRecordCount?: number; candidates: MocCandidateSummary[] }
 type MocDiscoveryState = "running" | "ready" | "empty" | "incomplete" | "failed";
 interface MocDiscoveryStatus { phase: string; jobName?: string; reason?: string; message?: string; evidencePath?: string; candidateCount?: number; lastTransitionTime?: string; reviewSummary?: MocReviewSummary; reviewSummaryState?: "available" | "missing"; discoveryState?: MocDiscoveryState }
-interface MocDiscoveryRequest { name: string; namespace?: string; createdAt?: string; surveyName: string; releaseHint?: string; productHint?: string; surveyId?: string; releaseId?: string; productId?: string; policyRef: string; workKey?: string; workTitle?: string; status: MocDiscoveryStatus }
+interface MocDiscoveryRequest { name: string; observation?: DiscoveryObservation; namespace?: string; createdAt?: string; surveyName: string; releaseHint?: string; productHint?: string; surveyId?: string; releaseId?: string; productId?: string; policyRef: string; workKey?: string; workTitle?: string; status: MocDiscoveryStatus }
 interface MocBuildProgress { phase: string; step: number; totalSteps: number; percent?: number; message?: string }
 interface MocBuildRequest { schemaVersion: 1; kind: "MocBuildRequest"; name: string; discoveryRequestName: string; provider: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; workKey?: string; workTitle?: string; createdAt: string; updatedAt: string; phase: string; progress: MocBuildProgress; source: { url: string; snapshotSha256?: string; sizeBytes?: number; evidenceRef?: string }; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; moc?: { ref: string; sha256: string; sizeBytes?: number }; query?: { ref: string; sha256?: string; order: number }; preview?: { ref: string; sha256?: string; order: number }; statistics?: { ref: string; sha256?: string; sizeBytes?: number }; manifest?: { ref: string; sha256?: string; sizeBytes?: number } }; error?: { reason: string; message: string }; duplicateOf?: string; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
 interface MocRegistrationDefaults { releaseId: string; releaseLabel: string; releaseKind: string; productName: string; productDescription: string; productStatus: string; modality: string; dataOrigin: string }
-interface ReviewProduct { productId: string; name: string; canonicalName?: string; modality?: string; description: string; status: string; sourceUrl?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; geometrySourceUrl?: string; geometrySourceLabel?: string; reason?: string; manualStep?: string; coverage?: { availableOrders?: number[]; overviewOrder?: number; maxOrder?: number; layerId?: string; areaDeg2?: number }; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle; review?: { state: string; draftRevision?: number; publishedRevision?: number | null; updatedAt?: string; publishedAt?: string | null } }
-interface ReviewRelease { id: string; label: string; kind: string; releasedYear?: number; modalities: string[]; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; products: ReviewProduct[] }
+interface ReviewProduct { productId: string; name: string; canonicalName?: string; modality?: string; description: string; status: string; sourceUrl?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; geometrySourceUrl?: string; geometrySourceLabel?: string; reason?: string; manualStep?: string; retiredAt?: string; retirementReason?: string; coverage?: { availableOrders?: number[]; overviewOrder?: number; maxOrder?: number; layerId?: string; areaDeg2?: number }; readiness?: ReadinessVersions; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle; review?: { state: string; draftRevision?: number; publishedRevision?: number | null; reviewedRevision?: number; reviewedAt?: string; acceptedGaps?: string[]; updatedAt?: string; publishedAt?: string | null } }
+interface ReviewRelease { id: string; label: string; kind: string; releasedYear?: number; modalities: string[]; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; readiness?: { draft: ReadinessAggregate; published: ReadinessAggregate }; products: ReviewProduct[] }
 interface ReviewMocBuild { name: string; discoveryRequestName: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; sourceUrl?: string; phase: string; progress?: { percent?: number; message?: string }; createdAt?: string; updatedAt?: string; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number }; lifecycle?: ProductLifecycle }
-interface ReviewSurvey { id: string; surveyId: string; name: string; mission: string; color: string; description: string; modalities: string[]; imageUrl: string; statistics: Record<string, number>; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; releases: ReviewRelease[]; unmatchedProducts?: Array<Record<string, unknown>>; unmatchedBuilds?: ReviewMocBuild[] }
+interface ReviewSurvey { id: string; surveyId: string; name: string; mission: string; color: string; description: string; modalities: string[]; imageUrl: string; statistics: Record<string, number>; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; readiness?: { draft: ReadinessAggregate; published: ReadinessAggregate }; releases: ReviewRelease[]; unmatchedProducts?: Array<Record<string, unknown>>; unmatchedBuilds?: ReviewMocBuild[] }
 
 interface EditorialProduct {
   productId: string;
@@ -74,7 +114,9 @@ const byId = <T extends HTMLElement>(id: string): T => {
 };
 
 function renderIcons(): void {
-  createIcons({ icons: { Activity, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Sun, Table2, Unlock, Upload, X }, attrs: { "aria-hidden": "true" } });
+  document.querySelectorAll<HTMLElement>("i[data-lucide]").forEach(icon => icon.setAttribute("data-icon-pending", icon.dataset.lucide!));
+  createIcons({ nameAttr: "data-icon-pending", icons: { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Sun, Table2, Unlock, Upload, X }, attrs: { "aria-hidden": "true" } });
+  document.querySelectorAll("[data-icon-pending]").forEach(icon => icon.removeAttribute("data-icon-pending"));
 }
 
 type AdminTheme = "light" | "dark";
@@ -510,30 +552,32 @@ function discardEditorialChanges(): void {
   toast("未保存的目录修改已撤销");
 }
 
-type AdminStep = "sources" | "tasks" | "review" | "releases";
-let activeStep: AdminStep = "sources";
-
+let activeStep: AdminStep = "overview";
 function setAdminStep(step: AdminStep, replace = false): void {
+  const changed = activeStep !== step;
   activeStep = step;
-  if (step === "releases" && !byId("admin-workspace").hidden) {
-    void loadPublicationPlan();
-    void loadPublicationRuns();
+  if (changed || replace) {
+    if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+    pollTimer = undefined;
+    workspaceRequests.cancel(); refreshVersion++; refreshInFlight = null;
+    document.querySelectorAll<HTMLDialogElement>("dialog[open]").forEach(dialog => dialog.close());
   }
-  document.querySelectorAll<HTMLElement>("[data-admin-panel]").forEach((panel) => { panel.hidden = panel.dataset.adminPanel !== step; });
-  document.querySelectorAll<HTMLButtonElement>("[data-admin-step]").forEach((button) => {
+  document.querySelectorAll<HTMLElement>("[data-admin-panel]").forEach(panel => { panel.hidden = panel.dataset.adminPanel !== step; });
+  document.querySelectorAll<HTMLButtonElement>("[data-admin-step]").forEach(button => {
     const selected = button.dataset.adminStep === step;
-    button.setAttribute("aria-selected", String(selected));
-    button.tabIndex = selected ? 0 : -1;
+    button.setAttribute("aria-selected", String(selected)); button.tabIndex = selected ? 0 : -1;
   });
-  const hash = `#${step}`;
-  if (replace) history.replaceState(null, "", hash);
-  else if (location.hash !== hash) history.pushState(null, "", hash);
+  const incoming = parseAdminRoute(location.pathname, location.hash);
+  const destination = replace && incoming?.step === step ? routePath(incoming) : routePath({ step });
+  if (replace) history.replaceState(null, "", destination);
+  else if (location.pathname !== destination) history.pushState(null, "", destination);
+  if (step === "overview") {
+    overviewSurveyId = parseAdminRoute(location.pathname)?.surveyId ?? "";
+    if (overviewRecord) renderOverview(overviewRecord);
+  }
+  if (token && !byId("admin-workspace").hidden) void refresh();
 }
-
-function readAdminStep(): AdminStep {
-  const value = location.hash.slice(1);
-  return value === "tasks" || value === "review" || value === "releases" ? value : "sources";
-}
+function readAdminStep(): AdminStep { return parseAdminRoute(location.pathname, location.hash)?.step ?? "overview"; }
 
 function modalityIcon(modality?: string): string {
   const value = modality?.toLowerCase();
@@ -599,12 +643,13 @@ function formatDate(value?: string): string {
 }
 
 function connectorLabel(connector: Connector): string {
-  return `${connector.name} · ${connector.type.toUpperCase()} · ${connector.phase ?? "NOT_CHECKED"}`;
+  const configuration = connector.configurationPhase ? ` · config ${connector.configurationPhase}` : "";
+  return `${connector.name} · ${connector.type.toUpperCase()} · ${connector.phase ?? "NOT_CHECKED"}${configuration}`;
 }
 
 function connectorIcon(type?: string): string {
   const normalized = String(type ?? "").toLowerCase();
-  if (normalized === "s3" || normalized === "oss") return "cloud-cog";
+  if (normalized === "s3" || normalized === "oss") return "cloud";
   if (normalized === "local" || normalized === "pvc" || normalized === "filesystem" || normalized === "file-system") return "hard-drive";
   if (normalized === "jdbc" || normalized === "database" || normalized === "postgres" || normalized === "mysql") return "database";
   return "plug";
@@ -627,9 +672,180 @@ function connectorLocation(connector: Connector): string {
   return `${connector.endpoint ?? ""}${connector.region ? ` · ${connector.region}` : ""}${connector.bucket ? ` · ${connector.bucket}` : ""}${connector.prefix ? ` / ${connector.prefix}` : ""}`;
 }
 
+function formatBytes(value?: number): string {
+  if (value === undefined || !Number.isFinite(value)) return "未知";
+  if (value < 1024) return `${value} B`;
+  const units = ["KiB", "MiB", "GiB", "TiB"];
+  let size = value;
+  let unit = "B";
+  for (const candidate of units) {
+    size /= 1024;
+    unit = candidate;
+    if (size < 1024) break;
+  }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${unit}`;
+}
+
+function connectorInventoryMarkup(connector: Connector, compact = false): string {
+  const inventory = connector.inventory;
+  const state = inventory?.state ?? "unknown";
+  const objectCount = inventory?.totalObjectCount ?? inventory?.observedObjectCount ?? inventory?.processedObjects;
+  const countLabel = objectCount === undefined ? "未知对象数" : `${objectCount.toLocaleString()} 个对象`;
+  const bytes = inventory?.totalBytes === undefined ? "字节数未知" : formatBytes(inventory.totalBytes);
+  const qualifier = inventory?.denominatorKnown ? "授权范围盘点" : inventory?.state === "running" ? "盘点进行中" : inventory?.state === "partial" ? "部分盘点" : inventory?.observedObjectCount !== undefined ? "最近扫描观测" : "未盘点";
+  return `<span class="connector-inventory connector-inventory-${escapeText(state)}"><span class="connector-inventory-state">${escapeText(qualifier)}</span><strong>${escapeText(countLabel)}</strong>${compact ? "" : `<small>${escapeText(bytes)}${inventory?.observedAt ? ` · ${escapeText(formatDate(inventory.observedAt))}` : ""}</small>`}</span>`;
+}
+
 let connectorRecords: Connector[] = [];
 let selectedConnectorName = "";
 const connectorProbeResults = new Map<string, Connector>();
+let overviewRecord: AdminOverview | null = null;
+let overviewQuery = "";
+let overviewSurveyId = "";
+let activeProductDialogId = "";
+
+function readinessLevelLabel(level?: ReadinessLevel): string {
+  if (level === undefined || level < 0) return "待补充";
+  return `L${level}`;
+}
+
+function readinessLevelClass(level?: ReadinessLevel): string {
+  return level === undefined || level < 0 ? "needs-information" : `l${level}`;
+}
+
+function readinessChip(readiness?: ProductReadiness, version = "当前"): string {
+  if (!readiness) return `<span class="readiness-chip readiness-chip-unknown">${escapeText(version)} · 未知</span>`;
+  const orders = readiness.geometry.orders.length ? readiness.geometry.orders.map((order) => `O${order}`).join("/") : "--";
+  const reverse = readiness.reverseLookup.level >= 2 ? `可定位${readiness.reverseLookup.level === 3 ? "文件" : "Tile / 曝光"} · 反查 ${readiness.reverseLookup.orders.map((order) => `O${order}`).join(" / ")}` : "仅提供来源入口，尚不能定位 Tile 或文件";
+  return `<span class="readiness-chip readiness-chip-${readinessLevelClass(readiness.level)}"><strong>${escapeText(version)} · ${escapeText(capabilityNames[readiness.level])} (${readinessLevelLabel(readiness.level)})</strong><span>覆盖精度 ${escapeText(orders)}（HEALPix 阶数）</span><span>${escapeText(reverse)}</span></span>`;
+}
+
+function readinessVersionMarkup(versions?: ReadinessVersions): string {
+  if (!versions) return readinessChip();
+  return `<div class="readiness-version-pair">${versions.published ? readinessChip(versions.published, "公开版本") : `<span class="publication-state">尚未发布</span>`}${!versions.published || JSON.stringify(versions.draft) !== JSON.stringify(versions.published) ? readinessChip(versions.draft, "工作版本") : ""}</div>`;
+}
+
+type ReadinessActionStep = "sources" | "tasks" | "review" | "releases" | "scan";
+
+function readinessActionForGap(gap: string): { step: ReadinessActionStep; label: string } {
+  if (gap === "source-not-traceable") return { step: "sources", label: "去数据源" };
+  if (gap === "completeness-unknown" || gap === "completeness-partial") return { step: "sources", label: "看盘点" };
+  if (gap === "isolated-restore-not-verified") return { step: "releases", label: "去发布验证" };
+  if (gap === "output-validation-missing") return { step: "review", label: "去审核" };
+  if (gap === "source-unit-index-missing" || gap === "file-level-reverse-index-missing") return { step: "scan", label: "补充反查索引" };
+  return { step: "tasks", label: "去探索/处理" };
+}
+
+function readinessGapMarkup(gap: string): string {
+  let action = readinessActionForGap(gap);
+  const guide = gapGuidance[gap];
+  const product = productRecords.find((entry) => entry.productId === activeProductDialogId);
+  const build = mocBuildRecords.find((entry) => entry.productId === product?.productId);
+  if (gap === "output-validation-missing" && build) action = { step: "review", label: "校验已有构建" };
+  if (gap === "execution-record-missing" && build) action = { step: "review", label: "校验并记录证据" };
+  const context = product ? `本产品：${product.draft.name}${build ? `；已有关联候选 ${build.candidateTitle ?? build.candidateId}` : "；尚无关联 MOC 构建"}。` : "";
+  return `<li><div><strong>${escapeText(guide?.title ?? "待核实事项")}</strong><p>${escapeText(guide?.description ?? gap)}</p>${["input-snapshot-hash-missing", "execution-record-missing", "output-validation-missing"].includes(gap) ? `<p>${escapeText(context)}</p>` : ""}<small>${guide?.blocking ? "发布前必须解决" : gap === "isolated-restore-not-verified" ? "发布阶段自动验证" : "可披露限制后分级发布"}</small></div><button type="button" class="readiness-gap-action" data-readiness-action="${action.step}" title="${escapeText(action.label)}"><i data-lucide="arrow-right"></i><span>${escapeText(action.label)}</span></button></li>`;
+}
+
+function readinessDetailMarkup(versions?: ReadinessVersions): string {
+  if (!versions) return "";
+  const versionBlock = (label: string, readiness: ProductReadiness): string => {
+    const evidence = [
+      ["输入锁定", readiness.evidence.inputLocked],
+      ["实际执行", readiness.evidence.executionRecorded],
+      ["输出校验", readiness.evidence.outputValidated],
+      ["隔离恢复", readiness.evidence.isolatedRestoreValidated],
+    ].map(([name, passed]) => `<span class="readiness-evidence-${passed ? "passed" : "missing"}">${escapeText(name)} ${passed ? "已记录" : "缺失"}</span>`).join("");
+    const gaps = readiness.gaps.length ? readiness.gaps.map(readinessGapMarkup).join("") : "<li><span>没有待处理缺口</span></li>";
+    return `<section class="readiness-detail-version"><header><strong>${escapeText(label)} · ${escapeText(readinessLevelLabel(readiness.level))}</strong><span>覆盖 ${escapeText(readiness.geometry.orders.length ? readiness.geometry.orders.map((order) => `O${order}`).join("/") : "--")} · 反查 ${escapeText(readiness.reverseLookup.precision)}</span></header><div class="readiness-evidence-list">${evidence}</div><ul>${gaps}</ul></section>`;
+  };
+  return `<section class="readiness-detail"><div class="section-heading"><div><span class="section-index">READINESS EVIDENCE</span><h4>能力与缺口</h4></div><span class="section-note">derived from artifacts / checks</span></div>${versionBlock("草稿", versions.draft)}${versions.published ? versionBlock("已发布", versions.published) : ""}</section>`;
+}
+
+function executionEvidenceMarkup(entries?: ExecutionEvidence[], revision?: number): string {
+  const visible = (entries ?? []).filter((entry) => revision === undefined || entry.revision === revision).slice(-32);
+  if (!visible.length) return `<section class="execution-evidence"><div class="section-heading"><div><span class="section-index">EXECUTION RECEIPTS</span><h4>实际执行记录</h4></div><span class="section-note">当前版本暂无记录</span></div><p class="resource-empty">方法说明不会自动生成执行成功记录；请在构建或扫描完成后登记输入、输出和校验。</p></section>`;
+  return `<section class="execution-evidence"><div class="section-heading"><div><span class="section-index">EXECUTION RECEIPTS</span><h4>实际执行记录</h4></div><span class="section-note">revision ${escapeText(String(revision ?? visible[0]?.revision ?? "--"))} · ${visible.length} 条</span></div><div class="execution-evidence-list">${visible.map((entry) => {
+    const stateName = (state: string) => ({ passed: "通过", failed: "失败", running: "执行中", skipped: "未执行", "not-applicable": "不适用" })[state] ?? state;
+    const checkName = (id: string) => ({ "source-snapshot": "来源快照", "output-integrity": "输出完整性" })[id] ?? id;
+    const stepName = ({ "moc-build": "获取来源并构建 MOC", "verify-moc-build": "重新校验构建产物" })[entry.stepId] ?? entry.stepId;
+    const references = (items: ExecutionEvidence["inputs"], label: string) => `<details><summary>${label} · ${items?.length ?? 0} 项</summary>${(items ?? []).map((item) => `<dl>${detailValue("制品", item.label)}${detailValue("记录位置", item.ref)}${detailValue("SHA-256", item.sha256)}</dl>`).join("") || "暂无记录"}</details>`;
+    return `<article class="execution-evidence-row"><div><strong>${escapeText(stepName)}</strong><span>${escapeText(stateName(entry.status))} · ${escapeText(formatDate(entry.startedAt))}${entry.finishedAt ? ` → ${escapeText(formatDate(entry.finishedAt))}` : ""}</span>${entry.tool ? `<small>${escapeText(entry.tool.name ?? "工具")} · ${escapeText(entry.tool.version ?? "执行版本未记录")}${entry.tool.imageDigest ? ` · ${escapeText(entry.tool.imageDigest)}` : ""}</small>` : ""}</div><div>${(entry.checks ?? []).map((check) => `<p>${escapeText(checkName(check.id))}：${escapeText(stateName(check.status))}${check.detail ? ` · ${escapeText(check.detail)}` : ""}</p>`).join("")}${references(entry.inputs, "输入")}${references(entry.outputs, "输出")}${entry.error ? `<p class="execution-evidence-error">${escapeText(entry.error)}</p>` : ""}</div></article>`;
+  }).join("")}</div></section>`;
+}
+
+function readinessAggregateMarkup(summary?: { draft: ReadinessAggregate; published: ReadinessAggregate }): string {
+  if (!summary) return "";
+  const draft = summary.draft;
+  const published = summary.published;
+  const levelCounts = (value: ReadinessAggregate): string => `L0 ${value.levelCounts.L0} · L1 ${value.levelCounts.L1} · L2 ${value.levelCounts.L2} · L3 ${value.levelCounts.L3} · 待补充 ${value.levelCounts.needsInformation}`;
+  const capability = (value: ReadinessAggregate): string => `覆盖 ${value.capabilityCounts.coverage} · 单元 ${value.capabilityCounts.unit} · 文件 ${value.capabilityCounts.file}`;
+  const orders = (value: ReadinessAggregate): string => value.geometryOrders.length ? value.geometryOrders.map((order) => `O${order}`).join("/") : "--";
+  return `<div class="readiness-aggregate"><div><span>草稿</span><strong>${escapeText(levelCounts(draft))}</strong><small>${escapeText(capability(draft))} · 空间 ${escapeText(orders(draft))} · 精度 ${escapeText(draft.geometryPrecision)}</small></div><div><span>已发布</span><strong>${escapeText(levelCounts(published))}</strong><small>${escapeText(capability(published))} · 空间 ${escapeText(orders(published))} · 精度 ${escapeText(published.geometryPrecision)}</small></div></div>`;
+}
+
+function renderOverview(overview: AdminOverview): void {
+  overviewRecord = overview;
+  byId("step-overview-count").textContent = String(overview.totals.products);
+  byId("overview-generated-at").textContent = `更新于 ${formatDate(overview.generatedAt)} · ${overview.coverage.mode.toUpperCase()} coverage`;
+  const summary = overview.readinessVersions?.[overviewVersion] ?? overview.readiness;
+  byId("overview-readiness-summary").innerHTML = [
+    ["L0 来源已登记", summary.levelCounts.L0, "已有来源，尚无可查询覆盖"],
+    ["L1 覆盖可查询", summary.levelCounts.L1, "尚不能定位数据单元"],
+    ["L2 单元可反查", summary.levelCounts.L2, "可定位 Tile / 曝光等单元"],
+    ["L3 文件可定位", summary.levelCounts.L3, "可反查具体文件位置"],
+    ["待补充", summary.levelCounts.needsInformation, "来源依据待核实"],
+  ].map(([label, value, detail]) => `<div class="readiness-summary-card"><span>${escapeText(label)}</span><strong>${escapeText(value)}</strong><small>${escapeText(detail)}</small></div>`).join("");
+  const query = overviewQuery;
+  const surveys = overview.surveys.filter((survey) => {
+    if (!query) return true;
+    const haystack = JSON.stringify(survey).toLocaleLowerCase();
+    return haystack.includes(query);
+  });
+  const list = byId("overview-survey-list");
+  list.onclick = event => {
+    const target = (event.target as Element).closest<HTMLButtonElement>("button");
+    if (!target) return;
+    if (target.dataset.surveyCard) {
+      overviewSurveyId = target.dataset.surveyCard;
+      history.pushState(null, "", routePath({ step: "overview", surveyId: overviewSurveyId }));
+      renderOverview(overview);
+    } else if (target.id === "overview-back") {
+      overviewSurveyId = ""; history.pushState(null, "", "/admin/overview"); renderOverview(overview);
+    } else if (target.dataset.overviewProduct) {
+      setAdminStep("review"); openProduct(target.dataset.overviewProduct);
+    }
+  };
+  if (!surveys.length) {
+    list.innerHTML = `<div class="resource-empty">没有匹配的巡天、DR 或产品</div>`;
+    renderIcons();
+    return;
+  }
+  const selectedSurvey = surveys.find((survey) => survey.id === overviewSurveyId);
+  if (!selectedSurvey) {
+    reconcileMarkup(list, `<div class="survey-card-grid">${surveys.map((survey) => {
+      const count = survey.releases.reduce((sum, release) => sum + release.products.length, 0);
+      const summary = survey.readiness?.[overviewVersion];
+      const image = surveyPresentationImage(survey.id);
+      return `<button type="button" class="survey-data-card" data-survey-card="${escapeText(survey.id)}" data-row-key="${escapeText(survey.id)}">${image ? `<img class="survey-card-image" src="${escapeText(image)}" alt="${escapeText(survey.name)} 项目图片" loading="lazy" />` : `<span class="survey-card-image survey-card-placeholder">${escapeText(survey.name)}</span>`}<span class="survey-card-copy"><strong>${escapeText(survey.name)}</strong><small>${escapeText(survey.mission)}</small></span><span class="survey-card-metrics">${taskMetric("layers-3", "集合", survey.releases.length)}${taskMetric("boxes", "产品", count)}${taskMetric("scan-line", "有覆盖", summary?.capabilityCounts.coverage ?? "—")}${taskMetric("file-check-2", "可定位文件", summary?.capabilityCounts.file ?? "—")}${taskMetric("package-check", "已发布", survey.readiness?.published.productCount ?? "—")}</span><span class="survey-card-open"><i data-lucide="chevron-down"></i><span>查看产品</span></span></button>`;
+    }).join("")}</div>`);
+    list.querySelectorAll<HTMLImageElement>(".survey-card-image").forEach(image => {
+      const surveyId = image.closest<HTMLElement>("[data-survey-card]")?.dataset.surveyCard ?? "";
+      image.title = surveyPresentationAttribution(surveyId) ?? "项目展示图片";
+    });
+    renderIcons();
+    return;
+  }
+  reconcileMarkup(list, `<button type="button" class="admin-quiet" id="overview-back">← 返回全部巡天</button>` + [selectedSurvey].map((survey) => {
+    const releases = survey.releases.map((release) => {
+      const products = release.products.filter((product) => !query || JSON.stringify(product).toLocaleLowerCase().includes(query));
+      if (query && !products.length && !`${survey.name} ${release.label}`.toLocaleLowerCase().includes(query)) return "";
+      return `<section class="overview-release" data-row-key="${escapeText(release.id)}"><header><div><strong>${escapeText(release.label)}</strong><span>${products.length} 个产品</span></div></header><div class="overview-product-list">${products.map((product) => `<article class="overview-product" data-row-key="${escapeText(product.productId)}"><div><strong>${escapeText(product.name)}</strong><span>${escapeText(product.modality ?? "模态未知")}</span></div>${readinessVersionMarkup(product.readiness)}<button type="button" class="admin-quiet" data-overview-product="${escapeText(product.productId)}" title="查看状态、证据及补全操作"><i data-lucide="eye"></i><span>产品详情与证据</span></button></article>`).join("")}</div></section>`;
+    }).filter(Boolean).join("");
+    return `<article class="overview-survey"><header class="overview-survey-header"><div class="overview-survey-copy"><strong>${escapeText(survey.name)}</strong><span>${escapeText(survey.mission)} · ${survey.releases.length} 个数据发布 / 集合</span><p>按产品查看能力；不同产品的覆盖精度和反查能力可能不同。</p></div></header>${releases || `<div class="resource-empty">没有匹配的 DR / 产品</div>`}</article>`;
+  }).join(""));
+  renderIcons();
+}
 
 function renderConnectorDetails(connector?: Connector): void {
   const detail = byId("connector-detail");
@@ -639,8 +855,13 @@ function renderConnectorDetails(connector?: Connector): void {
   }
   const location = connectorLocation(connector);
   const phase = connector.phase ?? "NOT_CHECKED";
-  detail.innerHTML = `<div class="connector-detail-watermark" aria-hidden="true"><i data-lucide="${connectorIcon(connector.type)}"></i></div><div class="connector-detail-heading"><div class="connector-detail-title"><span class="connector-type-icon connector-type-${escapeText(String(connector.type).toLowerCase())}"><i data-lucide="${connectorIcon(connector.type)}"></i></span><div><span class="section-note">SELECTED CONNECTOR · ${escapeText(connectorTypeLabel(connector.type))}</span><h4>${escapeText(connector.name)}</h4></div></div><div class="connector-detail-actions"><button type="button" class="admin-quiet" data-probe-connector="${escapeText(connector.name)}" title="探测 Connector 连接"${phase === "PROBING" ? " disabled" : ""}><i data-lucide="plug-zap"></i><span>${phase === "PROBING" ? "探测中…" : "探测连接"}</span></button><button type="button" class="admin-quiet" data-use-connector="${escapeText(connector.name)}" title="用此 Connector 创建扫描"><i data-lucide="send"></i><span>用于新扫描</span></button></div></div><dl class="connector-detail-grid">${detailValue("type", connectorTypeLabel(connector.type))}${detailValue("phase", phase)}${detailValue("location", location)}${detailValue("PVC", connector.pvcName)}${detailValue("base path", connector.basePath)}${detailValue("legacy path", connector.localPath)}${detailValue("credentials", connector.accessKeyConfigured ? "configured" : "not configured")}${detailValue("checked", connector.checkedAt ? formatDate(connector.checkedAt) : "NOT_CHECKED")}${detailValue("created", formatDate(connector.createdAt))}${detailValue("message", connector.message)}</dl>`;
+  const inventory = connector.inventory;
+  const usage = connector.usage;
+  const inventoryState = inventory?.state ?? "unknown";
+  const inventoryAction = inventoryState === "complete" ? "重新盘点" : inventoryState === "running" ? "继续盘点" : "开始盘点";
+  detail.innerHTML = `<div class="connector-detail-watermark" aria-hidden="true"><i data-lucide="${connectorIcon(connector.type)}"></i></div><div class="connector-detail-heading"><div class="connector-detail-title"><span class="connector-type-icon connector-type-${escapeText(String(connector.type).toLowerCase())}"><i data-lucide="${connectorIcon(connector.type)}"></i></span><div><span class="section-note">SELECTED CONNECTOR · ${escapeText(connectorTypeLabel(connector.type))}</span><h4>${escapeText(connector.name)}</h4></div></div><div class="connector-detail-actions"><button type="button" class="admin-quiet" data-probe-connector="${escapeText(connector.name)}" title="探测 Connector 连接"${phase === "PROBING" ? " disabled" : ""}><i data-lucide="plug-zap"></i><span>${phase === "PROBING" ? "探测中…" : "探测连接"}</span></button><button type="button" class="admin-quiet" data-inventory-connector="${escapeText(connector.name)}" title="按授权范围分页盘点对象或文件"><i data-lucide="list-checks"></i><span>${escapeText(inventoryAction)}</span></button><button type="button" class="admin-quiet" data-use-connector="${escapeText(connector.name)}" title="用此 Connector 创建扫描"><i data-lucide="send"></i><span>用于新扫描</span></button></div></div>${connectorInventoryMarkup(connector)}<dl class="connector-detail-grid">${detailValue("type", connectorTypeLabel(connector.type))}${detailValue("resource", connector.resourceKind)}${detailValue("probe phase", phase)}${detailValue("configuration phase", connector.configurationPhase)}${detailValue("location", location)}${detailValue("PVC", connector.pvcName)}${detailValue("base path", connector.basePath)}${detailValue("legacy path", connector.localPath)}${detailValue("credentials", connector.accessKeyConfigured ? "configured" : "not configured")}${detailValue("checked", connector.checkedAt ? formatDate(connector.checkedAt) : "NOT_CHECKED")}${detailValue("created", formatDate(connector.createdAt))}${detailValue("scan tasks", usage?.scanTaskCount === undefined ? "0" : String(usage.scanTaskCount))}${detailValue("linked products", usage?.productCount === undefined ? "0" : String(usage.productCount))}${detailValue("message", connector.message || inventory?.note)}</dl>`;
   detail.querySelector<HTMLButtonElement>("[data-probe-connector]")?.addEventListener("click", () => void probeConnector(connector.name));
+  detail.querySelector<HTMLButtonElement>("[data-inventory-connector]")?.addEventListener("click", () => void inventoryConnector(connector.name));
   detail.querySelector<HTMLButtonElement>("[data-use-connector]")?.addEventListener("click", () => {
     setAdminStep("tasks");
     byId<HTMLSelectElement>("source-connector").value = connector.name;
@@ -650,7 +871,7 @@ function renderConnectorDetails(connector?: Connector): void {
 }
 
 function renderConnectors(connectors: Connector[]): void {
-  connectorRecords = connectors.map((connector) => connectorProbeResults.get(connector.name) ?? connector);
+  connectorRecords = connectors.map((connector) => ({ ...connector, ...(connectorProbeResults.get(connector.name) ?? {}) }));
   const list = byId("connector-list");
   const source = byId<HTMLSelectElement>("source-connector");
   source.replaceChildren(new Option(connectorRecords.length ? "选择 source connector" : "暂无 source connector", ""), ...connectorRecords.map((connector) => new Option(connectorLabel(connector), connector.name)));
@@ -665,7 +886,11 @@ function renderConnectors(connectors: Connector[]): void {
     const type = connectorTypeLabel(connector.type);
     const location = connectorLocation(connector);
     const selected = connector.name === selectedConnectorName;
-    return `<button type="button" class="resource-row connector-row${selected ? " is-selected" : ""}" data-connector-name="${escapeText(connector.name)}"><span class="connector-type-icon connector-type-${escapeText(String(connector.type).toLowerCase())}" aria-hidden="true"><i data-lucide="${connectorIcon(connector.type)}"></i></span><span class="connector-row-copy"><strong>${escapeText(connector.name)}</strong><span>${escapeText(type)} · ${escapeText(connector.phase ?? "NOT_CHECKED")}</span><p>${escapeText(location)}</p></span><code>${escapeText(connector.message ?? "")}</code></button>`;
+    const phase = (connector.phase ?? "NOT_CHECKED").toUpperCase();
+    const tone = phase === "READY" ? "ready" : ["ERROR", "FAILED"].includes(phase) ? "error" : ["PENDING", "PROBING"].includes(phase) ? "pending" : "unknown";
+    const stale = connector.checkedAt && Date.now() - Date.parse(connector.checkedAt) > 86_400_000;
+    const label = { ready: "最近检查通过", error: "连接失败", pending: "检查中", unknown: "未检查" }[tone];
+    return `<button type="button" class="resource-row connector-row connector-status-${tone}${selected ? " is-selected" : ""}" aria-pressed="${selected}" data-connector-name="${escapeText(connector.name)}"><span class="connector-type-icon connector-type-${escapeText(String(connector.type).toLowerCase())}" aria-hidden="true"><i data-lucide="${connectorIcon(connector.type)}"></i></span><span class="connector-row-copy"><strong>${escapeText(connector.name)}</strong><span>${escapeText(type)} · ${label}${stale ? " · 结果已过期" : ""}</span><p>${escapeText(location)}</p></span>${connectorInventoryMarkup(connector, true)}</button>`;
   }).join("");
   list.querySelectorAll<HTMLButtonElement>("[data-connector-name]").forEach((button) => button.addEventListener("click", () => {
     selectedConnectorName = button.dataset.connectorName ?? "";
@@ -689,6 +914,24 @@ async function probeConnector(name: string): Promise<void> {
     connectorProbeResults.set(name, { ...current, phase: "ERROR", message: error instanceof Error ? error.message : "探测失败", checkedAt: new Date().toISOString() });
     renderConnectors(connectorRecords);
     toast(error instanceof Error ? error.message : "Connector 探测失败", true);
+  }
+}
+
+async function inventoryConnector(name: string): Promise<void> {
+  const current = connectorRecords.find((connector) => connector.name === name);
+  if (!current) return;
+  const button = byId<HTMLElement>("connector-detail").querySelector<HTMLButtonElement>("[data-inventory-connector]");
+  if (button) button.disabled = true;
+  try {
+    const response = await api<{ connector: { name: string; inventory?: Connector["inventory"] } }>(`/api/v1/admin/connectors/${encodeURIComponent(name)}/inventory`, { method: "POST" });
+    connectorProbeResults.set(name, { ...current, inventory: response.connector.inventory });
+    renderConnectors(connectorRecords);
+    const state = response.connector.inventory?.state ?? "unknown";
+    toast(`${name} · 盘点${state === "complete" ? "完成" : state === "running" ? "已推进一页" : state}` , state === "failed");
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "Connector 盘点失败", true);
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -748,6 +991,7 @@ function lifecycleStateLabel(state?: string): string {
     INACTIVE: "INACTIVE",
     PUBLISHED: "PUBLISHED",
     DRAFT: "DRAFT",
+    RETIRED: "RETIRED",
   } as Record<string, string>)[normalized] ?? normalized;
 }
 
@@ -768,7 +1012,7 @@ function phaseMarkup(phase: string | undefined, prefix = ""): string {
   return `<span class="task-phase task-phase-${phaseClass(phase ?? "PENDING")}" title="${escapeText(label)}"><i data-lucide="${phaseIcon(phase)}"></i><span>${escapeText(label)}</span></span>`;
 }
 
-function taskMetric(icon: string, label: string, value: string): string {
+function taskMetric(icon: string, label: string, value: string | number): string {
   return `<span class="task-metric"><i data-lucide="${icon}"></i><span>${escapeText(label)}</span><strong>${escapeText(value)}</strong></span>`;
 }
 
@@ -854,7 +1098,7 @@ function renderMocDiscoveryRequests(requests: MocDiscoveryRequest[]): void {
     renderWorkOutputs(taskRecords, requests, mocBuildRecords);
     return;
   }
-  list.innerHTML = requests.map((request) => {
+  const markup = requests.map((request) => {
     const status = request.status ?? { phase: "PENDING" };
     const hints = [request.releaseHint, request.productHint].filter(Boolean).join(" · ");
     const discoveryState = mocDiscoveryStateForStatus(status);
@@ -866,20 +1110,46 @@ function renderMocDiscoveryRequests(requests: MocDiscoveryRequest[]): void {
           ? `${mocFailureReasonLabel(status.reason)}${status.message ? ` · ${status.message}` : ""}`
           : discoveryState === "incomplete"
             ? "Warehouse 已结束，但候选摘要不完整"
-            : "Warehouse 正在处理探查请求";
-    const reviewState = mocDiscoveryStateLabel(discoveryState);
+            : discoveryProgress(request);
+    const reviewState = discoveryState === "running" && !status.jobName ? discoveryObservationLabel(request.observation) : mocDiscoveryStateLabel(discoveryState);
     const retrying = mocRetryInFlight === request.name;
     const retry = ["SUCCEEDED", "FAILED", "COMPLETED", "ERROR", "INVALID", "CANCELLED"].includes(phaseLabel(status.phase)) ? `<button type="button" class="admin-quiet" data-moc-retry="${escapeText(request.name)}" title="重新探查"${retrying ? " disabled" : ""}><i data-lucide="rotate-ccw"></i><span>${retrying ? "探查中…" : "重新探查"}</span></button>` : "";
-    return `<article class="resource-row moc-discovery-row"><div><div class="task-identity"><i data-lucide="search"></i><strong>${escapeText(workTitle(undefined, request))}</strong></div><span>${escapeText(request.name)}${hints ? ` · ${escapeText(hints)}` : ""}</span><p>${escapeText(counts)} · ${escapeText(reviewState)}${status.evidencePath ? ` · evidence ${escapeText(status.evidencePath)}` : ""}</p></div><div class="moc-discovery-row-actions">${phaseMarkup(status.phase)}${mocReviewAction(request, "data-moc-review")}${retry}</div></article>`;
+    return `<article class="resource-row moc-discovery-row" data-row-key="${escapeText(request.name)}"><div><div class="task-identity"><i data-lucide="search"></i><strong>${escapeText(workTitle(undefined, request))}</strong></div><span>${escapeText(request.name)}${hints ? ` · ${escapeText(hints)}` : ""}</span><p>${escapeText(counts)}</p><small>提交 ${escapeText(formatDate(request.createdAt))} · 最近检查 ${escapeText(formatDate(request.observation?.checkedAt))}</small></div><div class="moc-discovery-row-actions">${discoveryState === "running" && !status.jobName ? `<span class="discovery-observation-state" data-state="${request.observation?.state ?? "waiting"}">${escapeText(reviewState)}</span>` : phaseMarkup(status.phase)}${mocReviewAction(request, "data-moc-review")}${retry}</div></article>`;
   }).join("");
-  list.querySelectorAll<HTMLButtonElement>("[data-moc-review]").forEach((button) => button.addEventListener("click", () => void openMocReview(button.dataset.mocReview ?? "")));
-  list.querySelectorAll<HTMLButtonElement>("[data-moc-retry]").forEach((button) => button.addEventListener("click", () => void resubmitMocDiscovery(button.dataset.mocRetry ?? "")));
+  reconcileMarkup(list, markup);
+  list.onclick = event => {
+    const button = (event.target as Element).closest<HTMLButtonElement>("button");
+    if (button?.dataset.mocReview) void openMocReview(button.dataset.mocReview);
+    if (button?.dataset.mocRetry) void resubmitMocDiscovery(button.dataset.mocRetry);
+  };
   renderIcons();
   renderWorkOutputs(taskRecords, requests, mocBuildRecords);
 }
 
 let activeMocReviewRequest: MocDiscoveryRequest | null = null;
 let activeMocCandidateId = "";
+
+function updateMocObservation(request: MocDiscoveryRequest, fetchFailed = false): void {
+  const state = byId("moc-review-state");
+  if (!state) return;
+  const observation = request.observation;
+  if (fetchFailed) {
+    state.textContent = `状态暂不可获取；保留最后已知状态“${discoveryObservationLabel(observation)}”。${discoveryProgress(request)} 最近成功检查：${formatDate(observation?.checkedAt)}`;
+    return;
+  }
+  state.textContent = `${discoveryProgress(request)} 提交时间：${formatDate(request.createdAt)}；最近检查：${formatDate(observation?.checkedAt)}；最后进展：${formatDate(observation?.lastProgressAt ?? request.status.lastTransitionTime)}。`;
+  const outcome = mocDiscoveryStateForStatus(request.status);
+  byId("moc-review-title").textContent = `${workTitle(undefined, request)} · ${outcome === "running" && !request.status.jobName ? discoveryObservationLabel(observation) : mocDiscoveryStateLabel(outcome)}`;
+  state.dataset.state = observation?.state ?? "running";
+  if (observation?.executor.reason) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "诊断详情";
+    const description = document.createElement("p");
+    description.textContent = `${observation.executor.reason} · ${observation.executor.source ?? "Warehouse 观察"} · 检查时间 ${formatDate(observation.executor.checkedAt)}`;
+    details.append(summary, description); state.append(details);
+  }
+}
 
 function renderMocReviewSummary(request: MocDiscoveryRequest): void {
   const summary = request.status.reviewSummary;
@@ -895,7 +1165,7 @@ function renderMocReviewSummary(request: MocDiscoveryRequest): void {
   const create = byId<HTMLButtonElement>("moc-create-build");
   const protocol = byId("moc-review-protocol");
   kicker.textContent = discoveryState === "ready" ? "BUILD REVIEW" : "MOC DISCOVERY";
-  title.textContent = `${identity} · ${mocDiscoveryStateLabel(discoveryState)}`;
+  title.textContent = `${identity} · ${discoveryState === "running" && !request.status.jobName ? discoveryObservationLabel(request.observation) : mocDiscoveryStateLabel(discoveryState)}`;
   state.dataset.state = discoveryState;
   failure.hidden = true;
   failure.replaceChildren();
@@ -932,7 +1202,7 @@ function renderMocReviewSummary(request: MocDiscoveryRequest): void {
     return;
   }
   if (discoveryState === "running") {
-    state.textContent = "Warehouse 正在执行公开 MOC 探查，候选摘要尚未就绪。";
+    updateMocObservation(request);
     create.disabled = true;
     return;
   }
@@ -952,11 +1222,28 @@ function renderMocReviewSummary(request: MocDiscoveryRequest): void {
     return;
   }
   state.textContent = `已找到 ${summary.candidates.length} 个候选 MOC，可选择后创建构建请求。`;
-  summary.candidates.forEach((candidate) => select.add(new Option(`${candidate.title ?? candidate.candidateId}`, candidate.candidateId)));
+  summary.candidates.forEach((candidate) => select.add(new Option(`${candidate.title ?? candidate.candidateId}${candidateBuildLabel(candidate)}`, candidate.candidateId)));
   select.value = activeMocCandidateId && summary.candidates.some((candidate) => candidate.candidateId === activeMocCandidateId) ? activeMocCandidateId : summary.candidates[0]?.candidateId ?? "";
   activeMocCandidateId = select.value;
   select.onchange = () => { activeMocCandidateId = select.value; syncMocCandidateSelection(); };
   syncMocCandidateSelection();
+}
+
+function candidateExistingBuild(candidate: MocCandidateSummary): MocBuildRequest | undefined {
+  return mocBuildRecords.find((build) => (build.candidateId === candidate.candidateId || Boolean(candidate.mocUrl && build.source.url === candidate.mocUrl)) && ["STAGED", "PUBLISHED", "DUPLICATE"].includes(build.phase));
+}
+
+function candidateBuildLabel(candidate: MocCandidateSummary): string {
+  const build = candidateExistingBuild(candidate);
+  if (!build) return " · 尚未构建";
+  const original = build.duplicateOf ? mocBuildRecords.find((entry) => entry.name === build.duplicateOf) ?? build : build;
+  const product = productRecords.find((entry) => entry.productId === original.productId);
+  return ` · ${product?.published ? "已有发布" : product ? "已登记" : "已构建"}：${releaseDisplayName(product?.draft.surveyId ?? original.surveyId, product?.draft.releaseId ?? original.releaseId)} / ${product?.draft.name ?? original.candidateTitle ?? original.candidateId}`;
+}
+
+function releaseDisplayName(surveyId?: string, releaseId?: string): string {
+  return reviewSurveyRecords.find((survey) => survey.id === surveyId)?.releases.find((release) => release.id === releaseId)?.label
+    ?? (!releaseId || releaseId === "public" ? "公开覆盖集合（未标明官方 DR）" : releaseId);
 }
 
 function syncMocCandidateSelection(): void {
@@ -964,9 +1251,15 @@ function syncMocCandidateSelection(): void {
   const select = byId<HTMLSelectElement>("moc-build-candidate");
   const candidate = request?.status.reviewSummary?.candidates.find((entry) => entry.candidateId === select.value);
   byId("moc-candidate-detail").innerHTML = candidate
-    ? `<strong>${escapeText(candidate.title ?? candidate.candidateId)}</strong><p>${escapeText(candidate.candidateId)}</p><small>${escapeText(candidate.mocUrl ?? candidate.hipsUrl ?? "没有可下载 MOC URL")}</small>`
+    ? `<strong>${escapeText(candidate.title ?? candidate.candidateId)}</strong><p>${escapeText(candidateBuildLabel(candidate))}</p><small>${escapeText(candidate.mocUrl ?? candidate.hipsUrl ?? "没有可下载 MOC URL")}</small>${candidateExistingBuild(candidate) ? `<button type="button" class="admin-quiet" id="candidate-existing-build">查看已有构建与产品</button><p>此候选已有结果，通常无需重复构建。来源更新后可再次构建，系统会按实际内容哈希判重。</p>` : ""}`
     : `<span class="resource-empty">请选择一个候选</span>`;
   byId<HTMLButtonElement>("moc-create-build").disabled = !candidate || !request || mocDiscoveryStateForStatus(request.status) !== "ready";
+  document.getElementById("candidate-existing-build")?.addEventListener("click", () => {
+    const build = candidate && candidateExistingBuild(candidate);
+    if (!build) return;
+    byId<HTMLDialogElement>("moc-review-dialog").close();
+    void openMocBuildDetails(build.duplicateOf ?? build.name);
+  });
 }
 
 async function openMocReview(name: string): Promise<void> {
@@ -1073,23 +1366,32 @@ async function openMocBuildDetails(name: string): Promise<void> {
 
 function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], builds: MocBuildRequest[] = mocBuildRecords): void {
   const container = byId("modality-chart");
+  container.onclick = event => {
+    const target = (event.target as Element).closest<HTMLButtonElement>("button");
+    if (!target) return;
+    if (target.dataset.mocBuildDetails) void openMocBuildDetails(target.dataset.mocBuildDetails);
+    if (target.dataset.registerMocBuildOutput) void openMocProductRegistration(target.dataset.registerMocBuildOutput);
+    if (target.dataset.taskDetailsOutput) void openTaskDetails(target.dataset.taskDetailsOutput);
+    if (target.dataset.taskResubmitOutput) void resubmitTask(target.dataset.taskResubmitOutput);
+    if (target.dataset.mocReviewOutput) void openMocReview(target.dataset.mocReviewOutput);
+    if (target.dataset.mocRetryOutput) void resubmitMocDiscovery(target.dataset.mocRetryOutput);
+  };
   const groups = aggregateWorkAttempts(
     tasks.map((task) => ({ key: taskWorkKey(task), createdAt: task.createdAt, value: task })),
     requests.map((request) => ({ key: mocWorkKey(request), createdAt: request.createdAt, value: request })),
   );
   if (!groups.length) {
-    container.innerHTML = builds.length ? `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status">${phaseMarkup(build.phase, "BUILD ")}${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>` : `<div class="resource-empty">暂无任务产出</div>`;
-    container.querySelectorAll<HTMLButtonElement>("[data-moc-build-details]").forEach((button) => button.addEventListener("click", () => void openMocBuildDetails(button.dataset.mocBuildDetails ?? "")));
-    container.querySelectorAll<HTMLButtonElement>("[data-register-moc-build-output]").forEach((button) => button.addEventListener("click", () => void openMocProductRegistration(button.dataset.registerMocBuildOutput ?? "")));
+    reconcileMarkup(container, builds.length ? `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row" data-row-key="${escapeText(build.name)}"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status">${phaseMarkup(build.phase, "BUILD ")}${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>` : `<div class="resource-empty">暂无任务产出</div>`);
     renderIcons();
     return;
   }
+  const renderedBuildNames = new Set<string>();
   const rows = groups.map((group) => {
     const key = group.key;
     const task = group.task;
     const request = group.request;
     const scanStatus = task ? phaseLabel(task.status?.phase) : "NOT_SUBMITTED";
-    const mocStatus = request ? phaseLabel(request.status?.phase) : "NOT_SUBMITTED";
+    const mocStatus = request ? (request.observation && ["waiting", "delayed", "blocked"].includes(request.observation.state) ? discoveryObservationLabel(request.observation) : phaseLabel(request.status?.phase)) : "NOT_SUBMITTED";
     const taskStatus = task?.status ?? { phase: "PENDING" };
     const scanCounts = task ? taskStatsMarkup(taskStatus) : `<span class="task-metric task-metric-empty"><i data-lucide="scan-line"></i><span>scan</span><strong>未提交</strong></span>`;
     const mocCounts = request ? taskMetric("search", "candidates", request.status.candidateCount !== undefined ? request.status.candidateCount.toLocaleString() : "--") : taskMetric("search", "MOC", "未探查");
@@ -1097,20 +1399,22 @@ function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], build
     const mocRetry = request && ["SUCCEEDED", "FAILED", "COMPLETED", "ERROR", "INVALID", "CANCELLED"].includes(mocStatus) ? `<button type="button" class="admin-quiet" data-moc-retry-output="${escapeText(request.name)}" title="重新探查"><i data-lucide="rotate-ccw"></i><span>重提探查</span></button>` : "";
     const evidence = task?.status.evidencePath ?? request?.status.evidencePath;
     const attemptLabel = `${group.taskAttempts} scan / ${group.mocAttempts} MOC attempts; latest result only`;
-    const relatedBuilds = builds.filter((build) => build.discoveryRequestName === request?.name || (build.productId && build.productId === task?.productId));
-    const buildRows = relatedBuilds.map((build) => `<div class="work-build-output">${phaseMarkup(build.phase, "BUILD ")}<span>${escapeText(build.progress?.message ?? "")}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<span class="work-build-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</span>${mocBuildReadout(build)}</div>`).join("");
-    return `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="layers-3"></i><strong>${escapeText(workTitle(task, request))}</strong></div><small>${escapeText(key)} · ${escapeText(attemptLabel)}</small><div class="work-output-metrics"><div><span class="work-output-metrics-label"><i data-lucide="scan-line"></i>SCAN OUTPUT</span>${scanCounts}</div><div><span class="work-output-metrics-label"><i data-lucide="search"></i>MOC OUTPUT</span>${mocCounts}</div></div>${evidence ? `<p class="work-output-evidence"><i data-lucide="shield-check"></i>${escapeText(evidence)}</p>` : ""}${buildRows}</div><div class="work-output-status">${phaseMarkup(scanStatus, "SCAN ")}${phaseMarkup(mocStatus, "MOC ")}<div class="work-output-actions">${task ? `<button type="button" class="admin-quiet" data-task-details-output="${escapeText(task.name)}" title="查看扫描详情"><i data-lucide="eye"></i><span>详情</span></button>` : ""}${request ? mocReviewAction(request, "data-moc-review-output") : ""}${retry}${mocRetry}</div></div></article>`;
+    const discoveryNames = new Set(requests.filter((entry) => mocWorkKey(entry) === key).map((entry) => entry.name));
+    const relatedBuilds = builds.filter((build) => discoveryNames.has(build.discoveryRequestName) || (build.productId && build.productId === task?.productId));
+    relatedBuilds.forEach((build) => renderedBuildNames.add(build.name));
+    const buildRows = relatedBuilds.map((build) => {
+      const product = productRecords.find((entry) => entry.productId === build.productId);
+      const release = reviewSurveyRecords.find((survey) => survey.id === (product?.draft.surveyId ?? build.surveyId))?.releases.find((release) => release.id === (product?.draft.releaseId ?? build.releaseId));
+      return `<div class="work-build-output" data-row-key="${escapeText(build.name)}"><strong>${escapeText(product?.draft.name ?? build.candidateTitle ?? build.candidateId)}</strong><span>${escapeText(release?.label ?? product?.draft.releaseId ?? build.releaseId ?? "未指定数据发布 / 集合")} · ${product?.published ? "产品已发布" : product ? "已登记产品" : "尚未登记产品"}</span>${phaseMarkup(build.phase, "BUILD ")}<span>${escapeText(build.progress?.message ?? "")}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<span class="work-build-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</span>${mocBuildReadout(build)}</div>`;
+    }).join("");
+    return `<article class="work-output-row" data-row-key="${escapeText(key)}"><div class="work-output-copy"><div class="task-identity"><i data-lucide="layers-3"></i><strong>${escapeText(workTitle(task, request))}</strong></div><small>${escapeText(key)} · ${escapeText(attemptLabel)}</small><div class="work-output-metrics"><div><span class="work-output-metrics-label"><i data-lucide="scan-line"></i>SCAN OUTPUT</span>${scanCounts}</div><div><span class="work-output-metrics-label"><i data-lucide="search"></i>MOC OUTPUT</span>${mocCounts}</div></div>${evidence ? `<p class="work-output-evidence"><i data-lucide="shield-check"></i>${escapeText(evidence)}</p>` : ""}</div><div class="work-output-status">${phaseMarkup(scanStatus, "SCAN ")}${phaseMarkup(mocStatus, "MOC ")}<div class="work-output-actions">${task ? `<button type="button" class="admin-quiet" data-task-details-output="${escapeText(task.name)}" title="查看扫描详情"><i data-lucide="eye"></i><span>详情</span></button>` : ""}${request ? mocReviewAction(request, "data-moc-review-output") : ""}${retry}${mocRetry}</div></div><div class="work-build-list">${buildRows}</div></article>`;
   }).join("");
-  container.innerHTML = `<div class="work-output-list">${rows}</div>`;
-  container.querySelectorAll<HTMLButtonElement>("[data-task-details-output]").forEach((button) => button.addEventListener("click", () => void openTaskDetails(button.dataset.taskDetailsOutput ?? "")));
-  container.querySelectorAll<HTMLButtonElement>("[data-task-resubmit-output]").forEach((button) => button.addEventListener("click", () => void resubmitTask(button.dataset.taskResubmitOutput ?? "")));
-  container.querySelectorAll<HTMLButtonElement>("[data-moc-review-output]").forEach((button) => button.addEventListener("click", () => void openMocReview(button.dataset.mocReviewOutput ?? "")));
-  container.querySelectorAll<HTMLButtonElement>("[data-moc-retry-output]").forEach((button) => button.addEventListener("click", () => void resubmitMocDiscovery(button.dataset.mocRetryOutput ?? "")));
-  if (builds.length && !groups.some((group) => builds.some((build) => build.discoveryRequestName === group.request?.name))) {
-    container.insertAdjacentHTML("beforeend", `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status">${phaseMarkup(build.phase, "BUILD ")}${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>`);
+  let outputMarkup = `<div class="work-output-list">${rows}</div>`;
+  const ungroupedBuilds = builds.filter((build) => !renderedBuildNames.has(build.name));
+  if (ungroupedBuilds.length) {
+    outputMarkup += `<div class="work-output-list">${ungroupedBuilds.map((build) => `<article class="work-output-row" data-row-key="${escapeText(build.name)}"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status">${phaseMarkup(build.phase, "BUILD ")}${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>`;
   }
-  container.querySelectorAll<HTMLButtonElement>("[data-moc-build-details]").forEach((button) => button.addEventListener("click", () => void openMocBuildDetails(button.dataset.mocBuildDetails ?? "")));
-  container.querySelectorAll<HTMLButtonElement>("[data-register-moc-build-output]").forEach((button) => button.addEventListener("click", () => void openMocProductRegistration(button.dataset.registerMocBuildOutput ?? "")));
+  reconcileMarkup(container, outputMarkup);
   renderIcons();
 }
 
@@ -1145,6 +1449,13 @@ let productRecords: Product[] = [];
 let reviewSurveyRecords: ReviewSurvey[] = [];
 let selectedReviewSurveyId = "";
 let productQuery = "";
+const workspaceRequests = new WorkspaceRequests();
+const resourceCache = new Map<Resource, unknown>();
+const renderedSignatures = new Map<Resource, string>();
+let refreshVersion = 0;
+let automaticUpdates = sessionStorage.getItem("assets-admin-auto-update") !== "off";
+let pendingUpdates = false;
+let overviewVersion: "draft" | "published" = "draft";
 let refreshInFlight: Promise<void> | null = null;
 let pollTimer: number | undefined;
 const terminalWorkPhases = new Set(["SUCCEEDED", "FAILED", "COMPLETED", "ERROR", "INVALID", "CANCELLED", "STAGED", "DUPLICATE"]);
@@ -1158,14 +1469,9 @@ function hasActiveWork(): boolean {
 function schedulePolling(delayMs?: number): void {
   if (pollTimer !== undefined) window.clearTimeout(pollTimer);
   pollTimer = undefined;
-  if (!token || byId("admin-workspace").hidden || !hasActiveWork()) return;
-  const delay = delayMs ?? (document.hidden ? 15_000 : 3_000);
-  pollTimer = window.setTimeout(async () => {
-    pollTimer = undefined;
-    if (!token || byId("admin-workspace").hidden) return;
-    await refresh();
-    schedulePolling();
-  }, delay);
+  if (!automaticUpdates || document.hidden || !token || byId("admin-workspace").hidden) return;
+  const active = activeStep === "tasks" && hasActiveWork() || activeStep === "releases" && publicationRuns.some(run => ["queued", "building", "uploading", "verifying"].includes(run.status));
+  pollTimer = window.setTimeout(() => { pollTimer = undefined; void refresh(true); }, delayMs ?? (active ? 3000 : 15000));
 }
 
 function renderProducts(products: Product[]): void {
@@ -1173,8 +1479,57 @@ function renderProducts(products: Product[]): void {
   const select = byId<HTMLSelectElement>("task-product");
   select.replaceChildren(new Option("选择 Catalog 产品", ""), ...products.map((product) => new Option(`${product.draft.surveyId.toUpperCase()} · ${product.draft.name}`, product.productId)));
   const mocProduct = document.getElementById("moc-product");
+  const selectedMocProduct = mocProduct instanceof HTMLSelectElement ? mocProduct.value : "";
   if (mocProduct instanceof HTMLSelectElement) mocProduct.replaceChildren(new Option("不绑定 Catalog 产品", ""), ...products.map((product) => new Option(`${product.draft.surveyId.toUpperCase()} · ${product.draft.releaseId} · ${product.draft.name}`, product.productId)));
+  if (mocProduct instanceof HTMLSelectElement) mocProduct.value = selectedMocProduct;
+  renderDiscoveryProductTree();
   renderReviewSurveys(reviewSurveyRecords);
+}
+
+const discoveryExpanded = new Set<string>();
+let discoveryTreeSearching = false;
+function renderDiscoveryProductTree(): void {
+  const search = byId<HTMLInputElement>("moc-product-search");
+  const query = search.value.trim().toLowerCase();
+  const select = byId<HTMLSelectElement>("moc-product");
+  const selected = productRecords.find((product) => product.productId === select.value);
+  byId("moc-product-selection").textContent = selected ? `已选择：${selected.draft.publicSurvey?.name ?? selected.draft.surveyId} / ${selected.draft.releaseId} / ${selected.draft.name}` : "当前：不绑定已有产品；探索可独立进行";
+  const matching = productRecords.filter((product) => !product.retiredAt && `${product.draft.publicSurvey?.name ?? ""} ${product.draft.surveyId} ${product.draft.releaseId} ${product.draft.name}`.toLowerCase().includes(query));
+  const surveys = [...new Set(matching.map((product) => product.draft.surveyId))];
+  const tree = byId("moc-product-tree");
+  const previousScroll = tree.scrollTop;
+  if (!discoveryTreeSearching) {
+    tree.querySelectorAll<HTMLDetailsElement>("details[data-branch]").forEach(branch => {
+      if (branch.open) discoveryExpanded.add(branch.dataset.branch!);
+      else discoveryExpanded.delete(branch.dataset.branch!);
+    });
+  }
+  discoveryTreeSearching = Boolean(query);
+  tree.innerHTML = `<button type="button" data-pick-product="" aria-pressed="${!selected}">不绑定已有产品</button>` + surveys.map((surveyId) => {
+    const products = matching.filter((product) => product.draft.surveyId === surveyId);
+    const releases = [...new Set(products.map((product) => product.draft.releaseId))];
+    return `<details ${query ? "open" : ""}><summary>${escapeText(products[0]?.draft.publicSurvey?.name ?? surveyId.toUpperCase())} · ${products.length} 个产品</summary>${releases.map((releaseId) => `<details ${query ? "open" : ""}><summary>${escapeText(releaseDisplayName(surveyId, releaseId))}</summary>${products.filter((product) => product.draft.releaseId === releaseId).map((product) => `<button type="button" data-pick-product="${escapeText(product.productId)}" aria-pressed="${select.value === product.productId}">${escapeText(product.draft.name)} · ${product.published ? "已发布" : "未发布"}</button>`).join("")}</details>`).join("")}</details>`;
+  }).join("") + (!matching.length ? `<p>没有匹配产品，可不绑定产品继续探索。</p>` : "");
+  tree.querySelectorAll<HTMLButtonElement>("[data-pick-product]").forEach((button) => button.addEventListener("click", () => {
+    select.value = button.dataset.pickProduct ?? "";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    const product = productRecords.find((entry) => entry.productId === select.value);
+    if (product) {
+      const form = byId<HTMLFormElement>("moc-discovery-form");
+      setRegistrationField(form, "surveyName", product.draft.publicSurvey?.name ?? product.draft.surveyId);
+      setRegistrationField(form, "releaseHint", product.draft.releaseId);
+      setRegistrationField(form, "productHint", product.draft.name);
+    }
+    renderDiscoveryProductTree();
+  }));
+  search.oninput = renderDiscoveryProductTree;
+  tree.querySelectorAll<HTMLDetailsElement>("details").forEach(branch => {
+    const parent = branch.parentElement?.closest("details");
+    const key = `${parent?.querySelector("summary")?.textContent ?? ""}/${branch.querySelector("summary")?.textContent ?? ""}`;
+    branch.dataset.branch = key;
+    branch.open = Boolean(query) || discoveryExpanded.has(key);
+  });
+  tree.scrollTop = previousScroll;
 }
 
 function renderProductLoadError(message: string): void {
@@ -1209,29 +1564,32 @@ function renderReviewSurveys(surveys: ReviewSurvey[]): void {
     const selected = survey.id === selectedReviewSurveyId;
     const surveyColor = surveyColorAttribute(survey.color);
     const publicStats = Object.entries(survey.statistics).filter(([, value]) => typeof value === "number").map(([key, value]) => `${key} ${value.toLocaleString()}`).join(" · ");
-    const releases = selected ? survey.releases.map((release) => `<section class="review-release"><div class="review-release-heading"><div><span class="section-index">RELEASE</span><h5>${escapeText(release.label)}</h5></div><small>${escapeText(release.id)} · ${escapeText(release.kind)}${release.releasedYear ? ` · ${release.releasedYear}` : ""}</small></div><div class="review-product-list">${release.products.filter(reviewProductMatches).map((product) => {
+    const releases = selected ? survey.releases.map((release) => `<section class="review-release"><div class="review-release-heading"><div><span class="section-index">RELEASE</span><h5>${escapeText(release.label)}</h5></div><small>${escapeText(release.id)} · ${escapeText(release.kind)}${release.releasedYear ? ` · ${release.releasedYear}` : ""}</small>${readinessAggregateMarkup(release.readiness)}</div><div class="review-product-list">${release.products.filter(reviewProductMatches).map((product) => {
       const orders = product.coverage?.availableOrders?.map((order) => `O${order}`).join(" / ") || "orders unavailable";
-      const reviewState = product.review?.state ?? "unmatched";
+      const reviewState = product.retiredAt || product.lifecycle?.publication?.state === "RETIRED" ? "retired" : product.review?.state ?? "unmatched";
       const buildStatus = mocBuildStatusText(product.mocBuild);
-    return `<article class="review-product-row"><div><div class="review-product-title"><span class="modality-icon"><i data-lucide="${modalityIcon(product.modality)}"></i></span><strong>${escapeText(product.name)}</strong></div><span>${escapeText(product.modality ?? "modality unknown")} · ${escapeText(product.status)} · ${escapeText(orders)}</span><p>${escapeText(product.description || product.reason || "No public description")}</p>${product.reason ? `<small>${escapeText(product.reason)}</small>` : ""}${buildStatus ? `<small class="moc-build-status"><i data-lucide="box"></i>${escapeText(buildStatus)}</small>` : ""}${lifecycleMarkup(product.lifecycle, reviewState, product.mocBuild?.outputs?.availableOrders)}${lifecycleLinksMarkup(product.lifecycle)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span><button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}" title="编辑产品文稿"><i data-lucide="pencil"></i><span>产品事实</span></button>${reviewState !== "published" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish title="发布产品"><i data-lucide="upload"></i><span>发布产品</span></button>` : ""}</div></article>`;
+    const canPublish = reviewState === "reviewed";
+    const canRetire = reviewState === "published" && !product.retiredAt;
+    return `<article class="review-product-row${product.retiredAt ? " is-retired" : ""}"><div><div class="review-product-title"><span class="modality-icon"><i data-lucide="${modalityIcon(product.modality)}"></i></span><strong>${escapeText(product.name)}</strong></div><span>${escapeText(product.modality ?? "modality unknown")} · ${escapeText(product.status)} · ${escapeText(orders)}</span>${readinessVersionMarkup(product.readiness)}<p>${escapeText(product.description || product.reason || "No public description")}</p>${product.reason ? `<small>${escapeText(product.reason)}</small>` : ""}${product.retiredAt ? `<small class="product-retired-label">已退休 · ${escapeText(product.retirementReason ?? "未填写原因")}</small>` : ""}${buildStatus ? `<small class="moc-build-status"><i data-lucide="box"></i>${escapeText(buildStatus)}</small>` : ""}${lifecycleMarkup(product.lifecycle, reviewState, product.mocBuild?.outputs?.availableOrders)}${lifecycleLinksMarkup(product.lifecycle)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span><button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}" title="${product.retiredAt ? "查看已退休产品事实" : "编辑产品文稿"}"><i data-lucide="${product.retiredAt ? "eye" : "pencil"}"></i><span>${product.retiredAt ? "查看事实" : "产品事实"}</span></button>${reviewState !== "published" && reviewState !== "retired" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish title="${canPublish ? "发布产品" : "先确认当前版本审核"}"${canPublish ? "" : " disabled"}><i data-lucide="upload"></i><span>${canPublish ? "发布产品" : "待审核"}</span></button>` : ""}${canRetire ? `<button type="button" class="admin-quiet product-retire-inline" data-retire-product="${escapeText(product.productId)}" title="退休产品"><i data-lucide="archive-x"></i><span>退休</span></button>` : ""}</div></article>`;
     }).join("") || `<div class="resource-empty">该 Release 没有匹配的产品</div>`}</div></section>`).join("") : "";
     const unmatchedRecords = survey.unmatchedProducts ?? [];
     const unmatchedProducts = selected ? unmatchedRecords.filter((product) => !productQuery || Object.values(product).join(" ").toLocaleLowerCase().includes(productQuery)).map((product) => {
       const productId = typeof product.productId === "string" ? product.productId : "";
       const name = typeof product.name === "string" ? product.name : productId || "unmatched product";
-      const reviewState = typeof product.review === "object" && product.review && typeof (product.review as Record<string, unknown>).state === "string" ? String((product.review as Record<string, unknown>).state) : "unmatched";
-      return `<article class="review-product-row"><div><strong>${escapeText(name)}</strong><span>${escapeText(String(product.surveyId ?? "survey unknown"))} · ${escapeText(String(product.releaseId ?? "release unknown"))}</span><p>该草稿没有对应的公共 survey/release/product 记录，需要补齐映射或确认是否应移除。</p>${lifecycleMarkup(undefined, reviewState)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span>${productId ? `<button type="button" class="admin-quiet" data-edit-product="${escapeText(productId)}" title="编辑未匹配产品"><i data-lucide="pencil"></i><span>编辑</span></button>${reviewState !== "unmatched-published" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(productId)}" data-publish title="发布未匹配产品"><i data-lucide="upload"></i><span>发布</span></button>` : ""}` : ""}</div></article>`;
+      const reviewState = typeof product.retiredAt === "string" ? "retired" : typeof product.review === "object" && product.review && typeof (product.review as Record<string, unknown>).state === "string" ? String((product.review as Record<string, unknown>).state) : "unmatched";
+      return `<article class="review-product-row${product.retiredAt ? " is-retired" : ""}"><div><strong>${escapeText(name)}</strong><span>${escapeText(String(product.surveyId ?? "survey unknown"))} · ${escapeText(String(product.releaseId ?? "release unknown"))}</span><p>该草稿没有对应的公共 survey/release/product 记录，需要补齐映射或确认是否应移除。</p>${product.retiredAt ? `<small class="product-retired-label">已退休 · ${escapeText(String(product.retirementReason ?? "未填写原因"))}</small>` : ""}${lifecycleMarkup(undefined, reviewState)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span>${productId ? `<button type="button" class="admin-quiet" data-edit-product="${escapeText(productId)}" title="${product.retiredAt ? "查看已退休产品" : "编辑未匹配产品"}"><i data-lucide="${product.retiredAt ? "eye" : "pencil"}"></i><span>${product.retiredAt ? "查看" : "编辑"}</span></button>${reviewState !== "unmatched-published" && reviewState !== "retired" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(productId)}" data-publish title="发布未匹配产品"><i data-lucide="upload"></i><span>发布</span></button>` : ""}` : ""}</div></article>`;
     }).join("") : "";
     const unmatched = selected && unmatchedRecords.length ? `<section class="review-release review-unmatched"><div class="review-release-heading"><div><span class="section-index">QUEUE</span><h5>未匹配公共 Catalog</h5></div><small>Assets editorial queue</small></div><div class="review-product-list">${unmatchedProducts || `<div class="resource-empty">暂无未匹配产品</div>`}</div></section>` : "";
     const unmatchedBuilds = survey.unmatchedBuilds ?? [];
     const mocBuildQueue = selected && unmatchedBuilds.length ? `<section class="review-release review-unmatched"><div class="review-release-heading"><div><span class="section-index">MOC QUEUE</span><h5>待登记 MOC 构建</h5></div><small>STAGED · 需要绑定产品</small></div><div class="review-product-list">${unmatchedBuilds.map((build) => `<article class="review-product-row"><div><strong>${escapeText(build.candidateTitle ?? build.candidateId)}</strong><span>${escapeText(build.name)} · ${escapeText(build.candidateId)} · ${escapeText(build.phase)}</span><p>构建已经完成，但还没有 survey / release / product 归属。登记后才能编辑公共文稿并发布。</p>${build.sourceUrl ? `<small class="moc-build-status">${escapeText(build.sourceUrl)}</small>` : ""}${mocBuildReadout(build)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(build.phase)}">${escapeText(build.phase)}</span><button type="button" class="admin-quiet" data-register-moc-build="${escapeText(build.name)}" title="登记为公共产品"><i data-lucide="plus"></i><span>登记产品</span></button></div></article>`).join("")}</div></section>` : "";
     const image = survey.imageUrl ? `<img src="${escapeText(survey.imageUrl)}" alt="" loading="lazy" />` : "";
-    return `<article class="review-survey${selected ? " is-selected" : ""}"${surveyColor}><div class="review-survey-header"><button type="button" class="review-survey-toggle" data-review-survey="${escapeText(survey.id)}"><span class="review-survey-swatch"${surveyColor} aria-hidden="true"></span><span class="review-survey-copy"><strong>${escapeText(survey.name)}</strong><small>${escapeText(survey.mission)} · ${survey.releases.length} releases · ${escapeText(publicStats || "statistics unavailable")}</small><p>${escapeText(survey.description)}</p></span><i data-lucide="${selected ? "chevron-up" : "chevron-down"}"></i></button>${survey.id.startsWith("__") ? "" : `<button type="button" class="admin-quiet review-survey-edit" data-edit-editorial="${escapeText(survey.id)}" title="编辑巡天公开目录文案"><i data-lucide="pencil-line"></i><span>编辑目录</span></button>`}</div>${selected ? `<div class="review-survey-body"><div class="review-survey-meta"><span><i data-lucide="layers-3"></i>${escapeText(survey.modalities.join(" · "))}</span><span><i data-lucide="grid-3x3"></i>Coverage ${escapeText(survey.coverageOrders?.availableOrders?.map((order) => `O${order}`).join(" / ") || "orders unavailable")}</span>${image}</div>${releases}${unmatched}${mocBuildQueue}</div>` : ""}</article>`;
+    return `<article class="review-survey${selected ? " is-selected" : ""}"${surveyColor}><div class="review-survey-header"><button type="button" class="review-survey-toggle" data-review-survey="${escapeText(survey.id)}"><span class="review-survey-swatch"${surveyColor} aria-hidden="true"></span><span class="review-survey-copy"><strong>${escapeText(survey.name)}</strong><small>${escapeText(survey.mission)} · ${survey.releases.length} releases · ${escapeText(publicStats || "statistics unavailable")}</small><p>${escapeText(survey.description)}</p></span><i data-lucide="${selected ? "chevron-up" : "chevron-down"}"></i></button>${survey.id.startsWith("__") ? "" : `<button type="button" class="admin-quiet review-survey-edit" data-edit-editorial="${escapeText(survey.id)}" title="编辑巡天公开目录文案"><i data-lucide="pencil-line"></i><span>编辑目录</span></button>`}</div>${readinessAggregateMarkup(survey.readiness)}${selected ? `<div class="review-survey-body"><div class="review-survey-meta"><span><i data-lucide="layers-3"></i>${escapeText(survey.modalities.join(" · "))}</span><span><i data-lucide="grid-3x3"></i>Coverage ${escapeText(survey.coverageOrders?.availableOrders?.map((order) => `O${order}`).join(" / ") || "orders unavailable")}</span>${image}</div>${releases}${unmatched}${mocBuildQueue}</div>` : ""}</article>`;
   }).join("");
   list.querySelectorAll<HTMLButtonElement>("[data-review-survey]").forEach((button) => button.addEventListener("click", () => { selectedReviewSurveyId = button.dataset.reviewSurvey ?? ""; renderReviewSurveys(reviewSurveyRecords); }));
   list.querySelectorAll<HTMLButtonElement>("[data-edit-editorial]").forEach((button) => button.addEventListener("click", () => void openEditorial(button.dataset.editEditorial ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-edit-product]").forEach((button) => button.addEventListener("click", () => openProduct(button.dataset.editProduct ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-publish-product]").forEach((button) => button.addEventListener("click", () => void publishProduct(button.dataset.publishProduct ?? "")));
+  list.querySelectorAll<HTMLButtonElement>("[data-retire-product]").forEach((button) => button.addEventListener("click", () => void retireProduct(button.dataset.retireProduct ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-register-moc-build]").forEach((button) => button.addEventListener("click", () => void openMocProductRegistration(button.dataset.registerMocBuild ?? "")));
   renderIcons();
 }
@@ -1275,9 +1633,117 @@ function setDerivedProduct(productId: string): void {
   setTaskSubmitEnabled(executable);
 }
 
+function productHistoryActionLabel(action?: string): string {
+  return ({
+    "moc-registration": "登记产品",
+    draft: "保存草稿",
+    execution: "记录执行",
+    review: "审核版本",
+    publish: "发布版本",
+    retire: "退休产品",
+    "recipe-migration": "迁移 recipe",
+    "scan-defaults-migration": "迁移扫描默认值",
+    "source-metadata-migration": "迁移来源事实",
+  } as Record<string, string>)[action ?? ""] ?? action ?? "历史事件";
+}
+
+function productHistoryMarkup(entries: ProductHistoryEntry[]): string {
+  if (!entries.length) return `<p class="resource-empty">尚无产品历史记录。</p>`;
+  const visible = entries.slice(-128).reverse();
+  return `<div class="product-history-list">${visible.map((entry) => {
+    const accepted = Array.isArray(entry.acceptedGaps) && entry.acceptedGaps.length ? ` · 接受缺口 ${entry.acceptedGaps.length} 项` : "";
+    const reason = entry.reason ? ` · ${escapeText(entry.reason)}` : "";
+    return `<article class="product-history-row"><div><strong>${escapeText(productHistoryActionLabel(entry.action))}</strong><span>${entry.revision !== undefined ? `revision ${entry.revision}` : ""}${accepted}${reason}</span></div><time datetime="${escapeText(entry.at ?? "")}">${escapeText(formatDate(entry.at))}</time></article>`;
+  }).join("")}</div>`;
+}
+
+async function loadProductHistory(productId: string): Promise<void> {
+  const target = byId("product-history");
+  target.innerHTML = `<p class="resource-empty">正在读取产品历史…</p>`;
+  try {
+    const response = await api<{ history: ProductHistoryEntry[]; truncated?: boolean }>(`/api/v1/admin/products/${encodeURIComponent(productId)}/history`);
+    if (activeProductDialogId !== productId) return;
+    const entries = Array.isArray(response.history) ? response.history : [];
+    target.innerHTML = `${response.truncated ? `<p class="product-history-note">仅显示最近 ${entries.length} 条事件。</p>` : ""}${productHistoryMarkup(entries)}`;
+  } catch (error) {
+    if (activeProductDialogId !== productId) return;
+    target.innerHTML = `<p class="resource-empty">${escapeText(error instanceof Error ? error.message : "产品历史读取失败")}</p>`;
+  }
+}
+
+function readinessAction(productId: string, step: ReadinessActionStep): void {
+  const product = productRecords.find((entry) => entry.productId === productId);
+  if (!product) return;
+  if (step === "review" && document.getElementById("product-verify-build")) {
+    byId<HTMLButtonElement>("product-verify-build").click();
+    return;
+  }
+  byId<HTMLDialogElement>("product-dialog").close();
+  if (step === "scan") {
+    setAdminStep("tasks");
+    byId<HTMLSelectElement>("task-product").value = productId;
+    setDerivedProduct(productId);
+    byId<HTMLDialogElement>("task-dialog").showModal();
+    toast("先查官方单元或文件索引；确需扫描时，选择已授权的存储并填写本产品范围。");
+    return;
+  }
+  if (step === "sources") {
+    setAdminStep("sources");
+    toast("已转到数据源工作区；请核对授权范围和盘点状态");
+    return;
+  }
+  if (step === "tasks") {
+    setAdminStep("tasks");
+    const build = mocBuildRecords.find((entry) => entry.productId === productId);
+    if (build) { void openMocReview(build.discoveryRequestName); return; }
+    const select = byId<HTMLSelectElement>("moc-product");
+    select.value = productId;
+    const form = byId<HTMLFormElement>("moc-discovery-form");
+    setRegistrationField(form, "surveyName", product.draft.publicSurvey?.name ?? product.draft.surveyId);
+    setRegistrationField(form, "releaseHint", product.draft.releaseId);
+    setRegistrationField(form, "productHint", product.draft.name);
+    renderDiscoveryProductTree();
+    byId<HTMLDialogElement>("moc-discovery-dialog").showModal();
+    return;
+  }
+  if (step === "releases") {
+    setAdminStep("releases");
+    void loadPublicationPlan();
+    toast("已转到发布与验证工作区");
+    return;
+  }
+  selectedReviewSurveyId = product.draft.surveyId;
+  setAdminStep("review");
+  renderReviewSurveys(reviewSurveyRecords);
+  window.setTimeout(() => openProduct(productId), 0);
+}
+
+async function retireProduct(productId: string): Promise<void> {
+  const product = productRecords.find((entry) => entry.productId === productId);
+  if (!product || product.retiredAt) return;
+  const reason = window.prompt("请输入退休原因（可选）", product.retirementReason ?? "");
+  if (reason === null) return;
+  if (!window.confirm(`确认退休产品“${product.draft.name}”吗？公开内容会隐藏，但历史发布记录会保留。`)) return;
+  try {
+    await api(`/api/v1/admin/products/${encodeURIComponent(productId)}/retire`, {
+      method: "POST",
+      body: JSON.stringify({ revision: product.revision, ...(reason.trim() ? { reason: reason.trim() } : {}) }),
+    });
+    activeProductDialogId = "";
+    if (byId<HTMLDialogElement>("product-dialog").open) byId<HTMLDialogElement>("product-dialog").close();
+    toast("产品已退休，公开目录和覆盖已隐藏");
+    await refresh();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "产品退休失败", true);
+  }
+}
+
 function openProduct(productId: string): void {
   const product = productRecords.find((entry) => entry.productId === productId);
   if (!product) return;
+  activeProductDialogId = productId;
+  const productPath = routePath({ step: "review", productId });
+  if (location.pathname !== productPath) history.pushState(null, "", productPath);
   const form = byId<HTMLFormElement>("product-form");
   const facts = byId("product-public-facts");
   const publicProduct = reviewSurveyRecords.flatMap((survey) => survey.releases.flatMap((release) => release.products)).find((entry) => entry.productId === productId);
@@ -1285,8 +1751,11 @@ function openProduct(productId: string): void {
   const lifecycle = product.lifecycle ?? publicProduct?.lifecycle;
   const runtimeInvalid = lifecycle?.runtime?.state === "INVALID";
   const reload = runtimeInvalid ? `<button type="button" class="admin-quiet lifecycle-reload" data-reload-catalog title="Reload runtime Catalog"><i data-lucide="rotate-cw"></i><span>Reload Catalog</span></button>` : "";
-  facts.innerHTML = `<div class="section-heading"><div><span class="section-index">PUBLIC FACTS</span><h4>${escapeText(product.draft.name)}</h4></div><span class="section-note">read-only · /surveys/ source</span></div><dl class="product-fact-grid">${detailValue("survey", product.draft.surveyId)}${detailValue("release", product.draft.releaseId)}${detailValue("modality", publicProduct?.modality ?? product.draft.modality)}${detailValue("catalog status", publicProduct?.status)}${detailValue("description", publicProduct?.description)}${detailValue("coverage orders", (publicProduct?.coverage?.availableOrders ?? product.coverage?.availableOrders ?? product.draft.coverage?.availableOrders)?.map((order) => `O${order}`).join(" / "))}${detailValue("layer", publicProduct?.coverage?.layerId ?? product.draft.layerId)}${detailValue("MOC build", mocBuildStatusText(mocBuild) || "not started")}</dl>${lifecycleMarkup(lifecycle, product.published ? "PUBLISHED" : "DRAFT", mocBuild?.outputs?.availableOrders)}${lifecycleLinksMarkup(lifecycle)}${reload}`;
+  const retired = Boolean(product.retiredAt);
+  const retirement = retired ? `<div class="product-retirement-notice"><strong>产品已退休</strong><span>${escapeText(product.retirementReason ?? "未填写退休原因")} · ${escapeText(formatDate(product.retiredAt))}</span></div>` : "";
+  facts.innerHTML = `<div class="section-heading"><div><span class="section-index">PUBLIC FACTS</span><h4>${escapeText(product.draft.name)}</h4></div><span class="section-note">read-only · /surveys/ source</span></div><dl class="product-fact-grid">${detailValue("survey", product.draft.surveyId)}${detailValue("release", product.draft.releaseId)}${detailValue("modality", publicProduct?.modality ?? product.draft.modality)}${detailValue("catalog status", publicProduct?.status)}${detailValue("description", publicProduct?.description)}${detailValue("coverage orders", (publicProduct?.coverage?.availableOrders ?? product.coverage?.availableOrders ?? product.draft.coverage?.availableOrders)?.map((order) => `O${order}`).join(" / "))}${detailValue("layer", publicProduct?.coverage?.layerId ?? product.draft.layerId)}${detailValue("MOC build", mocBuildStatusText(mocBuild) || "not started")}${detailValue("review", product.review?.revision === product.revision ? `已审核 ${formatDate(product.review.reviewedAt)}` : "当前版本未审核")}</dl>${retirement}${readinessDetailMarkup(product.readiness)}${executionEvidenceMarkup(product.executionEvidence, product.revision)}${lifecycleMarkup(lifecycle, retired ? "RETIRED" : product.published ? "PUBLISHED" : "DRAFT", mocBuild?.outputs?.availableOrders)}${lifecycleLinksMarkup(product.lifecycle)}${reload}<section class="product-history"><div class="section-heading"><div><span class="section-index">AUDIT HISTORY</span><h4>产品历史</h4></div><span class="section-note">按需读取</span></div><div id="product-history" class="product-history-content"><p class="resource-empty">正在读取产品历史…</p></div></section>`;
   facts.querySelector<HTMLButtonElement>("[data-reload-catalog]")?.addEventListener("click", (event) => void reloadCatalogRuntime(event.currentTarget as HTMLButtonElement));
+  facts.querySelectorAll<HTMLButtonElement>("[data-readiness-action]").forEach((button) => button.addEventListener("click", () => readinessAction(productId, button.dataset.readinessAction as ReadinessActionStep)));
   (form.elements.namedItem("productId") as HTMLInputElement).value = productId;
   (form.elements.namedItem("summaryMarkdown") as HTMLTextAreaElement).value = product.draft.presentation.summaryMarkdown;
   (form.elements.namedItem("methodologyMarkdown") as HTMLTextAreaElement).value = product.draft.presentation.methodologyMarkdown;
@@ -1296,12 +1765,52 @@ function openProduct(productId: string): void {
     const field = form.elements.namedItem(name);
     if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) field.value = value ?? "";
   }
-  byId("product-dialog-title").textContent = `${product.draft.name} · 编辑草稿`;
+  byId("product-dialog-title").textContent = retired ? `${product.draft.name} · 已退休` : `${product.draft.name} · 详情与证据`;
+  const edit = byId<HTMLDetailsElement>("product-edit-content");
+  edit.open = false;
+  edit.hidden = retired;
+  edit.ontoggle = () => { byId<HTMLButtonElement>("product-save-draft").hidden = !edit.open || retired; };
   const publishButton = byId<HTMLButtonElement>("product-dialog-publish");
-  publishButton.hidden = Boolean(product.published);
+  publishButton.hidden = Boolean(product.published) || retired;
   publishButton.dataset.publishProduct = productId;
+  const reviewButton = byId<HTMLButtonElement>("product-dialog-review");
+  reviewButton.hidden = product.review?.revision === product.revision || retired;
+  reviewButton.dataset.reviewProduct = productId;
+  reviewButton.title = product.review?.revision === product.revision ? "当前 revision 已审核" : "将当前草稿 revision 记为已审核";
+  const gaps = product.readiness?.draft.gaps ?? [];
+  const blocking = gaps.filter((gap) => gapGuidance[gap]?.blocking);
+  const preflight = byId("product-review-preflight");
+  preflight.innerHTML = `<div class="review-preflight-summary"><h4>发布前检查</h4><span>${blocking.length ? `${blocking.length} 项待解决` : "发布门禁已通过"}</span></div>${gaps.map(gap => {
+    const guide = gapGuidance[gap];
+    const action = readinessActionForGap(gap);
+    const verify = Boolean(mocBuild) && ["output-validation-missing", "execution-record-missing", "validated-coverage-missing"].includes(gap);
+    const step = gap === "output-validation-missing" && !mocBuild ? "tasks" : action.step;
+    return `<div class="preflight-item ${guide?.blocking ? "is-blocking" : "is-pending"}"><i data-lucide="${guide?.blocking ? "circle-alert" : "circle-dot"}"></i><div><strong>${escapeText(guide?.title ?? gap)}</strong><p>${escapeText(guide?.description ?? "查看产品证据与能力限制。")}</p></div><button type="button" class="admin-quiet" ${verify ? "data-preflight-verify" : `data-preflight-step="${step}"`}>${verify ? "校验已有构建" : step === "tasks" ? "选择候选并构建" : escapeText(action.label)}</button></div>`;
+  }).join("")}${!blocking.length ? `<div class="preflight-item is-passed"><i data-lucide="circle-check"></i><span>来源与输出门禁已满足，请确认当前版本的能力与限制。</span></div>` : ""}${mocBuild ? `<button type="button" class="admin-quiet" id="product-verify-build">重新校验来源与输出</button>` : ""}${gaps.length && !blocking.length ? `<label><input type="checkbox" id="review-accept-limitations" />我已阅读能力限制，同意按当前可证实能力发布；隔离恢复由发布流程执行。</label>` : ""}`;
+  preflight.querySelectorAll<HTMLButtonElement>("[data-preflight-step]").forEach(button => button.addEventListener("click", () => readinessAction(productId, button.dataset.preflightStep as ReadinessActionStep)));
+  preflight.querySelectorAll<HTMLButtonElement>("[data-preflight-verify]").forEach(button => button.addEventListener("click", () => document.getElementById("product-verify-build")?.click()));
+  reviewButton.disabled = blocking.length > 0 || gaps.length > 0;
+  document.getElementById("review-accept-limitations")?.addEventListener("change", (event) => { reviewButton.disabled = !(event.target as HTMLInputElement).checked; });
+  document.getElementById("product-verify-build")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    button.disabled = true;
+    button.textContent = "正在校验来源与输出…";
+    try {
+      const result = await api<{ verification: { passed: boolean; error?: string } }>(`/api/v1/admin/products/${encodeURIComponent(productId)}/verify-build`, { method: "POST", body: JSON.stringify({ revision: product.revision }) });
+      byId<HTMLDialogElement>("product-dialog").close();
+      await refresh();
+      openProduct(productId);
+      setMessage("product", result.verification.passed ? "来源与输出校验通过，证据已记录。" : result.verification.error ?? "校验失败", !result.verification.passed);
+    } catch (error) { setMessage("product", error instanceof Error ? error.message : "校验失败", true); button.disabled = false; button.textContent = "重新校验已有构建"; }
+  });
+  const retireButton = byId<HTMLButtonElement>("product-dialog-retire");
+  retireButton.hidden = retired || !product.published;
+  retireButton.dataset.retireProduct = productId;
+  const editableFields = form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input:not([type=hidden]), select, textarea");
+  editableFields.forEach((field) => { field.disabled = retired; });
   byId<HTMLDialogElement>("product-dialog").showModal();
   renderIcons();
+  void loadProductHistory(productId);
 }
 
 function guessedSurveyId(build: ReviewMocBuild | MocBuildRequest): string {
@@ -1322,7 +1831,7 @@ async function openMocProductRegistration(name: string): Promise<void> {
   const listedBuild = mocBuildRecords.find((entry) => entry.name === name);
   if (!listedBuild || listedBuild.phase !== "STAGED" || listedBuild.productId) return;
   try {
-    const response = await api<{ request: MocBuildRequest; registrationDefaults?: MocRegistrationDefaults }>(`/api/v1/admin/moc-builds/${encodeURIComponent(name)}`);
+    const response = await api<{ request: MocBuildRequest; registrationDefaults?: MocRegistrationDefaults; surveyFacts?: { surveyId: string; surveyName: string; mission: string; surveyDescription: string } }>(`/api/v1/admin/moc-builds/${encodeURIComponent(name)}`);
     const build = response.request;
     if (build.phase !== "STAGED" || build.productId) return;
     const defaults = response.registrationDefaults ?? {
@@ -1338,24 +1847,9 @@ async function openMocProductRegistration(name: string): Promise<void> {
     const form = byId<HTMLFormElement>("moc-product-register-form");
     form.reset();
     setRegistrationField(form, "buildName", build.name);
-    setRegistrationField(form, "surveyId", build.surveyId ?? guessedSurveyId(build));
-    setRegistrationField(form, "surveyName", build.surveyId?.toUpperCase() ?? guessedSurveyId(build).toUpperCase());
-    setRegistrationField(form, "releaseId", defaults.releaseId);
-    setRegistrationField(form, "releaseLabel", defaults.releaseLabel);
-    setRegistrationField(form, "releaseKind", defaults.releaseKind);
-    setRegistrationField(form, "productName", defaults.productName);
-    setRegistrationField(form, "productDescription", defaults.productDescription);
-    setRegistrationField(form, "productStatus", defaults.productStatus);
-    setRegistrationField(form, "modality", defaults.modality);
-    setRegistrationField(form, "dataOrigin", defaults.dataOrigin);
-    setRegistrationField(form, "surveyColor", "#42d5c4");
-    setRegistrationField(form, "surveyModalities", `${defaults.modality}, imaging`);
     const sourceUrl = mocBuildSourceUrl(build);
-    setRegistrationField(form, "sourceUrl", sourceUrl);
-    setRegistrationField(form, "geometrySourceUrl", sourceUrl);
-    setRegistrationField(form, "geometrySourceLabel", "CDS MOC source");
-    setRegistrationField(form, "candidateSource", sourceUrl);
-    byId("moc-product-register-build-facts").innerHTML = `<div class="section-heading"><div><span class="section-index">STAGED BUILD</span><h4>${escapeText(build.candidateTitle ?? build.candidateId)}</h4></div><span class="section-note">Release/产品空白时使用自动事实</span></div><dl class="product-fact-grid">${detailValue("build", build.name)}${detailValue("candidate", build.candidateId)}${detailValue("source", sourceUrl)}${detailValue("outputs", build.outputs?.availableOrders?.map((order) => `O${order}`).join(" / "))}</dl>`;
+    if (!response.surveyFacts || !response.registrationDefaults) throw new Error("登记事实暂不可读取，请恢复探索记录后重试；无需手工填写巡天事实。");
+    byId("moc-product-register-build-facts").innerHTML = `<section class="registration-summary"><h4>${escapeText(defaults.productName)}</h4><p>确认将已构建结果登记为产品。巡天信息由系统统一继承，来源与精度取自本次构建。</p><dl class="product-fact-grid">${detailValue("巡天", response.surveyFacts.surveyName)}${detailValue("项目", response.surveyFacts.mission)}${detailValue("巡天简介", response.surveyFacts.surveyDescription)}${detailValue("数据发布 / 集合", defaults.releaseLabel)}${detailValue("产品", defaults.productName)}${detailValue("来源", sourceUrl)}${detailValue("覆盖精度", build.outputs?.availableOrders?.map((order) => `O${order}`).join(" / "))}</dl><p>登记后进入产品详情检查证据，再确认审核与发布。</p></section>`;
     const buildDialog = byId<HTMLDialogElement>("moc-build-detail-dialog");
     if (buildDialog.open) buildDialog.close();
     byId<HTMLDialogElement>("moc-product-register-dialog").showModal();
@@ -1367,30 +1861,9 @@ async function submitMocProductRegistration(event: SubmitEvent): Promise<void> {
   const form = event.currentTarget as HTMLFormElement;
   const buildName = formValue(form, "buildName");
   if (!buildName) return;
-  const year = formValue(form, "releasedYear");
   setMessage("moc-registration", "正在登记产品…");
-  const input = {
-    surveyId: formValue(form, "surveyId"),
-    surveyName: formValue(form, "surveyName"),
-    mission: formValue(form, "mission"),
-    surveyDescription: formValue(form, "surveyDescription"),
-    surveyColor: formValue(form, "surveyColor"),
-    surveyModalities: formValue(form, "surveyModalities").split(",").map((value) => value.trim()).filter(Boolean),
-    releaseId: formValue(form, "releaseId"),
-    releaseLabel: formValue(form, "releaseLabel"),
-    releaseKind: formValue(form, "releaseKind"),
-    ...(year ? { releasedYear: Number(year) } : {}),
-    productName: formValue(form, "productName"),
-    productDescription: formValue(form, "productDescription"),
-    productStatus: formValue(form, "productStatus"),
-    modality: formValue(form, "modality"),
-    sourceUrl: formValue(form, "sourceUrl"),
-    geometrySourceUrl: formValue(form, "geometrySourceUrl"),
-    geometrySourceLabel: formValue(form, "geometrySourceLabel"),
-    dataOrigin: formValue(form, "dataOrigin"),
-  };
   try {
-    const response = await api<{ product: Product; request: MocBuildRequest }>(`/api/v1/admin/moc-builds/${encodeURIComponent(buildName)}/register-product`, { method: "POST", body: JSON.stringify(input) });
+    const response = await api<{ product: Product; request: MocBuildRequest }>(`/api/v1/admin/moc-builds/${encodeURIComponent(buildName)}/register-product`, { method: "POST", body: "{}" });
     byId<HTMLDialogElement>("moc-product-register-dialog").close();
     toast(`已登记产品 ${response.product.draft.name}`);
     await refresh();
@@ -1402,10 +1875,23 @@ async function saveProduct(event: SubmitEvent): Promise<void> {
   const form = event.currentTarget as HTMLFormElement;
   const product = productRecords.find((entry) => entry.productId === formValue(form, "productId"));
   if (!product) return;
-  let nodes: Array<Record<string, unknown>>;
-  try { nodes = JSON.parse(formValue(form, "flowNodes")) as Array<Record<string, unknown>>; } catch { setMessage("product", "流程节点 JSON 无效", true); return; }
+  const nodes = product.draft.presentation.flow.nodes;
   const content = { ...product.draft, dataOrigin: formValue(form, "dataOrigin") || undefined, sourceTier: formValue(form, "sourceTier") || undefined, originNote: formValue(form, "originNote") || undefined, sourceLabel: formValue(form, "sourceLabel") || undefined, sourceUrl: formValue(form, "sourceUrl") || undefined, geometrySourceLabel: formValue(form, "geometrySourceLabel") || undefined, geometrySourceUrl: formValue(form, "geometrySourceUrl") || undefined, presentation: { summaryMarkdown: formValue(form, "summaryMarkdown"), methodologyMarkdown: formValue(form, "methodologyMarkdown"), limitationsMarkdown: formValue(form, "limitationsMarkdown"), flow: { nodes, edges: product.draft.presentation.flow.edges } } };
   try { await api(`/api/v1/admin/products/${encodeURIComponent(product.productId)}/draft`, { method: "PUT", body: JSON.stringify({ revision: product.revision, content }) }); byId<HTMLDialogElement>("product-dialog").close(); toast("产品草稿已保存"); await refresh(); } catch (error) { setMessage("product", error instanceof Error ? error.message : "保存失败", true); }
+}
+
+async function reviewProduct(productId: string): Promise<void> {
+  const product = productRecords.find((entry) => entry.productId === productId);
+  if (!product) return;
+  const gaps = product.readiness?.draft.gaps ?? [];
+  if (gaps.some((gap) => gapGuidance[gap]?.blocking)) { setMessage("product", "请先完成上方标注的必需校验，再确认审核。", true); return; }
+  if (gaps.length && !byId<HTMLInputElement>("review-accept-limitations").checked) return;
+  try {
+    await api(`/api/v1/admin/products/${encodeURIComponent(productId)}/review`, { method: "POST", body: JSON.stringify({ revision: product.revision, acceptedGaps: gaps }) });
+    toast("产品版本已审核");
+    if (byId<HTMLDialogElement>("product-dialog").open) byId<HTMLDialogElement>("product-dialog").close();
+    await refresh();
+  } catch (error) { toast(error instanceof Error ? error.message : "审核失败", true); }
 }
 
 async function publishProduct(productId: string): Promise<void> {
@@ -1427,60 +1913,84 @@ async function reloadCatalogRuntime(button?: HTMLButtonElement): Promise<void> {
   }
 }
 
-async function refresh(): Promise<void> {
+async function refresh(background = false): Promise<void> {
   if (refreshInFlight) return refreshInFlight;
+  const version = ++refreshVersion;
+  const step = activeStep;
   const button = byId<HTMLButtonElement>("refresh-button");
-  button.disabled = true;
-  byId("admin-status").textContent = "REFRESHING…";
+  if (!background) button.disabled = true;
+  byId("refresh-state").textContent = background ? "" : "正在更新…";
   refreshInFlight = (async () => {
-  const [connectors, tasks, products, reviewSurveys, catalogStatus, mocDiscovery, mocBuilds] = await Promise.allSettled([
-    api<{ connectors: Connector[] }>("/api/v1/admin/connectors"),
-    api<{ tasks: Task[] }>("/api/v1/admin/tasks"),
-    api<{ products: Product[] }>("/api/v1/admin/products"),
-    api<{ surveys: ReviewSurvey[] }>("/api/v1/admin/products?view=surveys"),
-    api<CatalogStatus>("/api/v1/admin/catalog/status"),
-    api<{ requests: MocDiscoveryRequest[] }>("/api/v1/admin/moc-discovery"),
-    api<{ requests: MocBuildRequest[] }>("/api/v1/admin/moc-builds"),
-  ]);
-  if (connectors.status === "fulfilled") renderConnectors(connectors.value.connectors);
-  else toast(connectors.reason instanceof Error ? connectors.reason.message : "Connector 刷新失败", true);
-  if (tasks.status === "fulfilled") renderTasks(tasks.value.tasks);
-  else toast(tasks.reason instanceof Error ? tasks.reason.message : "任务刷新失败", true);
-  if (products.status === "fulfilled") renderProducts(Array.isArray(products.value.products) ? products.value.products : []);
-  else renderProductLoadError(products.reason instanceof Error ? products.reason.message : "产品刷新失败");
-  if (reviewSurveys.status === "fulfilled") renderReviewSurveys(Array.isArray(reviewSurveys.value.surveys) ? reviewSurveys.value.surveys : []);
-  else byId("product-list").innerHTML = `<div class="resource-empty">${escapeText(reviewSurveys.reason instanceof Error ? reviewSurveys.reason.message : "公共巡天刷新失败")}</div>`;
-  if (mocDiscovery.status === "fulfilled") renderMocDiscoveryRequests(Array.isArray(mocDiscovery.value.requests) ? mocDiscovery.value.requests : []);
-  else renderMocDiscoveryRequests([]);
-  if (mocBuilds.status === "fulfilled") {
-    mocBuildRecords = Array.isArray(mocBuilds.value.requests) ? mocBuilds.value.requests : [];
-    renderWorkOutputs(taskRecords, mocDiscoveryRecords, mocBuildRecords);
-    if (activeMocBuildName) {
-      const activeBuild = mocBuildRecords.find((build) => build.name === activeMocBuildName);
-      if (activeBuild) renderMocBuildDetails(activeBuild);
+    const keys = [...new Set([...workspaceResources[step], ...(!resourceCache.has("overview") ? ["overview" as const] : [])])];
+    const results = await workspaceRequests.load(keys, (url, signal) => api(url, { signal }));
+    if (!results || version !== refreshVersion || !token) return;
+    let failures = 0;
+    let changed = false;
+    for (const result of results) {
+      if (result.status === "rejected") { failures++; continue; }
+      const { key, value } = result.value;
+      resourceCache.set(key, value);
+      if (renderedSignatures.get(key) !== businessSignature(value)) changed = true;
     }
-  } else {
-    mocBuildRecords = [];
-  }
-  const connectorCount = connectors.status === "fulfilled" ? connectors.value.connectors.length : "--";
-  const taskCount = tasks.status === "fulfilled" ? tasks.value.tasks.length : "--";
-  const productCount = products.status === "fulfilled" ? products.value.products.length : "unknown";
-  const mocCount = mocDiscovery.status === "fulfilled" ? mocDiscovery.value.requests.length : "--";
-  const buildCount = mocBuilds.status === "fulfilled" ? mocBuilds.value.requests.length : "--";
-  const coverageState = catalogStatus.status === "fulfilled" ? `${catalogStatus.value.mode.toUpperCase()} · ${catalogStatus.value.footprints} FOOTPRINTS` : "COVERAGE UNAVAILABLE";
-  byId("step-sources-count").textContent = String(connectorCount);
-  byId("step-tasks-count").textContent = String(taskCount);
-  byId("step-review-count").textContent = reviewSurveys.status === "fulfilled" ? String(reviewSurveys.value.surveys.length) : "unknown";
-  byId("admin-status").textContent = `${connectorCount} CONNECTORS · ${taskCount} TASKS · ${mocCount} DISCOVERY · ${buildCount} BUILDS · ${productCount} PRODUCTS · ${coverageState} · ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
-  void loadPublicationPlan();
-  void loadPublicationRuns();
-  })().catch((error) => {
-    toast(error instanceof Error ? error.message : "刷新失败", true);
-    byId("admin-status").textContent = "REFRESH FAILED";
+    if (document.querySelector("dialog[open]")) {
+      if (activeMocReviewRequest && byId<HTMLDialogElement>("moc-review-dialog").open) {
+        const latest = (resourceCache.get("mocDiscovery") as { requests?: MocDiscoveryRequest[] } | undefined)?.requests?.find(request => request.name === activeMocReviewRequest?.name);
+        const unavailable = results.some((result, index) => keys[index] === "mocDiscovery" && result.status === "rejected");
+        updateMocObservation(latest ?? activeMocReviewRequest, unavailable);
+      }
+      pendingUpdates ||= changed;
+      byId("refresh-state").textContent = pendingUpdates ? "有更新；关闭弹框后显示" : "";
+      return;
+    }
+    const apply = <T>(key: Resource, render: (value: T) => void) => {
+      const value = resourceCache.get(key);
+      if (value === undefined) return;
+      const signature = businessSignature(value);
+      if (renderedSignatures.get(key) === signature) return;
+      render(value as T); renderedSignatures.set(key, signature);
+    };
+    apply<AdminOverview>("overview", renderOverview);
+    apply<{ products: Product[] }>("products", data => renderProducts(data.products));
+    apply<{ surveys: ReviewSurvey[] }>("reviewSurveys", data => renderReviewSurveys(data.surveys));
+    if (step === "sources" || step === "tasks") apply<{ connectors: Connector[] }>("connectors", data => renderConnectors(data.connectors));
+    if (step === "tasks" || step === "review") {
+      apply<{ requests: MocBuildRequest[] }>("mocBuilds", data => { mocBuildRecords = data.requests; renderWorkOutputs(taskRecords, mocDiscoveryRecords, mocBuildRecords); });
+      if (step === "tasks") {
+        apply<{ tasks: Task[] }>("tasks", data => renderTasks(data.tasks));
+        apply<{ requests: MocDiscoveryRequest[] }>("mocDiscovery", data => renderMocDiscoveryRequests(data.requests));
+      }
+    }
+    const count = (key: Resource, value: number): number | string => {
+      if (resourceCache.has(key)) return value;
+      const overviewCounts: Partial<Record<Resource, number | undefined>> = {
+        connectors: overviewRecord?.connectors.length,
+        tasks: overviewRecord?.workflows.tasks.total,
+        mocDiscovery: overviewRecord?.workflows.discovery.total,
+        mocBuilds: overviewRecord?.workflows.builds.total,
+        products: overviewRecord?.totals.products,
+      };
+      return overviewCounts[key] ?? "—";
+    };
+    const status = '连接 ' + count("connectors", connectorRecords.length) + ' · 扫描 ' + count("tasks", taskRecords.length) + ' · 探索 ' + count("mocDiscovery", mocDiscoveryRecords.length) + ' · 构建 ' + count("mocBuilds", mocBuildRecords.length) + ' · 产品 ' + count("products", productRecords.length);
+    if (byId("admin-status").textContent !== status) byId("admin-status").textContent = status;
+    byId("step-sources-count").textContent = String(count("connectors", connectorRecords.length));
+    const scanCount = count("tasks", taskRecords.length);
+    const discoveryCount = count("mocDiscovery", mocDiscoveryRecords.length);
+    byId("step-tasks-count").textContent = typeof scanCount === "number" && typeof discoveryCount === "number" ? String(scanCount + discoveryCount) : "—";
+    byId("step-review-count").textContent = String(reviewSurveyRecords.length);
+    pendingUpdates = false;
+    byId("refresh-state").textContent = failures ? "部分数据更新失败，保留上次结果" : "";
+    if (!failures) byId("refresh-time").textContent = '上次更新 ' + new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    if (step === "releases") { await loadPublicationRuns(); if (!background || !publicationPlan) await loadPublicationPlan(); }
+    const route = parseAdminRoute(location.pathname);
+    if (route?.productId && !document.querySelector("dialog[open]")) {
+      if (productRecords.some(product => product.productId === route.productId)) openProduct(route.productId);
+      else byId("refresh-state").textContent = "产品未找到";
+    }
+  })().catch(error => {
+    if (version === refreshVersion) byId("refresh-state").textContent = error instanceof Error ? error.message : "更新失败，保留上次结果";
   }).finally(() => {
-    button.disabled = false;
-    refreshInFlight = null;
-    schedulePolling();
+    if (version === refreshVersion) { button.disabled = false; refreshInFlight = null; schedulePolling(); }
   });
   return refreshInFlight;
 }
@@ -1489,6 +1999,7 @@ interface PublicationPlanSurvey {
   surveyId: string;
   publishedLayers: number;
   changedProducts: number;
+  productDiffs?: Array<{ productId: string; releaseId: string; name: string; change: string; fields: string[]; draftRevision: number; publishedRevision: number | null; reviewed: boolean }>;
   currentPackage?: { id: string; version: string } | null;
   changed: boolean;
   blockers: string[];
@@ -1519,30 +2030,43 @@ interface PublicationRun {
   files?: number;
   packages?: number;
   error?: string;
+  failureStage?: "build" | "upload" | "candidate" | "activate";
+  verification?: { overall?: string; candidate?: { state?: string; checkedAt?: string; bundleSha256?: string; error?: string }; authority?: { state?: string; checkedAt?: string; bundleSha256?: string; error?: string }; site?: { state?: string; target?: string; checkedAt?: string; observedBundleSha256?: string; checkedProducts?: number; error?: string } };
 }
 
 let publicationPlan: PublicationPlan | null = null;
 const selectedPublicationSurveys = new Set<string>();
 let publicationRuns: PublicationRun[] = [];
-let publicationPollTimer: number | undefined;
+
 
 function publicationStatusLabel(status: string): string {
-  const labels: Record<string, string> = { queued: "排队中", building: "构建中", uploading: "上传中", published: "已发布", failed: "失败" };
+  const labels: Record<string, string> = { queued: "排队中", building: "构建中", uploading: "上传中", verifying: "隔离验证中", published: "权威已发布", failed: "失败" };
   return labels[status] ?? status;
+}
+
+function publicationVerificationLabel(state?: string): string {
+  return ({ pending: "待核验", passed: "已通过", failed: "失败", "not-configured": "未配置目标", "site-pending": "站点待生效", verified: "闭环完成", "authority-published": "权威已发布" } as Record<string, string>)[state ?? ""] ?? (state || "未知");
+}
+
+function publicationFailureStageLabel(stage?: string): string {
+  return ({ build: "构建", upload: "上传", candidate: "候选隔离验证", activate: "权威指针切换" } as Record<string, string>)[stage ?? ""] ?? (stage || "--");
 }
 
 async function loadPublicationPlan(): Promise<void> {
   try {
+    const step = activeStep;
+    const version = refreshVersion;
     const { plan } = await api<{ plan: PublicationPlan }>("/api/v1/admin/publication-plan");
+    if (step !== activeStep || version !== refreshVersion) return;
+    if (businessSignature(plan) === businessSignature(publicationPlan)) return;
     publicationPlan = plan;
     for (const surveyId of [...selectedPublicationSurveys]) {
       if (!plan.surveys.some((survey) => survey.surveyId === surveyId && survey.selectable)) selectedPublicationSurveys.delete(surveyId);
     }
     renderPublicationPlan();
   } catch (error) {
-    publicationPlan = null;
-    byId("publication-plan-list").innerHTML = `<tr><td colspan="7" class="resource-empty">${escapeText(error instanceof Error ? error.message : "发布计划读取失败")}</td></tr>`;
-    byId("publication-plan-summary").textContent = "发布计划不可用";
+    if (!publicationPlan) byId("publication-plan-list").innerHTML = `<tr><td colspan="8" class="resource-empty">${escapeText(error instanceof Error ? error.message : "发布计划读取失败")}</td></tr>`;
+    byId("publication-plan-summary").textContent = publicationPlan ? "发布计划更新失败，保留上次结果；提交时仍检查版本" : "发布计划不可用";
   }
 }
 
@@ -1554,7 +2078,7 @@ function renderPublicationPlan(): void {
   byId("publication-plan-summary").textContent = `${plan.surveys.length} 巡天 · ${changed.length} 有变化 · ${plan.dynamicPackages} 资源包 · ${plan.dynamicLayers} 图层 · 基线 ${plan.baselineBundle.id.slice(0, 24)}…`;
   const body = byId("publication-plan-list");
   if (plan.surveys.length === 0) {
-    body.innerHTML = `<tr><td colspan="7" class="resource-empty">当前没有动态发布数据</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="resource-empty">当前没有动态发布数据</td></tr>`;
     updatePublicationPublishButton();
     return;
   }
@@ -1564,7 +2088,8 @@ function renderPublicationPlan(): void {
       ? `<input type="checkbox" data-publication-survey="${escapeText(survey.surveyId)}" ${checked ? "checked" : ""} />`
       : `<input type="checkbox" disabled />`;
     const blockers = survey.blockers.length ? survey.blockers.map((blocker) => escapeText(blocker)).join("<br>") : "—";
-    return `<tr${survey.changed ? ' data-changed="true"' : ""}><td>${checkbox}</td><td>${escapeText(survey.surveyId)}</td><td>${survey.publishedLayers}</td><td>${survey.changedProducts}</td><td>${survey.currentPackage ? `${escapeText(survey.currentPackage.id)}<br><small>${escapeText(survey.currentPackage.version)}</small>` : "—"}</td><td>${survey.changed ? "是" : "否"}</td><td>${blockers}</td></tr>`;
+    const diffs = (survey.productDiffs ?? []).map((diff) => `${diff.change === "added" ? "新增" : diff.change === "removed" ? "移除" : "修改"} ${diff.name} · r${diff.draftRevision} · ${diff.fields.join(", ")} · ${diff.reviewed ? "已审核" : "待审核"}`).join("<br>") || "—";
+    return `<tr${survey.changed ? ' data-changed="true"' : ""}><td>${checkbox}</td><td>${escapeText(survey.surveyId)}</td><td>${survey.publishedLayers}</td><td>${survey.changedProducts}</td><td>${diffs}</td><td>${survey.currentPackage ? `${escapeText(survey.currentPackage.id)}<br><small>${escapeText(survey.currentPackage.version)}</small>` : "—"}</td><td>${survey.changed ? "是" : "否"}</td><td>${blockers}</td></tr>`;
   }).join("");
   body.querySelectorAll<HTMLInputElement>("[data-publication-survey]").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
@@ -1604,13 +2129,17 @@ async function publishSelectedSurveys(): Promise<void> {
 
 async function loadPublicationRuns(): Promise<void> {
   try {
+    const step = activeStep;
+    const version = refreshVersion;
     const { runs } = await api<{ runs: PublicationRun[] }>("/api/v1/admin/publications");
-    publicationRuns = Array.isArray(runs) ? runs : [];
-    renderPublicationRuns();
-    const active = publicationRuns.find((run) => run.status === "queued" || run.status === "building" || run.status === "uploading");
+    if (step !== activeStep || version !== refreshVersion) return;
+    const incoming = Array.isArray(runs) ? runs : [];
+    if (businessSignature(incoming) !== businessSignature(publicationRuns)) { publicationRuns = incoming; renderPublicationRuns(); }
+    const active = publicationRuns.find((run) => run.status === "queued" || run.status === "building" || run.status === "uploading" || run.status === "verifying");
     if (active) schedulePublicationPolling(active.runId);
   } catch (error) {
-    byId("publication-run-list").innerHTML = `<tr><td colspan="7" class="resource-empty">${escapeText(error instanceof Error ? error.message : "发布记录读取失败")}</td></tr>`;
+    if (!publicationRuns.length) byId("publication-run-list").innerHTML = `<tr><td colspan="7" class="resource-empty">${escapeText(error instanceof Error ? error.message : "发布记录读取失败")}</td></tr>`;
+    byId("refresh-state").textContent = "发布记录更新失败，保留上次结果";
   }
 }
 
@@ -1620,7 +2149,7 @@ function renderPublicationRuns(): void {
     body.innerHTML = `<tr><td colspan="7" class="resource-empty">尚未提交发布任务</td></tr>`;
     return;
   }
-  body.innerHTML = publicationRuns.map((run) => `<tr><td>${escapeText(run.runId)}</td><td>${escapeText(publicationStatusLabel(run.status))}</td><td>${escapeText(run.surveyIds.join(", "))}</td><td>${run.bundle ? `${escapeText(run.bundle.id)}<br><small>${escapeText(run.bundle.sha256.slice(0, 16))}…</small>` : "—"}</td><td>${run.files ?? "--"}</td><td>${escapeText(formatDate(run.createdAt))}</td><td><button type="button" class="admin-quiet" data-publication-run="${escapeText(run.runId)}">详情</button></td></tr>`).join("");
+  body.innerHTML = publicationRuns.map((run) => `<tr><td>${escapeText(run.runId)}</td><td>${escapeText(publicationStatusLabel(run.status))}<br><small>${escapeText(publicationVerificationLabel(run.verification?.overall))}</small></td><td>${escapeText(run.surveyIds.join(", "))}</td><td>${run.bundle ? `${escapeText(run.bundle.id)}<br><small>${escapeText(run.bundle.sha256.slice(0, 16))}…</small>` : "—"}</td><td>${run.files ?? "--"}</td><td>${escapeText(formatDate(run.createdAt))}</td><td><button type="button" class="admin-quiet" data-publication-run="${escapeText(run.runId)}">详情</button></td></tr>`).join("");
   body.querySelectorAll<HTMLButtonElement>("[data-publication-run]").forEach((button) => {
     button.addEventListener("click", () => {
       const run = publicationRuns.find((item) => item.runId === button.dataset.publicationRun);
@@ -1640,27 +2169,45 @@ function openPublicationRun(run: PublicationRun): void {
     ["文件 / 资源包", `${run.files ?? "--"} / ${run.packages ?? "--"}`],
     ["提交时间", formatDate(run.createdAt)],
     ["完成时间", formatDate(run.finishedAt)],
-    ["错误", run.error ?? "—"],
+    ["失败阶段", run.failureStage ? publicationFailureStageLabel(run.failureStage) : "--"],
+    ["候选隔离恢复", publicationVerificationLabel(run.verification?.candidate?.state)],
+    ["权威指针", publicationVerificationLabel(run.verification?.authority?.state)],
+    ["目标站点", `${publicationVerificationLabel(run.verification?.site?.state)}${run.verification?.site?.target ? ` · ${run.verification.site.target}` : ""}${run.verification?.site?.observedBundleSha256 ? ` · ${run.verification.site.observedBundleSha256}` : ""}`],
+    ["错误", run.error ?? run.verification?.site?.error ?? "—"],
   ];
-  byId("publication-run-detail").innerHTML = `<dl class="admin-context">${facts.map(([label, value]) => `<div><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`).join("")}</dl>`;
+  const verify = run.status === "published" ? `<button type="button" class="admin-primary" data-verify-publication="${escapeText(run.runId)}"><i data-lucide="shield-check"></i><span>重新核验目标站点</span></button>` : "";
+  const retry = run.status === "failed" ? `<button type="button" class="admin-primary" data-retry-publication="${escapeText(run.runId)}"><i data-lucide="rotate-ccw"></i><span>按当前计划重试</span></button>` : "";
+  byId("publication-run-detail").innerHTML = `<dl class="admin-context">${facts.map(([label, value]) => `<div><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`).join("")}</dl><div class="publication-verification-actions">${retry}${verify}</div>`;
+  byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-verify-publication]")?.addEventListener("click", (event) => void verifyPublicationRun((event.currentTarget as HTMLButtonElement).dataset.verifyPublication ?? ""));
+  byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-retry-publication]")?.addEventListener("click", (event) => void retryPublicationRun((event.currentTarget as HTMLButtonElement).dataset.retryPublication ?? ""));
+  renderIcons();
   byId<HTMLDialogElement>("publication-run-dialog").showModal();
 }
 
-function schedulePublicationPolling(runId: string): void {
-  if (publicationPollTimer !== undefined) window.clearTimeout(publicationPollTimer);
-  publicationPollTimer = window.setTimeout(async () => {
-    try {
-      const { run } = await api<{ run: PublicationRun }>(`/api/v1/admin/publications/${encodeURIComponent(runId)}`);
-      publicationRuns = publicationRuns.map((item) => (item.runId === run.runId ? run : item));
-      renderPublicationRuns();
-      if (run.status === "published") toast("Release archive 已发布");
-      else if (run.status === "failed") toast(run.error ? `发布失败：${run.error}` : "发布失败", true);
-      else schedulePublicationPolling(runId);
-    } catch {
-      schedulePublicationPolling(runId);
-    }
-  }, 4000);
+async function retryPublicationRun(runId: string): Promise<void> {
+  if (!runId || !window.confirm("按当前发布计划重新排队该失败任务吗？这不会覆盖旧的失败记录。")) return;
+  try {
+    const { run } = await api<{ run: PublicationRun }>(`/api/v1/admin/publications/${encodeURIComponent(runId)}/retry`, { method: "POST", body: "{}" });
+    publicationRuns = [run, ...publicationRuns.filter((item) => item.runId !== run.runId)];
+    renderPublicationRuns();
+    openPublicationRun(run);
+    schedulePublicationPolling(run.runId);
+    toast(`发布任务已重新排队：${run.runId}`);
+  } catch (error) { toast(error instanceof Error ? error.message : "发布重试失败", true); }
 }
+
+async function verifyPublicationRun(runId: string): Promise<void> {
+  if (!runId) return;
+  try {
+    const { run } = await api<{ run: PublicationRun }>(`/api/v1/admin/publications/${encodeURIComponent(runId)}/verify`, { method: "POST" });
+    publicationRuns = publicationRuns.map((item) => item.runId === run.runId ? run : item);
+    renderPublicationRuns();
+    openPublicationRun(run);
+    toast(`站点核验：${publicationVerificationLabel(run.verification?.overall)}`, run.verification?.overall === "failed");
+  } catch (error) { toast(error instanceof Error ? error.message : "站点核验失败", true); }
+}
+
+function schedulePublicationPolling(_runId: string): void { schedulePolling(); }
 
 function formValue(form: HTMLFormElement, name: string): string {
   return String(new FormData(form).get(name) ?? "").trim();
@@ -1719,7 +2266,7 @@ async function initialize(): Promise<void> {
     adminConfig = await api<AdminConfig>("/api/v1/admin/config", { headers: {} });
     setTaskSubmitEnabled(false);
     byId("admin-namespace").textContent = adminConfig.namespace;
-    byId("admin-capability").textContent = adminConfig.enabled && adminConfig.kubernetesConfigured ? "ONLINE" : "NOT CONFIGURED";
+    byId("admin-capability").textContent = adminConfig.enabled && adminConfig.kubernetesConfigured ? "接口已连接" : "接口未配置";
     if (!adminConfig.enabled) {
       byId("login-title").textContent = t("admin.disabled");
       byId("login-error").textContent = "当前部署未启用 Kubernetes 管理连接。";
@@ -1744,11 +2291,17 @@ byId<HTMLFormElement>("login-form").addEventListener("submit", async (event) => 
   showWorkspace();
   await refresh();
 });
-byId("logout-button").addEventListener("click", () => { token = ""; sessionStorage.removeItem(tokenKey); if (pollTimer !== undefined) window.clearTimeout(pollTimer); pollTimer = undefined; connectorProbeResults.clear(); connectorRecords = []; showLogin(); });
+byId("logout-button").addEventListener("click", () => { token = ""; sessionStorage.removeItem(tokenKey); if (pollTimer !== undefined) window.clearTimeout(pollTimer); pollTimer = undefined; connectorProbeResults.clear(); connectorRecords = []; overviewRecord = null; showLogin(); });
 applyAdminTheme(storedAdminTheme() ?? adminSystemTheme());
 byId("theme-toggle").addEventListener("click", () => applyAdminTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark", true));
 window.matchMedia?.("(prefers-color-scheme: light)").addEventListener("change", () => { if (!storedAdminTheme()) applyAdminTheme(adminSystemTheme()); });
 byId("refresh-button").addEventListener("click", () => void refresh());
+
+
+byId<HTMLInputElement>("overview-search").addEventListener("input", (event) => {
+  overviewQuery = (event.currentTarget as HTMLInputElement).value.trim().toLocaleLowerCase();
+  if (overviewRecord) renderOverview(overviewRecord);
+});
 byId("publication-refresh-button").addEventListener("click", () => { void loadPublicationPlan(); void loadPublicationRuns(); });
 byId("publication-publish-button").addEventListener("click", () => void publishSelectedSurveys());
 byId("publication-run-close").addEventListener("click", () => byId<HTMLDialogElement>("publication-run-dialog").close());
@@ -1759,8 +2312,10 @@ byId<HTMLFormElement>("moc-discovery-form").addEventListener("submit", (event) =
 byId<HTMLFormElement>("moc-review-form").addEventListener("submit", (event) => void submitMocReview(event));
 byId<HTMLFormElement>("moc-product-register-form").addEventListener("submit", (event) => void submitMocProductRegistration(event));
 byId<HTMLFormElement>("product-form").addEventListener("submit", (event) => void saveProduct(event));
-byId("product-dialog-cancel").addEventListener("click", () => byId<HTMLDialogElement>("product-dialog").close());
+byId("product-dialog-cancel").addEventListener("click", () => { history.replaceState(null, "", "/admin/review"); activeProductDialogId = ""; byId<HTMLDialogElement>("product-dialog").close(); });
+byId<HTMLButtonElement>("product-dialog-review").addEventListener("click", (event) => { const productId = (event.currentTarget as HTMLButtonElement).dataset.reviewProduct; if (productId) void reviewProduct(productId); });
 byId<HTMLButtonElement>("product-dialog-publish").addEventListener("click", (event) => { const productId = (event.currentTarget as HTMLButtonElement).dataset.publishProduct; if (productId) void publishProduct(productId); });
+byId<HTMLButtonElement>("product-dialog-retire").addEventListener("click", (event) => { const productId = (event.currentTarget as HTMLButtonElement).dataset.retireProduct; if (productId) void retireProduct(productId); });
 byId("editorial-dialog-close").addEventListener("click", () => {
   if (activeEditorial && JSON.stringify(activeEditorial.document.draft) !== JSON.stringify(activeEditorial.baseline) && !window.confirm("目录有未保存修改，确定关闭吗？")) return;
   byId<HTMLDialogElement>("editorial-dialog").close();
@@ -1781,6 +2336,12 @@ byId<HTMLFormElement>("editorial-diff-form").addEventListener("submit", (event) 
 byId<HTMLDialogElement>("editorial-dialog").addEventListener("cancel", (event) => {
   if (activeEditorial && JSON.stringify(activeEditorial.document.draft) !== JSON.stringify(activeEditorial.baseline) && !window.confirm("目录有未保存修改，确定关闭吗？")) event.preventDefault();
 });
+byId<HTMLDialogElement>("product-dialog").addEventListener("close", () => {
+  if (byId<HTMLDialogElement>("product-dialog").open) return;
+  activeProductDialogId = "";
+  if (parseAdminRoute(location.pathname)?.productId) history.replaceState(null, "", "/admin/review");
+});
+byId<HTMLDialogElement>("product-dialog").addEventListener("cancel", () => { history.replaceState(null, "", "/admin/review"); });
 byId("moc-product-register-cancel").addEventListener("click", () => byId<HTMLDialogElement>("moc-product-register-dialog").close());
 byId("task-product").addEventListener("change", (event) => setDerivedProduct((event.currentTarget as HTMLSelectElement).value));
 byId("connector-type").addEventListener("change", updateConnectorFields);
@@ -1801,6 +2362,24 @@ byId<HTMLInputElement>("product-search").addEventListener("input", (event) => {
 document.querySelectorAll<HTMLButtonElement>("[data-admin-step]").forEach((button) => button.addEventListener("click", () => setAdminStep(button.dataset.adminStep as AdminStep)));
 window.addEventListener("popstate", () => setAdminStep(readAdminStep(), true));
 document.addEventListener("visibilitychange", () => schedulePolling(0));
+byId<HTMLButtonElement>("auto-update-toggle").textContent = automaticUpdates ? "自动更新：开" : "自动更新：关";
+byId("auto-update-toggle").addEventListener("click", () => {
+  automaticUpdates = !automaticUpdates;
+  if (!automaticUpdates) {
+    workspaceRequests.cancel(); refreshVersion++; refreshInFlight = null;
+    byId<HTMLButtonElement>("refresh-button").disabled = false;
+  }
+  sessionStorage.setItem("assets-admin-auto-update", automaticUpdates ? "on" : "off");
+  byId("auto-update-toggle").textContent = automaticUpdates ? "自动更新：开" : "自动更新：关";
+  schedulePolling(automaticUpdates ? 0 : undefined);
+});
+document.querySelectorAll<HTMLDialogElement>("dialog").forEach(dialog => dialog.addEventListener("close", () => {
+  if (pendingUpdates && !document.querySelector("dialog[open]")) void refresh();
+}));
+byId<HTMLSelectElement>("overview-version").addEventListener("change", event => {
+  overviewVersion = (event.target as HTMLSelectElement).value as "draft" | "published";
+  if (overviewRecord) renderOverview(overviewRecord);
+});
 setAdminStep(readAdminStep(), true);
 updateConnectorFields();
 void initialize();

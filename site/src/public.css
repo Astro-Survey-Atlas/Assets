@@ -685,6 +685,12 @@ body.resources-page .resource-detail-meta,
 body.resources-page .resource-detail-section,
 body.resources-page .resource-detail-download { border-color: var(--public-line); }
 body.resources-page .resource-detail-section h3 { color: var(--brand-magenta-strong); }
+body.resources-page .resource-readiness-summary { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--public-line); }
+body.resources-page .resource-readiness-summary h4 { margin: 0 0 10px; color: var(--brand-indigo-strong); font: 700 11px/1.2 var(--font-mono), monospace; letter-spacing: .08em; }
+body.resources-page .resource-readiness-summary .resource-coverage-summary { margin-top: 0; }
+body.resources-page .resource-readiness-summary .resource-detail-row dd { color: var(--public-text); }
+body.resources-page .resource-readiness-gaps { margin: 12px 0 0; color: var(--brand-magenta-strong); font-size: 11px; line-height: 1.5; }
+body.resources-page .resource-product-item > span { overflow-wrap: anywhere; }
 body.resources-page .sdk-core-band pre { min-width: 0; max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 @media (max-width: 900px) {

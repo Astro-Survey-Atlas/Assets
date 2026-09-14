@@ -1,11 +1,14 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage, type RequestOptions as HttpRequestOptions } from "node:http";
 import { request as httpsRequest, type RequestOptions as HttpsRequestOptions } from "node:https";
 import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 import type { MocCandidateSummary, MocReviewSummary } from "./moc-discovery.js";
+import { ConnectorInventoryStateStore, ConnectorProbeStateStore, type ConnectorInventoryPhase, type ConnectorInventoryState } from "./connector-state.js";
+import { executorLogFinding, observeDiscovery, type DiscoveryObservation, type ExecutorObservation } from "./discovery-observation.js";
 
 const API_GROUP = "/apis/atlas.zhejianglab.org/v1alpha1";
+const WAREHOUSE_DATA_SOURCE_GROUP = "/apis/org.zhejianglab.astro.metadata/v1alpha1";
 export const ASSETS_MANAGED_BY = "astro-survey-atlas-assets";
 export const PUBLIC_COVERAGE_KIND = "public-coverage";
 export const SUPPORTED_COVERAGE_MODES = ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix"] as const;
@@ -51,11 +54,16 @@ export interface AdminConfig {
   scannerImage: string;
   evidenceClaimName: string;
   evidenceMountPath: string;
+  discoveryObserverNamespace?: string;
+  discoveryObserverSelector?: string;
+  discoveryAcceptTimeoutSeconds?: number;
 }
 
 interface KubernetesMetadata {
   name?: string;
   namespace?: string;
+  resourceVersion?: string;
+  uid?: string;
   creationTimestamp?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
@@ -107,6 +115,24 @@ export interface ConnectorView {
   message?: string;
   checkedAt?: string;
   createdAt?: string;
+  /** Resource origin is surfaced so operators can distinguish Assets config from Warehouse state. */
+  resourceKind?: "ConfigMap" | "AstroDataSource";
+  configurationPhase?: string;
+  inventory?: ConnectorInventoryView;
+}
+
+export interface ConnectorInventoryView {
+  state: "unknown" | "running" | "complete" | "partial" | "failed";
+  denominatorKnown: boolean;
+  processedObjects?: number;
+  totalObjectCount?: number;
+  totalBytes?: number;
+  startedAt?: string;
+  finishedAt?: string;
+  updatedAt?: string;
+  observedAt?: string;
+  source?: "warehouse" | "assets-object-store" | "unavailable";
+  note?: string;
 }
 
 export interface ConnectorProbeView extends ConnectorView {
@@ -126,6 +152,7 @@ export interface ObjectStorageProbeInput {
 
 export interface ConnectorProbeClient {
   probeObjectStorage(input: ObjectStorageProbeInput): Promise<void>;
+  inventoryObjectStorage?(input: ObjectStorageProbeInput, continuationToken?: string): Promise<{ objects: Array<{ sizeBytes?: number }>; nextToken?: string; truncated: boolean }>;
 }
 
 export interface CoverageTaskInput {
@@ -228,6 +255,7 @@ export interface WorkContextView {
 }
 
 export interface MocDiscoveryView {
+  observation?: DiscoveryObservation;
   name: string;
   namespace?: string;
   createdAt?: string;
@@ -279,6 +307,9 @@ export function loadAdminConfig(environment: NodeJS.ProcessEnv = process.env): A
   return {
     enabled: envBool(environment.ASSETS_ADMIN_ENABLED, true),
     namespace: environment.ASSETS_WAREHOUSE_NAMESPACE?.trim() || "atlas-warehouse",
+    discoveryObserverNamespace: environment.ASSETS_DISCOVERY_OBSERVER_NAMESPACE?.trim() || "atlas-system",
+    discoveryObserverSelector: environment.ASSETS_DISCOVERY_OBSERVER_SELECTOR?.trim() || "app.kubernetes.io/name=astro-atlas-moc-discovery",
+    discoveryAcceptTimeoutSeconds: safePositiveInteger(environment.ASSETS_DISCOVERY_ACCEPT_TIMEOUT_SECONDS, "discoveryAcceptTimeoutSeconds", 120, 86400),
     adminToken: environment.ASSETS_ADMIN_TOKEN?.trim() || "",
     kubeToken: environment.ASSETS_KUBE_TOKEN?.trim() || "",
     apiBaseUrl: environment.ASSETS_KUBE_API_URL?.trim() || (host ? `https://${host}:${port}` : undefined),
@@ -356,6 +387,11 @@ function resourcePath(namespace: string, plural: string, name?: string): string 
   return name ? `${base}/${encodeURIComponent(name)}` : base;
 }
 
+function warehouseDataSourcePath(namespace: string, name?: string): string {
+  const base = `${WAREHOUSE_DATA_SOURCE_GROUP}/namespaces/${encodeURIComponent(namespace)}/astrodatasources`;
+  return name ? `${base}/${encodeURIComponent(name)}` : base;
+}
+
 function coreResourcePath(plural: string, name?: string, namespace?: string): string {
   const base = namespace
     ? `/api/v1/namespaces/${encodeURIComponent(namespace)}/${plural}`
@@ -379,6 +415,15 @@ export class KubernetesApi {
   private token?: string;
 
   constructor(private readonly config: AdminConfig) {}
+
+  async executorPods(namespace: string, selector: string): Promise<KubernetesResource[]> {
+    const result = await this.request<KubernetesResourceList>("GET", `${coreResourcePath("pods", undefined, namespace)}?labelSelector=${encodeURIComponent(selector)}&limit=4`);
+    return result.items ?? [];
+  }
+
+  async executorLog(namespace: string, pod: string): Promise<string> {
+    return this.request<string>("GET", `${coreResourcePath("pods", pod, namespace)}/log?tailLines=80&limitBytes=16384&sinceSeconds=600&timestamps=true`);
+  }
 
   async list(plural: string, selector: string): Promise<KubernetesResource[]> {
     const query = selector ? `?labelSelector=${encodeURIComponent(selector)}` : "";
@@ -412,6 +457,21 @@ export class KubernetesApi {
   async getCore(plural: string, name: string, namespace?: string): Promise<KubernetesResource | null> {
     try {
       return await this.request<KubernetesResource>("GET", coreResourcePath(plural, name, namespace));
+    } catch (error) {
+      if (error instanceof KubernetesApiError && error.statusCode === 404) return null;
+      throw error;
+    }
+  }
+
+  /** Read the Warehouse-native connector resources when that CRD is installed. */
+  async listDataSources(namespace = this.config.namespace): Promise<KubernetesResource[]> {
+    const result = await this.request<KubernetesResourceList>("GET", warehouseDataSourcePath(namespace));
+    return Array.isArray(result.items) ? result.items : [];
+  }
+
+  async getDataSource(name: string, namespace = this.config.namespace): Promise<KubernetesResource | null> {
+    try {
+      return await this.request<KubernetesResource>("GET", warehouseDataSourcePath(namespace, name));
     } catch (error) {
       if (error instanceof KubernetesApiError && error.statusCode === 404) return null;
       throw error;
@@ -515,12 +575,53 @@ export class S3ConnectorProbeClient implements ConnectorProbeClient {
       client.destroy();
     }
   }
+
+  async inventoryObjectStorage(input: ObjectStorageProbeInput, continuationToken?: string): Promise<{ objects: Array<{ sizeBytes?: number }>; nextToken?: string; truncated: boolean }> {
+    const client = new S3Client({
+      region: input.region || "us-east-1",
+      endpoint: input.endpoint,
+      forcePathStyle: true,
+      credentials: { accessKeyId: input.accessKeyId, secretAccessKey: input.secretAccessKey },
+    });
+    try {
+      const result = await client.send(new ListObjectsV2Command({
+        Bucket: input.bucket,
+        ...(input.prefix !== undefined ? { Prefix: input.prefix } : {}),
+        MaxKeys: 1000,
+        ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+      }), { abortSignal: AbortSignal.timeout(CONNECTOR_PROBE_TIMEOUT_MS * 2) });
+      return {
+        objects: (result.Contents ?? []).map((entry) => ({ ...(typeof entry.Size === "number" && Number.isSafeInteger(entry.Size) && entry.Size >= 0 ? { sizeBytes: entry.Size } : {}) })),
+        ...(result.NextContinuationToken ? { nextToken: result.NextContinuationToken } : {}),
+        truncated: result.IsTruncated === true,
+      };
+    } finally {
+      client.destroy();
+    }
+  }
+}
+
+function connectorData(resource: KubernetesResource): Record<string, unknown> {
+  if (resource.data) return resource.data;
+  const spec = resource.spec ?? {};
+  const mount = spec.mount && typeof spec.mount === "object" && !Array.isArray(spec.mount) ? spec.mount as Record<string, unknown> : {};
+  const credential = spec.credentialSecretRef && typeof spec.credentialSecretRef === "object" && !Array.isArray(spec.credentialSecretRef)
+    ? spec.credentialSecretRef as Record<string, unknown> : {};
+  return {
+    ...spec,
+    ...(typeof mount.pvcName === "string" && spec.pvcName === undefined ? { pvcName: mount.pvcName } : {}),
+    ...(typeof mount.subPath === "string" && spec.basePath === undefined ? { basePath: mount.subPath } : {}),
+    ...(typeof credential.name === "string" && spec.credentialSecretName === undefined ? { credentialSecretName: credential.name } : {}),
+    ...(typeof credential.accessKeyKey === "string" && spec.accessKeyKey === undefined ? { accessKeyKey: credential.accessKeyKey } : {}),
+    ...(typeof credential.secretKeyKey === "string" && spec.secretKeyKey === undefined ? { secretKeyKey: credential.secretKeyKey } : {}),
+  };
 }
 
 function connectorView(resource: KubernetesResource): ConnectorView {
-  const data = resource.data ?? {};
+  const data = connectorData(resource);
   const nodeName = typeof data.nodeName === "string" ? data.nodeName : undefined;
   const nodePath = typeof data.nodePath === "string" ? data.nodePath : undefined;
+  const statusPhase = typeof resource.status?.phase === "string" ? resource.status.phase : undefined;
   return {
     name: resource.metadata?.name ?? "",
     type: String(data.type ?? "") as ConnectorType,
@@ -536,7 +637,26 @@ function connectorView(resource: KubernetesResource): ConnectorView {
     nodePath,
     phase: "NOT_CHECKED",
     createdAt: resource.metadata?.creationTimestamp,
+    ...(resource.kind === "AstroDataSource" ? { resourceKind: "AstroDataSource" as const } : { resourceKind: "ConfigMap" as const }),
+    ...(statusPhase ? { configurationPhase: statusPhase } : {}),
   };
+}
+
+function connectorConfigFingerprint(connector: ConnectorView, credentialVersion?: string): string {
+  const stable = {
+    name: connector.name,
+    type: connector.type,
+    endpoint: connector.endpoint,
+    region: connector.region,
+    bucket: connector.bucket,
+    prefix: connector.prefix,
+    accessKeyConfigured: connector.accessKeyConfigured,
+    pvcName: connector.pvcName,
+    basePath: connector.basePath,
+    localPath: connector.localPath,
+    ...(credentialVersion ? { credentialVersion } : {}),
+  };
+  return createHash("sha256").update(JSON.stringify(stable)).digest("hex").slice(0, 32);
 }
 
 function statusView(status: Record<string, unknown> | undefined): TaskStatusView {
@@ -799,6 +919,8 @@ interface ConnectorDefinition {
   pvcName?: string;
   basePath?: string;
   credentialSecretName?: string;
+  accessKeyKey?: string;
+  secretKeyKey?: string;
 }
 
 function validateEndpoint(value: string): string {
@@ -816,21 +938,24 @@ function validateEndpoint(value: string): string {
 }
 
 function connectorDefinition(resource: KubernetesResource): ConnectorDefinition {
-  const data = resource.data ?? {};
+  const data = connectorData(resource);
   const type = String(data.type ?? "") as ConnectorType;
+  const stringValue = (key: string): string | undefined => typeof data[key] === "string" ? data[key] as string : undefined;
   return {
     name: resource.metadata?.name ?? "",
     type,
-    endpoint: data.endpoint,
-    region: data.region,
-    bucket: data.bucket,
-    prefix: data.prefix,
-    localPath: data.localPath,
-    nodeName: data.nodeName,
-    nodePath: data.nodePath,
-    pvcName: data.pvcName,
-    basePath: data.basePath,
-    credentialSecretName: data.credentialSecretName,
+    endpoint: stringValue("endpoint"),
+    region: stringValue("region"),
+    bucket: stringValue("bucket"),
+    prefix: stringValue("prefix"),
+    localPath: stringValue("localPath"),
+    nodeName: stringValue("nodeName"),
+    nodePath: stringValue("nodePath"),
+    pvcName: stringValue("pvcName"),
+    basePath: stringValue("basePath"),
+    credentialSecretName: stringValue("credentialSecretName"),
+    accessKeyKey: stringValue("accessKeyKey") ?? (resource.kind === "AstroDataSource" ? "access-key" : "accessKey"),
+    secretKeyKey: stringValue("secretKeyKey") ?? (resource.kind === "AstroDataSource" ? "secret-key" : "secretKey"),
   };
 }
 
@@ -838,6 +963,19 @@ function isManagedConnector(resource: KubernetesResource): boolean {
   const labels = resource.metadata?.labels ?? {};
   return labels["app.kubernetes.io/managed-by"] === ASSETS_MANAGED_BY
     && labels["astro.zhejianglab.org/resource-kind"] === "connector";
+}
+
+function isWarehouseDataSource(resource: KubernetesResource): boolean {
+  return resource.kind === "AstroDataSource"
+    && typeof resource.apiVersion === "string"
+    && resource.apiVersion.startsWith("org.zhejianglab.astro.metadata/");
+}
+
+function isLegacyConnectorResource(resource: KubernetesResource): boolean {
+  // Unit callers from the pre-label API supplied a minimal ConfigMap-shaped
+  // object. Keep that in-process compatibility without accepting an actual
+  // unowned Kubernetes ConfigMap (which always has kind/metadata labels).
+  return !resource.kind && !resource.metadata?.labels;
 }
 
 function secretValue(resource: KubernetesResource, key: string): string | undefined {
@@ -853,6 +991,34 @@ function secretValue(resource: KubernetesResource, key: string): string | undefi
   }
   const plain = resource.stringData?.[key];
   return typeof plain === "string" && plain ? plain : undefined;
+}
+
+/**
+ * Resolve the two credential keys used by both connector generations.
+ * Assets-owned ConfigMaps carry explicit accessKeyKey/secretKeyKey values;
+ * Warehouse AstroDataSource currently follows its scanner contract's
+ * access-key/secret-key names. Keep a narrow compatibility fallback for
+ * existing Secrets while never exposing the values themselves.
+ */
+function credentialKeyCandidates(resource: KubernetesResource, kind: "access" | "secret"): string[] {
+  const data = connectorData(resource);
+  const configured = kind === "access" ? data.accessKeyKey : data.secretKeyKey;
+  const warehouseDefaults = kind === "access" ? ["access-key", "s3-access-key", "accessKey"] : ["secret-key", "s3-access-secret", "secretKey"];
+  const assetsDefaults = kind === "access" ? ["accessKey", "access-key", "s3-access-key"] : ["secretKey", "secret-key", "s3-access-secret"];
+  const defaults = resource.kind === "AstroDataSource" ? warehouseDefaults : assetsDefaults;
+  return [...new Set([typeof configured === "string" && configured.trim() ? configured.trim() : undefined, ...defaults].filter((value): value is string => Boolean(value)))];
+}
+
+function connectorCredentialValues(resource: KubernetesResource, secret: KubernetesResource): { accessKeyId?: string; secretAccessKey?: string } {
+  const accessKeyId = credentialKeyCandidates(resource, "access").map((key) => secretValue(secret, key)).find((value): value is string => Boolean(value));
+  const secretAccessKey = credentialKeyCandidates(resource, "secret").map((key) => secretValue(secret, key)).find((value): value is string => Boolean(value));
+  return { ...(accessKeyId ? { accessKeyId } : {}), ...(secretAccessKey ? { secretAccessKey } : {}) };
+}
+
+function credentialVersion(secret: KubernetesResource | null | undefined): string | undefined {
+  const metadata = secret?.metadata;
+  if (!metadata) return undefined;
+  return metadata.resourceVersion?.trim() || metadata.uid?.trim() || undefined;
 }
 
 function objectProbeErrorMessage(error: unknown): string {
@@ -872,6 +1038,24 @@ function checkedConnector(base: ConnectorView, phase: Exclude<ConnectorPhase, "N
     phase,
     ...(message ? { message } : {}),
     checkedAt: new Date().toISOString(),
+  };
+}
+
+function connectorInventoryView(state: ConnectorInventoryState): ConnectorInventoryView {
+  const phase = state.phase.toLowerCase() as ConnectorInventoryView["state"];
+  const normalized = ["unknown", "running", "complete", "partial", "failed"].includes(phase) ? phase as ConnectorInventoryView["state"] : "unknown";
+  return {
+    state: normalized,
+    denominatorKnown: normalized === "complete",
+    ...(state.processedObjects !== undefined ? { processedObjects: state.processedObjects } : {}),
+    ...(state.totalObjectCount !== undefined ? { totalObjectCount: state.totalObjectCount } : {}),
+    ...(state.totalBytes !== undefined ? { totalBytes: state.totalBytes } : {}),
+    ...(state.startedAt ? { startedAt: state.startedAt } : {}),
+    ...(state.finishedAt ? { finishedAt: state.finishedAt } : {}),
+    updatedAt: state.updatedAt,
+    ...(normalized === "unknown" ? { source: "unavailable" as const } : { source: "assets-object-store" as const }),
+    ...(state.message ? { note: state.message } : {}),
+    ...(normalized === "complete" ? { observedAt: state.finishedAt ?? state.updatedAt } : {}),
   };
 }
 
@@ -1134,7 +1318,7 @@ function buildTaskResource(
         ...(localLocation ? { sourceVolume: localLocation.sourceVolume } : {}),
       },
       credentials: connector.credentialSecretName ? {
-        source: { secretName: connector.credentialSecretName, accessKeyKey: "accessKey", secretKeyKey: "secretKey" },
+        source: { secretName: connector.credentialSecretName, accessKeyKey: connector.accessKeyKey ?? "accessKey", secretKeyKey: connector.secretKeyKey ?? "secretKey" },
       } : {},
       plan,
     },
@@ -1145,11 +1329,15 @@ export class AssetsAdmin {
   readonly config: AdminConfig;
   private readonly kube: KubernetesApi;
   private readonly probeClient: ConnectorProbeClient;
+  private readonly probeStateStore?: ConnectorProbeStateStore;
+  private readonly inventoryStateStore?: ConnectorInventoryStateStore;
 
-  constructor(config: AdminConfig = loadAdminConfig(), kube = new KubernetesApi(config), probeClient: ConnectorProbeClient = new S3ConnectorProbeClient()) {
+  constructor(config: AdminConfig = loadAdminConfig(), kube = new KubernetesApi(config), probeClient: ConnectorProbeClient = new S3ConnectorProbeClient(), probeStateStore?: ConnectorProbeStateStore, inventoryStateStore?: ConnectorInventoryStateStore) {
     this.config = config;
     this.kube = kube;
     this.probeClient = probeClient;
+    this.probeStateStore = probeStateStore;
+    this.inventoryStateStore = inventoryStateStore;
   }
 
   publicConfig(): Record<string, unknown> {
@@ -1158,6 +1346,10 @@ export class AssetsAdmin {
       authRequired: true,
       namespace: this.config.namespace,
       kubernetesConfigured: Boolean(this.config.apiBaseUrl),
+      publicationVerification: {
+        configured: Boolean(process.env.ASSETS_PUBLIC_VERIFY_URL?.trim()),
+        ...(process.env.ASSETS_PUBLIC_VERIFY_URL?.trim() ? { target: process.env.ASSETS_PUBLIC_VERIFY_URL.trim() } : {}),
+      },
       capabilities: {
         coverageModes: [...SUPPORTED_COVERAGE_MODES],
         modalities: [...SUPPORTED_MODALITIES],
@@ -1176,15 +1368,172 @@ export class AssetsAdmin {
     if (!sameSecret(headerToken(header), this.config.adminToken)) throw new AdminHttpError(401, "Invalid Assets admin token");
   }
 
+  private async connectorResource(name: string): Promise<KubernetesResource | null> {
+    const normalized = dnsName(name, "connector name");
+    const configMap = await this.kube.getCore("configmaps", normalized, this.config.namespace);
+    if (configMap && (isManagedConnector(configMap) || isLegacyConnectorResource(configMap))) return configMap;
+    const getter = (this.kube as KubernetesApi & { getDataSource?: (resourceName: string, namespace?: string) => Promise<KubernetesResource | null> }).getDataSource;
+    if (getter) {
+      const dataSource = await getter.call(this.kube, normalized, this.config.namespace);
+      if (dataSource && isWarehouseDataSource(dataSource)) return dataSource;
+    }
+    return null;
+  }
+
   async listConnectors(): Promise<ConnectorView[]> {
-    const resources = await this.kube.listCore("configmaps", `app.kubernetes.io/managed-by=${ASSETS_MANAGED_BY},astro.zhejianglab.org/resource-kind=connector`, this.config.namespace);
-    return resources.map(connectorView).filter((connector) => CONNECTOR_TYPES.includes(connector.type)).sort((a, b) => a.name.localeCompare(b.name));
+    const configMaps = await this.kube.listCore("configmaps", `app.kubernetes.io/managed-by=${ASSETS_MANAGED_BY},astro.zhejianglab.org/resource-kind=connector`, this.config.namespace);
+    let dataSources: KubernetesResource[] = [];
+    const lister = (this.kube as KubernetesApi & { listDataSources?: (namespace?: string) => Promise<KubernetesResource[]> }).listDataSources;
+    if (lister) {
+      try { dataSources = await lister.call(this.kube, this.config.namespace); }
+      catch { /* Older Warehouse deployments may not install the AstroDataSource CRD. */ }
+    }
+    const byName = new Map<string, KubernetesResource>();
+    for (const resource of [...dataSources.filter(isWarehouseDataSource), ...configMaps.filter(isManagedConnector)]) {
+      const name = resource.metadata?.name;
+      if (name && !byName.has(name)) byName.set(name, resource);
+    }
+    const connectors = [...byName.values()].map(connectorView).filter((connector) => CONNECTOR_TYPES.includes(connector.type));
+    if (!this.probeStateStore && !this.inventoryStateStore) return connectors.sort((a, b) => a.name.localeCompare(b.name));
+    const withState = await Promise.all(connectors.map(async (connector) => {
+      const state = await this.probeStateStore?.get(connector.name);
+      const inventory = await this.inventoryStateStore?.get(connector.name);
+      let secretVersion: string | undefined;
+      if (connector.accessKeyConfigured) {
+        try {
+          const resource = await this.connectorResource(connector.name);
+          const definition = resource ? connectorDefinition(resource) : undefined;
+          if (definition?.credentialSecretName) secretVersion = credentialVersion(await this.kube.getCore("secrets", definition.credentialSecretName, this.config.namespace));
+        } catch {
+          // A missing/temporarily unreadable Secret is represented by the
+          // probe phase; it must not make the connector list unavailable.
+        }
+      }
+      const fingerprint = connectorConfigFingerprint(connector, secretVersion);
+      const legacyFingerprint = connectorConfigFingerprint(connector);
+      const matches = (value: string | undefined): boolean => !value || value === fingerprint || (!secretVersion && value === legacyFingerprint);
+      const probe = state && matches(state.configFingerprint) ? state : undefined;
+      const inventoryView = inventory && matches(inventory.scopeFingerprint) ? connectorInventoryView(inventory) : undefined;
+      return probe || inventoryView ? { ...connector, ...(probe ?? {}), ...(inventoryView ? { inventory: inventoryView } : {}) } : connector;
+    }));
+    return withState.sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async probeConnector(name: string): Promise<ConnectorProbeView> {
+    const result = await this.probeConnectorOnce(name);
+    if (this.probeStateStore) {
+      let secretVersion: string | undefined;
+      if (result.accessKeyConfigured) {
+        try {
+          const resource = await this.connectorResource(result.name);
+          const definition = resource ? connectorDefinition(resource) : undefined;
+          if (definition?.credentialSecretName) secretVersion = credentialVersion(await this.kube.getCore("secrets", definition.credentialSecretName, this.config.namespace));
+        } catch {
+          // Persist the base connector fingerprint when the Secret cannot be
+          // read; a later list refresh will invalidate it if the Secret changes.
+        }
+      }
+      await this.probeStateStore.set(result.name, { phase: result.phase, ...(result.message ? { message: result.message } : {}), checkedAt: result.checkedAt, configFingerprint: connectorConfigFingerprint(result, secretVersion) });
+    }
+    return result;
+  }
+
+  /** Advance one bounded connector inventory page and persist its progress. */
+  async inventoryConnector(name: string): Promise<ConnectorInventoryView> {
     const normalized = dnsName(name, "connector name");
-    const resource = await this.kube.getCore("configmaps", normalized, this.config.namespace);
-    if (!resource || !isManagedConnector(resource)) {
+    const resource = await this.connectorResource(normalized);
+    if (!resource) throw new AdminHttpError(404, `Connector ${normalized} was not found`);
+    const base = connectorView(resource);
+    let fingerprint = connectorConfigFingerprint(base);
+    const now = new Date().toISOString();
+    const definition = connectorDefinition(resource);
+    if (definition.type === "local") {
+      const unavailable: ConnectorInventoryState = { phase: "UNKNOWN", updatedAt: now, scopeFingerprint: fingerprint, message: "本地 PVC 目录由 Warehouse 扫描器读取；Assets 当前没有独立目录盘点 API。" };
+      await this.inventoryStateStore?.set(normalized, unavailable);
+      return connectorInventoryView(unavailable);
+    }
+    if (definition.type !== "s3" && definition.type !== "oss") {
+      const failed: ConnectorInventoryState = { phase: "FAILED", updatedAt: now, scopeFingerprint: fingerprint, message: "Connector type is unsupported" };
+      await this.inventoryStateStore?.set(normalized, failed);
+      return connectorInventoryView(failed);
+    }
+    const endpoint = typeof definition.endpoint === "string" ? definition.endpoint.trim() : "";
+    const bucket = typeof definition.bucket === "string" ? definition.bucket.trim() : "";
+    if (!endpoint || !bucket || !definition.credentialSecretName) {
+      const failed: ConnectorInventoryState = { phase: "FAILED", updatedAt: now, scopeFingerprint: fingerprint, message: "Object storage endpoint, bucket and credential Secret are required" };
+      await this.inventoryStateStore?.set(normalized, failed);
+      return connectorInventoryView(failed);
+    }
+    if (!this.probeClient.inventoryObjectStorage) {
+      const unavailable: ConnectorInventoryState = { phase: "UNKNOWN", updatedAt: now, scopeFingerprint: fingerprint, message: "当前 Warehouse/Connector client 未提供分页盘点能力。" };
+      await this.inventoryStateStore?.set(normalized, unavailable);
+      return connectorInventoryView(unavailable);
+    }
+    let secret: KubernetesResource | null;
+    try { secret = await this.kube.getCore("secrets", definition.credentialSecretName, this.config.namespace); }
+    catch { secret = null; }
+    fingerprint = connectorConfigFingerprint(base, credentialVersion(secret));
+    const { accessKeyId, secretAccessKey } = secret ? connectorCredentialValues(resource, secret) : {};
+    if (!accessKeyId || !secretAccessKey) {
+      const failed: ConnectorInventoryState = { phase: "FAILED", updatedAt: now, scopeFingerprint: fingerprint, message: "Credential Secret is missing the configured keys" };
+      await this.inventoryStateStore?.set(normalized, failed);
+      return connectorInventoryView(failed);
+    }
+    const previous = await this.inventoryStateStore?.get(normalized);
+    // A running scan can safely resume only when its provider cursor is still
+    // present.  A partial result caused by a hard object limit or a provider
+    // that omitted its cursor must start a fresh pass; reusing its counters
+    // would double-count the first page on the next operator retry.
+    const resumable = previous?.scopeFingerprint === fingerprint
+      && previous.phase !== "COMPLETE"
+      && (previous.phase === "RUNNING" || Boolean(previous.continuationToken));
+    const state = resumable ? previous : undefined;
+    const processedObjects = state?.processedObjects ?? 0;
+    const totalBytes = state?.totalBytes ?? 0;
+    let page: { objects: Array<{ sizeBytes?: number }>; nextToken?: string; truncated: boolean };
+    try {
+      page = await this.probeClient.inventoryObjectStorage({ type: definition.type, endpoint, ...(definition.region ? { region: definition.region } : {}), bucket, ...(definition.prefix !== undefined ? { prefix: definition.prefix } : {}), accessKeyId, secretAccessKey }, state?.continuationToken);
+    } catch (error) {
+      const failed: ConnectorInventoryState = {
+        phase: "FAILED",
+        processedObjects,
+        totalBytes,
+        updatedAt: now,
+        scopeFingerprint: fingerprint,
+        ...(state?.startedAt ? { startedAt: state.startedAt } : { startedAt: now }),
+        ...(state?.continuationToken ? { continuationToken: state.continuationToken } : {}),
+        message: objectProbeErrorMessage(error),
+      };
+      await this.inventoryStateStore?.set(normalized, failed);
+      return connectorInventoryView(failed);
+    }
+    const pageBytes = page.objects.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
+    const nextCount = processedObjects + page.objects.length;
+    const nextBytes = totalBytes + pageBytes;
+    const maxObjects = Number(process.env.ASSETS_CONNECTOR_INVENTORY_MAX_OBJECTS ?? "2000000");
+    const exceedsLimit = Number.isSafeInteger(maxObjects) && maxObjects >= 1 && nextCount >= maxObjects && page.truncated;
+    const missingContinuation = page.truncated && !page.nextToken;
+    const complete = !page.truncated || exceedsLimit || missingContinuation;
+    const next: ConnectorInventoryState = {
+      phase: complete ? (exceedsLimit || missingContinuation ? "PARTIAL" : "COMPLETE") : "RUNNING",
+      processedObjects: nextCount,
+      ...(complete && !exceedsLimit && !missingContinuation ? { totalObjectCount: nextCount } : {}),
+      totalBytes: nextBytes,
+      startedAt: state?.startedAt ?? now,
+      updatedAt: now,
+      ...(complete ? { finishedAt: now } : {}),
+      scopeFingerprint: fingerprint,
+      ...(!complete && page.nextToken ? { continuationToken: page.nextToken } : {}),
+      ...(exceedsLimit ? { message: `盘点达到 ${maxObjects} 个对象上限，结果为部分统计。` } : missingContinuation ? { message: "对象存储返回了截断结果但没有 continuation token，结果为部分统计。" } : {}),
+    };
+    await this.inventoryStateStore?.set(normalized, next);
+    return connectorInventoryView(next);
+  }
+
+  private async probeConnectorOnce(name: string): Promise<ConnectorProbeView> {
+    const normalized = dnsName(name, "connector name");
+    const resource = await this.connectorResource(normalized);
+    if (!resource) {
       throw new AdminHttpError(404, `Connector ${normalized} was not found`);
     }
     const base = connectorView(resource);
@@ -1228,10 +1577,7 @@ export class AssetsAdmin {
       return checkedConnector(base, "ERROR", "Credential Secret could not be read");
     }
     if (!secret) return checkedConnector(base, "ERROR", "Credential Secret was not found");
-    const accessKeyKey = typeof resource.data?.accessKeyKey === "string" && resource.data.accessKeyKey ? resource.data.accessKeyKey : "accessKey";
-    const secretKeyKey = typeof resource.data?.secretKeyKey === "string" && resource.data.secretKeyKey ? resource.data.secretKeyKey : "secretKey";
-    const accessKeyId = secretValue(secret, accessKeyKey);
-    const secretAccessKey = secretValue(secret, secretKeyKey);
+    const { accessKeyId, secretAccessKey } = connectorCredentialValues(resource, secret);
     if (!accessKeyId || !secretAccessKey) return checkedConnector(base, "ERROR", "Credential Secret is missing the configured keys");
     try {
       await this.probeClient.probeObjectStorage({
@@ -1291,7 +1637,42 @@ export class AssetsAdmin {
 
   async listMocDiscoveryRequests(): Promise<MocDiscoveryView[]> {
     const resources = await this.kube.list("mocdiscoveryrequests", "app.kubernetes.io/managed-by=" + ASSETS_MANAGED_BY + ",astro.zhejianglab.org/resource-kind=moc-discovery");
-    return resources.map((resource) => mocDiscoveryView(resource)).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+    const executor = await this.observeExecutor();
+    return resources.map((resource) => this.withDiscoveryObservation(mocDiscoveryView(resource), executor)).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  }
+
+  private executorObservation?: { expires: number; value: Promise<ExecutorObservation> };
+
+  private observeExecutor(): Promise<ExecutorObservation> {
+    if (this.executorObservation && this.executorObservation.expires > Date.now()) return this.executorObservation.value;
+    const value = (async (): Promise<ExecutorObservation> => {
+      const checkedAt = new Date().toISOString();
+      const namespace = this.config.discoveryObserverNamespace ?? "atlas-system";
+      try {
+        const pods = await this.kube.executorPods(namespace, this.config.discoveryObserverSelector ?? "app.kubernetes.io/name=astro-atlas-moc-discovery");
+        if (!pods.length) return { health: "error", checkedAt, reason: "ExecutorMissing", message: "未发现配置的探索执行器实例。", source: `kubernetes:${namespace}/pods` };
+        const findings = await Promise.all(pods.slice(0, 4).map(async pod => {
+          const source = `kubernetes:${namespace}/pods/${pod.metadata?.name}`;
+          const statuses = pod.status?.containerStatuses as Array<{ ready?: boolean; state?: { waiting?: { reason?: string }; terminated?: { reason?: string } } }> | undefined;
+          if (statuses?.some(status => status.ready)) {
+            const finding = executorLogFinding(await this.kube.executorLog(namespace, pod.metadata?.name ?? ""));
+            return finding ? { health: "error" as const, checkedAt, source, ...finding } : { health: "unknown" as const, checkedAt, source, message: "实例就绪；尚无独立的执行循环健康证明。" };
+          }
+          if (statuses?.some(status => status.state?.terminated?.reason === "OOMKilled")) return { health: "error" as const, checkedAt, source, reason: "OOMKilled", message: "探索执行器因超出容器内存限制被终止。" };
+          if (statuses?.some(status => status.state?.waiting?.reason === "CrashLoopBackOff")) return { health: "error" as const, checkedAt, source, reason: "CrashLoopBackOff", message: "探索执行器反复退出，正在等待重启。" };
+          return { health: "error" as const, checkedAt, source, reason: "ExecutorNotReady", message: "探索执行器实例尚未就绪，暂时无法确认接单能力。" };
+        }));
+        return findings.find(finding => finding.health === "unknown") ?? findings[0]!;
+      } catch {
+        return { health: "unavailable", checkedAt, message: "执行器诊断暂不可获取；等待时长仍按提交记录计算。" };
+      }
+    })();
+    this.executorObservation = { expires: Date.now() + 15_000, value };
+    return value;
+  }
+
+  private withDiscoveryObservation(view: MocDiscoveryView, executor: ExecutorObservation): MocDiscoveryView {
+    return { ...view, observation: observeDiscovery(view, executor, this.config.discoveryAcceptTimeoutSeconds ?? 120) };
   }
 
   async getMocDiscoveryRequest(name: string): Promise<MocDiscoveryView> {
@@ -1301,7 +1682,7 @@ export class AssetsAdmin {
       || resource.metadata?.labels?.["astro.zhejianglab.org/resource-kind"] !== "moc-discovery") {
       throw new AdminHttpError(404, `MOC discovery request ${normalized} was not found`);
     }
-    return mocDiscoveryView(resource, true);
+    return this.withDiscoveryObservation(mocDiscoveryView(resource, true), await this.observeExecutor());
   }
 
   async createMocDiscoveryRequest(input: MocDiscoveryInput): Promise<MocDiscoveryView> {
@@ -1379,9 +1760,9 @@ export class AssetsAdmin {
     const sourceLabel = resource.metadata?.labels?.["astro.zhejianglab.org/source-connector"];
     if (!sourceLabel) throw new AdminHttpError(400, `Coverage task ${normalized} has no source connector label`);
     const sourceName = dnsName(sourceLabel, "sourceConnector");
-    const source = await this.kube.getCore("configmaps", sourceName, this.config.namespace);
+    const source = await this.connectorResource(sourceName);
     if (!source) throw new AdminHttpError(400, `Source connector ${sourceName} was not found`);
-    const sourceType = source.data?.type;
+    const sourceType = connectorDefinition(source).type;
     if (sourceType !== "s3" && sourceType !== "oss" && sourceType !== "local") {
       throw new AdminHttpError(400, "Source connector must be S3 / OSS or local");
     }
@@ -1401,7 +1782,7 @@ export class AssetsAdmin {
     const retryRunId = retryName;
     const evidence = originalPlan.evidence && typeof originalPlan.evidence === "object" ? originalPlan.evidence as Record<string, unknown> : {};
     refreshedSpec.credentials = sourceType === "local" ? {} : {
-      source: { secretName: definition.credentialSecretName, accessKeyKey: "accessKey", secretKeyKey: "secretKey" },
+      source: { secretName: definition.credentialSecretName, accessKeyKey: definition.accessKeyKey ?? "accessKey", secretKeyKey: definition.secretKeyKey ?? "secretKey" },
     };
     if (sourceType === "local") {
       const scanner = refreshedSpec.scanner && typeof refreshedSpec.scanner === "object" ? refreshedSpec.scanner as Record<string, unknown> : {};
@@ -1448,9 +1829,9 @@ export class AssetsAdmin {
   async createTask(input: CoverageTaskInput): Promise<CoverageTaskView> {
     if (input.sinkConnector) throw new AdminHttpError(400, "sinkConnector is not supported");
     const sourceName = dnsName(input.sourceConnector, "sourceConnector");
-    const source = await this.kube.getCore("configmaps", sourceName, this.config.namespace);
+    const source = await this.connectorResource(sourceName);
     if (!source) throw new AdminHttpError(400, `Source connector ${sourceName} was not found`);
-    const sourceType = source.data?.type;
+    const sourceType = connectorDefinition(source).type;
     if (sourceType !== "s3" && sourceType !== "oss" && sourceType !== "local") throw new AdminHttpError(400, "Source connector must be S3 / OSS or local");
     const definition = connectorDefinition(source);
     if (sourceType === "local") {

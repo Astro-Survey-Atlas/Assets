@@ -1,17 +1,20 @@
 import { createReadStream } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { open, readFile, stat } from "node:fs/promises";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 
 import { AdminHttpError, AssetsAdmin, KubernetesApiError, SUPPORTED_COVERAGE_MODES, adminFromRequest, type ConnectorInput, type CoverageTaskInput, type MocDiscoveryInput } from "./admin.js";
+import { ConnectorInventoryStateStore, ConnectorProbeStateStore } from "./connector-state.js";
 import { createArtifactStoreFromProcess } from "./artifact-store.js";
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
 import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog, withCoverageRevisions, type CoverageCellLayer } from "./coverage.js";
 import { overlapForLayers } from "./overlap.js";
-import { ProductStore, type MocProductRegistrationInput, type ProductRecord } from "./products.js";
+import { ProductStore, type MocProductRegistrationInput, type ProductExecutionRecord, type ProductRecord } from "./products.js";
+import { aggregateReadiness, deriveProductReadiness, type ProductReadiness, type ReadinessAggregate, type ReadinessLayer } from "./admin-readiness.js";
 import { SurveyEditorialStore, type SurveyEditorialContent, type SurveyEditorialRecord } from "./editorial.js";
 import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
 import { CoverageEvidenceStore, EvidenceStoreError, type DownloadPlanEntrypoint, type ReverseLookupResult, type WarehouseLayerSnapshot } from "./evidence-store.js";
@@ -25,7 +28,7 @@ import { ContentArchiveError } from "./content-archive.js";
 import { buildPublicProductEvidence } from "./public-product-evidence.js";
 import { StateSnapshotCoordinator, STATE_SNAPSHOT_NAMESPACES, type StateSnapshotSink, type StateSnapshotSyncStatus } from "./state-snapshot.js";
 import { UploadSpool } from "./upload-spool.js";
-import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductVerificationStatus, PublicSurveyModality } from "./types.js";
+import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductReadiness, PublicProductVerificationStatus, PublicReadinessAggregate, PublicSurveyModality } from "./types.js";
 
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
@@ -285,7 +288,7 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
 }
 
 await reloadRuntimeCoverage();
-const admin = new AssetsAdmin();
+const admin = new AssetsAdmin(undefined, undefined, undefined, new ConnectorProbeStateStore(contentRoot, stateSnapshotSink), new ConnectorInventoryStateStore(contentRoot, stateSnapshotSink));
 const products = new ProductStore(stateSnapshotSink, contentRoot);
 await products.initialize(releaseRoot, coverageCatalog.layers);
 const publisher = new PublicReleasePublisher({
@@ -296,6 +299,7 @@ const publisher = new PublicReleasePublisher({
   loadPackages: dynamicResourcePackages,
   loadProducts: () => products.list(),
   snapshotSink: stateSnapshotSink,
+  verificationTarget: process.env.ASSETS_PUBLIC_VERIFY_URL?.trim() || undefined,
 });
 const mocBuildService = new MocBuildService({
   store: mocBuildStore,
@@ -339,7 +343,9 @@ async function refreshDynamicResourcePackages(): Promise<void> {
 }
 
 function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurveyIndex>>): Awaited<ReturnType<typeof loadSurveyIndex>> {
-  const published = products.list().filter((record): record is ProductRecord & { published: NonNullable<ProductRecord["published"]> } => Boolean(record.published));
+  const allRecords = products.list();
+  const retiredProductIds = new Set(allRecords.filter((record) => Boolean(record.retiredAt)).map((record) => record.productId));
+  const published = allRecords.filter((record): record is ProductRecord & { published: NonNullable<ProductRecord["published"]> } => Boolean(record.published) && !record.retiredAt);
   if (!published.length) return index;
   const records = new Map(published.map((record) => [record.productId, record.published]));
   const publicModality = (value: string | undefined): PublicSurveyModality => {
@@ -364,7 +370,7 @@ function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurv
     ...survey,
     releases: survey.releases.map((release) => ({
       ...release,
-      products: release.products.map((product) => {
+      products: release.products.filter((product) => !retiredProductIds.has(product.productId ?? "")).map((product) => {
         const override = records.get(product.productId ?? "");
         return override ? applyOverride(product, override) : product;
       }),
@@ -431,7 +437,7 @@ function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurv
   return {
     ...index,
     surveys: surveys.map((survey) => {
-      const surveyLayers = coverageCatalog.layers.filter((layer) => layer.surveyId === survey.id);
+      const surveyLayers = coverageCatalog.layers.filter((layer) => layer.surveyId === survey.id && !isRetiredLayer(layer));
       const productsForSurvey = survey.releases.flatMap((release) => release.products);
       return {
         ...survey,
@@ -450,7 +456,80 @@ function adminSurveyIndex(): Awaited<ReturnType<typeof loadSurveyIndex>> {
 
 function publicSurveyIndex(): Awaited<ReturnType<typeof loadSurveyIndex>> {
   const enriched = editorial.applyPublished(runtimeSurveyIndex);
-  return { ...enriched, surveys: enriched.surveys.filter((survey) => !isDeniedSurvey(survey.id)) };
+  const publishedReadiness = new Map(products.list().flatMap((record) => {
+    if (!record.published || record.retiredAt) return [];
+    const readiness = productReadiness(record).published;
+    return readiness ? [[record.productId, readiness] as const] : [];
+  }));
+  const aggregate = (values: PublicProductReadiness[]): PublicReadinessAggregate => aggregateReadiness(values) as PublicReadinessAggregate;
+  return {
+    ...enriched,
+    surveys: enriched.surveys
+      .filter((survey) => !isDeniedSurvey(survey.id))
+      .map((survey) => {
+        const releases = survey.releases.map((release) => {
+          const products = release.products.map((product) => {
+            const readiness = product.productId ? publishedReadiness.get(product.productId) : undefined;
+            return readiness ? { ...product, readiness } : product;
+          });
+          const releaseReadiness = aggregate(products.flatMap((product) => product.readiness ? [product.readiness] : []));
+          return { ...release, products, ...(releaseReadiness.productCount ? { readiness: releaseReadiness } : {}) };
+        });
+        const surveyReadiness = aggregate(releases.flatMap((release) => release.products.flatMap((product) => product.readiness ? [product.readiness] : [])));
+        return { ...survey, releases, ...(surveyReadiness.productCount ? { readiness: surveyReadiness } : {}) };
+      }),
+  };
+}
+
+function isRetiredLayer(layer: Pick<CoverageCellLayer, "layerId" | "surveyId" | "releaseId" | "product">): boolean {
+  return products.list().some((record) => Boolean(record.retiredAt)
+    && (record.draft.layerId === layer.layerId
+      || (record.draft.surveyId === layer.surveyId && record.draft.releaseId === layer.releaseId && record.draft.name === layer.product)));
+}
+
+function publicCoverageCatalog(): typeof coverageCatalog {
+  const records = new Map([...coverageCatalog.records.entries()].filter(([, layer]) => !isRetiredLayer(layer)));
+  return { ...coverageCatalog, layers: coverageCatalog.layers.filter((layer) => records.has(layer.layerId)), records };
+}
+
+function isRetiredFootprint(footprint: { surveyId: string; releaseId: string; product: string }): boolean {
+  return products.list().some((record) => Boolean(record.retiredAt)
+    && record.draft.surveyId === footprint.surveyId
+    && record.draft.releaseId === footprint.releaseId
+    && record.draft.name === footprint.product);
+}
+
+function fullyRetiredSurveyIds(): Set<string> {
+  const bySurvey = new Map<string, ProductRecord[]>();
+  for (const product of products.list()) {
+    const records = bySurvey.get(product.draft.surveyId) ?? [];
+    records.push(product);
+    bySurvey.set(product.draft.surveyId, records);
+  }
+  return new Set([...bySurvey.entries()]
+    .filter(([, records]) => records.length > 0 && records.every((record) => Boolean(record.retiredAt)))
+    .map(([surveyId]) => surveyId));
+}
+
+function isRetiredAsset(record: PublicAssetRecord): boolean {
+  if (products.list().some((product) => Boolean(product.retiredAt)
+    && record.product === product.draft.name
+    && record.surveyId === product.draft.surveyId
+    && record.releaseId === product.draft.releaseId)) return true;
+  // Resource Packages are survey-level archives. They have no single product
+  // identity, so hide them only when the entire represented survey is retired;
+  // historical release archives remain available through release history.
+  return record.kind === "package" && typeof record.surveyId === "string" && fullyRetiredSurveyIds().has(record.surveyId);
+}
+
+function publicAssetCatalog(): LoadedCatalog {
+  const visibleManifestFiles = catalog.manifest.files.filter((record) => !isRetiredAsset(record));
+  const visibleFiles = new Map([...catalog.files.entries()].filter(([, entry]) => !isRetiredAsset(entry.record)));
+  return {
+    ...catalog,
+    manifest: { ...catalog.manifest, files: visibleManifestFiles },
+    files: visibleFiles,
+  };
 }
 
 function editorialApiContent(content: SurveyEditorialContent | null): SurveyEditorialContent | null {
@@ -518,8 +597,7 @@ function productCoverage(record: ProductRecord): Record<string, unknown> | undef
   return { layerId: layer.layerId, availableOrders: layer.availableOrders, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder, coverageRole: layer.coverageRole, areaDeg2: layer.areaDeg2 };
 }
 
-function productCoverageLayer(record: ProductRecord, build?: ReturnType<MocBuildStore["get"]>): CoverageCellLayer | undefined {
-  const content = record.published ?? record.draft;
+function productCoverageLayer(record: ProductRecord, build?: ReturnType<MocBuildStore["get"]>, content = record.published ?? record.draft): CoverageCellLayer | undefined {
   const direct = content.layerId ? coverageCatalog.records.get(content.layerId) : undefined;
   if (direct) return direct;
   const matches = [...coverageCatalog.records.values()].filter((candidate) => candidate.surveyId === content.surveyId
@@ -531,6 +609,135 @@ function productCoverageLayer(record: ProductRecord, build?: ReturnType<MocBuild
     if (publishedLayer) return publishedLayer;
   }
   return matches.find((candidate) => candidate.layerId.startsWith("moc-")) ?? matches[0];
+}
+
+function readinessLayer(layer: CoverageCellLayer | undefined): ReadinessLayer | undefined {
+  if (!layer) return undefined;
+  const snapshot = warehouseLayerSnapshots.get(layer.layerId);
+  return {
+    availableOrders: layer.availableOrders,
+    overviewOrder: layer.overviewOrder,
+    maxOrder: layer.maxOrder,
+    cellCount: layer.cellCount,
+    ...(layer.recipe ? { recipe: {
+      mode: layer.recipe.mode,
+      coordinateFrame: layer.recipe.coordinateFrame,
+      ordering: layer.recipe.ordering,
+      sourceSnapshotSha256: layer.recipe.sourceSnapshotSha256,
+    } } : {}),
+    ...(layer.sourceUnitIndex ? { sourceUnitIndex: {
+      status: layer.sourceUnitIndex.status,
+      unitKind: layer.sourceUnitIndex.unitKind,
+      notes: layer.sourceUnitIndex.notes,
+    } } : {}),
+    ...(snapshot ? {
+      fileCount: snapshot.fileCount,
+      coverageCount: snapshot.coverageCount,
+      errorCount: snapshot.errorCount,
+      updatedAt: snapshot.updatedAt,
+    } : {}),
+  };
+}
+
+function readinessLayerFromBuild(build: ReturnType<MocBuildStore["get"]> | undefined): ReadinessLayer | undefined {
+  const outputs = build?.outputs;
+  const orders = outputs?.availableOrders?.filter((order): order is number => Number.isSafeInteger(order) && order >= 0) ?? [];
+  if (!outputs || !orders.length || !["STAGED", "PUBLISHED", "DUPLICATE"].includes(build?.phase ?? "")) return undefined;
+  const overviewOrder = Math.min(...orders);
+  return {
+    availableOrders: [...new Set(orders)].sort((a, b) => a - b),
+    overviewOrder,
+    maxOrder: outputs.maxOrder ?? Math.max(...orders),
+    ...(outputs.cellCount !== undefined ? { cellCount: outputs.cellCount } : {}),
+    recipe: { mode: "native-moc", coordinateFrame: "ICRS", ordering: "NESTED", sourceSnapshotSha256: build?.source.snapshotSha256 },
+    sourceUnitIndex: { status: "entrypoint-only", notes: "已锁定 MOC 构建输出；尚未生成单元到文件反查索引。" },
+  };
+}
+
+function productReadinessForContent(record: ProductRecord, content: ProductRecord["draft"] | NonNullable<ProductRecord["published"]>, build?: ReturnType<MocBuildStore["get"]>): ProductReadiness {
+  const layer = productCoverageLayer(record, build, content);
+  const revision = content === record.draft ? record.revision : record.publishedRevision;
+  const executions = revision === null || revision === undefined ? [] : (record.executions ?? []).filter((entry) => entry.revision === revision);
+  const executionEvidence = executions.length ? {
+    executionRecorded: executions.some((entry) => entry.status === "passed"),
+    outputValidated: executions.some((entry) => entry.status === "passed" && entry.checks.some((check) => check.status === "passed" && /output|hash|integrity/i.test(check.id))),
+    isolatedRestoreValidated: executions.some((entry) => entry.status === "passed" && entry.checks.some((check) => check.status === "passed" && /isolated|restore/i.test(check.id))),
+  } : undefined;
+  const latestVerification = executions.filter((entry) => entry.stepId === "verify-moc-build").at(-1);
+  if (executionEvidence && latestVerification) executionEvidence.outputValidated = latestVerification.status === "passed";
+  return deriveProductReadiness({
+    content: {
+      productId: content.productId,
+      surveyId: content.surveyId,
+      releaseId: content.releaseId,
+      name: content.name,
+      mode: content.mode,
+      sourceTier: content.sourceTier,
+      sourceUrl: content.sourceUrl,
+      sourceLabel: content.sourceLabel,
+      geometrySourceUrl: content.geometrySourceUrl,
+      geometrySourceLabel: content.geometrySourceLabel,
+      recipeHash: content.recipeHash,
+    },
+    layer: readinessLayer(layer) ?? readinessLayerFromBuild(build),
+    ...(build ? { build: {
+      phase: build.phase,
+      source: { snapshotSha256: build.source.snapshotSha256 },
+      ...(build.outputs ? { outputs: { availableOrders: build.outputs.availableOrders, maxOrder: build.outputs.maxOrder } } : {}),
+      ...(build.publicationId ? { publicationId: build.publicationId } : {}),
+    } } : {}),
+    ...(executionEvidence ? { evidence: executionEvidence } : {}),
+  });
+}
+
+function productReadiness(record: ProductRecord): { draft: ProductReadiness; published: ProductReadiness | null } {
+  const summary = adminMocBuildSummary(record.productId);
+  const build = summary ? mocBuildStore.get(String(summary.name)) : undefined;
+  return {
+    draft: productReadinessForContent(record, record.draft, build),
+    published: record.published ? productReadinessForContent(record, record.published, build) : null,
+  };
+}
+
+function currentReadiness(record: ProductRecord): ProductReadiness {
+  const summary = productReadiness(record);
+  return summary.published ?? summary.draft;
+}
+
+function readinessSummaryForRecords(records: readonly ProductRecord[]): { draft: ReadinessAggregate; published: ReadinessAggregate } {
+  const versions = records.map((record) => productReadiness(record));
+  return {
+    draft: aggregateReadiness(versions.map((version) => version.draft)),
+    published: aggregateReadiness(versions.flatMap((version) => version.published ? [version.published] : [])),
+  };
+}
+
+const NON_ACCEPTABLE_PUBLICATION_GAPS = new Set([
+  "source-not-traceable",
+  "validated-coverage-missing",
+  "coverage-query-unavailable",
+  "output-validation-missing",
+]);
+
+function assertReviewableProduct(record: ProductRecord, acceptedGaps: readonly string[]): void {
+  const readiness = productReadiness(record).draft;
+  const unknown = acceptedGaps.filter((gap) => !readiness.gaps.includes(gap));
+  if (unknown.length) throw new AdminHttpError(400, `acceptedGaps contains gaps not present in the current revision: ${unknown.join(", ")}`);
+  const blocked = readiness.gaps.filter((gap) => NON_ACCEPTABLE_PUBLICATION_GAPS.has(gap));
+  if (blocked.length) throw new AdminHttpError(409, `Product cannot be reviewed for publication until evidence is fixed: ${blocked.join(", ")}`);
+}
+
+function assertPublishableProduct(record: ProductRecord): void {
+  const review = record.review;
+  if (!review || review.revision !== record.revision || review.contentSha256 !== record.contentSha256) {
+    throw new AdminHttpError(409, "Product revision must be reviewed before publication");
+  }
+  const readiness = productReadiness(record).draft;
+  const blocked = readiness.gaps.filter((gap) => NON_ACCEPTABLE_PUBLICATION_GAPS.has(gap));
+  if (blocked.length) throw new AdminHttpError(409, `Product publication is blocked by missing evidence: ${blocked.join(", ")}`);
+  const accepted = new Set(review.acceptedGaps);
+  const unaccepted = readiness.gaps.filter((gap) => !accepted.has(gap));
+  if (unaccepted.length) throw new AdminHttpError(409, `Product publication requires explicit acceptance of evidence gaps: ${unaccepted.join(", ")}`);
 }
 
 function adminMocBuildSummaryForBuild(build: ReturnType<MocBuildStore["get"]>): Record<string, unknown> {
@@ -567,18 +774,23 @@ function adminProductLifecycle(record: ProductRecord, build?: ReturnType<MocBuil
   const layer = productCoverageLayer(record, build);
   const published = Boolean(record.published);
   const hasPublication = Boolean(build?.publicationId);
-  const runtimeState = hasPublication
-    ? layer ? "ACTIVE" : "INVALID"
-    : layer ? "CATALOG_BASELINE" : "INACTIVE";
+  const retired = Boolean(record.retiredAt);
+  const runtimeState = retired
+    ? "INACTIVE"
+    : hasPublication
+      ? layer ? "ACTIVE" : "INVALID"
+      : layer ? "CATALOG_BASELINE" : "INACTIVE";
   return {
     publication: {
-      state: published ? "PUBLISHED" : "DRAFT",
+      state: retired ? "RETIRED" : published ? "PUBLISHED" : "DRAFT",
       ...(record.publishedAt ? { publishedAt: record.publishedAt } : {}),
+      ...(record.retiredAt ? { retiredAt: record.retiredAt } : {}),
+      ...(record.retirementReason ? { retirementReason: record.retirementReason } : {}),
       ...(build?.publicationId ? { publicationId: build.publicationId } : {}),
     },
     runtime: {
       state: runtimeState,
-      ...(layer ? {
+      ...(layer && !retired ? {
         layerId: layer.layerId,
         catalogRevision: coverageCatalog.revision,
         availableOrders: layer.availableOrders,
@@ -587,12 +799,12 @@ function adminProductLifecycle(record: ProductRecord, build?: ReturnType<MocBuil
       } : {}),
     },
     links: {
-      product: published
+      product: published && !retired
         ? `/api/v1/products/${encodeURIComponent(record.productId)}`
         : `/api/v1/admin/products/${encodeURIComponent(record.productId)}`,
       catalog: "/api/v1/coverage/catalog",
-      ...(published && layer ? { sky: `/?survey=${encodeURIComponent(record.draft.surveyId)}&product=${encodeURIComponent(record.productId)}` } : {}),
-      ...(published && layer ? { moc: `/api/v1/coverage/layers/${encodeURIComponent(layer.layerId)}/moc.fits` } : {}),
+      ...(published && !retired && layer ? { sky: `/?survey=${encodeURIComponent(record.draft.surveyId)}&product=${encodeURIComponent(record.productId)}` } : {}),
+      ...(published && !retired && layer ? { moc: `/api/v1/coverage/layers/${encodeURIComponent(layer.layerId)}/moc.fits` } : {}),
     },
   };
 }
@@ -607,6 +819,23 @@ function adminMocBuildView(build: ReturnType<MocBuildStore["get"]>): Record<stri
 
 type MocRegistrationDefaultField = "releaseId" | "releaseLabel" | "releaseKind" | "productName" | "productDescription" | "productStatus" | "modality" | "dataOrigin";
 type MocRegistrationDefaults = Pick<MocProductRegistrationInput, MocRegistrationDefaultField>;
+
+async function mocSurveyFacts(build: ReturnType<MocBuildStore["get"]>) {
+  const discovery = await admin.getMocDiscoveryRequest(build.discoveryRequestName);
+  const surveyId = build.surveyId ?? discovery.surveyId ?? registrationSlug(discovery.surveyName);
+  const survey = runtimeSurveyIndex.surveys.find((entry) => entry.id === surveyId || entry.name.toLowerCase() === discovery.surveyName.toLowerCase());
+  const existing = products.list().find((entry) => entry.draft.surveyId === (survey?.id ?? surveyId) && entry.draft.publicSurvey)?.draft.publicSurvey;
+  const palette = ["#5678ad", "#528c79", "#9670a9", "#b58049", "#518caa", "#ad6476"];
+  const colorIndex = [...surveyId].reduce((sum, letter) => (sum * 31 + letter.charCodeAt(0)) >>> 0, 0) % palette.length;
+  return {
+    surveyId: survey?.id ?? surveyId,
+    surveyName: survey?.name ?? existing?.name ?? discovery.surveyName,
+    mission: survey?.mission ?? existing?.mission ?? discovery.surveyName,
+    surveyDescription: survey?.description ?? existing?.description ?? `${discovery.surveyName} 的公开覆盖产品。巡天简介尚待来源核实。`,
+    surveyColor: survey?.color ?? existing?.color ?? palette[colorIndex]!,
+    surveyModalities: survey?.modalities ?? existing?.modalities ?? ["imaging"],
+  };
+}
 
 function registrationSlug(value: string | undefined, fallback = "public"): string {
   const normalized = (value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 63);
@@ -783,6 +1012,7 @@ function buildPublicProductDossier(record: ProductRecord): PublicProductDossier 
   // internal fields out of the response.
   const product = effectivePublicProduct(record)!;
   const canonicalProduct = record.published ?? record.draft;
+  const readiness = productReadiness(record).published ?? productReadiness(record).draft;
   const layer = productCoverageLayer(record);
   const assets = productAssets(record);
   const catalogEntry = productCatalogEntry(record);
@@ -847,6 +1077,7 @@ function buildPublicProductDossier(record: ProductRecord): PublicProductDossier 
     schemaVersion: 1,
     identity: { productId: product.productId, surveyId: product.surveyId, releaseId: product.releaseId, name: product.name, ...(product.modality ? { modality: product.modality } : {}), ...(product.dataOrigin ? { dataOrigin: product.dataOrigin } : {}), ...(product.sourceTier ? { sourceTier: product.sourceTier } : {}) },
     conclusion: { status, summary, coverageAvailable: hasCoverage },
+    readiness,
     coverage: { available: hasCoverage, ...(layer ? { layerId: layer.layerId, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder, cellCount: layer.cellCount, cellCounts, areaDeg2: layer.areaDeg2, ...(layer.coverageRole ?? product.coverageRole ? { coverageRole: layer.coverageRole ?? product.coverageRole } : {}), ...(mocAsset ? { mocUrl: `/api/v1/coverage/layers/${encodeURIComponent(layer.layerId)}/moc.fits` } : {}), ...(previewAsset ? { previewUrl: `/api/v1/assets/${encodeURIComponent(previewAsset.id)}/preview` } : {}) } : {}), coordinateFrame: "ICRS", ordering: "NESTED", availableOrders, precision },
     source: { ...(product.sourceLabel || catalogEntry?.sourceLabel ? { label: product.sourceLabel ?? catalogEntry?.sourceLabel } : {}), ...(official?.url ? { url: official.url } : {}), ...(product.geometrySourceLabel || catalogEntry?.geometrySourceLabel ? { geometryLabel: product.geometrySourceLabel ?? catalogEntry?.geometrySourceLabel } : {}), ...(geometry?.url ? { geometryUrl: geometry.url } : {}), ...(snapshot ? { snapshot } : {}), references: evidence.sourceReferences },
     derivation: { ...(layer?.recipe?.mode ? { mode: layer.recipe.mode } : product.mode ? { mode: product.mode } : {}), coordinateFrame: "ICRS", ordering: "NESTED", ...(layer?.coverageRole ?? product.coverageRole ? { coverageRole: layer?.coverageRole ?? product.coverageRole } : {}), availableOrders, steps: evidence.steps },
@@ -869,6 +1100,7 @@ function publicProductListView(record: ProductRecord): Record<string, unknown> {
     ...published,
     ...(editorialProduct ? { description: editorialProduct.description, ...(editorialProduct.reason ? { reason: editorialProduct.reason } : {}), ...(editorialProduct.manualStep ? { manualStep: editorialProduct.manualStep } : {}) } : {}),
     ...(coverage ? { coverage } : {}),
+    readiness: dossier.readiness,
     detailUrl: `/api/v1/products/${encodeURIComponent(record.productId)}`,
     evidenceUrl: dossier.evidenceUrl,
     links: dossier.links,
@@ -877,34 +1109,58 @@ function publicProductListView(record: ProductRecord): Record<string, unknown> {
 
 function adminProductView(record: ProductRecord): Record<string, unknown> {
   const mocBuild = adminMocBuildSummary(record.productId);
-  return { ...record, ...(productCoverage(record) ? { coverage: productCoverage(record) } : {}), ...(mocBuild ? { mocBuild } : {}), lifecycle: adminProductLifecycle(record, mocBuild ? mocBuildStore.get(String(mocBuild.name)) : undefined) };
+  const { executions, ...base } = record;
+  const buildRecord = mocBuild ? mocBuildStore.get(String(mocBuild.name)) : undefined;
+  const buildExecution: ProductExecutionRecord | undefined = buildRecord ? {
+    executionId: `moc-build:${buildRecord.name}`,
+    revision: record.revision,
+    stepId: "moc-build",
+    status: buildRecord.phase === "FAILED" ? "failed" : ["STAGED", "PUBLISHED", "DUPLICATE"].includes(buildRecord.phase) ? "passed" : "running",
+    startedAt: buildRecord.createdAt,
+    ...(buildRecord.phase === "FAILED" || ["STAGED", "PUBLISHED", "DUPLICATE"].includes(buildRecord.phase) ? { finishedAt: buildRecord.updatedAt } : {}),
+    tool: { name: "MOC-Core-SDK" },
+    inputs: [{ label: "source snapshot", ...(buildRecord.source.evidenceRef ? { ref: buildRecord.source.evidenceRef } : {}), ...(buildRecord.source.snapshotSha256 ? { sha256: buildRecord.source.snapshotSha256 } : {}), ...(buildRecord.source.sizeBytes !== undefined ? { sizeBytes: buildRecord.source.sizeBytes } : {}) }],
+    parameters: { candidateId: buildRecord.candidateId },
+    outputs: Object.entries(buildRecord.outputs ?? {}).flatMap(([label, value]) => {
+      if (!value || typeof value !== "object") return [];
+      const output = value as { ref?: unknown; sha256?: unknown; sizeBytes?: unknown };
+      if (typeof output.ref !== "string" && typeof output.sha256 !== "string") return [];
+      return [{ label, ...(typeof output.ref === "string" ? { ref: output.ref } : {}), ...(typeof output.sha256 === "string" ? { sha256: output.sha256 } : {}), ...(typeof output.sizeBytes === "number" ? { sizeBytes: output.sizeBytes } : {}) }];
+    }),
+    checks: [
+      { id: "source-snapshot", status: buildRecord.source.snapshotSha256 ? "passed" : "failed" },
+      { id: "output-integrity", status: ["STAGED", "PUBLISHED", "DUPLICATE"].includes(buildRecord.phase) ? "passed" : "not-applicable" },
+    ],
+    ...(buildRecord.error?.message ? { error: buildRecord.error.message } : {}),
+  } : undefined;
+  const evidence = [...(buildExecution ? [buildExecution] : []), ...(executions ?? [])].slice(-64);
+  return {
+    ...base,
+    ...(evidence.length ? { executionEvidence: evidence } : {}),
+    ...(productCoverage(record) ? { coverage: productCoverage(record) } : {}),
+    ...(mocBuild ? { mocBuild } : {}),
+    readiness: productReadiness(record),
+    lifecycle: adminProductLifecycle(record, mocBuild ? mocBuildStore.get(String(mocBuild.name)) : undefined),
+    ...(record.retiredAt ? { retiredAt: record.retiredAt } : {}),
+    ...(record.retirementReason ? { retirementReason: record.retirementReason } : {}),
+  };
 }
 
 function adminProductSurveys(records: ProductRecord[], index: typeof runtimeSurveyIndex): Array<Record<string, unknown>> {
   const byProductId = new Map(records.map((record) => [record.productId, record]));
   const seen = new Set<string>();
-  const surveys = index.surveys.map((survey) => ({
-    id: survey.id,
-    surveyId: survey.id,
-    name: survey.name,
-    mission: survey.mission,
-    color: survey.color,
-    description: survey.description,
-    modalities: survey.modalities,
-    imageUrl: survey.imageUrl,
-    statistics: survey.statistics,
-    coverageOrders: survey.coverageOrders,
-    releases: survey.releases.map((release) => ({
-      id: release.id,
-      label: release.label,
-      kind: release.kind,
-      ...(release.releasedYear !== undefined ? { releasedYear: release.releasedYear } : {}),
-      modalities: release.modalities,
-      coverageOrders: release.coverageOrders,
-      products: release.products.map((product) => {
+  const surveys = index.surveys.map((survey) => {
+    const surveyRecords: ProductRecord[] = [];
+    const releases = survey.releases.map((release) => {
+      const releaseRecords: ProductRecord[] = [];
+      const products = release.products.map((product) => {
         const productId = product.productId ?? `${survey.id}:${release.id}:${product.name}`;
         const record = byProductId.get(productId);
-        if (record) seen.add(productId);
+        if (record) {
+          seen.add(productId);
+          releaseRecords.push(record);
+          surveyRecords.push(record);
+        }
         const coverage = record ? productCoverage(record) : product.coverage;
         const mocBuild = record ? adminMocBuildSummary(record.productId) : undefined;
         return {
@@ -912,36 +1168,213 @@ function adminProductSurveys(records: ProductRecord[], index: typeof runtimeSurv
           productId,
           ...(coverage ? { coverage } : {}),
           ...(mocBuild ? { mocBuild } : {}),
-          ...(record ? { lifecycle: adminProductLifecycle(record, mocBuild ? mocBuildStore.get(String(mocBuild.name)) : undefined) } : {}),
+          ...(record ? { readiness: productReadiness(record), lifecycle: adminProductLifecycle(record, mocBuild ? mocBuildStore.get(String(mocBuild.name)) : undefined), ...(record.retiredAt ? { retiredAt: record.retiredAt } : {}), ...(record.retirementReason ? { retirementReason: record.retirementReason } : {}) } : {}),
           review: record ? {
-            state: record.published ? "published" : "draft",
+            state: record.retiredAt ? "retired" : record.published ? "published" : record.review?.revision === record.revision && record.review.contentSha256 === record.contentSha256 ? "reviewed" : "draft",
             draftRevision: record.revision,
             publishedRevision: record.publishedRevision,
             updatedAt: record.updatedAt,
             publishedAt: record.publishedAt,
+            ...(record.review ? { reviewedRevision: record.review.revision, reviewedAt: record.review.reviewedAt, acceptedGaps: record.review.acceptedGaps } : {}),
           } : { state: "unmatched" },
         };
-      }),
-    })),
-  }));
-  const unmatchedProducts = records.filter((record) => !seen.has(record.productId)).map((record) => ({
+      });
+      return {
+        id: release.id,
+        label: release.label,
+        kind: release.kind,
+        ...(release.releasedYear !== undefined ? { releasedYear: release.releasedYear } : {}),
+        modalities: release.modalities,
+        coverageOrders: release.coverageOrders,
+        readiness: readinessSummaryForRecords(releaseRecords),
+        products,
+      };
+    });
+    return {
+      id: survey.id,
+      surveyId: survey.id,
+      name: survey.name,
+      mission: survey.mission,
+      color: survey.color,
+      description: survey.description,
+      modalities: survey.modalities,
+      imageUrl: survey.imageUrl,
+      statistics: survey.statistics,
+      coverageOrders: survey.coverageOrders,
+      readiness: readinessSummaryForRecords(surveyRecords),
+      releases,
+    };
+  });
+  const unmatchedRecords = records.filter((record) => !seen.has(record.productId));
+  const unmatchedProducts = unmatchedRecords.map((record) => ({
     productId: record.productId,
     surveyId: record.draft.surveyId,
     releaseId: record.draft.releaseId,
     name: record.draft.name,
     modality: record.draft.modality,
+    ...(record.retiredAt ? { retiredAt: record.retiredAt } : {}),
+    ...(record.retirementReason ? { retirementReason: record.retirementReason } : {}),
+    readiness: productReadiness(record),
     review: {
-      state: record.published ? "unmatched-published" : "unmatched-draft",
+      state: record.retiredAt ? "retired" : record.published ? "unmatched-published" : "unmatched-draft",
       draftRevision: record.revision,
       publishedRevision: record.publishedRevision,
       updatedAt: record.updatedAt,
       publishedAt: record.publishedAt,
+      ...(record.review ? { reviewedRevision: record.review.revision, reviewedAt: record.review.reviewedAt, acceptedGaps: record.review.acceptedGaps } : {}),
     },
   }));
   const unmatchedBuilds = adminUnmatchedMocBuilds();
-  const result: Array<Record<string, unknown>> = unmatchedProducts.length ? [...surveys, { id: "__unmatched__", surveyId: "__unmatched__", name: "未匹配公共 Catalog 的产品", mission: "Assets editorial queue", color: "#82979e", description: "这些产品存在于 Assets 编辑存储，但没有对应的公共 survey/release/product 记录。", modalities: [], imageUrl: "", statistics: { publicProducts: unmatchedProducts.length, acquired: 0, overviewOnly: 0, awaitingGeometry: unmatchedProducts.length, notApplicable: 0, footprintCells: 0 }, releases: [], unmatchedProducts }] : [...surveys];
+  const result: Array<Record<string, unknown>> = unmatchedProducts.length ? [...surveys, { id: "__unmatched__", surveyId: "__unmatched__", name: "未匹配公共 Catalog 的产品", mission: "Assets editorial queue", color: "#82979e", description: "这些产品存在于 Assets 编辑存储，但没有对应的公共 survey/release/product 记录。", modalities: [], imageUrl: "", statistics: { publicProducts: unmatchedProducts.length, acquired: 0, overviewOnly: 0, awaitingGeometry: unmatchedProducts.length, notApplicable: 0, footprintCells: 0 }, readiness: readinessSummaryForRecords(unmatchedRecords), releases: [], unmatchedProducts }] : [...surveys];
   if (unmatchedBuilds.length) result.push({ id: "__moc-builds__", surveyId: "__moc-builds__", name: "待登记 MOC 构建", mission: "Assets editorial queue", color: "#42d5c4", description: "这些 MOC 已完成构建但尚未绑定到公共 survey / release / product。登记后才能进入产品文稿审核与发布。", modalities: [], imageUrl: "", statistics: { publicProducts: 0, acquired: 0, overviewOnly: 0, awaitingGeometry: unmatchedBuilds.length, notApplicable: 0, footprintCells: 0 }, releases: [], unmatchedBuilds });
   return result;
+}
+
+function overviewSurveySummary(value: Record<string, unknown>): Record<string, unknown> {
+  const releases = Array.isArray(value.releases) ? value.releases : [];
+  return {
+    id: value.id,
+    surveyId: value.surveyId,
+    name: value.name,
+    mission: value.mission,
+    modalities: value.modalities,
+    statistics: value.statistics,
+    readiness: value.readiness,
+    releases: releases.map((releaseValue) => {
+      const release = releaseValue && typeof releaseValue === "object" && !Array.isArray(releaseValue) ? releaseValue as Record<string, unknown> : {};
+      const products = Array.isArray(release.products) ? release.products : [];
+      return {
+        id: release.id,
+        label: release.label,
+        kind: release.kind,
+        readiness: release.readiness,
+        products: products.map((productValue) => {
+          const product = productValue && typeof productValue === "object" && !Array.isArray(productValue) ? productValue as Record<string, unknown> : {};
+          return {
+            productId: product.productId,
+            name: product.name,
+            modality: product.modality,
+            status: product.status,
+            readiness: product.readiness,
+            review: product.review,
+          };
+        }),
+      };
+    }),
+  };
+}
+
+function connectorScope(connector: Awaited<ReturnType<AssetsAdmin["listConnectors"]>>[number]): Record<string, unknown> {
+  if (connector.type === "local") {
+    return { kind: "pvc", ...(connector.pvcName ? { pvcName: connector.pvcName } : {}), ...(connector.basePath ? { basePath: connector.basePath } : {}), ...(connector.localPath ? { legacyPath: connector.localPath } : {}) };
+  }
+  return {
+    kind: "bucket-prefix",
+    ...(connector.endpoint ? { endpoint: connector.endpoint } : {}),
+    ...(connector.region ? { region: connector.region } : {}),
+    ...(connector.bucket ? { bucket: connector.bucket } : {}),
+    ...(connector.prefix ? { prefix: connector.prefix } : {}),
+  };
+}
+
+function connectorSummary(connector: Awaited<ReturnType<AssetsAdmin["listConnectors"]>>[number], tasks: Awaited<ReturnType<AssetsAdmin["listTasks"]>>): Record<string, unknown> {
+  const related = tasks.filter((task) => task.sourceConnector === connector.name).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  const latest = related[0];
+  const observedObjectCount = latest?.status.discoveredFiles;
+  const inventory = connector.inventory;
+  return {
+    ...connector,
+    scope: connectorScope(connector),
+    inventory: inventory ? {
+      ...inventory,
+      ...(inventory.state === "complete" ? {} : observedObjectCount !== undefined ? { observedObjectCount, observedAt: latest?.createdAt, source: inventory.source ?? "scan-run" } : {}),
+      note: inventory.note ?? (observedObjectCount !== undefined ? "最近一次扫描的观测值，不代表整个授权范围总量。" : "尚未执行授权范围盘点；总对象数与总字节数未知。"),
+    } : {
+      state: "unknown",
+      denominatorKnown: false,
+      ...(observedObjectCount !== undefined ? { observedObjectCount } : {}),
+      ...(latest?.createdAt ? { observedAt: latest.createdAt } : {}),
+      source: observedObjectCount !== undefined ? "scan-run" : "none",
+      note: observedObjectCount !== undefined ? "最近一次扫描的观测值，不代表整个授权范围总量。" : "尚未执行授权范围盘点；总对象数与总字节数未知。",
+    },
+    usage: {
+      scanTaskCount: related.length,
+      productCount: new Set(related.map((task) => task.productId).filter((value): value is string => Boolean(value))).size,
+      ...(latest ? { latestTask: { name: latest.name, phase: latest.status.phase, ...(latest.createdAt ? { createdAt: latest.createdAt } : {}) } } : {}),
+    },
+  };
+}
+
+/** Keep the on-demand product history useful without returning full draft bodies or evidence payloads. */
+function productHistorySummary(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { action: "unknown" };
+  const entry = value as Record<string, unknown>;
+  const summary: Record<string, unknown> = {};
+  for (const key of ["action", "productId", "revision", "at", "reason"] as const) {
+    const current = entry[key];
+    if ((key === "revision" && Number.isSafeInteger(current)) || (key !== "revision" && typeof current === "string" && current)) summary[key] = current;
+  }
+  if (Array.isArray(entry.acceptedGaps)) summary.acceptedGaps = entry.acceptedGaps.filter((gap): gap is string => typeof gap === "string").slice(0, 64);
+  const execution = entry.execution;
+  if (execution && typeof execution === "object" && !Array.isArray(execution)) {
+    const details = execution as Record<string, unknown>;
+    for (const key of ["executionId", "stepId", "status"] as const) if (typeof details[key] === "string" && details[key]) summary[key] = details[key];
+  }
+  return summary;
+}
+
+async function adminOverview(): Promise<Record<string, unknown>> {
+  const records = products.list();
+  const surveyRecords = adminProductSurveys(records, adminSurveyIndex());
+  let tasks: Awaited<ReturnType<AssetsAdmin["listTasks"]>> = [];
+  let discoveryRequests: Awaited<ReturnType<AssetsAdmin["listMocDiscoveryRequests"]>> = [];
+  let connectors: Awaited<ReturnType<AssetsAdmin["listConnectors"]>> = [];
+  await Promise.all([
+    admin.listTasks().then((value) => { tasks = value; }).catch(() => undefined),
+    admin.listMocDiscoveryRequests().then((value) => { discoveryRequests = value; }).catch(() => undefined),
+    admin.listConnectors().then((value) => { connectors = value; }).catch(() => undefined),
+  ]);
+  const releaseCount = surveyRecords.filter((survey) => !String(survey.id).startsWith("__"))
+    .reduce((total, survey) => total + (Array.isArray(survey.releases) ? survey.releases.length : 0), 0);
+  const activeRecords = records.filter((record) => !record.retiredAt);
+  const productSummaries = activeRecords.map((record) => currentReadiness(record));
+  const taskPhases = Object.fromEntries([...new Set(tasks.map((task) => task.status.phase))].sort().map((phase) => [phase, tasks.filter((task) => task.status.phase === phase).length]));
+  const discoveryPhases = Object.fromEntries([...new Set(discoveryRequests.map((request) => request.status.discoveryState ?? request.status.phase))].sort().map((phase) => [phase, discoveryRequests.filter((request) => (request.status.discoveryState ?? request.status.phase) === phase).length]));
+  const buildPhases = Object.fromEntries([...new Set(mocBuildStore.list().map((build) => build.phase))].sort().map((phase) => [phase, mocBuildStore.list().filter((build) => build.phase === phase).length]));
+  const readinessVersions = readinessSummaryForRecords(activeRecords);
+  return {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    coverage: {
+      mode: coverageLoadMode,
+      loadedAt: coverageLoadedAt,
+      revision: coverageCatalog.revision,
+      layers: coverageCatalog.layers.length,
+      footprints: coverageCatalog.records.size,
+      warehouseConfigured: evidenceStore.configured,
+    },
+    totals: {
+      surveys: surveyRecords.filter((survey) => !String(survey.id).startsWith("__")).length,
+      releases: releaseCount,
+      products: records.length,
+      publishedProducts: records.filter((record) => Boolean(record.published) && !record.retiredAt).length,
+      retiredProducts: records.filter((record) => Boolean(record.retiredAt)).length,
+    },
+    readiness: aggregateReadiness(productSummaries),
+    readinessVersions,
+    surveys: surveyRecords.map(overviewSurveySummary),
+    connectors: connectors.map((connector) => connectorSummary(connector, tasks)),
+    workflows: {
+      tasks: { total: tasks.length, phases: taskPhases },
+      discovery: { total: discoveryRequests.length, phases: discoveryPhases },
+      builds: { total: mocBuildStore.list().length, phases: buildPhases },
+    },
+    syncStatus: {
+      products: await apiSyncStatus("products"),
+      editorial: await apiSyncStatus("editorial"),
+      "publication-runs": await apiSyncStatus("publication-runs"),
+    },
+  };
 }
 const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
 const MAX_FITS_HEADER_BYTES = 256 * 1024;
@@ -1006,16 +1439,17 @@ async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<st
   }
   // Serve-time policy filter: denied surveys are never listed, even when the
   // on-disk catalog is an unsanitized worktree original.
+  const retiredSurveys = fullyRetiredSurveyIds();
   const sanitizedPackages = (document.packages as unknown[]).filter((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const surveyId = (value as Record<string, unknown>)["surveyId"];
-    return typeof surveyId === "string" ? !isDeniedSurvey(surveyId) : true;
+    return typeof surveyId === "string" ? !isDeniedSurvey(surveyId) && !retiredSurveys.has(surveyId) : true;
   });
   document.packages = sanitizedPackages;
   const packageAssets = [...catalog.files.values()]
     .map(({ record }) => record)
-    .filter((record) => record.kind === "package");
-  const dynamicEntries = dynamicResourcePackages.list();
+    .filter((record) => record.kind === "package" && !isRetiredAsset(record));
+  const dynamicEntries = dynamicResourcePackages.list().filter((entry) => !retiredSurveys.has(entry.surveyId));
   const dynamicIds = new Set(dynamicEntries.map((entry) => entry.id));
   const identities = new Set(sanitizedPackages.map((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return "";
@@ -1338,6 +1772,7 @@ async function sendPreview(request: IncomingMessage, response: ServerResponse, l
 }
 
 async function sendStatic(response: ServerResponse, pathname: string): Promise<void> {
+  if (/^\/admin\/(?:overview(?:\/surveys\/[^/]+)?|sources|tasks|review(?:\/products\/[^/]+)?|releases)\/?$/.test(pathname)) pathname = "/admin/";
   const requested = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
   const resolved = path.resolve(siteRoot, requested.endsWith("/") ? path.join(requested, "index.html") : requested);
   const relative = path.relative(siteRoot, resolved);
@@ -1469,21 +1904,13 @@ async function registerMocBuildProduct(name: string, body: Record<string, unknow
     if (product.published) throw new AdminHttpError(409, `Product ${requestedProductId} is already published`);
   } else {
     const defaults = await mocRegistrationDefaults(build);
-    const modalities = Array.isArray(body.surveyModalities)
-      ? body.surveyModalities.filter((value): value is string => typeof value === "string")
-      : typeof body.surveyModalities === "string" ? body.surveyModalities.split(",").map((value) => value.trim()).filter(Boolean) : [];
-    const selectedModalities = modalities.length ? modalities : [defaults.values.modality];
+    const surveyFacts = await mocSurveyFacts(build);
     const textOrDefault = (key: MocRegistrationDefaultField): string => {
       const value = body[key];
       return typeof value === "string" && value.trim() ? value : String(defaults.values[key] ?? "");
     };
     const input: MocProductRegistrationInput = {
-      surveyId: typeof body.surveyId === "string" ? body.surveyId : "",
-      surveyName: typeof body.surveyName === "string" ? body.surveyName : "",
-      mission: typeof body.mission === "string" ? body.mission : "",
-      surveyDescription: typeof body.surveyDescription === "string" ? body.surveyDescription : "",
-      surveyColor: typeof body.surveyColor === "string" ? body.surveyColor : "#42d5c4",
-      surveyModalities: selectedModalities,
+      ...surveyFacts,
       releaseId: textOrDefault("releaseId"),
       releaseLabel: textOrDefault("releaseLabel"),
       releaseKind: textOrDefault("releaseKind"),
@@ -1512,11 +1939,23 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
   if (!admin.config.enabled) return json(response, 404, { error: "Assets administration is disabled" });
   try {
     admin.authorize(adminFromRequest(request));
+    if (pathname === "/api/v1/admin/overview" && request.method === "GET") {
+      return json(response, 200, await adminOverview());
+    }
     const connectorProbeMatch = /^\/api\/v1\/admin\/connectors\/([^/]+)\/probe$/.exec(pathname);
     if (connectorProbeMatch?.[1] && request.method === "POST") {
       return json(response, 200, { connector: await admin.probeConnector(decodeURIComponent(connectorProbeMatch[1])) });
     }
-    if (pathname === "/api/v1/admin/connectors" && request.method === "GET") return json(response, 200, { connectors: await admin.listConnectors() });
+    const connectorInventoryMatch = /^\/api\/v1\/admin\/connectors\/([^/]+)\/inventory$/.exec(pathname);
+    if (connectorInventoryMatch?.[1] && request.method === "POST") {
+      return json(response, 202, { connector: { name: decodeURIComponent(connectorInventoryMatch[1]), inventory: await admin.inventoryConnector(decodeURIComponent(connectorInventoryMatch[1])) } });
+    }
+    if (pathname === "/api/v1/admin/connectors" && request.method === "GET") {
+      const connectors = await admin.listConnectors();
+      let tasks: Awaited<ReturnType<AssetsAdmin["listTasks"]>> = [];
+      try { tasks = await admin.listTasks(); } catch { /* Connector inventory remains readable when Warehouse is unavailable. */ }
+      return json(response, 200, { connectors: connectors.map((connector) => connectorSummary(connector, tasks)) });
+    }
     if (pathname === "/api/v1/admin/connectors" && request.method === "POST") {
       const input = await requestJsonBody(request) as unknown as ConnectorInput;
       return json(response, 201, { connector: await admin.createConnector(input) });
@@ -1604,7 +2043,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       if (build.phase === "STAGED" && !build.productId) {
         try {
           const defaults = await mocRegistrationDefaults(build);
-          return json(response, 200, { request: adminMocBuildView(build), registrationDefaults: defaults.values, registrationDefaultSources: defaults.sources });
+          return json(response, 200, { request: adminMocBuildView(build), registrationDefaults: defaults.values, surveyFacts: await mocSurveyFacts(build), registrationDefaultSources: defaults.sources });
         } catch {
           // A build detail remains readable even if its discovery evidence has expired.
         }
@@ -1658,13 +2097,80 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       const productId = productMatch?.[1] ?? draftMatch?.[1]!;
       return json(response, 200, { product: await products.updateDraft(decodeAdminPathSegment(productId), body.content ?? body, expectedRevision(request, body)), syncStatus: await apiSyncStatus("products") });
     }
+    const executionMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/executions$/.exec(pathname);
+    const verifyProductMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/verify-build$/.exec(pathname);
+    if (verifyProductMatch?.[1] && request.method === "POST") {
+      const record = products.get(decodeAdminPathSegment(verifyProductMatch[1]));
+      const body = await requestJsonBody(request);
+      const revision = expectedRevision(request, body);
+      if (revision !== record.revision) throw new AdminHttpError(409, "产品版本已变化，请刷新后重新校验。");
+      if (record.retiredAt) throw new AdminHttpError(409, "已退休产品不能重新校验。");
+      const summary = adminMocBuildSummary(record.productId);
+      if (!summary) throw new AdminHttpError(409, "没有关联的 MOC 构建，请先从探索候选构建覆盖。");
+      const build = mocBuildStore.get(String(summary.name));
+      const startedAt = new Date().toISOString();
+      let failure: string | undefined;
+      try { await mocBuildService.verifyOutputs(build.name); }
+      catch (error) { failure = error instanceof Error ? error.message : "产物校验失败"; }
+      const product = await products.recordExecution(record.productId, {
+        executionId: `verify-build-${randomUUID()}`,
+        stepId: "verify-moc-build",
+        status: failure ? "failed" : "passed",
+        startedAt, finishedAt: new Date().toISOString(),
+        tool: { name: "Assets integrity verification / MOC-Core-SDK" },
+        inputs: build.source.evidenceRef || build.source.snapshotSha256 ? [{ label: "探索下载的 MOC 快照", ref: build.source.evidenceRef, sha256: build.source.snapshotSha256 }] : [],
+        outputs: Object.entries(build.outputs ?? {}).flatMap(([label, entry]) => entry && typeof entry === "object" && "ref" in entry ? [{ label, ref: entry.ref, sha256: entry.sha256 }] : []),
+        parameters: { buildName: build.name, candidateId: build.candidateId },
+        checks: [{ id: "output-integrity", status: failure ? "failed" : "passed", detail: failure ?? "来源及输出哈希、大小与 Core MOC 校验通过" }],
+        ...(failure ? { error: failure } : {}),
+      }, revision);
+      return json(response, 200, { product: adminProductView(product), verification: { passed: !failure, ...(failure ? { error: failure } : {}) }, syncStatus: await apiSyncStatus("products") });
+    }
+    if (executionMatch?.[1] && request.method === "GET") {
+      const record = products.get(decodeAdminPathSegment(executionMatch[1]));
+      return json(response, 200, { productId: record.productId, revision: record.revision, executions: (record.executions ?? []).slice(-128), readiness: productReadiness(record), syncStatus: await apiSyncStatus("products") });
+    }
+    if (executionMatch?.[1] && request.method === "POST") {
+      const body = await requestJsonBody(request);
+      const envelope = Object.prototype.hasOwnProperty.call(body, "execution");
+      if (envelope && Object.keys(body).some((key) => !["execution", "revision"].includes(key))) throw new AdminHttpError(400, "Product execution request contains unsupported field");
+      const execution = envelope ? body.execution : body;
+      const product = await products.recordExecution(decodeAdminPathSegment(executionMatch[1]), execution, expectedRevision(request, body));
+      return json(response, 201, { product: adminProductView(product), readiness: productReadiness(product), syncStatus: await apiSyncStatus("products") });
+    }
     const publishMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/publish$/.exec(pathname);
+    const retireMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/retire$/.exec(pathname);
+    const reviewMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/review$/.exec(pathname);
+    if (reviewMatch?.[1] && request.method === "POST") {
+      const body: Record<string, unknown> = await requestJsonBody(request).catch(() => ({} as Record<string, unknown>));
+      if (Object.keys(body).some((key) => !["revision", "acceptedGaps"].includes(key))) throw new AdminHttpError(400, "Product review request contains unsupported field");
+      if (body.acceptedGaps !== undefined && !Array.isArray(body.acceptedGaps)) throw new AdminHttpError(400, "acceptedGaps must be an array");
+      if (Array.isArray(body.acceptedGaps) && body.acceptedGaps.some((value) => typeof value !== "string")) throw new AdminHttpError(400, "acceptedGaps must contain only strings");
+      const acceptedGaps = Array.isArray(body.acceptedGaps)
+        ? body.acceptedGaps.filter((value: unknown): value is string => typeof value === "string").map((value: string) => value.trim()).filter(Boolean)
+        : [];
+      const productId = decodeAdminPathSegment(reviewMatch[1]);
+      const existing = products.get(productId);
+      assertReviewableProduct(existing, acceptedGaps);
+      const product = await products.review(productId, expectedRevision(request, body), acceptedGaps);
+      return json(response, 200, { product: adminProductView(product), readiness: productReadiness(product), syncStatus: await apiSyncStatus("products") });
+    }
+    if (retireMatch?.[1] && request.method === "POST") {
+      const body: Record<string, unknown> = await requestJsonBody(request).catch(() => ({} as Record<string, unknown>));
+      if (Object.keys(body).some((key) => !["revision", "reason"].includes(key))) throw new AdminHttpError(400, "Product retirement request contains unsupported field");
+      const reason = body.reason === undefined ? undefined : typeof body.reason === "string" ? body.reason : (() => { throw new AdminHttpError(400, "reason must be a string"); })();
+      const product = await products.retire(decodeAdminPathSegment(retireMatch[1]), expectedRevision(request, body), reason);
+      runtimeSurveyIndex = applyPublishedProductMetadata(runtimeSurveyIndex);
+      await editorial.sync(runtimeSurveyIndex.surveys);
+      return json(response, 200, { product: adminProductView(product), readiness: productReadiness(product), syncStatus: await apiSyncStatus("products") });
+    }
     if (publishMatch?.[1] && request.method === "POST") {
-      const body = await requestJsonBody(request).catch(() => ({}));
+      const body: Record<string, unknown> = await requestJsonBody(request).catch(() => ({} as Record<string, unknown>));
       const productId = decodeAdminPathSegment(publishMatch[1]);
       const existing = products.get(productId);
       const revision = expectedRevision(request, body);
       if (revision !== undefined && revision !== existing.revision) throw new AdminHttpError(409, "Product revision conflict");
+      assertPublishableProduct(existing);
       const staged = mocBuildStore.list().find((build) => build.productId === productId && build.phase === "STAGED");
       const publication = staged ? await mocPublicationStore.publish(staged, {
         productId,
@@ -1693,7 +2199,11 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       });
     }
     const historyMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/history$/.exec(pathname);
-    if (historyMatch?.[1] && request.method === "GET") return json(response, 200, { history: await products.history(decodeAdminPathSegment(historyMatch[1])) });
+    if (historyMatch?.[1] && request.method === "GET") {
+      const allHistory = await products.history(decodeAdminPathSegment(historyMatch[1]));
+      const history = allHistory.slice(-128).map(productHistorySummary);
+      return json(response, 200, { history, truncated: history.length < allHistory.length });
+    }
     if (pathname === "/api/v1/admin/publication-plan" && request.method === "GET") {
       return json(response, 200, { plan: await publisher.plan() });
     }
@@ -1711,6 +2221,18 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       return json(response, 202, { run, syncStatus: await apiSyncStatus("publication-runs") });
     }
     const publicationMatch = /^\/api\/v1\/admin\/publications\/([^/]+)$/.exec(pathname);
+    const publicationRetryMatch = /^\/api\/v1\/admin\/publications\/([^/]+)\/retry$/.exec(pathname);
+    const publicationVerifyMatch = /^\/api\/v1\/admin\/publications\/([^/]+)\/verify$/.exec(pathname);
+    if (publicationRetryMatch?.[1] && request.method === "POST") {
+      const body: Record<string, unknown> = await requestJsonBody(request).catch(() => ({} as Record<string, unknown>));
+      if (Object.keys(body).length) throw new AdminHttpError(400, "Publication retry request contains unsupported field");
+      const run = await publisher.retry(decodeAdminPathSegment(publicationRetryMatch[1]), adminFromRequest(request));
+      return json(response, 202, { run, syncStatus: await apiSyncStatus("publication-runs") });
+    }
+    if (publicationVerifyMatch?.[1] && request.method === "POST") {
+      const run = await publisher.verifySite(decodeAdminPathSegment(publicationVerifyMatch[1]));
+      return json(response, 200, { run, syncStatus: await apiSyncStatus("publication-runs") });
+    }
     if (publicationMatch?.[1] && request.method === "GET") {
       const run = await publisher.get(decodeAdminPathSegment(publicationMatch[1]));
       if (!run) return json(response, 404, { error: "Publication run not found" });
@@ -1730,7 +2252,7 @@ function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, p
   const match = /^\/api\/v1\/coverage\/blocks\/([a-z0-9-]+)$/.exec(pathname);
   if (!match) return json(response, 404, { error: "Coverage block not found" });
   const record = coverageCatalog.records.get(match[1]!);
-  if (!record) return json(response, 404, { error: "Coverage layer not found" });
+  if (!record || isRetiredLayer(record)) return json(response, 404, { error: "Coverage layer not found" });
   const query = requestQuery(request);
   const order = Number(query.get("order"));
   const tile = Number(query.get("tile"));
@@ -1749,9 +2271,9 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
   const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
   const surveyIds = Array.isArray(body.surveyIds) ? body.surveyIds.filter((value): value is string => typeof value === "string") : [];
   const requestedOrder = typeof body.requestedOrder === "number" && Number.isInteger(body.requestedOrder) ? body.requestedOrder : undefined;
-  const result = overlapForLayers([...coverageCatalog.records.values()], surveyIds, requestedOrder);
+  const result = overlapForLayers([...publicCoverageCatalog().records.values()], surveyIds, requestedOrder);
   if (!result) return json(response, 400, { error: "At least two surveys with a common HEALPix order are required" });
-  const selectedLayers = [...coverageCatalog.records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
+  const selectedLayers = [...publicCoverageCatalog().records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
   const needsSourceUnits = result.components.length > 0 && selectedLayers.some((layer) => layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "tile");
   const sourceUnits = needsSourceUnits ? await sourceUnitsReadyWithin(3_000) : null;
   const componentDetails = await Promise.all(result.components.map(async (component) => {
@@ -1792,11 +2314,11 @@ async function sendCoverageOverlapDetails(request: IncomingMessage, response: Se
   const componentId = typeof body.componentId === "string" ? body.componentId : "";
   const requestedOrder = typeof body.requestedOrder === "number" && Number.isInteger(body.requestedOrder) ? body.requestedOrder : undefined;
   if (surveyIds.length < 2 || !componentId) return json(response, 400, { error: "surveyIds and componentId are required" });
-  const result = overlapForLayers([...coverageCatalog.records.values()], surveyIds, requestedOrder);
+  const result = overlapForLayers([...publicCoverageCatalog().records.values()], surveyIds, requestedOrder);
   if (!result) return json(response, 400, { error: "No common coverage is available for the selected surveys" });
   const component = result.components.find((candidate) => candidate.id === componentId);
   if (!component) return json(response, 404, { error: "Overlap component not found for the current survey selection" });
-  const selectedLayers = [...coverageCatalog.records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
+  const selectedLayers = [...publicCoverageCatalog().records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
   const sourceUnitsByLayer = new Map<string, unknown>();
   if (selectedLayers.some((layer) => layer.sourceUnitIndex?.unitKind === "tile")) {
     const sourceUnits = await sourceUnitsReadyWithin(3_000);
@@ -1905,7 +2427,7 @@ const TILE_SELECTION_RULE = "all official tile footprints intersecting the curre
 const TILE_SELECTION_NOTE = "下载本组件列出的全部 Tile 可获得覆盖当前重合区域的相关数据；Tile 内容可能超出组件边界，未做空间裁剪。";
 
 async function publicTileEntrypoints(layerIds: readonly string[], order: number, cells: readonly number[], limit: number): Promise<{ entries: DownloadPlanEntrypoint[]; selections: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; tileIds: string[]; selectionRule: string; complete: boolean; note: string }>; truncated: boolean }> {
-  const layers = layerIds.map((layerId) => coverageCatalog.records.get(layerId)).filter((layer): layer is CoverageCellLayer => Boolean(layer && layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "tile"));
+  const layers = layerIds.map((layerId) => publicCoverageCatalog().records.get(layerId)).filter((layer): layer is CoverageCellLayer => Boolean(layer && layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "tile"));
   if (!layers.length) return { entries: [], selections: [], truncated: false };
   const sourceUnits = await sourceUnitsReadyWithin(3_000);
   if (!sourceUnits) return { entries: [], selections: [], truncated: false };
@@ -1953,10 +2475,14 @@ async function sendCoverageReverseLookup(request: IncomingMessage, response: Ser
   const order = typeof body.order === "number" && Number.isSafeInteger(body.order) ? body.order : Number.NaN;
   const limit = typeof body.limit === "number" && Number.isSafeInteger(body.limit) ? body.limit : undefined;
   if (layerIds.length < 1 || !Number.isSafeInteger(order) || order < 0 || order > 29 || !cells.length) return json(response, 400, { error: "layerIds, order and cells are required" });
-  const warehouseLayerIds = layerIds.filter((layerId) => warehouseLayerSnapshots.has(layerId));
-  const entrypoints = publicReverseEntrypoints(layerIds, order, cells);
+  // A retired layer must be invisible to every public lookup, including a
+  // caller that still holds its old layer id. Keep the requested ids in the
+  // envelope for diagnostics, but only resolve ids present in the public map.
+  const publicLayerIds = layerIds.filter((layerId) => publicCoverageCatalog().records.has(layerId));
+  const warehouseLayerIds = publicLayerIds.filter((layerId) => warehouseLayerSnapshots.has(layerId));
+  const entrypoints = publicReverseEntrypoints(publicLayerIds, order, cells);
   const boundedLimit = Math.min(Math.max(limit ?? 500, 1), 5000);
-  const tileEntrypoints = await publicTileEntrypoints(layerIds, order, cells, boundedLimit);
+  const tileEntrypoints = await publicTileEntrypoints(publicLayerIds, order, cells, boundedLimit);
   const downloadEntrypoints = [...normalizeReverseEntrypoints(entrypoints), ...tileEntrypoints.entries];
   const warehouseResult: ReverseLookupResult = warehouseLayerIds.length
     ? await evidenceStore.reverseLookup({ layerIds: warehouseLayerIds, order, cells, limit }, { tolerateUnavailable: true })
@@ -2002,7 +2528,10 @@ const server = http.createServer((request, response) => {
       bundle: catalog.manifest.bundle,
       files: catalog.files.size,
     });
-    if (pathname === "/api/v1/assets") return json(response, 200, publicManifest(catalog, [...publishedPublicAssets.values()].map(({ record }) => record)));
+    if (pathname === "/api/v1/assets") {
+      const visibleAssets = [...publishedPublicAssets.values()].map(({ record }) => record).filter((record) => !isRetiredAsset(record));
+      return json(response, 200, publicManifest(publicAssetCatalog(), visibleAssets));
+    }
     if (pathname === "/api/v1/resource-packages/catalog.json") return json(response, 200, await resourcePackageCatalog(catalog));
     if (pathname === "/api/v1/releases") {
       const history = await releaseHistory(catalog);
@@ -2069,25 +2598,25 @@ const server = http.createServer((request, response) => {
       const match = [...catalog.files.values()].find(({ record }) => record.kind === "package"
         && record.version === version
         && (record.downloadName === `${packageId}-${version}.zip` || record.path.endsWith(`/${packageId}-${version}.zip`)));
-      if (!match || isDeniedSurvey(match.record.surveyId) || isDeniedPackageId(packageId)) {
+      if (!match || isRetiredAsset(match.record) || (match.record.surveyId ? fullyRetiredSurveyIds().has(match.record.surveyId) : false) || isDeniedSurvey(match.record.surveyId) || isDeniedPackageId(packageId)) {
         return json(response, 404, { error: "Resource package version not found" });
       }
       return sendDownload(request, response, catalog, match.record.id);
     }
     if (pathname === "/api/v1/coverage/catalog") {
-      const { records: _records, ...publicCoverageCatalog } = coverageCatalog;
-      const body = { ...publicCoverageCatalog, schemaVersion: 2, generatedAt: coverageLoadedAt };
+      const { records: _records, ...publicCoverage } = publicCoverageCatalog();
+      const body = { ...publicCoverage, schemaVersion: 2, generatedAt: coverageLoadedAt };
       const etag = `"catalog-${coverageCatalog.revision ?? "unknown"}"`;
       return compressedJson(request, response, 200, body, "no-cache, must-revalidate", etag);
     }
     if (pathname.startsWith("/api/v1/coverage/blocks/")) return sendCoverageBlock(request, response, pathname);
-    if (pathname === "/api/v1/coverage") return json(response, 200, { ...runtimeCoverageManifest, footprints: runtimeCoverageManifest.footprints.filter((footprint) => !isDeniedSurvey(footprint.surveyId)) });
+    if (pathname === "/api/v1/coverage") return json(response, 200, { ...runtimeCoverageManifest, footprints: runtimeCoverageManifest.footprints.filter((footprint) => !isDeniedSurvey(footprint.surveyId) && !isRetiredFootprint(footprint)) });
     if (pathname === "/api/v1/surveys") return json(response, 200, publicSurveyIndex());
-    if (pathname === "/api/v1/products") return json(response, 200, { products: products.list().filter((record) => record.published).map(publicProductListView) });
+    if (pathname === "/api/v1/products") return json(response, 200, { products: products.list().filter((record) => record.published && !record.retiredAt).map(publicProductListView) });
     const productEvidence = /^\/api\/v1\/products\/([^/]+)\/evidence$/.exec(pathname);
     if (productEvidence?.[1]) {
       const record = products.list().find((candidate) => candidate.productId === decodeURIComponent(productEvidence[1]!));
-      if (!record) return json(response, 404, { error: "Product not found" });
+      if (!record?.published || record.retiredAt) return json(response, 404, { error: "Product not found" });
       const dossier = buildPublicProductDossier(record);
       // Evidence is deliberately a projection of the dossier. It contains
       // public hashes and checks, never manifests, task snapshots, storage
@@ -2127,13 +2656,14 @@ const server = http.createServer((request, response) => {
     const productDetail = /^\/api\/v1\/products\/([^/]+)$/.exec(pathname);
     if (productDetail?.[1]) {
       const record = products.list().find((candidate) => candidate.productId === decodeURIComponent(productDetail[1]!));
-      if (!record) return json(response, 404, { error: "Product not found" });
+      if (!record?.published || record.retiredAt) return json(response, 404, { error: "Product not found" });
       return json(response, 200, buildPublicProductDossier(record));
     }
     const layerMoc = /^\/api\/v1\/coverage\/layers\/([a-z0-9-]+)\/moc\.fits$/.exec(pathname);
     if (layerMoc?.[1]) {
       const layerId = layerMoc[1]!;
       const layer = coverageCatalog.records.get(layerId);
+      if (layer && isRetiredLayer(layer)) return json(response, 404, { error: "Coverage MOC not found" });
       const asset = [...catalog.files.entries()].find(([, entry]) => {
         if (entry.record.kind !== "moc") return false;
         if (entry.record.path.includes(`/layers/${layerId}/`) || entry.record.id === `layer-${layerId}-moc` || entry.record.id === layerId) return true;
@@ -2143,9 +2673,17 @@ const server = http.createServer((request, response) => {
       return sendDownload(request, response, catalog, asset[0]);
     }
     const download = /^\/api\/v1\/assets\/([a-z0-9-]+)\/download$/.exec(pathname);
-    if (download?.[1]) return sendDownload(request, response, catalog, download[1]);
+    if (download?.[1]) {
+      const entry = catalog.files.get(download[1]);
+      if (!entry || isRetiredAsset(entry.record)) return json(response, 404, { error: "Asset not found" });
+      return sendDownload(request, response, catalog, download[1]);
+    }
     const preview = /^\/api\/v1\/assets\/([a-z0-9-]+)\/preview$/.exec(pathname);
-    if (preview?.[1]) return sendPreview(request, response, catalog, preview[1]);
+    if (preview?.[1]) {
+      const entry = catalog.files.get(preview[1]);
+      if (!entry || isRetiredAsset(entry.record)) return json(response, 404, { error: "Asset not found" });
+      return sendPreview(request, response, catalog, preview[1]);
+    }
     if (pathname.startsWith("/api/")) return json(response, 404, { error: "API endpoint not found" });
     return sendStatic(response, pathname);
   })().catch((error) => {

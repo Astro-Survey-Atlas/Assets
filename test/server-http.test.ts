@@ -339,6 +339,17 @@ test("admin endpoints require a token and expose the configured control-plane bo
   const productBody = await products.json() as { products: Array<{ productId: string }> };
   assert.ok(productBody.products.length > 0);
 
+  const overview = await fetch(`http://127.0.0.1:${port}/api/v1/admin/overview`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(overview.status, 200);
+  const overviewText = await overview.text();
+  const overviewBody = JSON.parse(overviewText) as { schemaVersion: number; totals: { products: number }; readiness: { capabilityCounts: { coverage: number; unit: number; file: number } }; surveys: Array<{ readiness?: unknown; releases: Array<{ readiness?: unknown; products: Array<{ readiness?: { draft?: unknown; published?: unknown } }> }> }>; connectors: unknown[] };
+  assert.equal(overviewBody.schemaVersion, 1);
+  assert.equal(overviewBody.totals.products, productBody.products.length);
+  assert.ok(overviewBody.readiness.capabilityCounts.coverage >= 0);
+  assert.ok(overviewBody.surveys.length > 0);
+  assert.ok(overviewBody.surveys.some((survey) => survey.readiness && survey.releases.some((release) => release.readiness && release.products.some((product) => product.readiness?.draft))));
+  assert.doesNotMatch(overviewText, /normalized-scan|taskSnapshot|\/var\/lib|elasticsearch|input-manifest/i);
+
   const surveyView = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products?view=surveys`, { headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(surveyView.status, 200);
   const surveyViewText = await surveyView.text();
@@ -529,7 +540,10 @@ test("staged MOC builds can be registered, reviewed and published as a dynamic s
   const headers = { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" };
   const detail = await fetch(`http://127.0.0.1:${port}/api/v1/admin/moc-builds/${buildName}`, { headers });
   assert.equal(detail.status, 200);
-  const detailBody = await detail.json() as { registrationDefaults?: { releaseId?: string; releaseLabel?: string; productName?: string; modality?: string } };
+  const detailBody = await detail.json() as { surveyFacts?: { surveyId: string; surveyName: string; mission: string; surveyDescription: string; surveyColor: string; surveyModalities: string[] }; registrationDefaults?: { releaseId?: string; releaseLabel?: string; productName?: string; modality?: string } };
+  assert.equal(detailBody.surveyFacts?.surveyId, "jwst");
+  assert.equal(detailBody.surveyFacts?.surveyName, "JWST");
+  assert.ok(detailBody.surveyFacts?.mission);
   assert.deepEqual(detailBody.registrationDefaults, {
     releaseId: "dr1",
     releaseLabel: "DR1",
@@ -550,13 +564,31 @@ test("staged MOC builds can be registered, reviewed and published as a dynamic s
   assert.equal(registered.product.draft.publicRelease?.label, "DR1");
   assert.equal(registered.product.draft.publicDescription, "JWST DR1 的公开天区覆盖 MOC；来源为 CDS MOC 服务，已由 Assets 校验并锁定来源哈希。");
   assert.equal(registered.product.draft.publicSurvey?.name, "JWST");
+  assert.deepEqual(registered.product.draft.publicSurvey, {
+    name: detailBody.surveyFacts!.surveyName,
+    mission: detailBody.surveyFacts!.mission,
+    description: detailBody.surveyFacts!.surveyDescription,
+    color: detailBody.surveyFacts!.surveyColor,
+    modalities: detailBody.surveyFacts!.surveyModalities,
+  });
   assert.equal(registered.request.productId, registered.product.productId);
   assert.equal(registered.request.workKey, `product:${registered.product.productId}`);
+
+  const execution = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${registered.product.productId}/executions`, { method: "POST", headers, body: JSON.stringify({ revision: 1, executionId: "moc-output-check-1", stepId: "outputs", status: "passed", tool: { name: "moc-core", version: "1.1.0" }, inputs: [{ label: "locked source", sha256: "a".repeat(64), sizeBytes: 11 }], outputs: [{ label: "query projection", sha256: "b".repeat(64), sizeBytes: 2 }], checks: [{ id: "output-integrity", status: "passed" }] }) });
+  assert.equal(execution.status, 201);
+  const executionBody = await execution.json() as { product: { executionEvidence?: Array<{ executionId: string }> } };
+  assert.equal(executionBody.product.executionEvidence?.at(-1)?.executionId, "moc-output-check-1");
 
   const review = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products?view=surveys`, { headers });
   const reviewBody = await review.json() as { surveys: Array<{ id: string; unmatchedBuilds?: unknown[]; unmatchedProducts?: Array<{ productId: string }> }> };
   assert.equal(reviewBody.surveys.some((survey) => survey.id === "__moc-builds__"), false);
   assert.ok(reviewBody.surveys.find((survey) => survey.id === "__unmatched__")?.unmatchedProducts?.some((product) => product.productId === registered.product.productId));
+
+  const registeredDetail = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${registered.product.productId}`, { headers });
+  assert.equal(registeredDetail.status, 200);
+  const registeredDetailBody = await registeredDetail.json() as { product: { revision: number; readiness?: { draft?: { gaps?: string[] } } } };
+  const reviewProduct = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${registered.product.productId}/review`, { method: "POST", headers, body: JSON.stringify({ revision: registeredDetailBody.product.revision, acceptedGaps: registeredDetailBody.product.readiness?.draft?.gaps ?? [] }) });
+  assert.equal(reviewProduct.status, 200);
 
   const publish = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${registered.product.productId}/publish`, { method: "POST", headers, body: JSON.stringify({ revision: 1 }) });
   assert.equal(publish.status, 200);
@@ -566,9 +598,18 @@ test("staged MOC builds can be registered, reviewed and published as a dynamic s
   const dynamic = surveys.surveys.find((survey) => survey.id === "jwst");
   assert.ok(dynamic);
   assert.equal(dynamic.releases.find((release) => release.id === "dr1")?.products[0]?.productId, registered.product.productId);
+  const verify = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${registered.product.productId}/verify-build`, { method: "POST", headers, body: JSON.stringify({ revision: 1 }) });
+  assert.equal(verify.status, 200);
+  const verified = await verify.json() as { verification: { passed: boolean }; product: { review?: unknown; executionEvidence: Array<{ status: string }>; readiness: { draft: { gaps: string[] } } } };
+  assert.equal(verified.verification.passed, false, "fixture deliberately has no locked source snapshot");
+  assert.equal(verified.product.review, undefined, "failed validation invalidates an existing review");
+  assert.equal(verified.product.executionEvidence.at(-1)?.status, "failed");
+  assert.ok(verified.product.readiness.draft.gaps.includes("output-validation-missing"));
+  const blockedReview = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${registered.product.productId}/review`, { method: "POST", headers, body: JSON.stringify({ revision: 1, acceptedGaps: verified.product.readiness.draft.gaps }) });
+  assert.equal(blockedReview.status, 409, "prior successful receipts cannot override the latest failed verification");
 });
 
-test("admin connector probe route checks an authorized PVC without persisting its phase", async (context) => {
+test("admin connector probe route checks an authorized PVC and persists its phase", async (context) => {
   const kubePort = await freePort();
   const kubeServer = createServer((request, response) => {
     const pathname = new URL(request.url ?? "/", "http://kubernetes").pathname;
@@ -620,9 +661,12 @@ test("admin connector probe route checks an authorized PVC without persisting it
 
   const listed = await fetch(`http://127.0.0.1:${port}/api/v1/admin/connectors`, { headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(listed.status, 200);
-  const listedBody = await listed.json() as { connectors: Array<{ name: string; phase: string; checkedAt?: string }> };
-  assert.equal(listedBody.connectors[0]?.phase, "NOT_CHECKED");
-  assert.equal(listedBody.connectors[0]?.checkedAt, undefined);
+  const listedBody = await listed.json() as { connectors: Array<{ name: string; phase: string; checkedAt?: string; scope?: { kind?: string }; inventory?: { state?: string; denominatorKnown?: boolean; observedObjectCount?: number }; usage?: { scanTaskCount?: number } }> };
+  assert.equal(listedBody.connectors[0]?.phase, "READY");
+  assert.match(listedBody.connectors[0]?.checkedAt ?? "", /^20\d\d-/);
+  assert.equal(listedBody.connectors[0]?.scope?.kind, "pvc");
+  assert.equal(listedBody.connectors[0]?.inventory?.state, "unknown");
+  assert.equal(listedBody.connectors[0]?.inventory?.denominatorKnown, false);
   const missing = await fetch(`http://127.0.0.1:${port}/api/v1/admin/connectors/missing/probe`, { method: "POST", headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(missing.status, 404);
 });
@@ -646,6 +690,9 @@ test("public product dossier, evidence projection and predictable MOC URL are ha
   const adminProductResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}`, { headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(adminProductResponse.status, 200);
   const adminProductBody = await adminProductResponse.json() as { product: { draft: Record<string, unknown> } };
+  const canonicalProductName = String(adminProductBody.product.draft.name);
+  const canonicalSurveyId = String(adminProductBody.product.draft.surveyId);
+  const canonicalReleaseId = String(adminProductBody.product.draft.releaseId);
   const unsafeDraft = { ...adminProductBody.product.draft, sourceUrl: "http://10.42.0.7/private", geometrySourceUrl: "http://192.168.0.4/geometry" };
   const updateResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}`, {
     method: "PUT",
@@ -654,34 +701,48 @@ test("public product dossier, evidence projection and predictable MOC URL are ha
   });
   assert.equal(updateResponse.status, 200);
   const catalogDetail = await fetch(`http://127.0.0.1:${port}/api/v1/products/${candidate.productId}`);
-  assert.equal(catalogDetail.status, 200);
-  const catalogDossier = await catalogDetail.json() as { identity: { productId: string }; coverage: { layerId?: string }; conclusion: { summary: string }; source?: { url?: string; geometryUrl?: string } };
-  assert.equal(catalogDossier.identity.productId, candidate.productId);
-  assert.equal(catalogDossier.coverage.layerId, "euclid-q1-deep-fields-image-extent");
-  assert.equal(catalogDossier.source?.url, undefined);
-  assert.ok(catalogDossier.source?.geometryUrl?.startsWith("/api/v1/assets/"));
-  assert.doesNotMatch(JSON.stringify(catalogDossier), /10\.42\.0\.7|192\.168\.0\.4/);
-  assert.doesNotMatch(catalogDossier.conclusion.summary, /scannerRunId|taskSnapshot|normalized-scan|\/var\/lib|elasticsearch/i);
+  assert.equal(catalogDetail.status, 404, "unpublished product details must remain private");
+  const reviewDetail = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}`, { headers: { Authorization: "Bearer test-admin-token" } });
+  const reviewDetailBody = await reviewDetail.json() as { product: { revision: number; readiness?: { draft?: { gaps?: string[] } } } };
+  const reviewResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}/review`, { method: "POST", headers: { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" }, body: JSON.stringify({ revision: reviewDetailBody.product.revision, acceptedGaps: reviewDetailBody.product.readiness?.draft?.gaps ?? [] }) });
+  assert.equal(reviewResponse.status, 200);
   const publishResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}/publish`, { method: "POST", headers: { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" }, body: "{}" });
   assert.equal(publishResponse.status, 200);
 
+  const publicSurveyResponse = await fetch(`http://127.0.0.1:${port}/api/v1/surveys`);
+  assert.equal(publicSurveyResponse.status, 200);
+  const publicSurveyBody = await publicSurveyResponse.json() as { surveys: Array<{ releases: Array<{ products: Array<{ productId?: string; readiness?: { level: number; geometry: { orders: number[] } } }> }> }> };
+  const publicSurveyProduct = publicSurveyBody.surveys.flatMap((survey) => survey.releases.flatMap((release) => release.products)).find((product) => product.productId === candidate.productId);
+  assert.equal(publicSurveyProduct?.readiness?.level, 1);
+  assert.ok((publicSurveyProduct?.readiness?.geometry.orders.length ?? 0) > 0);
+
   const listResponse = await fetch(`http://127.0.0.1:${port}/api/v1/products`);
   assert.equal(listResponse.status, 200);
-  const listBody = await listResponse.json() as { products: Array<{ productId: string; detailUrl: string; evidenceUrl: string; links: Array<{ kind: string; url: string }> }> };
+  const listBody = await listResponse.json() as { products: Array<{ productId: string; detailUrl: string; evidenceUrl: string; readiness?: { level: number; geometry: { orders: number[] }; reverseLookup: { orders: number[] } }; links: Array<{ kind: string; url: string }> }> };
   const listed = listBody.products.find((product) => product.productId === candidate.productId);
   assert.ok(listed);
   assert.equal(listed.detailUrl, `/api/v1/products/${candidate.productId}`);
   assert.equal(listed.evidenceUrl, `/api/v1/products/${candidate.productId}/evidence`);
+  assert.ok(listed.readiness);
+  assert.ok(listed.readiness.geometry.orders.length > 0);
+  assert.ok(listed.readiness.reverseLookup.orders.length > 0);
   assert.ok(listed.links.some((link) => link.kind === "fits-moc"));
 
   const detailResponse = await fetch(`http://127.0.0.1:${port}${listed.detailUrl}`);
   assert.equal(detailResponse.status, 200);
-  const detail = await detailResponse.json() as { schemaVersion: number; identity: { productId: string }; coverage: { layerId?: string; ordering: string; precision: string }; verification: { status: string }; evidenceUrl: string };
+  const detailText = await detailResponse.text();
+  const detail = JSON.parse(detailText) as { schemaVersion: number; identity: { productId: string }; coverage: { layerId?: string; ordering: string; precision: string }; readiness?: { level: number; gaps: string[] }; source?: { url?: string; geometryUrl?: string }; conclusion: { summary: string }; verification: { status: string }; evidenceUrl: string };
   assert.equal(detail.schemaVersion, 1);
   assert.equal(detail.identity.productId, candidate.productId);
   assert.equal(detail.coverage.ordering, "NESTED");
   assert.equal(detail.coverage.precision, "exact");
   assert.equal(detail.verification.status, "complete");
+  assert.equal(detail.readiness?.level, 1);
+  assert.ok(detail.readiness?.gaps.includes("source-unit-index-missing"));
+  assert.equal(detail.source?.url, undefined);
+  assert.ok(detail.source?.geometryUrl?.startsWith("/api/v1/assets/"));
+  assert.doesNotMatch(detailText, /10\.42\.0\.7|192\.168\.0\.4/);
+  assert.doesNotMatch(detail.conclusion.summary, /scannerRunId|taskSnapshot|normalized-scan|\/var\/lib|elasticsearch/i);
 
   const evidenceResponse = await fetch(`http://127.0.0.1:${port}${detail.evidenceUrl}`);
   assert.equal(evidenceResponse.status, 200);
@@ -704,6 +765,58 @@ test("public product dossier, evidence projection and predictable MOC URL are ha
   const mocHead = await fetch(`http://127.0.0.1:${port}${mocUrl}`, { method: "HEAD" });
   assert.equal(mocHead.status, 200);
   assert.ok(Number(mocHead.headers.get("content-length")) > 0);
+
+  const beforeRetirement = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}`, { headers: { Authorization: "Bearer test-admin-token" } });
+  const beforeRetirementBody = await beforeRetirement.json() as { product: { revision: number } };
+  const retirement = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}/retire`, {
+    method: "POST",
+    headers: { Authorization: "Bearer test-admin-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ revision: beforeRetirementBody.product.revision, reason: "Superseded by a newer release" }),
+  });
+  assert.equal(retirement.status, 200);
+  const retirementBody = await retirement.json() as { product: { retiredAt?: string; retirementReason?: string; published?: unknown } };
+  assert.ok(retirementBody.product.retiredAt);
+  assert.equal(retirementBody.product.retirementReason, "Superseded by a newer release");
+  assert.ok(retirementBody.product.published, "retirement keeps the historical published content");
+
+  const retiredAdmin = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(retiredAdmin.status, 200);
+  const retiredAdminBody = await retiredAdmin.json() as { product: { lifecycle?: { publication?: { state?: string }; runtime?: { state?: string }; links?: { product?: string; sky?: string; moc?: string } }; retiredAt?: string } };
+  assert.equal(retiredAdminBody.product.retiredAt !== undefined, true);
+  assert.equal(retiredAdminBody.product.lifecycle?.publication?.state, "RETIRED");
+  assert.equal(retiredAdminBody.product.lifecycle?.runtime?.state, "INACTIVE");
+  assert.equal(retiredAdminBody.product.lifecycle?.links?.product, `/api/v1/admin/products/${candidate.productId}`);
+  assert.equal(retiredAdminBody.product.lifecycle?.links?.sky, undefined);
+  const historyResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${candidate.productId}/history`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(historyResponse.status, 200);
+  const historyText = await historyResponse.text();
+  const historyBody = JSON.parse(historyText) as { history: Array<{ action?: string; revision?: number }> };
+  assert.ok(historyBody.history.some((entry) => entry.action === "publish"));
+  assert.ok(historyBody.history.some((entry) => entry.action === "retire"));
+  assert.doesNotMatch(historyText, /summaryMarkdown|methodologyMarkdown|executionEvidence|secretKey/i);
+
+  const publicProductsAfterRetirement = await fetch(`http://127.0.0.1:${port}/api/v1/products`);
+  assert.equal(publicProductsAfterRetirement.status, 200);
+  assert.equal((await publicProductsAfterRetirement.json() as { products: Array<{ productId: string }> }).products.some((product) => product.productId === candidate.productId), false);
+  const publicAssetsAfterRetirement = await fetch(`http://127.0.0.1:${port}/api/v1/assets`);
+  assert.equal(publicAssetsAfterRetirement.status, 200);
+  assert.equal((await publicAssetsAfterRetirement.json() as { files: Array<{ product?: string; surveyId?: string; releaseId?: string }> }).files.some((asset) => asset.product === canonicalProductName && asset.surveyId === canonicalSurveyId && asset.releaseId === canonicalReleaseId), false);
+  assert.equal((await fetch(`http://127.0.0.1:${port}/api/v1/products/${candidate.productId}`)).status, 404);
+  assert.equal((await fetch(`http://127.0.0.1:${port}/api/v1/products/${candidate.productId}/evidence`)).status, 404);
+  const publicCoverageAfterRetirement = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/catalog`);
+  const publicCoverageAfterRetirementBody = await publicCoverageAfterRetirement.json() as { layers: Array<{ layerId: string }> };
+  assert.equal(publicCoverageAfterRetirementBody.layers.some((layer) => layer.layerId === "euclid-q1-deep-fields-image-extent"), false);
+  assert.equal((await fetch(`http://127.0.0.1:${port}${mocUrl}`)).status, 404);
+  const retiredReverse = await fetch(`http://127.0.0.1:${port}/api/v1/coverage/reverse-lookup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ layerIds: ["euclid-q1-deep-fields-image-extent"], order: 4, cells: [0] }),
+  });
+  assert.equal(retiredReverse.status, 200);
+  const retiredReverseBody = await retiredReverse.json() as { entrypoints: unknown[]; downloadPlan: { entrypoints: unknown[]; files: unknown[] } };
+  assert.deepEqual(retiredReverseBody.entrypoints, []);
+  assert.deepEqual(retiredReverseBody.downloadPlan.entrypoints, []);
+  assert.deepEqual(retiredReverseBody.downloadPlan.files, []);
 });
 
 test("HTTP publication activates dynamic MOC assets and restores them after restart", async (context) => {
@@ -788,6 +901,10 @@ test("HTTP publication activates dynamic MOC assets and restores them after rest
   assert.equal(stagedAdminProduct?.lifecycle?.publication?.state, "DRAFT");
   assert.equal(stagedAdminProduct?.lifecycle?.runtime?.state, "INACTIVE");
   assert.equal(stagedAdminProduct?.mocBuild?.lifecycle?.runtime?.state, "INACTIVE");
+  const stagedDetail = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${productId}`, { headers: adminHeaders });
+  const stagedDetailBody = await stagedDetail.json() as { product: { revision: number; readiness?: { draft?: { gaps?: string[] } } } };
+  const stagedReview = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${productId}/review`, { method: "POST", headers: adminHeaders, body: JSON.stringify({ revision: stagedDetailBody.product.revision, acceptedGaps: stagedDetailBody.product.readiness?.draft?.gaps ?? [] }) });
+  assert.equal(stagedReview.status, 200);
   const publish = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${productId}/publish`, { method: "POST", headers: adminHeaders, body: "{}" });
   assert.equal(publish.status, 200);
   const publishBody = await publish.json() as { lifecycle?: { publication?: { state?: string }; runtime?: { state?: string; availableOrders?: number[] }; links?: Record<string, string> } };

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { createArtifactStore, FilesystemArtifactStore, type ArtifactStore, publishReleaseArchive } from "../server/artifact-store.js";
+import { activateReleasePointer, createArtifactStore, FilesystemArtifactStore, type ArtifactStore, publishReleaseArchive, uploadReleaseArchive } from "../server/artifact-store.js";
 import { packageRelease } from "../scripts/release-archive.js";
 import { storageLayout } from "../server/storage-layout.js";
 import { cleanupReleaseHistory, syncReleaseFromObjectStore } from "../server/sync-release.js";
@@ -52,6 +52,22 @@ test("release archive is deterministic and publishes only the archive pointer", 
     const pointer = await store.get("public/current.json");
     assert.equal(JSON.parse(pointer!.body.toString("utf8")).schemaVersion, 2);
     assert.ok(await store.head(published.archiveKey));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("release pointer activation rejects a stale baseline after candidate upload", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-archive-cas-release-"));
+  try {
+    const { bundleSha256 } = await makeSource(root);
+    const descriptor = await packageRelease({ root, outputPath: path.join(root, "release.tar.gz") });
+    const store = new LocalS3Store(new FilesystemArtifactStore(path.join(root, "objects")));
+    await publishReleaseArchive(descriptor, store);
+    const uploaded = await uploadReleaseArchive(descriptor, store);
+    await assert.rejects(() => activateReleasePointer(uploaded, store, { expectedCurrentBundleSha256: "0".repeat(64) }), /Current release changed/);
+    const pointer = JSON.parse((await store.get("public/current.json"))!.body.toString("utf8")) as { bundle: { sha256: string } };
+    assert.equal(pointer.bundle.sha256, bundleSha256);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

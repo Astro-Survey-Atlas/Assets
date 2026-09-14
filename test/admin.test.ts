@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { AdminHttpError, AssetsAdmin, buildConnectorResource, buildConnectorResources, buildTaskResource, connectorView, mocDiscoveryState, taskView, type ObjectStorageProbeInput } from "../server/admin.js";
+import { ConnectorInventoryStateStore, ConnectorProbeStateStore } from "../server/connector-state.js";
 import { aggregateWorkAttempts } from "../site/admin/work-items.js";
 
 test("work output aggregation counts attempts but renders only the latest result", () => {
@@ -55,6 +59,121 @@ test("connector views start as NOT_CHECKED because ConfigMaps do not persist pro
   assert.equal(connectors[0]?.checkedAt, undefined);
 });
 
+test("Warehouse AstroDataSource connectors are visible alongside Assets ConfigMaps", async () => {
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const dataSource = {
+    apiVersion: "org.zhejianglab.astro.metadata/v1alpha1",
+    kind: "AstroDataSource",
+    metadata: { name: "warehouse-oss", namespace: "warehouse", creationTimestamp: "2026-09-13T00:00:00.000Z" },
+    spec: { type: "oss", endpoint: "https://oss.example", bucket: "catalog", prefix: "dr1", credentialSecretRef: { name: "warehouse-oss-secret" } },
+    status: { phase: "Ready", message: "DataSource configuration is valid" },
+  };
+  const connectors = await new AssetsAdmin(config, {
+    listCore: async () => [],
+    listDataSources: async () => [dataSource],
+  } as never).listConnectors();
+  assert.equal(connectors.length, 1);
+  assert.equal(connectors[0]?.name, "warehouse-oss");
+  assert.equal(connectors[0]?.resourceKind, "AstroDataSource");
+  assert.equal(connectors[0]?.configurationPhase, "Ready");
+  assert.equal(connectors[0]?.bucket, "catalog");
+  assert.equal(connectors[0]?.prefix, "dr1");
+});
+
+test("Warehouse AstroDataSource connectors use their credentialSecretRef for probes", async () => {
+  let received: ObjectStorageProbeInput | undefined;
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const dataSource = {
+    apiVersion: "org.zhejianglab.astro.metadata/v1alpha1",
+    kind: "AstroDataSource",
+    metadata: { name: "warehouse-s3" },
+    spec: { type: "s3", endpoint: "https://s3.example", bucket: "data", credentialSecretRef: { name: "warehouse-s3-secret" } },
+    status: { phase: "Ready" },
+  };
+  const kube = {
+    getCore: async (plural: string) => plural === "configmaps" ? null : { data: { accessKey: Buffer.from("key").toString("base64"), secretKey: Buffer.from("secret").toString("base64") } },
+    getDataSource: async () => dataSource,
+  };
+  const result = await new AssetsAdmin(config, kube as never, { probeObjectStorage: async (input: ObjectStorageProbeInput) => { received = input; } }).probeConnector("warehouse-s3");
+  assert.equal(result.phase, "READY");
+  assert.equal(result.resourceKind, "AstroDataSource");
+  assert.equal(received?.bucket, "data");
+  assert.equal(received?.accessKeyId, "key");
+  assert.equal(received?.secretAccessKey, "secret");
+});
+
+test("Warehouse AstroDataSource probes accept the native access-key and secret-key Secret fields", async () => {
+  let received: ObjectStorageProbeInput | undefined;
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const dataSource = {
+    apiVersion: "org.zhejianglab.astro.metadata/v1alpha1",
+    kind: "AstroDataSource",
+    metadata: { name: "warehouse-native-s3" },
+    spec: { type: "s3", endpoint: "https://s3.example", bucket: "data", credentialSecretRef: { name: "warehouse-native-s3-secret" } },
+  };
+  const kube = {
+    getCore: async (plural: string) => plural === "configmaps" ? null : { data: { "access-key": Buffer.from("native-key").toString("base64"), "secret-key": Buffer.from("native-secret").toString("base64") } },
+    getDataSource: async () => dataSource,
+  };
+  const result = await new AssetsAdmin(config, kube as never, { probeObjectStorage: async (input: ObjectStorageProbeInput) => { received = input; } }).probeConnector("warehouse-native-s3");
+  assert.equal(result.phase, "READY");
+  assert.equal(received?.accessKeyId, "native-key");
+  assert.equal(received?.secretAccessKey, "native-secret");
+});
+
+test("connector probe state survives a new admin process and excludes credentials", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-connector-state-"));
+  const snapshots: unknown[] = [];
+  const sink = { enqueue: async (_namespace: string, state: unknown) => { snapshots.push(state); return {} as never; } };
+  const first = new ConnectorProbeStateStore(root, sink);
+  await first.set("source", { phase: "READY", message: "read-only probe", checkedAt: "2026-09-13T00:00:00.000Z" });
+  const second = new ConnectorProbeStateStore(root, sink);
+  assert.deepEqual(await second.get("source"), { phase: "READY", message: "read-only probe", checkedAt: "2026-09-13T00:00:00.000Z" });
+  const persisted = await readFile(path.join(root, "connector-probes-v1.json"), "utf8");
+  assert.doesNotMatch(persisted, /secret|accessKey|secretKey/i);
+  assert.equal(snapshots.length, 1);
+});
+
+test("persisted connector probes are invalidated when the connector definition changes", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-connector-fingerprint-"));
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const resource = { metadata: { name: "assets-s3", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "connector" } }, data: { type: "s3", endpoint: "https://object.example", bucket: "data", credentialSecretName: "assets-s3-credentials" } };
+  const kube = { listCore: async () => [resource], getCore: async (plural: string) => plural === "configmaps" ? resource : { data: { accessKey: Buffer.from("key").toString("base64"), secretKey: Buffer.from("secret").toString("base64") } } };
+  const firstStore = new ConnectorProbeStateStore(root);
+  await new AssetsAdmin(config, kube as never, { probeObjectStorage: async () => undefined }, firstStore).probeConnector("assets-s3");
+  const changed = structuredClone(resource);
+  changed.data.endpoint = "https://other.example";
+  const second = await new AssetsAdmin(config, { listCore: async () => [changed] } as never, { probeObjectStorage: async () => undefined }, new ConnectorProbeStateStore(root)).listConnectors();
+  assert.equal(second[0]?.phase, "NOT_CHECKED");
+});
+
+test("persisted connector probes are invalidated when the credential Secret rotates", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-connector-secret-rotation-"));
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const resource = { metadata: { name: "assets-s3", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "connector" } }, data: { type: "s3", endpoint: "https://object.example", bucket: "data", credentialSecretName: "assets-s3-credentials" } };
+  const secret = { metadata: { name: "assets-s3-credentials", resourceVersion: "1" }, data: { accessKey: Buffer.from("key").toString("base64"), secretKey: Buffer.from("secret").toString("base64") } };
+  const kube = { listCore: async () => [resource], getCore: async (plural: string) => plural === "configmaps" ? resource : secret };
+  try {
+    const state = new ConnectorProbeStateStore(root);
+    await new AssetsAdmin(config, kube as never, { probeObjectStorage: async () => undefined }, state).probeConnector("assets-s3");
+    secret.metadata.resourceVersion = "2";
+    const listed = await new AssetsAdmin(config, kube as never, { probeObjectStorage: async () => undefined }, new ConnectorProbeStateStore(root)).listConnectors();
+    assert.equal(listed[0]?.phase, "NOT_CHECKED");
+    assert.equal(listed[0]?.checkedAt, undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("connector probe state restores from the authority snapshot when the local file is absent", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-connector-restore-"));
+  const store = new ConnectorProbeStateStore(root, {
+    enqueue: async () => ({}) as never,
+    restore: async (namespace: string) => namespace === "connector-probes" ? { pointer: {} as never, state: { schemaVersion: 1, probes: { source: { phase: "ERROR", message: "restored", checkedAt: "2026-09-13T00:00:00.000Z" } } } } : null,
+  });
+  assert.deepEqual(await store.get("source"), { phase: "ERROR", message: "restored", checkedAt: "2026-09-13T00:00:00.000Z" });
+});
+
 test("object connector probes decode Secret data and return a transient READY result", async () => {
   let received: ObjectStorageProbeInput | undefined;
   const kube = {
@@ -72,6 +191,101 @@ test("object connector probes decode Secret data and return a transient READY re
   assert.equal(received?.accessKeyId, "access-key");
   assert.equal(received?.secretAccessKey, "secret-value");
   assert.equal("secret-value" in result, false);
+});
+
+test("object connector inventory accumulates pages and survives a fresh admin process", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-connector-inventory-"));
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const resource = { metadata: { name: "assets-s3", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "connector" } }, data: { type: "s3", endpoint: "https://object.example", bucket: "data", prefix: "dr1", credentialSecretName: "assets-s3-credentials" } };
+  const kube = { getCore: async (plural: string) => plural === "configmaps" ? resource : { data: { accessKey: Buffer.from("key").toString("base64"), secretKey: Buffer.from("secret").toString("base64") } }, listCore: async () => [resource] };
+  let page = 0;
+  const inventoryClient = {
+    inventoryObjectStorage: async (_input: unknown, token?: string) => {
+      page += 1;
+      if (!token) return { objects: [{ sizeBytes: 10 }, { sizeBytes: 20 }], nextToken: "page-2", truncated: true };
+      return { objects: [{ sizeBytes: 30 }], truncated: false };
+    },
+  };
+  try {
+    const state = new ConnectorInventoryStateStore(root);
+    const admin = new AssetsAdmin(config, kube as never, inventoryClient as never, undefined, state);
+    const first = await admin.inventoryConnector("assets-s3");
+    assert.equal(first.state, "running");
+    assert.equal(first.processedObjects, 2);
+    assert.equal(first.denominatorKnown, false);
+    const second = await admin.inventoryConnector("assets-s3");
+    assert.equal(second.state, "complete");
+    assert.equal(second.totalObjectCount, 3);
+    assert.equal(second.totalBytes, 60);
+    const restarted = new AssetsAdmin(config, kube as never, inventoryClient as never, undefined, new ConnectorInventoryStateStore(root));
+    const listed = await restarted.listConnectors();
+    assert.equal(listed[0]?.inventory?.state, "complete");
+    assert.equal(listed[0]?.inventory?.totalObjectCount, 3);
+    assert.equal(page, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("local connector inventory remains explicitly unknown because PVC contents belong to Warehouse", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-local-inventory-"));
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const resource = { metadata: { name: "assets-local", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "connector" } }, data: { type: "local", pvcName: "atlas-source-catalogs", basePath: "dr1" } };
+  try {
+    const state = new ConnectorInventoryStateStore(root);
+    const admin = new AssetsAdmin(config, { getCore: async () => resource } as never, undefined, undefined, state);
+    const result = await admin.inventoryConnector("assets-local");
+    assert.equal(result.state, "unknown");
+    assert.equal(result.denominatorKnown, false);
+    assert.match(result.note ?? "", /Warehouse/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("object inventory marks a provider-truncated page partial instead of restarting with duplicate counts", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-connector-inventory-partial-"));
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const resource = { metadata: { name: "assets-s3", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "connector" } }, data: { type: "s3", endpoint: "https://object.example", bucket: "data", credentialSecretName: "assets-s3-credentials" } };
+  const kube = { getCore: async (plural: string) => plural === "configmaps" ? resource : { data: { accessKey: Buffer.from("key").toString("base64"), secretKey: Buffer.from("secret").toString("base64") } }, listCore: async () => [resource] };
+  let calls = 0;
+  const inventoryClient = { inventoryObjectStorage: async () => { calls += 1; return { objects: [{ sizeBytes: 10 }], truncated: true }; } };
+  try {
+    const state = new ConnectorInventoryStateStore(root);
+    const admin = new AssetsAdmin(config, kube as never, inventoryClient as never, undefined, state);
+    const first = await admin.inventoryConnector("assets-s3");
+    assert.equal(first.state, "partial");
+    assert.equal(first.denominatorKnown, false);
+    assert.match(first.note ?? "", /continuation token/);
+    const second = await admin.inventoryConnector("assets-s3");
+    assert.equal(second.state, "partial");
+    assert.equal(second.processedObjects, 1, "a new pass must not reuse the previous partial counter");
+    assert.equal(calls, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("failed inventory retains a provider cursor for an explicit retry", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "assets-connector-inventory-retry-"));
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const resource = { metadata: { name: "assets-s3", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "connector" } }, data: { type: "s3", endpoint: "https://object.example", bucket: "data", credentialSecretName: "assets-s3-credentials" } };
+  const kube = { getCore: async (plural: string) => plural === "configmaps" ? resource : { data: { accessKey: Buffer.from("key").toString("base64"), secretKey: Buffer.from("secret").toString("base64") } } };
+  let calls = 0;
+  const inventoryClient = { inventoryObjectStorage: async (_input: unknown, token?: string) => { calls += 1; if (!token) return { objects: [{ sizeBytes: 10 }], nextToken: "page-2", truncated: true }; if (calls === 2) throw new Error("temporary outage"); return { objects: [{ sizeBytes: 20 }], truncated: false }; } };
+  try {
+    const state = new ConnectorInventoryStateStore(root);
+    const admin = new AssetsAdmin(config, kube as never, inventoryClient as never, undefined, state);
+    assert.equal((await admin.inventoryConnector("assets-s3")).state, "running");
+    assert.equal((await admin.inventoryConnector("assets-s3")).state, "failed");
+    const done = await admin.inventoryConnector("assets-s3");
+    assert.equal(done.state, "complete");
+    assert.equal(done.totalObjectCount, 2);
+    assert.equal(done.totalBytes, 30);
+    assert.equal(calls, 3);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("object connector probes report empty listings as READY and redact storage errors", async () => {
@@ -374,6 +588,36 @@ test("coverage task defaults use the standard Elasticsearch index names", () => 
     sourcePaths: ["oss://example/projects/CSST"],
     objectIndex: "legacy_object_index",
   }, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400 && /objectIndex is not part/.test(error.message));
+});
+
+test("ScanRequests sourced from a Warehouse AstroDataSource preserve its native credential key names", async () => {
+  const dataSource = {
+    apiVersion: "org.zhejianglab.astro.metadata/v1alpha1",
+    kind: "AstroDataSource",
+    metadata: { name: "warehouse-native-s3" },
+    spec: { type: "s3", endpoint: "https://s3.example", bucket: "data", credentialSecretRef: { name: "warehouse-native-s3-secret" } },
+  };
+  let created: Record<string, unknown> | undefined;
+  const kube = {
+    getCore: async (plural: string) => plural === "configmaps" ? null : { metadata: { name: "warehouse-native-s3-secret" }, data: { "access-key": "a", "secret-key": "b" } },
+    getDataSource: async () => dataSource,
+    create: async (_plural: string, resource: Record<string, unknown>) => { created = resource; return resource; },
+  };
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  await new AssetsAdmin(config, kube as never).createTask({
+    name: "native-s3-scan",
+    layerId: "native-layer",
+    surveyId: "gaia",
+    releaseId: "dr3",
+    product: "Gaia DR3",
+    mode: "fits-wcs",
+    coverageRole: "footprint_extent",
+    dataOrigin: "observed",
+    sourceTier: "official_inventory_derived",
+    sourceConnector: "warehouse-native-s3",
+    sourcePaths: ["s3://data/dr3"],
+  });
+  assert.deepEqual((created?.spec as Record<string, unknown>).credentials, { source: { secretName: "warehouse-native-s3-secret", accessKeyKey: "access-key", secretKeyKey: "secret-key" } });
 });
 
 test("spectrum tasks render the Warehouse header-position extraction mode", () => {
