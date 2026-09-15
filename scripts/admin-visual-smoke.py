@@ -12,13 +12,13 @@ def main():
     screenshots = Path(os.environ.get("ASSETS_SCREENSHOT_DIR", "/tmp/asa-admin-visual"))
     screenshots.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, executable_path=shutil.which("chromium") or shutil.which("chromium-browser"))
+        browser = playwright.chromium.launch(headless=True, executable_path=os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE") or shutil.which("chromium") or shutil.which("chromium-browser"))
         page = browser.new_page(viewport={"width": 1440, "height": 1000})
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         if urlsplit(base).hostname in ("127.0.0.1", "localhost"):
             page.route("**/api/v1/admin/connectors", lambda route: route.fulfill(json={"connectors": [
-                {"name": f"fixture-{phase.lower()}", "type": "s3", "phase": phase, "endpoint": "https://storage.example", "bucket": "survey-data", "inventory": {"state": "unknown", "observedObjectCount": 1}}
+                {"name": f"fixture-{phase.lower()}", "type": "local" if phase in ("READY", "ERROR") else "s3", "pvcName": "source", "phase": phase, "endpoint": "https://storage.example", "bucket": "survey-data", "inventory": {"state": "unknown", "observedObjectCount": 1}}
                 for phase in ("READY", "ERROR", "PENDING", "NOT_CHECKED")
             ]}))
         page.goto(base, wait_until="networkidle")
@@ -54,8 +54,15 @@ def main():
         connector = page.locator(".connector-row").first
         assert connector.locator(":scope > .connector-inventory").count() == 1
         assert connector.locator(".connector-row-copy .connector-inventory").count() == 0
+        for row in page.locator('.connector-row').all():
+            row.click()
+            selected_icon = row.locator('.connector-type-icon')
+            detail_icon = page.locator('#connector-detail .connector-type-icon')
+            colors = "el => { const s = getComputedStyle(el); return [s.color, s.backgroundColor, s.borderColor]; }"
+            assert selected_icon.evaluate(colors) == detail_icon.evaluate(colors), 'list/detail connector icon colors differ'
         page.screenshot(path=str(screenshots / "connectors-light.png"), full_page=True)
         page.locator("#theme-toggle").click()
+        assert page.locator('.connector-row.is-selected .connector-type-icon').evaluate(colors) == page.locator('#connector-detail .connector-type-icon').evaluate(colors), 'dark theme colors differ'
         page.screenshot(path=str(screenshots / "connectors-dark.png"), full_page=True)
         page.locator('[data-admin-step="overview"]').click()
         if page.locator("#overview-back").is_visible():

@@ -1,5 +1,83 @@
 # Assets Session Handoff
 
+## Latest: action feedback and detail layout (2026-09-15, dev 142)
+
+Dev image `0.1.0-20260915-133500`, digest
+`sha256:fab75b0b4a79db330b8d5d89d41f85634fa50d7337171ac7c06194cf4d44471c`;
+Helm revision **142**, site and publisher Ready. User entry remains
+`http://astro.assets.dev.72602.space:32080/`.
+
+Fixed consent checkbox first-line alignment and oversized cancel button.
+Successful review reveals the owning survey and product row, returns focus,
+and highlights the row green for five seconds. Review/publish share a per-product
+in-flight guard; buttons show spinner/aria-busy and disable duplicate requests,
+including new buttons rendered while the request is pending. Failures restore
+the action for retry. Connector detail has a fixed square 44px icon, wrapping
+identity, and one row of three 36px square icon buttons with accessible text.
+
+IMPORTANT user item 4 requested an explanation first: draft/published storage
+and duplicate readiness panels remain unchanged. Publishing clones draft into
+published and retains a working copy for future edits. Suggested future UX is
+one combined panel when version/content/evidence match, separate panels only
+when unpublished changes exist; user has not approved that change yet.
+
+Build, 198 Node tests + Core wheel, TypeScript and Helm lint passed. New local
+`scripts/admin-action-feedback-browser.py` intercepts every review/publish and
+checks consent/cancel geometry, reveal/highlight expiry, spinner, single request
+under repeated clicks, failure/retry success and square Connector controls on
+mobile. Live read-only browser verified requested product
+`b2c58698f7945ea9c0a2` and desktop/mobile Connector layout. No real product review
+or publication was triggered for testing. Screenshots:
+`/dev/shm/asa-feedback-dev-142/` and `/dev/shm/asa-action-feedback/`.
+Public coverage 200 and DESI FITS Range 206 with SHA passed; authority bundle
+remains `adace67a9c7bcbae0044ced06352be7263b91dade2cb0bc8a4bc1415539ee407`.
+Production unchanged, no commit/push. Temporary 4199 server stopped.
+
+Previous rollout records below are historical.
+
+## Latest: public content correction and admin consistency (2026-09-15)
+
+Dev Helm revision **141**, image `0.1.0-20260915-113800`, digest
+`sha256:d870a02d2582a6674adaa7be010a4cbec968dfbc41b63113bb7152c32c242104`.
+Site and publisher Ready. User URL remains
+`http://astro.assets.dev.72602.space:32080/`.
+
+Three August 26 Warehouse ACTIVE test layers leaked through runtime merging,
+not through published survey/package data: `smoke-catalog`,
+`assets-smoke-image-euclid-vis`, `assets-atlas-spectrum-sdss-current`.
+Their scan_run_ids and source findings are recorded at the top of the admin
+refactor plan. Server defaults now union mandatory test exclusions with custom
+Helm exclusions, so old reused values cannot reintroduce them. Live catalog has
+124 layers; all three are absent, direct blocks return 404, reverse lookup
+returns no matches/files/entrypoints. Warehouse records/evidence were retained.
+
+SDK is now an introduction with official docs/quickstart/source links; obsolete
+CLI snippets, version 1.0.0 and undecided ownership language are removed.
+GitHub project responsibilities and docs/source links were updated in EN/ZH.
+Admin images use a consistent desaturated display, restoring original color on
+hover/focus; Euclid/Gaia badges fit without cropping. Unpublished state uses the
+lifecycle badge format, product modalities have icons, DR headers count modes.
+Execution receipts share preflight styles, colored checks, duration, collapsible
+input/output references and explicit missing-version badges; no historic evidence
+or versions were invented.
+
+Verification: build, TypeScript, **198 Node tests + Core wheel**, Helm lint,
+five-poll usability regression and new receipt/image/modality browser fixture
+passed. Live visual smoke, real product receipt, SDK/GitHub language switching,
+public test-layer isolation and DESI FITS Range 206 with SHA passed. Authority
+bundle remains `adace67a9c7bcbae0044ced06352be7263b91dade2cb0bc8a4bc1415539ee407`;
+production unchanged. No commit/push performed.
+
+Screenshots: `/dev/shm/asa-sep15-dev-141/`, local cases in
+`/dev/shm/asa-sep15-admin/` and `/dev/shm/asa-sep15-pages/`.
+Local `/tmp` writes hit errno -122 (quota); tests succeeded with TMPDIR=/dev/shm.
+Snap confinement rejects profiles there, so browser verification used native
+`/snap/chromium/current/usr/lib/chromium-browser/chrome` via
+PLAYWRIGHT_CHROMIUM_EXECUTABLE. No unrelated temporary files were deleted.
+The temporary local 4199 server was stopped after verification.
+
+Previous rollout records below are historical.
+
 ## Latest: dev admin polish and independent task observation (2026-09-14)
 
 Dev Helm revision **140**, image `0.1.0-20260914-171000`, digest

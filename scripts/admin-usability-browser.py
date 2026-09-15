@@ -22,7 +22,7 @@ def main():
     discovery_polls = []
     build_polls = []
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, executable_path=shutil.which("chromium") or shutil.which("chromium-browser"))
+        browser = playwright.chromium.launch(headless=True, executable_path=os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE") or shutil.which("chromium") or shutil.which("chromium-browser"))
         page = browser.new_page(viewport={"width": 1440, "height": 900})
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
@@ -45,7 +45,7 @@ def main():
             elif path.endswith("/moc-builds"):
                 build_polls.append(path)
                 build["progress"]["message"] = f"构建结果检查 {len(build_polls)}"
-                route.fulfill(json={"requests": [build]})
+                route.fulfill(json={"requests": [build] + [dict(build, name=f"jwst-build-{i}", candidateId=f"jwst-fixture-{i}", candidateTitle=f"JWST product {i}") for i in range(1, 5)]})
             else:
                 route.fulfill(json={"request": build, "registrationDefaults": defaults, "surveyFacts": facts})
 
@@ -56,6 +56,10 @@ def main():
         page.locator("#login-form button[type=submit]").click()
         expect(page.locator("[data-survey-card]").first).to_be_visible()
         page.locator('[data-admin-step="tasks"]').click()
+        expect(page.locator('#task-panel-outputs')).to_be_visible()
+        page.evaluate("window.savedOutputList = document.getElementById('modality-chart').firstChild")
+        page.locator('[data-task-tab="discovery"]').click()
+        expect(page.locator('#task-panel-outputs')).not_to_be_visible()
         expect(page.locator('[data-moc-review="roman-waiting"]')).to_be_visible()
         page.locator("#moc-discovery-create-button").click()
         page.locator("#moc-product-search").fill("Euclid")
@@ -84,8 +88,20 @@ def main():
         page.locator("#refresh-button").click()
         page.wait_for_timeout(500)
         assert len(discovery_polls) > poll_count, "manual refresh remains usable while paused"
+        page.locator('[data-task-tab="outputs"]').click()
+        assert page.evaluate("window.savedOutputList === document.getElementById('modality-chart').firstChild"), "tabs preserve the output DOM"
         width = page.locator(".work-build-output").first.evaluate("el => el.getBoundingClientRect().width / el.closest('.work-output-row').getBoundingClientRect().width")
         assert width > .95, width
+        fourth_height = page.locator('.work-build-output').nth(3).evaluate('el => el.getBoundingClientRect().height')
+        assert fourth_height < 100, fourth_height
+        page.locator('[data-moc-review-output="roman-waiting"]').click()
+        expect(page.locator('#moc-review-dialog')).to_be_visible()
+        page.locator('#moc-review-dialog-cancel').click()
+        page.locator('[data-task-tab="outputs"]').focus()
+        page.keyboard.press('End')
+        expect(page.locator('#task-panel-scans')).to_be_visible()
+        page.keyboard.press('ArrowLeft')
+        expect(page.locator('#task-panel-discovery')).to_be_visible()
         page.locator('[data-moc-review="roman-waiting"]').click()
         expect(page.locator("#moc-review-state")).to_contain_text("内存不足")
         expect(page.locator("#moc-review-title")).to_contain_text("等待受阻")
@@ -122,6 +138,11 @@ def main():
         expect(page.locator('#overview-back')).to_be_visible()
         page.go_back()
         assert not page.evaluate("document.documentElement.scrollWidth > window.innerWidth"), "mobile overflow"
+        page.locator('[data-admin-step="tasks"]').click()
+        page.locator('[data-task-tab="scans"]').click()
+        page.reload(wait_until='networkidle')
+        expect(page.locator('[data-task-tab="scans"]')).to_have_attribute('aria-selected', 'true')
+        expect(page.locator('#task-panel-scans')).to_be_visible()
         assert not errors, errors
         browser.close()
     print("admin usability browser passed (local JWST/Roman fixtures; registration POST intercepted)")

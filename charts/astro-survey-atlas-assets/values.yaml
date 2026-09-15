@@ -36,6 +36,9 @@ warehouse:
     - assets-smoke-catalog-gaia
     - warehouse-caller-assets
     - warehouse-selftest-s3
+    - smoke-catalog
+    - assets-smoke-image-euclid-vis
+    - assets-atlas-spectrum-sdss-current
 
 service:
   type: ClusterIP

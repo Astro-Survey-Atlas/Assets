@@ -103,6 +103,22 @@ test("Warehouse smoke and self-test Gaia layers stay out of the public catalog",
   assert.equal(merged.records.get("warehouse-selftest-s3"), undefined);
 });
 
+test("known test layers remain excluded with old Helm overrides, without keyword filtering legitimate identities", () => {
+  const previous = process.env.ASSETS_WAREHOUSE_EXCLUDED_LAYER_IDS;
+  process.env.ASSETS_WAREHOUSE_EXCLUDED_LAYER_IDS = "warehouse-selftest-s3,custom-excluded";
+  try {
+    const denied = ["smoke-catalog", "assets-smoke-image-euclid-vis", "assets-atlas-spectrum-sdss-current", "custom-excluded"];
+    const ids = [...denied, "science-smoke-nebula"];
+    const base = { schemaVersion: 1, coordinateFrame: "ICRS" as const, ordering: "NESTED" as const, tileScheme: "ipix-range-4096" as const, layers: [], records: new Map([["smoke-catalog", layer("smoke-catalog", "smoke", [1])]]) };
+    const merged = coverageCatalogFromWarehouse(base, { layers: ids.map(id => warehouseLayer(id, "example")), coverages: ids.map(layerId => ({ layerId, order: 8, ipix: 12 })), truncated: false });
+    assert.deepEqual([...merged.records.keys()], ["science-smoke-nebula"]);
+    assert.deepEqual(merged.layers.map(layer => layer.layerId), ["science-smoke-nebula"]);
+  } finally {
+    if (previous === undefined) delete process.env.ASSETS_WAREHOUSE_EXCLUDED_LAYER_IDS;
+    else process.env.ASSETS_WAREHOUSE_EXCLUDED_LAYER_IDS = previous;
+  }
+});
+
 test("coverage globe keeps O8-only Warehouse layers in the O4 visual overview", () => {
   const catalog: CoverageCatalog = {
     schemaVersion: 1,

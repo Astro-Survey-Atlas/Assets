@@ -68,12 +68,14 @@ const defaultExcludedWarehouseLayerIds = new Set([
   "assets-smoke-catalog-gaia",
   "warehouse-caller-assets",
   "warehouse-selftest-s3",
+  "smoke-catalog",
+  "assets-smoke-image-euclid-vis",
+  "assets-atlas-spectrum-sdss-current",
 ]);
 
 function excludedWarehouseLayerIds(): Set<string> {
   const configured = process.env.ASSETS_WAREHOUSE_EXCLUDED_LAYER_IDS;
-  if (configured === undefined) return defaultExcludedWarehouseLayerIds;
-  return new Set(configured.split(",").map((value) => value.trim()).filter(Boolean));
+  return new Set([...defaultExcludedWarehouseLayerIds, ...(configured ?? "").split(",").map((value) => value.trim()).filter(Boolean)]);
 }
 
 function colorFor(id: string): string {
@@ -280,8 +282,8 @@ export function coverageCatalogFromWarehouse(
   snapshot: WarehouseCoverageCatalogSnapshot,
 ): CoverageCatalog & { records: Map<string, CoverageCellLayer> } {
   const fallbackById = base.records;
-  const records = new Map(base.records);
   const excluded = excludedWarehouseLayerIds();
+  const records = new Map([...base.records].filter(([id]) => !excluded.has(id)));
   for (const layer of snapshot.layers) {
     // Smoke and self-test layers remain evidence-only even if a stale
     // Warehouse index briefly reports them as ACTIVE.

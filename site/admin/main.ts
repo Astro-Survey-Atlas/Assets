@@ -7,8 +7,10 @@ import { parseAdminRoute, routePath, type AdminStep } from "./navigation.js";
 import { WorkspaceRequests, workspaceResources, businessSignature, type Resource } from "./workspaces.js";
 import { capabilityNames, gapGuidance, discoveryProgress, discoveryObservationLabel, type DiscoveryObservation } from "./readiness-copy.js";
 import { surveyPresentationImage, surveyPresentationAttribution } from "./presentation.js";
+import { mountTaskTabs } from "./task-tabs.js";
 
 mountLocaleControls();
+const taskTabs = mountTaskTabs(document.getElementById("admin-step-tasks")!);
 
 document.addEventListener("error", event => {
   const image = event.target;
@@ -115,7 +117,7 @@ const byId = <T extends HTMLElement>(id: string): T => {
 
 function renderIcons(): void {
   document.querySelectorAll<HTMLElement>("i[data-lucide]").forEach(icon => icon.setAttribute("data-icon-pending", icon.dataset.lucide!));
-  createIcons({ nameAttr: "data-icon-pending", icons: { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Sun, Table2, Unlock, Upload, X }, attrs: { "aria-hidden": "true" } });
+  createIcons({ nameAttr: "data-icon-pending", icons: { Download, Package, Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Sun, Table2, Unlock, Upload, X }, attrs: { "aria-hidden": "true" } });
   document.querySelectorAll("[data-icon-pending]").forEach(icon => icon.removeAttribute("data-icon-pending"));
 }
 
@@ -589,6 +591,14 @@ function modalityIcon(modality?: string): string {
   return "layers-3";
 }
 
+function modalityLabel(modality?: string): string {
+  return ({ image: "成像", imaging: "成像", spectrum: "光谱", spectroscopy: "光谱", catalog: "星表", photometry: "测光", cube: "数据立方", "integral-field": "积分视场", timeseries: "时序", "time-domain": "时域", infrared: "红外", ultraviolet: "紫外", simulation: "仿真" } as Record<string, string>)[modality?.toLowerCase() ?? ""] ?? (modality || "模态未知");
+}
+
+function modalityMarkup(modality?: string, count?: number): string {
+  return `<span class="product-modality" title="${escapeText(modality ?? "unknown")}"><i data-lucide="${modalityIcon(modality)}"></i><span>${escapeText(modalityLabel(modality))}</span>${count === undefined ? "" : `<strong>${count}</strong>`}</span>`;
+}
+
 function escapeText(value: unknown): string {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character] ?? character);
 }
@@ -722,7 +732,7 @@ function readinessChip(readiness?: ProductReadiness, version = "当前"): string
 
 function readinessVersionMarkup(versions?: ReadinessVersions): string {
   if (!versions) return readinessChip();
-  return `<div class="readiness-version-pair">${versions.published ? readinessChip(versions.published, "公开版本") : `<span class="publication-state">尚未发布</span>`}${!versions.published || JSON.stringify(versions.draft) !== JSON.stringify(versions.published) ? readinessChip(versions.draft, "工作版本") : ""}</div>`;
+  return `<div class="readiness-version-pair">${versions.published ? readinessChip(versions.published, "公开版本") : `<span class="lifecycle-chip lifecycle-publication publication-state"><i data-lucide="package"></i>尚未发布</span>`}${!versions.published || JSON.stringify(versions.draft) !== JSON.stringify(versions.published) ? readinessChip(versions.draft, "工作版本") : ""}</div>`;
 }
 
 type ReadinessActionStep = "sources" | "tasks" | "review" | "releases" | "scan";
@@ -764,13 +774,17 @@ function readinessDetailMarkup(versions?: ReadinessVersions): string {
 
 function executionEvidenceMarkup(entries?: ExecutionEvidence[], revision?: number): string {
   const visible = (entries ?? []).filter((entry) => revision === undefined || entry.revision === revision).slice(-32);
-  if (!visible.length) return `<section class="execution-evidence"><div class="section-heading"><div><span class="section-index">EXECUTION RECEIPTS</span><h4>实际执行记录</h4></div><span class="section-note">当前版本暂无记录</span></div><p class="resource-empty">方法说明不会自动生成执行成功记录；请在构建或扫描完成后登记输入、输出和校验。</p></section>`;
-  return `<section class="execution-evidence"><div class="section-heading"><div><span class="section-index">EXECUTION RECEIPTS</span><h4>实际执行记录</h4></div><span class="section-note">revision ${escapeText(String(revision ?? visible[0]?.revision ?? "--"))} · ${visible.length} 条</span></div><div class="execution-evidence-list">${visible.map((entry) => {
+  const heading = `<div class="review-preflight-summary"><h4>实际执行记录</h4><span>版本 ${escapeText(String(revision ?? visible[0]?.revision ?? "—"))} · ${visible.length} 条</span></div>`;
+  if (!visible.length) return `<section class="execution-evidence review-preflight">${heading}<div class="preflight-item is-pending"><i data-lucide="circle-dot"></i><div><strong>当前版本暂无执行记录</strong><p>从候选构建覆盖，或校验已有构建后，系统会记录真实的输入、输出和校验结果。</p></div><button type="button" class="admin-quiet" data-readiness-action="tasks">去探索 / 处理</button></div></section>`;
+  return `<section class="execution-evidence review-preflight">${heading}<div class="execution-evidence-list">${visible.map((entry) => {
     const stateName = (state: string) => ({ passed: "通过", failed: "失败", running: "执行中", skipped: "未执行", "not-applicable": "不适用" })[state] ?? state;
     const checkName = (id: string) => ({ "source-snapshot": "来源快照", "output-integrity": "输出完整性" })[id] ?? id;
     const stepName = ({ "moc-build": "获取来源并构建 MOC", "verify-moc-build": "重新校验构建产物" })[entry.stepId] ?? entry.stepId;
-    const references = (items: ExecutionEvidence["inputs"], label: string) => `<details><summary>${label} · ${items?.length ?? 0} 项</summary>${(items ?? []).map((item) => `<dl>${detailValue("制品", item.label)}${detailValue("记录位置", item.ref)}${detailValue("SHA-256", item.sha256)}</dl>`).join("") || "暂无记录"}</details>`;
-    return `<article class="execution-evidence-row"><div><strong>${escapeText(stepName)}</strong><span>${escapeText(stateName(entry.status))} · ${escapeText(formatDate(entry.startedAt))}${entry.finishedAt ? ` → ${escapeText(formatDate(entry.finishedAt))}` : ""}</span>${entry.tool ? `<small>${escapeText(entry.tool.name ?? "工具")} · ${escapeText(entry.tool.version ?? "执行版本未记录")}${entry.tool.imageDigest ? ` · ${escapeText(entry.tool.imageDigest)}` : ""}</small>` : ""}</div><div>${(entry.checks ?? []).map((check) => `<p>${escapeText(checkName(check.id))}：${escapeText(stateName(check.status))}${check.detail ? ` · ${escapeText(check.detail)}` : ""}</p>`).join("")}${references(entry.inputs, "输入")}${references(entry.outputs, "输出")}${entry.error ? `<p class="execution-evidence-error">${escapeText(entry.error)}</p>` : ""}</div></article>`;
+    const tone = (state: string) => state === "passed" ? "passed" : state === "failed" ? "blocking" : state === "running" ? "running" : "pending";
+    const icon = (state: string) => state === "passed" ? "circle-check" : state === "failed" ? "circle-alert" : "circle-dot";
+    const duration = entry.finishedAt ? Date.parse(entry.finishedAt) - Date.parse(entry.startedAt ?? "") : NaN;
+    const references = (items: ExecutionEvidence["inputs"], label: string, symbol: string) => `<details class="receipt-artifacts"><summary><i data-lucide="${symbol}"></i><span>${label}</span><strong>${items?.length ?? 0} 项</strong></summary><div class="receipt-artifact-list">${(items ?? []).map((item) => `<dl class="receipt-artifact">${detailValue("制品", item.label)}${detailValue("记录位置", item.ref)}${detailValue("SHA-256", item.sha256)}</dl>`).join("") || "<p>暂无记录</p>"}</div></details>`;
+    return `<article class="execution-receipt" data-state="${escapeText(entry.status)}"><header class="receipt-header"><strong>${escapeText(stepName)}</strong><span class="receipt-status is-${tone(entry.status)}"><i data-lucide="${icon(entry.status)}"></i>${escapeText(stateName(entry.status))}</span></header><div class="receipt-time"><i data-lucide="calendar-days"></i><span>${escapeText(formatDate(entry.startedAt))}${entry.finishedAt ? ` → ${escapeText(formatDate(entry.finishedAt))}` : ""}</span>${Number.isFinite(duration) && duration >= 0 ? `<span>耗时 ${(duration / 1000).toFixed(1)} 秒</span>` : ""}</div><div class="receipt-tool"><i data-lucide="boxes"></i><span>${escapeText(entry.tool?.name ?? "工具未记录")}</span><span class="receipt-status ${entry.tool?.version ? "" : "is-pending"}">${escapeText(entry.tool?.version ?? "执行版本未记录")}</span>${entry.tool?.imageDigest ? `<code>${escapeText(entry.tool.imageDigest)}</code>` : ""}</div>${(entry.checks ?? []).map((check) => `<div class="preflight-item is-${tone(check.status)}"><i data-lucide="${icon(check.status)}"></i><div><strong>${escapeText(checkName(check.id))}</strong>${check.detail ? `<p>${escapeText(check.detail)}</p>` : ""}</div><span class="receipt-check-state">${escapeText(stateName(check.status))}</span></div>`).join("")}<div class="receipt-references">${references(entry.inputs, "输入", "download")}${references(entry.outputs, "输出", "upload")}</div>${entry.error ? `<div class="preflight-item is-blocking"><i data-lucide="circle-alert"></i><div><strong>执行失败</strong><p>${escapeText(entry.error)}</p></div></div>` : ""}</article>`;
   }).join("")}</div></section>`;
 }
 
@@ -832,6 +846,7 @@ function renderOverview(overview: AdminOverview): void {
     list.querySelectorAll<HTMLImageElement>(".survey-card-image").forEach(image => {
       const surveyId = image.closest<HTMLElement>("[data-survey-card]")?.dataset.surveyCard ?? "";
       image.title = surveyPresentationAttribution(surveyId) ?? "项目展示图片";
+      image.dataset.fit = ["euclid", "gaia"].includes(surveyId) ? "contain" : "cover";
     });
     renderIcons();
     return;
@@ -840,11 +855,22 @@ function renderOverview(overview: AdminOverview): void {
     const releases = survey.releases.map((release) => {
       const products = release.products.filter((product) => !query || JSON.stringify(product).toLocaleLowerCase().includes(query));
       if (query && !products.length && !`${survey.name} ${release.label}`.toLocaleLowerCase().includes(query)) return "";
-      return `<section class="overview-release" data-row-key="${escapeText(release.id)}"><header><div><strong>${escapeText(release.label)}</strong><span>${products.length} 个产品</span></div></header><div class="overview-product-list">${products.map((product) => `<article class="overview-product" data-row-key="${escapeText(product.productId)}"><div><strong>${escapeText(product.name)}</strong><span>${escapeText(product.modality ?? "模态未知")}</span></div>${readinessVersionMarkup(product.readiness)}<button type="button" class="admin-quiet" data-overview-product="${escapeText(product.productId)}" title="查看状态、证据及补全操作"><i data-lucide="eye"></i><span>产品详情与证据</span></button></article>`).join("")}</div></section>`;
+      const modalities = new Map<string, number>();
+      for (const product of products) {
+        const raw = product.modality?.toLowerCase() ?? "unknown";
+        const key = raw === "image" ? "imaging" : raw === "spectrum" ? "spectroscopy" : raw;
+        modalities.set(key, (modalities.get(key) ?? 0) + 1);
+      }
+      return `<section class="overview-release" data-row-key="${escapeText(release.id)}"><header><div><strong>${escapeText(release.label)}</strong><span>${products.length} 个产品</span></div><div class="release-modalities">${[...modalities].map(([modality, count]) => modalityMarkup(modality === "unknown" ? undefined : modality, count)).join("")}</div></header><div class="overview-product-list">${products.map((product) => `<article class="overview-product" data-row-key="${escapeText(product.productId)}"><div><strong>${escapeText(product.name)}</strong>${modalityMarkup(product.modality)}</div>${readinessVersionMarkup(product.readiness)}<button type="button" class="admin-quiet" data-overview-product="${escapeText(product.productId)}" title="查看状态、证据及补全操作"><i data-lucide="eye"></i><span>产品详情与证据</span></button></article>`).join("")}</div></section>`;
     }).filter(Boolean).join("");
     return `<article class="overview-survey"><header class="overview-survey-header"><div class="overview-survey-copy"><strong>${escapeText(survey.name)}</strong><span>${escapeText(survey.mission)} · ${survey.releases.length} 个数据发布 / 集合</span><p>按产品查看能力；不同产品的覆盖精度和反查能力可能不同。</p></div></header>${releases || `<div class="resource-empty">没有匹配的 DR / 产品</div>`}</article>`;
   }).join(""));
   renderIcons();
+}
+
+function connectorTone(phase?: string): "ready" | "error" | "pending" | "unknown" {
+  const value = (phase ?? "NOT_CHECKED").toUpperCase();
+  return value === "READY" ? "ready" : ["ERROR", "FAILED"].includes(value) ? "error" : ["PENDING", "PROBING"].includes(value) ? "pending" : "unknown";
 }
 
 function renderConnectorDetails(connector?: Connector): void {
@@ -855,6 +881,7 @@ function renderConnectorDetails(connector?: Connector): void {
   }
   const location = connectorLocation(connector);
   const phase = connector.phase ?? "NOT_CHECKED";
+  detail.dataset.connectorState = connectorTone(phase);
   const inventory = connector.inventory;
   const usage = connector.usage;
   const inventoryState = inventory?.state ?? "unknown";
@@ -864,6 +891,7 @@ function renderConnectorDetails(connector?: Connector): void {
   detail.querySelector<HTMLButtonElement>("[data-inventory-connector]")?.addEventListener("click", () => void inventoryConnector(connector.name));
   detail.querySelector<HTMLButtonElement>("[data-use-connector]")?.addEventListener("click", () => {
     setAdminStep("tasks");
+    taskTabs.select("scans");
     byId<HTMLSelectElement>("source-connector").value = connector.name;
     byId<HTMLDialogElement>("task-dialog").showModal();
   });
@@ -887,7 +915,7 @@ function renderConnectors(connectors: Connector[]): void {
     const location = connectorLocation(connector);
     const selected = connector.name === selectedConnectorName;
     const phase = (connector.phase ?? "NOT_CHECKED").toUpperCase();
-    const tone = phase === "READY" ? "ready" : ["ERROR", "FAILED"].includes(phase) ? "error" : ["PENDING", "PROBING"].includes(phase) ? "pending" : "unknown";
+    const tone = connectorTone(phase);
     const stale = connector.checkedAt && Date.now() - Date.parse(connector.checkedAt) > 86_400_000;
     const label = { ready: "最近检查通过", error: "连接失败", pending: "检查中", unknown: "未检查" }[tone];
     return `<button type="button" class="resource-row connector-row connector-status-${tone}${selected ? " is-selected" : ""}" aria-pressed="${selected}" data-connector-name="${escapeText(connector.name)}"><span class="connector-type-icon connector-type-${escapeText(String(connector.type).toLowerCase())}" aria-hidden="true"><i data-lucide="${connectorIcon(connector.type)}"></i></span><span class="connector-row-copy"><strong>${escapeText(connector.name)}</strong><span>${escapeText(type)} · ${label}${stale ? " · 结果已过期" : ""}</span><p>${escapeText(location)}</p></span>${connectorInventoryMarkup(connector, true)}</button>`;
@@ -1297,6 +1325,7 @@ async function submitMocReview(event: SubmitEvent): Promise<void> {
     const response = await api<{ request: MocBuildRequest }>("/api/v1/admin/moc-builds", { method: "POST", body: JSON.stringify({ discoveryRequestName: activeMocReviewRequest.name, candidateId: activeMocCandidateId, ...(activeMocReviewRequest.productId ? { productId: activeMocReviewRequest.productId } : {}) }) });
     toast(`已创建构建请求 ${response.request.name}`);
     byId<HTMLDialogElement>("moc-review-dialog").close();
+    taskTabs.select("outputs");
     await refresh();
   } catch (error) { setMessage("moc-review", error instanceof Error ? error.message : "创建构建失败", true); button.disabled = false; }
 }
@@ -1364,6 +1393,25 @@ async function openMocBuildDetails(name: string): Promise<void> {
   } catch (error) { toast(error instanceof Error ? error.message : "MOC 构建详情加载失败", true); }
 }
 
+function workBuildRowMarkup(build: MocBuildRequest): string {
+  const product = productRecords.find(entry => entry.productId === build.productId);
+  const release = reviewSurveyRecords.find(survey => survey.id === (product?.draft.surveyId ?? build.surveyId))?.releases.find(release => release.id === (product?.draft.releaseId ?? build.releaseId));
+  const busy = ["QUEUED", "PENDING", "RUNNING", "PROCESSING"].includes(phaseLabel(build.phase));
+  const percent = busy && typeof build.progress?.percent === "number" ? Math.min(100, Math.max(0, build.progress.percent)) : undefined;
+  const message = build.error?.message ?? (busy ? build.progress?.message : undefined);
+  return `<div class="work-build-output" data-row-key="${escapeText(build.name)}"><div class="work-build-identity"><strong>${escapeText(product?.draft.name ?? build.candidateTitle ?? build.candidateId)}</strong><small>${escapeText(release?.label ?? product?.draft.releaseId ?? build.releaseId ?? "数据发布未指定")} · ${product?.published ? "产品已发布" : product ? "已登记产品" : "待登记产品"}</small>${message ? `<span class="work-build-message${build.error ? " is-error" : ""}" title="${escapeText(message)}">${escapeText(message)}</span>` : ""}</div><div class="work-build-metrics">${phaseMarkup(build.phase)}${taskMetric("grid-3x3", "精度", orderLabel(build.outputs?.availableOrders))}${taskMetric("layers-3", "覆盖单元", build.outputs?.cellCount?.toLocaleString() ?? "—")}${percent !== undefined ? `<span class="work-build-progress"><progress max="100" value="${percent}" aria-label="构建进度"></progress><small>${percent}%</small></span>` : ""}</div><div class="work-build-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div>`;
+}
+
+function standaloneBuildsMarkup(builds: MocBuildRequest[]): string {
+  return `<div class="work-output-list">${builds.map(build => `<article class="work-output-row" data-row-key="${escapeText(build.name)}">${workBuildRowMarkup(build)}</article>`).join("")}</div>`;
+}
+
+function updateTaskTabCounts(): void {
+  byId("task-tab-outputs-count").textContent = String(document.querySelectorAll("#modality-chart .work-output-row").length);
+  byId("task-tab-discovery-count").textContent = String(mocDiscoveryRecords.length);
+  byId("task-tab-scans-count").textContent = String(taskRecords.length);
+}
+
 function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], builds: MocBuildRequest[] = mocBuildRecords): void {
   const container = byId("modality-chart");
   container.onclick = event => {
@@ -1381,7 +1429,8 @@ function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], build
     requests.map((request) => ({ key: mocWorkKey(request), createdAt: request.createdAt, value: request })),
   );
   if (!groups.length) {
-    reconcileMarkup(container, builds.length ? `<div class="work-output-list">${builds.map((build) => `<article class="work-output-row" data-row-key="${escapeText(build.name)}"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status">${phaseMarkup(build.phase, "BUILD ")}${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>` : `<div class="resource-empty">暂无任务产出</div>`);
+    reconcileMarkup(container, builds.length ? standaloneBuildsMarkup(builds) : '<div class="resource-empty">暂无任务产出</div>');
+    updateTaskTabCounts();
     renderIcons();
     return;
   }
@@ -1402,19 +1451,16 @@ function renderWorkOutputs(tasks: Task[], requests: MocDiscoveryRequest[], build
     const discoveryNames = new Set(requests.filter((entry) => mocWorkKey(entry) === key).map((entry) => entry.name));
     const relatedBuilds = builds.filter((build) => discoveryNames.has(build.discoveryRequestName) || (build.productId && build.productId === task?.productId));
     relatedBuilds.forEach((build) => renderedBuildNames.add(build.name));
-    const buildRows = relatedBuilds.map((build) => {
-      const product = productRecords.find((entry) => entry.productId === build.productId);
-      const release = reviewSurveyRecords.find((survey) => survey.id === (product?.draft.surveyId ?? build.surveyId))?.releases.find((release) => release.id === (product?.draft.releaseId ?? build.releaseId));
-      return `<div class="work-build-output" data-row-key="${escapeText(build.name)}"><strong>${escapeText(product?.draft.name ?? build.candidateTitle ?? build.candidateId)}</strong><span>${escapeText(release?.label ?? product?.draft.releaseId ?? build.releaseId ?? "未指定数据发布 / 集合")} · ${product?.published ? "产品已发布" : product ? "已登记产品" : "尚未登记产品"}</span>${phaseMarkup(build.phase, "BUILD ")}<span>${escapeText(build.progress?.message ?? "")}</span>${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<span class="work-build-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</span>${mocBuildReadout(build)}</div>`;
-    }).join("");
+    const buildRows = relatedBuilds.map(workBuildRowMarkup).join("");
     return `<article class="work-output-row" data-row-key="${escapeText(key)}"><div class="work-output-copy"><div class="task-identity"><i data-lucide="layers-3"></i><strong>${escapeText(workTitle(task, request))}</strong></div><small>${escapeText(key)} · ${escapeText(attemptLabel)}</small><div class="work-output-metrics"><div><span class="work-output-metrics-label"><i data-lucide="scan-line"></i>SCAN OUTPUT</span>${scanCounts}</div><div><span class="work-output-metrics-label"><i data-lucide="search"></i>MOC OUTPUT</span>${mocCounts}</div></div>${evidence ? `<p class="work-output-evidence"><i data-lucide="shield-check"></i>${escapeText(evidence)}</p>` : ""}</div><div class="work-output-status">${phaseMarkup(scanStatus, "SCAN ")}${phaseMarkup(mocStatus, "MOC ")}<div class="work-output-actions">${task ? `<button type="button" class="admin-quiet" data-task-details-output="${escapeText(task.name)}" title="查看扫描详情"><i data-lucide="eye"></i><span>详情</span></button>` : ""}${request ? mocReviewAction(request, "data-moc-review-output") : ""}${retry}${mocRetry}</div></div><div class="work-build-list">${buildRows}</div></article>`;
   }).join("");
   let outputMarkup = `<div class="work-output-list">${rows}</div>`;
   const ungroupedBuilds = builds.filter((build) => !renderedBuildNames.has(build.name));
   if (ungroupedBuilds.length) {
-    outputMarkup += `<div class="work-output-list">${ungroupedBuilds.map((build) => `<article class="work-output-row" data-row-key="${escapeText(build.name)}"><div class="work-output-copy"><div class="task-identity"><i data-lucide="box"></i><strong>${escapeText(build.workTitle ?? build.candidateId)}</strong></div><small>${escapeText(build.name)} · ${escapeText(build.discoveryRequestName)}</small><p>${escapeText(build.progress?.message ?? "")}${build.error ? ` · ${escapeText(build.error.message)}` : ""}</p>${mocBuildReadout(build)}</div><div class="work-output-status">${phaseMarkup(build.phase, "BUILD ")}${build.progress?.percent !== undefined ? `<progress max="100" value="${build.progress.percent}"></progress><small>${build.progress.percent}%</small>` : ""}<div class="work-output-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div></article>`).join("")}</div>`;
+    outputMarkup += standaloneBuildsMarkup(ungroupedBuilds);
   }
   reconcileMarkup(container, outputMarkup);
+  updateTaskTabCounts();
   renderIcons();
 }
 
@@ -1591,7 +1637,8 @@ function renderReviewSurveys(surveys: ReviewSurvey[]): void {
   list.querySelectorAll<HTMLButtonElement>("[data-publish-product]").forEach((button) => button.addEventListener("click", () => void publishProduct(button.dataset.publishProduct ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-retire-product]").forEach((button) => button.addEventListener("click", () => void retireProduct(button.dataset.retireProduct ?? "")));
   list.querySelectorAll<HTMLButtonElement>("[data-register-moc-build]").forEach((button) => button.addEventListener("click", () => void openMocProductRegistration(button.dataset.registerMocBuild ?? "")));
-  renderIcons();
+  syncProductOperationButtons();
+  applyReviewedFeedback();
 }
 
 function setExtractionFields(mode?: string): void {
@@ -1681,6 +1728,7 @@ function readinessAction(productId: string, step: ReadinessActionStep): void {
   byId<HTMLDialogElement>("product-dialog").close();
   if (step === "scan") {
     setAdminStep("tasks");
+    taskTabs.select("scans");
     byId<HTMLSelectElement>("task-product").value = productId;
     setDerivedProduct(productId);
     byId<HTMLDialogElement>("task-dialog").showModal();
@@ -1694,6 +1742,7 @@ function readinessAction(productId: string, step: ReadinessActionStep): void {
   }
   if (step === "tasks") {
     setAdminStep("tasks");
+    taskTabs.select("discovery");
     const build = mocBuildRecords.find((entry) => entry.productId === productId);
     if (build) { void openMocReview(build.discoveryRequestName); return; }
     const select = byId<HTMLSelectElement>("moc-product");
@@ -1786,7 +1835,7 @@ function openProduct(productId: string): void {
     const verify = Boolean(mocBuild) && ["output-validation-missing", "execution-record-missing", "validated-coverage-missing"].includes(gap);
     const step = gap === "output-validation-missing" && !mocBuild ? "tasks" : action.step;
     return `<div class="preflight-item ${guide?.blocking ? "is-blocking" : "is-pending"}"><i data-lucide="${guide?.blocking ? "circle-alert" : "circle-dot"}"></i><div><strong>${escapeText(guide?.title ?? gap)}</strong><p>${escapeText(guide?.description ?? "查看产品证据与能力限制。")}</p></div><button type="button" class="admin-quiet" ${verify ? "data-preflight-verify" : `data-preflight-step="${step}"`}>${verify ? "校验已有构建" : step === "tasks" ? "选择候选并构建" : escapeText(action.label)}</button></div>`;
-  }).join("")}${!blocking.length ? `<div class="preflight-item is-passed"><i data-lucide="circle-check"></i><span>来源与输出门禁已满足，请确认当前版本的能力与限制。</span></div>` : ""}${mocBuild ? `<button type="button" class="admin-quiet" id="product-verify-build">重新校验来源与输出</button>` : ""}${gaps.length && !blocking.length ? `<label><input type="checkbox" id="review-accept-limitations" />我已阅读能力限制，同意按当前可证实能力发布；隔离恢复由发布流程执行。</label>` : ""}`;
+  }).join("")}${!blocking.length ? `<div class="preflight-item is-passed"><i data-lucide="circle-check"></i><span>来源与输出门禁已满足，请确认当前版本的能力与限制。</span></div>` : ""}${mocBuild ? `<button type="button" class="admin-quiet" id="product-verify-build">重新校验来源与输出</button>` : ""}${gaps.length && !blocking.length ? `<label><input type="checkbox" id="review-accept-limitations" /><span>我已阅读能力限制，同意按当前可证实能力发布；隔离恢复由发布流程执行。</span></label>` : ""}`;
   preflight.querySelectorAll<HTMLButtonElement>("[data-preflight-step]").forEach(button => button.addEventListener("click", () => readinessAction(productId, button.dataset.preflightStep as ReadinessActionStep)));
   preflight.querySelectorAll<HTMLButtonElement>("[data-preflight-verify]").forEach(button => button.addEventListener("click", () => document.getElementById("product-verify-build")?.click()));
   reviewButton.disabled = blocking.length > 0 || gaps.length > 0;
@@ -1809,7 +1858,7 @@ function openProduct(productId: string): void {
   const editableFields = form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input:not([type=hidden]), select, textarea");
   editableFields.forEach((field) => { field.disabled = retired; });
   byId<HTMLDialogElement>("product-dialog").showModal();
-  renderIcons();
+  syncProductOperationButtons();
   void loadProductHistory(productId);
 }
 
@@ -1880,24 +1929,91 @@ async function saveProduct(event: SubmitEvent): Promise<void> {
   try { await api(`/api/v1/admin/products/${encodeURIComponent(product.productId)}/draft`, { method: "PUT", body: JSON.stringify({ revision: product.revision, content }) }); byId<HTMLDialogElement>("product-dialog").close(); toast("产品草稿已保存"); await refresh(); } catch (error) { setMessage("product", error instanceof Error ? error.message : "保存失败", true); }
 }
 
+const productOperations = new Map<string, "review" | "publish">();
+const operationButtonOriginals = new WeakMap<HTMLButtonElement, { html: string; disabled: boolean }>();
+const reviewedFeedback = new Map<string, number>();
+
+function syncProductOperationButtons(): void {
+  document.querySelectorAll<HTMLButtonElement>("[data-review-product], [data-publish-product]").forEach(button => {
+    const id = button.dataset.reviewProduct ?? button.dataset.publishProduct ?? "";
+    const operation = productOperations.get(id);
+    if (operation) {
+      if (!operationButtonOriginals.has(button)) operationButtonOriginals.set(button, { html: button.innerHTML, disabled: button.disabled });
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+      const isThisAction = operation === "publish" ? Boolean(button.dataset.publishProduct) : Boolean(button.dataset.reviewProduct);
+      if (isThisAction && !button.querySelector(".button-spinner")) button.innerHTML = `<i data-lucide="loader-circle" class="button-spinner"></i><span>${operation === "publish" ? "正在发布…" : "正在审核…"}</span>`;
+    } else {
+      const original = operationButtonOriginals.get(button);
+      if (original) { button.innerHTML = original.html; button.disabled = original.disabled; operationButtonOriginals.delete(button); }
+      button.removeAttribute("aria-busy");
+    }
+  });
+  renderIcons();
+}
+
+function reviewedProductRow(productId: string): HTMLElement | null {
+  return document.querySelector(`[data-edit-product="${CSS.escape(productId)}"]`)?.closest<HTMLElement>(".review-product-row") ?? null;
+}
+
+function applyReviewedFeedback(): void {
+  for (const [id, started] of reviewedFeedback) {
+    const row = reviewedProductRow(id);
+    if (!row) continue;
+    if (Date.now() - started >= 5000) { row.classList.remove("review-confirmed"); row.style.removeProperty("animation-delay"); continue; }
+    if (!row.classList.contains("review-confirmed")) { row.classList.add("review-confirmed"); row.style.animationDelay = `-${Date.now() - started}ms`; }
+  }
+}
+
+function revealReviewedProduct(productId: string): void {
+  const owner = reviewSurveyRecords.find(survey => survey.releases.some(release => release.products.some(product => product.productId === productId)) || survey.unmatchedProducts?.some(product => product.productId === productId));
+  if (owner) selectedReviewSurveyId = owner.id;
+  renderReviewSurveys(reviewSurveyRecords);
+  if (!reviewedProductRow(productId) && productQuery) { productQuery = ""; byId<HTMLInputElement>("product-search").value = ""; renderReviewSurveys(reviewSurveyRecords); }
+  const row = reviewedProductRow(productId);
+  if (!row) return;
+  const started = Date.now();
+  reviewedFeedback.set(productId, started);
+  applyReviewedFeedback();
+  row.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  row.querySelector<HTMLButtonElement>("[data-edit-product]")?.focus({ preventScroll: true });
+  window.setTimeout(() => { if (reviewedFeedback.get(productId) === started) { applyReviewedFeedback(); reviewedFeedback.delete(productId); } }, 5050);
+}
+
 async function reviewProduct(productId: string): Promise<void> {
+  if (productOperations.has(productId)) return;
   const product = productRecords.find((entry) => entry.productId === productId);
   if (!product) return;
   const gaps = product.readiness?.draft.gaps ?? [];
   if (gaps.some((gap) => gapGuidance[gap]?.blocking)) { setMessage("product", "请先完成上方标注的必需校验，再确认审核。", true); return; }
   if (gaps.length && !byId<HTMLInputElement>("review-accept-limitations").checked) return;
+  productOperations.set(productId, "review");
+  syncProductOperationButtons();
   try {
     await api(`/api/v1/admin/products/${encodeURIComponent(productId)}/review`, { method: "POST", body: JSON.stringify({ revision: product.revision, acceptedGaps: gaps }) });
-    toast("产品版本已审核");
-    if (byId<HTMLDialogElement>("product-dialog").open) byId<HTMLDialogElement>("product-dialog").close();
+    toast(`${product.draft.name} · 版本 ${product.revision} 已审核`);
+    if (activeProductDialogId === productId && byId<HTMLDialogElement>("product-dialog").open) byId<HTMLDialogElement>("product-dialog").close();
+    if (refreshInFlight) await refreshInFlight;
     await refresh();
+    if (activeStep === "review" && !document.querySelector("dialog[open]")) revealReviewedProduct(productId);
   } catch (error) { toast(error instanceof Error ? error.message : "审核失败", true); }
+  finally { productOperations.delete(productId); syncProductOperationButtons(); }
 }
 
 async function publishProduct(productId: string): Promise<void> {
+  if (productOperations.has(productId)) return;
   const product = productRecords.find((entry) => entry.productId === productId);
   if (!product) return;
-  try { await api(`/api/v1/admin/products/${encodeURIComponent(productId)}/publish`, { method: "POST", body: JSON.stringify({ revision: product.revision }) }); if (byId<HTMLDialogElement>("product-dialog").open) byId<HTMLDialogElement>("product-dialog").close(); toast("产品已发布"); await refresh(); } catch (error) { toast(error instanceof Error ? error.message : "发布失败", true); }
+  productOperations.set(productId, "publish");
+  syncProductOperationButtons();
+  try {
+    await api(`/api/v1/admin/products/${encodeURIComponent(productId)}/publish`, { method: "POST", body: JSON.stringify({ revision: product.revision }) });
+    if (activeProductDialogId === productId && byId<HTMLDialogElement>("product-dialog").open) byId<HTMLDialogElement>("product-dialog").close();
+    toast(`${product.draft.name} · 产品已发布`);
+    if (refreshInFlight) await refreshInFlight;
+    await refresh();
+  } catch (error) { toast(error instanceof Error ? error.message : "发布失败", true); }
+  finally { productOperations.delete(productId); syncProductOperationButtons(); }
 }
 
 async function reloadCatalogRuntime(button?: HTMLButtonElement): Promise<void> {
@@ -2383,3 +2499,4 @@ byId<HTMLSelectElement>("overview-version").addEventListener("change", event => 
 setAdminStep(readAdminStep(), true);
 updateConnectorFields();
 void initialize();
+import { Download, Package } from "lucide";
