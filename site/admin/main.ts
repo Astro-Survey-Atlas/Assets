@@ -1327,7 +1327,11 @@ async function submitMocReview(event: SubmitEvent): Promise<void> {
     byId<HTMLDialogElement>("moc-review-dialog").close();
     taskTabs.select("outputs");
     await refresh();
-  } catch (error) { setMessage("moc-review", error instanceof Error ? error.message : "创建构建失败", true); button.disabled = false; }
+  } catch (error) {
+    setMessage("moc-review", error instanceof Error ? error.message : "创建构建失败", true);
+    button.disabled = false;
+    button.querySelector("span")!.textContent = "创建构建请求";
+  }
 }
 
 async function resubmitMocDiscovery(name: string): Promise<void> {
