@@ -7,6 +7,8 @@ import { pipeline } from "node:stream/promises";
 
 import yazl from "yazl";
 
+import { historicalPackages, mergePackageHistory, type PackageMetadata } from "./package-history.js";
+import { assertReleaseContinuity, retainedPackageLayers } from "./package-continuity.js";
 import type { MocPublication } from "./moc-build.js";
 import { deriveAccessModes, sourceAuthorityForUrl, sourceTierAuthority } from "./package-access-policy.js";
 import { isDeniedSurvey } from "./publication-policy.js";
@@ -345,7 +347,7 @@ export class DynamicResourcePackageStore {
   #initialized = false;
   readonly #snapshotSink: StateSnapshotSink | undefined;
 
-  constructor(contentRoot: string, snapshotSink?: StateSnapshotSink) {
+  constructor(contentRoot: string, snapshotSink?: StateSnapshotSink, private readonly baselineRoot?: string) {
     this.contentRoot = path.resolve(contentRoot);
     this.#snapshotSink = snapshotSink;
   }
@@ -395,6 +397,46 @@ export class DynamicResourcePackageStore {
       }
     }
     this.#initialized = true;
+  }
+
+  /** Explicit maintenance: restore Release sets lost before this publisher existed. */
+  async repairHistoricalReleases(root: string): Promise<void> {
+    await this.initialize();
+    const recovered = await historicalPackages(root);
+    const catalog = JSON.parse(await readFile(path.join(root, "artifacts/public-survey-footprints/packages/catalog.json"), "utf8")) as { packages: PackageMetadata[] };
+    for (const id of new Set(recovered.map(({ entry }) => entry.id))) {
+      const current = catalog.packages.filter((entry) => entry.id === id && !entry.deprecated).sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }))[0];
+      if (!current) continue;
+      const older = recovered.filter(({ entry }) => entry.id === id).sort((a, b) => a.entry.version.localeCompare(b.entry.version, undefined, { numeric: true }));
+      if (older.every(({ entry }) => entry.releases.every((release) => current.releases.includes(release)))) continue;
+      const bytes = await readFile(path.join(root, "artifacts/public-survey-footprints/packages", `${id}-${current.version}.zip`));
+      const fingerprint = hash(JSON.stringify([...older.map(({ entry }) => entry.sha256), current.sha256]));
+      if ([...this.#entries.values()].some((entry) => entry.id === id && entry.contentFingerprint === fingerprint)) continue;
+      const minor = Math.max(packageMinorVersion(current.version) ?? 0, ...[...this.#entries.values()].filter((entry) => entry.id === id).map((entry) => packageMinorVersion(entry.version) ?? 0)) + 1;
+      const version = `3.${minor}.0`;
+      const merged = await mergePackageHistory([...older, { entry: current, bytes }], version);
+      const archivePath = expectedArchivePath(id, version);
+      const destination = path.join(this.contentRoot, archivePath);
+      await mkdir(path.dirname(destination), { recursive: true });
+      const temporary = `${destination}.${process.pid}.${Date.now()}.tmp`;
+      await zipEntries(merged.entries, temporary);
+      const archive = await readFile(temporary);
+      try { await link(temporary, destination); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST" || hash(await readFile(destination)) !== hash(archive)) throw error;
+      } finally { await rm(temporary, { force: true }); }
+      const entry: DynamicResourcePackageEntry = { ...merged.metadata, archivePath, archiveUrl: `/api/v1/assets/${dynamicResourcePackageAssetId({ id, version })}/download`, sizeBytes: archive.length, sha256: hash(archive), updatedAt: new Date().toISOString(), contentFingerprint: fingerprint, objectKey: stateSnapshotFileKey("resource-packages", hash(archive)) };
+      if (!persistedPackageEntry(entry)) throw new Error(`Invalid repaired package metadata: ${id}`);
+      this.#entries.set(packageEntryKey(id, version), entry);
+      await this.persist();
+      await queueStateSnapshotFile(this.#snapshotSink, { namespace: "resource-packages", sourcePath: destination, objectKey: entry.objectKey!, kind: "resource-package", contentType: "application/zip", expectedSha256: entry.sha256, expectedSizeBytes: entry.sizeBytes });
+    }
+  }
+
+  async reload(): Promise<void> {
+    this.#initialized = false;
+    this.#entries.clear();
+    await this.initialize();
   }
 
   list(): Array<Omit<DynamicResourcePackageEntry, "archivePath" | "objectKey" | "contentFingerprint">> {
@@ -453,6 +495,7 @@ export class DynamicResourcePackageStore {
     const publicationSurveys = new Set(publications.filter((publication) => !isDeniedSurvey(publication.surveyId)).map((publication) => publication.surveyId));
     for (const entry of this.#entries.values()) {
       if (entry.deprecated || !publicationSurveys.has(entry.surveyId) || grouped.has(entry.surveyId)) continue;
+      if (!publications.filter((publication) => publication.surveyId === entry.surveyId).every((publication) => products.some((product) => product.productId === publication.productId && product.retiredAt))) throw new Error(`No valid layers for ${entry.surveyId}; retaining the previous package`);
       entry.deprecated = true;
       entry.replacedBy = [...new Set([...entry.replacedBy, `retired-${entry.surveyId}`])];
     }
@@ -476,17 +519,18 @@ export class DynamicResourcePackageStore {
   }
 
   private async syncSurvey(surveyId: string, layers: readonly LayerBytes[]): Promise<DynamicResourcePackageEntry | undefined> {
+    const retained = await retainedPackageLayers(this.baselineRoot, surveyId, layers.map((layer) => layer.publication.layerId));
     const orders = layers.flatMap((layer) => [layer.preview?.order, layer.query?.order]).filter((order): order is number => order !== undefined);
     if (!orders.length) return undefined;
     const overviewOrder = Math.min(4, ...orders);
-    const fingerprint = hash(JSON.stringify(layers.map(({ publication, product, query, preview, moc }) => ({
+    const fingerprint = hash(JSON.stringify([retained.layers, ...layers.map(({ publication, product, query, preview, moc }) => ({
       id: publication.id,
       layerId: publication.layerId,
       publishedAt: publication.publishedAt,
       product: { productId: product.productId, revision: product.publicRelease, modality: product.modality, coverageRole: product.coverageRole, dataOrigin: product.dataOrigin, sourceTier: product.sourceTier },
       source: publication.sourceSnapshotSha256,
       files: { moc: hash(moc), query, preview },
-    })).sort((left, right) => left.layerId.localeCompare(right.layerId))));
+    })).sort((left, right) => left.layerId.localeCompare(right.layerId))]));
     const packageId = stableResourcePackageId(surveyId);
     const lineage = [...this.#entries.values()].filter((entry) => entry.id === packageId);
     const existingPackage = lineage.find((entry) => entry.contentFingerprint === fingerprint && !entry.deprecated);
@@ -494,17 +538,22 @@ export class DynamicResourcePackageStore {
     // Stable package IDs carry incrementing content versions: static seed
     // packages are 3.0.0, the first dynamic rebuild becomes 3.1.0, and every
     // changed fingerprint bumps the minor version again.
-    const nextMinor = lineage.reduce((max, entry) => Math.max(max, packageMinorVersion(entry.version) ?? 0), 0) + 1;
+    const nextMinor = lineage.reduce((max, entry) => Math.max(max, packageMinorVersion(entry.version) ?? 0), packageMinorVersion(retained.metadata.version) ?? 0) + 1;
     const packageVersion = `3.${nextMinor}.0`;
     const entryKey = packageEntryKey(packageId, packageVersion);
     if (this.#entries.has(entryKey)) throw new Error(`Dynamic package version collision: ${packageId} ${packageVersion}`);
     const packageDir = path.join(this.contentRoot, "resource-packages", packageId, packageVersion);
     await mkdir(packageDir, { recursive: true });
     const packagePath = path.join(packageDir, `${packageId}.zip`);
-    const footprint = packageSupport(layers, overviewOrder);
-    const provenance = packageProvenance(layers, packageId, packageVersion, overviewOrder);
+    const footprintDocument = JSON.parse(packageSupport(layers, overviewOrder).toString());
+    footprintDocument.footprints.push(...retained.footprints);
+    const footprint = Buffer.from(JSON.stringify(footprintDocument));
+    const provenanceDocument = JSON.parse(packageProvenance(layers, packageId, packageVersion, overviewOrder).toString());
+    provenanceDocument.layers.push(...retained.provenance);
+    const provenance = Buffer.from(JSON.stringify(provenanceDocument));
     const first = layers[0]!;
-    const releases = [...new Set(layers.map((layer) => layer.publication.releaseId))].sort();
+    const releases = [...new Set([...retained.layers.map((layer) => layer.releaseId), ...layers.map((layer) => layer.publication.releaseId)])].sort();
+    assertReleaseContinuity([...retained.metadata.releases, ...lineage.flatMap((entry) => entry.releases)], releases);
     const releaseLabels = Object.fromEntries(layers.map((layer) => [layer.publication.releaseId, text(layer.product.publicRelease?.label, layer.publication.releaseId)]));
     const sources = [...layers.reduce((unique, layer) => {
       if (!unique.has(layer.publication.releaseId)) {
@@ -517,6 +566,8 @@ export class DynamicResourcePackageStore {
       }
       return unique;
     }, new Map<string, { releaseId: string; label: string; url: string; authority: string }>()).values()].sort((left, right) => left.releaseId.localeCompare(right.releaseId));
+    Object.assign(releaseLabels, retained.metadata.releaseLabels);
+    for (const source of retained.metadata.sources) if (releases.includes(source.releaseId) && !sources.some((item) => item.releaseId === source.releaseId)) sources.push(source);
     const layerRecords = layers.map(({ publication, product, moc }) => ({
       layerId: publication.layerId,
       surveyId,
@@ -535,10 +586,10 @@ export class DynamicResourcePackageStore {
       id: packageId,
       version: packageVersion,
       surveyId,
-      layers: layerRecords,
+      layers: [...layerRecords, ...retained.layers].sort((a, b) => a.layerId.localeCompare(b.layerId)),
       files: [...support.entries()].map(([filePath, bytes]) => ({ path: filePath, sizeBytes: bytes.length, sha256: hash(bytes) })).sort((left, right) => left.path.localeCompare(right.path)),
     };
-    const entries = new Map<string, Buffer>([["resource-package.json", Buffer.from(`${JSON.stringify(packageManifest, null, 2)}\n`, "utf8")], ...support.entries(), ...layers.map(({ publication, moc }) => [`mocs/${publication.layerId}.moc.fits`, moc] as const)]);
+    const entries = new Map<string, Buffer>([["resource-package.json", Buffer.from(`${JSON.stringify(packageManifest, null, 2)}\n`, "utf8")], ...support.entries(), ...retained.entries, ...layers.map(({ publication, moc }) => [`mocs/${publication.layerId}.moc.fits`, moc] as const)]);
     const temporary = `${packagePath}.${process.pid}.${Date.now()}.tmp`;
     await zipEntries(entries, temporary);
     const archiveBytes = await readFile(temporary);

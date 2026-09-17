@@ -82,7 +82,7 @@ const mocBuildStore = new MocBuildStore(contentRoot, stateSnapshotSink);
 await mocBuildStore.initialize();
 const mocPublicationStore = new MocPublicationStore(contentRoot, evidenceRoot, stateSnapshotSink);
 await mocPublicationStore.initialize();
-const dynamicResourcePackages = new DynamicResourcePackageStore(contentRoot, stateSnapshotSink);
+const dynamicResourcePackages = new DynamicResourcePackageStore(contentRoot, stateSnapshotSink, releaseRoot);
 await dynamicResourcePackages.initialize();
 const publishedPublicAssets = new Map<string, { record: PublicAssetRecord; absolutePath: string }>();
 const publishedAssetIds = new Set<string>();
@@ -1449,15 +1449,8 @@ async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<st
   const packageAssets = [...catalog.files.values()]
     .map(({ record }) => record)
     .filter((record) => record.kind === "package" && !isRetiredAsset(record));
-  const dynamicEntries = dynamicResourcePackages.list().filter((entry) => !retiredSurveys.has(entry.surveyId));
-  const dynamicIds = new Set(dynamicEntries.map((entry) => entry.id));
-  const identities = new Set(sanitizedPackages.map((value) => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return "";
-    const entry = value as Record<string, unknown>;
-    return `${typeof entry.id === "string" ? entry.id : ""}@${typeof entry.version === "string" ? entry.version : ""}`;
-  }));
-  const packageEntries = [...sanitizedPackages, ...dynamicEntries.filter((entry) => !identities.has(`${entry.id}@${entry.version}`))];
-  const packages = packageEntries.map((value) => {
+  // Public upgrades become visible only when the complete release is activated.
+  const packages = sanitizedPackages.map((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Resource package catalog contains an invalid entry");
     const entry = value as Record<string, unknown>;
     const packageId = typeof entry.id === "string" ? entry.id : undefined;
@@ -1470,13 +1463,8 @@ async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<st
     const asset = dynamicAsset ?? packageAssets.find((candidate) => candidate.surveyId === surveyId
       && candidate.version === version
       && (!candidate.releaseId || releases.includes(candidate.releaseId)));
-    // A dynamic rebuild supersedes the static seed package with the same
-    // stable ID: keep the static entry visible but flag it as replaced.
-    const superseded = packageId !== undefined && dynamicIds.has(packageId)
-      && !dynamicEntries.some((dynamic) => dynamic.id === packageId && dynamic.version === version);
     return {
       ...entry,
-      ...(superseded ? { deprecated: true, replacedBy: [packageId] } : {}),
       ...(packageId && version && asset
         ? { archiveUrl: `/api/v1/resource-packages/${encodeURIComponent(packageId)}/versions/${encodeURIComponent(version)}/download` }
         : asset

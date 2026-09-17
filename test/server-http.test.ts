@@ -925,7 +925,9 @@ test("HTTP publication activates dynamic MOC assets and restores them after rest
   const packageCatalog = await packageCatalogResponse.json() as { packages: Array<{ id: string; surveyId: string; version: string; archiveUrl: string; sha256: string; sizeBytes: number }> };
   const dynamicPackage = packageCatalog.packages.find((entry) => entry.surveyId === "euclid" && entry.id === "public-euclid-footprints" && (entry as { deprecated?: boolean }).deprecated !== true);
   assert.ok(dynamicPackage);
-  assert.equal(dynamicPackage.version, "3.1.0");
+  // Product publication must not expose a package upgrade before release activation.
+  assert.equal(dynamicPackage.version, "3.0.0");
+  assert.equal(packageCatalog.packages.some((entry) => entry.surveyId === "euclid" && entry.version === "3.1.0"), false);
   const packageArchive = await fetch(`http://127.0.0.1:${port}${dynamicPackage.archiveUrl}`, { headers: { Range: "bytes=0-7" } });
   assert.equal(packageArchive.status, 206);
   assert.equal(packageArchive.headers.get("x-content-sha256"), dynamicPackage.sha256);

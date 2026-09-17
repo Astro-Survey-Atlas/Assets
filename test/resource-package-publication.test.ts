@@ -177,3 +177,30 @@ test("dynamic package metadata queues and restores a missing archive", async () 
     await rm(base, { recursive: true, force: true });
   }
 });
+
+test("ERO-only dynamic update builds a complete Euclid successor and repeated synchronization is stable", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "euclid-continuity-"));
+  try {
+    const { mkdir } = await import("node:fs/promises");
+    const { readResourcePackageManifest } = await import("../server/resource-package-inspection.js");
+    const { testDataRoot } = await import("./test-data-root.js");
+    const moc = await readFile(path.join(testArtifactRoot, "layers/euclid-q1-deep-fields-image-extent/euclid-q1-deep-fields-image-extent.moc.fits"));
+    const layer = publication(root, "ero-update", moc, "2026-09-17T00:00:00Z");
+    layer.surveyId = "euclid"; layer.releaseId = "euclid-ero";
+    const build = path.join(root, "moc-releases/ero-update");
+    await mkdir(build, { recursive: true });
+    await writeFile(path.join(build, "moc.fits"), moc);
+    await writeFile(path.join(build, "query.json"), JSON.stringify({ order: 8, pixels: [64] }));
+    await writeFile(path.join(build, "preview.json"), JSON.stringify({ order: 4, pixels: [0] }));
+    const store = new DynamicResourcePackageStore(root, undefined, testDataRoot);
+    await store.sync([layer], [], (file) => path.join(root, file.path));
+    const entry = store.latest("public-euclid-footprints")!;
+    assert.deepEqual(entry.releases, ["euclid-ero", "euclid-q1"]);
+    const archive = store.assets()[0]!;
+    const manifest = await readResourcePackageManifest(await readFile(path.join(root, archive.path)));
+    assert.equal(manifest.layers.filter((item) => item.releaseId === "euclid-q1").length, 6);
+    assert.equal(manifest.layers.length, 13);
+    await store.sync([layer], [], (file) => path.join(root, file.path));
+    assert.equal(store.list().length, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

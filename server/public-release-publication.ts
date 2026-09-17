@@ -9,6 +9,8 @@ import { activateReleasePointer, createArtifactStoreFromProcess, uploadReleaseAr
 import { publicReleaseBundleDigest } from "./catalog.js";
 import type { MocPublication, MocPublicationFile } from "./moc-build.js";
 import { dynamicResourcePackageAssetId, type DynamicResourcePackageAsset, type DynamicResourcePackageEntry } from "./resource-package-publication.js";
+import { historicalPackages } from "./package-history.js";
+import { assertReleaseContinuity } from "./package-continuity.js";
 import { readResourcePackageManifest } from "./resource-package-inspection.js";
 import {
   assertRecordPublishable,
@@ -771,6 +773,9 @@ export class PublicReleasePublisher {
     try {
       const candidate = await this.#buildCandidateTree(stagingRoot, runId);
       run = this.#append(run, `candidate: ${candidate.files.length} files, ${candidate.packages.length} dynamic packages`);
+      failureStage = "candidate";
+      await verifyReleaseDocuments(candidate.root, JSON.parse(await readFile(path.join(candidate.root, MANIFEST_RELATIVE_PATH), "utf8")));
+      failureStage = "build";
       const { packageRelease } = await import("../scripts/release-archive.js");
       archivePath = path.join(await mkdtemp(path.join(tmpdir(), "assets-release-archive-")), "release.tar.gz");
       const descriptor = await packageRelease({ root: candidate.root, outputPath: archivePath });
@@ -1032,6 +1037,13 @@ export class PublicReleasePublisher {
       existingPaths.add(record.path);
     }
 
+    for (const { entry, bytes } of await historicalPackages(this.#options.baselineRoot)) {
+      const relative = `artifacts/public-survey-footprints/packages/${entry.id}-${entry.version}.zip`;
+      if (existingPaths.has(relative)) continue;
+      await writeFile(this.#inside(stagingRoot, relative), bytes);
+      files.push({ id: dynamicResourcePackageAssetId(entry), kind: "package", label: entry.name, description: entry.description, path: relative, downloadName: `${entry.id}-${entry.version}.zip`, mediaType: "application/zip", sizeBytes: entry.sizeBytes, sha256: entry.sha256, surveyId: entry.surveyId, version: entry.version, deliveryClass: "runtime" });
+      existingPaths.add(relative);
+    }
     const dynamicPackageEntries: PublicPackageEntry[] = [];
     for (const { entry, asset } of allDynamic) {
       const releasePath = `artifacts/public-survey-footprints/packages/${asset.downloadName}`;
@@ -1138,6 +1150,9 @@ export class PublicReleasePublisher {
         sources: Array.isArray(catalogEntry.sources) ? (catalogEntry.sources as ProjectedPackageSource[]) : undefined,
         zipBytes,
       }, surveyLookups);
+      const actualReleases = projection.releases.map((release) => release.id).sort();
+      const declaredReleases = Array.isArray(catalogEntry.releases) ? [...catalogEntry.releases].sort() : [];
+      if (JSON.stringify(actualReleases) !== JSON.stringify(declaredReleases)) throw new PublicationConflictError(`Package/catalog release mismatch: ${catalogEntry.id}@${catalogEntry.version}`, 422);
       collectionInputs.push({ downloadName: record.downloadName, zipBytes, projection });
       historyPackages.push({
         ...projection,
@@ -1335,6 +1350,7 @@ export class PublicReleasePublisher {
       packages: Array<Record<string, unknown> & { id: string; surveyId?: string; version: string; name: string }>;
     };
     const packages = document.packages.filter((entry) => !(entry.surveyId && isDeniedSurvey(entry.surveyId)));
+    packages.push(...(await historicalPackages(this.#options.baselineRoot)).map(({ entry }) => entry));
     const known = new Set(packages.map((entry) => `${entry.id}@${entry.version}`));
     for (const { entry } of allDynamic) {
       if (isDeniedSurvey(entry.surveyId)) continue;
@@ -1345,6 +1361,14 @@ export class PublicReleasePublisher {
         ...entry,
         archiveUrl: `/api/v1/resource-packages/${entry.id}/versions/${entry.version}/download`,
       });
+    }
+    for (const entry of packages) {
+      const latest = packages.filter((candidate) => candidate.id === entry.id && candidate.deprecated !== true)
+        .sort((a, b) => packageMinor(b.version) - packageMinor(a.version))[0];
+      if (!latest) continue;
+      const releases = (value: Record<string, unknown>): string[] => Array.isArray(value.releases) ? value.releases.filter((id): id is string => typeof id === "string") : [];
+      assertReleaseContinuity(releases(entry), releases(latest));
+      if (entry.version !== latest.version) { entry.deprecated = true; entry.replacedBy = [latest.id]; }
     }
     packages.sort((left, right) => left.id.localeCompare(right.id) || packageMinor(left.version) - packageMinor(right.version));
     return { schemaVersion: document.schemaVersion, version: document.version, generatedAt: document.generatedAt, packages };
@@ -1427,6 +1451,8 @@ export class PublicReleasePublisher {
   }
 
   async #recoverClaimedQueue(): Promise<void> {
+    // Initialization must not call get(), which awaits this same restoration.
+    const runs = await this.#readRunsOnDisk();
     for (const entry of await readdir(this.#queueDir)) {
       if (!entry.endsWith(".claimed.json")) continue;
       const claimedPath = path.join(this.#queueDir, entry);
@@ -1439,7 +1465,7 @@ export class PublicReleasePublisher {
         await rm(claimedPath, { force: true });
         continue;
       }
-      const run = await this.get(runId);
+      const run = runs.find((candidate) => candidate.runId === runId);
       if (run?.status === "queued") {
         const queuedPath = path.join(this.#queueDir, `${runId}.json`);
         await rename(claimedPath, queuedPath).catch(async (error: NodeJS.ErrnoException) => {

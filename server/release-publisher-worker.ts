@@ -57,6 +57,7 @@ for (;;) {
     if (runId) {
       claimed = true;
       log(`executing run ${runId}`);
+      await dynamicResourcePackages.reload();
       const finished = await publisher.execute(runId);
       log(`run ${runId} finished status=${finished.status}${finished.error ? ` error=${finished.error}` : ` bundle=${finished.bundle?.sha256 ?? ""}`}`);
     }

@@ -255,7 +255,7 @@ async function harness(): Promise<TestHarness> {
   const catalogBytes = JSON.stringify({
     schemaVersion: 3,
     version: "3.0.0",
-    packages: [{ id: "public-legacy-footprints", version: "3.0.0", name: "Legacy footprints", surveyId: "m42" }],
+    packages: [{ id: "public-legacy-footprints", version: "3.0.0", name: "Legacy footprints", surveyId: "m42", releases: ["m42-dr0"] }],
   });
   baselineManifest.files = [
     baselineLayerRecord,
@@ -748,4 +748,34 @@ test("publication policy denies sensitive surveys end to end", async () => {
   } finally {
     await rm(base, { recursive: true, force: true });
   }
+});
+
+test("publication rejects catalog Release claims absent from the downloadable ZIP", async () => {
+  const context = await harness();
+  const base = path.dirname(context.options.contentRoot);
+  try {
+    context.packageEntries[0]!.releases.push("m42-missing");
+    const objectRoot = path.join(base, "objects-release-mismatch");
+    const publisher = new PublicReleasePublisher({ ...context.options, store: new FilesystemArtifactStore(objectRoot) });
+    const plan = await publisher.plan();
+    const queued = await publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["m42"] });
+    const run = await publisher.execute(queued.runId);
+    assert.equal(run.status, "failed");
+    assert.match(run.error ?? "", /Package\/catalog release mismatch/);
+    await assert.rejects(() => readFile(path.join(objectRoot, "public/current.json")));
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test("publisher startup recovers a claimed queue marker without awaiting its own initialization", async () => {
+  const context = await harness();
+  const base = path.dirname(context.options.contentRoot);
+  try {
+    const publisher = new PublicReleasePublisher(context.options);
+    const plan = await publisher.plan();
+    const queued = await publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["m42"] });
+    assert.equal(await publisher.claimQueuedRun(), queued.runId);
+    const restarted = new PublicReleasePublisher(context.options);
+    const result = await Promise.race([restarted.claimQueuedRun(), new Promise((_, reject) => setTimeout(() => reject(new Error("queue recovery deadlocked")), 1000))]);
+    assert.equal(result, queued.runId);
+  } finally { await rm(base, { recursive: true, force: true }); }
 });

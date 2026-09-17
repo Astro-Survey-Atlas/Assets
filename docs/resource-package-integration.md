@@ -153,3 +153,40 @@ Online clients may instead use `/api/v1/coverage/catalog` and immutable
 `/api/v1/coverage/blocks/<layer-id>` responses. Reverse lookup remains an
 optional Assets/Warehouse online capability and is not required to consume the
 offline package.
+
+## Incremental publication and Release continuity
+
+A dynamic MOC publication is an incremental update to a survey package. The
+builder retains every baseline layer not replaced by the same stable layer ID,
+including its original FITS bytes, provenance and preview precision. It verifies
+the baseline archive and retained member hashes before allocating an immutable
+successor version. The candidate publication rejects a missing historical Release
+and rejects differences between catalog Release IDs and actual ZIP layer Release
+IDs. Removing a Release is not an implicit side effect of updating another one:
+it requires a separate explicit withdrawal workflow with a recorded reason; the
+current incremental publisher rejects such removals.
+
+The public catalog exposes activated release versions. Product publication may
+prepare a new package, but the package becomes an upgrade only after the complete
+public release (catalog, history and collection) is activated. Historical
+immutable downloads remain available.
+
+Run the HTTP consumer audit after publication:
+
+```bash
+python3 scripts/check-public-package-release.py https://<assets-host>
+```
+
+It checks every current package, its ZIP members, Release continuity, the latest
+history entry, versioned downloads and the whole-release collection hashes.
+
+For a repair that republishes already published bytes without publishing pending
+editorial drafts, `scripts/repair-public-package-release.mjs` uses the standard
+publisher, archive verification and authority pointer activation. Run it from
+`/app` in the configured Assets environment with `ASSETS_REPAIR_SURVEY_ID` set.
+The default is a read-only plan. Before setting `ASSETS_REPAIR_EXECUTE=1`, verify
+there are no queued/running publications and pause the ordinary publisher worker;
+resume the worker afterwards. The repair filters packages/publications to the
+named survey, preserves all other baseline packages, and never reviews drafts.
+Activate the resulting authority bundle on the Assets server and run the HTTP
+audit. Workspace needs only its normal catalog sync and package update.
