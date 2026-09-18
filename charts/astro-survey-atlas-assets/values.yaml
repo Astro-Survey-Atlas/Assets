@@ -110,6 +110,7 @@ syncResources:
 releasePublisher:
   enabled: true
   pollSeconds: 5
+  leaseMs: 600000
   uploadSpoolRoot: /var/lib/assets-upload-spool
   resources:
     requests:
@@ -152,3 +153,6 @@ containerSecurityContext:
   runAsUser: 10001
   seccompProfile:
     type: RuntimeDefault
+
+regionAccess:
+  secretName: astro-survey-atlas-assets-region-access

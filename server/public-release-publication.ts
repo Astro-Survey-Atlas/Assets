@@ -1,4 +1,6 @@
+import { uploadObjectRelease, restoreObjectRelease, activateObjectRelease } from "./object-release.js";
 import { createHash, randomUUID } from "node:crypto";
+import { buildApprovedRelease, currentReview, productGeometry, readApprovedRelease } from "./approved-release.js";
 import { execFile as execFileCallback } from "node:child_process";
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -139,6 +141,7 @@ export interface PublicationRunRequest {
   planId: string;
   expectedBaselineSha256: string;
   surveyIds: string[];
+  productIds?: string[];
 }
 
 export type PublicationRunStatus = "queued" | "building" | "uploading" | "verifying" | "published" | "failed";
@@ -173,6 +176,7 @@ export interface PublicationVerificationExpectation {
 
 export interface PublicationRun {
   runId: string;
+  selectedProducts?: Array<{productId:string;revision:number}>;
   planId: string;
   baselineBundle: { id: string; sha256: string };
   surveyIds: string[];
@@ -180,8 +184,12 @@ export interface PublicationRun {
   requestedBy: string | undefined;
   createdAt: string;
   startedAt: string | undefined;
+  /** The worker lease is refreshed while a run is active. */
+  claimedAt?: string;
+  lastProgressAt?: string;
   finishedAt: string | undefined;
   bundle: { id: string; sha256: string } | undefined;
+  manifestKey?: string;
   archiveKey: string | undefined;
   archiveSizeBytes: number | undefined;
   archiveSha256: string | undefined;
@@ -190,6 +198,8 @@ export interface PublicationRun {
   error: string | undefined;
   /** The durable stage at which the last attempt stopped. */
   failureStage?: PublicationFailureStage;
+  /** Set when a worker lease expired; the operator can recover this run. */
+  recovery?: { detectedAt: string; reason: string };
   /** Identity-level expectations captured at submit time for target-site checks. */
   expected?: PublicationVerificationExpectation;
   verification?: PublicationVerification;
@@ -231,6 +241,8 @@ export interface PublicReleasePublisherOptions {
   verificationTarget?: string;
   /** Injectable HTTP client keeps target-site checks deterministic in tests. */
   fetchImpl?: typeof fetch;
+  /** Maximum time without a worker heartbeat before an active run is released. */
+  publicationLeaseMs?: number;
 }
 
 interface LatestPackage {
@@ -555,8 +567,10 @@ export class PublicReleasePublisher {
   readonly #runsDir: string;
   readonly #queueDir: string;
   readonly #snapshotSink: StateSnapshotSink | undefined;
+  readonly #leaseMs: number;
   #runsRestored = false;
   #runsRestorePromise: Promise<void> | undefined;
+  #runWriteTail: Promise<void> = Promise.resolve();
 
   constructor(options: PublicReleasePublisherOptions) {
     this.#options = options;
@@ -564,97 +578,40 @@ export class PublicReleasePublisher {
     this.#runsDir = path.join(publicationRoot, "runs");
     this.#queueDir = path.join(publicationRoot, "queue");
     this.#snapshotSink = options.snapshotSink;
+    const configuredLease = options.publicationLeaseMs ?? Number(process.env.ASSETS_PUBLICATION_LEASE_MS ?? "600000");
+    this.#leaseMs = Number.isFinite(configuredLease) && configuredLease > 0 ? configuredLease : 600_000;
   }
 
   async plan(): Promise<PublicationPlan> {
-    const baseline = await this.#baselineManifest();
-    const publications = await this.#options.loadPublications();
-    const products = this.#options.loadProducts ? await this.#options.loadProducts() : [];
-    const latestByLayer = new Map<string, MocPublication>();
-    for (const publication of publications) {
-      const product = products.find((candidate) => candidate.productId === publication.productId);
-      if (product?.retiredAt) continue;
-      const existing = latestByLayer.get(publication.layerId);
-      if (!existing || existing.publishedAt < publication.publishedAt) latestByLayer.set(publication.layerId, publication);
-    }
-    const packages = await latestPackages(this.#options.loadPackages);
-    const packageBySurvey = new Map<string, LatestPackage>();
-    for (const entry of packages.values()) if (!packageBySurvey.has(entry.entry.surveyId)) packageBySurvey.set(entry.entry.surveyId, entry);
-    const productDiffs = products.map(productDiff).filter((value): value is PublicationProductDiff => Boolean(value));
-    const changedProductsBySurvey = new Map<string, PublicationProductDiff[]>();
-    for (const diff of productDiffs) {
-      const entries = changedProductsBySurvey.get(diff.surveyId) ?? [];
-      entries.push(diff);
-      changedProductsBySurvey.set(diff.surveyId, entries);
-    }
-    const baselinePackageShas = new Set(baseline.files.filter((record) => record.kind === "package").map((record) => record.sha256));
-    const baselineRecordIds = new Set(baseline.files.map((record) => record.id));
-
-    const surveyIds = [...new Set([...[...latestByLayer.values()].map((p) => p.surveyId), ...packageBySurvey.keys(), ...changedProductsBySurvey.keys()])].sort();
-    const surveys: PublicationSurveyPlan[] = [];
-    const fingerprintInputs: unknown[] = [{ baseline: baseline.bundle.sha256 }];
-    for (const surveyId of surveyIds) {
-      const layers = [...latestByLayer.values()].filter((publication) => publication.surveyId === surveyId);
-      const blockers: string[] = [];
-      if (isDeniedSurvey(surveyId)) blockers.push("Survey is excluded from publication by policy");
-      for (const layer of layers) {
-        for (const file of Object.values(layer.files)) {
-          if (!file) continue;
-          try {
-            if (!(await stat(this.#options.publicationFile(file))).isFile()) blockers.push(`Missing published file for ${layer.layerId}`);
-          } catch {
-            blockers.push(`Missing published file for ${layer.layerId}`);
-          }
-        }
+    const baseline=await this.#baselineManifest();
+    const products=this.#options.loadProducts ? await this.#options.loadProducts() : [];
+    const publications=await this.#options.loadPublications();
+    const previous=await readApprovedRelease(this.#options.baselineRoot);
+    const surveys: PublicationSurveyPlan[]=[];
+    for(const surveyId of [...new Set(products.map(p=>p.draft.surveyId))].sort()) {
+      const diffs:PublicationProductDiff[]=[];
+      for(const product of products.filter(p=>p.draft.surveyId===surveyId)) {
+        const old=previous.products.find(p=>p.productId===product.productId);
+        if(product.retiredAt){if(old)diffs.push({productId:product.productId,surveyId,releaseId:product.draft.releaseId,name:product.draft.name,change:"removed",fields:["withdrawal"],draftRevision:product.revision,publishedRevision:old.revision,reviewed:Boolean(product.retirementReason?.trim())});continue;}
+        let geometry=null;let geometryInvalid=false;
+        try { geometry=await productGeometry(product,{root:this.#options.baselineRoot,files:baseline.files,publications,publicationFile:this.#options.publicationFile}); } catch { geometryInvalid=true; }
+        if(old?.revision===product.revision && JSON.stringify(old.geometry)===JSON.stringify(geometry?.facts??null))continue;
+        diffs.push({productId:product.productId,surveyId,releaseId:product.draft.releaseId,name:product.draft.name,change:old?"modified":"added",fields:["identity","coverage","presentation"],draftRevision:product.revision,publishedRevision:old?.revision??null,reviewed:!geometryInvalid&&currentReview(product,geometry?.facts??null)});
       }
-      const current = packageBySurvey.get(surveyId);
-      const dynamicLayerIds = layers.flatMap((layer) => this.#layerRecordIds(layer)).filter((id) => !baselineRecordIds.has(id));
-      const diffs = changedProductsBySurvey.get(surveyId) ?? [];
-      for (const diff of diffs) if (!diff.reviewed) blockers.push(`Product ${diff.productId} revision ${diff.draftRevision} is not reviewed`);
-      const changed = Boolean(
-        (current && !baselinePackageShas.has(current.asset.sha256)) ||
-        dynamicLayerIds.length > 0 ||
-        diffs.length > 0,
-      );
-      surveys.push({
-        surveyId,
-        publishedLayers: layers.length,
-        changedProducts: diffs.length,
-        productDiffs: diffs,
-        currentPackage: current ? { id: current.entry.id, version: current.entry.version, sha256: current.asset.sha256, sizeBytes: current.asset.sizeBytes } : undefined,
-        inReleasePackage: Boolean(current && baselinePackageShas.has(current.asset.sha256)),
-        changed,
-        blockers,
-        selectable: changed && blockers.length === 0,
-      });
-      fingerprintInputs.push({
-        surveyId,
-        layers: layers.map((layer) => [layer.layerId, layer.publishedAt, layer.files.moc.sha256]),
-        package: current ? [current.entry.id, current.entry.version, current.asset.sha256] : undefined,
-        changedProducts: diffs.length,
-        productDiffs: diffs.map((diff) => [diff.productId, diff.draftRevision, diff.fields, diff.reviewed]),
-      });
+      const blockers=isDeniedSurvey(surveyId)?["Survey is excluded from publication by policy"]:[];
+      if(!diffs.some(d=>d.reviewed))blockers.push("No reviewed product versions are ready; review a product first");
+      surveys.push({surveyId,publishedLayers:previous.products.filter(p=>p.content.surveyId===surveyId&&p.geometry).length,changedProducts:diffs.length,productDiffs:diffs,currentPackage:undefined,inReleasePackage:previous.packages.some(p=>p.surveyId===surveyId),changed:diffs.length>0,blockers,selectable:diffs.some(d=>d.reviewed)&&!isDeniedSurvey(surveyId)});
     }
-    const verification = await verificationExpectations(
-      surveys.filter((survey) => survey.changed).map((survey) => survey.surveyId),
-      productDiffs,
-      products,
-      publications,
-      surveys,
-    );
-    return {
-      planId: digest(fingerprintInputs).slice(0, 16),
-      baselineBundle: baseline.bundle,
-      surveys,
-      changedSurveyIds: surveys.filter((survey) => survey.changed).map((survey) => survey.surveyId),
-      dynamicPackages: packages.size,
-      dynamicLayers: latestByLayer.size,
-      createdAt: new Date().toISOString(),
-      verification,
-    };
+    return {planId:digest({baseline:baseline.bundle,surveys}).slice(0,16),baselineBundle:baseline.bundle,surveys,changedSurveyIds:surveys.filter(s=>s.changed).map(s=>s.surveyId),dynamicPackages:0,dynamicLayers:0,createdAt:new Date().toISOString()};
   }
 
+  #submissionTail: Promise<unknown> = Promise.resolve();
   async submit(request: PublicationRunRequest, requestedBy?: string): Promise<PublicationRun> {
+    const pending = this.#submissionTail.then(() => this.#submit(request, requestedBy));
+    this.#submissionTail = pending.catch(() => undefined);
+    return pending;
+  }
+  async #submit(request: PublicationRunRequest, requestedBy?: string): Promise<PublicationRun> {
     const plan = await this.plan();
     if (request.planId !== plan.planId) {
       throw new PublicationConflictError(`Publication plan ${request.planId} is stale; current plan is ${plan.planId}`);
@@ -663,21 +620,34 @@ export class PublicReleasePublisher {
       throw new PublicationConflictError(`Baseline release changed; expected ${plan.baselineBundle.sha256}`);
     }
     const requested = [...new Set(request.surveyIds ?? [])];
+    if (!request.productIds?.length) throw new PublicationConflictError("Select explicit reviewed product versions",400);
     if (!requested.length) throw new PublicationConflictError("Select at least one changed survey to publish", 400);
     const notChanged = requested.filter((surveyId) => !plan.changedSurveyIds.includes(surveyId));
     if (notChanged.length) throw new PublicationConflictError(`Surveys have no publication changes: ${notChanged.join(", ")}`);
     const blocked = plan.surveys.filter((survey) => requested.includes(survey.surveyId) && survey.blockers.length).map((survey) => `${survey.surveyId}: ${survey.blockers.join("; ")}`);
     if (blocked.length) throw new PublicationConflictError(`Blocked surveys cannot be published: ${blocked.join(" | ")}`);
+    const eligible=plan.surveys.filter(s=>requested.includes(s.surveyId)).flatMap(s=>s.productDiffs).filter(p=>p.reviewed);
+    const selected=eligible.filter(p=>!request.productIds || request.productIds.includes(p.productId));
+    if(!selected.length || request.productIds?.some(id=>!eligible.some(p=>p.productId===id)))throw new PublicationConflictError("Select reviewed product versions only",400);
 
+    const versions = selected.map(p => ({ productId: p.productId, revision: p.draftRevision }));
+    const now = Date.now();
+    const active = (await this.list()).filter(r => ["queued", "building", "uploading", "verifying"].includes(r.status) && now - Date.parse(r.lastProgressAt ?? r.startedAt ?? r.createdAt) < 15 * 60 * 1000);
+    const duplicate = active.find(r => r.selectedProducts?.length === versions.length && versions.every(v => r.selectedProducts?.some(p => p.productId === v.productId && p.revision === v.revision)));
+    if (duplicate) return duplicate;
+    if (active.some(r => r.selectedProducts?.some(p => versions.some(v => p.productId === v.productId)))) throw new PublicationConflictError("Product already has an active publication task");
     const run: PublicationRun = {
       runId: `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`,
+      selectedProducts:selected.map(p=>({productId:p.productId,revision:p.draftRevision})),
       planId: plan.planId,
       baselineBundle: plan.baselineBundle,
       surveyIds: requested,
       status: "queued",
-      requestedBy,
+      requestedBy: requestedBy ? "admin" : undefined,
       createdAt: new Date().toISOString(),
       startedAt: undefined,
+      claimedAt: undefined,
+      lastProgressAt: undefined,
       finishedAt: undefined,
       bundle: undefined,
       archiveKey: undefined,
@@ -702,11 +672,25 @@ export class PublicReleasePublisher {
 
   /** Requeue a failed attempt against a freshly computed plan and baseline. */
   async retry(runId: string, requestedBy?: string): Promise<PublicationRun> {
+    await this.#ensureRunsRestored();
+    await this.#recoverStaleRuns();
     const previous = await this.get(runId);
     if (!previous) throw new PublicationConflictError(`Unknown publication run: ${runId}`, 404);
     if (previous.status !== "failed") throw new PublicationConflictError(`Publication run ${runId} is ${previous.status}, not failed`);
     const plan = await this.plan();
-    return this.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: previous.surveyIds }, requestedBy);
+    return this.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: previous.surveyIds, productIds: previous.selectedProducts?.map(p=>p.productId) }, requestedBy);
+  }
+
+  /** Release a stale worker lease and immediately create a fresh queued attempt. */
+  async recover(runId: string, requestedBy?: string): Promise<PublicationRun> {
+    await this.#ensureRunsRestored();
+    await this.#recoverStaleRuns();
+    const previous = await this.get(runId);
+    if (!previous) throw new PublicationConflictError(`Unknown publication run: ${runId}`, 404);
+    if (previous.status !== "failed" || !previous.recovery) {
+      throw new PublicationConflictError(`Publication run ${runId} is still active or is not recoverable`);
+    }
+    return this.retry(runId, requestedBy);
   }
 
   async get(runId: string): Promise<PublicationRun | undefined> {
@@ -721,6 +705,7 @@ export class PublicReleasePublisher {
 
   async list(): Promise<PublicationRun[]> {
     await this.#ensureRunsRestored();
+    await this.#recoverStaleRuns();
     await mkdir(this.#runsDir, { recursive: true });
     const runs: PublicationRun[] = [];
     for (const entry of (await readdir(this.#runsDir)).filter((name) => name.endsWith(".json")).sort().reverse()) {
@@ -731,6 +716,7 @@ export class PublicReleasePublisher {
 
   async claimQueuedRun(): Promise<string | undefined> {
     await this.#ensureRunsRestored();
+    await this.#recoverStaleRuns();
     await mkdir(this.#queueDir, { recursive: true });
     const entries = (await readdir(this.#queueDir)).filter((name) => name.endsWith(".json") && !name.endsWith(".claimed.json")).sort();
     for (const entry of entries) {
@@ -740,7 +726,12 @@ export class PublicReleasePublisher {
         await rename(queuedPath, claimedPath);
         const runId = (JSON.parse(await readFile(claimedPath, "utf8")) as { runId: string }).runId;
         const run = await this.get(runId);
-        if (run?.status === "queued") return runId;
+        if (run?.status === "queued") {
+          const now = new Date().toISOString();
+          await this.#writeRun({ ...run, claimedAt: now, lastProgressAt: now, recovery: undefined });
+          await writeJsonAtomic(claimedPath, { runId, claimedAt: now });
+          return runId;
+        }
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
@@ -757,11 +748,16 @@ export class PublicReleasePublisher {
     const stagingRoot = await mkdtemp(path.join(tmpdir(), "assets-release-publish-"));
     let archivePath: string | undefined;
     let failureStage: "build" | "upload" | "candidate" | "activate" = "build";
+    let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
     const verificationTarget = this.#options.verificationTarget?.trim() || process.env.ASSETS_PUBLIC_VERIFY_URL?.trim() || undefined;
+    const startedAt = new Date().toISOString();
     run = {
       ...run,
       status: "building",
-      startedAt: new Date().toISOString(),
+      startedAt: run.startedAt ?? startedAt,
+      claimedAt: run.claimedAt ?? startedAt,
+      lastProgressAt: startedAt,
+      recovery: undefined,
       verification: {
         overall: "failed",
         candidate: { state: "pending" },
@@ -770,31 +766,47 @@ export class PublicReleasePublisher {
       },
     };
     await this.#writeRun(run);
+    const heartbeatMs = Math.max(1_000, Math.floor(this.#leaseMs / 3));
+    heartbeatTimer = setInterval(() => {
+      const now = new Date().toISOString();
+      run = { ...run, lastProgressAt: now };
+      void this.#writeRun(run).catch(() => undefined);
+    }, heartbeatMs);
+    heartbeatTimer.unref?.();
     try {
-      const candidate = await this.#buildCandidateTree(stagingRoot, runId);
+      if(!run.selectedProducts?.length)throw new PublicationConflictError("Legacy publication task must be resubmitted under reviewed-release-v1");
+      const candidate = await buildApprovedRelease({stagingRoot,runId,root:this.#options.baselineRoot,baseline:await this.#baselineManifest(),files:(await this.#baselineManifest()).files,products:this.#options.loadProducts?await this.#options.loadProducts():[],publications:await this.#options.loadPublications(),publicationFile:this.#options.publicationFile,selected:run.selectedProducts});
+      const approved = await readApprovedRelease(candidate.root);
+      const previous = await readApprovedRelease(this.#options.baselineRoot);
+      run.expected = {
+        products: [...approved.products.map(p=>({productId:p.productId,surveyId:p.content.surveyId,present:true})),...previous.products.filter(p=>!approved.products.some(n=>n.productId===p.productId)).map(p=>({productId:p.productId,surveyId:p.content.surveyId,present:false}))],
+        layers: approved.products.flatMap(p=>p.geometry?[{layerId:p.geometry.layerId,surveyId:p.content.surveyId,present:true}]:[]),
+        packages: approved.packages.map(p=>({id:String(p.id),version:String(p.version),surveyId:String(p.surveyId),present:true})),
+      };
       run = this.#append(run, `candidate: ${candidate.files.length} files, ${candidate.packages.length} dynamic packages`);
       failureStage = "candidate";
       await verifyReleaseDocuments(candidate.root, JSON.parse(await readFile(path.join(candidate.root, MANIFEST_RELATIVE_PATH), "utf8")));
       failureStage = "build";
-      const { packageRelease } = await import("../scripts/release-archive.js");
-      archivePath = path.join(await mkdtemp(path.join(tmpdir(), "assets-release-archive-")), "release.tar.gz");
-      const descriptor = await packageRelease({ root: candidate.root, outputPath: archivePath });
       run = { ...run, files: candidate.files.length, packages: candidate.packages.length };
       await this.#writeRun(run);
 
-      run = { ...run, status: "uploading" };
+      run = { ...run, status: "uploading", lastProgressAt: new Date().toISOString() };
       await this.#writeRun(run);
       const store = this.#options.store ?? createArtifactStoreFromProcess();
       if (store.kind !== "s3" && !this.#options.allowFilesystemStore) {
         throw new PublicationConflictError("Release publication requires a configured S3 object store", 400);
       }
       failureStage = "upload";
-      const uploaded = await uploadReleaseArchive(descriptor, store);
+      const uploaded = await uploadObjectRelease(candidate.root, this.#options.baselineRoot, store, run.baselineBundle.sha256);
       failureStage = "candidate";
-      const candidateVerification = await verifyUploadedReleaseArchive(uploaded, store);
+      const restored = path.join(stagingRoot, "object-readback");
+      await restoreObjectRelease(store, uploaded, restored, this.#options.baselineRoot);
+      const checks = await verifyReleaseDocuments(restored, JSON.parse(await readFile(path.join(restored, MANIFEST_RELATIVE_PATH), "utf8")));
+      const candidateVerification: ReleaseArchiveVerification = { state: "passed", checkedAt: new Date().toISOString(), bundleSha256: uploaded.bundle.sha256, files: candidate.files.length, ...checks };
       run = {
         ...run,
         status: "verifying",
+        lastProgressAt: new Date().toISOString(),
         verification: {
           ...(run.verification ?? { overall: "failed", candidate: { state: "pending" }, authority: { state: "pending" }, site: { state: "not-configured" } }),
           candidate: candidateVerification,
@@ -803,29 +815,33 @@ export class PublicReleasePublisher {
       };
       await this.#writeRun(run);
       failureStage = "activate";
-      const published = await activateReleasePointer(uploaded, store, {
-        currentKey: process.env.ASSETS_OBJECT_STORE_CURRENT_KEY,
-        expectedCurrentBundleSha256: run.baselineBundle.sha256,
-      });
+      const latestProducts=this.#options.loadProducts?await this.#options.loadProducts():[];
+      const candidateApproval=await readApprovedRelease(candidate.root);
+      for(const selected of run.selectedProducts ?? []) {
+        const latest=latestProducts.find(p=>p.productId===selected.productId);
+        const frozen=candidateApproval.products.find(p=>p.productId===selected.productId);
+        if(!latest || latest.revision!==selected.revision || (frozen && !currentReview(latest,frozen.geometry)))throw new PublicationConflictError("Selected product changed during publication; review and resubmit");
+      }
+      const published = await activateObjectRelease(store, uploaded, run.baselineBundle.sha256);
       const siteState = verificationTarget
         ? { state: "pending" as const, target: verificationTarget }
         : { state: "not-configured" as const };
       run = {
         ...run,
         status: "published",
+        lastProgressAt: new Date().toISOString(),
+        claimedAt: undefined,
         finishedAt: new Date().toISOString(),
         bundle: published.bundle,
-        archiveKey: published.archiveKey,
-        archiveSizeBytes: published.archiveSizeBytes,
-        archiveSha256: published.archiveSha256,
+        manifestKey: published.manifestKey,
         verification: {
           ...(run.verification ?? { overall: "failed", candidate: { state: "pending" }, authority: { state: "pending" }, site: { state: "not-configured" } }),
           overall: verificationTarget ? "site-pending" : "authority-published",
-          authority: { state: "passed", checkedAt: published.publishedAt, bundleSha256: published.bundle.sha256 },
+          authority: { state: "passed", checkedAt: published.publishedAt!, bundleSha256: published.bundle.sha256 },
           site: siteState,
         },
       };
-      run = this.#append(run, `published ${published.archiveKey}`);
+      run = this.#append(run, `published object manifest ${published.manifestKey}`);
       await this.#writeRun(run);
       if (verificationTarget) run = await this.verifySite(run.runId);
       return run;
@@ -836,6 +852,8 @@ export class PublicReleasePublisher {
         ...run,
         status: "failed",
         finishedAt: new Date().toISOString(),
+        lastProgressAt: new Date().toISOString(),
+        claimedAt: undefined,
         error: message,
         failureStage,
         ...(verification ? { verification: {
@@ -848,6 +866,8 @@ export class PublicReleasePublisher {
       await this.#writeRun(run).catch(() => undefined);
       return run;
     } finally {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      await this.#releaseQueueMarkers(runId);
       await rm(stagingRoot, { recursive: true, force: true });
       if (archivePath) await rm(path.dirname(archivePath), { recursive: true, force: true }).catch(() => undefined);
     }
@@ -998,269 +1018,6 @@ export class PublicReleasePublisher {
     }
   }
 
-  async #buildCandidateTree(stagingRoot: string, runId: string): Promise<CandidateBuild> {
-    const baseline = await this.#baselineManifest();
-    for (const record of baseline.files) {
-      if (inferredPublicAssetDeliveryClass({ path: record.path, kind: record.kind }) === "evidence") {
-        throw new PublicationConflictError(`Baseline release contains an evidence record: ${record.id}`, 500);
-      }
-      try {
-        assertRecordPublishable(record);
-      } catch (error) {
-        throw new PublicationConflictError(error instanceof Error ? error.message : String(error), 500);
-      }
-    }
-    const allDynamic = await this.#allDynamicPackages();
-    const baselinePath = (relativePath: string): string => path.resolve(this.#options.baselineRoot, relativePath);
-
-    const existingPaths = new Set<string>();
-    const files: PublicAssetRecord[] = [];
-    for (const record of baseline.files) {
-      if (record.path === PACKAGE_CATALOG_RELATIVE_PATH || record.path === RELEASE_HISTORY_RELATIVE_PATH) continue;
-      const source = baselinePath(record.path);
-      let bytes = await readFile(source);
-      if (bytes.length !== record.sizeBytes || createHash("sha256").update(bytes).digest("hex") !== record.sha256) {
-        const sanitized = isSanitizableControlDocument(record.path) ? sanitizeReleaseControlDocument(record.path, bytes) : null;
-        if (
-          !sanitized ||
-          sanitized.length !== record.sizeBytes ||
-          createHash("sha256").update(sanitized).digest("hex") !== record.sha256
-        ) {
-          throw new PublicationConflictError(`Baseline file hash mismatch: ${record.path}`, 500);
-        }
-        bytes = Buffer.from(sanitized);
-      }
-      const destination = this.#inside(stagingRoot, record.path);
-      await mkdir(path.dirname(destination), { recursive: true });
-      await writeFile(destination, bytes);
-      files.push({ ...record });
-      existingPaths.add(record.path);
-    }
-
-    for (const { entry, bytes } of await historicalPackages(this.#options.baselineRoot)) {
-      const relative = `artifacts/public-survey-footprints/packages/${entry.id}-${entry.version}.zip`;
-      if (existingPaths.has(relative)) continue;
-      await writeFile(this.#inside(stagingRoot, relative), bytes);
-      files.push({ id: dynamicResourcePackageAssetId(entry), kind: "package", label: entry.name, description: entry.description, path: relative, downloadName: `${entry.id}-${entry.version}.zip`, mediaType: "application/zip", sizeBytes: entry.sizeBytes, sha256: entry.sha256, surveyId: entry.surveyId, version: entry.version, deliveryClass: "runtime" });
-      existingPaths.add(relative);
-    }
-    const dynamicPackageEntries: PublicPackageEntry[] = [];
-    for (const { entry, asset } of allDynamic) {
-      const releasePath = `artifacts/public-survey-footprints/packages/${asset.downloadName}`;
-      if (existingPaths.has(releasePath)) continue;
-      const record: PublicAssetRecord = {
-        id: asset.id,
-        kind: "package",
-        label: entry.name,
-        description: entry.description,
-        path: releasePath,
-        downloadName: asset.downloadName,
-        mediaType: "application/zip",
-        sizeBytes: asset.sizeBytes,
-        sha256: asset.sha256,
-        surveyId: entry.surveyId,
-        releaseId: entry.releases[0],
-        version: entry.version,
-        deliveryClass: "runtime",
-      };
-      const source = path.join(path.resolve(this.#options.contentRoot), asset.path);
-      const details = await stat(source);
-      if (details.size !== record.sizeBytes) throw new PublicationConflictError(`Dynamic package size mismatch: ${entry.id}@${entry.version}`, 500);
-      const destination = this.#inside(stagingRoot, releasePath);
-      await mkdir(path.dirname(destination), { recursive: true });
-      await copyFile(source, destination);
-      files.push(record);
-      existingPaths.add(releasePath);
-      dynamicPackageEntries.push(entry);
-    }
-
-    const baselineRecordIds = new Set(baseline.files.map((record) => record.id));
-    const publications = await this.#options.loadPublications();
-    const products = this.#options.loadProducts ? await this.#options.loadProducts() : [];
-    const latestByLayer = new Map<string, MocPublication>();
-    for (const publication of publications) {
-      const product = products.find((candidate) => candidate.productId === publication.productId);
-      if (product?.retiredAt) continue;
-      const existing = latestByLayer.get(publication.layerId);
-      if (!existing || existing.publishedAt < publication.publishedAt) latestByLayer.set(publication.layerId, publication);
-    }
-    for (const layerId of [...latestByLayer.keys()].sort()) {
-      const publication = latestByLayer.get(layerId)!;
-      if (isDeniedSurvey(publication.surveyId) || isDeniedLayerId(publication.layerId)) continue;
-      const layerRecords = this.#layerRecords(publication);
-      if (layerRecords.every(({ record }) => baselineRecordIds.has(record.id))) continue;
-      for (const { record, file } of layerRecords) {
-        const source = this.#options.publicationFile(file);
-        const destination = this.#inside(stagingRoot, record.path);
-        await mkdir(path.dirname(destination), { recursive: true });
-        await copyFile(source, destination);
-        files.push(record);
-      }
-    }
-
-    const mergedCatalog = await this.#mergedPackageCatalog(allDynamic);
-    const catalogBytes = Buffer.from(`${JSON.stringify(mergedCatalog, null, 2)}\n`, "utf8");
-    const catalogRecord = baseline.files.find((record) => record.path === PACKAGE_CATALOG_RELATIVE_PATH);
-    files.push({
-      ...(catalogRecord ?? {
-        id: "packages-catalog",
-        kind: "manifest" as const,
-        label: "Resource package catalog",
-        description: "Catalog of published resource packages.",
-        downloadName: "catalog.json",
-        mediaType: "application/json",
-      }),
-      path: PACKAGE_CATALOG_RELATIVE_PATH,
-      sizeBytes: catalogBytes.byteLength,
-      sha256: createHash("sha256").update(catalogBytes).digest("hex"),
-      deliveryClass: "runtime" as const,
-    });
-
-    const generatedAt = new Date().toISOString();
-    const bundleId = `public-survey-footprints-${generatedAt.slice(0, 10)}`;
-    const baselineHistory = await this.#readBaselineHistory();
-    const sequence = baselineHistory.releases.reduce((max, entry) => Math.max(max, entry.sequence), 0) + 1;
-    const releaseId = `${bundleId}-${sequence}`;
-
-    const surveyLookups = await loadSurveyLookups(path.resolve(this.#options.baselineRoot, "src", "surveys", "survey-catalog.json"));
-    const catalogByDownloadName = new Map<string, Record<string, unknown> & { id: string; surveyId?: string; version: string; name: string }>();
-    for (const entry of mergedCatalog.packages) {
-      catalogByDownloadName.set(`${entry.id}-${entry.version}.zip`, entry);
-    }
-    const collectionInputs: Array<{ downloadName: string; zipBytes: Buffer; projection: Awaited<ReturnType<typeof projectResourcePackage>> }> = [];
-    const historyPackages: ReleaseHistoryPackage[] = [];
-    for (const record of files.filter((candidate) => candidate.kind === "package").sort((left, right) => left.path.localeCompare(right.path))) {
-      const catalogEntry = catalogByDownloadName.get(record.downloadName);
-      if (!catalogEntry) continue;
-      const surveyId = catalogEntry.surveyId;
-      if (!surveyId || isDeniedSurvey(surveyId)) continue;
-      if (catalogEntry.deprecated === true) continue;
-      const zipBytes = await readFile(this.#inside(stagingRoot, record.path));
-      const projection = await projectResourcePackage({
-        id: catalogEntry.id,
-        version: catalogEntry.version,
-        name: catalogEntry.name,
-        surveyId,
-        sizeBytes: record.sizeBytes,
-        sha256: record.sha256,
-        facilities: typeof catalogEntry.facilities === "object" && catalogEntry.facilities !== null && Array.isArray(catalogEntry.facilities)
-          ? (catalogEntry.facilities as string[])
-          : undefined,
-        accessModes: Array.isArray(catalogEntry.accessModes) ? (catalogEntry.accessModes as string[]) : undefined,
-        sources: Array.isArray(catalogEntry.sources) ? (catalogEntry.sources as ProjectedPackageSource[]) : undefined,
-        zipBytes,
-      }, surveyLookups);
-      const actualReleases = projection.releases.map((release) => release.id).sort();
-      const declaredReleases = Array.isArray(catalogEntry.releases) ? [...catalogEntry.releases].sort() : [];
-      if (JSON.stringify(actualReleases) !== JSON.stringify(declaredReleases)) throw new PublicationConflictError(`Package/catalog release mismatch: ${catalogEntry.id}@${catalogEntry.version}`, 422);
-      collectionInputs.push({ downloadName: record.downloadName, zipBytes, projection });
-      historyPackages.push({
-        ...projection,
-        downloadUrl: `/api/v1/resource-packages/${projection.id}/versions/${projection.version}/download`,
-      });
-    }
-    const collection = await buildResourcePackageCollection({
-      releaseId,
-      sequence,
-      bundleId,
-      releasedAt: generatedAt,
-      notes: `Publication run ${runId}`,
-      catalogBytes,
-      packages: collectionInputs,
-    });
-    const collectionPath = `artifacts/public-survey-footprints/collections/${collection.fileName}`;
-    const collectionDestination = this.#inside(stagingRoot, collectionPath);
-    await mkdir(path.dirname(collectionDestination), { recursive: true });
-    await writeFile(collectionDestination, collection.bytes);
-    files.push({
-      id: `collection-${slugifyReleaseId(releaseId)}`,
-      kind: "package-collection",
-      label: "Resource package collection",
-      description: `All ${collectionInputs.length} public resource packages of release ${releaseId} in one deterministic archive.`,
-      path: collectionPath,
-      downloadName: collection.fileName,
-      mediaType: "application/zip",
-      sizeBytes: collection.sizeBytes,
-      sha256: collection.sha256,
-      deliveryClass: "runtime",
-    });
-
-    const history: ReleaseHistoryDocument = {
-      schemaVersion: 2,
-      latestReleaseId: releaseId,
-      releases: [...baselineHistory.releases, {
-        releaseId,
-        sequence,
-        bundleId,
-        releasedAt: generatedAt,
-        notes: `Publication run ${runId}`,
-        catalogSha256: createHash("sha256").update(catalogBytes).digest("hex"),
-        collection: {
-          fileName: collection.fileName,
-          sizeBytes: collection.sizeBytes,
-          sha256: collection.sha256,
-          downloadUrl: `/api/v1/releases/${releaseId}/download`,
-        },
-        packages: historyPackages,
-      }],
-    };
-    const historyBytes = Buffer.from(`${JSON.stringify(history, null, 2)}\n`, "utf8");
-    const historyRecord = baseline.files.find((record) => record.path === RELEASE_HISTORY_RELATIVE_PATH);
-    files.push({
-      ...(historyRecord ?? {
-        id: "metadata-release-history",
-        kind: "metadata" as const,
-        label: "Release history",
-        description: "Chronological history of published public releases.",
-        downloadName: "release-history.json",
-        mediaType: "application/json",
-      }),
-      path: RELEASE_HISTORY_RELATIVE_PATH,
-      sizeBytes: historyBytes.byteLength,
-      sha256: createHash("sha256").update(historyBytes).digest("hex"),
-      deliveryClass: "runtime" as const,
-    });
-
-    files.sort((left, right) => left.path.localeCompare(right.path));
-    const seen = new Set<string>();
-    for (const record of files) {
-      if (seen.has(record.path)) throw new PublicationConflictError(`Candidate release has duplicate path: ${record.path}`, 500);
-      seen.add(record.path);
-      if (record.deliveryClass !== "runtime") throw new PublicationConflictError(`Candidate release contains an evidence record: ${record.id}`, 500);
-      try {
-        assertRecordPublishable(record);
-      } catch (error) {
-        throw new PublicationConflictError(error instanceof Error ? error.message : String(error), 500);
-      }
-    }
-    const bundleSha256 = publicReleaseBundleDigest(files);
-    const manifest: ReleaseManifestDocument = {
-      schemaVersion: 1,
-      generatedAt,
-      bundle: { id: bundleId, sha256: bundleSha256 },
-      statistics: {
-        ...baseline.statistics,
-        packages: files.filter((record) => record.kind === "package").length,
-        rawMocFiles: files.filter((record) => record.kind === "moc").length,
-        totalBytes: files.reduce((sum, record) => sum + record.sizeBytes, 0),
-        runtimeBytes: files.reduce((sum, record) => sum + record.sizeBytes, 0),
-        evidenceBytes: 0,
-      },
-      files,
-    };
-    const catalogDestination = this.#inside(stagingRoot, PACKAGE_CATALOG_RELATIVE_PATH);
-    await mkdir(path.dirname(catalogDestination), { recursive: true });
-    await writeFile(catalogDestination, catalogBytes);
-    const historyDestination = this.#inside(stagingRoot, RELEASE_HISTORY_RELATIVE_PATH);
-    await mkdir(path.dirname(historyDestination), { recursive: true });
-    await writeFile(historyDestination, historyBytes);
-    const manifestDestination = this.#inside(stagingRoot, MANIFEST_RELATIVE_PATH);
-    await mkdir(path.dirname(manifestDestination), { recursive: true });
-    await writeFile(manifestDestination, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-
-    return { root: stagingRoot, files, packages: dynamicPackageEntries };
-  }
-
   async #allDynamicPackages(): Promise<Array<{ entry: PublicPackageEntry; asset: DynamicResourcePackageAsset }>> {
     const assets = await this.#options.loadPackages.assets();
     const result: Array<{ entry: PublicPackageEntry; asset: DynamicResourcePackageAsset }> = [];
@@ -1388,14 +1145,71 @@ export class PublicReleasePublisher {
     return path.resolve(root, ...normalized.split("/"));
   }
 
+  async #recoverStaleRuns(): Promise<PublicationRun[]> {
+    const now = Date.now();
+    const runs = await this.#readRunsOnDisk();
+    const claimedIds = new Set<string>();
+    for (const entry of await readdir(this.#queueDir).catch(() => [])) {
+      if (!entry.endsWith(".claimed.json")) continue;
+      try {
+        const value = JSON.parse(await readFile(path.join(this.#queueDir, entry), "utf8")) as { runId?: unknown };
+        if (typeof value.runId === "string") claimedIds.add(value.runId);
+      } catch { /* malformed claim is handled by queue restoration */ }
+    }
+    const stale: PublicationRun[] = [];
+    for (const run of runs) {
+      const active = ["building", "uploading", "verifying"].includes(run.status);
+      const claimedQueued = run.status === "queued" && claimedIds.has(run.runId);
+      if (!active && !claimedQueued) continue;
+      const timestamp = Date.parse(run.lastProgressAt ?? run.claimedAt ?? run.startedAt ?? run.createdAt);
+      if (!Number.isFinite(timestamp) || now - timestamp <= this.#leaseMs) continue;
+      const stage: PublicationFailureStage = run.status === "uploading" ? "upload" : run.status === "verifying" ? "candidate" : "build";
+      const reason = `发布 worker 在${stage === "upload" ? "上传" : stage === "candidate" ? "验证" : "构建"}阶段中断，任务已释放，可重试`;
+      const detectedAt = new Date(now).toISOString();
+      const failed: PublicationRun = {
+        ...run,
+        status: "failed",
+        finishedAt: detectedAt,
+        lastProgressAt: detectedAt,
+        claimedAt: undefined,
+        error: reason,
+        failureStage: stage,
+        recovery: { detectedAt, reason },
+        verification: run.verification ? {
+          ...run.verification,
+          overall: "failed",
+          ...(stage === "candidate" ? { candidate: { ...run.verification.candidate, state: "failed", checkedAt: detectedAt, error: reason } } : {}),
+          ...(stage === "upload" ? { authority: { ...run.verification.authority, state: "failed", checkedAt: detectedAt, error: reason } } : {}),
+        } : run.verification,
+        log: [...run.log.slice(-39), `${detectedAt} ${reason}`],
+      };
+      await this.#writeRun(failed);
+      await this.#releaseQueueMarkers(run.runId);
+      stale.push(failed);
+    }
+    return stale;
+  }
+
+  async #releaseQueueMarkers(runId: string): Promise<void> {
+    await Promise.all([
+      rm(path.join(this.#queueDir, `${runId}.json`), { force: true }),
+      rm(path.join(this.#queueDir, `${runId}.claimed.json`), { force: true }),
+    ]);
+  }
+
   #append(run: PublicationRun, message: string): PublicationRun {
-    return { ...run, log: [...run.log.slice(-40), `${new Date().toISOString()} ${message}`] };
+    const now = new Date().toISOString();
+    return { ...run, lastProgressAt: now, log: [...run.log.slice(-40), `${now} ${message}`] };
   }
 
   async #writeRun(run: PublicationRun): Promise<void> {
-    await mkdir(this.#runsDir, { recursive: true });
-    await writeFile(path.join(this.#runsDir, `${run.runId}.json`), `${JSON.stringify(run, null, 2)}\n`, "utf8");
-    await queueStateSnapshot(this.#snapshotSink, "publication-runs", { schemaVersion: 1, runs: await this.#readRunsOnDisk() });
+    const operation = this.#runWriteTail.then(async () => {
+      await mkdir(this.#runsDir, { recursive: true });
+      await writeFile(path.join(this.#runsDir, `${run.runId}.json`), `${JSON.stringify(run, null, 2)}\n`, "utf8");
+      await queueStateSnapshot(this.#snapshotSink, "publication-runs", { schemaVersion: 1, runs: await this.#readRunsOnDisk() });
+    });
+    this.#runWriteTail = operation.catch(() => undefined);
+    await operation;
   }
 
   async #ensureRunsRestored(): Promise<void> {
@@ -1472,6 +1286,7 @@ export class PublicReleasePublisher {
           if (error.code !== "EEXIST" && error.code !== "ENOTEMPTY") throw error;
           await rm(claimedPath, { force: true });
         });
+        await writeJsonAtomic(path.join(this.#runsDir, `${runId}.json`), { ...run, claimedAt: undefined, lastProgressAt: undefined, recovery: undefined });
       } else {
         await rm(claimedPath, { force: true });
       }

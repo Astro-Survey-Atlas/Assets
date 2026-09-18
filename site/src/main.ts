@@ -1,4 +1,5 @@
-import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Maximize2, Minimize2, Moon, Menu, RotateCcw, Search, ShieldCheck, Sun, Telescope, X, createIcons } from "lucide";
+import { ensureDownloadAccess, resetDownloadAccess } from "./download-access";
+import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Lock, Maximize2, Minimize2, Moon, Menu, RotateCcw, Search, ShieldCheck, Sun, Telescope, X, createIcons } from "lucide";
 import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 import type { SurveyLayerContextMenu, SurveyLayerInspection, SurveyLayerOverlapComponent, SurveyLayerState } from "./atlas/survey-layer-viewer.js";
@@ -716,8 +717,7 @@ function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLEl
     return product?.modality ? [modalityLabel(product.modality)] : [];
   }))];
   const states = [...new Set(layers.map((layer) => coverageLayerLoadStates.get(layer.layerId) ?? "loading"))];
-  const stateLabel = states.includes("error") ? "ERROR" : states.includes("loading") ? "LOADING" : states.includes("empty") ? "EMPTY" : "READY";
-  summary.textContent = `${layers.length} products · ${orders.length ? `O${orders.join("/O")}` : "HEALPIX --"}${modalities.length ? ` · ${modalities.join(" · ")}` : ""} · ${stateLabel}`;
+  summary.textContent = `${layers.length} products · ${orders.length ? `最高原生 O${Math.max(...layers.map(layer => layer.maxOrder))} · O${orders.join("/O")}` : "HEALPIX --"}${modalities.length ? ` · ${modalities.join(" · ")}` : ""}`;
   body.append(kicker, title, summary);
   const list = document.createElement("div");
   list.className = "coverage-layer-detail-list";
@@ -727,7 +727,7 @@ function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLEl
     const row = document.createElement("div");
     row.className = "coverage-layer-detail-row";
     const state = coverageLayerLoadStates.get(layer.layerId) ?? "loading";
-    row.textContent = `${layer.product || product?.name || "Coverage"} · ${layer.releaseId || release?.label || "--"} · ${layer.availableOrders.length ? `O${layer.availableOrders.join("/O")}` : "HEALPIX --"} · ${state.toUpperCase()}`;
+    row.textContent = `${layer.product || product?.name || "Coverage"} · ${layer.releaseId || release?.label || "--"} · 最高原生 O${layer.maxOrder} · ${layer.availableOrders.length ? `O${layer.availableOrders.join("/O")}` : "HEALPIX --"}`;
     if (state === "error") {
       const error = coverageLayerLoadErrors.get(layer.layerId);
       row.title = error ?? "Coverage block unavailable";
@@ -1073,9 +1073,10 @@ async function fetchOverlapEvidence(component: OverlapComponentView, signal?: Ab
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     signal,
-    body: JSON.stringify({ layerIds: lookup.layerIds, order: lookup.order, cells: component.cells, limit: 5000 }),
+    body: JSON.stringify({ layerIds: lookup.layerIds, order: lookup.order, cells: component.cells, limit: 1000 }),
   });
-  if (!response.ok) throw new Error(`reverse lookup HTTP ${response.status}`);
+  if(response.status===401)resetDownloadAccess();
+  if (!response.ok) { const failure=await response.json().catch(()=>({})); throw new Error(failure.error??`reverse lookup HTTP ${response.status}`); }
   const result = await response.json() as OverlapEvidenceResult;
   overlapEvidenceCache.set(component.id, result);
   return result;
@@ -1145,6 +1146,7 @@ function downloadPlanFor(result: OverlapEvidenceResult | null): DownloadPlan {
 }
 
 async function downloadOverlapCsv(components: OverlapComponentView[], filename: string, button: HTMLButtonElement): Promise<void> {
+  if(!await ensureDownloadAccess())return;
   const original = button.textContent ?? "Download CSV";
   button.disabled = true;
   button.textContent = t("coverage.downloadLoading");
@@ -1173,6 +1175,7 @@ async function downloadOverlapCsv(components: OverlapComponentView[], filename: 
 }
 
 async function downloadOverlapJson(components: OverlapComponentView[], filename: string, button: HTMLButtonElement): Promise<void> {
+  if(!await ensureDownloadAccess())return;
   const original = button.textContent ?? "Download JSON";
   button.disabled = true;
   button.textContent = t("coverage.downloadLoading");
@@ -1434,26 +1437,26 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
   const currentDownload = document.createElement("button");
   currentDownload.type = "button";
   currentDownload.className = "command-button overlap-download-button";
-  currentDownload.append(icon("download"), document.createTextNode(t("coverage.downloadCurrent")));
+  currentDownload.append(icon("lock"), document.createTextNode(t("coverage.downloadCurrent")));
   currentDownload.addEventListener("click", () => void downloadOverlapCsv([component], `atlas-overlap-${component.id}-download-plan.csv`, currentDownload));
   downloads.append(currentDownload);
   const currentJson = document.createElement("button");
   currentJson.type = "button";
   currentJson.className = "command-button overlap-download-button";
-  currentJson.append(icon("file-json-2"), document.createTextNode(t("coverage.downloadJson")));
+  currentJson.append(icon("lock"), document.createTextNode(t("coverage.downloadJson")));
   currentJson.addEventListener("click", () => void downloadOverlapJson([component], `atlas-overlap-${component.id}-download-plan.json`, currentJson));
   downloads.append(currentJson);
   if (activeOverlapComponents.length > 1) {
     const allDownload = document.createElement("button");
     allDownload.type = "button";
     allDownload.className = "command-button overlap-download-button";
-    allDownload.append(icon("download"), document.createTextNode(t("coverage.downloadAll")));
+    allDownload.append(icon("lock"), document.createTextNode(t("coverage.downloadAll")));
     allDownload.addEventListener("click", () => void downloadOverlapCsv(activeOverlapComponents, "atlas-overlap-all-download-plan.csv", allDownload));
     downloads.append(allDownload);
     const allJson = document.createElement("button");
     allJson.type = "button";
     allJson.className = "command-button overlap-download-button";
-    allJson.append(icon("file-json-2"), document.createTextNode(t("coverage.downloadJson")));
+    allJson.append(icon("lock"), document.createTextNode(t("coverage.downloadJson")));
     allJson.addEventListener("click", () => void downloadOverlapJson(activeOverlapComponents, "atlas-overlap-all-download-plan.json", allJson));
     downloads.append(allJson);
   }
@@ -1462,7 +1465,7 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
     const evidence = document.createElement("div");
     evidence.className = "overlap-evidence-plan";
     list.append(evidence);
-    void loadOverlapEvidence(component, evidence);
+    const unlock=document.createElement("button");unlock.type="button";unlock.className="command-button";unlock.append(icon("lock"), document.createTextNode("查看区域下载计划"));unlock.onclick=async()=>{if(await ensureDownloadAccess())void loadOverlapEvidence(component,evidence);};evidence.append(unlock);
   }
   content.append(list);
 }
@@ -1676,11 +1679,11 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
 
   const actionsSection = drawerSection("DOWNLOAD PLAN");
   const actions = document.createElement("div"); actions.className = "overlap-drawer-actions";
-  const currentCsv = document.createElement("button"); currentCsv.type = "button"; currentCsv.className = "command-button overlap-download-button"; currentCsv.append(icon("download"), document.createTextNode(t("coverage.downloadCurrent"))); currentCsv.addEventListener("click", () => void downloadOverlapCsv([component], `atlas-overlap-${component.id}-download-plan.csv`, currentCsv)); actions.append(currentCsv);
-  const currentJson = document.createElement("button"); currentJson.type = "button"; currentJson.className = "command-button overlap-download-button"; currentJson.append(icon("file-json-2"), document.createTextNode(t("coverage.downloadJson"))); currentJson.addEventListener("click", () => void downloadOverlapJson([component], `atlas-overlap-${component.id}-download-plan.json`, currentJson)); actions.append(currentJson);
+  const currentCsv = document.createElement("button"); currentCsv.type = "button"; currentCsv.className = "command-button overlap-download-button"; currentCsv.append(icon("lock"), document.createTextNode(t("coverage.downloadCurrent"))); currentCsv.addEventListener("click", () => void downloadOverlapCsv([component], `atlas-overlap-${component.id}-download-plan.csv`, currentCsv)); actions.append(currentCsv);
+  const currentJson = document.createElement("button"); currentJson.type = "button"; currentJson.className = "command-button overlap-download-button"; currentJson.append(icon("lock"), document.createTextNode(t("coverage.downloadJson"))); currentJson.addEventListener("click", () => void downloadOverlapJson([component], `atlas-overlap-${component.id}-download-plan.json`, currentJson)); actions.append(currentJson);
   if (activeOverlapComponents.length > 1) {
-    const allCsv = document.createElement("button"); allCsv.type = "button"; allCsv.className = "command-button overlap-download-button"; allCsv.append(icon("download"), document.createTextNode(t("coverage.downloadAll"))); allCsv.addEventListener("click", () => void downloadOverlapCsv(activeOverlapComponents, "atlas-overlap-all-download-plan.csv", allCsv)); actions.append(allCsv);
-    const allJson = document.createElement("button"); allJson.type = "button"; allJson.className = "command-button overlap-download-button"; allJson.append(icon("file-json-2"), document.createTextNode(t("coverage.downloadJson"))); allJson.addEventListener("click", () => void downloadOverlapJson(activeOverlapComponents, "atlas-overlap-all-download-plan.json", allJson)); actions.append(allJson);
+    const allCsv = document.createElement("button"); allCsv.type = "button"; allCsv.className = "command-button overlap-download-button"; allCsv.append(icon("lock"), document.createTextNode(t("coverage.downloadAll"))); allCsv.addEventListener("click", () => void downloadOverlapCsv(activeOverlapComponents, "atlas-overlap-all-download-plan.csv", allCsv)); actions.append(allCsv);
+    const allJson = document.createElement("button"); allJson.type = "button"; allJson.className = "command-button overlap-download-button"; allJson.append(icon("lock"), document.createTextNode(t("coverage.downloadJson"))); allJson.addEventListener("click", () => void downloadOverlapJson(activeOverlapComponents, "atlas-overlap-all-download-plan.json", allJson)); actions.append(allJson);
   }
   actionsSection.append(actions);
   content.append(actionsSection);
@@ -1886,6 +1889,10 @@ function openCoverageContextMenu(menuState: SurveyLayerContextMenu): void {
   menu.hidden = false;
 }
 
+function modalityIconName(modality: Modality): string { return ({ imaging: "image", spectroscopy: "telescope", photometry: "database", "time-domain": "rotate-ccw", "integral-field": "layers-3", ultraviolet: "sun", infrared: "circle-help", catalog: "list-checks", simulation: "box" } as Record<Modality, string>)[modality]; }
+function escapeHtml(value: string): string { return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character] ?? character)); }
+function modalityIconsMarkup(modalities: readonly Modality[], label: string): string { const unique=[...new Set(modalities)].sort((a,b)=>modalityLabel(a).localeCompare(modalityLabel(b))); return unique.length ? `<span class="coverage-modalities" aria-label="${escapeHtml(label)}：${escapeHtml(unique.map(modalityLabel).join("、"))}">${unique.map(m=>`<i data-lucide="${modalityIconName(m)}" title="${escapeHtml(modalityLabel(m))}"></i>`).join("")}</span>` : `<span class="coverage-modalities-empty">模态未指定</span>`; }
+
 function renderCoverageLayers(): void {
   const host = byId("coverage-layers");
   hideCoverageLayerTooltip();
@@ -1910,10 +1917,11 @@ function renderCoverageLayers(): void {
     const name = document.createElement("span");
     const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
     label.dataset.searchText = `${survey?.name ?? surveyId} ${survey?.mission ?? ""}`.toLocaleLowerCase();
-    const loadState = layers.some((layer) => coverageLayerLoadStates.get(layer.layerId) === "error")
-      ? "ERROR"
-      : layers.some((layer) => coverageLayerLoadStates.get(layer.layerId) === "loading") ? "LOADING" : "READY";
-    name.textContent = `${survey?.name ?? surveyId.toUpperCase()} · ${loadState}`;
+    const releaseGroups = new Map<string, CoverageCatalog["layers"]>();
+    for (const layer of layers) releaseGroups.set(layer.releaseId, [...(releaseGroups.get(layer.releaseId) ?? []), layer]);
+    const releaseModalities = [...releaseGroups.values()].map(group => [...new Set(group.flatMap(layer => { const product = survey?.releases.find(r => r.id === layer.releaseId)?.products.find(p => p.productId === layer.productId || p.name === layer.product); return product?.modality ? [product.modality] : []; }))]);
+    const commonModalities = [...new Set(releaseModalities.flat())];
+    name.textContent = survey?.name ?? surveyId.toUpperCase();
     name.className = "coverage-layer-name";
     const swatch = document.createElement("span");
     swatch.className = "coverage-layer-swatch";
@@ -1960,6 +1968,7 @@ function renderCoverageLayers(): void {
       coverageDots?.setLayerOrder([...host.querySelectorAll<HTMLElement>("[data-layer-key]")].map((node) => node.dataset.layerKey!).filter(Boolean));
     });
     label.append(input, swatch, handle, name);
+    const common = document.createElement("span"); common.innerHTML = modalityIconsMarkup(commonModalities, `${survey?.name ?? surveyId} 共同覆盖模态`); label.append(common);
     host.append(label);
   }
   if (host.dataset.tooltipBound !== "true") {
@@ -2005,7 +2014,7 @@ async function copy(value: string, message = "SHA-256 已复制"): Promise<void>
 
 function renderIcons(): void {
     createIcons({
-    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Maximize2, Minimize2, Moon, Menu, RotateCcw, Search, ShieldCheck, Sun, Telescope, X },
+    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Lock, Maximize2, Minimize2, Moon, Menu, RotateCcw, Search, ShieldCheck, Sun, Telescope, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -2066,7 +2075,7 @@ function updateSurveyFilterCount(): void {
 function filteredSurveys(): SurveyRecord[] {
   const surveys = surveyIndex?.surveys ?? [];
   return surveys.filter((survey) => {
-    if (!selectedModalities.size || !survey.modalities.some((modality) => selectedModalities.has(modality))) return false;
+    if (selectedModalities.size && !survey.modalities.some((modality) => selectedModalities.has(modality))) return false;
     if (!search) return true;
     return [
     survey.name,

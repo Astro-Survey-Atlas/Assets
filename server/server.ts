@@ -1,6 +1,6 @@
 import { createReadStream } from "node:fs";
-import { randomUUID } from "node:crypto";
-import { open, readFile, stat } from "node:fs/promises";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { open, readFile, realpath, stat } from "node:fs/promises";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
@@ -13,7 +13,10 @@ import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
 import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog, withCoverageRevisions, type CoverageCellLayer } from "./coverage.js";
 import { overlapForLayers } from "./overlap.js";
+import { AccessGate, AccessError, queryRegion } from "./region-access.js";
+import { loadPublicState } from "./public-state.js";
 import { ProductStore, type MocProductRegistrationInput, type ProductExecutionRecord, type ProductRecord } from "./products.js";
+import { currentReview, productGeometry, readApprovedRelease, PUBLICATION_POLICY } from "./approved-release.js";
 import { aggregateReadiness, deriveProductReadiness, type ProductReadiness, type ReadinessAggregate, type ReadinessLayer } from "./admin-readiness.js";
 import { SurveyEditorialStore, type SurveyEditorialContent, type SurveyEditorialRecord } from "./editorial.js";
 import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
@@ -32,9 +35,17 @@ import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, Public
 
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
+const accessGate=new AccessGate();
+async function handleDownloadUnlock(request:IncomingMessage,response:ServerResponse):Promise<void> {
+  const body=await requestJsonBody(request,8192);
+  const token=accessGate.unlock(request,body.password);
+  const secure=request.headers["x-forwarded-proto"]==="https"?"; Secure":"";
+  response.setHeader("Set-Cookie",`assets_download=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600${secure}`);
+  json(response,200,{unlocked:true,expiresAt:new Date(Date.now()+3600000).toISOString()});
+}
 const releaseRoot = path.resolve(process.env.ASSET_RELEASE_ROOT ?? process.env.ASSET_WORKTREE_ROOT ?? projectRoot);
 const siteRoot = path.resolve(process.env.PUBLIC_SITE_ROOT ?? path.join(projectRoot, "dist", "site"));
-const catalog = await loadCatalog(releaseRoot);
+const catalog = await loadCatalog(await realpath(releaseRoot));
 let coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src", "footprints", "survey-footprints.json"), "utf8")) as {
   schemaVersion: number;
   generatedAt: string;
@@ -220,7 +231,9 @@ async function publicationLayer(publication: MocPublication): Promise<CoverageCe
   };
 }
 
+const activePublishedMocLayers = new Set<string>();
 async function activatePublishedMocs(): Promise<void> {
+  activePublishedMocLayers.clear();
   clearPublishedAssets();
   const layers = (await Promise.all(mocPublicationStore.list().map(async (publication) => {
     const integrity = await mocPublicationStore.verify(publication);
@@ -233,7 +246,7 @@ async function activatePublishedMocs(): Promise<void> {
   }))).filter((layer): layer is CoverageCellLayer => Boolean(layer));
   if (!layers.length) return;
   const records = new Map(coverageCatalog.records);
-  for (const layer of layers) records.set(layer.layerId, layer);
+  for (const layer of layers) { records.set(layer.layerId, layer); activePublishedMocLayers.add(layer.layerId); }
   coverageCatalog = withCoverageRevisions({ ...coverageCatalog, records, layers: [] });
   runtimeCoverageManifest = {
     ...runtimeCoverageManifest,
@@ -300,7 +313,35 @@ const publisher = new PublicReleasePublisher({
   loadProducts: () => products.list(),
   snapshotSink: stateSnapshotSink,
   verificationTarget: process.env.ASSETS_PUBLIC_VERIFY_URL?.trim() || undefined,
+  publicationLeaseMs: Number(process.env.ASSETS_PUBLICATION_LEASE_MS ?? "600000"),
 });
+let publicState = await loadPublicState(catalog);
+let approvedRelease = publicState.snapshot;
+products.projectPublished(approvedRelease.products, approvedRelease.generatedAt);
+async function prepareProductGeometry(record:ProductRecord):Promise<void> {
+  const staged=mocBuildStore.list().find(b=>b.productId===record.productId && b.phase==="STAGED");
+  if(!staged)return;
+  // This copies verified build bytes to durable candidate storage. It does not
+  // grant public access; only the approved snapshot can do that.
+  const prepared=await mocPublicationStore.publish(staged,{productId:record.productId,surveyId:record.draft.surveyId,releaseId:record.draft.releaseId,name:record.draft.name});
+  await mocBuildStore.markPublished(staged.name,prepared.id);
+  await reloadRuntimeCoverage();
+}
+let publicRefreshBusy=false;
+const publicRefreshTimer=setInterval(()=>{ void (async()=>{
+  if(publicRefreshBusy)return;publicRefreshBusy=true;
+  try {
+    const root=await realpath(releaseRoot);
+    if(root===catalog.root)return;
+    const nextCatalog=await loadCatalog(root);
+    const next=await loadPublicState(nextCatalog);
+    // No await between these assignments: readers see one consistent snapshot.
+    Object.assign(catalog,nextCatalog);publicState=next;approvedRelease=next.snapshot;
+    products.projectPublished(approvedRelease.products,approvedRelease.generatedAt);
+  } catch(error) { console.error("Public release refresh failed; retaining verified snapshot",error instanceof Error?error.message:String(error)); }
+  finally {publicRefreshBusy=false;}
+})().catch(()=>undefined);},3000);
+publicRefreshTimer.unref();
 const mocBuildService = new MocBuildService({
   store: mocBuildStore,
   evidenceRoot,
@@ -455,30 +496,7 @@ function adminSurveyIndex(): Awaited<ReturnType<typeof loadSurveyIndex>> {
 }
 
 function publicSurveyIndex(): Awaited<ReturnType<typeof loadSurveyIndex>> {
-  const enriched = editorial.applyPublished(runtimeSurveyIndex);
-  const publishedReadiness = new Map(products.list().flatMap((record) => {
-    if (!record.published || record.retiredAt) return [];
-    const readiness = productReadiness(record).published;
-    return readiness ? [[record.productId, readiness] as const] : [];
-  }));
-  const aggregate = (values: PublicProductReadiness[]): PublicReadinessAggregate => aggregateReadiness(values) as PublicReadinessAggregate;
-  return {
-    ...enriched,
-    surveys: enriched.surveys
-      .filter((survey) => !isDeniedSurvey(survey.id))
-      .map((survey) => {
-        const releases = survey.releases.map((release) => {
-          const products = release.products.map((product) => {
-            const readiness = product.productId ? publishedReadiness.get(product.productId) : undefined;
-            return readiness ? { ...product, readiness } : product;
-          });
-          const releaseReadiness = aggregate(products.flatMap((product) => product.readiness ? [product.readiness] : []));
-          return { ...release, products, ...(releaseReadiness.productCount ? { readiness: releaseReadiness } : {}) };
-        });
-        const surveyReadiness = aggregate(releases.flatMap((release) => release.products.flatMap((product) => product.readiness ? [product.readiness] : [])));
-        return { ...survey, releases, ...(surveyReadiness.productCount ? { readiness: surveyReadiness } : {}) };
-      }),
-  };
+  return publicState.index;
 }
 
 function isRetiredLayer(layer: Pick<CoverageCellLayer, "layerId" | "surveyId" | "releaseId" | "product">): boolean {
@@ -487,10 +505,7 @@ function isRetiredLayer(layer: Pick<CoverageCellLayer, "layerId" | "surveyId" | 
       || (record.draft.surveyId === layer.surveyId && record.draft.releaseId === layer.releaseId && record.draft.name === layer.product)));
 }
 
-function publicCoverageCatalog(): typeof coverageCatalog {
-  const records = new Map([...coverageCatalog.records.entries()].filter(([, layer]) => !isRetiredLayer(layer)));
-  return { ...coverageCatalog, layers: coverageCatalog.layers.filter((layer) => records.has(layer.layerId)), records };
-}
+function publicCoverageCatalog(): typeof coverageCatalog { return publicState.coverage; }
 
 function isRetiredFootprint(footprint: { surveyId: string; releaseId: string; product: string }): boolean {
   return products.list().some((record) => Boolean(record.retiredAt)
@@ -512,25 +527,10 @@ function fullyRetiredSurveyIds(): Set<string> {
 }
 
 function isRetiredAsset(record: PublicAssetRecord): boolean {
-  if (products.list().some((product) => Boolean(product.retiredAt)
-    && record.product === product.draft.name
-    && record.surveyId === product.draft.surveyId
-    && record.releaseId === product.draft.releaseId)) return true;
-  // Resource Packages are survey-level archives. They have no single product
-  // identity, so hide them only when the entire represented survey is retired;
-  // historical release archives remain available through release history.
-  return record.kind === "package" && typeof record.surveyId === "string" && fullyRetiredSurveyIds().has(record.surveyId);
+  return !approvedRelease.assetIds.includes(record.id);
 }
 
-function publicAssetCatalog(): LoadedCatalog {
-  const visibleManifestFiles = catalog.manifest.files.filter((record) => !isRetiredAsset(record));
-  const visibleFiles = new Map([...catalog.files.entries()].filter(([, entry]) => !isRetiredAsset(entry.record)));
-  return {
-    ...catalog,
-    manifest: { ...catalog.manifest, files: visibleManifestFiles },
-    files: visibleFiles,
-  };
-}
+function publicAssetCatalog(): LoadedCatalog { return publicState.catalog; }
 
 function editorialApiContent(content: SurveyEditorialContent | null): SurveyEditorialContent | null {
   if (!content) return null;
@@ -598,6 +598,7 @@ function productCoverage(record: ProductRecord): Record<string, unknown> | undef
 }
 
 function productCoverageLayer(record: ProductRecord, build?: ReturnType<MocBuildStore["get"]>, content = record.published ?? record.draft): CoverageCellLayer | undefined {
+  if (content === record.published && content.layerId) return publicState?.coverage.records.get(content.layerId);
   const direct = content.layerId ? coverageCatalog.records.get(content.layerId) : undefined;
   if (direct) return direct;
   const matches = [...coverageCatalog.records.values()].filter((candidate) => candidate.surveyId === content.surveyId
@@ -954,6 +955,7 @@ function dedupeLinks(links: Array<PublicProductLink | undefined>): PublicProduct
 }
 
 function effectiveEditorialProduct(record: ProductRecord): { displayName: string; description: string; reason?: string; manualStep?: string; survey?: { name: string; mission: string; description: string }; release?: { label: string } } | undefined {
+  if (publicState.records.get(record.productId) === record) return undefined;
   const content = editorial.publishedContent(record.draft.surveyId);
   if (!content) return undefined;
   const release = content.releases.find((entry) => entry.releaseId === record.draft.releaseId);
@@ -970,21 +972,11 @@ function effectiveEditorialProduct(record: ProductRecord): { displayName: string
 }
 
 function effectivePublicProduct(record: ProductRecord): NonNullable<ProductRecord["published"]> {
-  const base = record.published ?? record.draft;
-  const editorialProduct = effectiveEditorialProduct(record);
-  if (!editorialProduct) return base;
-  return {
-    ...base,
-    name: editorialProduct.displayName,
-    publicDescription: editorialProduct.description,
-    ...(base.publicSurvey && editorialProduct.survey ? {
-      publicSurvey: { ...base.publicSurvey, name: editorialProduct.survey.name, mission: editorialProduct.survey.mission, description: editorialProduct.survey.description },
-    } : {}),
-    ...(base.publicRelease && editorialProduct.release ? { publicRelease: { ...base.publicRelease, label: editorialProduct.release.label } } : {}),
-  };
+  const content=publicState.records.get(record.productId)?.published ?? record.draft;
+  return {...content,name:content.publicDisplayName??content.name};
 }
 
-function productCatalogEntry(record: ProductRecord): { status?: string; reason?: string; sourceUrl?: string; geometrySourceUrl?: string; sourceLabel?: string; geometrySourceLabel?: string; officialDataUrl?: string; officialDataLabel?: string; officialQueryUrl?: string; officialQueryLabel?: string } | undefined {
+function productCatalogEntry(record: ProductRecord): { status?: string; description?: string; reason?: string; manualStep?: string; sourceUrl?: string; geometrySourceUrl?: string; sourceLabel?: string; geometrySourceLabel?: string; officialDataUrl?: string; officialDataLabel?: string; officialQueryUrl?: string; officialQueryLabel?: string } | undefined {
   const content = record.published ?? record.draft;
   const survey = publicSurveyIndex().surveys.find((candidate) => candidate.id === content.surveyId);
   const release = survey?.releases.find((candidate) => candidate.id === content.releaseId);
@@ -1025,7 +1017,7 @@ function buildPublicProductDossier(record: ProductRecord): PublicProductDossier 
   const statisticsAsset = assets.find((asset) => asset.record.kind === "metadata" && /statistics/i.test(asset.record.id));
   const precision: PublicProductDossier["coverage"]["precision"] = !layer
     ? "entrypoint-only"
-    : layer.sourceUnitIndex?.status === "estimated" ? "estimated" : "exact";
+    : "estimated";
   const hasCoverage = Boolean(layer);
   const hasSnapshot = Boolean(layer?.recipe?.sourceSnapshotSha256);
   const status: PublicProductVerificationStatus = !hasCoverage
@@ -1076,6 +1068,9 @@ function buildPublicProductDossier(record: ProductRecord): PublicProductDossier 
   const dossier: PublicProductDossier = {
     schemaVersion: 1,
     identity: { productId: product.productId, surveyId: product.surveyId, releaseId: product.releaseId, name: product.name, ...(product.modality ? { modality: product.modality } : {}), ...(product.dataOrigin ? { dataOrigin: product.dataOrigin } : {}), ...(product.sourceTier ? { sourceTier: product.sourceTier } : {}) },
+    description: effectiveEditorialProduct(record)?.description ?? product.publicDescription ?? catalogEntry?.description ?? product.name,
+    ...(effectiveEditorialProduct(record)?.reason ? { reason: effectiveEditorialProduct(record)!.reason } : catalogEntry?.reason ? { reason: catalogEntry.reason } : {}),
+    ...(effectiveEditorialProduct(record)?.manualStep ? { manualStep: effectiveEditorialProduct(record)!.manualStep } : catalogEntry?.manualStep ? { manualStep: catalogEntry.manualStep } : {}),
     conclusion: { status, summary, coverageAvailable: hasCoverage },
     readiness,
     coverage: { available: hasCoverage, ...(layer ? { layerId: layer.layerId, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder, cellCount: layer.cellCount, cellCounts, areaDeg2: layer.areaDeg2, ...(layer.coverageRole ?? product.coverageRole ? { coverageRole: layer.coverageRole ?? product.coverageRole } : {}), ...(mocAsset ? { mocUrl: `/api/v1/coverage/layers/${encodeURIComponent(layer.layerId)}/moc.fits` } : {}), ...(previewAsset ? { previewUrl: `/api/v1/assets/${encodeURIComponent(previewAsset.id)}/preview` } : {}) } : {}), coordinateFrame: "ICRS", ordering: "NESTED", availableOrders, precision },
@@ -1092,19 +1087,8 @@ function buildPublicProductDossier(record: ProductRecord): PublicProductDossier 
 }
 
 function publicProductListView(record: ProductRecord): Record<string, unknown> {
-  const published = structuredClone(effectivePublicProduct(record)!);
-  const editorialProduct = effectiveEditorialProduct(record);
-  const coverage = productCoverage(record);
-  const dossier = buildPublicProductDossier(record);
-  return {
-    ...published,
-    ...(editorialProduct ? { description: editorialProduct.description, ...(editorialProduct.reason ? { reason: editorialProduct.reason } : {}), ...(editorialProduct.manualStep ? { manualStep: editorialProduct.manualStep } : {}) } : {}),
-    ...(coverage ? { coverage } : {}),
-    readiness: dossier.readiness,
-    detailUrl: `/api/v1/products/${encodeURIComponent(record.productId)}`,
-    evidenceUrl: dossier.evidenceUrl,
-    links: dossier.links,
-  };
+  const dossier=buildPublicProductDossier(record);
+  return {productId:record.productId,surveyId:record.draft.surveyId,releaseId:record.draft.releaseId,name:record.draft.name,coverage:dossier.coverage,readiness:dossier.readiness,detailUrl:`/api/v1/products/${record.productId}`};
 }
 
 function adminProductView(record: ProductRecord): Record<string, unknown> {
@@ -1230,6 +1214,8 @@ function adminProductSurveys(records: ProductRecord[], index: typeof runtimeSurv
   return result;
 }
 
+function productsRecord(id:string):ProductRecord|undefined {return products.list().find(p=>p.productId===id);}
+
 function overviewSurveySummary(value: Record<string, unknown>): Record<string, unknown> {
   const releases = Array.isArray(value.releases) ? value.releases : [];
   return {
@@ -1257,6 +1243,7 @@ function overviewSurveySummary(value: Record<string, unknown>): Record<string, u
             status: product.status,
             readiness: product.readiness,
             review: product.review,
+            publicCoverage: {published:publicState.records.has(String(product.productId)),orders:[...publicState.coverage.records.values()].filter(l=>l.productId===product.productId).map(l=>l.maxOrder),retired:Boolean(productsRecord(String(product.productId))?.retiredAt)},
           };
         }),
       };
@@ -1352,6 +1339,18 @@ async function adminOverview(): Promise<Record<string, unknown>> {
       layers: coverageCatalog.layers.length,
       footprints: coverageCatalog.records.size,
       warehouseConfigured: evidenceStore.configured,
+      runtimeLayers: [...coverageCatalog.records.values()].map(layer => {
+        const record = records.find(product => product.productId === layer.productId)
+          ?? records.find(product => product.draft.layerId === layer.layerId)
+          ?? records.find(product => product.draft.surveyId === layer.surveyId && product.draft.releaseId === layer.releaseId && product.draft.name === layer.product);
+        const source = activePublishedMocLayers.has(layer.layerId)
+          ? "product-moc" : warehouseLayerSnapshots.has(layer.layerId) ? "warehouse" : "release";
+        return { layerId: layer.layerId, surveyId: layer.surveyId, releaseId: layer.releaseId, name: layer.product, source,
+          availableOrders: layer.availableOrders, productId: record?.productId,
+          productState: !record ? "unlinked" : record.retiredAt ? "retired" : record.review?.revision === record.revision ? "reviewed" : "pending",
+          productPublished: Boolean(record?.published),
+        };
+      }),
     },
     totals: {
       surveys: surveyRecords.filter((survey) => !String(survey.id).startsWith("__")).length,
@@ -1440,10 +1439,13 @@ async function resourcePackageCatalog(catalog: LoadedCatalog): Promise<Record<st
   // Serve-time policy filter: denied surveys are never listed, even when the
   // on-disk catalog is an unsanitized worktree original.
   const retiredSurveys = fullyRetiredSurveyIds();
-  const sanitizedPackages = (document.packages as unknown[]).filter((value) => {
+  const sanitizedPackages = approvedRelease.packages.filter((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const surveyId = (value as Record<string, unknown>)["surveyId"];
-    return typeof surveyId === "string" ? !isDeniedSurvey(surveyId) && !retiredSurveys.has(surveyId) : true;
+    const packageId = typeof (value as Record<string, unknown>)["id"] === "string" ? (value as Record<string, unknown>)["id"] as string : "";
+    const version = typeof (value as Record<string, unknown>)["version"] === "string" ? (value as Record<string, unknown>)["version"] as string : "";
+    const approved = approvedRelease.packages.some(p => p.id === packageId && p.version === version);
+    return typeof surveyId === "string" ? !isDeniedSurvey(surveyId) && !retiredSurveys.has(surveyId) && approved : approved;
   });
   document.packages = sanitizedPackages;
   const packageAssets = [...catalog.files.values()]
@@ -1489,17 +1491,17 @@ async function releaseHistory(loaded: LoadedCatalog): Promise<ReleaseHistoryDocu
   if (!raw || !Array.isArray(raw.releases)) {
     throw new Error("Release history document is malformed");
   }
-  const releases = raw.releases
+  const releases = raw.releases.filter(entry => entry.releaseId === approvedRelease.releaseId)
     .map((entry) => ({
       ...entry,
-      packages: entry.packages.filter((pkg) => !isDeniedPackageId(pkg.id) && !(pkg.survey && isDeniedSurvey(pkg.survey.id))),
+      packages: entry.packages.filter((pkg) => (approvedRelease.packages.some(p => p.id === pkg.id && p.version === pkg.version)) && !isDeniedPackageId(pkg.id) && !(pkg.survey && isDeniedSurvey(pkg.survey.id))),
     }))
     .sort((left, right) => right.sequence - left.sequence);
   const latest = releases[0];
   const storedLatest = raw.schemaVersion === 2 ? raw.latestReleaseId : undefined;
   return {
     schemaVersion: 2,
-    latestReleaseId: latest?.releaseId ?? storedLatest ?? "",
+    latestReleaseId: latest?.releaseId ?? "",
     releases,
   };
 }
@@ -2070,7 +2072,11 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       if (action === "publish" && request.method === "POST") {
         const body = await requestJsonBody(request);
         if (Object.keys(body).some((key) => key !== "revision")) throw new AdminHttpError(400, "editorial publish request contains unsupported field");
-        const record = await editorial.publish(surveyId, editorialExpectedRevision(request, body));
+        const expected = editorialExpectedRevision(request, body);
+        const pending = editorial.get(surveyId);
+        if (expected !== undefined && pending.revision !== expected) throw new AdminHttpError(409,"Editorial revision conflict");
+        await products.applyEditorial(pending.draft);
+        const record = await editorial.publish(surveyId, expected);
         return json(response, 200, { editorial: editorialApiRecord(record), syncStatus: await apiSyncStatus("editorial") });
       }
     }
@@ -2140,7 +2146,9 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       const productId = decodeAdminPathSegment(reviewMatch[1]);
       const existing = products.get(productId);
       assertReviewableProduct(existing, acceptedGaps);
-      const product = await products.review(productId, expectedRevision(request, body), acceptedGaps);
+      await prepareProductGeometry(existing);
+      const geometry = await productGeometry(existing, { root: catalog.root, files: catalog.manifest.files, publications: mocPublicationStore.list(), publicationFile: file => mocPublicationStore.absolutePath(file) });
+      const product = await products.review(productId, expectedRevision(request, body), acceptedGaps, geometry?.facts ?? null);
       return json(response, 200, { product: adminProductView(product), readiness: productReadiness(product), syncStatus: await apiSyncStatus("products") });
     }
     if (retireMatch?.[1] && request.method === "POST") {
@@ -2158,34 +2166,11 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       const existing = products.get(productId);
       const revision = expectedRevision(request, body);
       if (revision !== undefined && revision !== existing.revision) throw new AdminHttpError(409, "Product revision conflict");
-      assertPublishableProduct(existing);
-      const staged = mocBuildStore.list().find((build) => build.productId === productId && build.phase === "STAGED");
-      const publication = staged ? await mocPublicationStore.publish(staged, {
-        productId,
-        surveyId: existing.draft.surveyId,
-        releaseId: existing.draft.releaseId,
-        name: existing.draft.name,
-      }) : undefined;
-      const product = await products.publish(productId, revision);
-      if (staged && publication) {
-        await mocBuildStore.markPublished(staged.name, publication.id);
-        await reloadRuntimeCoverage();
-        await refreshDynamicResourcePackages();
-      }
-      runtimeSurveyIndex = applyPublishedProductMetadata(runtimeSurveyIndex);
-      await editorial.sync(runtimeSurveyIndex.surveys);
-      const publishedBuild = mocBuildStore.list().find((build) => build.productId === productId);
-      return json(response, 200, {
-        product,
-        lifecycle: adminProductLifecycle(product, publishedBuild),
-        syncStatus: await apiSyncStatus("products"),
-        syncStatuses: {
-          products: await apiSyncStatus("products"),
-          "moc-publications": await apiSyncStatus("moc-publications"),
-          editorial: await apiSyncStatus("editorial"),
-        },
-      });
+      const plan = await publisher.plan();
+      const run = await publisher.submit({planId:plan.planId,expectedBaselineSha256:plan.baselineBundle.sha256,surveyIds:[existing.draft.surveyId],productIds:[productId]}, "admin");
+      return json(response,202,{product:adminProductView(existing),run});
     }
+
     const historyMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/history$/.exec(pathname);
     if (historyMatch?.[1] && request.method === "GET") {
       const allHistory = await products.history(decodeAdminPathSegment(historyMatch[1]));
@@ -2205,16 +2190,24 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         planId: typeof body.planId === "string" ? body.planId : "",
         expectedBaselineSha256: typeof body.expectedBaselineSha256 === "string" ? body.expectedBaselineSha256 : "",
         surveyIds,
-      }, adminFromRequest(request));
+        productIds: Array.isArray(body.productIds) ? body.productIds.filter((v):v is string=>typeof v==="string") : undefined,
+      }, "admin");
       return json(response, 202, { run, syncStatus: await apiSyncStatus("publication-runs") });
     }
     const publicationMatch = /^\/api\/v1\/admin\/publications\/([^/]+)$/.exec(pathname);
     const publicationRetryMatch = /^\/api\/v1\/admin\/publications\/([^/]+)\/retry$/.exec(pathname);
+    const publicationRecoverMatch = /^\/api\/v1\/admin\/publications\/([^/]+)\/recover$/.exec(pathname);
     const publicationVerifyMatch = /^\/api\/v1\/admin\/publications\/([^/]+)\/verify$/.exec(pathname);
     if (publicationRetryMatch?.[1] && request.method === "POST") {
       const body: Record<string, unknown> = await requestJsonBody(request).catch(() => ({} as Record<string, unknown>));
       if (Object.keys(body).length) throw new AdminHttpError(400, "Publication retry request contains unsupported field");
       const run = await publisher.retry(decodeAdminPathSegment(publicationRetryMatch[1]), adminFromRequest(request));
+      return json(response, 202, { run, syncStatus: await apiSyncStatus("publication-runs") });
+    }
+    if (publicationRecoverMatch?.[1] && request.method === "POST") {
+      const body: Record<string, unknown> = await requestJsonBody(request).catch(() => ({} as Record<string, unknown>));
+      if (Object.keys(body).length) throw new AdminHttpError(400, "Publication recovery request contains unsupported field");
+      const run = await publisher.recover(decodeAdminPathSegment(publicationRecoverMatch[1]), adminFromRequest(request));
       return json(response, 202, { run, syncStatus: await apiSyncStatus("publication-runs") });
     }
     if (publicationVerifyMatch?.[1] && request.method === "POST") {
@@ -2239,8 +2232,8 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
 function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, pathname: string): void {
   const match = /^\/api\/v1\/coverage\/blocks\/([a-z0-9-]+)$/.exec(pathname);
   if (!match) return json(response, 404, { error: "Coverage block not found" });
-  const record = coverageCatalog.records.get(match[1]!);
-  if (!record || isRetiredLayer(record)) return json(response, 404, { error: "Coverage layer not found" });
+  const record = publicCoverageCatalog().records.get(match[1]!);
+  if (!record) return json(response, 404, { error: "Coverage layer not found" });
   const query = requestQuery(request);
   const order = Number(query.get("order"));
   const tile = Number(query.get("tile"));
@@ -2262,37 +2255,8 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
   const result = overlapForLayers([...publicCoverageCatalog().records.values()], surveyIds, requestedOrder);
   if (!result) return json(response, 400, { error: "At least two surveys with a common HEALPix order are required" });
   const selectedLayers = [...publicCoverageCatalog().records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
-  const needsSourceUnits = result.components.length > 0 && selectedLayers.some((layer) => layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "tile");
-  const sourceUnits = needsSourceUnits ? await sourceUnitsReadyWithin(3_000) : null;
-  const componentDetails = await Promise.all(result.components.map(async (component) => {
-    const componentCells = new Set(component.cells);
-    const componentLayers = selectedLayers.filter((layer) => layer.cells.get(component.order)?.some((pixel) => componentCells.has(pixel)));
-    const sourceStates = componentLayers.map((layer) => layer.sourceUnitIndex?.status ?? "entrypoint-only");
-    const lookupPrecision = sourceStates.includes("entrypoint-only")
-      ? "entrypoint-only"
-      : sourceStates.includes("estimated")
-        ? "estimated"
-        : "exact";
-    return { ...component,
-    // File and tile matches can be large. The component already carries its
-    // cells, so the browser requests the bounded plan only when needed.
-    evidenceLookup: componentLayers.length ? {
-      endpoint: "/api/v1/coverage/reverse-lookup",
-      layerIds: componentLayers.map((layer) => layer.layerId),
-      order: component.order,
-      precision: lookupPrecision,
-      deferred: true,
-    } : undefined,
-    surveys: await Promise.all(componentLayers.map(async (layer) => ({
-      surveyId: layer.surveyId,
-      releaseId: layer.releaseId,
-      product: layer.product,
-      modality: layer.modality ?? "coverage",
-      sourceUnitIndex: layer.sourceUnitIndex,
-      sourceUnits: sourceUnits ? await Promise.resolve(sourceUnits.match(layer.layerId, component.order, component.cells)).catch(() => null) : null,
-      downloadUrl: layer.recipe?.sourceUrl,
-    }))) };
-  }));
+  const componentDetails=result.components.map(component=>({...component,evidenceLookup:{endpoint:"/api/v1/coverage/reverse-lookup",layerIds:selectedLayers.map(l=>l.layerId),order:component.order,precision:"estimated",deferred:true},surveys:selectedLayers.map(layer=>({surveyId:layer.surveyId,releaseId:layer.releaseId,product:layer.product,modality:layer.modality??"coverage"}))}));
+
   return compressedJson(request, response, 200, { ...result, components: componentDetails }, "public, max-age=60, stale-while-revalidate=120");
 }
 
@@ -2307,15 +2271,8 @@ async function sendCoverageOverlapDetails(request: IncomingMessage, response: Se
   const component = result.components.find((candidate) => candidate.id === componentId);
   if (!component) return json(response, 404, { error: "Overlap component not found for the current survey selection" });
   const selectedLayers = [...publicCoverageCatalog().records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
-  const sourceUnitsByLayer = new Map<string, unknown>();
-  if (selectedLayers.some((layer) => layer.sourceUnitIndex?.unitKind === "tile")) {
-    const sourceUnits = await sourceUnitsReadyWithin(3_000);
-    if (sourceUnits) for (const layer of selectedLayers) {
-      if (layer.sourceUnitIndex?.unitKind !== "tile") continue;
-      try { sourceUnitsByLayer.set(layer.layerId, await Promise.resolve(sourceUnits.match(layer.layerId, component.order, component.cells))); } catch { /* keep source index metadata only */ }
-    }
-  }
-  const details = buildOverlapDetails({ result, component, layers: selectedLayers, surveyIndex: publicSurveyIndex(), catalog, sourceUnitsByLayer, warehouseSnapshots: warehouseLayerSnapshots });
+  const details = buildOverlapDetails({ result, component, layers: selectedLayers, surveyIndex: publicSurveyIndex(), catalog:publicState.catalog, sourceUnitsByLayer:new Map(), warehouseSnapshots:new Map() });
+
   return compressedJson(request, response, 200, details, "public, max-age=60, stale-while-revalidate=120");
 }
 
@@ -2456,55 +2413,50 @@ async function publicTileEntrypoints(layerIds: readonly string[], order: number,
   return { entries, selections, truncated };
 }
 
-async function sendCoverageReverseLookup(request: IncomingMessage, response: ServerResponse): Promise<void> {
-  const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
-  const layerIds = Array.isArray(body.layerIds) ? body.layerIds.filter((value): value is string => typeof value === "string") : [];
-  const cells = Array.isArray(body.cells) ? body.cells.filter((value): value is number => typeof value === "number" && Number.isSafeInteger(value)) : [];
-  const order = typeof body.order === "number" && Number.isSafeInteger(body.order) ? body.order : Number.NaN;
-  const limit = typeof body.limit === "number" && Number.isSafeInteger(body.limit) ? body.limit : undefined;
-  if (layerIds.length < 1 || !Number.isSafeInteger(order) || order < 0 || order > 29 || !cells.length) return json(response, 400, { error: "layerIds, order and cells are required" });
-  // A retired layer must be invisible to every public lookup, including a
-  // caller that still holds its old layer id. Keep the requested ids in the
-  // envelope for diagnostics, but only resolve ids present in the public map.
-  const publicLayerIds = layerIds.filter((layerId) => publicCoverageCatalog().records.has(layerId));
-  const warehouseLayerIds = publicLayerIds.filter((layerId) => warehouseLayerSnapshots.has(layerId));
-  const entrypoints = publicReverseEntrypoints(publicLayerIds, order, cells);
-  const boundedLimit = Math.min(Math.max(limit ?? 500, 1), 5000);
-  const tileEntrypoints = await publicTileEntrypoints(publicLayerIds, order, cells, boundedLimit);
-  const downloadEntrypoints = [...normalizeReverseEntrypoints(entrypoints), ...tileEntrypoints.entries];
-  const warehouseResult: ReverseLookupResult = warehouseLayerIds.length
-    ? await evidenceStore.reverseLookup({ layerIds: warehouseLayerIds, order, cells, limit }, { tolerateUnavailable: true })
-    : evidenceStore.unavailableResult({ layerIds: [], order, cells }, "这些图层由 Assets 公共 MOC 提供；没有 Warehouse 文件级反向索引。 ");
-  const precision = warehouseResult.truncated || tileEntrypoints.truncated
-    ? "truncated"
-    : !warehouseResult.available && downloadEntrypoints.length
-      ? "entrypoint-only"
-      : warehouseResult.precision;
-  const downloadPlan = {
-    ...warehouseResult.downloadPlan,
-    entrypoints: downloadEntrypoints,
-    tileSelections: tileEntrypoints.selections,
-    truncated: warehouseResult.downloadPlan.truncated || tileEntrypoints.truncated,
-    warnings: [
-      ...warehouseResult.downloadPlan.warnings,
-      ...(tileEntrypoints.truncated ? ["Tile entrypoint results were truncated"] : []),
-    ],
-  };
-  return compressedJson(request, response, 200, {
-    ...warehouseResult,
-    requested: { ...warehouseResult.requested, layerIds },
-    precision,
-    entrypoints,
-    downloadPlan,
-    notes: [...warehouseResult.notes, ...(downloadEntrypoints.length ? [`${downloadEntrypoints.length} 个公共数据或覆盖入口不包含在文件清单中。`] : [])],
-  }, "public, max-age=30, stale-while-revalidate=60");
+async function sendCoverageReverseLookup(request:IncomingMessage,response:ServerResponse):Promise<void> {
+  accessGate.identity(request);
+  const body=await requestJsonBody(request,256*1024);
+  if(!Array.isArray(body.layerIds)||body.layerIds.some(id=>typeof id!=="string"))throw new AccessError(400,"layerIds required");
+  const sources=body.layerIds.map(id=>{
+    const p=publicState.snapshot.products.find(p=>p.geometry?.layerId===id);
+    if(!p?.geometry)throw new AccessError(404,"Published source not found");
+    return {surveyId:p.content.surveyId,releaseId:p.content.releaseId,productId:p.productId,layerId:id,coverageRevision:p.geometry.coverageRevision,indexRevision:p.geometry.indexRevision};
+  });
+  const result=await executeRegionQuery(request,{purpose:"download-plan",region:{coordinateFrame:"ICRS",ordering:"NESTED",order:body.order,cells:body.cells},sources,limit:body.limit});
+  const entrypoints=result.sources.flatMap(s=>(s.downloads as Array<Record<string,unknown>>).map(d=>({...d,purpose:"data-access",layerId:s.layerId,product:s.product,order:s.order,nside:s.nside,cells:s.cells,precision:"estimated",required:true,selectionComplete:s.completeness==="complete",tileId:d.unitId,url:d.url,sourceUri:d.url,sourceScope:"tile-directory"})));
+  const truncated=result.sources.some(s=>s.completeness==="truncated");
+  compressedJson(request,response,200,{available:entrypoints.length>0,precision:"estimated",truncated,requested:{layerIds:body.layerIds,order:body.order,cells:body.cells},sources:result.sources,expiresAt:result.expiresAt,notes:result.sources.flatMap(s=>s.reason?[s.reason]:[]),downloadPlan:{schemaVersion:1,files:[],entrypoints,truncated,warnings:["Tile directories are candidate download units, not verified file lists."]}},"no-store");
+}
+
+async function executeRegionQuery(request:IncomingMessage,body:unknown) {
+  const identity=accessGate.identity(request),reservation=accessGate.begin(identity);
+  const state=publicState;
+  const task=queryRegion(state,body,async(layerId,order,cells,limit,indexRevision)=>{
+    const product=state.records.get(state.coverage.records.get(layerId)!.productId)!;
+    const material=await productGeometry(product,{root:state.catalog.root,files:catalog.manifest.files,publications:[],publicationFile:()=>""});
+    if(material?.facts.indexRevision!==indexRevision)throw new AccessError(409,"Index revision changed");
+    const index=await sourceUnitsReadyWithin(3000);
+    return index?await index.match(layerId,order,cells,limit):null;
+  });
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  // Keep the concurrency slot while timed-out worker work is still running.
+  void task.then(r=>reservation.finish(r.sources.reduce((sum,s)=>sum+(s.cells as number[]).length+(s.sourceUnits as unknown[]).length,0)),()=>reservation.finish(11000));
+  try{return await Promise.race([task,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new AccessError(504,"Region query timed out")),10000);})]);}finally{if(timer)clearTimeout(timer);}
+}
+async function sendProtectedRegionQuery(request:IncomingMessage,response:ServerResponse):Promise<void> {
+  accessGate.identity(request);
+  const body=await requestJsonBody(request,256*1024);
+  const result=await executeRegionQuery(request,body);
+  compressedJson(request,response,200,result,"no-store");
 }
 
 const server = http.createServer((request, response) => {
   void (async () => {
     securityHeaders(response);
     const pathname = requestPath(request);
+    if (pathname === "/api/v1/access/unlock" && request.method==="POST") return handleDownloadUnlock(request,response);
     if (pathname.startsWith("/api/v1/admin/")) return sendAdmin(request, response, pathname);
+    if (pathname === "/api/v1/access/region-query" && request.method === "POST") return sendProtectedRegionQuery(request,response);
     if (pathname === "/api/v1/coverage/overlap" && request.method === "POST") return sendCoverageOverlap(request, response);
     if (pathname === "/api/v1/coverage/overlap/details" && request.method === "POST") return sendCoverageOverlapDetails(request, response);
     if (pathname === "/api/v1/coverage/reverse-lookup" && request.method === "POST") return sendCoverageReverseLookup(request, response);
@@ -2517,7 +2469,7 @@ const server = http.createServer((request, response) => {
       files: catalog.files.size,
     });
     if (pathname === "/api/v1/assets") {
-      const visibleAssets = [...publishedPublicAssets.values()].map(({ record }) => record).filter((record) => !isRetiredAsset(record));
+      const visibleAssets: PublicAssetRecord[] = [];
       return json(response, 200, publicManifest(publicAssetCatalog(), visibleAssets));
     }
     if (pathname === "/api/v1/resource-packages/catalog.json") return json(response, 200, await resourcePackageCatalog(catalog));
@@ -2530,13 +2482,14 @@ const server = http.createServer((request, response) => {
       const releaseId = decodeURIComponent(releaseDetail[1]);
       const entry = (await releaseHistory(catalog)).releases.find((candidate) => candidate.releaseId === releaseId);
       if (!entry) return json(response, 404, { error: "Release not found" });
+      if (releaseId !== approvedRelease.releaseId) return json(response,404,{error:"Release withdrawn pending re-review"});
       return compressedJson(request, response, 200, entry, "public, max-age=60, stale-while-revalidate=300");
     }
     const releaseDownload = /^\/api\/v1\/releases\/([^/]+)\/download$/.exec(pathname);
     if (releaseDownload?.[1]) {
       const releaseId = decodeURIComponent(releaseDownload[1]);
       const entry = (await releaseHistory(catalog)).releases.find((candidate) => candidate.releaseId === releaseId);
-      if (!entry) return json(response, 404, { error: "Release not found" });
+      if (!entry || entry.releaseId !== approvedRelease.releaseId) return json(response, 404, { error: "Release not found" });
       const collection = entry.collection;
       if (!collection) return json(response, 404, { error: "Release collection not available" });
       const match = [...catalog.files.values()].find(({ record }) => record.kind === "package-collection"
@@ -2550,6 +2503,7 @@ const server = http.createServer((request, response) => {
       const history = await releaseHistory(catalog);
       const entry = history.releases.find((candidate) => candidate.releaseId === releaseId);
       if (!entry) return json(response, 404, { error: "Release not found" });
+      if (releaseId !== approvedRelease.releaseId) return json(response,404,{error:"Release withdrawn pending re-review"});
       const currentEntry = [...history.releases].reverse().find((candidate) => candidate.bundleId === catalog.manifest.bundle.id);
       if (currentEntry?.releaseId === releaseId) {
         return json(response, 200, await resourcePackageCatalog(catalog));
@@ -2586,25 +2540,26 @@ const server = http.createServer((request, response) => {
       const match = [...catalog.files.values()].find(({ record }) => record.kind === "package"
         && record.version === version
         && (record.downloadName === `${packageId}-${version}.zip` || record.path.endsWith(`/${packageId}-${version}.zip`)));
-      if (!match || isRetiredAsset(match.record) || (match.record.surveyId ? fullyRetiredSurveyIds().has(match.record.surveyId) : false) || isDeniedSurvey(match.record.surveyId) || isDeniedPackageId(packageId)) {
+      if (!match || isRetiredAsset(match.record) || isDeniedSurvey(match.record.surveyId) || isDeniedPackageId(packageId)) {
         return json(response, 404, { error: "Resource package version not found" });
       }
+      if (!approvedRelease.packages.some(p => p.id === packageId && p.version === version)) return json(response,404,{error:"Resource package withdrawn pending re-review"});
       return sendDownload(request, response, catalog, match.record.id);
     }
     if (pathname === "/api/v1/coverage/catalog") {
       const { records: _records, ...publicCoverage } = publicCoverageCatalog();
-      const body = { ...publicCoverage, schemaVersion: 2, generatedAt: coverageLoadedAt };
+      const body = { ...publicCoverage, schemaVersion: 2, generatedAt: coverageLoadedAt, publicationPolicy: PUBLICATION_POLICY, publicReleaseId: approvedRelease.releaseId || null };
       const etag = `"catalog-${coverageCatalog.revision ?? "unknown"}"`;
       return compressedJson(request, response, 200, body, "no-cache, must-revalidate", etag);
     }
     if (pathname.startsWith("/api/v1/coverage/blocks/")) return sendCoverageBlock(request, response, pathname);
-    if (pathname === "/api/v1/coverage") return json(response, 200, { ...runtimeCoverageManifest, footprints: runtimeCoverageManifest.footprints.filter((footprint) => !isDeniedSurvey(footprint.surveyId) && !isRetiredFootprint(footprint)) });
+    if (pathname === "/api/v1/coverage") return json(response, 200, { schemaVersion:1, coordinateFrame:"ICRS", ordering:"NESTED", nside:16, generatedAt:approvedRelease.generatedAt, footprints:publicState.footprints });
     if (pathname === "/api/v1/surveys") return json(response, 200, publicSurveyIndex());
-    if (pathname === "/api/v1/products") return json(response, 200, { products: products.list().filter((record) => record.published && !record.retiredAt).map(publicProductListView) });
+    if (pathname === "/api/v1/products") return json(response, 200, { products: [...publicState.records.values()].map(publicProductListView) });
     const productEvidence = /^\/api\/v1\/products\/([^/]+)\/evidence$/.exec(pathname);
     if (productEvidence?.[1]) {
-      const record = products.list().find((candidate) => candidate.productId === decodeURIComponent(productEvidence[1]!));
-      if (!record?.published || record.retiredAt) return json(response, 404, { error: "Product not found" });
+      const record = publicState.records.get(decodeURIComponent(productEvidence[1]!));
+      if (!record?.published) return json(response, 404, { error: "Product not found" });
       const dossier = buildPublicProductDossier(record);
       // Evidence is deliberately a projection of the dossier. It contains
       // public hashes and checks, never manifests, task snapshots, storage
@@ -2643,16 +2598,16 @@ const server = http.createServer((request, response) => {
     }
     const productDetail = /^\/api\/v1\/products\/([^/]+)$/.exec(pathname);
     if (productDetail?.[1]) {
-      const record = products.list().find((candidate) => candidate.productId === decodeURIComponent(productDetail[1]!));
-      if (!record?.published || record.retiredAt) return json(response, 404, { error: "Product not found" });
+      const record = publicState.records.get(decodeURIComponent(productDetail[1]!));
+      if (!record?.published) return json(response, 404, { error: "Product not found" });
       return json(response, 200, buildPublicProductDossier(record));
     }
     const layerMoc = /^\/api\/v1\/coverage\/layers\/([a-z0-9-]+)\/moc\.fits$/.exec(pathname);
     if (layerMoc?.[1]) {
       const layerId = layerMoc[1]!;
-      const layer = coverageCatalog.records.get(layerId);
-      if (layer && isRetiredLayer(layer)) return json(response, 404, { error: "Coverage MOC not found" });
-      const asset = [...catalog.files.entries()].find(([, entry]) => {
+      const layer = publicCoverageCatalog().records.get(layerId);
+      if (!layer) return json(response, 404, { error: "Coverage MOC not found" });
+      const asset = [...publicState.catalog.files.entries()].find(([, entry]) => {
         if (entry.record.kind !== "moc") return false;
         if (entry.record.path.includes(`/layers/${layerId}/`) || entry.record.id === `layer-${layerId}-moc` || entry.record.id === layerId) return true;
         return Boolean(layer && entry.record.surveyId === layer.surveyId && entry.record.releaseId === layer.releaseId && entry.record.product === layer.product);
@@ -2675,6 +2630,7 @@ const server = http.createServer((request, response) => {
     if (pathname.startsWith("/api/")) return json(response, 404, { error: "API endpoint not found" });
     return sendStatic(response, pathname);
   })().catch((error) => {
+    if(error instanceof AccessError || error instanceof AdminHttpError){ if(error.statusCode===429)response.setHeader("Retry-After","60");return json(response,error.statusCode,{error:error.message});}
     console.error(error);
     if (!response.headersSent) {
       const statusCode = error instanceof EvidenceStoreError ? error.statusCode : 500;

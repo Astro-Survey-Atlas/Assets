@@ -551,9 +551,11 @@ export class StateSnapshotCoordinator implements StateSnapshotSink {
       const current = currentObject ? parsePointer(JSON.parse(currentObject.body.toString("utf8")) as unknown, job.namespace) : null;
       if (current && current.generation > job.generation) continue;
       if (current && current.generation === job.generation) {
-        if (current.snapshotSha256 !== job.snapshotSha256 || current.snapshotKey !== job.snapshotKey) {
-          throw new Error(`State pointer generation conflict: ${job.namespace}@${job.generation}`);
-        }
+        // A shared spool can contain an older duplicate from a writer that
+        // raced generation allocation before the lock was introduced. The
+        // already published pointer is authoritative; never replace it with
+        // another snapshot at the same generation and let the worker continue
+        // reconciling later generations.
         continue;
       }
       const pointer: StateSnapshotPointer = {

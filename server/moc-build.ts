@@ -507,6 +507,7 @@ export interface MocPublicationProduct {
  * and public runtime catalogues.
  */
 export class MocPublicationStore {
+  async reload():Promise<void> { this.#initialized=false;await this.initialize(); }
   readonly contentRoot: string;
   readonly evidenceRoot: string;
   #records = new Map<string, MocPublication>();

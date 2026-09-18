@@ -1,5 +1,6 @@
 import { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Unlock, Upload, X, Sun, createIcons } from "lucide";
 import "./styles.css";
+import { UploadCloud } from "lucide";
 import { mountLocaleControls, t } from "../src/i18n.js";
 import { reconcileMarkup } from "./stable-dom.js";
 import { aggregateWorkAttempts } from "./work-items.js";
@@ -52,14 +53,15 @@ interface ProductReadiness {
 }
 interface ReadinessAggregate { productCount: number; levelCounts: { L0: number; L1: number; L2: number; L3: number; needsInformation: number }; capabilityCounts: { coverage: number; unit: number; file: number }; geometryOrders: number[]; reverseLookupOrders: number[]; geometryPrecision: string; reverseLookupPrecision: string; completeness: { complete: number; partial: number; unknown: number }; gapCount: number }
 interface ReadinessVersions { draft: ProductReadiness; published: ProductReadiness | null }
-interface AdminOverviewSurveyProduct { productId: string; name: string; modality?: string; status?: string; readiness?: ReadinessVersions; review?: { state?: string; draftRevision?: number; publishedRevision?: number | null; updatedAt?: string; publishedAt?: string | null } }
+interface AdminOverviewSurveyProduct { publicCoverage?:{published:boolean;orders:number[];retired:boolean}; productId: string; name: string; modality?: string; status?: string; readiness?: ReadinessVersions; review?: { state?: string; draftRevision?: number; publishedRevision?: number | null; updatedAt?: string; publishedAt?: string | null } }
 interface AdminOverviewRelease { id: string; label: string; kind?: string; readiness?: { draft: ReadinessAggregate; published: ReadinessAggregate }; products: AdminOverviewSurveyProduct[] }
 interface AdminOverviewSurvey { id: string; surveyId: string; name: string; mission: string; modalities: string[]; statistics?: Record<string, number>; readiness?: { draft: ReadinessAggregate; published: ReadinessAggregate }; releases: AdminOverviewRelease[] }
 interface AdminOverview { schemaVersion: 1; generatedAt: string; coverage: CatalogStatus; totals: { surveys: number; releases: number; products: number; publishedProducts: number; retiredProducts?: number }; readiness: ReadinessAggregate; readinessVersions?: { draft: ReadinessAggregate; published: ReadinessAggregate }; surveys: AdminOverviewSurvey[]; connectors: Connector[]; workflows: { tasks: { total: number; phases: Record<string, number> }; discovery: { total: number; phases: Record<string, number> }; builds: { total: number; phases: Record<string, number> } }; syncStatus?: Record<string, unknown> }
 interface MocBuildSummary { name: string; discoveryRequestName: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; sourceUrl?: string; phase: string; progress?: { phase?: string; step?: number; totalSteps?: number; percent?: number; message?: string }; createdAt?: string; updatedAt?: string; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; query?: { order?: number }; preview?: { order?: number }; manifest?: { ref?: string; sha256?: string; sizeBytes?: number } }; error?: { reason?: string; message?: string }; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
 interface Product { productId: string; draft: { productId: string; surveyId: string; releaseId: string; name: string; layerId?: string; modality?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; sourceUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: { name: string; mission: string; description: string; color: string; modalities: string[] }; publicRelease?: { label: string; kind: string; releasedYear?: number }; publicDescription?: string; publicStatus?: string; scanDefaults?: { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }; recipeVersion?: number; recipeHash?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } } }; published: unknown; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; retiredAt?: string; retirementReason?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; readiness?: ReadinessVersions; review?: { revision?: number; reviewedAt?: string; acceptedGaps?: string[] }; executionEvidence?: ExecutionEvidence[]; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle }
 interface ExecutionEvidence { executionId: string; revision: number; stepId: string; status: string; startedAt: string; finishedAt?: string; tool?: { name?: string; version?: string; imageDigest?: string }; inputs?: Array<{ label?: string; ref?: string; sha256?: string; sizeBytes?: number }>; parameters?: Record<string, string | number | boolean>; outputs?: Array<{ label?: string; ref?: string; sha256?: string; sizeBytes?: number }>; checks?: Array<{ id: string; status: string; detail?: string }>; error?: string }
-interface CatalogStatus { mode: string; loadedAt: string; revision?: string; layers: number; footprints: number; warehouseConfigured: boolean }
+interface RuntimeLayer { layerId: string; surveyId: string; releaseId: string; name: string; source: "release" | "warehouse" | "product-moc"; availableOrders: number[]; productId?: string; productState: string; productPublished: boolean }
+interface CatalogStatus { mode: string; loadedAt: string; revision?: string; layers: number; footprints: number; warehouseConfigured: boolean; runtimeLayers?: RuntimeLayer[] }
 interface MocCandidateSummary { candidateId: string; title?: string; recordUrl?: string; mocUrl?: string; hipsUrl?: string }
 interface MocReviewSummary { schemaVersion: 2; truncated: boolean; summaryTruncated: boolean; searchRecordCount?: number; candidates: MocCandidateSummary[] }
 type MocDiscoveryState = "running" | "ready" | "empty" | "incomplete" | "failed";
@@ -68,7 +70,7 @@ interface MocDiscoveryRequest { name: string; observation?: DiscoveryObservation
 interface MocBuildProgress { phase: string; step: number; totalSteps: number; percent?: number; message?: string }
 interface MocBuildRequest { schemaVersion: 1; kind: "MocBuildRequest"; name: string; discoveryRequestName: string; provider: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; workKey?: string; workTitle?: string; createdAt: string; updatedAt: string; phase: string; progress: MocBuildProgress; source: { url: string; snapshotSha256?: string; sizeBytes?: number; evidenceRef?: string }; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; moc?: { ref: string; sha256: string; sizeBytes?: number }; query?: { ref: string; sha256?: string; order: number }; preview?: { ref: string; sha256?: string; order: number }; statistics?: { ref: string; sha256?: string; sizeBytes?: number }; manifest?: { ref: string; sha256?: string; sizeBytes?: number } }; error?: { reason: string; message: string }; duplicateOf?: string; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
 interface MocRegistrationDefaults { releaseId: string; releaseLabel: string; releaseKind: string; productName: string; productDescription: string; productStatus: string; modality: string; dataOrigin: string }
-interface ReviewProduct { productId: string; name: string; canonicalName?: string; modality?: string; description: string; status: string; sourceUrl?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; geometrySourceUrl?: string; geometrySourceLabel?: string; reason?: string; manualStep?: string; retiredAt?: string; retirementReason?: string; coverage?: { availableOrders?: number[]; overviewOrder?: number; maxOrder?: number; layerId?: string; areaDeg2?: number }; readiness?: ReadinessVersions; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle; review?: { state: string; draftRevision?: number; publishedRevision?: number | null; reviewedRevision?: number; reviewedAt?: string; acceptedGaps?: string[]; updatedAt?: string; publishedAt?: string | null } }
+interface ReviewProduct { publicCoverage?: {published:boolean;orders:number[];retired:boolean}; productId: string; name: string; canonicalName?: string; modality?: string; description: string; status: string; sourceUrl?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; geometrySourceUrl?: string; geometrySourceLabel?: string; reason?: string; manualStep?: string; retiredAt?: string; retirementReason?: string; coverage?: { availableOrders?: number[]; overviewOrder?: number; maxOrder?: number; layerId?: string; areaDeg2?: number }; readiness?: ReadinessVersions; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle; review?: { state: string; draftRevision?: number; publishedRevision?: number | null; reviewedRevision?: number; reviewedAt?: string; acceptedGaps?: string[]; updatedAt?: string; publishedAt?: string | null } }
 interface ReviewRelease { id: string; label: string; kind: string; releasedYear?: number; modalities: string[]; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; readiness?: { draft: ReadinessAggregate; published: ReadinessAggregate }; products: ReviewProduct[] }
 interface ReviewMocBuild { name: string; discoveryRequestName: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; sourceUrl?: string; phase: string; progress?: { percent?: number; message?: string }; createdAt?: string; updatedAt?: string; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number }; lifecycle?: ProductLifecycle }
 interface ReviewSurvey { id: string; surveyId: string; name: string; mission: string; color: string; description: string; modalities: string[]; imageUrl: string; statistics: Record<string, number>; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; readiness?: { draft: ReadinessAggregate; published: ReadinessAggregate }; releases: ReviewRelease[]; unmatchedProducts?: Array<Record<string, unknown>>; unmatchedBuilds?: ReviewMocBuild[] }
@@ -117,7 +119,7 @@ const byId = <T extends HTMLElement>(id: string): T => {
 
 function renderIcons(): void {
   document.querySelectorAll<HTMLElement>("i[data-lucide]").forEach(icon => icon.setAttribute("data-icon-pending", icon.dataset.lucide!));
-  createIcons({ nameAttr: "data-icon-pending", icons: { Download, Package, Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Sun, Table2, Unlock, Upload, X }, attrs: { "aria-hidden": "true" } });
+  createIcons({ nameAttr: "data-icon-pending", icons: { Download, Package, Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3x3: Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Sun, Table2, Unlock, Upload, UploadCloud, X }, attrs: { "aria-hidden": "true" } });
   document.querySelectorAll("[data-icon-pending]").forEach(icon => icon.removeAttribute("data-icon-pending"));
 }
 
@@ -370,7 +372,10 @@ function surveyColorAttribute(value: unknown): string {
 
 function editorialDiffFields(): Array<{ label: string; before: string; after: string }> {
   if (!activeEditorial) return [];
-  const baseline = activeEditorial.document.published ?? activeEditorial.baseline;
+  // `baseline` tracks the last saved draft so the Save button can clear its
+  // dirty state. Publishing must compare against the last published copy,
+  // which remains unchanged after saving a draft.
+  const baseline = activeEditorial.publishedBaseline;
   return editorialFieldDescriptors(activeEditorial.document.draft).flatMap((field) => {
     const before = editorialFieldValue(baseline, field.path);
     return before === field.value ? [] : [{ label: field.label, before: before || "(empty)", after: field.value || "(empty)" }];
@@ -446,7 +451,7 @@ function startEditorialInlineEdit(button: HTMLButtonElement): void {
   input.select();
 }
 
-let activeEditorial: { survey: ReviewSurvey; document: EditorialDocument; baseline: EditorialSnapshot } | null = null;
+let activeEditorial: { survey: ReviewSurvey; document: EditorialDocument; baseline: EditorialSnapshot; publishedBaseline: EditorialSnapshot } | null = null;
 let editorialOpenRequest = 0;
 let editorialPublishPending = false;
 
@@ -473,7 +478,7 @@ async function openEditorial(surveyId: string): Promise<void> {
     const response = await api<unknown>(`/api/v1/admin/catalog/surveys/${encodeURIComponent(survey.surveyId || survey.id)}/editorial`);
     if (requestId !== editorialOpenRequest) return;
     const document = normalizeEditorialDocument(response, survey);
-    activeEditorial = { survey, document, baseline: cloneEditorial(document.draft) };
+    activeEditorial = { survey, document, baseline: cloneEditorial(document.draft), publishedBaseline: cloneEditorial(document.published ?? document.draft) };
     renderEditorialCanvas();
     setEditorialLoading(false);
     updateEditorialStatus();
@@ -490,9 +495,9 @@ async function openEditorial(surveyId: string): Promise<void> {
 
 function renderEditorialDiff(forPublish: boolean): void {
   const changes = editorialDiffFields();
-  byId("editorial-diff-title").textContent = forPublish ? "发布前确认" : "字段变更";
+  byId("editorial-diff-title").textContent = forPublish ? "提交文案确认" : "字段变更";
   byId("editorial-diff-content").innerHTML = changes.length
-    ? `<p class="editorial-diff-summary">${forPublish ? "以下公开文案将写入巡天目录。数据、覆盖几何和系统 ID 不会改变。" : `${changes.length} 个公开字段已变化。`}</p><div class="editorial-diff-list">${changes.map((change) => `<article class="editorial-diff-row"><strong>${escapeText(change.label)}</strong><div><span class="editorial-diff-before">${escapeText(change.before)}</span><i data-lucide="arrow-right"></i><span class="editorial-diff-after">${escapeText(change.after)}</span></div></article>`).join("")}</div>`
+    ? `<p class="editorial-diff-summary">${forPublish ? "以下文案将写入产品工作版本并使旧审核失效。重新审核、完整发布后才会对外显示。" : `${changes.length} 个公开字段已变化。`}</p><div class="editorial-diff-list">${changes.map((change) => `<article class="editorial-diff-row"><strong>${escapeText(change.label)}</strong><div><span class="editorial-diff-before">${escapeText(change.before)}</span><i data-lucide="arrow-right"></i><span class="editorial-diff-after">${escapeText(change.after)}</span></div></article>`).join("")}</div>`
     : `<div class="resource-empty">当前没有待发布的文案变化。</div>`;
   const confirm = byId<HTMLButtonElement>("editorial-diff-confirm");
   confirm.hidden = !forPublish;
@@ -535,9 +540,10 @@ async function publishEditorial(): Promise<void> {
     const response = await api<unknown>(`/api/v1/admin/catalog/surveys/${encodeURIComponent(state.document.surveyId)}/editorial/publish`, { method: "POST", body: JSON.stringify({ revision: state.document.revision }) });
     state.document = normalizeEditorialDocument(response, state.survey, state.document);
     state.baseline = cloneEditorial(state.document.draft);
-    if (!state.document.published) state.document.published = cloneEditorial(state.document.draft);
+    state.document.published = cloneEditorial(state.document.draft);
+    state.publishedBaseline = cloneEditorial(state.document.draft);
     renderEditorialCanvas();
-    toast("巡天目录文案已发布");
+    toast("文案已提交到产品工作版本，请重新审核后完整发布");
     await refresh();
   } catch (error) {
     toast(error instanceof Error ? error.message : "目录文案发布失败", true);
@@ -730,9 +736,9 @@ function readinessChip(readiness?: ProductReadiness, version = "当前"): string
   return `<span class="readiness-chip readiness-chip-${readinessLevelClass(readiness.level)}"><strong>${escapeText(version)} · ${escapeText(capabilityNames[readiness.level])} (${readinessLevelLabel(readiness.level)})</strong><span>覆盖精度 ${escapeText(orders)}（HEALPix 阶数）</span><span>${escapeText(reverse)}</span></span>`;
 }
 
-function readinessVersionMarkup(versions?: ReadinessVersions): string {
-  if (!versions) return readinessChip();
-  return `<div class="readiness-version-pair">${versions.published ? readinessChip(versions.published, "公开版本") : `<span class="lifecycle-chip lifecycle-publication publication-state"><i data-lucide="package"></i>尚未发布</span>`}${!versions.published || JSON.stringify(versions.draft) !== JSON.stringify(versions.published) ? readinessChip(versions.draft, "工作版本") : ""}</div>`;
+function readinessVersionMarkup(versions?: ReadinessVersions, extra = ""): string {
+  if (!versions) return `<div class="readiness-version-pair">${readinessChip()}${extra}</div>`;
+  return `<div class="readiness-version-pair">${versions.published ? readinessChip(versions.published, "公开版本") : `<span class="lifecycle-chip lifecycle-publication publication-state"><i data-lucide="package"></i>尚未发布</span>`}${!versions.published || JSON.stringify(versions.draft) !== JSON.stringify(versions.published) ? readinessChip(versions.draft, "工作版本") : ""}${extra}</div>`;
 }
 
 type ReadinessActionStep = "sources" | "tasks" | "review" | "releases" | "scan";
@@ -798,6 +804,22 @@ function readinessAggregateMarkup(summary?: { draft: ReadinessAggregate; publish
   return `<div class="readiness-aggregate"><div><span>草稿</span><strong>${escapeText(levelCounts(draft))}</strong><small>${escapeText(capability(draft))} · 空间 ${escapeText(orders(draft))} · 精度 ${escapeText(draft.geometryPrecision)}</small></div><div><span>已发布</span><strong>${escapeText(levelCounts(published))}</strong><small>${escapeText(capability(published))} · 空间 ${escapeText(orders(published))} · 精度 ${escapeText(published.geometryPrecision)}</small></div></div>`;
 }
 
+function runtimeLayerChip(layers: RuntimeLayer[] | undefined): string {
+  const label = layers === undefined ? "状态未知" : layers.length ? "已载入" : "未载入";
+  const sources = { release: "发布包基线", warehouse: "Warehouse ACTIVE", "product-moc": "产品发布 MOC" };
+  return `<span class="readiness-chip runtime-coverage-chip" title="服务端天球目录状态，不代表浏览器已勾选，也不代表当前产品版本已审核或发布"><strong>天球覆盖 · ${label}</strong>${layers?.map(layer => `<span>${escapeText(sources[layer.source])} · ${escapeText(orderLabel(layer.availableOrders))}</span>`).join("") ?? ""}</span>`;
+}
+
+function runtimeLayersMarkup(surveyId: string, coverage: CatalogStatus): string {
+  const active=coverage.runtimeLayers?.filter(l=>l.surveyId===surveyId&&l.source==="warehouse")??[];
+  return `<div class="runtime-coverage-note"><p>目录与天球仅展示审核并完整发布成功的产品。</p>${active.length?`<details><summary>Warehouse 执行状态 · ${active.length} 个 ACTIVE 图层（不代表公开授权）</summary>${active.map(l=>`<p>${escapeText(l.name)} · ${escapeText(l.releaseId)} · ACTIVE · ${escapeText(orderLabel(l.availableOrders))}</p>`).join("")}</details>`:""}</div>`;
+}
+function productSkyStatus(product:{publicCoverage?:{published:boolean;orders:number[];retired:boolean};review?:Partial<NonNullable<ReviewProduct["review"]>>}):string {
+  const state=product.publicCoverage;
+  const label=state?.published?(state.orders.length?`已公开 · 天球可显示 · ${orderLabel(state.orders)}`:"已公开 · 暂无覆盖几何"):state?.retired?"已下架":"未公开 · "+(product.review?.reviewedRevision===product.review?.draftRevision&&product.review?.reviewedRevision?"已审核待发布":"待审核");
+  return `<span class="readiness-chip runtime-coverage-chip"><strong>${escapeText(label)}</strong></span>`;
+}
+
 function renderOverview(overview: AdminOverview): void {
   overviewRecord = overview;
   byId("step-overview-count").textContent = String(overview.totals.products);
@@ -861,9 +883,9 @@ function renderOverview(overview: AdminOverview): void {
         const key = raw === "image" ? "imaging" : raw === "spectrum" ? "spectroscopy" : raw;
         modalities.set(key, (modalities.get(key) ?? 0) + 1);
       }
-      return `<section class="overview-release" data-row-key="${escapeText(release.id)}"><header><div><strong>${escapeText(release.label)}</strong><span>${products.length} 个产品</span></div><div class="release-modalities">${[...modalities].map(([modality, count]) => modalityMarkup(modality === "unknown" ? undefined : modality, count)).join("")}</div></header><div class="overview-product-list">${products.map((product) => `<article class="overview-product" data-row-key="${escapeText(product.productId)}"><div><strong>${escapeText(product.name)}</strong>${modalityMarkup(product.modality)}</div>${readinessVersionMarkup(product.readiness)}<button type="button" class="admin-quiet" data-overview-product="${escapeText(product.productId)}" title="查看状态、证据及补全操作"><i data-lucide="eye"></i><span>产品详情与证据</span></button></article>`).join("")}</div></section>`;
+      return `<section class="overview-release" data-row-key="${escapeText(release.id)}"><header><div><strong>${escapeText(release.label)}</strong><span>${products.length} 个产品</span></div><div class="release-modalities">${[...modalities].map(([modality, count]) => modalityMarkup(modality === "unknown" ? undefined : modality, count)).join("")}</div></header><div class="overview-product-list">${products.map((product) => `<article class="overview-product" data-row-key="${escapeText(product.productId)}"><div><strong>${escapeText(product.name)}</strong>${modalityMarkup(product.modality)}</div>${readinessVersionMarkup(product.readiness, productSkyStatus(product))}<button type="button" class="admin-quiet" data-overview-product="${escapeText(product.productId)}" title="查看状态、证据及补全操作"><i data-lucide="eye"></i><span>产品详情与证据</span></button></article>`).join("")}</div></section>`;
     }).filter(Boolean).join("");
-    return `<article class="overview-survey"><header class="overview-survey-header"><div class="overview-survey-copy"><strong>${escapeText(survey.name)}</strong><span>${escapeText(survey.mission)} · ${survey.releases.length} 个数据发布 / 集合</span><p>按产品查看能力；不同产品的覆盖精度和反查能力可能不同。</p></div></header>${releases || `<div class="resource-empty">没有匹配的 DR / 产品</div>`}</article>`;
+return `<article class="overview-survey"><header class="overview-survey-header"><div class="overview-survey-copy"><strong>${escapeText(survey.name)}</strong><span>${escapeText(survey.mission)} · ${survey.releases.length} 个数据发布 / 集合</span><p>按产品查看能力；不同产品的覆盖精度和反查能力可能不同。</p></div></header>${runtimeLayersMarkup(survey.id, overview.coverage)}${releases || `<div class="resource-empty">没有匹配的 DR / 产品</div>`}</article>`;
   }).join(""));
   renderIcons();
 }
@@ -1601,46 +1623,69 @@ function mocBuildStatusText(build?: MocBuildSummary): string {
   return `MOC build ${build.phase}${percent}${published}`;
 }
 
+type ReviewFilter = "all" | "pending" | "reviewed" | "published" | "retired";
+let reviewFilter: ReviewFilter = "all";
+const reviewFilterLabels: Record<ReviewFilter, string> = { all: "全部", pending: "待审核", reviewed: "已审核", published: "已发布", retired: "已退休" };
+
+function reviewProductState(product: ReviewProduct): Exclude<ReviewFilter, "all"> {
+  if (product.retiredAt || product.lifecycle?.publication?.state === "RETIRED") return "retired";
+  const state = product.review?.state;
+  if (state === "reviewed") return "reviewed";
+  if (state === "published" || state === "unmatched-published") return "published";
+  return "pending";
+}
+
+function reviewEntries(survey: ReviewSurvey): Array<{ product: ReviewProduct; release: string; unmatched?: boolean }> {
+  return [
+    ...survey.releases.flatMap(release => release.products.map(product => ({ product, release: release.label }))),
+    ...(survey.unmatchedProducts ?? []).map(record => ({
+      product: { ...record, productId: String(record.productId ?? ""), name: String(record.name ?? record.productId ?? "未命名产品"), description: String(record.description ?? ""), status: String(record.status ?? "unknown") } as ReviewProduct,
+      release: String(record.releaseId ?? "未指定 Release"), unmatched: true,
+    })),
+  ];
+}
+
+function productPublicationRun(productId: string): PublicationRun | undefined {
+  return publicationRuns.find(run => run.selectedProducts?.some(selected => selected.productId === productId));
+}
+
 function renderReviewSurveys(surveys: ReviewSurvey[]): void {
   reviewSurveyRecords = surveys;
   const list = byId("product-list");
-  const visible = surveys.filter((survey) => !productQuery || `${survey.name} ${survey.mission} ${survey.description} ${survey.modalities.join(" ")} ${survey.releases.flatMap((release) => [release.label, release.id, release.kind, ...release.products.flatMap((product) => [product.name, product.description, product.modality ?? "", product.status, (product.coverage?.availableOrders ?? []).map((order) => `O${order}`).join(" ")])]).join(" ")} ${(survey.unmatchedProducts ?? []).map((product) => Object.values(product).join(" ")).join(" ")} ${(survey.unmatchedBuilds ?? []).map((build) => [build.name, build.candidateId, build.candidateTitle ?? "", build.surveyId ?? "", build.releaseId ?? "", build.sourceUrl ?? ""].join(" ")).join(" ")}`.toLocaleLowerCase().includes(productQuery));
-  if (!visible.length) {
-    list.innerHTML = `<div class="resource-empty">${surveys.length ? "没有匹配的巡天或产品" : "暂无公共巡天 Catalog"}</div>`;
+  const matchesSurvey = (survey: ReviewSurvey) => `${survey.name} ${survey.id} ${survey.mission}`.toLocaleLowerCase().includes(productQuery);
+  const visible = surveys.filter(survey => !productQuery || matchesSurvey(survey) || reviewEntries(survey).some(({product, release}) => reviewProductMatches(product) || release.toLocaleLowerCase().includes(productQuery)) || (survey.unmatchedBuilds ?? []).some(build => `${build.name} ${build.candidateTitle ?? ""}`.toLocaleLowerCase().includes(productQuery)));
+  reconcileMarkup(list, `<div class="review-survey-grid">${visible.map(survey => {
+    const entries = reviewEntries(survey);
+    const count = (state: ReviewFilter) => entries.filter(({product}) => reviewProductState(product) === state).length;
+    return `<button type="button" class="review-survey-card" data-review-survey="${escapeText(survey.id)}" aria-haspopup="dialog"><span class="review-card-name"><i data-lucide="globe-2"></i><strong>${escapeText(survey.name)}</strong></span><span class="review-card-total">${entries.length} 个产品 · ${survey.releases.length} 个 Release</span><span class="review-card-counts"><span>待审核 <strong>${count("pending")}</strong></span><span>已审核 <strong>${count("reviewed")}</strong></span><span>已发布 <strong>${count("published")}</strong></span>${count("retired") ? `<span>已退休 <strong>${count("retired")}</strong></span>` : ""}</span>${survey.unmatchedBuilds?.length ? `<small>${survey.unmatchedBuilds.length} 个构建待登记</small>` : ""}<span class="review-card-open">查看产品 <i data-lucide="arrow-right"></i></span></button>`;
+  }).join("") || '<p class="resource-empty">没有匹配的巡天或产品</p>'}</div>`);
+  list.querySelectorAll<HTMLButtonElement>("[data-review-survey]").forEach(button => button.onclick = () => {
+    selectedReviewSurveyId = button.dataset.reviewSurvey ?? "";
+    reviewFilter = "all";
+    renderReviewSurveys(reviewSurveyRecords);
+  });
+  const dialog = byId<HTMLDialogElement>("review-survey-dialog");
+  const survey = surveys.find(item => item.id === selectedReviewSurveyId);
+  if (!survey) {
+    if (dialog.open) dialog.close();
+    renderIcons();
     return;
   }
-  if (!visible.some((survey) => survey.id === selectedReviewSurveyId)) selectedReviewSurveyId = visible[0]!.id;
-  list.innerHTML = visible.map((survey) => {
-    const selected = survey.id === selectedReviewSurveyId;
-    const surveyColor = surveyColorAttribute(survey.color);
-    const publicStats = Object.entries(survey.statistics).filter(([, value]) => typeof value === "number").map(([key, value]) => `${key} ${value.toLocaleString()}`).join(" · ");
-    const releases = selected ? survey.releases.map((release) => `<section class="review-release"><div class="review-release-heading"><div><span class="section-index">RELEASE</span><h5>${escapeText(release.label)}</h5></div><small>${escapeText(release.id)} · ${escapeText(release.kind)}${release.releasedYear ? ` · ${release.releasedYear}` : ""}</small>${readinessAggregateMarkup(release.readiness)}</div><div class="review-product-list">${release.products.filter(reviewProductMatches).map((product) => {
-      const orders = product.coverage?.availableOrders?.map((order) => `O${order}`).join(" / ") || "orders unavailable";
-      const reviewState = product.retiredAt || product.lifecycle?.publication?.state === "RETIRED" ? "retired" : product.review?.state ?? "unmatched";
-      const buildStatus = mocBuildStatusText(product.mocBuild);
-    const canPublish = reviewState === "reviewed";
-    const canRetire = reviewState === "published" && !product.retiredAt;
-    return `<article class="review-product-row${product.retiredAt ? " is-retired" : ""}"><div><div class="review-product-title"><span class="modality-icon"><i data-lucide="${modalityIcon(product.modality)}"></i></span><strong>${escapeText(product.name)}</strong></div><span>${escapeText(product.modality ?? "modality unknown")} · ${escapeText(product.status)} · ${escapeText(orders)}</span>${readinessVersionMarkup(product.readiness)}<p>${escapeText(product.description || product.reason || "No public description")}</p>${product.reason ? `<small>${escapeText(product.reason)}</small>` : ""}${product.retiredAt ? `<small class="product-retired-label">已退休 · ${escapeText(product.retirementReason ?? "未填写原因")}</small>` : ""}${buildStatus ? `<small class="moc-build-status"><i data-lucide="box"></i>${escapeText(buildStatus)}</small>` : ""}${lifecycleMarkup(product.lifecycle, reviewState, product.mocBuild?.outputs?.availableOrders)}${lifecycleLinksMarkup(product.lifecycle)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span><button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}" title="${product.retiredAt ? "查看已退休产品事实" : "编辑产品文稿"}"><i data-lucide="${product.retiredAt ? "eye" : "pencil"}"></i><span>${product.retiredAt ? "查看事实" : "产品事实"}</span></button>${reviewState !== "published" && reviewState !== "retired" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish title="${canPublish ? "发布产品" : "先确认当前版本审核"}"${canPublish ? "" : " disabled"}><i data-lucide="upload"></i><span>${canPublish ? "发布产品" : "待审核"}</span></button>` : ""}${canRetire ? `<button type="button" class="admin-quiet product-retire-inline" data-retire-product="${escapeText(product.productId)}" title="退休产品"><i data-lucide="archive-x"></i><span>退休</span></button>` : ""}</div></article>`;
-    }).join("") || `<div class="resource-empty">该 Release 没有匹配的产品</div>`}</div></section>`).join("") : "";
-    const unmatchedRecords = survey.unmatchedProducts ?? [];
-    const unmatchedProducts = selected ? unmatchedRecords.filter((product) => !productQuery || Object.values(product).join(" ").toLocaleLowerCase().includes(productQuery)).map((product) => {
-      const productId = typeof product.productId === "string" ? product.productId : "";
-      const name = typeof product.name === "string" ? product.name : productId || "unmatched product";
-      const reviewState = typeof product.retiredAt === "string" ? "retired" : typeof product.review === "object" && product.review && typeof (product.review as Record<string, unknown>).state === "string" ? String((product.review as Record<string, unknown>).state) : "unmatched";
-      return `<article class="review-product-row${product.retiredAt ? " is-retired" : ""}"><div><strong>${escapeText(name)}</strong><span>${escapeText(String(product.surveyId ?? "survey unknown"))} · ${escapeText(String(product.releaseId ?? "release unknown"))}</span><p>该草稿没有对应的公共 survey/release/product 记录，需要补齐映射或确认是否应移除。</p>${product.retiredAt ? `<small class="product-retired-label">已退休 · ${escapeText(String(product.retirementReason ?? "未填写原因"))}</small>` : ""}${lifecycleMarkup(undefined, reviewState)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(reviewState)}">${escapeText(reviewState)}</span>${productId ? `<button type="button" class="admin-quiet" data-edit-product="${escapeText(productId)}" title="${product.retiredAt ? "查看已退休产品" : "编辑未匹配产品"}"><i data-lucide="${product.retiredAt ? "eye" : "pencil"}"></i><span>${product.retiredAt ? "查看" : "编辑"}</span></button>${reviewState !== "unmatched-published" && reviewState !== "retired" ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(productId)}" data-publish title="发布未匹配产品"><i data-lucide="upload"></i><span>发布</span></button>` : ""}` : ""}</div></article>`;
-    }).join("") : "";
-    const unmatched = selected && unmatchedRecords.length ? `<section class="review-release review-unmatched"><div class="review-release-heading"><div><span class="section-index">QUEUE</span><h5>未匹配公共 Catalog</h5></div><small>Assets editorial queue</small></div><div class="review-product-list">${unmatchedProducts || `<div class="resource-empty">暂无未匹配产品</div>`}</div></section>` : "";
-    const unmatchedBuilds = survey.unmatchedBuilds ?? [];
-    const mocBuildQueue = selected && unmatchedBuilds.length ? `<section class="review-release review-unmatched"><div class="review-release-heading"><div><span class="section-index">MOC QUEUE</span><h5>待登记 MOC 构建</h5></div><small>STAGED · 需要绑定产品</small></div><div class="review-product-list">${unmatchedBuilds.map((build) => `<article class="review-product-row"><div><strong>${escapeText(build.candidateTitle ?? build.candidateId)}</strong><span>${escapeText(build.name)} · ${escapeText(build.candidateId)} · ${escapeText(build.phase)}</span><p>构建已经完成，但还没有 survey / release / product 归属。登记后才能编辑公共文稿并发布。</p>${build.sourceUrl ? `<small class="moc-build-status">${escapeText(build.sourceUrl)}</small>` : ""}${mocBuildReadout(build)}</div><div class="product-row-actions"><span class="review-state review-state-${phaseClass(build.phase)}">${escapeText(build.phase)}</span><button type="button" class="admin-quiet" data-register-moc-build="${escapeText(build.name)}" title="登记为公共产品"><i data-lucide="plus"></i><span>登记产品</span></button></div></article>`).join("")}</div></section>` : "";
-    const image = survey.imageUrl ? `<img src="${escapeText(survey.imageUrl)}" alt="" loading="lazy" />` : "";
-    return `<article class="review-survey${selected ? " is-selected" : ""}"${surveyColor}><div class="review-survey-header"><button type="button" class="review-survey-toggle" data-review-survey="${escapeText(survey.id)}"><span class="review-survey-swatch"${surveyColor} aria-hidden="true"></span><span class="review-survey-copy"><strong>${escapeText(survey.name)}</strong><small>${escapeText(survey.mission)} · ${survey.releases.length} releases · ${escapeText(publicStats || "statistics unavailable")}</small><p>${escapeText(survey.description)}</p></span><i data-lucide="${selected ? "chevron-up" : "chevron-down"}"></i></button>${survey.id.startsWith("__") ? "" : `<button type="button" class="admin-quiet review-survey-edit" data-edit-editorial="${escapeText(survey.id)}" title="编辑巡天公开目录文案"><i data-lucide="pencil-line"></i><span>编辑目录</span></button>`}</div>${readinessAggregateMarkup(survey.readiness)}${selected ? `<div class="review-survey-body"><div class="review-survey-meta"><span><i data-lucide="layers-3"></i>${escapeText(survey.modalities.join(" · "))}</span><span><i data-lucide="grid-3x3"></i>Coverage ${escapeText(survey.coverageOrders?.availableOrders?.map((order) => `O${order}`).join(" / ") || "orders unavailable")}</span>${image}</div>${releases}${unmatched}${mocBuildQueue}</div>` : ""}</article>`;
-  }).join("");
-  list.querySelectorAll<HTMLButtonElement>("[data-review-survey]").forEach((button) => button.addEventListener("click", () => { selectedReviewSurveyId = button.dataset.reviewSurvey ?? ""; renderReviewSurveys(reviewSurveyRecords); }));
-  list.querySelectorAll<HTMLButtonElement>("[data-edit-editorial]").forEach((button) => button.addEventListener("click", () => void openEditorial(button.dataset.editEditorial ?? "")));
-  list.querySelectorAll<HTMLButtonElement>("[data-edit-product]").forEach((button) => button.addEventListener("click", () => openProduct(button.dataset.editProduct ?? "")));
-  list.querySelectorAll<HTMLButtonElement>("[data-publish-product]").forEach((button) => button.addEventListener("click", () => void publishProduct(button.dataset.publishProduct ?? "")));
-  list.querySelectorAll<HTMLButtonElement>("[data-retire-product]").forEach((button) => button.addEventListener("click", () => void retireProduct(button.dataset.retireProduct ?? "")));
-  list.querySelectorAll<HTMLButtonElement>("[data-register-moc-build]").forEach((button) => button.addEventListener("click", () => void openMocProductRegistration(button.dataset.registerMocBuild ?? "")));
+  byId("review-survey-dialog-title").textContent = survey.name;
+  const entries = reviewEntries(survey).filter(({product, release}) => !productQuery || matchesSurvey(survey) || reviewProductMatches(product) || release.toLocaleLowerCase().includes(productQuery));
+  const filtered = entries.filter(({product}) => reviewFilter === "all" || reviewProductState(product) === reviewFilter);
+  const content = byId("review-survey-content");
+  reconcileMarkup(content, `<div class="review-browser-toolbar"><div class="review-filters" aria-label="产品审核状态">${(Object.keys(reviewFilterLabels) as ReviewFilter[]).map(state => `<button type="button" class="admin-quiet" data-review-filter="${state}" aria-pressed="${reviewFilter === state}">${reviewFilterLabels[state]} <span>${state === "all" ? entries.length : entries.filter(({product}) => reviewProductState(product) === state).length}</span></button>`).join("")}</div>${survey.id.startsWith("__") ? "" : `<button type="button" class="admin-quiet" data-edit-editorial="${escapeText(survey.id)}"><i data-lucide="pencil-line"></i><span>编辑巡天文案</span></button>`}</div><div class="review-compact-list">${filtered.map(({product, release, unmatched}) => {
+    const state = reviewProductState(product);
+    return `<article class="review-product-row review-compact-row${state === "retired" ? " is-retired" : ""}" data-row-key="${escapeText(product.productId)}"><div class="review-compact-name"><i data-lucide="${modalityIcon(product.modality)}"></i><div><strong>${escapeText(product.name)}</strong><small>${escapeText(product.modality ?? "模态未指定")}${unmatched ? " · 待匹配目录" : ""}</small></div></div><div class="review-compact-release"><small>Release</small><span>${escapeText(release)}</span></div>${(() => { const run = productPublicationRun(product.productId); const active = run && ["queued", "building", "uploading", "verifying"].includes(run.status); const label = active ? `发布中 · ${publicationStatusLabel(run.status)}` : run?.status === "failed" ? "发布失败 · 查看详情" : reviewFilterLabels[state]; return `<span class="review-state review-state-${active ? "publishing" : run?.status === "failed" ? "failed" : state}">${active ? `<i data-lucide="loader-circle" class="button-spinner"></i>` : ""}${escapeText(label)}</span>`; })()}<div class="product-row-actions"><button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}"><i data-lucide="eye"></i><span>${state === "pending" ? "查看并审核" : "产品详情"}</span></button>${state === "reviewed" && !["queued", "building", "uploading", "verifying"].includes(productPublicationRun(product.productId)?.status ?? "") ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish><i data-lucide="upload"></i><span>发布</span></button>` : ""}</div></article>`;
+  }).join("") || '<p class="resource-empty">当前分类没有产品</p>'}</div>${(reviewFilter === "all" || reviewFilter === "pending") && survey.unmatchedBuilds?.length ? `<section class="review-registration-queue"><h5>待登记构建 · ${survey.unmatchedBuilds.length}</h5>${survey.unmatchedBuilds.map(build => `<article class="review-product-row review-compact-row"><div class="review-compact-name"><i data-lucide="box"></i><div><strong>${escapeText(build.candidateTitle ?? build.candidateId)}</strong><small>${escapeText(build.phase)}</small></div></div><div class="product-row-actions"><button type="button" class="admin-quiet" data-moc-build-details="${escapeText(build.name)}">构建详情</button><button type="button" class="admin-quiet" data-register-moc-build="${escapeText(build.name)}">登记产品</button></div></article>`).join("")}</section>` : ""}`);
+  content.querySelectorAll<HTMLButtonElement>("[data-review-filter]").forEach(button => button.onclick = () => { reviewFilter = button.dataset.reviewFilter as ReviewFilter; renderReviewSurveys(reviewSurveyRecords); });
+  content.querySelectorAll<HTMLButtonElement>("[data-edit-editorial]").forEach(button => button.onclick = () => void openEditorial(button.dataset.editEditorial ?? ""));
+  content.querySelectorAll<HTMLButtonElement>("[data-edit-product]").forEach(button => button.onclick = () => openProduct(button.dataset.editProduct ?? ""));
+  content.querySelectorAll<HTMLButtonElement>("[data-publish-product]").forEach(button => button.onclick = () => void publishProduct(button.dataset.publishProduct ?? ""));
+  content.querySelectorAll<HTMLButtonElement>("[data-register-moc-build]").forEach(button => button.onclick = () => void openMocProductRegistration(button.dataset.registerMocBuild ?? ""));
+  content.querySelectorAll<HTMLButtonElement>("[data-moc-build-details]").forEach(button => button.onclick = () => void openMocBuildDetails(button.dataset.mocBuildDetails ?? ""));
+  if (!dialog.open) dialog.showModal();
   syncProductOperationButtons();
   applyReviewedFeedback();
 }
@@ -1940,13 +1985,15 @@ const reviewedFeedback = new Map<string, number>();
 function syncProductOperationButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-review-product], [data-publish-product]").forEach(button => {
     const id = button.dataset.reviewProduct ?? button.dataset.publishProduct ?? "";
-    const operation = productOperations.get(id);
+    const run = publicationRuns.find(r => r.selectedProducts?.some(p => p.productId === id));
+    const pending = run && ["queued", "building", "uploading", "verifying"].includes(run.status);
+    const operation = productOperations.get(id) ?? (pending ? "publish" : undefined);
     if (operation) {
       if (!operationButtonOriginals.has(button)) operationButtonOriginals.set(button, { html: button.innerHTML, disabled: button.disabled });
       button.disabled = true;
       button.setAttribute("aria-busy", "true");
       const isThisAction = operation === "publish" ? Boolean(button.dataset.publishProduct) : Boolean(button.dataset.reviewProduct);
-      if (isThisAction && !button.querySelector(".button-spinner")) button.innerHTML = `<i data-lucide="loader-circle" class="button-spinner"></i><span>${operation === "publish" ? "正在发布…" : "正在审核…"}</span>`;
+      if (isThisAction) button.innerHTML = `<i data-lucide="loader-circle" class="button-spinner"></i><span>${operation === "publish" ? pending ? publicationStatusLabel(run.status) : "正在提交…" : "正在审核…"}</span>`;
     } else {
       const original = operationButtonOriginals.get(button);
       if (original) { button.innerHTML = original.html; button.disabled = original.disabled; operationButtonOriginals.delete(button); }
@@ -1970,6 +2017,7 @@ function applyReviewedFeedback(): void {
 }
 
 function revealReviewedProduct(productId: string): void {
+  reviewFilter = "reviewed";
   const owner = reviewSurveyRecords.find(survey => survey.releases.some(release => release.products.some(product => product.productId === productId)) || survey.unmatchedProducts?.some(product => product.productId === productId));
   if (owner) selectedReviewSurveyId = owner.id;
   renderReviewSurveys(reviewSurveyRecords);
@@ -1999,7 +2047,7 @@ async function reviewProduct(productId: string): Promise<void> {
     if (activeProductDialogId === productId && byId<HTMLDialogElement>("product-dialog").open) byId<HTMLDialogElement>("product-dialog").close();
     if (refreshInFlight) await refreshInFlight;
     await refresh();
-    if (activeStep === "review" && !document.querySelector("dialog[open]")) revealReviewedProduct(productId);
+    if (activeStep === "review" && !document.querySelector("dialog[open]:not(#review-survey-dialog)")) revealReviewedProduct(productId);
   } catch (error) { toast(error instanceof Error ? error.message : "审核失败", true); }
   finally { productOperations.delete(productId); syncProductOperationButtons(); }
 }
@@ -2011,9 +2059,10 @@ async function publishProduct(productId: string): Promise<void> {
   productOperations.set(productId, "publish");
   syncProductOperationButtons();
   try {
-    await api(`/api/v1/admin/products/${encodeURIComponent(productId)}/publish`, { method: "POST", body: JSON.stringify({ revision: product.revision }) });
+    const { run } = await api<{run:PublicationRun}>(`/api/v1/admin/products/${encodeURIComponent(productId)}/publish`, { method: "POST", body: JSON.stringify({ revision: product.revision }) });
     if (activeProductDialogId === productId && byId<HTMLDialogElement>("product-dialog").open) byId<HTMLDialogElement>("product-dialog").close();
-    toast(`${product.draft.name} · 产品已发布`);
+    publicationRuns = [run, ...publicationRuns.filter(r => r.runId !== run.runId)];
+    toast(`${product.draft.name} · 发布已提交，正在同步该产品产物；站点生效后才会公开`);
     if (refreshInFlight) await refreshInFlight;
     await refresh();
   } catch (error) { toast(error instanceof Error ? error.message : "发布失败", true); }
@@ -2041,6 +2090,7 @@ async function refresh(background = false): Promise<void> {
   if (!background) button.disabled = true;
   byId("refresh-state").textContent = background ? "" : "正在更新…";
   refreshInFlight = (async () => {
+    if (step === "review" || step === "overview") await loadPublicationRuns();
     const keys = [...new Set([...workspaceResources[step], ...(!resourceCache.has("overview") ? ["overview" as const] : [])])];
     const results = await workspaceRequests.load(keys, (url, signal) => api(url, { signal }));
     if (!results || version !== refreshVersion || !token) return;
@@ -2052,7 +2102,8 @@ async function refresh(background = false): Promise<void> {
       resourceCache.set(key, value);
       if (renderedSignatures.get(key) !== businessSignature(value)) changed = true;
     }
-    if (document.querySelector("dialog[open]")) {
+    // The survey browser displays live records; only detail/edit dialogs freeze snapshots.
+    if (document.querySelector("dialog[open]:not(#review-survey-dialog)")) {
       if (activeMocReviewRequest && byId<HTMLDialogElement>("moc-review-dialog").open) {
         const latest = (resourceCache.get("mocDiscovery") as { requests?: MocDiscoveryRequest[] } | undefined)?.requests?.find(request => request.name === activeMocReviewRequest?.name);
         const unavailable = results.some((result, index) => keys[index] === "mocDiscovery" && result.status === "rejected");
@@ -2137,12 +2188,16 @@ interface PublicationPlan {
 }
 
 interface PublicationRun {
+  selectedProducts?: Array<{productId:string;revision:number}>;
+  manifestKey?: string;
   runId: string;
   planId: string;
   surveyIds: string[];
   status: string;
   requestedBy?: string;
   createdAt: string;
+  claimedAt?: string;
+  lastProgressAt?: string;
   finishedAt?: string;
   bundle?: { id: string; sha256: string };
   archiveKey?: string;
@@ -2151,17 +2206,23 @@ interface PublicationRun {
   packages?: number;
   error?: string;
   failureStage?: "build" | "upload" | "candidate" | "activate";
+  recovery?: { detectedAt: string; reason: string };
   verification?: { overall?: string; candidate?: { state?: string; checkedAt?: string; bundleSha256?: string; error?: string }; authority?: { state?: string; checkedAt?: string; bundleSha256?: string; error?: string }; site?: { state?: string; target?: string; checkedAt?: string; observedBundleSha256?: string; checkedProducts?: number; error?: string } };
 }
 
 let publicationPlan: PublicationPlan | null = null;
 const selectedPublicationSurveys = new Set<string>();
+const selectedPublicationProducts = new Set<string>();
 let publicationRuns: PublicationRun[] = [];
 
 
 function publicationStatusLabel(status: string): string {
   const labels: Record<string, string> = { queued: "排队中", building: "构建中", uploading: "上传中", verifying: "隔离验证中", published: "权威已发布", failed: "失败" };
   return labels[status] ?? status;
+}
+
+function publicationRunStatusLabel(run: PublicationRun): string {
+  return run.recovery ? "任务失去 worker，可恢复" : publicationStatusLabel(run.status);
 }
 
 function publicationVerificationLabel(state?: string): string {
@@ -2206,23 +2267,29 @@ function renderPublicationPlan(): void {
     const checked = selectedPublicationSurveys.has(survey.surveyId);
     const checkbox = survey.selectable
       ? `<input type="checkbox" data-publication-survey="${escapeText(survey.surveyId)}" ${checked ? "checked" : ""} />`
-      : `<input type="checkbox" disabled />`;
+      : `<button type="button" class="admin-quiet" data-publication-blocked="${escapeText(survey.surveyId)}" aria-label="查看不能选择的原因">不可选 · 原因</button>`;
     const blockers = survey.blockers.length ? survey.blockers.map((blocker) => escapeText(blocker)).join("<br>") : "—";
-    const diffs = (survey.productDiffs ?? []).map((diff) => `${diff.change === "added" ? "新增" : diff.change === "removed" ? "移除" : "修改"} ${diff.name} · r${diff.draftRevision} · ${diff.fields.join(", ")} · ${diff.reviewed ? "已审核" : "待审核"}`).join("<br>") || "—";
+    const diffs = (survey.productDiffs ?? []).map((diff) => `<label><input type="checkbox" data-publication-product="${escapeText(diff.productId)}" data-survey="${escapeText(survey.surveyId)}" ${diff.reviewed?"":"disabled"} ${selectedPublicationProducts.has(diff.productId)?"checked":""}> ${diff.change === "added" ? "新增" : diff.change === "removed" ? "移除" : "修改"} ${escapeText(diff.name)} · r${diff.draftRevision} · ${escapeText(diff.fields.join(", "))} · ${diff.reviewed ? "已审核" : "待审核"}</label>`).join("<br>") || "—";
     return `<tr${survey.changed ? ' data-changed="true"' : ""}><td>${checkbox}</td><td>${escapeText(survey.surveyId)}</td><td>${survey.publishedLayers}</td><td>${survey.changedProducts}</td><td>${diffs}</td><td>${survey.currentPackage ? `${escapeText(survey.currentPackage.id)}<br><small>${escapeText(survey.currentPackage.version)}</small>` : "—"}</td><td>${survey.changed ? "是" : "否"}</td><td>${blockers}</td></tr>`;
   }).join("");
+  body.querySelectorAll<HTMLButtonElement>("[data-publication-blocked]").forEach(button=>button.onclick=()=>{
+    const survey=plan.surveys.find(s=>s.surveyId===button.dataset.publicationBlocked);
+    window.alert(`${survey?.surveyId??"巡天"} 暂时不能发布：\n${survey?.blockers.join("\n")??"请先审核当前产品版本"}`);
+  });
   body.querySelectorAll<HTMLInputElement>("[data-publication-survey]").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
       if (checkbox.checked) selectedPublicationSurveys.add(checkbox.dataset.publicationSurvey ?? "");
       else selectedPublicationSurveys.delete(checkbox.dataset.publicationSurvey ?? "");
-      updatePublicationPublishButton();
+      for(const diff of plan.surveys.find(s=>s.surveyId===checkbox.dataset.publicationSurvey)?.productDiffs??[]){if(diff.reviewed){if(checkbox.checked)selectedPublicationProducts.add(diff.productId);else selectedPublicationProducts.delete(diff.productId);}}
+      renderPublicationPlan();
     });
   });
+  body.querySelectorAll<HTMLInputElement>("[data-publication-product]").forEach(input=>input.onchange=()=>{if(input.checked)selectedPublicationProducts.add(input.dataset.publicationProduct!);else selectedPublicationProducts.delete(input.dataset.publicationProduct!);selectedPublicationSurveys.clear();for(const survey of plan.surveys)if(survey.productDiffs?.some(p=>selectedPublicationProducts.has(p.productId)))selectedPublicationSurveys.add(survey.surveyId);updatePublicationPublishButton();});
   updatePublicationPublishButton();
 }
 
 function updatePublicationPublishButton(): void {
-  byId<HTMLButtonElement>("publication-publish-button").disabled = selectedPublicationSurveys.size === 0;
+  byId<HTMLButtonElement>("publication-publish-button").disabled = selectedPublicationProducts.size === 0;
 }
 
 async function publishSelectedSurveys(): Promise<void> {
@@ -2233,9 +2300,9 @@ async function publishSelectedSurveys(): Promise<void> {
   try {
     const { run } = await api<{ run: PublicationRun }>("/api/v1/admin/publications", {
       method: "POST",
-      body: JSON.stringify({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: [...selectedPublicationSurveys] }),
+      body: JSON.stringify({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: [...selectedPublicationSurveys], productIds:[...selectedPublicationProducts] }),
     });
-    selectedPublicationSurveys.clear();
+    selectedPublicationSurveys.clear(); selectedPublicationProducts.clear();
     toast(`发布任务已提交：${run.runId}`);
     publicationRuns = [run, ...publicationRuns];
     renderPublicationRuns();
@@ -2254,7 +2321,13 @@ async function loadPublicationRuns(): Promise<void> {
     const { runs } = await api<{ runs: PublicationRun[] }>("/api/v1/admin/publications");
     if (step !== activeStep || version !== refreshVersion) return;
     const incoming = Array.isArray(runs) ? runs : [];
-    if (businessSignature(incoming) !== businessSignature(publicationRuns)) { publicationRuns = incoming; renderPublicationRuns(); }
+    if (businessSignature(incoming) !== businessSignature(publicationRuns)) { publicationRuns = incoming; renderPublicationRuns(); if (activeStep === "review") renderReviewSurveys(reviewSurveyRecords); }
+    syncProductOperationButtons();
+    if (byId<HTMLDialogElement>("publication-run-dialog").open) {
+      const currentId = byId("publication-run-title").textContent?.replace("发布详情 · ", "");
+      const current = publicationRuns.find(r => r.runId === currentId);
+      if (current) openPublicationRun(current);
+    }
     const active = publicationRuns.find((run) => run.status === "queued" || run.status === "building" || run.status === "uploading" || run.status === "verifying");
     if (active) schedulePublicationPolling(active.runId);
   } catch (error) {
@@ -2269,22 +2342,26 @@ function renderPublicationRuns(): void {
     body.innerHTML = `<tr><td colspan="7" class="resource-empty">尚未提交发布任务</td></tr>`;
     return;
   }
-  body.innerHTML = publicationRuns.map((run) => `<tr><td>${escapeText(run.runId)}</td><td>${escapeText(publicationStatusLabel(run.status))}<br><small>${escapeText(publicationVerificationLabel(run.verification?.overall))}</small></td><td>${escapeText(run.surveyIds.join(", "))}</td><td>${run.bundle ? `${escapeText(run.bundle.id)}<br><small>${escapeText(run.bundle.sha256.slice(0, 16))}…</small>` : "—"}</td><td>${run.files ?? "--"}</td><td>${escapeText(formatDate(run.createdAt))}</td><td><button type="button" class="admin-quiet" data-publication-run="${escapeText(run.runId)}">详情</button></td></tr>`).join("");
+  body.innerHTML = publicationRuns.map((run) => `<tr><td>${escapeText(run.runId)}</td><td>${escapeText(publicationRunStatusLabel(run))}<br><small>${escapeText(publicationVerificationLabel(run.verification?.overall))}</small></td><td>${escapeText(run.surveyIds.join(", "))}</td><td>${run.bundle ? `${escapeText(run.bundle.id)}<br><small>${escapeText(run.bundle.sha256.slice(0, 16))}…</small>` : "—"}</td><td>${run.files ?? "--"}</td><td>${escapeText(formatDate(run.createdAt))}</td><td><button type="button" class="admin-quiet" data-publication-run="${escapeText(run.runId)}">详情</button>${run.recovery ? `<button type="button" class="admin-primary" data-recover-publication="${escapeText(run.runId)}"><i data-lucide="refresh-cw"></i><span>恢复并重试</span></button>` : ""}</td></tr>`).join("");
   body.querySelectorAll<HTMLButtonElement>("[data-publication-run]").forEach((button) => {
     button.addEventListener("click", () => {
       const run = publicationRuns.find((item) => item.runId === button.dataset.publicationRun);
       if (run) openPublicationRun(run);
     });
   });
+  body.querySelectorAll<HTMLButtonElement>("[data-recover-publication]").forEach((button) => {
+    button.addEventListener("click", () => void recoverPublicationRun(button.dataset.recoverPublication ?? ""));
+  });
+  renderIcons();
 }
 
 function openPublicationRun(run: PublicationRun): void {
   byId("publication-run-title").textContent = `发布详情 · ${run.runId}`;
   const facts = [
-    ["状态", publicationStatusLabel(run.status)],
+    ["状态", publicationRunStatusLabel(run)],
     ["巡天", run.surveyIds.join(", ")],
     ["Bundle", run.bundle ? `${run.bundle.id} / ${run.bundle.sha256}` : "—"],
-    ["Archive", run.archiveKey ?? "—"],
+    ["发布清单 / 历史归档", run.manifestKey ?? run.archiveKey ?? "—"],
     ["Archive SHA-256", run.archiveSha256 ?? "—"],
     ["文件 / 资源包", `${run.files ?? "--"} / ${run.packages ?? "--"}`],
     ["提交时间", formatDate(run.createdAt)],
@@ -2296,10 +2373,12 @@ function openPublicationRun(run: PublicationRun): void {
     ["错误", run.error ?? run.verification?.site?.error ?? "—"],
   ];
   const verify = run.status === "published" ? `<button type="button" class="admin-primary" data-verify-publication="${escapeText(run.runId)}"><i data-lucide="shield-check"></i><span>重新核验目标站点</span></button>` : "";
-  const retry = run.status === "failed" ? `<button type="button" class="admin-primary" data-retry-publication="${escapeText(run.runId)}"><i data-lucide="rotate-ccw"></i><span>按当前计划重试</span></button>` : "";
-  byId("publication-run-detail").innerHTML = `<dl class="admin-context">${facts.map(([label, value]) => `<div><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`).join("")}</dl><div class="publication-verification-actions">${retry}${verify}</div>`;
+  const retry = run.status === "failed" && !run.recovery ? `<button type="button" class="admin-primary" data-retry-publication="${escapeText(run.runId)}"><i data-lucide="rotate-ccw"></i><span>按当前计划重试</span></button>` : "";
+  const recover = run.recovery ? `<button type="button" class="admin-primary" data-recover-publication="${escapeText(run.runId)}"><i data-lucide="refresh-cw"></i><span>恢复并重试</span></button>` : "";
+  byId("publication-run-detail").innerHTML = `<dl class="admin-context">${facts.map(([label, value]) => `<div><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`).join("")}</dl><div class="publication-verification-actions">${recover}${retry}${verify}</div>`;
   byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-verify-publication]")?.addEventListener("click", (event) => void verifyPublicationRun((event.currentTarget as HTMLButtonElement).dataset.verifyPublication ?? ""));
   byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-retry-publication]")?.addEventListener("click", (event) => void retryPublicationRun((event.currentTarget as HTMLButtonElement).dataset.retryPublication ?? ""));
+  byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-recover-publication]")?.addEventListener("click", (event) => void recoverPublicationRun((event.currentTarget as HTMLButtonElement).dataset.recoverPublication ?? ""));
   renderIcons();
   byId<HTMLDialogElement>("publication-run-dialog").showModal();
 }
@@ -2314,6 +2393,18 @@ async function retryPublicationRun(runId: string): Promise<void> {
     schedulePublicationPolling(run.runId);
     toast(`发布任务已重新排队：${run.runId}`);
   } catch (error) { toast(error instanceof Error ? error.message : "发布重试失败", true); }
+}
+
+async function recoverPublicationRun(runId: string): Promise<void> {
+  if (!runId || !window.confirm("这个任务已失去 worker，释放后重新排队吗？旧记录会保留。")) return;
+  try {
+    const { run } = await api<{ run: PublicationRun }>(`/api/v1/admin/publications/${encodeURIComponent(runId)}/recover`, { method: "POST", body: "{}" });
+    publicationRuns = [run, ...publicationRuns.filter((item) => item.runId !== run.runId)];
+    renderPublicationRuns();
+    openPublicationRun(run);
+    schedulePublicationPolling(run.runId);
+    toast(`发布任务已恢复并重新排队：${run.runId}`);
+  } catch (error) { toast(error instanceof Error ? error.message : "发布任务恢复失败", true); }
 }
 
 async function verifyPublicationRun(runId: string): Promise<void> {
@@ -2432,6 +2523,13 @@ byId<HTMLFormElement>("moc-discovery-form").addEventListener("submit", (event) =
 byId<HTMLFormElement>("moc-review-form").addEventListener("submit", (event) => void submitMocReview(event));
 byId<HTMLFormElement>("moc-product-register-form").addEventListener("submit", (event) => void submitMocProductRegistration(event));
 byId<HTMLFormElement>("product-form").addEventListener("submit", (event) => void saveProduct(event));
+byId("review-survey-close").addEventListener("click", () => byId<HTMLDialogElement>("review-survey-dialog").close());
+byId<HTMLDialogElement>("review-survey-dialog").addEventListener("close", () => {
+  const previous = selectedReviewSurveyId;
+  selectedReviewSurveyId = "";
+  byId("review-survey-content").replaceChildren();
+  document.querySelector<HTMLButtonElement>(`[data-review-survey="${CSS.escape(previous)}"]`)?.focus();
+});
 byId("product-dialog-cancel").addEventListener("click", () => { history.replaceState(null, "", "/admin/review"); activeProductDialogId = ""; byId<HTMLDialogElement>("product-dialog").close(); });
 byId<HTMLButtonElement>("product-dialog-review").addEventListener("click", (event) => { const productId = (event.currentTarget as HTMLButtonElement).dataset.reviewProduct; if (productId) void reviewProduct(productId); });
 byId<HTMLButtonElement>("product-dialog-publish").addEventListener("click", (event) => { const productId = (event.currentTarget as HTMLButtonElement).dataset.publishProduct; if (productId) void publishProduct(productId); });
@@ -2494,7 +2592,7 @@ byId("auto-update-toggle").addEventListener("click", () => {
   schedulePolling(automaticUpdates ? 0 : undefined);
 });
 document.querySelectorAll<HTMLDialogElement>("dialog").forEach(dialog => dialog.addEventListener("close", () => {
-  if (pendingUpdates && !document.querySelector("dialog[open]")) void refresh();
+  if (pendingUpdates && !document.querySelector("dialog[open]:not(#review-survey-dialog)")) void refresh();
 }));
 byId<HTMLSelectElement>("overview-version").addEventListener("change", event => {
   overviewVersion = (event.target as HTMLSelectElement).value as "draft" | "published";

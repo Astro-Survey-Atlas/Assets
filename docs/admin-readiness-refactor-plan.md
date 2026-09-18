@@ -377,6 +377,13 @@ P0 优先选择同时公开覆盖及 Tile/文件索引的 DR。具体来源与�
 - 部署前 `npm run build`、`npm test`（190 项 + Core wheel）、Helm lint 通过。hydrate exit 0；公开目录和 coverage API 200，DESI FITS Range 206 并带内容哈希；dev 管理后台浏览器 smoke 通过。
 - 可用入口：`http://10.15.51.75:32083/admin/`。配置的 Ingress 仍为 `astro.assets.dev.72602.space`，但该域名从当前工作站连接失败。72602 生产站点和 Warehouse 控制器/RBAC 均未修改，原 P2/P5 外部门禁继续保留。
 
+### 待办：发布巡天无法勾选时说明原因（2026-09-18）
+
+- [ ] 在 `/admin/releases` 点击不可选择的巡天选择框或对应交互区域时，弹窗说明该巡天不能选择的具体原因；不能仅依赖原生 disabled checkbox 接收点击。
+- 弹窗使用当前发布计划的 `blockers`，区分未审核产品、缺失制品、发布策略限制；无变化时明确提示“没有待发布变更”。未审核产品尽量显示名称、版本及审核入口，不只显示内部 ID。
+- 验收：不可选巡天点击后可见原因，支持键盘操作；无阻塞巡天仍可正常勾选；不得绕过服务端发布校验。
+- 状态：仅记录待办，尚未实现或部署。
+
 ### 2026-09-14 路由与稳定刷新部署
 
 - dev 更新至 revision `138`，镜像 `0.1.0-20260914-142228`，digest `sha256:63967c1b9fd830cf5de1e061fb26d544a9a8676ef4a605aac9dd86d9a280d644`。站点及发布 worker rollout 成功，hydrate 保留原权威 bundle。

@@ -125,7 +125,21 @@
         "sourceTier",
         "path",
         "sizeBytes",
-        "sha256"
+        "sha256",
+        "productId",
+        "sourceId",
+        "product",
+        "coordinateFrame",
+        "ordering",
+        "mocEncoding",
+        "availableOrders",
+        "overviewOrder",
+        "maxOrder",
+        "coverageRevision",
+        "indexRevision",
+        "geometryPrecision",
+        "precisionNote",
+        "accessAvailability"
       ],
       "properties": {
         "layerId": {
@@ -177,6 +191,77 @@
         },
         "sha256": {
           "$ref": "#/$defs/hash"
+        },
+        "productId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "product": {
+          "type": "string"
+        },
+        "coordinateFrame": {
+          "const": "ICRS"
+        },
+        "ordering": {
+          "const": "NESTED"
+        },
+        "mocEncoding": {
+          "const": "NUNIQ"
+        },
+        "availableOrders": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 13
+          }
+        },
+        "overviewOrder": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 13
+        },
+        "maxOrder": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 13
+        },
+        "coverageRevision": {
+          "$ref": "#/$defs/hash"
+        },
+        "indexRevision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/hash"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "geometryPrecision": {
+          "enum": [
+            "exact",
+            "estimated"
+          ]
+        },
+        "precisionNote": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accessAvailability": {
+          "enum": [
+            "geometry-only",
+            "entrypoint-only",
+            "tile-resolved",
+            "unavailable"
+          ]
         }
       }
     }

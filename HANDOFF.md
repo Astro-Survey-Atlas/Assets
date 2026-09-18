@@ -1,5 +1,170 @@
 # Assets Session Handoff
 
+## Latest: publication recovery deployed (2026-09-18, dev 175)
+
+Image `0.1.0-20260918-publication-lease2`, Helm revision 175.
+Site and release publisher both 1/1 Running. Publisher had been scaled to zero;
+restored by Helm. Stale active publication runs now expire after 600000 ms without
+heartbeat, become failed with recovery reason, and release queue markers.
+Admin list/detail expose Recover and retry through authenticated
+POST /api/v1/admin/publications/:runId/recover. Original records are retained.
+
+Recovered user run `mu6p4rna-3da9b804` through that API (HTTP 202), new run
+`mu6tefsx-bc07840a` published DESI product `cc7665b2435c322ec3c9` revision 4.
+Published at 10:28:38 UTC after starting 10:27:43 UTC. Live health bundle SHA:
+`7b280f837d8520fbdfe3079c93133f13b6d7f0c1382ba4c0c13adcb8c4493ade` (477 files).
+Public products, surveys (desi-dr1), and coverage catalog
+(desi-dr1-spectra-footprint O4/O8) verified. Browser verified recovery button;
+screenshot /dev/shm/publication-recovery-live.png. Build, site typecheck,
+201 Node tests + Core verification, Helm lint passed. Existing unrelated
+trailing blank line in test/server-http.test.ts remains.
+
+State snapshot reconciliation no longer stops on same-generation mismatched
+uploads: it retains the current remote pointer and continues to later generations.
+This unblocked publication-runs@37 with two distinct uploaded snapshots.
+
+Remaining hardening concerns: release sync lock still uses container-local PID;
+site init and publisher both PID 1 raced during rollout, sharing staging paths.
+Init eventually succeeded and both workloads are healthy, but the lock needs a
+cross-container identity/lease before another concurrent rollout. Publication
+recovery also needs cross-process fencing against late worker writes; current
+write tail only serializes within one publisher instance. Generation persistence
+writes all cached namespaces, so cross-namespace writers can overwrite counters;
+this deserves a separate regression/fix. Do not equate these known limitations
+with a fully hardened distributed queue. Preserve all dirty worktree changes.
+
+
+## Current implementation: reviewed public boundary (2026-09-18)
+
+Implemented the development hard-cutover foundation for the reviewed public
+coverage boundary. `server/approved-release.ts` creates an immutable reviewed
+release snapshot and package metadata; `server/native-moc.ts` validates actual
+ICRS/NUNIQ cells and projects existing MOCs without inventing precision.
+Product reviews carry `reviewed-release-v1` plus geometry facts; old review
+records are invalidated on startup. Public coverage/products/assets are filtered
+by the approved snapshot rather than Warehouse ACTIVE state. Warehouse ACTIVE
+remains execution state only.
+
+Added protected `POST /api/v1/access/region-query` with explicit layer IDs,
+bounded NESTED cells, revisions, capability/completeness fields and expiry.
+Reverse lookup/details and scientific asset downloads require either the
+server-to-server `X-Assets-API-Key` or the development download unlock
+(`POST /api/v1/access/unlock`, password default `123`); public MOCs, package
+catalogs and Resource Package ZIPs remain open for Workspace synchronization.
+See `docs/public-coverage-access-v1.md` for the fixed Euclid Q1 VIS + DESI DR1
+order-8 integration case.
+
+Server/site builds and TypeScript checks pass. The existing 203-test suite has
+188 passing and 15 failures because its publication/HTTP fixtures assert the
+old implicit-publication and anonymous-download behavior; these tests must be
+updated to the reviewed snapshot and unlock contract before deployment.
+
+## Latest: inline sky coverage state (2026-09-18, dev 160)
+
+Replaced the separate runtime layer product list with a sky coverage status chip
+after each overview product's readiness chips. Shows loaded/not loaded/unknown,
+actual source and orders; Warehouse sources explicitly retain `Warehouse ACTIVE`.
+Each product keeps only its existing detail button. Unlinked runtime layers remain
+in a small expandable survey note alongside the load time/degradation explanation.
+No Warehouse state or product mutations. Dev image
+`0.1.0-20260918-inline-layer-status`, revision 160, both rollouts Ready.
+Build, site types, Node/Core tests, Helm lint and diff check passed; live browser
+checks passed at 1440/390px including ACTIVE labels and product detail navigation.
+Health and public package audit passed; public bundle SHA unchanged from 159.
+
+## Latest: read-only runtime layer status (2026-09-18, dev 159)
+
+Overview survey details now contain an expandable current sky coverage panel;
+no extra tab or Warehouse state mutations. The admin overview summarizes actual
+loaded coverage records, source (release baseline, Warehouse ACTIVE, or activated
+published product MOC), Release, actual orders, associated product review state
+and published-version existence. Loaded means server catalog availability, not
+browser selection or product approval. Load timestamp and degradation are shown.
+
+Dev image `0.1.0-20260918-103851-layer-status`, Helm revision 159; site and
+publisher rollouts completed. Build, site TypeScript, 203 Node tests + Core,
+Helm lint and diff check passed. Live read-only browser checks passed at
+1440/390px, including actual sources/time, product detail links and no page
+errors. Screenshots: `/dev/shm/layers-1440.png`, `/dev/shm/layers-390.png`.
+Health, coverage, FITS 206 range/hash and public package audit (72 historical
+references) passed. Bundle remains `public-survey-footprints-2026-09-17`, SHA
+`f126e1ff96abaebfcf03848a5a7f93d9531d2b479f3ec4906c27712f2a9777bf`.
+No products were reviewed/published for testing; existing dirty work preserved.
+
+## Latest: public product editorial copy projection (2026-09-18, dev 156)
+
+The public product dossier previously omitted the catalog/editorial description:
+`/api/v1/products/:id` returned only the generic coverage conclusion, while the
+admin product editor showed `PUBLIC DESCRIPTION`. The dossier now exposes the
+published description, reason and manual step; `/surveys/#product=...` renders
+that copy in the product conclusion. Catalog description is used as fallback
+when no published product/editorial override exists. Build, TypeScript and 203
+tests passed. Dev revision 156 is Ready.
+
+## Latest: review result refresh correction (2026-09-17, dev 153)
+
+Image `0.1.0-20260917-154302-review-refresh`. The survey product browser was
+incorrectly covered by the generic open-dialog snapshot freeze: after review,
+fresh API responses were cached but the reviewed filter rendered old records.
+Refresh and deferred-close handling now exclude `review-survey-dialog` from the
+freeze; actual detail/edit dialogs retain their snapshot protection.
+
+Action-feedback regression now starts from review → Euclid → pending → product,
+instead of overview. It reproduced a missing reviewed row before the fix and
+passed afterward, including immediate highlight, publish guard and failure/retry.
+The read-only review layout suite, build/types, 203 tests + Core, Helm lint and
+diff check also passed. User product `d4f09ef93d371e7ebcb1` is ERO NISP.H and
+its persisted review was confirmed by a read-only API request; it was not
+reviewed or published again for testing.
+
+## Latest: survey-first review workspace (2026-09-17, dev 152)
+
+Dev revision 152, image `0.1.0-20260917-152757-review`, digest
+`sha256:1f29bb6b1a2c1919b43c4d1dc2979027c1782ac6fa7919e7e9c84b551a1fd398`.
+Site and publisher Ready. `/admin/review` starts with survey cards and status
+counts; selecting a survey opens a product dialog with all/pending/reviewed/
+published/retired filters. Product rows show name, modality, Release, state and
+actions. Readiness, lifecycle, provenance and history remain in product details.
+Unmatched products and staged builds retain their detail/registration paths.
+Closing the survey dialog restores card focus and polling does not reopen it.
+Review success selects the reviewed filter and reveals/highlights the product.
+
+Build, TypeScript, 203 Node tests, Core wheel, Helm lint and diff check passed.
+`scripts/admin-review-browser.py` passed locally and live at 1440/900/390px,
+covering counts, filters, compact geometry, details, Escape/focus, polling and
+search. Updated action-feedback browser fixture passed review/highlight,
+publish duplicate guard and failure/retry, with all mutations intercepted.
+Screenshots: `/dev/shm/asa-review-layout/`. Live package audit passed with 72
+historical references; health retains the September 17 bundle SHA below.
+Changes remain uncommitted; no push performed.
+
+## Latest: admin icons and task result layout (2026-09-17, dev 151)
+
+Dev image `0.1.0-20260917-150901-ui-fixes`, digest
+`sha256:1a49aa7718eb7a4bac3749a56d6176434c0264fa1190368db7fcfe19b26a3e00`.
+Helm revision 151; site and release publisher Ready. Existing Helm values were
+reused, overriding only image.tag. User URL:
+`http://astro.assets.dev.72602.space:32080/admin/tasks`.
+
+Fixed Lucide `grid-3x3` registry casing (`Grid3x3`) and missing `UploadCloud`.
+Discovery actions now inherit their button/status typography rather than generic
+resource-row span styles, and wrap. Scan/result metrics wrap instead of squeezing
+five fixed columns and overlapping the time column.
+
+Validation: build, site TypeScript, Helm lint, 203 Node tests and Core wheel passed.
+Run build before tests: concurrent manifest regeneration caused transient hash
+mismatches; sequential rerun passed. New `scripts/admin-layout-regression.py`
+reproduced icon/style/overflow failures before the fix and passes afterward.
+Live read-only browser checked outputs/discovery/scans at 1440/900/390px, no
+missing icon warnings, page errors or metric overflow. Screenshots:
+`/dev/shm/asa-ui-discovery-{1440,900,390}.png`.
+
+Public bundle remains `public-survey-footprints-2026-09-17`, SHA
+`f126e1ff96abaebfcf03848a5a7f93d9531d2b479f3ec4906c27712f2a9777bf`.
+Post-rollout package audit passed, including 72 historical package references.
+Release-page browser verified Euclid 3.2.0 with ERO (7 layers), Q1 (6 layers)
+and its versioned download URL. UI changes are uncommitted; no push performed.
+
 ## Latest: action feedback and detail layout (2026-09-15, dev 142)
 
 Dev image `0.1.0-20260915-133500`, digest

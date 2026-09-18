@@ -966,7 +966,8 @@ footer > span:last-child { margin-left: auto; color: var(--teal); text-shadow: v
 .resource-conclusion { position: relative; margin: -22px -25px 0; padding: 24px 25px 22px; border-bottom: 1px solid var(--line); background: rgba(16, 47, 52, .42); }
 .resource-conclusion .eyebrow { margin-bottom: 8px; }
 .resource-conclusion h3 { max-width: 650px; margin: 0 0 8px; color: var(--ink); font: 700 22px/1.2 var(--font-sans), sans-serif; }
-.resource-conclusion-copy { max-width: 680px; margin: 0; color: var(--ink); font: 500 13px/1.6 var(--font-sans), sans-serif; }
+.resource-product-description { max-width: 680px; margin: 0; color: var(--ink); font: 500 13px/1.6 var(--font-sans), sans-serif; }
+.resource-product-status-reason { max-width: 680px; margin: 8px 0 0; color: var(--muted); font: 400 12px/1.55 var(--font-sans), sans-serif; }
 .resource-evidence-status { display: inline-flex; align-items: center; min-height: 27px; margin-top: 16px; padding: 0 9px; border: 1px solid var(--line-strong); color: var(--muted); font: 700 9px/1 var(--font-mono), monospace; }
 .resource-evidence-status[data-status="complete"] { border-color: var(--teal); color: var(--teal); }
 .resource-evidence-status[data-status="partial"] { border-color: var(--ochre); color: var(--ochre); }
@@ -1237,7 +1238,7 @@ footer > span:last-child { margin-left: auto; color: var(--teal); text-shadow: v
 /* The expanded overlap view keeps the sky visible on the left while giving
    the selected component a stable, scrollable evidence surface. */
 .coverage-detail-panel.is-overlap-panel { position: fixed; }
-.overlap-expand-button { position: absolute; top: 8px; right: 0; width: 30px; min-height: 30px; padding: 0; color: var(--teal); background: rgba(13, 24, 33, .82); }
+.overlap-expand-button { position: absolute; top: 8px; left: 0; width: 30px; min-height: 30px; padding: 0; color: var(--teal); background: rgba(13, 24, 33, .82); }
 .overlap-expand-button:hover, .overlap-expand-button:focus-visible { border-color: var(--teal); background: rgba(16, 47, 52, .9); outline: 0; }
 .overlap-drawer { position: fixed; z-index: 56; top: 68px; right: 0; bottom: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: min(820px, max(520px, 52vw)); border-left: 1px solid rgba(44, 55, 146, .55); background: rgba(5, 10, 16, .97); box-shadow: -18px 0 55px rgba(0, 0, 0, .42); backdrop-filter: blur(18px) saturate(1.08); }
 .overlap-drawer-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 22px 26px 17px; border-bottom: 1px solid rgba(70, 97, 107, .72); }
@@ -1295,3 +1296,17 @@ body[data-overlap-drawer="open"][data-overlap-panels="dismissed"] .selection-que
   .overlap-drawer-heading strong { font-size: 15px; }
   .overlap-drawer-grid { grid-template-columns: 1fr; }
 }
+
+.download-unlock-dialog { max-width: 460px; width: calc(100% - 32px); padding: 24px; border: 1px solid var(--line); background: var(--paper, #f3f4f5); color: var(--ink, #17202a); font: inherit; }
+.download-unlock-dialog::backdrop { background: #0008; }
+.download-unlock-dialog input { display: block; width: 100%; margin: 8px 0; padding: 8px; box-sizing: border-box; }
+.download-unlock-dialog form > div { display: flex; justify-content: flex-end; gap: 12px; }
+.download-unlock-dialog button { padding: 8px 16px; font: inherit; cursor: pointer; }
+.coverage-layer-toggle { display: flex; align-items: center; gap: 8px; }
+.coverage-layer-toggle > .coverage-modalities { margin-left: auto; }
+.coverage-modalities { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+.coverage-modalities svg { width: 14px; height: 14px; }
+.coverage-modalities-empty { color: var(--muted); font-size: 10px; }
+.overlap-download-button { width: 100%; min-width: 0; justify-content: flex-start; text-align: left; }
+.overlap-download-button .button-icon { flex: 0 0 auto; }
+.overlap-download-button .button-icon svg { width: 15px; height: 15px; }

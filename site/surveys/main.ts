@@ -26,6 +26,9 @@ interface ProductIndex { products: PublishedProduct[] }
 interface ProductDossier {
   schemaVersion: 1;
   identity: { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; dataOrigin?: string; sourceTier?: string };
+  description?: string;
+  reason?: string;
+  manualStep?: string;
   conclusion: { status: "complete" | "partial" | "entrypoint-only"; summary: string; coverageAvailable: boolean };
   readiness: Readiness;
   coverage: { available: boolean; layerId?: string; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; availableOrders: number[]; overviewOrder?: number; maxOrder?: number; precision: "exact" | "estimated" | "entrypoint-only" | "truncated"; areaDeg2?: number; cellCount?: number; cellCounts?: Record<string, number>; coordinateFrame: string; ordering: string; mocUrl?: string; previewUrl?: string };
@@ -257,7 +260,8 @@ function renderDossier(parent: HTMLElement, dossier: ProductDossier): void {
   status.textContent = statusLabelFor(dossier.conclusion.status);
   appendText(conclusion, "p", localized("产品结论", "PRODUCT CONCLUSION"), "eyebrow");
   appendText(conclusion, "h3", dossier.identity.name);
-  appendText(conclusion, "p", dossier.conclusion.summary, "resource-conclusion-copy");
+  appendText(conclusion, "p", dossier.description || dossier.conclusion.summary, "resource-product-description");
+  if (dossier.reason) appendText(conclusion, "p", dossier.reason, "resource-product-status-reason");
   conclusion.append(status);
   if (dossier.coverage.available) {
     const area = typeof dossier.coverage.areaDeg2 === "number" ? `${dossier.coverage.areaDeg2.toLocaleString(undefined, { maximumFractionDigits: 2 })} deg²` : localized("未计算", "not calculated");
@@ -397,7 +401,7 @@ async function openProduct(survey: Survey, release: Release, catalogProduct: Pro
     const fallback = document.createElement("section"); fallback.className = "resource-conclusion";
     appendText(fallback, "p", localized("产品目录", "PRODUCT CATALOG"), "eyebrow");
     appendText(fallback, "h3", catalogProduct.name);
-    appendText(fallback, "p", catalogProduct.description ?? localized("该产品已登记，但详细证据仍在整理。", "This product is registered; detailed evidence is still being prepared."), "resource-conclusion-copy");
+    appendText(fallback, "p", catalogProduct.description ?? localized("该产品已登记，但详细证据仍在整理。", "This product is registered; detailed evidence is still being prepared."), "resource-product-description");
     const fallbackStatus = catalogProduct.status === "acquired" ? "partial" : "entrypoint-only";
     const status = document.createElement("span"); status.className = "resource-evidence-status"; status.dataset.status = fallbackStatus; status.textContent = statusLabelFor(fallbackStatus); fallback.append(status); content.append(fallback);
     const meta = document.createElement("dl"); meta.className = "resource-detail-meta";

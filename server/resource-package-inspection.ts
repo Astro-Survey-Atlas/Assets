@@ -24,6 +24,19 @@ export interface ResourcePackageLayerRecord {
   path: string;
   sizeBytes: number;
   sha256: string;
+  productId?: string;
+  sourceId?: string;
+  coordinateFrame?: "ICRS";
+  ordering?: "NESTED";
+  mocEncoding?: "NUNIQ";
+  availableOrders?: number[];
+  overviewOrder?: number;
+  maxOrder?: number;
+  coverageRevision?: string;
+  indexRevision?: string | null;
+  geometryPrecision?: string;
+  precisionNote?: string;
+  accessAvailability?: string;
 }
 
 export interface ResourcePackageManifest {
@@ -119,6 +132,13 @@ function parseLayer(value: unknown, manifestId: string): ResourcePackageLayerRec
   if (typeof record.coverageRole === "string") layer.coverageRole = record.coverageRole;
   if (typeof record.dataOrigin === "string") layer.dataOrigin = record.dataOrigin;
   if (typeof record.sourceTier === "string") layer.sourceTier = record.sourceTier;
+  for (const key of ["productId","sourceId","coverageRevision","geometryPrecision","precisionNote","accessAvailability"] as const) if (typeof record[key] === "string") layer[key] = record[key] as never;
+  if (record.coordinateFrame === "ICRS") layer.coordinateFrame="ICRS";
+  if (record.ordering === "NESTED") layer.ordering="NESTED";
+  if (record.mocEncoding === "NUNIQ") layer.mocEncoding="NUNIQ";
+  if (Array.isArray(record.availableOrders)) layer.availableOrders=record.availableOrders.filter((v): v is number=>Number.isSafeInteger(v));
+  for (const key of ["overviewOrder","maxOrder"] as const) if (Number.isSafeInteger(record[key])) layer[key]=Number(record[key]);
+  if (record.indexRevision === null || typeof record.indexRevision === "string") layer.indexRevision=record.indexRevision;
   return layer;
 }
 
@@ -169,4 +189,19 @@ export async function readResourcePackageManifest(zipBytes: Buffer): Promise<Res
     layers,
     files,
   };
+}
+
+/** Public packages use the reviewed v3 contract. Historical source ZIPs may be
+ * inspected internally but can never pass this publication gate. */
+export function validateReviewedPackage(manifest: ResourcePackageManifest): void {
+  const ids=new Set<string>();
+  for(const layer of manifest.layers) {
+    if(!layer.productId || layer.sourceId!==layer.layerId || ids.has(layer.layerId) || layer.coordinateFrame!=="ICRS" || layer.ordering!=="NESTED" || layer.mocEncoding!=="NUNIQ"
+      || !/^[a-f0-9]{64}$/.test(layer.coverageRevision??"") || layer.indexRevision!==null&&!/^[a-f0-9]{64}$/.test(layer.indexRevision??"")
+      || !layer.availableOrders?.length || layer.availableOrders.some(o=>!Number.isInteger(o)||o<0||o>13) || layer.maxOrder!==Math.max(...layer.availableOrders)
+      || !Number.isInteger(layer.overviewOrder) || layer.overviewOrder!<0 || layer.overviewOrder!>layer.maxOrder!
+      || !["exact","estimated"].includes(layer.geometryPrecision??"") || !layer.precisionNote || !["geometry-only","entrypoint-only","tile-resolved","unavailable"].includes(layer.accessAvailability??""))
+      throw new PackageInspectionError(`Invalid reviewed geometry metadata: ${layer.layerId}`);
+    ids.add(layer.layerId);
+  }
 }

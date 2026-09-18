@@ -1,3 +1,4 @@
+import { parseObjectPointer, restoreObjectRelease } from "./object-release.js";
 import { execFile as execFileCallback } from "node:child_process";
 import { lstat, mkdir, open, readFile, readdir, readlink, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
@@ -9,7 +10,7 @@ import { assertExactReleaseTree, loadCatalog } from "./catalog.js";
 
 const execFile = promisify(execFileCallback);
 
-export interface CurrentPointer {
+export interface ArchivePointer {
   schemaVersion: 2;
   bundle: { id: string; sha256: string };
   archiveKey: string;
@@ -17,6 +18,8 @@ export interface CurrentPointer {
   archiveSha256: string;
   publishedAt?: string;
 }
+
+export type CurrentPointer = ArchivePointer | import("./object-release.js").ObjectReleasePointer;
 
 function cleanArchiveKey(value: unknown): string {
   if (typeof value !== "string" || !value || value.includes("\0") || path.posix.isAbsolute(value)) throw new Error("Object-store current pointer contains an unsafe archive key");
@@ -26,7 +29,8 @@ function cleanArchiveKey(value: unknown): string {
 }
 
 export function parseCurrentPointer(bytes: Uint8Array): CurrentPointer {
-  const value = JSON.parse(Buffer.from(bytes).toString("utf8")) as Partial<CurrentPointer>;
+  const value = JSON.parse(Buffer.from(bytes).toString("utf8"));
+  if (value.schemaVersion === 3) return parseObjectPointer(value);
   if (value.schemaVersion !== 2 || !value.bundle || typeof value.bundle.id !== "string" || !/^[a-f0-9]{64}$/.test(value.bundle.sha256 ?? "") || !/^[a-f0-9]+$/.test(value.archiveSha256 ?? "") || !Number.isSafeInteger(value.archiveSizeBytes) || (value.archiveSizeBytes ?? 0) < 1) {
     throw new Error("Object-store current pointer is invalid");
   }
@@ -156,7 +160,10 @@ async function withReleaseLock<T>(targetRoot: string, work: () => Promise<T>): P
     const existing = await open(lockPath, "r").catch(() => undefined);
     const owner = existing ? Number((await existing.readFile("utf8").catch(() => "")).trim()) : Number.NaN;
     await existing?.close().catch(() => undefined);
-    if (processAlive(owner)) throw new Error(`Another release synchronization is already running (pid ${owner})`);
+    // A PID is only meaningful inside the process namespace that created the lock.
+    // Init and publisher containers both use PID 1, so a leftover PVC lock from a
+    // terminated container must be treated as stale when it names this process.
+    if (owner !== process.pid && processAlive(owner)) throw new Error(`Another release synchronization is already running (pid ${owner})`);
     await rm(lockPath, { force: true });
     handle = await open(lockPath, "wx");
   }
@@ -240,6 +247,17 @@ export async function syncReleaseFromObjectStore(store: ArtifactStore, targetRoo
       } catch {
         throw error instanceof Error ? error : new Error(reason);
       }
+    }
+    if (pointer.schemaVersion === 3) {
+      const releaseName = pointer.bundle.sha256;
+      const staging = path.join(resolvedRoot, ".staging", `${releaseName}.${process.pid}`);
+      await rm(staging, { recursive: true, force: true });
+      try {
+        await restoreObjectRelease(store, pointer, path.join(staging, "tree"), path.join(resolvedRoot, "current"));
+        const installedTarget = await activateRelease(resolvedRoot, releaseName, path.join(staging, "tree"), options.retainReleases ?? 2, options.cleanup === true);
+        const catalog = await loadCatalog(path.join(resolvedRoot, "current"));
+        return { bundle: pointer.bundle, archiveKey: pointer.manifestKey, installedTarget, files: catalog.manifest.files.length };
+      } finally { await rm(staging, { recursive: true, force: true }); }
     }
     const releaseName = pointer.bundle.sha256;
     const releasePath = path.join(resolvedRoot, "releases", releaseName);

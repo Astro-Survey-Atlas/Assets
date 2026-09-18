@@ -40,6 +40,8 @@ spec:
               value: {{ .Values.releasePublisher.uploadSpoolRoot | quote }}
             - name: ASSETS_PUBLICATION_POLL_SECONDS
               value: {{ .Values.releasePublisher.pollSeconds | quote }}
+            - name: ASSETS_PUBLICATION_LEASE_MS
+              value: {{ .Values.releasePublisher.leaseMs | quote }}
             - name: ASSETS_PUBLIC_VERIFY_URL
               value: {{ .Values.admin.publicVerifyUrl | quote }}
             - name: ASSETS_OBJECT_STORE_REQUIRED
@@ -79,7 +81,7 @@ spec:
           volumeMounts:
             - name: assets
               mountPath: /data
-              readOnly: true
+              readOnly: false
             - name: content
               mountPath: /var/lib/assets-content
               readOnly: false

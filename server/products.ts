@@ -3,6 +3,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AdminHttpError } from "./admin.js";
 import { queueStateSnapshot, type StateSnapshotSink } from "./state-snapshot.js";
+import { PUBLICATION_POLICY, type GeometryFacts } from "./approved-release.js";
 
 export type { PublicProductDossier, PublicProductLink, PublicProductLinkKind, PublicProductVerificationStatus } from "./types.js";
 
@@ -21,8 +22,8 @@ export interface ProductScanDefaults { allowedSuffixes?: string; maxOrder?: numb
 export type ProductPublicStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
 export interface ProductPublicSurvey { name: string; mission: string; description: string; color: string; modalities: string[] }
 export interface ProductPublicRelease { label: string; kind: string; releasedYear?: number }
-export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix" | "regions" | "tile-table" | "native-moc"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: ProductPublicSurvey; publicRelease?: ProductPublicRelease; publicDescription?: string; publicStatus?: ProductPublicStatus; presentation: ProductPresentation }
-export interface ProductReviewRecord { revision: number; contentSha256: string; reviewedAt: string; acceptedGaps: string[] }
+export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix" | "regions" | "tile-table" | "native-moc"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: ProductPublicSurvey; publicRelease?: ProductPublicRelease; publicDisplayName?: string; publicDescription?: string; publicReason?: string; publicManualStep?: string; publicStatus?: ProductPublicStatus; presentation: ProductPresentation }
+export interface ProductReviewRecord { revision: number; contentSha256: string; reviewedAt: string; acceptedGaps: string[]; policy?: string; geometry?: GeometryFacts | null }
 export type ProductExecutionStatus = "running" | "passed" | "failed" | "skipped";
 export interface ProductEvidenceReference { label?: string; ref?: string; sha256?: string; sizeBytes?: number; }
 export interface ProductExecutionCheck { id: string; status: "passed" | "failed" | "not-applicable"; detail?: string; }
@@ -343,7 +344,13 @@ export class ProductStore {
       }
     }
     this.#history = Array.isArray(data?.history) ? data.history : await this.readHistoryCache();
-    for (const record of data?.products ?? []) this.#records.set(record.productId, record);
+    for (const record of data?.products ?? []) {
+      if (record.review && record.review.policy !== PUBLICATION_POLICY) {
+        this.#history.push({action:"review-policy-withdrawal",productId:record.productId,at:new Date().toISOString(),reason:"All products require re-review under reviewed-release-v1"});
+        delete record.review;
+      }
+      this.#records.set(record.productId, record);
+    }
     const catalog = JSON.parse(await readFile(path.join(root, "src", "surveys", "survey-catalog.json"), "utf8")) as { surveys?: Array<{ id: string; releases: Array<{ id: string; products: Array<{ name: string; modality: string; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string }> }> }> };
     const registry = JSON.parse(await readFile(path.join(root, "src", "layers", "layer-registry.json"), "utf8")) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; coverageRole?: ProductContent["coverageRole"]; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; plannedMode?: string; mode?: string; recipePath?: string; status?: string; maxOrder?: number }> };
     const definitions = new Map((registry.layers ?? []).map((layer) => [`${layer.surveyId}:${layer.releaseId}:${layer.product}`, layer]));
@@ -390,9 +397,8 @@ export class ProductStore {
           .some((key) => existing.draft[key as keyof ProductContent] === undefined && draft[key as keyof ProductContent] !== undefined);
         if (recipeChanged || scanDefaultsMissing || sourceMetadataMissing) {
           existing.draft = migrateRecipeContent(existing.draft, draft);
-          if (existing.published) existing.published = migrateRecipeContent(existing.published, draft);
           existing.revision += 1;
-          if (existing.published) existing.publishedRevision = existing.revision;
+          delete existing.review;
           existing.updatedAt = new Date().toISOString();
           existing.contentSha256 = hashContent(existing.draft);
           migrationHistory.push(JSON.stringify({ action: recipeChanged ? "recipe-migration" : scanDefaultsMissing ? "scan-defaults-migration" : "source-metadata-migration", productId: id, revision: existing.revision, at: existing.updatedAt, ...(recipeHash ? { recipeHash } : {}) }));
@@ -413,6 +419,16 @@ export class ProductStore {
     await queueStateSnapshot(this.#snapshotSink, "products", state);
   }
   list(): ProductRecord[] { return [...this.#records.values()].sort((a, b) => `${a.draft.surveyId}:${a.draft.releaseId}:${a.draft.name}`.localeCompare(`${b.draft.surveyId}:${b.draft.releaseId}:${b.draft.name}`)); }
+  /** Published values are a read projection of the activated release, not a
+   * second authority in mutable product state. */
+  projectPublished(entries: readonly { productId:string; revision:number; content:ProductContent }[], at:string): void {
+    const byId=new Map(entries.map(p=>[p.productId,p]));
+    for(const record of this.#records.values()) {
+      const entry=byId.get(record.productId);
+      record.published=entry?.content??null; record.publishedRevision=entry?.revision??null; record.publishedAt=entry?at:null;
+    }
+  }
+  async reload(root:string):Promise<void> { this.#initialized=false;this.#records.clear();await this.initialize(root); }
   get(id: string): ProductRecord { const record = this.#records.get(id); if (!record) throw new AdminHttpError(404, "Product not found"); return record; }
 
   async createMocProduct(input: MocProductRegistrationInput): Promise<ProductRecord> {
@@ -491,6 +507,19 @@ export class ProductStore {
     return record;
   }
 
+  async applyEditorial(content: import("./editorial.js").SurveyEditorialContent): Promise<void> {
+    for (const release of content.releases) for (const copy of release.products) {
+      const record=this.#records.get(copy.productId);
+      if(!record || record.retiredAt)continue;
+      const next={...record.draft,publicDisplayName:copy.displayName,publicDescription:copy.description,publicReason:copy.reason,publicManualStep:copy.manualStep,
+        publicSurvey:{name:content.name,mission:content.mission,description:content.description,color:record.draft.publicSurvey?.color??"#376b9b",modalities:record.draft.publicSurvey?.modalities??[record.draft.modality??"catalog"]},
+        publicRelease:{...record.draft.publicRelease,label:release.label,kind:record.draft.publicRelease?.kind??"release"}};
+      if(hashContent(next)===record.contentSha256)continue;
+      record.draft=next;record.revision++;record.contentSha256=hashContent(next);record.updatedAt=new Date().toISOString();delete record.review;
+      this.#history.push({action:"editorial-draft",productId:record.productId,revision:record.revision,at:record.updatedAt});
+    }
+    await this.persist();
+  }
   async updateDraft(id: string, content: unknown, expectedRevision?: number): Promise<ProductRecord> {
     const record = this.get(id);
     assertNotRetired(record);
@@ -507,12 +536,12 @@ export class ProductStore {
     await appendFile(this.#historyFile(), `${JSON.stringify(audit)}\n`);
     return record;
   }
-  async review(id: string, expectedRevision?: number, acceptedGaps: string[] = []): Promise<ProductRecord> {
+  async review(id: string, expectedRevision?: number, acceptedGaps: string[] = [], geometry: GeometryFacts | null = null): Promise<ProductRecord> {
     const record = this.get(id);
     assertNotRetired(record);
     if (expectedRevision !== undefined && expectedRevision !== record.revision) throw new AdminHttpError(409, "Product revision conflict");
     const reviewedAt = new Date().toISOString();
-    record.review = { revision: record.revision, contentSha256: record.contentSha256, reviewedAt, acceptedGaps: [...new Set(acceptedGaps)].slice(0, 64) };
+    record.review = { revision: record.revision, contentSha256: record.contentSha256, reviewedAt, acceptedGaps: [...new Set(acceptedGaps)].slice(0, 64), policy: PUBLICATION_POLICY, geometry };
     this.#history.push({ action: "review", productId: id, revision: record.revision, at: reviewedAt, acceptedGaps: record.review.acceptedGaps });
     await this.persist();
     await appendFile(this.#historyFile(), `${JSON.stringify({ action: "review", productId: id, revision: record.revision, at: reviewedAt, acceptedGaps: record.review.acceptedGaps })}\n`);
@@ -560,7 +589,7 @@ export class ProductStore {
     if (expectedRevision !== undefined && expectedRevision !== record.revision) throw new AdminHttpError(409, "Product revision conflict");
     if (record.retiredAt) return record;
     const retiredAt = new Date().toISOString();
-    const normalizedReason = boundedEvidenceText(reason, "retirementReason", 2000);
+    const normalizedReason = boundedEvidenceText(reason, "retirementReason", 2000, true);
     record.retiredAt = retiredAt;
     if (normalizedReason) record.retirementReason = normalizedReason;
     record.revision += 1;

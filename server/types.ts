@@ -231,6 +231,10 @@ export interface PublicProductDossier {
     dataOrigin?: "observed" | "simulated" | "catalog";
     sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived";
   };
+  /** Published editorial copy shown on the public product page. */
+  description?: string;
+  reason?: string;
+  manualStep?: string;
   conclusion: {
     status: PublicProductVerificationStatus;
     summary: string;

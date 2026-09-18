@@ -116,6 +116,28 @@ test("state pointer never regresses when uploaded snapshots arrive out of order"
   }
 });
 
+test("same generation duplicates do not stop reconciliation of later snapshots", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "state-snapshot-duplicate-"));
+  try {
+    const store = new LocalS3Adapter(new FilesystemArtifactStore(path.join(base, "remote")));
+    const first = await makeCoordinator(base, store);
+    await first.coordinator.initialize(["publication-runs"]);
+    const original = await first.coordinator.enqueue("publication-runs", { run: "old" });
+    const duplicate = await first.coordinator.enqueue("publication-runs", { run: "new" });
+    const uploaded = await first.spool.processPending();
+    const generationOne = uploaded.uploadedManifests.find((manifest) => manifest.uploadId === original.uploadId)!;
+    const generationTwo = uploaded.uploadedManifests.find((manifest) => manifest.uploadId === duplicate.uploadId)!;
+    await first.coordinator.reconcileUploaded([generationOne]);
+    const duplicateJob = { ...generationTwo, metadata: { ...generationTwo.metadata, stateGeneration: "1" }, objectKey: generationTwo.objectKey.replace("/2-", "/1-") };
+    await first.coordinator.reconcileUploaded([duplicateJob, generationTwo]);
+    const pointer = await first.coordinator.readPointer("publication-runs");
+    assert.equal(pointer?.generation, 2);
+    assert.equal(pointer?.snapshotSha256, generationTwo.sha256);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
 test("same-namespace snapshot enqueue is serialized into distinct generations", async () => {
   const base = await mkdtemp(path.join(os.tmpdir(), "state-snapshot-concurrency-"));
   try {

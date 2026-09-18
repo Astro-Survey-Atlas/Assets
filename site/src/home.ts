@@ -13,6 +13,12 @@ import {
   Sun,
   Star,
   Telescope,
+  Image,
+  RotateCcw,
+  Layers3,
+  CircleHelp,
+  Box,
+  ListChecks,
   X,
   createIcons,
 } from "lucide";
@@ -47,7 +53,7 @@ const byId = <T extends HTMLElement>(id: string): T => document.getElementById(i
 
 function renderIcons(): void {
   createIcons({
-    icons: { ArrowRight, ArrowUpRight, Database, ExternalLink, FileCheck2, Grid2X2, "Grid2x2": Grid2X2, LocateFixed, Menu, Moon, PanelsTopLeft, Play, Star, Sun, Telescope, X },
+    icons: { ArrowRight, ArrowUpRight, Database, ExternalLink, FileCheck2, Grid2X2, "Grid2x2": Grid2X2, LocateFixed, Menu, Moon, PanelsTopLeft, Play, Star, Sun, Telescope, Image, RotateCcw, Layers3, CircleHelp, Box, ListChecks, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -174,9 +180,15 @@ function renderFeaturedSurveys(surveys: SurveyRecord[]): void {
     const name = document.createElement("strong");
     name.textContent = survey.name;
     const details = document.createElement("span");
-    const modalities = survey.modalities.map((modality) => modalityLabels[modality]?.[locale()] ?? modality);
-    details.textContent = `${survey.mission} · ${modalities.join(" · ")}`;
-    copy.append(name, details);
+    const modalities = [...new Set([...(survey.modalities ?? []), ...survey.releases.flatMap((release: any) => release.products.flatMap((product: any) => product.modality ? [product.modality] : []))])];
+    const iconNames: Record<string,string> = { imaging: "image", spectroscopy: "telescope", photometry: "database", "time-domain": "rotate-ccw", "integral-field": "layers-3", ultraviolet: "sun", infrared: "circle-help", catalog: "list-checks", simulation: "box" };
+    details.className = "snapshot-modalities";
+    details.setAttribute("aria-label", `${survey.name} 模态：${modalities.map((modality) => modalityLabels[modality]?.[locale()] ?? modality).join("、")}`);
+    details.innerHTML = modalities.map((modality) => `<i data-lucide="${iconNames[modality] ?? "database"}" title="${modalityLabels[modality]?.[locale()] ?? modality}"></i>`).join("");
+    const orders = survey.releases.flatMap((release: any) => release.products.flatMap((product: any) => product.coverage?.maxOrder ?? []));
+    const precision = orders.length ? `最高原生 O${Math.max(...orders)}` : "精度待定";
+    const precisionNode = document.createElement("small"); precisionNode.textContent = precision;
+    copy.append(name, details, precisionNode);
     const count = document.createElement("b");
     const productCount = survey.statistics?.acquired ?? survey.releases.reduce((sum, release) => sum + release.products.length, 0);
     count.textContent = `${productCount} ${t("home.productsCount")}`;

@@ -1,0 +1,845 @@
+{
+  "auditedAt": "2026-09-18T05:22:22.707Z",
+  "note": "Historical package bytes, not current public authorization. Re-review and complete publication are required after cutover.",
+  "packages": [
+    {
+      "id": "public-euclid-footprints",
+      "version": "3.2.0",
+      "sha256": "be385a8c3cc6958902f13f97cc7f4ab69239d67edfce52e24be81df022d1bd24",
+      "layers": [
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-ero",
+          "layerId": "euclid-euclid-ero-ero-color-imaging-moc",
+          "sourceId": "euclid-euclid-ero-ero-color-imaging-moc",
+          "mocSha256": "3216873736f072ae7a22e2bbb7aaf7ec913581e4f394f1199e5536bd599c2bd4",
+          "coverageRevision": "898f12b7d9e19ebfedca05a52f78d0026fb54220e028fef320cab0069dd6a2be",
+          "availableOrders": [
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 993,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-ero",
+          "layerId": "euclid-euclid-ero-ero-first-images-moc",
+          "sourceId": "euclid-euclid-ero-ero-first-images-moc",
+          "mocSha256": "fcee9e76d0ff6ecadb87c2ffec78a6f10a3f40c00a92585e9c8ba5923bdf0e6f",
+          "coverageRevision": "daaf9ea8f28d9c234bf6f2af23c36dde4ab9ca4e52204cd1ce4c9837f8759e5b",
+          "availableOrders": [
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 288,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-ero",
+          "layerId": "euclid-euclid-ero-ero-nisp-h-moc",
+          "sourceId": "euclid-euclid-ero-ero-nisp-h-moc",
+          "mocSha256": "012f95d89282e9b86b93173e9795b2411a369d0b3a74e918cf3a7d7ecb9a7640",
+          "coverageRevision": "1751305c80655c03e6195431d4b5648ff09d0d996552dc2e53a0644380877b64",
+          "availableOrders": [
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 1001,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-ero",
+          "layerId": "euclid-euclid-ero-ero-nisp-j-moc",
+          "sourceId": "euclid-euclid-ero-ero-nisp-j-moc",
+          "mocSha256": "ebcd0714d21101161d162cfb64e4bf94c477c21866513876666beba36f50b8da",
+          "coverageRevision": "5c9b24818ca501e855aa1a6375e9294f49615a0f675f0de32e85ae654476fb23",
+          "availableOrders": [
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 1004,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-ero",
+          "layerId": "euclid-euclid-ero-ero-nisp-y-moc",
+          "sourceId": "euclid-euclid-ero-ero-nisp-y-moc",
+          "mocSha256": "012f95d89282e9b86b93173e9795b2411a369d0b3a74e918cf3a7d7ecb9a7640",
+          "coverageRevision": "1751305c80655c03e6195431d4b5648ff09d0d996552dc2e53a0644380877b64",
+          "availableOrders": [
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 1001,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-ero",
+          "layerId": "euclid-euclid-ero-ero-vis-moc",
+          "sourceId": "euclid-euclid-ero-ero-vis-moc",
+          "mocSha256": "28900f6521fafcd1d0db448bb241425f4e5afa899c894675a775b328001632c1",
+          "coverageRevision": "a19cedb81bb57d793f817a60b0a57b53fa9acfb159314c764fa7509aab79f34e",
+          "availableOrders": [
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 996,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-q1",
+          "layerId": "euclid-euclid-q1-euclid-q1-color-imaging-moc",
+          "sourceId": "euclid-euclid-q1-euclid-q1-color-imaging-moc",
+          "mocSha256": "1a5fd7fa0c75a000c94c53ce2c667df2f275178d7fa33bf1119fd86b3f59189c",
+          "coverageRevision": "110299d072ff4bd104a999c86bd89a3e5f1e96754a35ba8bab17d019bd63be25",
+          "availableOrders": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 1379,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-q1",
+          "layerId": "euclid-euclid-q1-euclid-q1-nisp-h-moc",
+          "sourceId": "euclid-euclid-q1-euclid-q1-nisp-h-moc",
+          "mocSha256": "1a5fd7fa0c75a000c94c53ce2c667df2f275178d7fa33bf1119fd86b3f59189c",
+          "coverageRevision": "110299d072ff4bd104a999c86bd89a3e5f1e96754a35ba8bab17d019bd63be25",
+          "availableOrders": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 1379,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-q1",
+          "layerId": "euclid-euclid-q1-euclid-q1-nisp-j-moc",
+          "sourceId": "euclid-euclid-q1-euclid-q1-nisp-j-moc",
+          "mocSha256": "fa03ef4d29025b1e2e9fd620aed04b33d473e149515effd486172a2efa2b5864",
+          "coverageRevision": "7e00d7dbdba79eb133f5b8dccfc5f409705b195e64710b03f2122f2cd6d6c468",
+          "availableOrders": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 1374,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-q1",
+          "layerId": "euclid-euclid-q1-euclid-q1-nisp-y-moc",
+          "sourceId": "euclid-euclid-q1-euclid-q1-nisp-y-moc",
+          "mocSha256": "665110dc2799744215a1582c9c2c768b7c112d20bf01014da7317f40cffff9f6",
+          "coverageRevision": "27859d3932744263a6d84a5ca1484399a6d9e202b7b28f45abead5d861d346b6",
+          "availableOrders": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 1380,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-q1",
+          "layerId": "euclid-euclid-q1-euclid-q1-vis-moc",
+          "sourceId": "euclid-euclid-q1-euclid-q1-vis-moc",
+          "mocSha256": "7f8906442664691417d5314b7cbaf2dbdeafabc4fe9f7aa32b560280cb9af5f6",
+          "coverageRevision": "70fd175169ce8645f60f976f4b7c8fd74b34bb7755681dee7dd6c24a2120cbf2",
+          "availableOrders": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 1418,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": [
+              163327
+            ]
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": [
+              2613247
+            ]
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-q1",
+          "layerId": "euclid-q1-deep-fields-image-extent",
+          "sourceId": "euclid-q1-deep-fields-image-extent",
+          "mocSha256": "e1c38cd2abe21035deae79efdf13f003fb0421f14a780d3061dbc8a52d2da75e",
+          "coverageRevision": "680531863851c487ee61f101945cabe90b5f747893b91ef9af05bc278be0848b",
+          "availableOrders": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 1408,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        },
+        {
+          "surveyId": "euclid",
+          "releaseId": "euclid-ero",
+          "layerId": "moc-euclid-euclid-ero-7c8fb78617c6",
+          "sourceId": "moc-euclid-euclid-ero-7c8fb78617c6",
+          "mocSha256": "ee2cc7e66ff529200e1cb6c5094cde975d519984e7eda1bb878b2946186396f0",
+          "coverageRevision": "0559717782075ae5540f9ac39af8c5f94c6073a44c52d5ee056d6bc294fca775",
+          "availableOrders": [
+            8,
+            9,
+            10,
+            11
+          ],
+          "maxOrder": 11,
+          "nativeCellCount": 568,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "geometry-only",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": []
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "public-desi-footprints",
+      "version": "3.0.0",
+      "sha256": "5da8651a6e43ffae1428d3edacff2e033a71aee276834c10f79829c9ed6d3f18",
+      "layers": [
+        {
+          "surveyId": "desi",
+          "releaseId": "desi-dr1",
+          "layerId": "desi-dr1-spectra-footprint",
+          "sourceId": "desi-dr1-spectra-footprint",
+          "mocSha256": "e3fb86b871d2e24e3fd40724ea241d222988d8fd7262fa6b3855f59b3aae9c40",
+          "coverageRevision": "389b9ec36610e9f151a36652d8120dbb37ffee5adca01b4d3f684d77698b56e0",
+          "availableOrders": [
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 117291,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "tile-resolved",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": [
+              163327
+            ]
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ]
+          }
+        },
+        {
+          "surveyId": "desi",
+          "releaseId": "desi-edr",
+          "layerId": "desi-edr-spectra-footprint",
+          "sourceId": "desi-edr-spectra-footprint",
+          "mocSha256": "c1ef0b3ee9b18ca1d9dd1d10c08630850823c3f3ac4f3a0f22e86a58c177833f",
+          "coverageRevision": "c0bd89be4f8c83347ca71b6d95bed48efd4973c7cadf8253a39c7b5ba1497595",
+          "availableOrders": [
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ],
+          "maxOrder": 10,
+          "nativeCellCount": 31414,
+          "geometryPrecision": "estimated",
+          "accessAvailability": "tile-resolved",
+          "fixedRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 8,
+            "cells": [
+              163327
+            ],
+            "matchedCells": [
+              163327
+            ]
+          },
+          "fixedFineRegion": {
+            "coordinateFrame": "ICRS",
+            "ordering": "NESTED",
+            "order": 10,
+            "cells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ],
+            "matchedCells": [
+              2613232,
+              2613233,
+              2613234,
+              2613235,
+              2613236,
+              2613237,
+              2613238,
+              2613239,
+              2613240,
+              2613241,
+              2613242,
+              2613243,
+              2613244,
+              2613245,
+              2613246,
+              2613247
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

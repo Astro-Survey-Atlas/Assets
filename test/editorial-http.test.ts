@@ -39,7 +39,7 @@ async function stop(child: ChildProcess): Promise<void> {
   });
 }
 
-test("editorial HTTP API keeps drafts private and publishes display copy without changing product identity", async (context) => {
+test("editorial submission updates product draft, requires re-review and cannot bypass complete publication", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "assets-editorial-http-"));
   const environment = {
     ...process.env,
@@ -79,18 +79,6 @@ test("editorial HTTP API keeps drafts private and publishes display copy without
   const product = release.products[0]!;
   const productId = product.productId;
 
-  const initialCatalog = await (await fetch("http://127.0.0.1:" + port + "/api/v1/surveys")).json() as { surveys: Array<{ id: string; name: string; mission: string; releases: Array<{ id: string; label: string; products: Array<{ productId?: string; name: string; description: string; coverage?: { layerId?: string } }> }> }> };
-  const initialPublicSurvey = initialCatalog.surveys.find((survey) => survey.id === "gaia")!;
-  const initialPublicProduct = initialPublicSurvey.releases.find((entry) => entry.id === release.releaseId)!.products.find((entry) => entry.productId === productId)!;
-  const initialLayerId = initialPublicProduct.coverage?.layerId;
-
-  const productAdmin = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${encodeURIComponent(productId)}`, { headers });
-  const productAdminBody = await productAdmin.json() as { product: { revision: number; readiness?: { draft?: { gaps?: string[] } } } };
-  const productReview = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${encodeURIComponent(productId)}/review`, { method: "POST", headers, body: JSON.stringify({ revision: productAdminBody.product.revision, acceptedGaps: productAdminBody.product.readiness?.draft?.gaps ?? [] }) });
-  assert.equal(productReview.status, 200);
-  const productPublish = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${encodeURIComponent(productId)}/publish`, { method: "POST", headers, body: JSON.stringify({ revision: 1 }) });
-  assert.equal(productPublish.status, 200);
-
   const draft = structuredClone(initial.draft);
   draft.name = "CSST Editorial Name";
   draft.mission = "Edited CSST mission";
@@ -104,11 +92,7 @@ test("editorial HTTP API keeps drafts private and publishes display copy without
   assert.equal(updated.editorial.revision, 2);
   assert.equal(updated.editorial.published, null);
 
-  const privateCatalog = await (await fetch(`http://127.0.0.1:${port}/api/v1/surveys`)).json() as typeof initialCatalog;
-  const privateSurvey = privateCatalog.surveys.find((survey) => survey.id === "gaia")!;
-  assert.equal(privateSurvey.name, initialPublicSurvey.name);
-  assert.equal(privateSurvey.releases.find((entry) => entry.id === release.releaseId)!.products.find((entry) => entry.productId === productId)!.name, initialPublicProduct.name);
-
+  assert.deepEqual((await (await fetch(`http://127.0.0.1:${port}/api/v1/surveys`)).json() as {surveys:unknown[]}).surveys,[]);
   const forged = structuredClone(draft);
   forged.releases[0]!.products[0]!.canonicalName = "changed-canonical-name";
   const forgedResponse = await fetch(`${endpoint}/draft`, { method: "PUT", headers, body: JSON.stringify({ revision: updated.editorial.revision, content: forged }) });
@@ -124,28 +108,12 @@ test("editorial HTTP API keeps drafts private and publishes display copy without
   assert.equal(published.editorial.publishedRevision, 2);
   assert.equal(published.editorial.audit.at(-1)?.action, "publish");
 
-  const publicCatalog = await (await fetch(`http://127.0.0.1:${port}/api/v1/surveys`)).json() as typeof initialCatalog;
-  const publicSurvey = publicCatalog.surveys.find((survey) => survey.id === "gaia")!;
-  const publicRelease = publicSurvey.releases.find((entry) => entry.id === release.releaseId)!;
-  const publicProduct = publicRelease.products.find((entry) => entry.productId === productId)!;
-  assert.equal(publicSurvey.name, "CSST Editorial Name");
-  assert.equal(publicSurvey.mission, "Edited CSST mission");
-  assert.equal(publicRelease.label, "CSST Edited Release");
-  assert.equal(publicProduct.name, "Public W1 image label");
-  assert.equal(publicProduct.description, "Edited public product description");
-  assert.equal(publicProduct.productId, productId);
-  assert.equal(publicProduct.coverage?.layerId, initialLayerId);
-
-  const productList = await (await fetch(`http://127.0.0.1:${port}/api/v1/products`)).json() as { products: Array<{ productId: string; name: string; description?: string; publicDescription?: string }> };
-  const listed = productList.products.find((entry) => entry.productId === productId)!;
-  assert.equal(listed.name, "Public W1 image label");
-  assert.equal(listed.description, "Edited public product description");
-  assert.equal(listed.publicDescription, "Edited public product description");
-  const detail = await (await fetch(`http://127.0.0.1:${port}/api/v1/products/${productId}`)).json() as { identity: { productId: string; name: string }; coverage: { layerId?: string } };
-  assert.equal(detail.identity.productId, productId);
-  assert.equal(detail.identity.name, "Public W1 image label");
-  assert.equal(detail.coverage.layerId, initialLayerId);
-
+  assert.deepEqual((await (await fetch(`http://127.0.0.1:${port}/api/v1/surveys`)).json() as {surveys:unknown[]}).surveys,[]);
+  const productState=await (await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${productId}`,{headers})).json() as {product:{draft:{publicDisplayName:string;publicDescription:string};review?:unknown;published:unknown}};
+  assert.equal(productState.product.draft.publicDisplayName,"Public W1 image label");
+  assert.equal(productState.product.draft.publicDescription,"Edited public product description");
+  assert.equal(productState.product.review,undefined);
+  assert.equal(productState.product.published,null);
   await stop(child!);
   port = await start();
   const restored = await (await fetch(`http://127.0.0.1:${port}/api/v1/admin/catalog/surveys/gaia/editorial`, { headers })).json() as { editorial: { revision: number; published: { name: string } | null } };
