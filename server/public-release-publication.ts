@@ -144,12 +144,12 @@ export interface PublicationRunRequest {
   productIds?: string[];
 }
 
-export type PublicationRunStatus = "queued" | "building" | "uploading" | "verifying" | "published" | "failed";
+export type PublicationRunStatus = "queued" | "building" | "uploading" | "verifying" | "published" | "failed" | "cancelled";
 export type PublicationFailureStage = "build" | "upload" | "candidate" | "activate";
 
 export type PublicationVerificationState = "pending" | "passed" | "failed" | "not-configured";
 export interface PublicationVerification {
-  overall: "authority-published" | "site-pending" | "verified" | "failed";
+  overall: "pending" | "authority-published" | "site-pending" | "verified" | "failed";
   candidate: { state: PublicationVerificationState; checkedAt?: string; bundleSha256?: string; error?: string };
   authority: { state: PublicationVerificationState; checkedAt?: string; bundleSha256?: string; error?: string };
   site: {
@@ -177,6 +177,8 @@ export interface PublicationVerificationExpectation {
 export interface PublicationRun {
   runId: string;
   selectedProducts?: Array<{productId:string;revision:number}>;
+  queue?: { phase: string; attempts: number; nextAttemptAt?: string; cancellable: boolean; syncDelayed: boolean };
+
   planId: string;
   baselineBundle: { id: string; sha256: string };
   surveyIds: string[];
@@ -227,7 +229,18 @@ interface CandidateBuild {
   packages: PublicPackageEntry[];
 }
 
+export interface PublicationRunRepository {
+  get(id: string): Promise<PublicationRun | undefined>;
+  list(): Promise<PublicationRun[]>;
+  submit(run: PublicationRun): Promise<PublicationRun>;
+  write(run: PublicationRun): Promise<void>;
+  retry?(run: PublicationRun): Promise<PublicationRun | undefined>;
+}
+
 export interface PublicReleasePublisherOptions {
+  runRepository?: PublicationRunRepository;
+  activateCandidate?: typeof activateObjectRelease;
+  deferSiteVerification?: boolean;
   contentRoot: string;
   baselineRoot: string;
   loadPublications: () => Promise<MocPublication[]> | MocPublication[];
@@ -239,6 +252,8 @@ export interface PublicReleasePublisherOptions {
   snapshotSink?: StateSnapshotSink;
   /** Explicit operator-configured public site target for post-publication checks. */
   verificationTarget?: string;
+  /** Deployment-owned Service URL; never accepted from an HTTP request. */
+  internalVerificationTarget?: string;
   /** Injectable HTTP client keeps target-site checks deterministic in tests. */
   fetchImpl?: typeof fetch;
   /** Maximum time without a worker heartbeat before an active run is released. */
@@ -372,7 +387,7 @@ function isPublicationRun(value: unknown): value is PublicationRun {
     && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(run.runId)
     && typeof run.planId === "string"
     && typeof run.status === "string"
-    && ["queued", "building", "uploading", "verifying", "published", "failed"].includes(run.status)
+    && ["queued", "building", "uploading", "verifying", "published", "failed", "cancelled"].includes(run.status)
     && Array.isArray(run.surveyIds)
     && Array.isArray(run.log);
 }
@@ -632,7 +647,7 @@ export class PublicReleasePublisher {
 
     const versions = selected.map(p => ({ productId: p.productId, revision: p.draftRevision }));
     const now = Date.now();
-    const active = (await this.list()).filter(r => ["queued", "building", "uploading", "verifying"].includes(r.status) && now - Date.parse(r.lastProgressAt ?? r.startedAt ?? r.createdAt) < 15 * 60 * 1000);
+    const active = (await this.list()).filter(r => ["queued", "building", "uploading", "verifying"].includes(r.status));
     const duplicate = active.find(r => r.selectedProducts?.length === versions.length && versions.every(v => r.selectedProducts?.some(p => p.productId === v.productId && p.revision === v.revision)));
     if (duplicate) return duplicate;
     if (active.some(r => r.selectedProducts?.some(p => versions.some(v => p.productId === v.productId)))) throw new PublicationConflictError("Product already has an active publication task");
@@ -663,6 +678,7 @@ export class PublicReleasePublisher {
       },
       log: [],
     };
+    if (this.#options.runRepository) return this.#options.runRepository.submit(run);
     await mkdir(this.#runsDir, { recursive: true });
     await mkdir(this.#queueDir, { recursive: true });
     await this.#writeRun(run);
@@ -677,6 +693,12 @@ export class PublicReleasePublisher {
     const previous = await this.get(runId);
     if (!previous) throw new PublicationConflictError(`Unknown publication run: ${runId}`, 404);
     if (previous.status !== "failed") throw new PublicationConflictError(`Publication run ${runId} is ${previous.status}, not failed`);
+    const durableRetry = await this.#options.runRepository?.retry?.(previous);
+    if (durableRetry) return durableRetry;
+    const currentProducts = this.#options.loadProducts ? await this.#options.loadProducts() : [];
+    if (previous.selectedProducts?.some(selected => !currentProducts.some(product => product.productId === selected.productId && product.revision === selected.revision))) {
+      throw new PublicationConflictError("Selected revision changed; review and submit a new publication instead of retrying");
+    }
     const plan = await this.plan();
     return this.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: previous.surveyIds, productIds: previous.selectedProducts?.map(p=>p.productId) }, requestedBy);
   }
@@ -694,6 +716,7 @@ export class PublicReleasePublisher {
   }
 
   async get(runId: string): Promise<PublicationRun | undefined> {
+    if (this.#options.runRepository) return this.#options.runRepository.get(runId);
     await this.#ensureRunsRestored();
     try {
       return JSON.parse(await readFile(path.join(this.#runsDir, `${runId}.json`), "utf8")) as PublicationRun;
@@ -704,6 +727,7 @@ export class PublicReleasePublisher {
   }
 
   async list(): Promise<PublicationRun[]> {
+    if (this.#options.runRepository) return this.#options.runRepository.list();
     await this.#ensureRunsRestored();
     await this.#recoverStaleRuns();
     await mkdir(this.#runsDir, { recursive: true });
@@ -749,7 +773,7 @@ export class PublicReleasePublisher {
     let archivePath: string | undefined;
     let failureStage: "build" | "upload" | "candidate" | "activate" = "build";
     let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
-    const verificationTarget = this.#options.verificationTarget?.trim() || process.env.ASSETS_PUBLIC_VERIFY_URL?.trim() || undefined;
+    const verificationTarget = this.#options.internalVerificationTarget?.trim() || process.env.ASSETS_PUBLIC_VERIFY_INTERNAL_URL?.trim() || this.#options.verificationTarget?.trim() || process.env.ASSETS_PUBLIC_VERIFY_URL?.trim() || undefined;
     const startedAt = new Date().toISOString();
     run = {
       ...run,
@@ -759,14 +783,14 @@ export class PublicReleasePublisher {
       lastProgressAt: startedAt,
       recovery: undefined,
       verification: {
-        overall: "failed",
+        overall: "pending",
         candidate: { state: "pending" },
         authority: { state: "pending" },
         site: { state: verificationTarget ? "pending" : "not-configured", ...(verificationTarget ? { target: verificationTarget } : {}) },
       },
     };
     await this.#writeRun(run);
-    const heartbeatMs = Math.max(1_000, Math.floor(this.#leaseMs / 3));
+    const heartbeatMs = Math.max(1_000, Math.min(15_000, Math.floor(this.#leaseMs / 3)));
     heartbeatTimer = setInterval(() => {
       const now = new Date().toISOString();
       run = { ...run, lastProgressAt: now };
@@ -808,7 +832,7 @@ export class PublicReleasePublisher {
         status: "verifying",
         lastProgressAt: new Date().toISOString(),
         verification: {
-          ...(run.verification ?? { overall: "failed", candidate: { state: "pending" }, authority: { state: "pending" }, site: { state: "not-configured" } }),
+          ...(run.verification ?? { overall: "pending", candidate: { state: "pending" }, authority: { state: "pending" }, site: { state: "not-configured" } }),
           candidate: candidateVerification,
           authority: { state: "pending" },
         },
@@ -822,7 +846,7 @@ export class PublicReleasePublisher {
         const frozen=candidateApproval.products.find(p=>p.productId===selected.productId);
         if(!latest || latest.revision!==selected.revision || (frozen && !currentReview(latest,frozen.geometry)))throw new PublicationConflictError("Selected product changed during publication; review and resubmit");
       }
-      const published = await activateObjectRelease(store, uploaded, run.baselineBundle.sha256);
+      const published = await (this.#options.activateCandidate ?? activateObjectRelease)(store, uploaded, run.baselineBundle.sha256);
       const siteState = verificationTarget
         ? { state: "pending" as const, target: verificationTarget }
         : { state: "not-configured" as const };
@@ -835,7 +859,7 @@ export class PublicReleasePublisher {
         bundle: published.bundle,
         manifestKey: published.manifestKey,
         verification: {
-          ...(run.verification ?? { overall: "failed", candidate: { state: "pending" }, authority: { state: "pending" }, site: { state: "not-configured" } }),
+          ...(run.verification ?? { overall: "pending", candidate: { state: "pending" }, authority: { state: "pending" }, site: { state: "not-configured" } }),
           overall: verificationTarget ? "site-pending" : "authority-published",
           authority: { state: "passed", checkedAt: published.publishedAt!, bundleSha256: published.bundle.sha256 },
           site: siteState,
@@ -843,7 +867,7 @@ export class PublicReleasePublisher {
       };
       run = this.#append(run, `published object manifest ${published.manifestKey}`);
       await this.#writeRun(run);
-      if (verificationTarget) run = await this.verifySite(run.runId);
+      if (verificationTarget && !this.#options.deferSiteVerification) run = await this.verifySite(run.runId);
       return run;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -867,17 +891,18 @@ export class PublicReleasePublisher {
       return run;
     } finally {
       if (heartbeatTimer) clearInterval(heartbeatTimer);
-      await this.#releaseQueueMarkers(runId);
+      if (!this.#options.runRepository) await this.#releaseQueueMarkers(runId);
       await rm(stagingRoot, { recursive: true, force: true });
       if (archivePath) await rm(path.dirname(archivePath), { recursive: true, force: true }).catch(() => undefined);
     }
   }
 
   /** Verify a configured target site without changing the release pointer. */
-  async verifySite(runId: string): Promise<PublicationRun> {
+  async verifySite(runId: string, successor?: { bundle: { id: string; sha256: string }; expected: PublicationVerificationExpectation }): Promise<PublicationRun> {
     let run = await this.get(runId);
     if (!run) throw new PublicationConflictError(`Unknown publication run: ${runId}`, 404);
-    const target = this.#options.verificationTarget?.trim() || process.env.ASSETS_PUBLIC_VERIFY_URL?.trim();
+    const internalTarget = this.#options.internalVerificationTarget?.trim() || process.env.ASSETS_PUBLIC_VERIFY_INTERNAL_URL?.trim();
+    const target = internalTarget || this.#options.verificationTarget?.trim() || process.env.ASSETS_PUBLIC_VERIFY_URL?.trim();
     if (!target) {
       run = { ...run, verification: { ...(run.verification ?? { overall: "authority-published", candidate: { state: "passed" }, authority: { state: "passed" }, site: { state: "not-configured" } }), overall: run.status === "failed" ? "failed" : "authority-published", site: { state: "not-configured" } } };
       await this.#writeRun(run);
@@ -886,7 +911,8 @@ export class PublicReleasePublisher {
     let parsed: URL;
     try {
       parsed = new URL(target);
-      if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.hostname === "localhost" || /^(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(parsed.hostname)) throw new Error("target must be a public HTTPS URL");
+      if (parsed.username || parsed.password || !["http:", "https:"].includes(parsed.protocol)) throw new Error("Invalid verification URL");
+      if (!internalTarget && (parsed.protocol !== "https:" || parsed.hostname === "localhost" || /^(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(parsed.hostname))) throw new Error("target must be a public HTTPS URL");
     } catch {
       run = { ...run, verification: { ...(run.verification ?? { overall: "authority-published", candidate: { state: "passed" }, authority: { state: "passed" }, site: { state: "pending" } }), overall: "failed", site: { state: "failed", target, checkedAt: new Date().toISOString(), error: "Configured verification target is not a public HTTPS URL" } } };
       await this.#writeRun(run);
@@ -908,8 +934,8 @@ export class PublicReleasePublisher {
       const health = await request("/healthz");
       const bundle = health.bundle && typeof health.bundle === "object" && !Array.isArray(health.bundle) ? health.bundle as Record<string, unknown> : {};
       const observedBundleSha256 = typeof bundle.sha256 === "string" ? bundle.sha256 : undefined;
-      if (!observedBundleSha256 || observedBundleSha256 !== run.bundle?.sha256) {
-        run = { ...run, verification: { ...(run.verification ?? { overall: "site-pending", candidate: { state: "passed" }, authority: { state: "passed" }, site }), overall: "site-pending", site: { state: "pending", target, checkedAt: new Date().toISOString(), ...(observedBundleSha256 ? { observedBundleSha256 } : {}), error: `目标站点仍未使用候选 bundle（期望 ${run.bundle?.sha256 ?? "unknown"}）` } } };
+      if (!observedBundleSha256 || observedBundleSha256 !== (successor?.bundle ?? run.bundle)?.sha256) {
+        run = { ...run, verification: { ...(run.verification ?? { overall: "site-pending", candidate: { state: "passed" }, authority: { state: "passed" }, site }), overall: "site-pending", site: { state: "pending", target, checkedAt: new Date().toISOString(), ...(observedBundleSha256 ? { observedBundleSha256 } : {}), error: `目标站点仍未使用候选 bundle（期望 ${(successor?.bundle ?? run.bundle)?.sha256 ?? "unknown"}）` } } };
         await this.#writeRun(run);
         return run;
       }
@@ -966,7 +992,7 @@ export class PublicReleasePublisher {
         packageSurveys.set(key, surveys);
       }
       const hasIdentity = (identities: Map<string, Set<string | undefined>>, key: string, surveyId: string): boolean => identities.get(key)?.has(surveyId) ?? false;
-      const expectation = run.expected;
+      const expectation = successor?.expected ?? run.expected;
       const missingProducts = expectation?.products.filter((entry) => entry.present && !hasIdentity(productSurveys, entry.productId, entry.surveyId)).map((entry) => entry.productId) ?? [];
       const missingLayers = expectation?.layers.filter((entry) => entry.present && !hasIdentity(layerSurveys, entry.layerId, entry.surveyId)).map((entry) => entry.layerId) ?? [];
       const missingPackages = expectation?.packages.filter((entry) => entry.present && !hasIdentity(packageSurveys, `${entry.id}@${entry.version}`, entry.surveyId)).map((entry) => `${entry.id}@${entry.version}`) ?? [];
@@ -1146,6 +1172,7 @@ export class PublicReleasePublisher {
   }
 
   async #recoverStaleRuns(): Promise<PublicationRun[]> {
+    if (this.#options.runRepository) return [];
     const now = Date.now();
     const runs = await this.#readRunsOnDisk();
     const claimedIds = new Set<string>();
@@ -1203,9 +1230,10 @@ export class PublicReleasePublisher {
   }
 
   async #writeRun(run: PublicationRun): Promise<void> {
+    if (this.#options.runRepository) return this.#options.runRepository.write(run);
     const operation = this.#runWriteTail.then(async () => {
       await mkdir(this.#runsDir, { recursive: true });
-      await writeFile(path.join(this.#runsDir, `${run.runId}.json`), `${JSON.stringify(run, null, 2)}\n`, "utf8");
+      await writeJsonAtomic(path.join(this.#runsDir, `${run.runId}.json`), run);
       await queueStateSnapshot(this.#snapshotSink, "publication-runs", { schemaVersion: 1, runs: await this.#readRunsOnDisk() });
     });
     this.#runWriteTail = operation.catch(() => undefined);
@@ -1213,6 +1241,7 @@ export class PublicReleasePublisher {
   }
 
   async #ensureRunsRestored(): Promise<void> {
+    if (this.#options.runRepository) return;
     if (this.#runsRestored) return;
     if (!this.#runsRestorePromise) {
       this.#runsRestorePromise = this.#restoreRuns().then(() => {

@@ -54,3 +54,12 @@ and explicitly says so.
 `coverage_edges.parquet` is the offline reconstruction source. Online lookup
 uses the warehouse `ast_coverage_index_v1` and `ast_file_index_v1` indices;
 the old Assets ES is never a runtime dependency.
+
+## Public workflow explanation and discovery design
+
+The `/releases/` page presents the two current input paths: existing MOC discovery
+and bounded Warehouse scans, followed by explicit construction, version review,
+incremental publication and website verification. Full release archives remain
+export/restore artifacts. See [publication runtime](publication-runtime-split.md).
+The [LLM discovery enhancement](moc-discovery-enhancement-design.md) is a proposal,
+not an active source or a replacement for scientific validation and human review.

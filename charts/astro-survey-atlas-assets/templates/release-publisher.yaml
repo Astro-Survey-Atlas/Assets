@@ -1,4 +1,4 @@
-{{- if .Values.releasePublisher.enabled }}
+{{- if and .Values.releasePublisher.enabled (not .Values.splitRoles.enabled) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

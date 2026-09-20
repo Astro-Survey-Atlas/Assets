@@ -1646,7 +1646,9 @@ function reviewEntries(survey: ReviewSurvey): Array<{ product: ReviewProduct; re
 }
 
 function productPublicationRun(productId: string): PublicationRun | undefined {
-  return publicationRuns.find(run => run.selectedProducts?.some(selected => selected.productId === productId));
+  const publishedRevision = productRecords.find(product => product.productId === productId)?.publishedRevision;
+  return publicationRuns.find(run => run.selectedProducts?.some(selected => selected.productId === productId
+    && !(run.status === "failed" && publishedRevision != null && selected.revision <= publishedRevision)));
 }
 
 function renderReviewSurveys(surveys: ReviewSurvey[]): void {
@@ -2188,6 +2190,7 @@ interface PublicationPlan {
 }
 
 interface PublicationRun {
+  queue?: { phase: string; attempts: number; nextAttemptAt?: string; cancellable: boolean; syncDelayed: boolean };
   selectedProducts?: Array<{productId:string;revision:number}>;
   manifestKey?: string;
   runId: string;
@@ -2217,12 +2220,15 @@ let publicationRuns: PublicationRun[] = [];
 
 
 function publicationStatusLabel(status: string): string {
-  const labels: Record<string, string> = { queued: "排队中", building: "构建中", uploading: "上传中", verifying: "隔离验证中", published: "权威已发布", failed: "失败" };
+  const labels: Record<string, string> = { queued: "排队中", building: "构建中", uploading: "上传中", verifying: "隔离验证中", published: "发布完成", failed: "失败", cancelled: "已取消" };
   return labels[status] ?? status;
 }
 
 function publicationRunStatusLabel(run: PublicationRun): string {
-  return run.recovery ? "任务失去 worker，可恢复" : publicationStatusLabel(run.status);
+  if (run.status === "published" && !run.queue && run.verification?.overall !== "verified") return "权威已发布";
+  if (run.queue?.phase === "site-pending") return run.queue.syncDelayed ? "网站同步延迟，正在重试" : "等待网站生效";
+  if (run.queue?.nextAttemptAt) return `等待自动重试（第 ${run.queue.attempts} 次尝试已结束）`;
+  return run.recovery ? "任务中断，可恢复" : publicationStatusLabel(run.status);
 }
 
 function publicationVerificationLabel(state?: string): string {
@@ -2361,21 +2367,23 @@ function openPublicationRun(run: PublicationRun): void {
     ["状态", publicationRunStatusLabel(run)],
     ["巡天", run.surveyIds.join(", ")],
     ["Bundle", run.bundle ? `${run.bundle.id} / ${run.bundle.sha256}` : "—"],
-    ["发布清单 / 历史归档", run.manifestKey ?? run.archiveKey ?? "—"],
-    ["Archive SHA-256", run.archiveSha256 ?? "—"],
+    ["发布清单", run.manifestKey ?? run.archiveKey ?? "—"],
+    ...(run.archiveSha256 ? [["历史归档 SHA-256", run.archiveSha256]] : []),
     ["文件 / 资源包", `${run.files ?? "--"} / ${run.packages ?? "--"}`],
     ["提交时间", formatDate(run.createdAt)],
     ["完成时间", formatDate(run.finishedAt)],
     ["失败阶段", run.failureStage ? publicationFailureStageLabel(run.failureStage) : "--"],
-    ["候选隔离恢复", publicationVerificationLabel(run.verification?.candidate?.state)],
+    ["候选文件校验", publicationVerificationLabel(run.verification?.candidate?.state)],
     ["权威指针", publicationVerificationLabel(run.verification?.authority?.state)],
     ["目标站点", `${publicationVerificationLabel(run.verification?.site?.state)}${run.verification?.site?.target ? ` · ${run.verification.site.target}` : ""}${run.verification?.site?.observedBundleSha256 ? ` · ${run.verification.site.observedBundleSha256}` : ""}`],
     ["错误", run.error ?? run.verification?.site?.error ?? "—"],
   ];
-  const verify = run.status === "published" ? `<button type="button" class="admin-primary" data-verify-publication="${escapeText(run.runId)}"><i data-lucide="shield-check"></i><span>重新核验目标站点</span></button>` : "";
-  const retry = run.status === "failed" && !run.recovery ? `<button type="button" class="admin-primary" data-retry-publication="${escapeText(run.runId)}"><i data-lucide="rotate-ccw"></i><span>按当前计划重试</span></button>` : "";
+  const cancel = run.queue?.cancellable ? `<button type="button" class="admin-quiet" data-cancel-publication="${escapeText(run.runId)}"><i data-lucide="square"></i><span>${run.status === "queued" ? "取消排队" : "停止本次发布"}</span></button>` : "";
+  const verify = run.status === "published" || run.queue?.phase === "site-pending" ? `<button type="button" class="admin-primary" data-verify-publication="${escapeText(run.runId)}"><i data-lucide="shield-check"></i><span>重新核验目标站点</span></button>` : "";
+  const retry = run.status === "failed" && !run.recovery ? `<button type="button" class="admin-primary" data-retry-publication="${escapeText(run.runId)}"><i data-lucide="rotate-ccw"></i><span>重试原审核版本</span></button>` : "";
   const recover = run.recovery ? `<button type="button" class="admin-primary" data-recover-publication="${escapeText(run.runId)}"><i data-lucide="refresh-cw"></i><span>恢复并重试</span></button>` : "";
-  byId("publication-run-detail").innerHTML = `<dl class="admin-context">${facts.map(([label, value]) => `<div><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`).join("")}</dl><div class="publication-verification-actions">${recover}${retry}${verify}</div>`;
+  byId("publication-run-detail").innerHTML = `<dl class="admin-context">${facts.map(([label, value]) => `<div><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`).join("")}</dl><div class="publication-verification-actions">${cancel}${recover}${retry}${verify}</div>`;
+  byId("publication-run-detail").querySelector<HTMLButtonElement>("[data-cancel-publication]")?.addEventListener("click", event => void cancelPublicationRun((event.currentTarget as HTMLButtonElement).dataset.cancelPublication ?? ""));
   byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-verify-publication]")?.addEventListener("click", (event) => void verifyPublicationRun((event.currentTarget as HTMLButtonElement).dataset.verifyPublication ?? ""));
   byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-retry-publication]")?.addEventListener("click", (event) => void retryPublicationRun((event.currentTarget as HTMLButtonElement).dataset.retryPublication ?? ""));
   byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-recover-publication]")?.addEventListener("click", (event) => void recoverPublicationRun((event.currentTarget as HTMLButtonElement).dataset.recoverPublication ?? ""));
@@ -2383,13 +2391,24 @@ function openPublicationRun(run: PublicationRun): void {
   byId<HTMLDialogElement>("publication-run-dialog").showModal();
 }
 
+async function cancelPublicationRun(runId: string): Promise<void> {
+  try {
+    const { run } = await api<{ run: PublicationRun }>(`/api/v1/admin/publications/${encodeURIComponent(runId)}/cancel`, { method: "POST", body: "{}" });
+    publicationRuns = publicationRuns.map(item => item.runId === runId ? run : item);
+    byId<HTMLDialogElement>("publication-run-dialog").close();
+    renderPublicationRuns();
+    syncProductOperationButtons();
+    toast("本次发布已取消，历史记录已保留");
+  } catch (error) { toast(error instanceof Error ? error.message : "取消失败", true); }
+}
+
 async function retryPublicationRun(runId: string): Promise<void> {
-  if (!runId || !window.confirm("按当前发布计划重新排队该失败任务吗？这不会覆盖旧的失败记录。")) return;
+  if (!runId || !window.confirm("使用原来选定的审核版本重试吗？旧记录会保留；版本改变后需要重新提交。")) return;
   try {
     const { run } = await api<{ run: PublicationRun }>(`/api/v1/admin/publications/${encodeURIComponent(runId)}/retry`, { method: "POST", body: "{}" });
     publicationRuns = [run, ...publicationRuns.filter((item) => item.runId !== run.runId)];
     renderPublicationRuns();
-    openPublicationRun(run);
+    byId<HTMLDialogElement>("publication-run-dialog").close();
     schedulePublicationPolling(run.runId);
     toast(`发布任务已重新排队：${run.runId}`);
   } catch (error) { toast(error instanceof Error ? error.message : "发布重试失败", true); }
@@ -2401,7 +2420,7 @@ async function recoverPublicationRun(runId: string): Promise<void> {
     const { run } = await api<{ run: PublicationRun }>(`/api/v1/admin/publications/${encodeURIComponent(runId)}/recover`, { method: "POST", body: "{}" });
     publicationRuns = [run, ...publicationRuns.filter((item) => item.runId !== run.runId)];
     renderPublicationRuns();
-    openPublicationRun(run);
+    byId<HTMLDialogElement>("publication-run-dialog").close();
     schedulePublicationPolling(run.runId);
     toast(`发布任务已恢复并重新排队：${run.runId}`);
   } catch (error) { toast(error instanceof Error ? error.message : "发布任务恢复失败", true); }

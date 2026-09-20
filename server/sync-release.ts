@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { withLocalFileLock } from "./local-file-lock.js";
 import { parseObjectPointer, restoreObjectRelease } from "./object-release.js";
 import { execFile as execFileCallback } from "node:child_process";
 import { lstat, mkdir, open, readFile, readdir, readlink, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
@@ -111,7 +113,7 @@ async function activateRelease(targetRoot: string, releaseName: string, stagingP
     await loadCatalog(finalPath);
   }
   const currentPath = path.join(targetRoot, "current");
-  const nextPath = path.join(targetRoot, `.current.${process.pid}`);
+  const nextPath = path.join(targetRoot, `.current.${randomUUID()}`);
   await rm(nextPath, { force: true });
   await symlink(path.relative(targetRoot, finalPath), nextPath, "dir");
   await rename(nextPath, currentPath).catch(async (error: NodeJS.ErrnoException) => {
@@ -135,45 +137,16 @@ async function scavengeStaleStaging(stagingRoot: string, keepName: string): Prom
   await mkdir(stagingRoot, { recursive: true });
   for (const entry of await readdir(stagingRoot, { withFileTypes: true }).catch(() => [])) {
     if (entry.name === keepName) continue;
-    await rm(path.join(stagingRoot, entry.name), { recursive: true, force: true }).catch(() => undefined);
-  }
-}
-
-function processAlive(pid: number): boolean {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    const candidate = path.join(stagingRoot, entry.name);
+    const details = await lstat(candidate).catch(() => undefined);
+    if (details && Date.now() - details.mtimeMs > 24 * 60 * 60 * 1000) {
+      await rm(candidate, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 }
 
 async function withReleaseLock<T>(targetRoot: string, work: () => Promise<T>): Promise<T> {
-  const lockPath = path.join(targetRoot, ".sync.lock");
-  await mkdir(targetRoot, { recursive: true });
-  let handle: Awaited<ReturnType<typeof open>> | undefined;
-  try {
-    handle = await open(lockPath, "wx");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    const existing = await open(lockPath, "r").catch(() => undefined);
-    const owner = existing ? Number((await existing.readFile("utf8").catch(() => "")).trim()) : Number.NaN;
-    await existing?.close().catch(() => undefined);
-    // A PID is only meaningful inside the process namespace that created the lock.
-    // Init and publisher containers both use PID 1, so a leftover PVC lock from a
-    // terminated container must be treated as stale when it names this process.
-    if (owner !== process.pid && processAlive(owner)) throw new Error(`Another release synchronization is already running (pid ${owner})`);
-    await rm(lockPath, { force: true });
-    handle = await open(lockPath, "wx");
-  }
-  try {
-    await handle.writeFile(String(process.pid), "utf8");
-    return await work();
-  } finally {
-    await handle.close().catch(() => undefined);
-    await rm(lockPath, { force: true }).catch(() => undefined);
-  }
+  return withLocalFileLock(path.join(targetRoot, ".sync.lock"), work);
 }
 
 const ARCHIVE_SHA_MARKER = ".archive-sha256";
@@ -250,7 +223,16 @@ export async function syncReleaseFromObjectStore(store: ArtifactStore, targetRoo
     }
     if (pointer.schemaVersion === 3) {
       const releaseName = pointer.bundle.sha256;
-      const staging = path.join(resolvedRoot, ".staging", `${releaseName}.${process.pid}`);
+      const releasePath = path.join(resolvedRoot, "releases", releaseName);
+      try {
+        const cached = await validateInstalledRelease(releasePath, pointer.bundle);
+        const installedTarget = `releases/${releaseName}`;
+        if (await readlink(path.join(resolvedRoot, "current")).catch(() => "") !== installedTarget) {
+          await activateRelease(resolvedRoot, releaseName, path.join(resolvedRoot, ".staging", randomUUID()), options.retainReleases ?? 2, options.cleanup === true);
+        }
+        return { bundle: pointer.bundle, archiveKey: pointer.manifestKey, installedTarget, files: cached.manifest.files.length };
+      } catch { /* missing or corrupt cache: restore and verify immutable objects */ }
+      const staging = path.join(resolvedRoot, ".staging", `${releaseName}.${randomUUID()}`);
       await rm(staging, { recursive: true, force: true });
       try {
         await restoreObjectRelease(store, pointer, path.join(staging, "tree"), path.join(resolvedRoot, "current"));
@@ -262,7 +244,7 @@ export async function syncReleaseFromObjectStore(store: ArtifactStore, targetRoo
     const releaseName = pointer.bundle.sha256;
     const releasePath = path.join(resolvedRoot, "releases", releaseName);
     const stagingRoot = path.join(resolvedRoot, ".staging");
-    const stagingName = `${releaseName}.${process.pid}`;
+    const stagingName = `${releaseName}.${randomUUID()}`;
     const stagingPath = path.join(stagingRoot, stagingName);
     const archivePath = path.join(stagingPath, "release.tar.gz");
     await scavengeStaleStaging(stagingRoot, stagingName);
@@ -327,4 +309,8 @@ async function main(): Promise<void> {
   console.log(`Activated release archive ${synced.bundle.id} (${synced.bundle.sha256}) at ${synced.installedTarget}`);
 }
 
-if (process.argv[1] && path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1])) await main();
+// Do not top-level-await main: legacy object restoration imports this module.
+// Keeping module evaluation pending would deadlock a fresh schema-3 CLI restore.
+if (process.argv[1] && path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1])) {
+  void main().catch(error => { console.error(error); process.exitCode = 1; });
+}

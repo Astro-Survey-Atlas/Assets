@@ -50,6 +50,8 @@ COPY --from=build --chown=atlas:atlas /app/scripts ./scripts
 COPY --from=build --chown=atlas:atlas /app/package.json ./package.json
 COPY --from=build --chown=atlas:atlas /app/node_modules ./node_modules
 
+RUN command -v flock
+
 USER 10001:10001
 EXPOSE 4180
 CMD ["node", "dist/server/server.js"]

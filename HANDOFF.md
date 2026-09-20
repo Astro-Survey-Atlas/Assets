@@ -1,5 +1,133 @@
 # Assets Session Handoff
 
+## Latest: inline survey icons and visible source workflow (2026-09-20, dev 182)
+
+Image `0.1.0-20260920-flow-layout`, Helm revision 182. Both roles 1/1 Ready.
+Live browser verified inline icon geometry, always-visible workflow and CDS link;
+existing package download returned 206 bytes 0-31/408424. Public health is OK,
+user bundle `reviewed-mu9992i3-7e599e9b`, 479 files.
+Homepage modality icons now sit immediately after the survey name on one flex
+line; precision is the compact second line. Release workflow is always visible,
+with peer Existing MOC / Source data scan cards and matching heading levels.
+Existing MOC names CDS MocServer and links its full public query endpoint.
+Desktop uses two source columns; mobile stacks peers and preserves arrows.
+This supersedes the collapsed workflow layout from revision 181.
+
+Build, 211 Node tests + Core wheel, site types, Helm lint and diff check passed.
+Updated public-workflow browser check asserts name/icon center alignment, visible
+CDS URL, peer headings and absence of collapse controls, plus all previous
+language/theme/responsive checks. Logs `/dev/shm/assets-flow-layout-*.log`.
+
+## Latest: public release workflow and homepage icons (2026-09-20, dev 181)
+
+Image `0.1.0-20260920-release-flow`, Helm revision 181.
+Both site and backend are 1/1 Ready, zero restarts. Live browser verified actual
+homepage SVGs, workflow expansion and existing release download links; package
+Range returned 206 bytes 0-31/408416. Health remains on user publication bundle
+`reviewed-mu97svf3-c2030703`, SHA256
+`f075144af8e99dbf0ead0dc84e76974129bc410c0e591afe81572756b3dd9074`,
+479 manifest files.
+Homepage dynamic survey modality placeholders now render into scoped Lucide SVGs
+after API completion, including locale refresh; precision and modality labels use
+EN/ZH. `/releases/` has a default-collapsed, keyboard-accessible workflow explaining
+MOC discovery vs Warehouse scan inputs, construction, version review, explicit
+incremental publication and website verification. Desktop horizontal/mobile
+vertical arrows; LLM branch is dashed and explicitly planned/not enabled. Home
+workflow/video content and release history/download behavior are unchanged.
+
+`docs/moc-discovery-enhancement-design.md` specifies proposed alias/networked LLM
+candidate discovery, evidence, budgets, scientific validation and manual review.
+Existing discovery/coverage docs link it. No LLM integration, credentials, public
+API changes, scan submissions or test publications were introduced.
+
+Build, 211 Node tests + Core wheel, site TypeScript, Helm lint and diff check passed.
+`scripts/public-workflow-browser.py` verifies delayed API icon rendering, locale
+refresh, empty/error states, keyboard expansion, EN/ZH, light/dark and
+1440/900/390px without overflow or page errors. Fixtures intercept API responses;
+live acceptance additionally checks real catalog icons and release downloads.
+Logs `/dev/shm/assets-flow-{build,tests,image,push}.log`; layout screenshots
+`/dev/shm/release-flow-*.png`. Preserve all dirty/untracked implementation files.
+
+## Latest: pending verification display correction (2026-09-20, dev 180)
+
+Image `0.1.0-20260920-pending-verification`, Helm revision 180.
+User run `mu97fn25-02edfb19` actually succeeded on its first attempt: submitted
+02:36:02 UTC, authority activated 02:36:48, website verified 02:37:17. Its
+"uploading / failed" display came from PublicReleasePublisher.execute initializing
+verification.overall to failed before any check. Changed initial and pre-activation
+fallback state to pending (UI already renders 待核验); actual failure handling remains.
+Regression captures every real executor repository update for building/uploading/
+verifying and first failed with actual failed vs expected pending, then passed.
+Build, 211 Node tests + Core wheel, site TypeScript, Helm lint and diff check pass.
+Browser intercepted publication responses to verify uploading/pending and genuine
+failure remain distinct; no new publication was submitted for testing.
+
+Public product `467fbb986cd42d5968ce` is present; public coverage now has 6 layers.
+Authority bundle `reviewed-mu97fn25-02edfb19`, SHA256
+`196539806fe49c008b6f986dc09da993234a526023fc26143daff2baca66c2b0`.
+Both roles rolled out 1/1 Ready with zero restarts; final authenticated run check
+confirms published/verified and public health matches its bundle SHA.
+Logs `/dev/shm/assets-pending-{build,tests,image,push}.log`.
+
+## Latest: split publication runtime deployed (2026-09-20, dev 179)
+
+Dev Helm revision **179**, image `0.1.0-20260920-102600-split`.
+Site and backend are both 1/1 Running, zero restarts; legacy publisher removed.
+Public Service targets only site (verified endpoint 10.42.1.246:4180).
+Existing workspace changes remain uncommitted; preserve all tracked and new files.
+
+Implemented the approved scan/review/incremental-publication separation. Warehouse
+still owns scan execution/status. Site is public-only with authenticated admin
+proxy; backend alone owns business writes and durable SQLite WAL/FULL queue on
+local-path storage. Each role has its own 8Gi local-path release cache PVC, verified
+against authority on startup and refreshed independently. Lifetime kernel flock,
+fenced child IPC, leases/heartbeats, bounded transient retries, cancellation,
+immutable reviewed selections and CAS activation replace the previous shared-write
+runtime. Full release.tar.gz remains export/restore only. Website verification is
+separate from publication and snapshots; activated tasks stay verifying until the
+site confirms their exact selection, including a later bundle preserving it.
+Historical failed runs no longer override an equal/newer published product badge.
+Backend startup no longer automatically rebuilds resource packages. See
+`docs/publication-runtime-split.md` for workflow, cutover and rollback procedures.
+
+Migration stopped old writers before enabling backend. Both new caches were seeded
+from the old immutable cache only after authority SHA and all 477 file hashes were
+checked. Temporary migration Pods were deleted; original PVCs and history retained.
+Imported 10 historical publication runs; admin has 166 products. No actual product
+was reviewed or published for acceptance testing. Quiesced backups are in
+`/dev/shm/assets-split-migration` (volatile host storage; retain/copy before reboot):
+`quiesced-content-spool.tar.gz` SHA256
+`616b19e5cd2961177ec57b98e826512fc230098cfcfac1c82726aa1f7edc66f4`,
+`quiesced-current.json` SHA256
+`4efb1b9434d5c9b7abf8121b00e3c20094c8a1405ba9bdfc25c26fd47eb38166`.
+Rollback after new writes requires stopping backend and exporting latest SQLite
+history with `scripts/export-publication-rollback.ts`; never restore stale business
+state blindly. Legacy schema-3 fresh restore CLI deadlock was fixed and regression
+tested. Snapshot generation persistence is now namespace-local under kernel lock.
+
+Validation: build, site TypeScript, **210 Node tests + Core wheel**, Helm lint and
+`git diff --check` passed. Tests cover real child IPC/local S3 incremental publish,
+queue restart/fencing/retry/cancel, site offline/cache/proxy/hot activation, sync CLI
+and namespace locking. Local action-feedback/cancel/delayed-sync browser checks
+passed. Final live `scripts/admin-review-browser.py` passed at 1440/900/390px,
+including state filters, dialogs, focus, polling and no browser errors. Admin proxy
+returns 401 without auth and authenticated products/history return 200. Backend
+startup has no automatic-package-rebuild warning. Public API reports 5 products,
+5 coverage layers, 3 packages; health reports 477 manifest files (public asset list
+is deliberately filtered). DESI EDR MOC Range returned 206, bytes 0-31/259200;
+full file SHA and X-Content-SHA256 matched catalog.
+
+Public URL: `http://astro.assets.dev.72602.space:32080/`.
+Authority remains `reviewed-mu6tefsx-bc07840a`, SHA256
+`7b280f837d8520fbdfe3079c93133f13b6d7f0c1382ba4c0c13adcb8c4493ade`.
+Internal site verification uses `http://astro-survey-atlas-assets:80`; external
+HTTPS hostname mismatch remains an ingress certificate issue, not bypassed TLS.
+Logs: `/dev/shm/assets-plan-{build,tests}.log`,
+`/dev/shm/assets-split-finalized-{build,push}.log`,
+`/dev/shm/assets-split-live-browser.log`; screenshots `/dev/shm/asa-review-layout/`.
+The old shared-runtime hardening concerns in revision 175 below are superseded by
+this cutover. This remains a single-backend design, not a multi-writer deployment.
+
 ## Latest: publication recovery deployed (2026-09-18, dev 175)
 
 Image `0.1.0-20260918-publication-lease2`, Helm revision 175.

@@ -1,31 +1,28 @@
+{{- if .Values.splitRoles.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "astro-survey-atlas-assets.fullname" . }}
+  name: {{ include "astro-survey-atlas-assets.fullname" . }}-backend
   labels:
-    {{- include "astro-survey-atlas-assets.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ include "astro-survey-atlas-assets.name" . }}-backend
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: backend
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ .Values.splitRoles.backendReplicas }}
   strategy:
-    {{- if .Values.splitRoles.enabled }}
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
-    {{- else }}
     type: Recreate
-    {{- end }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "astro-survey-atlas-assets.name" . }}
+      app.kubernetes.io/name: {{ include "astro-survey-atlas-assets.name" . }}-backend
       app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        {{- include "astro-survey-atlas-assets.labels" . | nindent 8 }}
-        app.kubernetes.io/component: site
+        app.kubernetes.io/name: {{ include "astro-survey-atlas-assets.name" . }}-backend
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: backend
     spec:
-      {{- if and .Values.admin.enabled (not .Values.splitRoles.enabled) }}
+      {{- if .Values.admin.enabled }}
       serviceAccountName: {{ include "astro-survey-atlas-assets.fullname" . }}-admin
       automountServiceAccountToken: true
       {{- else }}
@@ -91,19 +88,15 @@ spec:
             - name: tmp
               mountPath: /tmp
       containers:
-        - name: site
+        - name: backend
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
               containerPort: 4180
           env:
-            {{- if .Values.splitRoles.enabled }}
             - name: ASSETS_ROLE
-              value: site
-            - name: ASSETS_BACKEND_URL
-              value: http://{{ include "astro-survey-atlas-assets.fullname" . }}-backend:4180
-            {{- end }}
+              value: backend
             - name: HOST
               value: 0.0.0.0
             - name: PORT
@@ -164,6 +157,8 @@ spec:
               value: /app/scripts/moc_build_worker.py
             - name: ASSETS_ADMIN_ENABLED
               value: {{ .Values.admin.enabled | quote }}
+            - name: ASSETS_PUBLIC_VERIFY_INTERNAL_URL
+              value: http://{{ include "astro-survey-atlas-assets.fullname" . }}:{{ .Values.service.port }}
             - name: ASSETS_PUBLIC_VERIFY_URL
               value: {{ .Values.admin.publicVerifyUrl | quote }}
             - name: ASSETS_WAREHOUSE_NAMESPACE
@@ -213,13 +208,12 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 2
             failureThreshold: 3
-          resources: {{ toYaml .Values.resources | nindent 12 }}
+          resources: {{ toYaml .Values.releasePublisher.resources | nindent 12 }}
           securityContext: {{ toYaml .Values.containerSecurityContext | nindent 12 }}
           volumeMounts:
             - name: assets
               mountPath: /data
-              readOnly: {{ not .Values.splitRoles.enabled }}
-            {{- if not .Values.splitRoles.enabled }}
+              readOnly: false
             - name: content
               mountPath: /var/lib/assets-content
               readOnly: false
@@ -229,14 +223,12 @@ spec:
             - name: upload-spool
               mountPath: {{ .Values.releasePublisher.uploadSpoolRoot }}
               readOnly: false
-            {{- end }}
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: assets
           persistentVolumeClaim:
-            claimName: {{ if .Values.splitRoles.enabled }}{{ include "astro-survey-atlas-assets.fullname" . }}-site-cache{{ else }}{{ default (printf "%s-assets" (include "astro-survey-atlas-assets.fullname" .)) .Values.persistence.existingClaim }}{{ end }}
-        {{- if not .Values.splitRoles.enabled }}
+            claimName: {{ include "astro-survey-atlas-assets.fullname" . }}-backend-cache
         - name: content
           {{- if .Values.contentPersistence.enabled }}
           persistentVolumeClaim:
@@ -258,7 +250,6 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
-        {{- end }}
         - name: tmp
           emptyDir: {}
       {{- with .Values.nodeSelector }}
@@ -270,3 +261,18 @@ spec:
       {{- with .Values.tolerations }}
       tolerations: {{ toYaml . | nindent 8 }}
       {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "astro-survey-atlas-assets.fullname" . }}-backend
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "astro-survey-atlas-assets.name" . }}-backend
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: 4180
+      targetPort: http
+{{- end }}

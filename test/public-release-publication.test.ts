@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { reviewedFixture } from "./reviewed-fixture.js";
-import { PublicReleasePublisher } from "../server/public-release-publication.js";
+import { PublicReleasePublisher, type PublicationRun } from "../server/public-release-publication.js";
 import { loadCatalog } from "../server/catalog.js";
 import { loadPublicState } from "../server/public-state.js";
 import { syncReleaseFromObjectStore } from "../server/sync-release.js";
@@ -114,4 +114,25 @@ test("explicit withdrawal removes public products and packages, retained version
   const queued=await queue(next),finished=await next.execute(queued.runId);assert.equal(finished.status,"published",finished.error);
   await syncReleaseFromObjectStore(f.store,installed);const state=await loadPublicState(await loadCatalog(path.join(installed,"current")));
   assert.equal(state.records.size,0);assert.equal(state.snapshot.packages.length,0);assert.equal(state.snapshot.withdrawals[0]?.reason,"Test withdrawal");
+});
+
+
+test("successful publication never reports failed verification while building or uploading", async t => {
+  const f = await reviewedFixture();
+  t.after(() => rm(f.base, { recursive: true, force: true }));
+  const runs = new Map<string, PublicationRun>();
+  const progress: PublicationRun[] = [];
+  const publisher = new PublicReleasePublisher({ ...f.options, runRepository: {
+    get: async id => runs.get(id), list: async () => [...runs.values()],
+    submit: async run => { runs.set(run.runId, run); return run; },
+    write: async run => { runs.set(run.runId, run); progress.push(structuredClone(run)); },
+  } });
+  const run = await queue(publisher);
+  const result = await publisher.execute(run.runId);
+  assert.equal(result.status, "published", result.error);
+  for (const status of ["building", "uploading", "verifying"]) {
+    const updates = progress.filter(run => run.status === status);
+    assert.ok(updates.length > 0, `observed ${status}`);
+    for (const update of updates) assert.equal(update.verification?.overall, "pending", `${status} must not display failure before verification`);
+  }
 });

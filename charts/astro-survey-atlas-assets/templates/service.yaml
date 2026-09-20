@@ -9,6 +9,7 @@ spec:
   selector:
     app.kubernetes.io/name: {{ include "astro-survey-atlas-assets.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: site
   ports:
     - name: http
       port: {{ .Values.service.port }}

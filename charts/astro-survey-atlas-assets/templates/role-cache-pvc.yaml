@@ -1,0 +1,17 @@
+{{- if .Values.splitRoles.enabled }}
+{{- range $role := list "site" "backend" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "astro-survey-atlas-assets.fullname" $ }}-{{ $role }}-cache
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ $.Values.splitRoles.cacheStorageClass | quote }}
+  resources:
+    requests:
+      storage: {{ $.Values.splitRoles.cacheSize }}
+{{- end }}
+{{- end }}

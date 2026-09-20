@@ -156,3 +156,11 @@ containerSecurityContext:
 
 regionAccess:
   secretName: astro-survey-atlas-assets-region-access
+
+# Enable only after quiescing legacy site/publisher writes and backing up content.
+# The existing content PVC is exclusively mounted by backend; it must be local-path.
+splitRoles:
+  enabled: false
+  backendReplicas: 1
+  cacheStorageClass: local-path
+  cacheSize: 8Gi

@@ -211,3 +211,22 @@ test("state files use content-addressed keys and restore only verified bytes", a
     await rm(base, { recursive: true, force: true });
   }
 });
+
+test("writing another namespace never regresses a counter cached by an older coordinator", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "state-snapshot-namespaces-"));
+  try {
+    const store = new LocalS3Adapter(new FilesystemArtifactStore(path.join(base, "remote")));
+    const first = await makeCoordinator(base, store);
+    const second = await makeCoordinator(base, store);
+    await first.coordinator.initialize(["products", "editorial"]);
+    await second.coordinator.initialize(["products", "editorial"]);
+    assert.equal((await first.coordinator.enqueue("products", { revision: 1 })).generation, 1);
+    await second.coordinator.enqueue("editorial", { revision: 1 });
+    // A new process has no in-memory maximum to hide a regressed disk counter.
+    const restarted = await makeCoordinator(base, store);
+    await restarted.coordinator.initialize(["products", "editorial"]);
+    assert.equal((await restarted.coordinator.enqueue("products", { revision: 2 })).generation, 2);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});

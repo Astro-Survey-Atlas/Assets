@@ -112,6 +112,7 @@ export const STATE_SNAPSHOT_NAMESPACES = [
   "moc-publications",
   "resource-packages",
   "publication-runs",
+  "publication-tasks",
 ] as const;
 
 /** Queue a local state snapshot and surface failures to the caller. */
@@ -311,11 +312,13 @@ export class StateSnapshotCoordinator implements StateSnapshotSink {
     await mkdir(path.join(this.root, "generations"), { recursive: true });
     for (const namespaceValue of namespaces) {
       const namespace = safeNamespace(namespaceValue);
-      const localGeneration = await this.readLocalGeneration(namespace);
       const pointer = await this.readPointer(namespace);
-      const generation = Math.max(localGeneration, pointer?.generation ?? 0);
-      this.#generations.set(namespace, generation);
-      await this.writeLocalGeneration();
+      await withGenerationLock(this.root, namespace, async () => {
+        const localGeneration = await this.readLocalGeneration(namespace);
+        const generation = Math.max(localGeneration, pointer?.generation ?? 0);
+        this.#generations.set(namespace, generation);
+        await this.writeLocalGeneration(namespace);
+      });
     }
   }
 
@@ -615,7 +618,7 @@ export class StateSnapshotCoordinator implements StateSnapshotSink {
     const current = Math.max(this.#generations.get(namespace) ?? 0, onDisk);
     const next = current + 1;
     this.#generations.set(namespace, next);
-    await this.writeLocalGeneration();
+    await this.writeLocalGeneration(namespace);
     return next;
   }
 
@@ -629,16 +632,16 @@ export class StateSnapshotCoordinator implements StateSnapshotSink {
     return 0;
   }
 
-  private async writeLocalGeneration(): Promise<void> {
+  private async writeLocalGeneration(namespace: string): Promise<void> {
+    // Each namespace has its own lock and file. Never flush other cached counters:
+    // another coordinator may have advanced them since this instance initialized.
     const document: LocalGenerationDocument = {
       schemaVersion: 1,
-      generations: Object.fromEntries(this.#generations),
+      generations: { [namespace]: this.#generations.get(namespace) ?? 0 },
     };
-    await Promise.all([...this.#generations.keys()].map((namespace) => writeJsonAtomic(
-      path.join(this.root, "generations", `${namespace}.json`),
-      document,
-    )));
+    await writeJsonAtomic(path.join(this.root, "generations", `${namespace}.json`), document);
   }
+
 }
 
 export function stateSnapshotPointerKey(namespace: string): string {

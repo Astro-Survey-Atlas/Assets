@@ -1,3 +1,8 @@
+import { acquireLocalFileLock } from "./local-file-lock.js";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { ReleaseSynchronizer } from "./release-synchronizer.js";
+import { PublicationScheduler } from "./publication-scheduler.js";
+import { proxyAdmin } from "./admin-proxy.js";
 import { createReadStream } from "node:fs";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { open, readFile, realpath, stat } from "node:fs/promises";
@@ -33,6 +38,10 @@ import { StateSnapshotCoordinator, STATE_SNAPSHOT_NAMESPACES, type StateSnapshot
 import { UploadSpool } from "./upload-spool.js";
 import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductReadiness, PublicProductVerificationStatus, PublicReadinessAggregate, PublicSurveyModality } from "./types.js";
 
+const role = process.env.ASSETS_ROLE ?? "legacy";
+if (!["legacy", "site", "backend"].includes(role)) throw new Error("Invalid ASSETS_ROLE");
+const managesContent = role !== "site";
+const requestRelease = new AsyncLocalStorage<{ catalog: LoadedCatalog; state: Awaited<ReturnType<typeof loadPublicState>> }>();
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
 const accessGate=new AccessGate();
@@ -45,7 +54,11 @@ async function handleDownloadUnlock(request:IncomingMessage,response:ServerRespo
 }
 const releaseRoot = path.resolve(process.env.ASSET_RELEASE_ROOT ?? process.env.ASSET_WORKTREE_ROOT ?? projectRoot);
 const siteRoot = path.resolve(process.env.PUBLIC_SITE_ROOT ?? path.join(projectRoot, "dist", "site"));
-const catalog = await loadCatalog(await realpath(releaseRoot));
+const authorityStore = role !== "legacy" ? createArtifactStoreFromProcess() : undefined;
+const releaseSynchronizer = authorityStore ? new ReleaseSynchronizer(authorityStore, path.dirname(releaseRoot), process.env.ASSETS_OBJECT_STORE_CURRENT_KEY) : undefined;
+await releaseSynchronizer?.sync();
+let currentCatalog = await loadCatalog(await realpath(releaseRoot));
+const catalog = new Proxy({} as LoadedCatalog, { get: (_target, key) => Reflect.get(requestRelease.getStore()?.catalog ?? currentCatalog, key) });
 let coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src", "footprints", "survey-footprints.json"), "utf8")) as {
   schemaVersion: number;
   generatedAt: string;
@@ -60,17 +73,20 @@ const evidenceStore = new CoverageEvidenceStore({
   fileIndex: process.env.ASSETS_WAREHOUSE_FILE_INDEX,
 });
 const contentRoot = path.resolve(process.env.ASSETS_CONTENT_ROOT ?? path.join(releaseRoot, ".assets-content"));
+const releaseBackendOwnership = role === "backend" ? await acquireLocalFileLock(path.join(contentRoot, ".backend-owner.lock")) : undefined;
 const evidenceRoot = path.resolve(process.env.ASSETS_EVIDENCE_ROOT ?? "/var/lib/assets-evidence");
 const uploadSpoolRoot = path.resolve(process.env.ASSETS_UPLOAD_SPOOL_ROOT ?? "/var/lib/assets-upload-spool");
 let stateSnapshotSink: StateSnapshotSink | undefined;
 const objectStoreRequired = /^(1|true|yes|on)$/i.test(process.env.ASSETS_OBJECT_STORE_REQUIRED ?? "");
-if (objectStoreRequired || process.env.ASSETS_OBJECT_STORE_ENDPOINT?.trim() || process.env.ASSETS_OBJECT_STORE_BUCKET?.trim()) {
+let snapshotWorker: { spool: UploadSpool; snapshots: StateSnapshotCoordinator } | undefined;
+if (managesContent && (objectStoreRequired || process.env.ASSETS_OBJECT_STORE_ENDPOINT?.trim() || process.env.ASSETS_OBJECT_STORE_BUCKET?.trim())) {
   const objectStore = createArtifactStoreFromProcess(process.env);
   const uploadSpool = new UploadSpool({ root: uploadSpoolRoot, store: objectStore });
   await uploadSpool.initialize();
   const stateSnapshots = new StateSnapshotCoordinator({ root: path.join(uploadSpoolRoot, "state"), store: objectStore, spool: uploadSpool });
   await stateSnapshots.initialize(STATE_SNAPSHOT_NAMESPACES);
   stateSnapshotSink = stateSnapshots;
+  snapshotWorker = { spool: uploadSpool, snapshots: stateSnapshots };
 }
 
 /**
@@ -80,6 +96,7 @@ if (objectStoreRequired || process.env.ASSETS_OBJECT_STORE_ENDPOINT?.trim() || p
  * transient status probe failure.
  */
 async function apiSyncStatus(namespace: string): Promise<StateSnapshotSyncStatus> {
+  if (role === "backend" && namespace === "publication-runs") namespace = "publication-tasks";
   if (!stateSnapshotSink?.syncStatus) return { namespace, status: "local" };
   try {
     return await stateSnapshotSink.syncStatus(namespace);
@@ -90,11 +107,11 @@ async function apiSyncStatus(namespace: string): Promise<StateSnapshotSyncStatus
 
 const editorial = new SurveyEditorialStore(contentRoot, stateSnapshotSink);
 const mocBuildStore = new MocBuildStore(contentRoot, stateSnapshotSink);
-await mocBuildStore.initialize();
+if (managesContent) await mocBuildStore.initialize();
 const mocPublicationStore = new MocPublicationStore(contentRoot, evidenceRoot, stateSnapshotSink);
-await mocPublicationStore.initialize();
+if (managesContent) await mocPublicationStore.initialize();
 const dynamicResourcePackages = new DynamicResourcePackageStore(contentRoot, stateSnapshotSink, releaseRoot);
-await dynamicResourcePackages.initialize();
+if (managesContent) await dynamicResourcePackages.initialize();
 const publishedPublicAssets = new Map<string, { record: PublicAssetRecord; absolutePath: string }>();
 const publishedAssetIds = new Set<string>();
 const dynamicPackageAssetIds = new Set<string>();
@@ -263,7 +280,7 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
   runtimeCoverageManifest = coverageManifest;
   coverageLoadMode = "static";
   warehouseLayerSnapshots = new Map();
-  if (evidenceStore.configured) {
+  if (managesContent && evidenceStore.configured) {
     try {
       const warehouseSnapshot = await evidenceStore.loadCurrentCoverageCatalog();
       if (warehouseSnapshot?.layers.length) {
@@ -295,7 +312,7 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
     }
   }
   coverageLoadedAt = new Date().toISOString();
-  await activatePublishedMocs();
+  if (managesContent) await activatePublishedMocs();
   runtimeSurveyIndex = await loadSurveyIndex(releaseRoot, catalog, runtimeCoverageManifest, coverageCatalog.layers, [...publishedPublicAssets.values()].map(({ record }) => record));
   return { mode: coverageLoadMode, loadedAt: coverageLoadedAt, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size };
 }
@@ -303,8 +320,15 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
 await reloadRuntimeCoverage();
 const admin = new AssetsAdmin(undefined, undefined, undefined, new ConnectorProbeStateStore(contentRoot, stateSnapshotSink), new ConnectorInventoryStateStore(contentRoot, stateSnapshotSink));
 const products = new ProductStore(stateSnapshotSink, contentRoot);
-await products.initialize(releaseRoot, coverageCatalog.layers);
+if (managesContent) await products.initialize(releaseRoot, coverageCatalog.layers);
+const publicationScheduler = role === "backend" && authorityStore && releaseSynchronizer ? new PublicationScheduler({
+  contentRoot, baselineRoot: releaseRoot, store: authorityStore, snapshotSink: stateSnapshotSink,
+  freeze: async () => ({ products: products.list(), publications: mocPublicationStore.list() }),
+  synchronize: () => releaseSynchronizer.sync(),
+}) : undefined;
+await publicationScheduler?.initialize();
 const publisher = new PublicReleasePublisher({
+  runRepository: publicationScheduler,
   contentRoot,
   baselineRoot: releaseRoot,
   loadPublications: () => mocPublicationStore.list(),
@@ -315,9 +339,10 @@ const publisher = new PublicReleasePublisher({
   verificationTarget: process.env.ASSETS_PUBLIC_VERIFY_URL?.trim() || undefined,
   publicationLeaseMs: Number(process.env.ASSETS_PUBLICATION_LEASE_MS ?? "600000"),
 });
-let publicState = await loadPublicState(catalog);
-let approvedRelease = publicState.snapshot;
-products.projectPublished(approvedRelease.products, approvedRelease.generatedAt);
+let currentPublicState = await loadPublicState(currentCatalog);
+const publicState = new Proxy({} as typeof currentPublicState, { get: (_target, key) => Reflect.get(requestRelease.getStore()?.state ?? currentPublicState, key) });
+const approvedRelease = new Proxy({} as typeof currentPublicState.snapshot, { get: (_target, key) => Reflect.get(publicState.snapshot, key) });
+if (managesContent) products.projectPublished(approvedRelease.products, approvedRelease.generatedAt);
 async function prepareProductGeometry(record:ProductRecord):Promise<void> {
   const staged=mocBuildStore.list().find(b=>b.productId===record.productId && b.phase==="STAGED");
   if(!staged)return;
@@ -331,16 +356,17 @@ let publicRefreshBusy=false;
 const publicRefreshTimer=setInterval(()=>{ void (async()=>{
   if(publicRefreshBusy)return;publicRefreshBusy=true;
   try {
+    await releaseSynchronizer?.sync();
     const root=await realpath(releaseRoot);
     if(root===catalog.root)return;
     const nextCatalog=await loadCatalog(root);
     const next=await loadPublicState(nextCatalog);
     // No await between these assignments: readers see one consistent snapshot.
-    Object.assign(catalog,nextCatalog);publicState=next;approvedRelease=next.snapshot;
-    products.projectPublished(approvedRelease.products,approvedRelease.generatedAt);
+    currentCatalog=nextCatalog;currentPublicState=next;
+    if (managesContent) products.projectPublished(next.snapshot.products,next.snapshot.generatedAt);
   } catch(error) { console.error("Public release refresh failed; retaining verified snapshot",error instanceof Error?error.message:String(error)); }
   finally {publicRefreshBusy=false;}
-})().catch(()=>undefined);},3000);
+})().catch(()=>undefined);},5000);
 publicRefreshTimer.unref();
 const mocBuildService = new MocBuildService({
   store: mocBuildStore,
@@ -362,7 +388,7 @@ async function resumeMocBuilds(): Promise<void> {
     }
   }
 }
-await resumeMocBuilds();
+if (managesContent) await resumeMocBuilds();
 
 async function refreshDynamicResourcePackages(): Promise<void> {
   // Restore previously generated immutable archives before attempting to
@@ -550,9 +576,35 @@ function editorialApiContent(content: SurveyEditorialContent | null): SurveyEdit
 function editorialApiRecord(record: SurveyEditorialRecord): SurveyEditorialRecord {
   return { ...record, draft: editorialApiContent(record.draft)!, published: editorialApiContent(record.published) };
 }
-await refreshDynamicResourcePackages();
-runtimeSurveyIndex = applyPublishedProductMetadata(runtimeSurveyIndex);
-await editorial.initialize(runtimeSurveyIndex.surveys);
+if (managesContent) {
+  if (role === "legacy") await refreshDynamicResourcePackages();
+  else registerDynamicPackageAssets();
+  runtimeSurveyIndex = applyPublishedProductMetadata(runtimeSurveyIndex);
+  await editorial.initialize(runtimeSurveyIndex.surveys);
+}
+function independentLoop(name: string, interval: number, work: () => Promise<void>): void {
+  let busy = false;
+  const timer = setInterval(() => {
+    if (busy) return;
+    busy = true;
+    void work().catch(error => console.error(`${name} deferred:`, error instanceof Error ? error.message : String(error))).finally(() => { busy = false; });
+  }, interval);
+  timer.unref();
+}
+if (publicationScheduler) {
+  independentLoop("publication", 1000, () => publicationScheduler.tick());
+  independentLoop("publication-checkpoint", 5000, () => publicationScheduler.snapshot());
+  independentLoop("site-verification", 5000, async () => {
+    for (const task of publicationScheduler.tasks.list().filter(task => task.phase === "site-pending")) await publisher.verifySite(task.id, await publicationScheduler.siteExpectation(task.id));
+  });
+  if (snapshotWorker) independentLoop("state-snapshots", 5000, async () => {
+    const { spool, snapshots } = snapshotWorker!;
+    const uploaded = await spool.processPending();
+    await snapshots.reconcileUploaded(uploaded.uploadedManifests);
+    await spool.markReconciled(uploaded.uploadedManifests.map(manifest => manifest.uploadId));
+    await spool.cleanupUploaded();
+  });
+}
 let sourceUnitsPromise: Promise<SourceUnitWorkerStore> | null = null;
 let sourceUnitsFallbackPromise: Promise<SourceUnitStore> | null = null;
 function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
@@ -2194,6 +2246,12 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       }, "admin");
       return json(response, 202, { run, syncStatus: await apiSyncStatus("publication-runs") });
     }
+    const publicationCancelMatch = /^\/api\/v1\/admin\/publications\/([^/]+)\/cancel$/.exec(pathname);
+    if (publicationCancelMatch?.[1] && request.method === "POST") {
+      if (!publicationScheduler) throw new AdminHttpError(409, "Cancellation requires the management backend");
+      await publicationScheduler.cancel(decodeAdminPathSegment(publicationCancelMatch[1]));
+      return json(response, 200, { run: await publisher.get(decodeAdminPathSegment(publicationCancelMatch[1])) });
+    }
     const publicationMatch = /^\/api\/v1\/admin\/publications\/([^/]+)$/.exec(pathname);
     const publicationRetryMatch = /^\/api\/v1\/admin\/publications\/([^/]+)\/retry$/.exec(pathname);
     const publicationRecoverMatch = /^\/api\/v1\/admin\/publications\/([^/]+)\/recover$/.exec(pathname);
@@ -2450,12 +2508,19 @@ async function sendProtectedRegionQuery(request:IncomingMessage,response:ServerR
   compressedJson(request,response,200,result,"no-store");
 }
 
+let adminMutationTail: Promise<void> = Promise.resolve();
 const server = http.createServer((request, response) => {
-  void (async () => {
+  void requestRelease.run({ catalog: currentCatalog, state: currentPublicState }, async () => {
     securityHeaders(response);
     const pathname = requestPath(request);
     if (pathname === "/api/v1/access/unlock" && request.method==="POST") return handleDownloadUnlock(request,response);
-    if (pathname.startsWith("/api/v1/admin/")) return sendAdmin(request, response, pathname);
+    if (pathname.startsWith("/api/v1/admin/")) {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181");
+      if (request.method === "GET" || request.method === "HEAD") return sendAdmin(request, response, pathname);
+      const mutation = adminMutationTail.then(() => sendAdmin(request, response, pathname));
+      adminMutationTail = mutation.catch(() => undefined);
+      return mutation;
+    }
     if (pathname === "/api/v1/access/region-query" && request.method === "POST") return sendProtectedRegionQuery(request,response);
     if (pathname === "/api/v1/coverage/overlap" && request.method === "POST") return sendCoverageOverlap(request, response);
     if (pathname === "/api/v1/coverage/overlap/details" && request.method === "POST") return sendCoverageOverlapDetails(request, response);
@@ -2629,7 +2694,7 @@ const server = http.createServer((request, response) => {
     }
     if (pathname.startsWith("/api/")) return json(response, 404, { error: "API endpoint not found" });
     return sendStatic(response, pathname);
-  })().catch((error) => {
+  }).catch((error) => {
     if(error instanceof AccessError || error instanceof AdminHttpError){ if(error.statusCode===429)response.setHeader("Retry-After","60");return json(response,error.statusCode,{error:error.message});}
     console.error(error);
     if (!response.headersSent) {
@@ -2645,9 +2710,18 @@ server.listen(port, host, () => {
   console.log(`astro-survey-atlas-assets listening on http://${host}:${port} with bundle ${catalog.manifest.bundle.sha256}`);
 });
 
+let shuttingDown = false;
 function shutdown(): void {
-  void sourceUnitsPromise?.then((store) => store.terminate()).catch(() => undefined);
-  server.close(() => process.exit(0));
+  if (shuttingDown) return;
+  shuttingDown = true;
+  const closed = new Promise<void>(resolve => server.close(() => resolve()));
+  void (async () => {
+    await publicationScheduler?.stop();
+    await sourceUnitsPromise?.then(store => store.terminate()).catch(() => undefined);
+    await closed;
+    await releaseBackendOwnership?.();
+    process.exit(0);
+  })().catch(error => { console.error("Shutdown failed", error); process.exit(1); });
 }
 
 process.on("SIGINT", shutdown);

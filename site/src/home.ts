@@ -51,10 +51,11 @@ const modalityLabels: Record<string, { en: string; zh: string }> = {
 
 const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
-function renderIcons(): void {
+function renderIcons(root: HTMLElement = document.body): void {
   createIcons({
     icons: { ArrowRight, ArrowUpRight, Database, ExternalLink, FileCheck2, Grid2X2, "Grid2x2": Grid2X2, LocateFixed, Menu, Moon, PanelsTopLeft, Play, Star, Sun, Telescope, Image, RotateCcw, Layers3, CircleHelp, Box, ListChecks, X },
     attrs: { "aria-hidden": "true" },
+    root,
   });
 }
 
@@ -183,18 +184,22 @@ function renderFeaturedSurveys(surveys: SurveyRecord[]): void {
     const modalities = [...new Set([...(survey.modalities ?? []), ...survey.releases.flatMap((release: any) => release.products.flatMap((product: any) => product.modality ? [product.modality] : []))])];
     const iconNames: Record<string,string> = { imaging: "image", spectroscopy: "telescope", photometry: "database", "time-domain": "rotate-ccw", "integral-field": "layers-3", ultraviolet: "sun", infrared: "circle-help", catalog: "list-checks", simulation: "box" };
     details.className = "snapshot-modalities";
-    details.setAttribute("aria-label", `${survey.name} 模态：${modalities.map((modality) => modalityLabels[modality]?.[locale()] ?? modality).join("、")}`);
+    details.setAttribute("aria-label", `${survey.name} ${locale() === "zh" ? "模态：" : "modalities: "}${modalities.map((modality) => modalityLabels[modality]?.[locale()] ?? modality).join("、")}`);
     details.innerHTML = modalities.map((modality) => `<i data-lucide="${iconNames[modality] ?? "database"}" title="${modalityLabels[modality]?.[locale()] ?? modality}"></i>`).join("");
     const orders = survey.releases.flatMap((release: any) => release.products.flatMap((product: any) => product.coverage?.maxOrder ?? []));
-    const precision = orders.length ? `最高原生 O${Math.max(...orders)}` : "精度待定";
+    const precision = orders.length ? `${locale() === "zh" ? "最高原生" : "Finest native"} O${Math.max(...orders)}` : (locale() === "zh" ? "精度待定" : "Precision unspecified");
     const precisionNode = document.createElement("small"); precisionNode.textContent = precision;
-    copy.append(name, details, precisionNode);
+    const heading = document.createElement("span");
+    heading.className = "snapshot-heading";
+    heading.append(name, details);
+    copy.append(heading, precisionNode);
     const count = document.createElement("b");
     const productCount = survey.statistics?.acquired ?? survey.releases.reduce((sum, release) => sum + release.products.length, 0);
     count.textContent = `${productCount} ${t("home.productsCount")}`;
     row.append(copy, count);
     host.append(row);
   });
+  renderIcons(host);
 }
 
 async function loadCatalog(): Promise<void> {
