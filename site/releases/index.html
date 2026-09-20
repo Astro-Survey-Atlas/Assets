@@ -52,6 +52,33 @@
         </div>
       </section>
 
+      <section class="resource-band release-faq" aria-labelledby="release-faq-title">
+        <h2 id="release-faq-title" data-i18n="releaseFaq.title">FAQ</h2>
+        <details id="frontend-package-faq">
+          <summary data-i18n="releaseFaq.question">How can my frontend use a published Resource Package?</summary>
+          <div class="release-faq-body">
+            <ol>
+              <li data-i18n="releaseFaq.select"></li>
+              <li data-i18n="releaseFaq.verify"></li>
+              <li data-i18n="releaseFaq.preview"></li>
+              <li data-i18n="releaseFaq.native"></li>
+              <li data-i18n="releaseFaq.workspace"></li>
+            </ol>
+            <pre class="release-code-block"><code>const catalogUrl = new URL("/api/v1/resource-packages/catalog.json", assetsBase);
+const response = await fetch(catalogUrl);
+if (!response.ok) throw new Error(`Catalog HTTP ${response.status}`);
+const { packages } = await response.json();
+// Select a package, then retain its id, version, sha256 and sizeBytes.
+const entry = packages.find(p =&gt; p.id === selectedPackageId);
+if (!entry) throw new Error("Package is not in this catalog");
+const downloadUrl = new URL(entry.archiveUrl, catalogUrl);
+// Download and verify the ZIP before parsing or displaying it.</code></pre>
+            <p data-i18n="releaseFaq.network"></p>
+            <p data-i18n="releaseFaq.limits"></p>
+          </div>
+        </details>
+      </section>
+
       <section class="resource-band release-api-band">
         <p class="public-kicker" data-i18n="page.releases.apiSyncTitle">API sync</p>
         <p class="release-api-hint" data-i18n="page.releases.apiSyncHint">Every release exposes a collection ZIP plus version-pinned packages. Download and verify bytes end to end:</p>
@@ -65,22 +92,20 @@
             <button class="release-code-copy" type="button" id="release-code-copy"><i data-lucide="copy"></i><span data-i18n="page.releases.copyCode">Copy</span></button>
           </div>
           <div class="release-code-pane is-active" role="tabpanel" id="release-pane-curl" aria-labelledby="release-tab-curl">
-            <pre class="release-code-block"><code class="release-code" data-lang="bash">BASE="https://astro.assets.dev.72602.space"   # or any Assets deployment
+            <pre class="release-code-block"><code class="release-code" data-lang="bash">BASE="http://astro.assets.dev.72602.space:32080"
 
-# 1. List releases; pick releaseId and its collection entry
-curl -fsS "$BASE/api/v1/releases" | python3 -m json.tool | less
+# List available versions; select a package and retain its hash.
+curl -fsS "$BASE/api/v1/resource-packages/catalog.json" -o catalog.json
+python3 -c 'import json; d=json.load(open("catalog.json")); print(*[(p["id"],p["version"],p["sha256"]) for p in d["packages"]], sep="\n")'
 
-# 2. Download the whole resource-package collection and verify it
-REL="public-survey-footprints-2026-09-09-2"
-SHA=$(curl -fsS "$BASE/api/v1/releases/$REL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["collection"]["sha256"])')
-curl -fL "$BASE/api/v1/releases/$REL/download" -o "$REL-resource-packages.zip"
-echo "$SHA  $REL-resource-packages.zip" | sha256sum -c -
-
-# 3. Or pin one package version and verify it
-PKG="public-desi-footprints"; VER="3.0.0"
-SHA=$(curl -fsS "$BASE/api/v1/releases/$REL" | python3 -c 'import json,sys;print([p["sha256"] for p in json.load(sys.stdin)["packages"] if p["id"]=="public-desi-footprints"][0])')
+# Set these from the SAME catalog entry. Never mix versions and hashes.
+PKG="&lt;package-id&gt;"; VER="&lt;version&gt;"; SHA="&lt;sha256&gt;"
 curl -fL "$BASE/api/v1/resource-packages/$PKG/versions/$VER/download" -o "$PKG-$VER.zip"
-echo "$SHA  $PKG-$VER.zip" | sha256sum -c -</code></pre>
+echo "$SHA  $PKG-$VER.zip" | sha256sum -c -
+
+# A historical release has a collection download only if its JSON
+# includes a collection entry. Incremental publication need not create one.
+</code></pre>
           </div>
           <div class="release-code-pane" role="tabpanel" id="release-pane-python" aria-labelledby="release-tab-python" hidden>
             <pre class="release-code-block"><code class="release-code" data-lang="python" data-src="/api/v1/assets/documentation-sync-example-python/preview">import urllib.request, hashlib, json, os, tempfile, argparse

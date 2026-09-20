@@ -22,19 +22,12 @@ def main() -> None:
     value = json.loads(path.read_text(encoding="utf-8"))
     for key, relative in {
         "sources": "sources.json",
-        "canonicalManifest": "normalized/survey-footprints.json",
+        "canonicalManifest": "../../src/footprints/survey-footprints.json",
         "rawMocIndex": "raw/moc/index.json",
         "rawGeometryIndex": "raw/geometry/index.json",
     }.items():
         if key in value.get("inputs", {}):
             value["inputs"][key]["sha256"] = sha(ARTIFACT_ROOT / relative)
-    for normalized in sorted((ARTIFACT_ROOT / "csst").glob("*-normalized-scan.json")):
-        value.setdefault("inputs", {})[normalized.stem] = {
-            "path": str(normalized.relative_to(ARTIFACT_ROOT)),
-            "sha256": sha(normalized),
-            "sizeBytes": normalized.stat().st_size,
-        }
-    manifest_path = ARTIFACT_ROOT / "normalized/survey-footprints.json"
     value["files"]["manifest"].update({"sha256": sha(manifest_path), "sizeBytes": manifest_path.stat().st_size})
     catalog_path = ARTIFACT_ROOT / "packages/catalog.json"
     value["files"]["catalog"].update({"sha256": sha(catalog_path), "sizeBytes": catalog_path.stat().st_size})

@@ -5,8 +5,9 @@ import type { PublicAssetRecord } from "./types.js";
  *
  * Deep module owning which surveys are excluded from every public release
  * artifact (manifest, archive, package catalog, release history, API).
- * Data for denied surveys stays in Git, evidence storage, admin and the
- * warehouse; it is only excluded at publication time.
+ * Private survey data may stay in protected admin/evidence storage and
+ * Workspace, but never in Git. These checks also block historical data
+ * from leaking through a release or public API.
  */
 
 export const DENIED_SURVEY_IDS: readonly string[] = (() => {

@@ -14,15 +14,11 @@
 尚未有产品几何的记录仍是 `overview_only` 或 `awaiting_geometry`，没有用面积、中心点、
 示意图或相邻产品代填。
 
-## CSST W1 仿真图像覆盖
+## 私有模拟数据
 
-CSST 条目描述尚未发射运行阶段的 W1 仿真数据，不是正式公开巡天 footprint。Assets 通过标准 coverage task 指定 `W1_Phot/` 输入，data-warehouse 执行文件读取和 FITS-WCS 解析；历史运行记录 `workspaceRunId=ingest-2789ca60-c9db-46b9-9314-e581c91ab836` 作为 provenance 事实保留，当前证据不把它当作 Assets 或 Atlas 的共享任务接口。该运行匹配 178,056 个 FITS 文件，逐文件通过 Range 请求读取 FITS header，并从 `IMAGE` HDU 的 ICRS WCS 边界生成 `image_extent` 覆盖；不下载图像像素，也不使用目录对象位置代替图像范围。
-
-WCS 边界使用包容性 NESTED HEALPix polygon rasterization，原生发布分辨率为 order 8（NSIDE 256）。标准 WCS 关键字始终是几何依据；`RA_OBJ/DEC_OBJ`、`RA_PNT0/DEC_PNT0` 和 `RA_PNT1/DEC_PNT1` 仅用于中心一致性审计。一个输入文件的 `CD2_1=0.003676972383887528 deg/pix` 会令 20,000 像素轴跨越约 73 度，明显偏离同批 WIDE 图像，审核后从公开并集中剔除并保留异常证据。
-
-审核后的 178,055 个文件并集包含 6,763 个 order-8 像元，面积为 354.7589326601951 平方度。项目路径中的“1000 平方度”只是仿真项目标签，不能作为当前文件集合的实测覆盖面积。官网使用的 46 个 NSIDE 16 像元是从原生 order-8 MOC 归并父像元所得的 display-resolution reduction，不是重新计算的高精度边界。
-
-完整输入 manifest、任务快照、统计、异常说明、order-8 JSON、FITS NUNIQ MOC、NSIDE 16 HEALPix 单元预览和各文件 SHA-256 历史上位于 `artifacts/public-survey-footprints/csst/`；批量 evidence 已由 S3 保存，当前 checkout 只保留三个 conformance keeper。OSS ETag 只作为对象版本证据，不冒充内容 SHA-256；这些静态制品不包含原始远程凭据，凭据的存储和解析不属于 MOC 计算方法。
+真实私有模拟数据与测量结果保留于受控后台/证据存储，不作为本仓库的公开产品或
+测试夹具。公开方法测试使用合成几何；用户数据重建由 Workspace 与 Warehouse
+独立执行，验收通过后再决定旧后台数据的清退。
 
 ## CDS MOC 产品
 

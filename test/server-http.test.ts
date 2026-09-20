@@ -128,10 +128,10 @@ test("admin endpoints require a token and expose the configured control-plane bo
   const surveyViewText = await surveyView.text();
   const surveyViewBody = JSON.parse(surveyViewText) as { surveys: Array<{ id: string; releases: Array<{ id: string; products: Array<{ productId: string; review?: { state: string } }> }>; unmatchedProducts?: unknown[] }> };
   assert.ok(surveyViewBody.surveys.length > 0);
-  const csst = surveyViewBody.surveys.find((survey) => survey.id === "csst");
-  assert.ok(csst);
-  assert.ok(csst.releases.length > 0 && csst.releases.every((release) => release.products.length > 0));
-  assert.ok(csst.releases.flatMap((release) => release.products).every((product) => product.productId && product.review?.state));
+  const publicSurvey = surveyViewBody.surveys.find((survey) => survey.id === "euclid");
+  assert.ok(publicSurvey);
+  assert.ok(publicSurvey.releases.length > 0 && publicSurvey.releases.every((release) => release.products.length > 0));
+  assert.ok(publicSurvey.releases.flatMap((release) => release.products).every((product) => product.productId && product.review?.state));
   assert.doesNotMatch(surveyViewText, /normalized-scan|taskSnapshot|\/var\/lib|elasticsearch|input-manifest/i);
 });
 

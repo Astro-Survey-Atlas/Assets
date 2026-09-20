@@ -1,5 +1,7 @@
 # Assets / Workspace baseline — 2026-09-20
 
+> Assets GitHub Release 已由维护者删除，配套 Workspace Release 也已撤下。本文仅为历史验证记录，不再作为可用下载入口。Git 历史和标签尚未重写。
+
 The matching `baseline-2026.09.20` tags in Assets and Workspace freeze the
 verified public publication → package installation → native MOC overlap flow.
 These are deployment baseline releases, not a request to rebuild packages from

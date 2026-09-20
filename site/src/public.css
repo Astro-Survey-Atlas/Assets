@@ -1936,3 +1936,11 @@ body.resources-page .project-repository-links svg { width: 12px; height: 12px; }
   .release-flow-steps { flex-direction: column; }
   .release-flow-steps li + li::before { content: "↓"; top: -21px; left: 50%; transform: translateX(-50%); }
 }
+
+.release-faq details { border: 1px solid var(--public-line); border-radius: 10px; padding: 16px 20px; }
+.release-faq summary { cursor: pointer; color: var(--public-text); font-weight: 600; line-height: 1.5; }
+.release-faq summary:focus-visible { outline: 2px solid var(--brand-indigo-strong); outline-offset: 5px; }
+.release-faq-body { color: var(--public-muted); font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.release-faq-body ol { list-style: none; padding: 0; }
+.release-faq-body li { margin: 14px 0; }
+.release-faq-body pre { overflow-x: auto; max-width: 100%; padding: 14px; font-size: 12px; }

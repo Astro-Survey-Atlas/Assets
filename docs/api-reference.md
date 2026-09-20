@@ -496,14 +496,13 @@ layer 按 layer identity 覆盖或追加。Warehouse 不可用时保留静态 ca
 `GET|POST /api/v1/admin/publications`、`GET /api/v1/admin/publications/{runId}` 和
 失败任务的 `POST /api/v1/admin/publications/{runId}/retry`。
 计划包含每个受影响产品的 added/modified 字段差异，并在 revision 未审核时阻塞提交。
-执行阶段先把不可变 archive 上传到 hash 地址，再从对象存储下载到干净目录，逐文件校验
-manifest、目录和 SHA-256，并读取每个 Resource Package ZIP 内的
-`resource-package.json` 校验 `id/version/surveyId` 与 catalog 一致，最后使用 current
-指针的 CAS 切换。恢复、语义或基线校验失败不会切换指针。`POST /api/v1/admin/publications/{runId}/verify` 可按运维配置的固定
+执行阶段将变更文件按 SHA-256 增量上传，写入不可变对象 manifest，再在隔离目录恢复、
+校验 manifest、文件哈希及 Resource Package 的 id/version/surveyId，最后通过 CAS
+切换 schema-3 current 指针。完整 archive 仅用于导出/恢复及旧成员兼容，不是单产品
+发布的必经步骤。恢复、语义或基线校验失败不会切换指针。`POST /api/v1/admin/publications/{runId}/verify` 可按运维配置的固定
 `ASSETS_PUBLIC_VERIFY_URL` 重新核验目标站点 `/healthz`、公开产品、coverage catalog
 和 Resource Package catalog；目标站点仍是旧 bundle 时状态为 `site-pending`，不算闭环完成。
-失败记录保存 `failureStage`（构建、上传、候选隔离验证或权威指针切换）；重试会按当前
-计划创建新的 run，不覆盖旧记录。站点核验失败只需调用 verify，不会重新发布。
+失败记录保存 `failureStage`（构建、上传、候选隔离验证或权威指针切换）；重试保留冻结的产品版本/审核选择与尝试记录；版本或审核发生变化必须重新提交。站点核验失败只需调用 verify，不会重新发布。
 
 发布后台的浏览器级 smoke 可在本地或目标环境运行：
 

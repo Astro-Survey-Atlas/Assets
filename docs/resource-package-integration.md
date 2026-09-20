@@ -4,6 +4,9 @@ Astro Survey Atlas Resource Package v3 is the reusable output boundary. A
 consumer does not need the Assets website, Kubernetes administrator, Warehouse,
 or Elasticsearch to install and query the published MOCs.
 
+See the [frontend guide](frontend-resource-package-guide.md) and the collapsible
+FAQ on `/releases/` for rendering and Workspace loading.
+
 ## Trust and download
 
 Read the public package catalog, choose a package, download its immutable
@@ -19,19 +22,19 @@ curl --fail --silent --show-error \
 # packages[].archiveUrl is the pinned version route:
 #   /api/v1/resource-packages/{id}/versions/{version}/download
 curl --fail --silent --show-error \
-  "$BASE/api/v1/resource-packages/public-desi-footprints/versions/3.0.0/download" \
-  --output public-desi-footprints-3.0.0.zip
+  "$BASE/api/v1/resource-packages/<id>/versions/<version>/download" \
+  --output package.zip
 
-printf '%s  %s\n' "<packages[].sha256>" public-desi-footprints-3.0.0.zip \
+printf '%s  %s\n' "<packages[].sha256>" package.zip \
   | sha256sum --check -
 ```
 
 The catalog's `packages[].sha256` is the trust anchor. HTTP `ETag` and object
 storage multipart ETags are not substitutes for the content hash.
 
-Every publication also exposes a whole-release **resource package collection**
-ZIP (catalog + all survey package ZIPs of that release) through the release
-history:
+A release may expose a **resource package collection** ZIP through release
+history when it declares `collection`. Incremental publication does not require
+creating one. Check that field before using the optional download:
 
 ```bash
 curl --fail --silent --show-error "$BASE/api/v1/releases" --output releases.json

@@ -63,7 +63,8 @@ order 投影负责空间计算，Resource Package v3 负责离线安装，官方
 ## 任务生命周期
 
 公共 MOC、Resource Package 和大型 query projection 的权威发布位置是版本化
-对象存储；Git 保留 catalog、recipe lock、provenance 摘要和 hash。输入 manifest、
+对象存储；Git 保留公开 catalog、recipe lock、非敏感 provenance 摘要和 hash。真实私有数据（包括 CSST）
+及其预览/配方不进入 Git；可保留在 Assets/Workspace 受控后台，测试采用合成数据。输入 manifest、
 normalized scan、任务快照和错误继续留在 evidence PVC/object store。已确认的
 authority 是 gitignored `.info` 描述的 MinIO，不是当前 Helm `storage/minio`
 公开桶。P0-P5 的盘点、恢复、队列、CAS、workflow 和线上切换均已验收；本地

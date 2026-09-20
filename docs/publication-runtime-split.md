@@ -1,7 +1,6 @@
 # Publication runtime and recovery
 
-Deployed in dev: role split at revision 179; current verified revision 182
-(2026-09-20). See [HANDOFF](../HANDOFF.md) for image, live counts and recovery
+The role split was deployed at revision 179. See [HANDOFF](../HANDOFF.md) for image, live counts and recovery
 evidence. The cutover instructions below describe the completed migration; do not
 repeat them on the already split deployment.
 

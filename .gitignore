@@ -8,12 +8,10 @@ __pycache__/
 .env
 .env.*
 !.env.example
-# CSST evidence lives in object storage (prefix repo-evidence); only the
-# conformance-fixture keepers stay tracked.
-artifacts/public-survey-footprints/csst/*
-!artifacts/public-survey-footprints/csst/README.md
-!artifacts/public-survey-footprints/csst/provenance.json
-!artifacts/public-survey-footprints/csst/csst-w1-image-extent-order8.fits
+# Private survey inputs, outputs and recipes never belong in Git.
+artifacts/public-survey-footprints/csst/
+fixtures/conformance/csst*
+src/layers/recipes/csst-*
 # Public release bytes are hydrated from the S3 authority into a disposable
 # local cache. Generated packages and release metadata must not re-enter Git.
 artifacts/public-survey-footprints/*

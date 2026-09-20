@@ -78,7 +78,7 @@ Assets 不会把 preview 当成更高精度的测量。每个响应都会返回�
 
 Git 保存小型、可审阅的发布元数据：survey/layer registry、recipe lock、schema、
 catalog 投影、provenance 摘要和 hash。版本化 MOC、资源包和大型 evidence 由生产
-S3 保存；当前 checkout 只保留三个 CSST conformance fixture、Core wheel 和
+S3 保存；真实 CSST 私有数据不进入 Git，可保留于受控后台与证据存储。当前 checkout 保留合成 conformance fixture、Core wheel 和
 `evidence-index.json`。生成的 release、layer、raw、content、probe 和 staging 副本
 已在独立 S3 恢复及 SHA-256/size 校验后删除。
 
@@ -91,12 +91,12 @@ S3 保存；当前 checkout 只保留三个 CSST conformance fixture、Core whee
 校验并激活的 `/data/current`，不在每次请求时访问 S3。请按[存储契约](docs/public-artifact-storage.md)
 配置 endpoint、bucket 和 credential Secret。
 
-## 存储改造目标
+## 存储权威
 
 [S3 唯一权威实施计划](docs/s3-authority-implementation-plan.md) 记录：生产 S3
 保存已上传业务数据和已同步控制状态，本地只保留可删除的恢复缓存、可重算
 scratch 和独立待上传目录。已确认的 authority 是 gitignored `.info` 描述的
-MinIO，不是当前 Helm 公开桶。P0-P6 迁移和线上消费者切换已完成；仍在使用的
+MinIO，不是已退役的 Helm 开发桶。P0-P6 迁移和线上消费者切换已完成；仍在使用的
 PVC 按迁移收据保留，待单独完成证据化退役评估。
 
 ## 部署

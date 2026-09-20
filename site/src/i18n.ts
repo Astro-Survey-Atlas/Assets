@@ -4,6 +4,16 @@ const STORAGE_KEY = "astro-survey-atlas.locale";
 
 const messages: Record<Locale, Record<string, string>> = {
   en: {
+    "releaseFaq.title": "FAQ",
+    "releaseFaq.question": "How can my frontend use a published Resource Package?",
+    "releaseFaq.select": "1. Choose a package from /api/v1/resource-packages/catalog.json. Pin id + version + SHA-256; resolve archiveUrl relative to the catalog URL. A catalog update does not mean an installed package has been updated.",
+    "releaseFaq.verify": "2. Download the ZIP and verify sizeBytes and SHA-256. After extraction, validate resource-package.json (schemaVersion 3, matching id/version/surveyId), then verify every declared file and native MOC against its size and hash. Cache by version and hash; keep the last verified package if an update fails.",
+    "releaseFaq.preview": "3. Read footprints/survey-footprints.json for a lightweight view. Each footprint has its own layerId, surveyId, releaseId, nside and NESTED pixels in ICRS. Join it to the matching manifest layer; do not assume one top-level nside or merge unrelated DRs.",
+    "releaseFaq.native": "4. For accurate overlap or zoom, load mocs/*.moc.fits from the same package using a MOC-capable library, or project it with MOC Core in your backend. Use a common real order; never expand an order-4 preview to claim order-8 precision. Retain layer identity and source precision.",
+    "releaseFaq.workspace": "5. In Workspace: synchronize the public catalog, install or update the selected package, then select the DRs to load. Installing, updating and activating are separate steps; no downgrade or data rescan is required to load an existing verified public package.",
+    "releaseFaq.network": "Browser access requires the source to allow CORS, or a same-origin backend proxy that you configure. Do not put admin or object-store credentials in frontend code. Web Crypto SHA-256 requires HTTPS or localhost; on plain HTTP, verify in the backend.",
+    "releaseFaq.limits": "Empty sources is valid for geometry-only packages. A MOC describes coverage, not a list of downloadable scientific files. Keep evidence and full scan/task records out of initial page requests.",
+
     "releaseFlow.mocSource": "Search public coverage records in CDS MocServer.",
     "releaseFlow.scanSource": "Scan explicitly selected source files through Warehouse, then build coverage from their normalized results.",
     "releaseFlow.title": "How data is discovered, verified and published",
@@ -63,7 +73,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "page.releases.bundleId": "Bundle",
     "page.releases.releasedAt": "Published",
     "page.releases.apiSyncTitle": "API sync",
-    "page.releases.apiSyncHint": "Every release exposes a collection ZIP plus version-pinned packages. Download and verify bytes end to end:",
+    "page.releases.apiSyncHint": "Download version-pinned packages and verify their bytes. A collection ZIP is available only when the selected release declares one:",
     "page.releases.examplesTitle": "Sync examples by language",
     "page.releases.copyCode": "Copy",
     "page.releases.loadingExample": "Loading example…",
@@ -336,6 +346,16 @@ const messages: Record<Locale, Record<string, string>> = {
     "admin.refreshFailed": "REFRESH FAILED",
   },
   zh: {
+    "releaseFaq.title": "常见问题",
+    "releaseFaq.question": "前端如何使用已发布的资源包？",
+    "releaseFaq.select": "1. 从 /api/v1/resource-packages/catalog.json 选择包，固定 id、version 与 SHA-256；相对于目录 URL 解析 archiveUrl。目录更新不代表本地已安装的包已更新。",
+    "releaseFaq.verify": "2. 下载 ZIP，校验 sizeBytes 和 SHA-256。解包后核对 resource-package.json 的 schemaVersion=3 及 id/version/surveyId，再按清单逐个校验文件和原生 MOC 的大小、哈希。按版本与哈希缓存；更新失败时保留上一份已验证包。",
+    "releaseFaq.preview": "3. 读取 footprints/survey-footprints.json 展示轻量概览。每个 footprint 自带 layerId、surveyId、releaseId、nside 和 ICRS/NESTED pixels，按身份关联清单中的图层；不要假定存在顶层统一 nside，也不要混合无关 DR。",
+    "releaseFaq.native": "4. 精细显示或重合计算应使用同包的 mocs/*.moc.fits，由支持 MOC 的库读取，或在后端通过 MOC Core 投影。选择真实的共同阶数，不能把 order 4 预览放大成 order 8 精度；保留图层身份和来源精度说明。",
+    "releaseFaq.workspace": "5. Workspace 操作：同步公共目录 → 安装或更新所选资源包 → 勾选要加载的 DR。安装、更新、激活是不同步骤；加载已验证的公开包不需要降级版本或重新扫描数据。",
+    "releaseFaq.network": "浏览器跨域访问需要服务端允许 CORS，或由你配置同源后端代理。管理令牌和对象存储凭据不能放进前端。Web Crypto 的 SHA-256 需要 HTTPS 或 localhost；普通 HTTP 页面应由后端校验。",
+    "releaseFaq.limits": "sources 为空是合法的纯覆盖包。MOC 表示覆盖范围，不等于可下载科学文件清单；完整扫描、任务快照等证据不应随首页请求加载。",
+
     "releaseFlow.mocSource": "从 CDS MocServer 检索已收录的公开覆盖记录。",
     "releaseFlow.scanSource": "通过 Warehouse 扫描明确选定的来源文件，再根据标准化结果构建覆盖。",
     "releaseFlow.title": "数据如何发现、验证与发布",
@@ -395,7 +415,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "page.releases.bundleId": "Bundle",
     "page.releases.releasedAt": "发布时间",
     "page.releases.apiSyncTitle": "API 同步",
-    "page.releases.apiSyncHint": "每次发布都提供合集 ZIP 与固定版本的资源包，可端到端下载并校验字节：",
+    "page.releases.apiSyncHint": "下载固定版本的资源包并校验字节；仅当所选发布声明 collection 时才提供合集 ZIP：",
     "page.releases.examplesTitle": "按语言切换同步示例",
     "page.releases.copyCode": "复制",
     "page.releases.loadingExample": "示例加载中…",

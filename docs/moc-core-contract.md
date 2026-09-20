@@ -28,9 +28,9 @@ vendor provenance.
   1.0.0 and is rejected at the input boundary. Core 1.1.0 additionally accepts
   any Resource Package `3.x.y` version.
 
-The reviewed CSST layer remains order 8 and retains its existing FITS bytes,
-pixels, measured area, and SHA-256. Its classification is `image_extent`,
-`simulated`, and `user_file_derived`.
+Shared conformance tests use synthetic geometry. Real private survey MOCs and
+preview cells (including CSST) are not Git fixtures; their protected runtime
+storage is independent of the public package contract.
 
 The Assets layer registry may reserve a stable ID with `status:
 awaiting_snapshot` before the official input is available. Such a record must

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { isDeniedSurvey } from "../server/publication-policy.js";
 
 const root = path.resolve(process.env.ASSET_WORKTREE_ROOT ?? process.cwd());
 const artifactRoot = path.resolve(process.env.ASSET_ARTIFACT_ROOT ?? path.join(root, "artifacts", "public-survey-footprints"));
@@ -136,7 +137,7 @@ export async function validate(): Promise<PublicFootprintStatistics> {
     registered.set(key, product);
   }
   const sourceProducts = new Map<string, SourceProduct>();
-  for (const release of sources.releases ?? []) for (const product of release.products ?? []) {
+  for (const release of (sources.releases ?? []).filter(release => !isDeniedSurvey(release.surveyId))) for (const product of release.products ?? []) {
     const key = identity(release.surveyId, release.releaseId, product.product);
     if (sourceProducts.has(key)) errors.push(`Duplicate source product: ${key}`);
     sourceProducts.set(key, product);
@@ -272,11 +273,6 @@ export async function validate(): Promise<PublicFootprintStatistics> {
       for (const [name, record] of Object.entries(outputProvenance.outputs)) await verifyRecord(record, `${spec.layerId} ${name}`, outputRoot);
     } catch (error) { errors.push(String(error)); }
   }
-
-  const csstPath = path.join(artifactRoot, "csst", "csst-w1-image-extent-order8.fits");
-  if (await sha256(csstPath) !== "caa6a5287efa0ba9abc406261d4e653730b062e49282ffc82549f7d2735dbf3c") errors.push("Frozen CSST MOC hash changed");
-  const csstLayer = registry.layers.find((layer) => layer.layerId === "csst-sim-w1-image-extent");
-  if (!csstLayer || csstLayer.coverageRole !== "image_extent" || csstLayer.dataOrigin !== "simulated" || csstLayer.sourceTier !== "user_file_derived" || csstLayer.maxOrder !== 8 || csstLayer.artifactPath !== "artifacts/public-survey-footprints/csst/csst-w1-image-extent-order8.fits" || csstLayer.expectedSha256 !== "caa6a5287efa0ba9abc406261d4e653730b062e49282ffc82549f7d2735dbf3c") errors.push("Frozen CSST classification changed");
 
   if (errors.length) throw new Error(`public footprint validation failed:\n${errors.join("\n")}`);
   const products = [...sourceProducts.values()];

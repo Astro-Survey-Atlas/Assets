@@ -1,227 +1,95 @@
-# Public artifact storage and release archives
+# Public artifact storage and recovery
 
-This document describes the **current storage contract**. The scope and
-implementation record are in the [S3 authority implementation
-plan](s3-authority-implementation-plan.md). Production S3 is the
-sole authority for uploaded business bytes and synced control state. The
-confirmed authority endpoint is the MinIO described by gitignored `.info`, not
-the currently deployed Helm `storage/minio` public-release bucket. Local
-`cache/` is a verified, disposable restore; `scratch/` is recomputable work;
-and `uploads/` is an explicit pending-upload spool. Compute completion does not
-wait for upload completion. The online authority cutover and development-bucket
-retirement are complete; active PVCs remain until a separate evidence-backed
-retirement decision.
+Production object storage is the authority for uploaded business data. Assets
+site and backend use independent, verified local release caches. Backend owns
+business state and the durable publication queue; site serves public data and
+proxies authenticated admin requests. See [publication runtime and recovery](publication-runtime-split.md)
+for the process/volume layout and [HANDOFF](../HANDOFF.md) for current deployment.
 
-The generated release tree, local dynamic content state, dated probe and release
-staging output were removed from this checkout after independent S3 restore and
-size/SHA-256 checks. The source checkout retains only small software/conformance
-fixtures and the evidence ledger; release validation must hydrate its data roots.
+## Public publication
 
-Assets v1 uses one deployment path: the release data is built as a complete,
-immutable `tar.gz`, uploaded to S3-compatible object storage, and downloaded by
-the `publish-assets` init container before the server starts. The runtime image
-contains code and dependencies only; it never contains the public release
-tree.
+Normal product publication is incremental. After version-bound review, backend
+uploads changed files under `public/objects/sha256/<sha256>`, writes an immutable
+object manifest under `public/manifests/<sha256>.json`, restores and verifies the
+candidate, then changes `public/current.json` with compare-and-swap. The website
+independently loads and verifies the selected release. Publication is complete
+only after website verification.
 
-## Ownership and delivery classes
-
-Assets owns the public release index, MOC, preview, evidence and reverse-lookup
-boundary. Warehouse owns scan execution and status. Workspace consumes the
-Assets HTTP catalog and verifies package hashes before installation.
-
-`release-manifest.json` is the file-level integrity and catalog trust surface.
-It records every public asset's logical path, media type, size, SHA-256 and
-delivery class. Evidence records remain marked `evidence`; the CSST
-`input-manifest.json` is not added to the public allowlist.
-
-## Object layout
-
-Each release is immutable and selected by a small mutable pointer:
-
-```text
-public/releases/<bundle-id>/<bundle-sha256>/release.tar.gz
-public/current.json
-```
-
-`public/current.json` currently uses schema version 2:
+The current pointer is schema 3:
 
 ```json
 {
-  "schemaVersion": 2,
-  "bundle": { "id": "public-survey-footprints-2026-09-07", "sha256": "<manifest-sha256>" },
-  "archiveKey": "public/releases/<bundle-id>/<manifest-sha256>/release.tar.gz",
-  "archiveSizeBytes": 123,
-  "archiveSha256": "<archive-sha256>",
-  "publishedAt": "2026-09-07T00:00:00.000Z"
+  "schemaVersion": 3,
+  "bundle": { "id": "<bundle-id>", "sha256": "<release-manifest-sha256>" },
+  "manifestKey": "public/manifests/<object-manifest-sha256>.json",
+  "manifestSha256": "<object-manifest-sha256>"
 }
 ```
 
-The archive contains the complete release tree needed by Assets, including the
-manifest, catalog, MOCs, coverage projections, registry and recipe metadata,
-provenance and Resource Package v3 archives. Package ZIPs are copied from
-`ASSETS_PACKAGE_STAGING_ROOT` during packaging and are validated against the
-catalog size and SHA-256. A clean code-only image build does not need package
-ZIPs in its build context.
+The object manifest pins every member's logical path, size and SHA-256. Unchanged
+legacy members may retain a schema-2 base archive reference; this compatibility
+does not require uploading a complete archive for every publication.
+`release-manifest.json` remains the public file-level integrity contract.
 
-## Runtime filesystem contract
+Full `release.tar.gz` archives are export/restore artifacts. Resource-package
+collection ZIPs are optional historical/distribution exports: consumers must
+check whether the selected release declares `collection`. Individual package
+versions have their own immutable URLs and hashes.
 
-```text
-/data/.staging                 temporary archive and extraction directory
-/data/releases/<manifest-sha>  fully verified immutable release tree
-/data/current                  atomic symlink to the active release
-/var/lib/assets-content        dynamic product publication PVC
-/var/lib/assets-evidence       scan and evidence PVC
-```
+## Code, runtime data and private evidence
 
-The init container reads only `public/current.json`, downloads its
-`archiveKey`, checks the archive size and SHA-256, rejects unsafe archive paths
-and links, extracts to staging, runs `loadCatalog` over the extracted tree,
-then atomically switches `/data/current`. A failed download, extraction or
-manifest check leaves the previous active release untouched and prevents the
-server container from starting.
+Git contains code, public metadata/recipe locks, synthetic conformance fixtures,
+the pinned Core wheel and non-secret integrity references. Real private survey
+inputs, coverage outputs, preview pixels and package fixtures do not belong in
+Git, including CSST. They may remain in protected Assets/Workspace backend
+storage and evidence storage. The public deny policy remains necessary to filter
+older snapshots and prevent accidental publication.
 
-When the selected manifest SHA already exists and passes `loadCatalog`, the
-archive is not downloaded again. This hash cache is the only startup reuse
-optimization; there is no image-data fallback or per-file object download.
+The former tracked CSST directory, embedded survey/layer/preview entries and
+private build recipes have been removed from the current source tree. They are
+not required to build public packages or exercise the shared MOC algorithms.
+Historical recipes/evidence must be restored to an explicit private work root,
+never added back to the checkout as test data.
 
-## Build and publish
+Input manifests, normalized scans, task snapshots and raw private inputs are
+`deliveryClass: evidence`; they are excluded from initial browser requests.
+An integrity reference is not permission to publish the referenced bytes.
 
-Build and validate the local release data first. Resource Package v3 archives
-can live outside the repository; use the selected catalog for the package set,
-not a historical fixed count:
+Existing evidence is stored under the configured authority namespaces. The
+repository-evidence namespace uses content-addressed objects and immutable
+snapshot manifests, selected by `repo-evidence/evidence/current.json`.
+`evidence-index.json` records logical paths, sizes and hashes for missing inputs.
+The dated migration snapshots and receipts are historical evidence; they must
+not be treated as current pointers or used to overwrite later business writes.
 
-```bash
-ASSETS_PACKAGE_STAGING_ROOT=/srv/asa-resource-packages npm run catalog:build
-ASSETS_PACKAGE_STAGING_ROOT=/srv/asa-resource-packages npm run artifacts:validate
-ASSETS_PACKAGE_STAGING_ROOT=/srv/asa-resource-packages npm run release:package
-```
+## Startup and serving
 
-`release:package` writes the archive and a sidecar descriptor containing the
-bundle ID, manifest SHA-256, archive size and archive SHA-256. Upload it only
-after the descriptor and archive have been checked:
+The code-only image contains no public release tree. Startup synchronizes the
+configured authority into a verified local cache and atomically selects the
+release. Periodic synchronization uses the same validation path. A complete
+verified cache can serve during an authority outage; a fresh empty installation
+cannot invent or fall back to source-checkout data.
 
-```bash
-ASSETS_RELEASE_ARCHIVE=/srv/releases/<bundle-sha256>.tar.gz npm run release:upload
-```
+Public downloads are served from the selected local release with Range, ETag
+and SHA-256 support. The browser does not receive storage credentials. Site and
+backend cache PVCs remain separate; SQLite queue state requires the backend's
+local-path volume, not NFS. Do not remove active or historical PVCs as part of a
+source cleanup.
 
-The upload command requires `ASSETS_OBJECT_STORE_ENDPOINT` and
-`ASSETS_OBJECT_STORE_BUCKET`, uses the configured S3 credentials, performs a
-read-after-write size/hash check, and updates `public/current.json` last. A
-failed upload never advances the pointer.
+Object-store settings come from `ASSETS_OBJECT_STORE_*` and the deployment's
+existing Secret. No live endpoint, access key or secret is copied into frontend
+code or Git. Use existing environment values when deploying an updated image.
 
-## Object-store configuration
+## Rebuild and recovery
 
-The init container and upload command use:
+Offline public rebuilds need a verified data root and package staging directory;
+source checkout alone is not the authority for generated output. If an intentional
+source-metadata edit changes a pinned input, regenerate its local provenance
+explicitly and retain the previous hash; never suppress a checksum failure.
+The rebuild/package scripts do not grant review or publication authorization.
 
-```text
-ASSETS_OBJECT_STORE_ENDPOINT
-ASSETS_OBJECT_STORE_BUCKET
-ASSETS_OBJECT_STORE_PREFIX             optional key prefix
-ASSETS_OBJECT_STORE_REGION             defaults to us-east-1
-ASSETS_OBJECT_STORE_FORCE_PATH_STYLE   true for MinIO/OSS
-ASSETS_OBJECT_STORE_CURRENT_KEY        defaults to public/current.json
-ASSETS_OBJECT_STORE_ACCESS_KEY_ID
-ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY
-ASSETS_OBJECT_STORE_SESSION_TOKEN      optional
-```
-
-Kubernetes injects credentials from `objectStore.credentialsSecret`. Real
-credentials and production endpoints are never committed to values files or
-written to logs. The chart always runs archive pull; its default values are
-intentionally incomplete until an endpoint, bucket and least-privilege Secret
-are supplied.
-
-## Evidence storage (repository evidence)
-
-Upstream MOC source snapshots (`raw/moc/`), the Euclid Q1 region ZIP and the
-bulk of the CSST working set (input manifest, normalized scans, job/task
-snapshots, reports) are evidence, not runtime data. Their durable copies live
-in the production object store under the `repo-evidence` key prefix, separate
-from both `public/releases/` and the in-cluster evidence PVC namespace:
-
-```text
-repo-evidence/evidence/objects/<sha256>       content-addressed objects
-repo-evidence/evidence/snapshots/<id>.json    immutable snapshot manifests
-repo-evidence/evidence/current.json           mutable pointer
-```
-
-`artifacts/public-survey-footprints/evidence-index.json` is the tracked ledger:
-it pins the active snapshot and lists every archived object's repository
-relative path, size and SHA-256. Release validation
-(`npm run artifacts:validate`, `npm run catalog:build`) accepts a locally
-missing evidence input only when its hash matches this index, so a fresh
-workspace stays verifiable while bulk evidence stays out of Git. The checkout
-retains only the three CSST conformance keepers, the Core wheel and this
-evidence index. Generated release trees, layer outputs, raw inputs, dynamic
-content, probe output and staging directories were removed only after
-independent S3 restore plus exact SHA-256 and size checks. Recomputing a
-product requires restoring its indexed inputs first; those historical build
-paths are not runtime authority.
-
-Restore a working evidence tree with:
-
-```bash
-node --import tsx scripts/content-archive.ts sync evidence --include "<families>"   # publish
-node --import tsx scripts/content-archive.ts restore evidence --root <target-dir>   # verify+restore
-```
-
-Both commands take their store configuration from `ASSETS_OBJECT_STORE_*` plus
-`ASSETS_OBJECT_STORE_PREFIX=repo-evidence` and scan the root configured by
-`ASSETS_EVIDENCE_ROOT`. After any future evidence re-sync, regenerate
-`evidence-index.json` from the verified restore so validation keeps accepting
-the archived inputs. Active snapshot:
-`9ffec99fbb30995f5bb7af6878e878c1050f02acebd0478700457e9df3155b69`
-(250 objects, 239,337,574 bytes, published 2026-09-10).
-
-The P0-P5 authority restore and cutover checks were also completed against production S3:
-
-| Prefix | Snapshot | Files | Bytes | Restore check |
-| --- | --- | ---: | ---: | --- |
-| `authority` | `b5be3ff04a8baf6b7516ef5a45800238730a37cc740d27e16a308af418f49ff3` | 468 | 104,141,186 | exact SHA-256 and size |
-| `authority-content` | `7abda54ff00eb14d4a9562d7bd4b99663c90d80b24af3d36862b2c67711a4519` | 4 | 854,957 | exact SHA-256 and size |
-| `authority-probe` | `f532707a285fc407926830c255d4bd36242f70179ffe5d281846604182890526` | 1 | 4,873 | exact SHA-256 and size |
-
-The local generated release tree, content state, dated probe and staging copies
-were removed only after those independent restores. Production S3 objects were
-not deleted. The online production consumer now uses the authority bucket; the
-old development objects and Secret were removed after consumer and hash checks.
-
-Before the authority cutover on 2026-09-12, a read-only listing through the
-Helm `storage/minio` configuration found only `public/current.json`. That
-cluster bucket was the public-release consumer, not the authority source. The
-same day, a read-only listing of the gitignored `.info` MinIO found the recorded
-`authority`, `authority-content`, `authority-probe` and `repo-evidence`
-pointers at `authority/evidence/current.json`,
-`authority-content/content/current.json`,
-`authority-probe/evidence/current.json` and
-`repo-evidence/evidence/current.json`. Do not print `.info` credentials. P5
-are now the source for online consumers; do not look for authority snapshots in
-the retired Helm public bucket.
-
-## Migration and rollback
-
-The first migration is deliberately one-way:
-
-1. Stage and validate the Resource Package v3 archives outside the repository.
-2. Build one complete deterministic archive.
-3. Upload and verify the immutable archive in MinIO/S3.
-4. Advance `public/current.json` only after verification.
-5. Deploy the code-only image with archive-pull values.
-6. Confirm `/healthz`, catalog, package downloads, Range responses, ETag and
-   `X-Content-SHA256`.
-
-Rollback changes `public/current.json` to a previously verified immutable
-archive and re-runs the Helm installation (`helm upgrade --install
-astro-survey-atlas-assets charts/astro-survey-atlas-assets --values
-<environment-values.yaml>`) so the init container re-syncs the pointed-to
-release. It does not delete release objects or the PVC's previous release
-directories.
-
-Static public release downloads read the verified `/data/current` tree; dynamic
-publications read the configured local content root. The server does not read S3
-for each HTTP request, so Range, ETag and `X-Content-SHA256` remain local file
-serving contracts. Hydrate and the Helm init container require the configured
-S3 store and fail closed on a fresh environment rather than silently using the
-source checkout. A plain Helm upgrade with unchanged Pod configuration may not
-rerun init; rollback must verify an actual Pod recreation and the resulting
-bundle hash.
+For recovery after new writes, stop backend, preserve SQLite/WAL, business state,
+spool and current authority, then follow the export procedure in
+[publication runtime](publication-runtime-split.md#rollback-after-new-writes).
+Changing the pointer to an old archive or blindly restoring an old snapshot is
+not a safe data rollback.

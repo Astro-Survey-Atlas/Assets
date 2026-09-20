@@ -25,7 +25,7 @@ or restore. Warehouse execution status alone never grants public visibility.
 MOC discovery currently queries CDS; alias expansion and networked LLM discovery
 are designed but not enabled. The Releases page shows the source-to-publication
 workflow and labels the planned enhancement. Homepage modality icons follow each
-survey name, with native precision beneath.
+survey name, native precision and DR/product counts on one line.
 
 See [current handoff](HANDOFF.md), [publication runtime](docs/publication-runtime-split.md),
 [current discovery](docs/deferred-moc-discovery-plan.md) and
@@ -81,7 +81,7 @@ configured Warehouse endpoint (`ASSETS_WAREHOUSE_ES_URL`).
   provenance and a package README.
 
 The [coverage workflow](docs/coverage-workflow.md),
-[API reference](docs/api-reference.md) and [Resource Package integration guide](docs/resource-package-integration.md)
+[API reference](docs/api-reference.md), [frontend package guide](docs/frontend-resource-package-guide.md) and [Resource Package integration guide](docs/resource-package-integration.md)
 define the stable contracts. The [MOC Core contract](docs/moc-core-contract.md)
 documents the existing offline `astro-survey-moc-core` implementation; the
 organization does not currently promise a general-purpose online SDK.
@@ -91,8 +91,8 @@ organization does not currently promise a general-purpose online SDK.
 Git is the source of truth for small, reviewable release metadata: survey and
 layer registries, recipe locks, schemas, catalog projections, provenance
 summaries and hashes. Production S3 stores versioned MOCs, packages and large
-evidence. The current checkout retains only three CSST conformance fixtures, the
-Core wheel and `evidence-index.json`; generated release, layer, raw, content,
+evidence. The checkout retains synthetic conformance fixtures, the
+Core wheel and `evidence-index.json`; private CSST data stays outside Git. Generated release, layer, raw, content,
 probe and staging copies were removed after independent S3 restore and exact
 SHA-256/size checks.
 
@@ -108,13 +108,13 @@ not fall back to source-tree artifacts or hidden local release data. HTTP serves
 the verified `/data/current` release without reading S3 per request. Configure
 the endpoint, bucket and credential Secret as described in the storage contract.
 
-## Storage migration target
+## Storage authority
 
 The [S3 authority implementation plan](docs/s3-authority-implementation-plan.md)
 records production S3 as the sole authority for uploaded business data and
 synced control state, with disposable local caches and separate pending
 uploads. The confirmed authority is the MinIO described by gitignored `.info`,
-not the currently deployed Helm public bucket. P0-P6 migration and online
+not the retired Helm development bucket. P0-P6 migration and online
 consumer cutover are complete; active PVCs remain under the migration receipt
 until separately retired.
 

@@ -43,12 +43,12 @@
               <div class="section-heading"><div><span class="section-index">01</span><h4 id="connector-title">Connector 列表</h4></div><span class="section-note">CONFIG + ON-DEMAND PROBE</span></div>
               <dialog id="connector-dialog" class="admin-dialog">
               <form id="connector-form" method="dialog" class="admin-form">
-                <label><span>名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="csst-w2-source" /></label>
+                <label><span>名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="survey-source-source" /></label>
                 <label><span>类型</span><select name="type" id="connector-type"><option value="oss">OSS 对象存储</option><option value="s3">S3 兼容对象存储</option><option value="local">Local 本地存储</option></select></label>
                 <label data-connector-object><span>Endpoint</span><input name="endpoint" type="url" placeholder="https://object.example" /></label>
                 <label data-connector-object><span>Region</span><input name="region" placeholder="cn-hangzhou-zjy-d01" /></label>
                 <label data-connector-object><span>Bucket</span><input name="bucket" placeholder="data-and-computing" /></label>
-                <label data-connector-object><span>Prefix</span><input name="prefix" placeholder="projects/CSST/..." /></label>
+                <label data-connector-object><span>Prefix</span><input name="prefix" placeholder="projects/survey/..." /></label>
                 <label data-connector-object><span>Access key</span><input name="accessKey" autocomplete="off" /></label>
                 <label data-connector-object><span>Secret key</span><input name="secretKey" type="password" autocomplete="new-password" /></label>
                 <label data-connector-local hidden><span>Warehouse source PVC</span><input name="pvcName" placeholder="atlas-source-catalogs" /></label>
@@ -74,13 +74,13 @@
           <form id="task-form" method="dialog" class="admin-form">
             <label><span>Catalog 产品</span><select name="productId" id="task-product"><option value="">加载中…</option></select></label>
             <output id="task-derived-summary" class="derived-summary">选择产品后自动带出 survey、release、layer 和 ScanPlan v2 recipe。</output>
-            <label><span>任务名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="csst-w2-coverage" /></label>
+            <label><span>任务名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="survey-source-coverage" /></label>
             <label><span>Source Connector</span><select name="sourceConnector" id="source-connector" required><option value="">加载中…</option></select></label>
             <label><span>Source path <small>一个 ScanRequest 绑定一个前缀或文件；Local 时相对于 Connector base path</small></span><textarea name="sourcePaths" rows="3" required placeholder="oss://bucket/prefix 或 relative/path/file.csv"></textarea></label>
             <div class="form-row"><label><span>允许后缀</span><input name="allowedSuffixes" placeholder=".fits" /></label><label data-extraction-order><span>计算 HEALPix order</span><input name="maxOrder" type="number" min="1" max="12" value="8" /></label></div>
             <div class="form-row" data-catalog-radec hidden><label><span>RA 列名</span><input name="raColumn" placeholder="ra" disabled /></label><label><span>Dec 列名</span><input name="decColumn" placeholder="dec" disabled /></label></div>
             <div data-catalog-healpix hidden><div class="form-row"><label><span>HEALPix 列名</span><input name="healpixColumn" placeholder="healpix" disabled /></label><label><span>HEALPix order 列名</span><input name="healpixOrderColumn" placeholder="order" disabled /></label></div><label><span>固定 HEALPix order <small>与 order 列名二选一</small></span><input name="healpixOrder" type="number" min="1" max="29" placeholder="8" disabled /></label></div>
-            <label><span>批次 ID <small>留空则自动生成</small></span><input name="batchId" placeholder="csst-w2-coverage-20260822" /></label>
+            <label><span>批次 ID <small>留空则自动生成</small></span><input name="batchId" placeholder="survey-source-coverage-20260822" /></label>
             <div class="form-row"><button id="task-dialog-cancel" class="admin-quiet" type="button">取消</button><button class="admin-primary" type="submit"><i data-lucide="send"></i><span>提交 ScanRequest</span></button></div>
             <p class="form-message" data-form-message="task" role="status"></p>
           </form>

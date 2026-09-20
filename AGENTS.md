@@ -20,6 +20,10 @@ verification baseline, known problems, dirty worktree, and next priorities.
   added to the Git-tracked public release allowlist. Keep it in evidence
   storage and preserve its hash/reference in migration/provenance records.
 
+- Keep real private survey inputs, outputs, previews and recipes out of Git,
+  including CSST. Protected Assets/Workspace backend and evidence storage may
+  retain them. Use synthetic fixtures for tests; keep public deny checks.
+
 ## Coverage workflow
 
 Every new survey recipe must follow `docs/coverage-workflow.md` and declare

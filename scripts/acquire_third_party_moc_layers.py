@@ -105,7 +105,6 @@ TARGETS: list[dict[str, Any]] = [
 LEGACY_FOOTPRINT_ORDER = [
     ("2mass", "2mass-all-sky", "H-band imaging"), ("2mass", "2mass-all-sky", "J-band imaging"), ("2mass", "2mass-all-sky", "K-band imaging"),
     ("allwise", "allwise", "W1 imaging"), ("allwise", "allwise", "W2 imaging"), ("allwise", "allwise", "W3 imaging"), ("allwise", "allwise", "W4 imaging"),
-    ("csst", "csst-sim-w1-20250731", "W1 simulated wide-field images"), ("csst", "csst-sim-w2-20250731", "W2 simulated wide-field images"), ("csst", "csst-sim-w3-20250731", "W3 simulated wide-field images"), ("csst", "csst-sim-w4-20250731", "W4 simulated wide-field images"),
     ("des", "des-dr2", "DR2 color imaging"), ("desi", "desi-dr1", "DR1 spectra and redshifts"), ("desi", "desi-edr", "Early Data Release spectra"), ("euclid", "euclid-q1", "Euclid Q1 deep fields"),
     ("galex", "galex-gr6-gr7", "FUV imaging"), ("galex", "galex-gr6-gr7", "NUV imaging"), ("galex", "galex-gr6-gr7", "ultraviolet image coverage"),
     ("hsc-ssp", "hsc-pdr2", "PDR2 Wide + Deep image coverage"), ("hsc-ssp", "hsc-pdr2", "PDR2 g-band imaging"), ("hsc-ssp", "hsc-pdr2", "PDR2 i-band imaging"), ("hsc-ssp", "hsc-pdr2", "PDR2 r-band imaging"), ("hsc-ssp", "hsc-pdr2", "PDR2 y-band imaging"), ("hsc-ssp", "hsc-pdr2", "PDR2 z-band imaging"),
@@ -114,17 +113,15 @@ LEGACY_FOOTPRINT_ORDER = [
     ("nvss", "nvss-final", "1.4 GHz radio imaging"), ("panstarrs", "panstarrs-dr1", "DR1 color imaging"), ("panstarrs", "panstarrs-dr1", "DR1 g-band imaging"), ("panstarrs", "panstarrs-dr1", "DR1 i-band imaging"), ("panstarrs", "panstarrs-dr1", "DR1 r-band imaging"), ("panstarrs", "panstarrs-dr1", "DR1 y-band imaging"), ("panstarrs", "panstarrs-dr1", "DR1 z-band imaging"), ("sdss", "sdss-dr09", "DR9 color imaging"),
 ]
 LEGACY_SOURCE_ORDER = [
-    ("csst", "csst-sim-w1-20250731"), ("euclid", "euclid-ero"), ("euclid", "euclid-q1"), ("euclid", "euclid-q2"), ("desi", "desi-edr"), ("desi", "desi-dr1"),
+    ("euclid", "euclid-ero"), ("euclid", "euclid-q1"), ("euclid", "euclid-q2"), ("desi", "desi-edr"), ("desi", "desi-dr1"),
     *[("sdss", f"sdss-dr{number:02d}") for number in range(1, 20)], ("galex", "galex-gr1"), ("galex", "galex-gr2-gr3"), ("galex", "galex-gr4-gr5"), ("galex", "galex-gr6-gr7"),
     *[("legacy-surveys", f"legacy-dr{number}") for number in range(1, 11)], ("hsc-ssp", "hsc-pdr1"), ("hsc-ssp", "hsc-pdr2"), ("hsc-ssp", "hsc-pdr3"), ("hst", "hst-mast-snapshot-2026"), ("panstarrs", "panstarrs-dr1"), ("des", "des-dr2"), ("2mass", "2mass-all-sky"), ("allwise", "allwise"), ("kids", "kids-dr5"), ("nvss", "nvss-final"),
-    ("csst", "csst-sim-w2-20250731"), ("csst", "csst-sim-w3-20250731"), ("csst", "csst-sim-w4-20250731"),
-]
+    ]
 LEGACY_LAYER_ORDER = [
-    "csst-sim-w1-image-extent", "euclid-q1-deep-fields-image-extent", "desi-edr-spectra-footprint", "desi-dr1-spectra-footprint",
+    "euclid-q1-deep-fields-image-extent", "desi-edr-spectra-footprint", "desi-dr1-spectra-footprint",
     "euclid-ero-image-extent", "euclid-q2-galactic-bulge-image-extent",
     *[f"legacy-dr{number}-{kind}" for number in range(1, 10) for kind in ("coadd-image-extent", "tractor-object-presence")],
-    "legacy-dr10-coadd-image-extent", "legacy-dr10-tractor-object-presence", "csst-sim-w2-image-extent", "csst-sim-w3-image-extent", "csst-sim-w4-image-extent",
-]
+    "legacy-dr10-coadd-image-extent", "legacy-dr10-tractor-object-presence", ]
 
 
 def restore_order(items: list[dict[str, Any]], keys: list[Any], key_fn: Any) -> list[dict[str, Any]]:

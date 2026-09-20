@@ -68,21 +68,6 @@
       "expectedSha256": "6c49a7f3d8b9235ee5320d8e0463988783272baf803cf3b488105781a79250e1"
     },
     {
-      "spec": "src/layers/recipes/csst-sim-w2-image-extent.lock.json",
-      "output": "artifacts/public-survey-footprints/layers/csst-sim-w2-image-extent",
-      "expectedSha256": "909ec26a41a54d2ad41444366a340e71fd5c7bc3da7a36cfc44a18ce5c21225b"
-    },
-    {
-      "spec": "src/layers/recipes/csst-sim-w3-image-extent.lock.json",
-      "output": "artifacts/public-survey-footprints/layers/csst-sim-w3-image-extent",
-      "expectedSha256": "6bc369f232f1f1523f578e1a79f2828aa78ff2d1e243c9c8ad16a39928f0d698"
-    },
-    {
-      "spec": "src/layers/recipes/csst-sim-w4-image-extent.lock.json",
-      "output": "artifacts/public-survey-footprints/layers/csst-sim-w4-image-extent",
-      "expectedSha256": "f7796308322935b1f304b33e4d8429680290e15744c7a95246259f70ff4046db"
-    },
-    {
       "spec": "src/layers/recipes/decals-dr5-color-footprint.lock.json",
       "output": "artifacts/public-survey-footprints/layers/decals-dr5-color-footprint",
       "expectedSha256": "eba092ee08b30e986bae089e72c0ff8a6bc27eb91d2d7e314376565c64f8b4fa"

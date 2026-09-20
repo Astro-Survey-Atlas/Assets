@@ -1,5 +1,7 @@
 # Assets：S3 唯一权威实施计划
 
+> 本文件记录已完成的迁移及当时验收。当前存储与进程合同以 [存储说明](public-artifact-storage.md)、[发布运行架构](publication-runtime-split.md) 为准；不得重复迁移或按旧快照覆盖新数据。
+
 日期：2026-09-12。状态：**P0–P6 已完成；authority 已切换，旧开发对象与 Secret 已清理；生产 authority 历史对象未删除**。
 代码基线：`022a791`；本轮代码、测试和文档改动尚未提交。扫描、MOC、Resource Package 和覆盖精度语义未改变。
 
@@ -19,7 +21,7 @@
 - 切换前 Helm release 的集群 MinIO 只暴露 `public/current.json`，曾是线上公开 release 消费者，不是 authority 复现源；revision `133` 起 site/init/release-publisher 已改用 `.info` 所描述的 authority bucket。
 - 校验完成后，仓库中的生成 release、layer、raw、content、probe 和 staging 副本才被删除；生产 S3 对象未删除。
 - 已完成：公开 bundle `public-survey-footprints-2026-09-09`（manifest SHA `adace67a9c7bcbae0044ced06352be7263b91dade2cb0bc8a4bc1415539ee407`）通过固定指针 hydrate；`.info` authority 的 evidence/content/probe 快照通过独立 restore；最新 worker 重启后状态快照 products generation 8（`322cd73ca79d46cf9612356d78494262e40356ef756318054f63ba90802e1e28`）和 resource-packages generation 4（`1a444a0384659bbdf175a9b24f723a0180724fc467e38bcef7aad5ff4a2bbda4`）已读回验证。
-- 仓库生成业务数据已删，Git 只保留三个 CSST conformance keeper、Core 1.1.0 wheel、`evidence-index.json`。
+- 当时保留的三个 CSST conformance keeper 已在当前源码清理中移出 Git；现保留合成夹具、Core wheel 和非敏感完整性引用。
 - 公开 hydrate overlay：152 Node 测试中 148 通过、2 失败、2 有意跳过；失败分别是 Gaia 私有 provenance 不在公开包、已消毒公开 catalog 无法再次触发 denied-survey sanitizer，均为公开数据边界预期，不影响完整 authority 校验。
 - P5 清理收据见 `docs/s3-authority-migration-receipt-20260912.json`：旧 `asa-assets-dev` 的 10 个对象（322,924,556 bytes）已逐对象和 authority 核对后删除，旧 `asa-assets-object-store` Secret 已删除；release/content/evidence/upload-spool PVC 保留并记录原因。线上 Helm revision `135` 使用 authority endpoint/bucket、镜像 `0.1.0-20260913-002759`（digest `sha256:5cecb399c7cf6a39f497ca2083a841428024b2da2967dc3a030b49aa50822da3`）。
 

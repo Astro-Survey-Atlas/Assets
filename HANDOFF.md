@@ -3,7 +3,32 @@
 更新：2026-09-20（Asia/Shanghai）。本文件为当前状态入口；旧版本记录见
 [历史交接](docs/handoff-history-through-20260920.md)，不可将旧部署或待办当成现状。
 
-## 固定发布基线（2026-09-20 14:18，Asia/Shanghai）
+## 当前清理与部署（2026-09-20 15:13，Asia/Shanghai）
+
+- Assets revision **185**，镜像 `1.0.0-20260920-private-data-faq`，site/backend 均 1/1 Ready。
+  Workspace 未变，revision **31**。没有迁移、恢复快照或修改线上发布数据。
+- 线上 bundle `reviewed-mu9fssb3-70a9ba96`，491 文件，7 个资源包；SHA256
+  `bebb1908a4f76b4ca699b1eb453f04e9b5423d4875de46aa8f04db8ae07a3e9a`。
+  部署前后目录（含全部包版本/hash）完全相同，公开目录无 CSST。
+- CSST 真实 FITS、provenance、conformance 数据及锁定配方已移出工作树；
+  公共 survey/layer/preview/build plan 中的 CSST 条目已移除，加入 Git ignore。
+  私有备份位于 `/home/aaron/.local/share/astro-assets-private/csst-cleanup-20260920`
+  （目录权限 0700），包含被移除的元数据与本地 provenance。不要提交该目录。
+- 保留后台/evidence/Workspace 数据及公开拒绝规则；测试使用合成私有条目。
+  推荐 Workspace 从原始来源重新扫描、生成并验证成功后，再退役 Assets 后台副本。
+  本轮未启动重新扫描，也未删除后台记录、证据或 PVC。
+- 两仓库 `baseline-2026.09.20` GitHub Releases 均已撤下；Git 标签和历史未重写。
+  当前源码清理尚未暂存或提交，旧 HEAD/历史仍含 CSST，不能声称已完成历史清除。
+- `/releases/` 新增默认折叠的前端资源包 FAQ（中英文），涵盖目录发现、版本/hash、
+  下载与校验、逐层预览、原生 MOC 重合、CORS 和 Workspace 激活；详见
+  [前端接入指南](docs/frontend-resource-package-guide.md)。来源流程图仍始终展开。
+- 修正旧 keeper、archive-only/schema-2、固定版本示例等文档；保留标明历史的迁移记录。
+- build、Core 校验、site 类型检查、Python 编译和 Helm lint 通过；完整 213 项测试
+  （含新增源码数据边界检查）通过。线上 FAQ 的键盘/点击、中英文、明暗主题和
+  1440/900/390px 均通过，无页面错误或横向溢出。
+- 临时证据：`/dev/shm/assets-cleanup-*`、`/dev/shm/assets-faq-live-browser.log`。
+
+## 历史固定基线（2026-09-20 14:18，已撤下 GitHub Release）
 
 - Assets revision **184**，镜像 `1.0.0-20260920-baseline`；site/backend 均 1/1。
   首页名称、原生阶数、模态、DR/产品数量同一行，ZH/EN、1440/900/390px 验证通过。
@@ -16,9 +41,8 @@
 - 最近 4 个发布任务均 published + verified、attempts=1，未记录执行失败；
   不能把用户看到的瞬时提交报错归因于打包失败。详情和验证见
   [基线说明](docs/releases/baseline-2026.09.20.md)。
-- 两仓库使用 `baseline-2026.09.20` GitHub Release 固定本次已验证的代码与镜像；
-  Assets 附原始资源包、离线集合、固定目录及校验清单；BASELINE.json 关联两端。
-  这是可复现的基线，不会阻止后续发布，也不可覆盖后续业务数据。
+- 两仓库的 `baseline-2026.09.20` GitHub Release 均已撤下；标签及历史仍保留。
+  以下旧基线数据只供查证，不可覆盖后续业务数据。
 
 ## Euclid × DESI 重合精度修复（2026-09-20）
 
@@ -66,8 +90,8 @@
 
 ## 当前部署与数据
 
-- dev Helm release/namespace：`astro-survey-atlas-assets`，revision **184**。
-- 镜像：`crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:1.0.0-20260920-baseline`。
+- dev Helm release/namespace：`astro-survey-atlas-assets`，最新部署见顶部。
+- 镜像：`crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:1.0.0-20260920-private-data-faq`。
 - 网站和 backend 均 1/1 Ready、0 restarts；旧 publisher Deployment 已移除。
 - 用户入口：<http://astro.assets.dev.72602.space:32080/>；直连备用：
   <http://10.15.51.75:32083/>。集群内网站 Service 使用端口 80。
@@ -142,8 +166,8 @@ EN/ZH、明暗主题、1440/900/390px 布局。线上实际目录与下载验收
 
 ## 工作区与继续工作约束
 
-当前 Assets / Workspace 代码以 `baseline-2026.09.20` 标签固定；具体提交与镜像摘要
-见 GitHub Release 的 BASELINE.json。后续修改以 `git status` 为准，保留任何新产生
+Assets / Workspace 的 `baseline-2026.09.20` 标签仍保留，但对应 GitHub Release 已撤下。
+当前 Assets 清理修改尚未提交；后续修改以 `git status` 为准，保留任何新产生
 的修改；Warehouse 的独立未提交修改不属于本次两仓库发布。部署与验证详情见顶部。
 
 保留现有修改、历史发布与 PVC。凭据仅使用已有 Secret，不写日志或文档。
