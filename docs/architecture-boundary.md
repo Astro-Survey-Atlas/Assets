@@ -77,7 +77,9 @@ Assets 管理页面
   -> data-warehouse operator 执行远程扫描
   -> Assets MOC Core finalizer
   -> locked manifest + MOC + v3 package
-  -> Assets catalog 激活
+  -> 审核具体产品版本并明确选择发布
+  -> 增量对象上传、authority CAS 与网站核验
+  -> Assets 公开 catalog 生效
   -> Atlas 只读安装并校验
 ```
 
@@ -110,3 +112,17 @@ checks; active release/content/evidence/upload-spool PVCs remain because they
 are still mounted or can contain recoverable state. This work does not add
 automatic scan-to-MOC/package conversion or change Warehouse's execution/index
 responsibilities or coverage semantics.
+
+
+## Assets 运行边界（2026-09-20 已上线）
+
+公开 site 与单写者 backend 使用独立 release cache PVC。site 不初始化草稿、
+构建或业务任务存储；管理请求经鉴权代理到 backend。backend 独占业务写入与
+SQLite 发布队列，子执行进程通过 fenced IPC 请求父进程激活 authority。
+网站同步、快照上传、发布执行和上线核验独立推进。Warehouse ACTIVE 是执行
+状态，只有审核且明确发布的版本进入公开数据边界。
+
+已有 MOC 探索由 Warehouse 查询 CDS，Assets 负责候选选择、构建、审核与发布。
+联网 LLM 增强仍为设计，不能描述为现有执行能力。详见
+[发布运行架构](publication-runtime-split.md)、[增强设计](moc-discovery-enhancement-design.md)
+及 [当前交接](../HANDOFF.md)。

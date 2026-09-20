@@ -13,6 +13,20 @@ Resource Package v3。
 | [Warehouse](https://github.com/Astro-Survey-Atlas/Warehouse) | Scanner、ScanPlan/ScanRequest 执行、当前文件/覆盖索引和 evidence | [Warehouse README](https://github.com/Astro-Survey-Atlas/Warehouse) |
 | [Workspace](https://github.com/Astro-Survey-Atlas/Workspace) | 用户资产、Connector、本地工作流、用户 MOC 和私有探索 | [Workspace README](https://github.com/Astro-Survey-Atlas/Workspace) |
 
+## 当前实现
+
+2026-09-20 已核实 dev revision 182。Assets 已拆分为公开网站与单写者后台，
+使用独立 release 缓存及持久化发布队列。审核后的具体产品版本走增量发布，网站
+核验通过后才完成发布；完整 release 归档用于导出或恢复。Warehouse 执行状态
+不会自动授予公开可见性。
+
+MOC 探索目前调用 CDS；别名扩展和联网 LLM 增强已有设计，尚未启用。发布页直接
+展示来源到发布的流程，并明确标记规划能力；首页模态图标位于巡天名称后，精度在下一行。
+
+当前部署、验收和待办见 [交接文档](HANDOFF.md)。技术详情见
+[发布运行架构](docs/publication-runtime-split.md)、[当前探索](docs/deferred-moc-discovery-plan.md)
+及 [增强设计](docs/moc-discovery-enhancement-design.md)。
+
 ## 三个项目如何协作
 
 ```mermaid
@@ -37,7 +51,9 @@ flowchart LR
   I --> H[NESTED HEALPix 像元]
   H --> M[MOC、preview、query blocks]
   M --> P[Manifest + SHA-256]
-  P --> R[公共 Resource Package v3]
+  P --> V[审核版本并明确选择]
+  V --> C[增量发布与网站核验]
+  C --> R[公共 Resource Package v3]
   P -. 仅审计 .-> E[对象存储 evidence]
 ```
 

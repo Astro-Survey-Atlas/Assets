@@ -1,6 +1,6 @@
 # Warehouse MOC Discovery
 
-Status: implemented and verified on 2026-08-30. The live Warehouse Operator and
+Status: implemented on 2026-08-30; current implementation checked on 2026-09-20. The live Warehouse Operator and
 discovery worker use the `cds-public-moc-v2` CDS MocServer filter API.
 
 Warehouse owns the namespaced `MocDiscoveryRequest` CRD, its evidence-only Job,
@@ -46,4 +46,6 @@ a validated MOC. Model-suggested candidates must follow the same file validation
 manual review and explicit incremental publication path.
 
 The public `/releases/` page explains the actual workflow and labels the enhanced
-branch as planned. It is explanatory content, not a live task/status dashboard.
+branch as planned. The workflow is always visible, with peer existing-MOC and
+source-scan cards; the existing-MOC card links the CDS query endpoint. It is
+explanatory content, not a live task/status dashboard.

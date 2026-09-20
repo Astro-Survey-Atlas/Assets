@@ -14,6 +14,23 @@ This repository is one part of the [Astro Survey Atlas organization](https://git
 | [Warehouse](https://github.com/Astro-Survey-Atlas/Warehouse) | Scanner, ScanPlan/ScanRequest execution, current file/coverage indices and evidence | [Warehouse README](https://github.com/Astro-Survey-Atlas/Warehouse) |
 | [Workspace](https://github.com/Astro-Survey-Atlas/Workspace) | User assets, connectors, local workflows, user MOCs and private exploration | [Workspace README](https://github.com/Astro-Survey-Atlas/Workspace) |
 
+## Current implementation
+
+Verified dev checkpoint: 2026-09-20, Helm revision 182. Assets now runs a public
+site and a single write-owning backend with independent release caches and a
+durable publication queue. Reviewed product versions are published incrementally;
+website verification completes publication. Full release archives are for export
+or restore. Warehouse execution status alone never grants public visibility.
+
+MOC discovery currently queries CDS; alias expansion and networked LLM discovery
+are designed but not enabled. The Releases page shows the source-to-publication
+workflow and labels the planned enhancement. Homepage modality icons follow each
+survey name, with native precision beneath.
+
+See [current handoff](HANDOFF.md), [publication runtime](docs/publication-runtime-split.md),
+[current discovery](docs/deferred-moc-discovery-plan.md) and
+[enhancement design](docs/moc-discovery-enhancement-design.md).
+
 ## How the projects work together
 
 ```mermaid
@@ -40,7 +57,9 @@ flowchart LR
   I --> H[NESTED HEALPix cells]
   H --> M[MOC, preview, query blocks]
   M --> P[Manifest + SHA-256]
-  P --> R[Public Resource Package v3]
+  P --> V[Review version and explicitly select]
+  V --> C[Incremental publication and website verification]
+  C --> R[Public Resource Package v3]
   P -. audit-only .-> E[Evidence object storage]
 ```
 

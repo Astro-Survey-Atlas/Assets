@@ -1,5 +1,10 @@
 # Publication runtime and recovery
 
+Deployed in dev: role split at revision 179; current verified revision 182
+(2026-09-20). See [HANDOFF](../HANDOFF.md) for image, live counts and recovery
+evidence. The cutover instructions below describe the completed migration; do not
+repeat them on the already split deployment.
+
 Warehouse owns scan execution and status. Assets submits standard scan requests,
 consumes normalized results, and builds candidates. Official MOC import uses the
 same existing Core validation/build path. Neither scan completion nor MOC build
