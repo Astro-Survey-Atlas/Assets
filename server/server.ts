@@ -1,3 +1,4 @@
+import { CoveragePrecisionError } from "./coverage-policy.js";
 import { acquireLocalFileLock } from "./local-file-lock.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { ReleaseSynchronizer } from "./release-synchronizer.js";
@@ -2279,7 +2280,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     }
     return json(response, 404, { error: "Admin endpoint not found" });
   } catch (error) {
-    if (error instanceof AdminHttpError || error instanceof KubernetesApiError || error instanceof PublicationConflictError || error instanceof ContentArchiveError) {
+    if (error instanceof CoveragePrecisionError || error instanceof AdminHttpError || error instanceof KubernetesApiError || error instanceof PublicationConflictError || error instanceof ContentArchiveError) {
       return json(response, error.statusCode, { error: error.message });
     }
     console.error("Assets admin request failed", error instanceof Error ? error.message : String(error));

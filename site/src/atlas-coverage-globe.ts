@@ -1,3 +1,4 @@
+import { MIN_PUBLIC_COVERAGE_ORDER } from "../../server/coverage-policy.js";
 import {
   SurveyLayerViewer,
   type SurveyLayerHover,
@@ -78,11 +79,14 @@ function projectPixelsToOrder(pixels: readonly number[], sourceOrder: number, ta
 }
 
 export function footprintManifest(catalog: CoverageCatalog, blocks: ReadonlyMap<string, number[]>): SurveyFootprintManifest {
-  const overviewOrders = [...new Set(catalog.layers.map((layer) => layer.overviewOrder))];
-  const order = overviewOrders.length ? Math.min(...overviewOrders) : 4;
+  // Older cached catalogs may predate the release precision gate. Never let
+  // an ineligible layer lower the resolution of every other survey.
+  const layers = catalog.layers.filter(layer => layer.overviewOrder >= MIN_PUBLIC_COVERAGE_ORDER && layer.maxOrder >= MIN_PUBLIC_COVERAGE_ORDER);
+  const overviewOrders = [...new Set(layers.map((layer) => layer.overviewOrder))];
+  const order = overviewOrders.length ? Math.min(...overviewOrders) : MIN_PUBLIC_COVERAGE_ORDER;
   const nside = 2 ** order;
   const generatedAt = new Date().toISOString();
-  const footprints = catalog.layers
+  const footprints = layers
     .map((layer) => ({
       surveyId: layer.surveyId,
       layerId: layer.layerId,

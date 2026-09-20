@@ -123,6 +123,7 @@ export interface PublicationProductDiff {
   draftRevision: number;
   publishedRevision: number | null;
   reviewed: boolean;
+  blockingReason?: string;
 }
 
 export interface PublicationPlan {
@@ -608,13 +609,13 @@ export class PublicReleasePublisher {
       for(const product of products.filter(p=>p.draft.surveyId===surveyId)) {
         const old=previous.products.find(p=>p.productId===product.productId);
         if(product.retiredAt){if(old)diffs.push({productId:product.productId,surveyId,releaseId:product.draft.releaseId,name:product.draft.name,change:"removed",fields:["withdrawal"],draftRevision:product.revision,publishedRevision:old.revision,reviewed:Boolean(product.retirementReason?.trim())});continue;}
-        let geometry=null;let geometryInvalid=false;
-        try { geometry=await productGeometry(product,{root:this.#options.baselineRoot,files:baseline.files,publications,publicationFile:this.#options.publicationFile}); } catch { geometryInvalid=true; }
+        let geometry=null;let geometryInvalid=false;let blockingReason: string | undefined;
+        try { geometry=await productGeometry(product,{root:this.#options.baselineRoot,files:baseline.files,publications,publicationFile:this.#options.publicationFile}); } catch (error) { geometryInvalid=true; blockingReason=error instanceof Error ? error.message : String(error); }
         if(old?.revision===product.revision && JSON.stringify(old.geometry)===JSON.stringify(geometry?.facts??null))continue;
-        diffs.push({productId:product.productId,surveyId,releaseId:product.draft.releaseId,name:product.draft.name,change:old?"modified":"added",fields:["identity","coverage","presentation"],draftRevision:product.revision,publishedRevision:old?.revision??null,reviewed:!geometryInvalid&&currentReview(product,geometry?.facts??null)});
+        diffs.push({productId:product.productId,surveyId,releaseId:product.draft.releaseId,name:product.draft.name,change:old?"modified":"added",fields:["identity","coverage","presentation"],draftRevision:product.revision,publishedRevision:old?.revision??null,reviewed:!geometryInvalid&&currentReview(product,geometry?.facts??null),...(blockingReason?{blockingReason}:{})});
       }
       const blockers=isDeniedSurvey(surveyId)?["Survey is excluded from publication by policy"]:[];
-      if(!diffs.some(d=>d.reviewed))blockers.push("No reviewed product versions are ready; review a product first");
+      if(!diffs.some(d=>d.reviewed))blockers.push(...(diffs.some(d=>d.blockingReason)?diffs.filter(d=>d.blockingReason).map(d=>`${d.name}: ${d.blockingReason}`):["No reviewed product versions are ready; review a product first"]));
       surveys.push({surveyId,publishedLayers:previous.products.filter(p=>p.content.surveyId===surveyId&&p.geometry).length,changedProducts:diffs.length,productDiffs:diffs,currentPackage:undefined,inReleasePackage:previous.packages.some(p=>p.surveyId===surveyId),changed:diffs.length>0,blockers,selectable:diffs.some(d=>d.reviewed)&&!isDeniedSurvey(surveyId)});
     }
     return {planId:digest({baseline:baseline.bundle,surveys}).slice(0,16),baselineBundle:baseline.bundle,surveys,changedSurveyIds:surveys.filter(s=>s.changed).map(s=>s.surveyId),dynamicPackages:0,dynamicLayers:0,createdAt:new Date().toISOString()};

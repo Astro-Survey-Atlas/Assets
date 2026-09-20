@@ -9,10 +9,11 @@ import { parseAdminRoute, routePath, type AdminStep } from "./navigation.js";
 import { WorkspaceRequests, workspaceResources, businessSignature, type Resource } from "./workspaces.js";
 import { capabilityNames, gapGuidance, discoveryProgress, discoveryObservationLabel, type DiscoveryObservation } from "./readiness-copy.js";
 import { surveyPresentationImage, surveyPresentationAttribution } from "./presentation.js";
-import { mountTaskTabs } from "./task-tabs.js";
+import { mountRecordTabs, mountTaskTabs } from "./task-tabs.js";
 
 mountLocaleControls();
 const taskTabs = mountTaskTabs(document.getElementById("admin-step-tasks")!);
+const publicationTabs = mountRecordTabs(document.getElementById("admin-step-releases")!, "publication", ["plan", "runs"] as const, "assets-admin-publication-tab");
 
 document.addEventListener("error", event => {
   const image = event.target;
@@ -2198,7 +2199,7 @@ interface PublicationPlanSurvey {
   surveyId: string;
   publishedLayers: number;
   changedProducts: number;
-  productDiffs?: Array<{ productId: string; releaseId: string; name: string; change: string; fields: string[]; draftRevision: number; publishedRevision: number | null; reviewed: boolean }>;
+  productDiffs?: Array<{ productId: string; releaseId: string; name: string; change: string; fields: string[]; draftRevision: number; publishedRevision: number | null; reviewed: boolean; blockingReason?: string }>;
   currentPackage?: { id: string; version: string } | null;
   changed: boolean;
   blockers: string[];
@@ -2301,7 +2302,7 @@ function renderPublicationPlan(): void {
       ? `<input type="checkbox" data-publication-survey="${escapeText(survey.surveyId)}" ${checked ? "checked" : ""} />`
       : `<button type="button" class="admin-quiet" data-publication-blocked="${escapeText(survey.surveyId)}" aria-label="查看不能选择的原因">不可选 · 原因</button>`;
     const blockers = survey.blockers.length ? survey.blockers.map((blocker) => escapeText(blocker)).join("<br>") : "—";
-    const diffs = (survey.productDiffs ?? []).map((diff) => `<label><input type="checkbox" data-publication-product="${escapeText(diff.productId)}" data-survey="${escapeText(survey.surveyId)}" ${diff.reviewed?"":"disabled"} ${selectedPublicationProducts.has(diff.productId)?"checked":""}> ${diff.change === "added" ? "新增" : diff.change === "removed" ? "移除" : "修改"} ${escapeText(diff.name)} · r${diff.draftRevision} · ${escapeText(diff.fields.join(", "))} · ${diff.reviewed ? "已审核" : "待审核"}</label>`).join("<br>") || "—";
+    const diffs = (survey.productDiffs ?? []).map((diff) => `<label><input type="checkbox" data-publication-product="${escapeText(diff.productId)}" data-survey="${escapeText(survey.surveyId)}" ${diff.reviewed?"":"disabled"} ${selectedPublicationProducts.has(diff.productId)?"checked":""}> ${diff.change === "added" ? "新增" : diff.change === "removed" ? "移除" : "修改"} ${escapeText(diff.name)} · r${diff.draftRevision} · ${escapeText(diff.fields.join(", "))} · ${diff.reviewed ? "已审核" : "待审核"}${diff.blockingReason ? ` · ${escapeText(diff.blockingReason)}` : ""}</label>`).join("<br>") || "—";
     return `<tr${survey.changed ? ' data-changed="true"' : ""}><td>${checkbox}</td><td>${escapeText(survey.surveyId)}</td><td>${survey.publishedLayers}</td><td>${survey.changedProducts}</td><td>${diffs}</td><td>${survey.currentPackage ? `${escapeText(survey.currentPackage.id)}<br><small>${escapeText(survey.currentPackage.version)}</small>` : "—"}</td><td>${survey.changed ? "是" : "否"}</td><td>${blockers}</td></tr>`;
   }).join("");
   body.querySelectorAll<HTMLButtonElement>("[data-publication-blocked]").forEach(button=>button.onclick=()=>{
@@ -2338,6 +2339,7 @@ async function publishSelectedSurveys(): Promise<void> {
     toast(`发布任务已提交：${run.runId}`);
     publicationRuns = [run, ...publicationRuns];
     renderPublicationRuns();
+    publicationTabs.select("runs", true);
     schedulePublicationPolling(run.runId);
   } catch (error) {
     toast(error instanceof Error ? error.message : "发布提交失败", true);

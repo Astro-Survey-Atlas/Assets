@@ -214,3 +214,6 @@ releaseId to a verified native MOC layer, requires a consistent NSIDE, and retai
 the supplied pixels without refinement. Missing display labels are derived from
 product names; missing source URLs stay absent. Original ZIP members are not
 rewritten. Native MOC paths and hashes remain the scientific interface.
+
+公开覆盖发布门槛：实际解码的原生 MOC 最高阶数至少为 order 4；旧低阶产品可以被撤下。
+这不要求混合阶 MOC 的每个内部像元都达到 order 4，也不允许放大预览伪造精度。

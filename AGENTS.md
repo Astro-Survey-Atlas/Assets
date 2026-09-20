@@ -23,6 +23,9 @@ verification baseline, known problems, dirty worktree, and next priorities.
 
 ## Coverage workflow
 
+Public MOC publication requires an actual native maximum order of at least 4;
+check decoded NUNIQ cells, never an upsampled preview or a requested order.
+
 Every new survey recipe must follow `docs/coverage-workflow.md` and declare
 ICRS/NESTED, available orders, input snapshot hashes, source file references,
 and the exact/estimated precision of every output. Do not manufacture an order

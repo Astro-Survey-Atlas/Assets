@@ -3,7 +3,39 @@
 更新：2026-09-20（Asia/Shanghai）。本文件为当前状态入口；旧版本记录见
 [历史交接](docs/handoff-history-through-20260920.md)，不可将旧部署或待办当成现状。
 
-## 当前状态：CSST 已从 Assets 运行侧退役（2026-09-20）
+## 当前状态：发布 Tab 与最低原生精度（2026-09-20）
+
+- Assets revision **187**，镜像 `1.0.0-20260920-order4-tabs`；site/backend 均 1/1 Ready。
+  Workspace 未部署变更，仍 revision 31。
+- 天球整体变粗的根因：最新 AKARI 产品的真实 NUNIQ 最高阶数为 0；globe 以全部
+  图层的最小 overviewOrder 建共同预览，把其他 O4 图层也投影成 O0。不是原包回退，
+  也不是 CSST 清理改变了其他公开几何。最小回归复现中 O4 的 [900,901] 被压成 O0 [3]。
+- 按用户要求，公开 MOC 的真实原生最高阶数必须 >=4。productGeometry、发布计划、
+  提交与冻结候选构建均拦截低阶几何；错误明确说明 order 值和门槛，审核接口返回 422。
+  混合阶 MOC 可以含更粗的内部像元，按最高实际阶数判断；不得靠放大预览达标。
+  globe 同时排除历史目录中低于 O4 的预览，不再由它们拉低其他图层精度。
+- 已通过正规队列撤下 AKARI 产品 `6360764e42fba3abad35`，保留后台退休记录与原因。
+  任务 `mu9kif5d-f6b1a87a`：published + verified。最新 bundle
+  `reviewed-mu9kif5d-f6b1a87a`，489 文件，SHA256
+  `ce37e251f4185f6ce854641448aff944368f0b516ce6a20223e3c27f1a997b1d`。
+  其余 6 个包版本与 SHA 均未改变，公开覆盖为 14 层，没有 O4 以下预览。
+- `/admin/releases` 的“发布计划／发布记录”改为互斥 Tab，默认计划，当前浏览器会话
+  记住上次 Tab；支持方向键/Home/End，切换保留勾选，提交成功自动进入记录。
+  发布按钮仅在计划 Tab 显示，详情弹框不被隐藏面板遮蔽；复用任务页 Tab 交互。
+- build、218 项 Node 测试、Core 校验、site 类型检查、Helm lint 和 diff check 通过。
+  新回归覆盖真实 FITS O0/O3 拒绝、O4/O8 接受、计划/提交/构建阻断与天球全局降阶。
+  本地及线上浏览器用模拟数据验证 80 条发布记录、1440/900/390px、键盘、状态保留
+  和提交切换（所有管理写请求均被浏览器 fixture 截获，不产生真实测试发布）。
+- 真实线上天球全选 Euclid/DESI/Gaia/SDSS/DES/SUMSS 时为 NSIDE16/O4；Euclid × DESI
+  重合为 NSIDE256/O8，当前 Euclid 3.10.0 对应 585 像元、5 连通区；无 pageerror。
+  部署容器使用 AKARI 原 FITS 再次验证返回精度错误 422。Workspace 同步实测 200，
+  6 包、available=true/stale=false；AKARI 未安装，未改其他安装版本和激活选择。
+- 本地重建因上一轮清理产生新的历史记录，修正旧测试“历史永远只有两条”的固定假设，
+  改验累计历史、顺序及各集合的完整性。未恢复旧快照或重新发布旧包。
+- 当前源码/文档尚未提交，保留用户已有修改和暂存。日志 `/dev/shm/assets-order4-*`、
+  `/dev/shm/assets-publication-tabs-*`；截图同目录，临时文件重启会丢失。
+
+## 已完成：CSST 从 Assets 运行侧退役（2026-09-20）
 
 - Assets revision **186**，镜像 `1.0.0-20260920-csst-retired`，site/backend 均 Ready。
   Workspace 未部署变更，仍为 revision 31；未改 Workspace 私有数据或激活选择。
@@ -118,7 +150,7 @@
 ## 当前部署与数据
 
 - dev Helm release/namespace：`astro-survey-atlas-assets`，最新部署见顶部。
-- 镜像：`crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:1.0.0-20260920-csst-retired`。
+- 镜像：`crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:1.0.0-20260920-order4-tabs`。
 - 网站和 backend 均 1/1 Ready、0 restarts；旧 publisher Deployment 已移除。
 - 用户入口：<http://astro.assets.dev.72602.space:32080/>；直连备用：
   <http://10.15.51.75:32083/>。集群内网站 Service 使用端口 80。

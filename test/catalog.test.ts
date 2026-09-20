@@ -81,12 +81,12 @@ test("release history ships as a public manifest record without sensitive packag
   };
   assert.equal(document.schemaVersion, 2);
   assert.ok(document.latestReleaseId);
-  assert.equal(document.releases.length, 2);
-  const [priorRelease, release] = document.releases;
+  assert.ok(document.releases.length >= 2);
+  const [priorRelease, release] = document.releases.slice(-2);
   assert.ok(priorRelease && priorRelease.sequence < release!.sequence, "history must keep earlier releases cumulative");
-  assert.equal(priorRelease!.packages.length, 14);
-  assert.equal(release!.sequence, 2);
-  assert.ok(release!.releaseId.endsWith("-2"));
+  assert.equal(document.releases[0]!.packages.length, 14);
+  assert.equal(release!.sequence, priorRelease!.sequence + 1);
+  assert.ok(release!.releaseId.endsWith(`-${release!.sequence}`));
   assert.equal(document.latestReleaseId, release!.releaseId);
   assert.equal(release!.bundleId, catalog.manifest.bundle.id);
   assert.equal(release!.packages.length, 29);
@@ -98,7 +98,7 @@ test("release history ships as a public manifest record without sensitive packag
   assert.match(collection.fileName, /-resource-packages\.zip$/);
   assert.equal(collection.downloadUrl, `/api/v1/releases/${release!.releaseId}/download`);
   const collectionRecords = catalog.manifest.files.filter((entry) => entry.kind === "package-collection");
-  assert.equal(collectionRecords.length, 2, "every published collection archive stays downloadable");
+  assert.equal(collectionRecords.length, document.releases.filter(entry => entry.collection).length, "every published collection archive stays downloadable");
   const collectionRecord = collectionRecords.find((entry) => entry.path.endsWith(collection.fileName));
   assert.ok(collectionRecord, "collection ZIP must be a public manifest record");
   assert.equal(collectionRecord.sizeBytes, collection.sizeBytes);

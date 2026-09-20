@@ -5,6 +5,7 @@ import type { ProductContent, ProductRecord } from "./products.js";
 import type { MocPublication, MocPublicationFile } from "./moc-build.js";
 import type { PublicAssetRecord } from "./types.js";
 import { decodeNativeMoc, projectMoc, sha256, type NativeMoc } from "./native-moc.js";
+import { assertPublicCoverageOrder } from "./coverage-policy.js";
 import { isDeniedSurvey } from "./publication-policy.js";
 import { readResourcePackageManifest, readZipEntry, validateReviewedPackage } from "./resource-package-inspection.js";
 import { publicReleaseBundleDigest } from "./catalog.js";
@@ -56,6 +57,7 @@ export async function productGeometry(product: ProductRecord, options: MaterialO
   const bytes=await readFile(sourcePath);
   if (sha256(bytes)!==expected) throw new Error(`Geometry checksum mismatch: ${product.productId}`);
   const moc=decodeNativeMoc(bytes);
+  assertPublicCoverageOrder(moc.maxOrder);
   let indexRevision: string | null=null;
   if (content.surveyId === "desi" && ["desi-dr1-spectra-footprint","desi-edr-spectra-footprint"].includes(layerId)) {
     const recipePath=path.join(options.root,`src/layers/recipes/${layerId}.lock.json`);
@@ -118,6 +120,7 @@ export async function buildApprovedRelease(options: ApprovedBuildOptions): Promi
     const entry=options.files.find(f=>f.id===`approved-${product.geometry!.layerId}-moc` && f.sha256===product.geometry!.mocSha256);
     if (!entry) throw new Error(`Missing frozen geometry: ${product.productId}`);
     const sourcePath=path.join(options.root,entry.path),bytes=await readFile(sourcePath),moc=decodeNativeMoc(bytes);
+    assertPublicCoverageOrder(moc.maxOrder);
     if (moc.sha256!==product.geometry.mocSha256 || moc.revision!==product.geometry.coverageRevision) throw new Error("Frozen geometry mismatch");
     material.set(product.productId,{facts:product.geometry,bytes,moc,sourcePath});
   }

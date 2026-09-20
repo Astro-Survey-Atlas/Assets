@@ -33,6 +33,22 @@ intermediates must not be advertised as byte-for-byte reproducible. In the targe
 storage model, compute completion and asynchronous upload completion are separate;
 pending-upload data is the explicit exception to recovery from S3.
 
+## Public precision gate
+
+Public MOC publication requires a finest actual NUNIQ cell order of at least 4.
+The decoded FITS geometry is authoritative: a requested order, FITS header claim,
+or an enlarged preview cannot satisfy this gate. Mixed-order MOCs may contain
+coarser interior cells alongside cells at order 4 or higher; those remain valid.
+Plans report the concrete precision blocker, submissions reject ineligible
+products, and the build rechecks both selected and retained frozen geometry.
+Withdrawal of an already published low-order product remains allowed.
+
+The globe excludes legacy previews below order 4 before choosing a shared
+preview order, so one ineligible cached layer cannot coarsen every other survey.
+It does not synthesize finer cells for that layer. Public withdrawal goes through
+the normal publication queue and site verification; retained package bytes stay
+unchanged.
+
 ## Reverse lookup and overlap
 
 ```mermaid
