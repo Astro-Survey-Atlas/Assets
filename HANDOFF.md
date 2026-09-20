@@ -3,6 +3,23 @@
 更新：2026-09-20（Asia/Shanghai）。本文件为当前状态入口；旧版本记录见
 [历史交接](docs/handoff-history-through-20260920.md)，不可将旧部署或待办当成现状。
 
+## 固定发布基线（2026-09-20 14:18，Asia/Shanghai）
+
+- Assets revision **184**，镜像 `1.0.0-20260920-baseline`；site/backend 均 1/1。
+  首页名称、原生阶数、模态、DR/产品数量同一行，ZH/EN、1440/900/390px 验证通过。
+- Workspace 仍为 revision **31**，镜像 `0.10.38-dev-20260920-native-overlap`。
+- 最新公开 bundle `reviewed-mu9eqjrr-d2bb9a87`，SHA256
+  `aa211a5004c482144eec85b2b9bd5cd73afcb19a3c74c6d4e61ad03ec0c53ecc`，484 文件；
+  4 包：DESI 3.2.0、Euclid 3.9.0、Gaia 3.1.0、SDSS 3.2.0，11 层 MOC。
+- 用户新增发布后的 Euclid ERO/Q1 × DESI EDR/DR1，两端及冻结包离线计算均
+  order 8、570 像元、5 连通区。原来的 81/4 仅对应当时 Euclid 3.6.0。
+- 最近 4 个发布任务均 published + verified、attempts=1，未记录执行失败；
+  不能把用户看到的瞬时提交报错归因于打包失败。详情和验证见
+  [基线说明](docs/releases/baseline-2026.09.20.md)。
+- 两仓库使用 `baseline-2026.09.20` GitHub Release 固定本次已验证的代码与镜像；
+  Assets 附原始资源包、离线集合、固定目录及校验清单；BASELINE.json 关联两端。
+  这是可复现的基线，不会阻止后续发布，也不可覆盖后续业务数据。
+
 ## Euclid × DESI 重合精度修复（2026-09-20）
 
 - Workspace `asa` / `asa-workspace` 已升级 revision **31**，镜像
@@ -49,14 +66,14 @@
 
 ## 当前部署与数据
 
-- dev Helm release/namespace：`astro-survey-atlas-assets`，revision **183**。
-- 镜像：`crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:0.1.0-20260920-discovery-diagnostics`。
+- dev Helm release/namespace：`astro-survey-atlas-assets`，revision **184**。
+- 镜像：`crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:1.0.0-20260920-baseline`。
 - 网站和 backend 均 1/1 Ready、0 restarts；旧 publisher Deployment 已移除。
 - 用户入口：<http://astro.assets.dev.72602.space:32080/>；直连备用：
   <http://10.15.51.75:32083/>。集群内网站 Service 使用端口 80。
-- 本次只读核实：5 个公开巡天、9 个公开产品、7 层覆盖、3 个资源包；
+- 前轮只读核实：5 个公开巡天、9 个公开产品、7 层覆盖、3 个资源包；
   管理端 166 个产品、14 条发布记录，无 queued/building/uploading/verifying 任务。
-- 当前 bundle：`reviewed-mu9992i3-7e599e9b`，479 个 manifest 文件；SHA256：
+- 前轮 bundle（已被顶部最新发布替代）：`reviewed-mu9992i3-7e599e9b`，479 个 manifest 文件；SHA256：
   `6becd38832c1f7550b05138ae84ed02fb52d9724ff86e35a367a4edcbafd1d71`。
   manifest 文件数与受发布边界过滤的公开资产数不同。以上数量为检查时快照，用户继续发布会改变它们。
 
@@ -78,7 +95,7 @@ PVC，启动核对 S3 authority，运行时同步；站点可使用经过验证�
 
 ## 已完成的界面与问题修复
 
-- 首页巡天名称后同行显示模态并集图标；第二行显示最高原生精度。
+- 首页巡天名称、原生阶数、模态并集图标、DR/产品数量现在同一行显示。
   API 返回及语言切换后均执行局部 Lucide 渲染，不能只在启动时渲染图标。
 - `/releases/` 流程始终展开，无折叠控件；已有 MOC 与来源数据扫描是同级卡片。
   MOC 源头链接为 <https://alasky.cds.unistra.fr/MocServer/query>。
@@ -125,9 +142,9 @@ EN/ZH、明暗主题、1440/900/390px 布局。线上实际目录与下载验收
 
 ## 工作区与继续工作约束
 
-上一轮交接文档已提交于 `61082bb`。本轮诊断与兼容修改未提交；具体变更以
-`git status` 为准，保留 Workspace 和 Warehouse 原有未提交修改。
-临时 4199 浏览器测试服务器已关闭。本轮未提交或推送；已更新三个 dev 服务，详情见顶部。
+当前 Assets / Workspace 代码以 `baseline-2026.09.20` 标签固定；具体提交与镜像摘要
+见 GitHub Release 的 BASELINE.json。后续修改以 `git status` 为准，保留任何新产生
+的修改；Warehouse 的独立未提交修改不属于本次两仓库发布。部署与验证详情见顶部。
 
 保留现有修改、历史发布与 PVC。凭据仅使用已有 Secret，不写日志或文档。
 运行时仅连接配置的 Warehouse ES；旧 ES 只允许显式的一次性迁移。
