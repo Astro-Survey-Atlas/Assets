@@ -190,3 +190,24 @@ resume the worker afterwards. The repair filters packages/publications to the
 named survey, preserves all other baseline packages, and never reviews drafts.
 Activate the resulting authority bundle on the Assets server and run the HTTP
 audit. Workspace needs only its normal catalog sync and package update.
+
+## Sparse descriptive metadata
+
+Reviewed v3 catalogs may have `sources: []` and omit `wavelengths`, `productTypes`
+and `coverageAuthorities`. Consumers normalize those three missing descriptive
+lists to `[]`; present values must still be arrays of nonempty strings. An empty
+source list does not waive archive/manifest/hash/MOC provenance validation or
+justify invented source information. Package identity, version, hash, size,
+Release membership and scientific validation remain required.
+
+Workspace reports `stale` and `lastSyncError` separately from local catalog
+availability. A usable cached catalog is not evidence of a successful remote
+sync. Successful sync atomically advances the current snapshot; failure retains
+that snapshot without selecting an older catalog or downgrading packages.
+
+Reviewed previews may declare `ordering: NESTED` and per-footprint `nside` rather
+than a document-level nside. Workspace matches every preview's layerId/surveyId/
+releaseId to a verified native MOC layer, requires a consistent NSIDE, and retains
+the supplied pixels without refinement. Missing display labels are derived from
+product names; missing source URLs stay absent. Original ZIP members are not
+rewritten. Native MOC paths and hashes remain the scientific interface.

@@ -795,3 +795,23 @@ test("coverage task basename patterns are rejected when they are not representab
     fileNamePattern: "^CSST_.*\\\\.fits$",
   }, "warehouse"), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400);
 });
+
+test("discovery errors survive the Warehouse status projection without leaking raw evidence", async () => {
+  const failure = { component: "warehouse-moc-discovery", code: "DiscoveryConnectTimeout", stage: "connect-or-tls", endpoint: "https://alasky.cds.unistra.fr/MocServer/query?token=secret", elapsedMs: 20002, timeoutMs: 20000, bytes: 0, causeChain: ["HttpConnectTimeoutException: HTTP connect timed out"], body: "private evidence" };
+  const resource = {
+    metadata: { name: "sdss-moc-discovery", labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" } },
+    spec: { query: { surveyName: "SDSS" }, policyRef: "cds-public-moc-v2" },
+    status: { phase: "FAILED", reason: "DiscoveryConnectTimeout", summary: { failure } },
+  };
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const admin = new AssetsAdmin(config, { get: async () => resource, list: async () => [resource] } as never);
+  const detail = await admin.getMocDiscoveryRequest("sdss-moc-discovery");
+  assert.equal(detail.status.failure?.code, "DiscoveryConnectTimeout");
+  assert.equal(detail.status.failure?.endpoint, "https://alasky.cds.unistra.fr/MocServer/query");
+  assert.equal(detail.status.failure?.elapsedMs, 20002);
+  assert.deepEqual(detail.status.failure?.causeChain, failure.causeChain);
+  assert.equal(detail.status.discoveryState, "failed");
+  assert.equal(JSON.stringify(detail).includes("private evidence"), false);
+  assert.equal(JSON.stringify(detail).includes("token=secret"), false);
+  assert.deepEqual((await admin.listMocDiscoveryRequests())[0]?.status.failure, detail.status.failure);
+});

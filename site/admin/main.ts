@@ -1,3 +1,4 @@
+import type { DiscoveryFailure } from "../../server/discovery-failure.js";
 import { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Unlock, Upload, X, Sun, createIcons } from "lucide";
 import "./styles.css";
 import { UploadCloud } from "lucide";
@@ -65,7 +66,7 @@ interface CatalogStatus { mode: string; loadedAt: string; revision?: string; lay
 interface MocCandidateSummary { candidateId: string; title?: string; recordUrl?: string; mocUrl?: string; hipsUrl?: string }
 interface MocReviewSummary { schemaVersion: 2; truncated: boolean; summaryTruncated: boolean; searchRecordCount?: number; candidates: MocCandidateSummary[] }
 type MocDiscoveryState = "running" | "ready" | "empty" | "incomplete" | "failed";
-interface MocDiscoveryStatus { phase: string; jobName?: string; reason?: string; message?: string; evidencePath?: string; candidateCount?: number; lastTransitionTime?: string; reviewSummary?: MocReviewSummary; reviewSummaryState?: "available" | "missing"; discoveryState?: MocDiscoveryState }
+interface MocDiscoveryStatus { failure?: DiscoveryFailure; phase: string; jobName?: string; reason?: string; message?: string; evidencePath?: string; candidateCount?: number; lastTransitionTime?: string; reviewSummary?: MocReviewSummary; reviewSummaryState?: "available" | "missing"; discoveryState?: MocDiscoveryState }
 interface MocDiscoveryRequest { name: string; observation?: DiscoveryObservation; namespace?: string; createdAt?: string; surveyName: string; releaseHint?: string; productHint?: string; surveyId?: string; releaseId?: string; productId?: string; policyRef: string; workKey?: string; workTitle?: string; status: MocDiscoveryStatus }
 interface MocBuildProgress { phase: string; step: number; totalSteps: number; percent?: number; message?: string }
 interface MocBuildRequest { schemaVersion: 1; kind: "MocBuildRequest"; name: string; discoveryRequestName: string; provider: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; workKey?: string; workTitle?: string; createdAt: string; updatedAt: string; phase: string; progress: MocBuildProgress; source: { url: string; snapshotSha256?: string; sizeBytes?: number; evidenceRef?: string }; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; moc?: { ref: string; sha256: string; sizeBytes?: number }; query?: { ref: string; sha256?: string; order: number }; preview?: { ref: string; sha256?: string; order: number }; statistics?: { ref: string; sha256?: string; sizeBytes?: number }; manifest?: { ref: string; sha256?: string; sizeBytes?: number } }; error?: { reason: string; message: string }; duplicateOf?: string; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
@@ -998,7 +999,14 @@ function mocFailureReasonLabel(reason?: string): string {
   const normalized = String(reason ?? "").trim();
   return ({
     ReconcileError: "Warehouse 控制器处理探查请求时出错",
-    DiscoveryProtocolError: "Warehouse 返回的探查结果不符合约定",
+    DiscoveryProtocolError: "Warehouse 探查发生传输或响应错误；旧版摘要可能缺少具体原因",
+    DiscoveryConnectTimeout: "Warehouse 连接 CDS 超时，尚未获得有效响应",
+    DiscoveryDnsError: "Warehouse 无法解析上游主机名",
+    DiscoveryTlsError: "Warehouse 与上游建立 TLS 连接失败",
+    DiscoveryConnectError: "Warehouse 无法建立上游连接",
+    DiscoveryRequestTimeout: "Warehouse 等待上游响应超时",
+    DiscoveryHttpError: "上游服务返回 HTTP 错误",
+    DiscoveryTransportError: "Warehouse 请求上游时发生传输错误",
     InvalidIntent: "探查请求参数不完整或无效",
   } as Record<string, string>)[normalized] ?? (normalized || "Warehouse 未完成公开 MOC 探查");
 }
@@ -1236,6 +1244,24 @@ function renderMocReviewSummary(request: MocDiscoveryRequest): void {
       const reason = document.createElement("small");
       reason.textContent = `技术原因：${request.status.reason}`;
       failure.append(reason);
+    }
+    const diagnostic = request.status.failure;
+    if (diagnostic) {
+      const stages: Record<string, string> = { "connect-or-tls": "连接建立（TCP/TLS 未细分）", dns: "DNS 解析", tls: "TLS 握手或验证", request: "请求/响应传输", response: "响应解析" };
+      const items = [
+        "执行方：Warehouse MOC discovery",
+        `访问目标：${diagnostic.endpoint ?? diagnostic.targetHost ?? "未知"}`,
+        `失败阶段：${stages[diagnostic.stage ?? ""] ?? diagnostic.stage ?? "未记录"}`,
+        `耗时：${diagnostic.elapsedMs === undefined ? "未记录" : diagnostic.elapsedMs + " ms"}；超时预算：${diagnostic.timeoutMs === undefined ? "未记录" : diagnostic.timeoutMs + " ms"}`,
+        `HTTP：${diagnostic.httpStatus ?? "未收到状态码"}；收到字节：${diagnostic.bytes ?? "未记录"}`,
+        ...(diagnostic.causeChain ?? []),
+        ...(["connect-or-tls", "request"].includes(diagnostic.stage ?? "") ? ["根因归属：尚不能区分集群出口、中间网络或上游服务；此错误不表示没有 MOC。"] : []),
+      ];
+      for (const text of items) { const line = document.createElement("p"); line.textContent = text; failure.append(line); }
+    } else {
+      const line = document.createElement("p");
+      line.textContent = "执行方：Warehouse。此历史任务未提供详细错误摘要，不能仅凭通用错误码判定责任方；原始原因保留在 evidence。";
+      failure.append(line);
     }
     if (request.status.evidencePath) {
       const evidence = document.createElement("small");

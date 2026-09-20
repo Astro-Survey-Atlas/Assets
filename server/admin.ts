@@ -1,3 +1,4 @@
+import { discoveryFailureView, type DiscoveryFailure } from "./discovery-failure.js";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage, type RequestOptions as HttpRequestOptions } from "node:http";
@@ -274,6 +275,7 @@ export interface MocDiscoveryView {
     reason?: string;
     message?: string;
     evidencePath?: string;
+    failure?: DiscoveryFailure;
     candidateCount?: number;
     lastTransitionTime?: string;
     reviewSummary?: MocReviewSummary;
@@ -787,6 +789,8 @@ function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = f
   const value = (key: string): string | undefined => typeof status[key] === "string" ? status[key] as string : undefined;
   const number = (key: string): number | undefined => typeof status[key] === "number" ? status[key] as number : undefined;
   const summary = reviewSummaryView(status.reviewSummary);
+  const operational = status.summary && typeof status.summary === "object" ? status.summary as Record<string, unknown> : {};
+  const failure = discoveryFailureView(operational.failure);
   const work = parseWorkContext(resource.metadata?.annotations?.["assets.atlas.zhejianglab.org/work-ref"]);
   const candidateCount = number("candidateCount") ?? summary?.candidates.length;
   const phase = (value("phase") ?? "PENDING").toUpperCase();
@@ -806,6 +810,7 @@ function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = f
     ...(work?.productId ? { productId: work.productId } : {}),
     status: {
       phase,
+      ...(failure ? { failure } : {}),
       ...(value("jobName") ? { jobName: value("jobName") } : {}),
       ...(value("reason") ? { reason: value("reason") } : {}),
       ...(value("message") ? { message: value("message") } : {}),

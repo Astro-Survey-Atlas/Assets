@@ -3,10 +3,54 @@
 更新：2026-09-20（Asia/Shanghai）。本文件为当前状态入口；旧版本记录见
 [历史交接](docs/handoff-history-through-20260920.md)，不可将旧部署或待办当成现状。
 
+## Euclid × DESI 重合精度修复（2026-09-20）
+
+- Workspace `asa` / `asa-workspace` 已升级 revision **31**，镜像
+  `0.10.38-dev-20260920-native-overlap`；Assets 仍为 revision **183**。
+- 原因是 Workspace G 模式固定使用 overview NSIDE 16/order 4，Assets 使用
+  order 8。相同 order 4 的像元完全相同；不是资源包版本不一致。
+- Workspace 现在从已安装且校验 SHA 的原生 FITS MOC，通过 Assets Core 离线
+  投影到共同查询阶数；不从预览放大。混合低精度来源保守限制在 overview，
+  界面显示实际阶数。详情/反查继续使用结果 NSIDE 和具体图层身份。
+- 线上 API 实测两边均 order 8、81 像元、4 连通区，像元及各区 cells 一致；
+  显式 order 4 仍为 9 像元、5 连通区；4 个区的 Workspace details 均一致。
+- Workspace build、262 项测试（2 skip）及真实包原生投影对照测试通过。
+  线上 Chromium 实选 Euclid/DESI 后按 G：请求不再固定 NSIDE，界面显示
+  order 8 / NSIDE 256、81 单元、4 区块，无 pageerror；Deployment 1/1 Ready。
+  未改公开发布数据、包版本、用户激活选择；所有既有暂存/未暂存修改保留。
+- 本轮源码及文档尚未提交。Workspace 详情见其
+  `docs/resource-package-compatibility.md`；临时日志/截图为
+  `/dev/shm/workspace-overlap-*`、`/dev/shm/workspace-native-overlap.png`。
+
+## 本轮修复（2026-09-20 13:22，Asia/Shanghai）
+
+- Assets revision 183；Warehouse operator revision 8，worker/operator 镜像分别为
+  `0.1.0-20260920-diagnostics` / `0.2.0-20260920-diagnostics`。
+- Workspace Helm `asa`（namespace `asa-workspace`）revision 30，镜像
+  `0.10.38-dev-20260920-package-compat`。已修复空来源/缺省描述字段和
+  新版逐层 NESTED 预览的消费兼容；线上三个包 DESI 3.2.0、Euclid 3.6.0、
+  Gaia 3.1.0 均完成安装，原生 7 层 MOC 可读取。未改变用户激活选择。
+- 公开 bundle/hash/479 文件未变。未恢复旧快照、降级资源包或接入 LLM。
+- SDSS 原任务 evidence 为连接 CDS 超时；见
+  [诊断记录](docs/sdss-discovery-diagnosis-20260920.md)。原任务未重跑。
+  新 worker 输出可读结构化错误并通过 status.summary.failure 传到 Assets；
+  历史记录明确提示详细摘要缺失，不再将通用错误解释为协议不符合约定。
+- Assets build、212 项 Node 测试、Core 校验、site 类型检查通过；浏览器实测
+  历史错误与真实 Warehouse 错误 fixture 的 1440/390 布局，无 pageerror。
+  Workspace build、261 项测试通过（2 跳过），真实包消费合同及线上安装通过。
+  Warehouse test/verify/quality、Helm/Compose/mapping/diff 静态门禁通过。
+- Warehouse live 不是全绿：Workspace caller 在实际 asa-workspace namespace
+  PASSED（1 文件、11 coverage、0 errors）；Assets S3 scan 成功（12 coverage），
+  MOC 因 CDS 连接超时 FAILED；本地 fixture 缺 `/data/gz_desi_merger_samples.csv`。
+  新自测的错误码为 DiscoveryConnectTimeout，耗时约 20048 ms，预算 20000 ms。
+- 三仓库本轮修改未提交；Workspace/Warehouse 原有 dirty changes 全部保留。
+  日志位于 `/dev/shm/{assets-diagnostics,workspace-preview,warehouse-*}*`；
+  这些为临时证据，重启丢失。仓库当前 HEAD 是 61082bb，上一轮交接已提交。
+
 ## 当前部署与数据
 
-- dev Helm release/namespace：`astro-survey-atlas-assets`，revision **182**。
-- 镜像：`crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:0.1.0-20260920-flow-layout`。
+- dev Helm release/namespace：`astro-survey-atlas-assets`，revision **183**。
+- 镜像：`crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:0.1.0-20260920-discovery-diagnostics`。
 - 网站和 backend 均 1/1 Ready、0 restarts；旧 publisher Deployment 已移除。
 - 用户入口：<http://astro.assets.dev.72602.space:32080/>；直连备用：
   <http://10.15.51.75:32083/>。集群内网站 Service 使用端口 80。
@@ -65,7 +109,7 @@ revision 182 已通过 build、211 项 Node 测试、Core wheel 校验、site Ty
 Helm lint 和 diff check。`scripts/public-workflow-browser.py` 验证延迟加载图标、
 名称图标同行、语言切换、空/错误目录、显式 CDS 链接、同级来源、无折叠以及
 EN/ZH、明暗主题、1440/900/390px 布局。线上实际目录与下载验收通过，
-资源包 Range 为 206（32 字节）。本次交接整理只修改文档，未重新部署或重跑全套测试。
+资源包 Range 为 206（32 字节）。上一轮交接整理只修改文档；本轮部署与测试见文件顶部。
 
 - 日志：`/dev/shm/assets-flow-layout-{build,tests,image,push}.log`。
 - 截图：`/dev/shm/assets-flow-live-{home,releases}.png`、`/dev/shm/release-flow-*.png`。
@@ -81,9 +125,9 @@ EN/ZH、明暗主题、1440/900/390px 布局。线上实际目录与下载验收
 
 ## 工作区与继续工作约束
 
-本次整理前 HEAD 为 `689e2eb`，工作区干净，先前代码及页面修改已被收录；此轮
-只新增/更新交接及关联说明，尚未提交。不要沿用历史日志中“代码仍全部未提交”的描述。
-临时 4199 浏览器测试服务器已关闭。本轮未提交、推送或修改集群资源。
+上一轮交接文档已提交于 `61082bb`。本轮诊断与兼容修改未提交；具体变更以
+`git status` 为准，保留 Workspace 和 Warehouse 原有未提交修改。
+临时 4199 浏览器测试服务器已关闭。本轮未提交或推送；已更新三个 dev 服务，详情见顶部。
 
 保留现有修改、历史发布与 PVC。凭据仅使用已有 Secret，不写日志或文档。
 运行时仅连接配置的 Warehouse ES；旧 ES 只允许显式的一次性迁移。
