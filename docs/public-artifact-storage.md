@@ -41,15 +41,15 @@ versions have their own immutable URLs and hashes.
 Git contains code, public metadata/recipe locks, synthetic conformance fixtures,
 the pinned Core wheel and non-secret integrity references. Real private survey
 inputs, coverage outputs, preview pixels and package fixtures do not belong in
-Git, including CSST. They may remain in protected Assets/Workspace backend
-storage and evidence storage. The public deny policy remains necessary to filter
+Git. CSST private inputs and outputs belong to Workspace; Assets no longer
+retains backend or evidence copies. The public deny policy remains necessary to filter
 older snapshots and prevent accidental publication.
 
 The former tracked CSST directory, embedded survey/layer/preview entries and
 private build recipes have been removed from the current source tree. They are
 not required to build public packages or exercise the shared MOC algorithms.
-Historical recipes/evidence must be restored to an explicit private work root,
-never added back to the checkout as test data.
+Any future CSST scan must use the original private source in Workspace; the
+Assets one-shot import/migration/registration scripts have been removed.
 
 Input manifests, normalized scans, task snapshots and raw private inputs are
 `deliveryClass: evidence`; they are excluded from initial browser requests.

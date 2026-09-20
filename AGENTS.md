@@ -16,13 +16,10 @@ verification baseline, known problems, dirty worktree, and next priorities.
 - Never put input manifests, normalized scans or task snapshots in the browser's
   initial request. Mark them `deliveryClass: evidence` and keep them on the
   evidence PVC/object store.
-- The CSST `input-manifest.json` is a source/evidence artifact and must not be
-  added to the Git-tracked public release allowlist. Keep it in evidence
-  storage and preserve its hash/reference in migration/provenance records.
-
-- Keep real private survey inputs, outputs, previews and recipes out of Git,
-  including CSST. Protected Assets/Workspace backend and evidence storage may
-  retain them. Use synthetic fixtures for tests; keep public deny checks.
+- CSST private scans, inputs, outputs, previews and recipes belong to Workspace.
+  Keep them out of Assets Git, backend storage, evidence archives and releases.
+  Keep synthetic fixtures and public deny checks to prevent reintroduction from
+  historical snapshots. Other input evidence follows the storage rules above.
 
 ## Coverage workflow
 

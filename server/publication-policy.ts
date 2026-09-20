@@ -5,8 +5,8 @@ import type { PublicAssetRecord } from "./types.js";
  *
  * Deep module owning which surveys are excluded from every public release
  * artifact (manifest, archive, package catalog, release history, API).
- * Private survey data may stay in protected admin/evidence storage and
- * Workspace, but never in Git. These checks also block historical data
+ * Private CSST data belongs to Workspace, outside Assets storage and Git.
+ * These checks also block historical data
  * from leaking through a release or public API.
  */
 

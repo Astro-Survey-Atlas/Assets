@@ -28,6 +28,7 @@ def main() -> None:
     }.items():
         if key in value.get("inputs", {}):
             value["inputs"][key]["sha256"] = sha(ARTIFACT_ROOT / relative)
+    manifest_path = ARTIFACT_ROOT / "normalized/survey-footprints.json"
     value["files"]["manifest"].update({"sha256": sha(manifest_path), "sizeBytes": manifest_path.stat().st_size})
     catalog_path = ARTIFACT_ROOT / "packages/catalog.json"
     value["files"]["catalog"].update({"sha256": sha(catalog_path), "sizeBytes": catalog_path.stat().st_size})

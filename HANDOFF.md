@@ -3,7 +3,34 @@
 更新：2026-09-20（Asia/Shanghai）。本文件为当前状态入口；旧版本记录见
 [历史交接](docs/handoff-history-through-20260920.md)，不可将旧部署或待办当成现状。
 
-## 当前清理与部署（2026-09-20 15:13，Asia/Shanghai）
+## 当前状态：CSST 已从 Assets 运行侧退役（2026-09-20）
+
+- Assets revision **186**，镜像 `1.0.0-20260920-csst-retired`，site/backend 均 Ready。
+  Workspace 未部署变更，仍为 revision 31；未改 Workspace 私有数据或激活选择。
+- 用户明确要求删除 Assets 后台副本，替代下方上一阶段“保留后台/备份”的策略。
+  已删 4 条 CSST 产品及对应历史，保留全部 162 条其他产品；新产品状态已同步 S3。
+  evidence PVC 的 `/var/lib/assets-evidence/csst`（约 196 MiB）已删除，重启后未恢复。
+- 已删除仓库外的 `~/.local/share/astro-assets-private/csst-cleanup-20260920` 备份，
+  本地旧 CSST 包、图层、临时构建/验证副本和含 CSST 的两份旧迁移备份 tar。
+  已清理旧未使用 release PVC 中 9 个含私有数据的缓存版本；PVC 本身保留。
+- 对象存储中 151 个旧产品状态快照去除 CSST 后重新计算哈希，保留其他巡天历史。
+  清理 evidence/content 归档的私有成员和中性文件名中的内嵌预览、目录、记录；
+  更新归档指针、对象 SHA/size 和本地 evidence-index。原混合快照不再可原样恢复。
+  255 个旧对象 HEAD 确认不存在，5 个归档指针和 28 份混合元数据校验通过；
+  桶未启用对象版本保留。删除记录仅保留非敏感对象键/hash，见 [退役收据](docs/csst-retirement-receipt-20260920.json)。
+- 已删除三个一次性脚本 `scripts/history/{import_csst_w234,migrate_csst_evidence,register_csst_w2_w4}.py`
+  及 CSST 展示图片、后台图片映射；运行容器中脚本也已移除。保留公开拒绝规则和合成测试。
+  将旧真实 CSST 产品 ID 的 HTTP 测试改为公开 Euclid 产品；补回 provenance 脚本缺失的路径变量。
+- 213 项测试、Core 校验、build、site 类型检查、provenance 合成输入执行检查通过。
+  最终本地生成目录/预览清理后的 4 项边界测试通过；线上 FAQ 浏览器验收通过，
+  公开 bundle 和全部 7 包版本/hash 与清理前完全相同。
+- Workspace `POST /api/resource-packages/sync` 多次实测 200，7 包下载/SHA 校验全部通过，
+  catalog 为 available=true/stale=false。未复现用户报告的 502，不能断言根因或归因于 CSST。
+  现有应用日志未取得这次历史 502 的细节；如再次出现，需捕获具体请求路径和响应 error。
+- Git 历史/标签仍未重写，旧提交仍含数据；当前清理修改以 `git status` 为准，保留用户暂存。
+  两仓库 GitHub baseline Release 已撤下。不得恢复本次已清除的私有混合快照。
+
+## 历史第一阶段清理（已被顶部退役策略替代，2026-09-20 15:13，Asia/Shanghai）
 
 - Assets revision **185**，镜像 `1.0.0-20260920-private-data-faq`，site/backend 均 1/1 Ready。
   Workspace 未变，revision **31**。没有迁移、恢复快照或修改线上发布数据。
@@ -91,7 +118,7 @@
 ## 当前部署与数据
 
 - dev Helm release/namespace：`astro-survey-atlas-assets`，最新部署见顶部。
-- 镜像：`crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:1.0.0-20260920-private-data-faq`。
+- 镜像：`crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:1.0.0-20260920-csst-retired`。
 - 网站和 backend 均 1/1 Ready、0 restarts；旧 publisher Deployment 已移除。
 - 用户入口：<http://astro.assets.dev.72602.space:32080/>；直连备用：
   <http://10.15.51.75:32083/>。集群内网站 Service 使用端口 80。
@@ -154,7 +181,8 @@ EN/ZH、明暗主题、1440/900/390px 布局。线上实际目录与下载验收
 
 - 日志：`/dev/shm/assets-flow-layout-{build,tests,image,push}.log`。
 - 截图：`/dev/shm/assets-flow-live-{home,releases}.png`、`/dev/shm/release-flow-*.png`。
-- 迁移一致性备份：`/dev/shm/assets-split-migration/`；这些是内存文件系统临时证据，重启会丢失。
+- 历史迁移一致性记录：`/dev/shm/assets-split-migration/`；两份含 CSST 的 content/spool tar
+  已在本次退役中删除，下列 SHA 仅供历史查证，不再是可恢复备份。
   `quiesced-content-spool.tar.gz` SHA256：
   `616b19e5cd2961177ec57b98e826512fc230098cfcfac1c82726aa1f7edc66f4`；
   `quiesced-current.json` SHA256：

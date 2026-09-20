@@ -1253,9 +1253,9 @@ three-way overlap at O8 or after Gaia's O4 visual coarsening.
 
 ## Known Problems
 
-1. Historical import utilities such as `scripts/import_csst_w234.py` still
-   mention `astro_*`. Keep them explicitly migration-only; do not make them a
-   runtime fallback.
+1. Historical note (superseded 2026-09-20): the CSST import, evidence migration
+   and registration utilities were removed when Assets retired private CSST data.
+   Re-scan original private sources through Workspace; these scripts are no longer available.
 2. The successful Assets-owned modality CRs were deleted after their ES state
    and evidence were verified; the failed cube probe remains for diagnosis
    because its real HI4PI header declares `RADESYS=FK5`. The current Warehouse

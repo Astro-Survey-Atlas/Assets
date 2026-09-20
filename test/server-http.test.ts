@@ -82,15 +82,20 @@ test("admin endpoints require a token and expose the configured control-plane bo
 
   const denied = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tasks`);
   assert.equal(denied.status, 401);
-  const deniedProduct = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/bb743658cd44269d7675`);
+  const deniedProduct = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/test-product`);
   assert.equal(deniedProduct.status, 401);
   assert.deepEqual(await deniedProduct.json(), { error: "Invalid Assets admin token" });
   const malformed = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tasks`, { headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(malformed.status, 503);
 
-  const existingProduct = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/bb743658cd44269d7675`, { headers: { Authorization: "Bearer test-admin-token" } });
+  const productList = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products?surveyId=euclid`, { headers: { Authorization: "Bearer test-admin-token" } });
+  assert.equal(productList.status, 200);
+  const publicProducts = await productList.json() as { products: Array<{ productId: string }> };
+  const productId = publicProducts.products[0]?.productId;
+  assert.ok(productId, "public Euclid product baseline is available");
+  const existingProduct = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${productId}`, { headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(existingProduct.status, 200);
-  assert.equal((await existingProduct.json() as { product: { productId: string } }).product.productId, "bb743658cd44269d7675");
+  assert.equal((await existingProduct.json() as { product: { productId: string } }).product.productId, productId);
 
   const missingProduct = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/missing-product-id`, { headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(missingProduct.status, 404);

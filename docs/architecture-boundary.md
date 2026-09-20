@@ -64,7 +64,7 @@ order 投影负责空间计算，Resource Package v3 负责离线安装，官方
 
 公共 MOC、Resource Package 和大型 query projection 的权威发布位置是版本化
 对象存储；Git 保留公开 catalog、recipe lock、非敏感 provenance 摘要和 hash。真实私有数据（包括 CSST）
-及其预览/配方不进入 Git；可保留在 Assets/Workspace 受控后台，测试采用合成数据。输入 manifest、
+及其预览/配方不进入 Git；CSST 私有数据由 Workspace 持有，Assets 不再保留副本，测试采用合成数据。输入 manifest、
 normalized scan、任务快照和错误继续留在 evidence PVC/object store。已确认的
 authority 是 gitignored `.info` 描述的 MinIO，不是当前 Helm `storage/minio`
 公开桶。P0-P5 的盘点、恢复、队列、CAS、workflow 和线上切换均已验收；本地
@@ -85,8 +85,8 @@ Assets 管理页面
 ```
 
 官方已有 MOC 的产品直接导入锁定。只有区域文件、tile 表或审核后的本地
-输入才创建任务。CSST W2/W3/W4 保持独立任务；CSST W1 的权威 MOC、像素、
-面积和 SHA-256 保持冻结。当前不生成深度数据，也不把深度字段塞进 FITS MOC。
+输入才创建任务。私有 CSST 的重新扫描和生成由 Workspace 发起，不再由 Assets
+历史导入脚本恢复。当前不生成深度数据，也不把深度字段塞进 FITS MOC。
 
 ## 深度扩展
 

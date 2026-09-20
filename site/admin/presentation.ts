@@ -4,7 +4,6 @@
  * previews and must not be presented as mission imagery.
  */
 const imageSources: Record<string, string> = {
-  csst: "https://upload.wikimedia.org/wikipedia/commons/1/12/CSST%E6%83%B3%E8%B1%A1%E5%9B%BE.jpg",
   euclid: "https://www.esa.int/var/esa/storage/images/science_exploration/space_science/euclid/24495561-6-eng-GB/Euclid_pillars.png",
   desi: "https://www.desi.lbl.gov/wp-content/uploads/sites/8/2018/06/instrument-1.jpg",
   sdss: "https://alasky.cds.unistra.fr/hips-image-services/hips2fits?hips=CDS%2FP%2FSDSS9%2Fcolor&ra=180&dec=0&fov=20&width=640&height=360&format=jpg&projection=TAN",
@@ -43,7 +42,6 @@ const images: Record<string, string> = Object.fromEntries(
 );
 
 const attributions: Record<string, string> = {
-  csst: "Wikimedia Commons · China Space Station Telescope (CSST) artist rendering",
   euclid: "ESA / Euclid mission",
   desi: "DESI collaboration / Berkeley Lab",
   sdss: "Sloan Digital Sky Survey via Wikimedia Commons",
