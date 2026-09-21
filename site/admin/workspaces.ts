@@ -14,6 +14,7 @@ export const workspaceResources: Record<AdminStep, Resource[]> = {
   tasks: ["tasks", "mocDiscovery", "mocBuilds", "products", "reviewSurveys", "connectors"],
   review: ["products", "reviewSurveys", "mocBuilds", "catalogStatus"],
   releases: [],
+  api: [],
 };
 
 /** Observation timestamps do not constitute a business change. */

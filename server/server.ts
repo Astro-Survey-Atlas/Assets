@@ -1,4 +1,8 @@
-import { CoveragePrecisionError } from "./coverage-policy.js";
+import { ApiManagement, MANAGED_KEY_PREFIX } from "./api-management.js";
+import { LlmDiscovery, CDS_SEARCH_URL } from "./llm-discovery.js";
+import { adminInventoryIndex } from "./admin-survey-index.js";
+import { decodeNativeMoc, sha256 as nativeSha256 } from "./native-moc.js";
+import { assertPublicCoverageOrder, MIN_PUBLIC_COVERAGE_ORDER, CoveragePrecisionError } from "./coverage-policy.js";
 import { acquireLocalFileLock } from "./local-file-lock.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { ReleaseSynchronizer } from "./release-synchronizer.js";
@@ -47,8 +51,21 @@ const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
 const accessGate=new AccessGate();
 async function handleDownloadUnlock(request:IncomingMessage,response:ServerResponse):Promise<void> {
-  const body=await requestJsonBody(request,8192);
-  const token=accessGate.unlock(request,body.password);
+  let token: string;
+  const apiKey = request.headers["x-assets-api-key"];
+  if (typeof apiKey === "string" && apiKey.startsWith(MANAGED_KEY_PREFIX)) {
+    accessGate.sameOrigin(request);
+    if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+    if (!apiManagement) throw new AccessError(503, "API management unavailable");
+    const started = Date.now(), route = "/api/v1/access/unlock";
+    let id: string | undefined;
+    token = accessGate.unlockKey(request, () => { id = apiManagement.authorize(apiKey, "region:query", route); return id; });
+    apiManagement.recordKey(id!, route, 200, Date.now()-started);
+  } else {
+    const body=await requestJsonBody(request,8192);
+    token=accessGate.unlock(request,body.password);
+  }
+  response.setHeader("Cache-Control", "no-store");
   const secure=request.headers["x-forwarded-proto"]==="https"?"; Secure":"";
   response.setHeader("Set-Cookie",`assets_download=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600${secure}`);
   json(response,200,{unlocked:true,expiresAt:new Date(Date.now()+3600000).toISOString()});
@@ -245,7 +262,7 @@ async function publicationLayer(publication: MocPublication): Promise<CoverageCe
       ...(publication.sourceSnapshotSha256 ? { sourceSnapshotSha256: publication.sourceSnapshotSha256 } : {}),
       ...(publication.sourceSnapshotSizeBytes !== undefined ? { sourceSnapshotSizeBytes: publication.sourceSnapshotSizeBytes } : {}),
     },
-    sourceUnitIndex: { status: "entrypoint-only", notes: "这是公开 CDS MOC 的覆盖层；没有源文件级反向索引。" },
+    sourceUnitIndex: { status: "entrypoint-only", notes: "这是公开来源 MOC 的覆盖层；没有源文件级反向索引。" },
   };
 }
 
@@ -320,6 +337,21 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
 
 await reloadRuntimeCoverage();
 const admin = new AssetsAdmin(undefined, undefined, undefined, new ConnectorProbeStateStore(contentRoot, stateSnapshotSink), new ConnectorInventoryStateStore(contentRoot, stateSnapshotSink));
+const apiManagement = managesContent ? new ApiManagement(contentRoot, stateSnapshotSink) : undefined;
+await apiManagement?.initialize();
+const apiStatsTimer = apiManagement ? setInterval(() => { void apiManagement.flush().catch(() => console.error("API statistics archive failed")); }, 60000) : undefined;
+apiStatsTimer?.unref();
+const llmDiscovery = new LlmDiscovery({ root: contentRoot, evidenceRoot, sink: stateSnapshotSink,
+  getSettings: () => apiManagement?.settings() ?? {}, onUsage: event => apiManagement?.recordLlm(event),
+  getRequest: name => admin.getMocDiscoveryRequest(name), baseUrl: process.env.ASSETS_LLM_BASE_URL,
+  model: process.env.ASSETS_LLM_MODEL, key: process.env.ASSETS_LLM_API_KEY });
+if (managesContent) await llmDiscovery.initialize();
+async function discoveryView(name: string) { return llmDiscovery.view(await admin.getMocDiscoveryRequest(name)); }
+function discoveryCandidate(discovery: Awaited<ReturnType<typeof discoveryView>>, id: unknown) {
+  return llmDiscovery.resolve(discovery.name, id) ?? resolveMocDiscoveryCandidate(discovery, id);
+}
+const llmTimer = managesContent ? setInterval(() => { void llmDiscovery.tick().catch(() => console.error("LLM discovery state update failed")); }, 5000) : undefined;
+llmTimer?.unref();
 const products = new ProductStore(stateSnapshotSink, contentRoot);
 if (managesContent) await products.initialize(releaseRoot, coverageCatalog.layers);
 const publicationScheduler = role === "backend" && authorityStore && releaseSynchronizer ? new PublicationScheduler({
@@ -381,8 +413,8 @@ async function resumeMocBuilds(): Promise<void> {
   for (const request of mocBuildStore.list()) {
     if (["STAGED", "FAILED", "DUPLICATE"].includes(request.phase)) continue;
     try {
-      const discovery = await admin.getMocDiscoveryRequest(request.discoveryRequestName);
-      const candidate = resolveMocDiscoveryCandidate(discovery, request.candidateId);
+      const discovery = await discoveryView(request.discoveryRequestName);
+      const candidate = discoveryCandidate(discovery, request.candidateId);
       mocBuildService.enqueue(request, candidate);
     } catch (error) {
       console.warn(`Unable to resume MOC build ${request.name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -519,7 +551,7 @@ function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurv
 }
 
 function adminSurveyIndex(): Awaited<ReturnType<typeof loadSurveyIndex>> {
-  return editorial.applyPublished(runtimeSurveyIndex);
+  return editorial.applyPublished(adminInventoryIndex(runtimeSurveyIndex, products.list()));
 }
 
 function publicSurveyIndex(): Awaited<ReturnType<typeof loadSurveyIndex>> {
@@ -581,7 +613,7 @@ if (managesContent) {
   if (role === "legacy") await refreshDynamicResourcePackages();
   else registerDynamicPackageAssets();
   runtimeSurveyIndex = applyPublishedProductMetadata(runtimeSurveyIndex);
-  await editorial.initialize(runtimeSurveyIndex.surveys);
+  await editorial.initialize(adminInventoryIndex(runtimeSurveyIndex, products.list()).surveys);
 }
 function independentLoop(name: string, interval: number, work: () => Promise<void>): void {
   let busy = false;
@@ -837,6 +869,7 @@ function adminProductLifecycle(record: ProductRecord, build?: ReturnType<MocBuil
   return {
     publication: {
       state: retired ? "RETIRED" : published ? "PUBLISHED" : "DRAFT",
+      ...(retired ? { withdrawalState: publicState.records.has(record.productId) ? "pending" : "withdrawn" } : {}),
       ...(record.publishedAt ? { publishedAt: record.publishedAt } : {}),
       ...(record.retiredAt ? { retiredAt: record.retiredAt } : {}),
       ...(record.retirementReason ? { retirementReason: record.retirementReason } : {}),
@@ -875,7 +908,7 @@ type MocRegistrationDefaultField = "releaseId" | "releaseLabel" | "releaseKind" 
 type MocRegistrationDefaults = Pick<MocProductRegistrationInput, MocRegistrationDefaultField>;
 
 async function mocSurveyFacts(build: ReturnType<MocBuildStore["get"]>) {
-  const discovery = await admin.getMocDiscoveryRequest(build.discoveryRequestName);
+  const discovery = await discoveryView(build.discoveryRequestName);
   const surveyId = build.surveyId ?? discovery.surveyId ?? registrationSlug(discovery.surveyName);
   const survey = runtimeSurveyIndex.surveys.find((entry) => entry.id === surveyId || entry.name.toLowerCase() === discovery.surveyName.toLowerCase());
   const existing = products.list().find((entry) => entry.draft.surveyId === (survey?.id ?? surveyId) && entry.draft.publicSurvey)?.draft.publicSurvey;
@@ -907,8 +940,8 @@ function inferMocModality(surveyName: string, productName: string, existing?: st
 }
 
 async function mocRegistrationDefaults(build: ReturnType<MocBuildStore["get"]>): Promise<{ values: MocRegistrationDefaults; sources: Partial<Record<MocRegistrationDefaultField, string>> }> {
-  const discovery = await admin.getMocDiscoveryRequest(build.discoveryRequestName);
-  const candidate = resolveMocDiscoveryCandidate(discovery, build.candidateId);
+  const discovery = await discoveryView(build.discoveryRequestName);
+  const candidate = discoveryCandidate(discovery, build.candidateId);
   const surveyId = build.surveyId ?? discovery.surveyId ?? registrationSlug(discovery.surveyName);
   const survey = runtimeSurveyIndex.surveys.find((entry) => entry.id === surveyId);
   const release = survey?.releases.find((entry) => entry.id === (build.releaseId ?? discovery.releaseId ?? registrationSlug(discovery.releaseHint, "")));
@@ -922,7 +955,7 @@ async function mocRegistrationDefaults(build: ReturnType<MocBuildStore["get"]>):
     releaseLabel,
     releaseKind: release?.kind ?? "release",
     productName,
-    productDescription: `${productName} 的公开天区覆盖 MOC；来源为 CDS MOC 服务，已由 Assets 校验并锁定来源哈希。`,
+    productDescription: `${productName} 的公开天区覆盖 MOC；来源为 ${candidate.provider === "llm" ? "经 LLM 发现并人工选择的公开来源" : "CDS MOC 服务"}，已由 Assets 校验并锁定来源哈希。`,
     productStatus: existingProduct?.status ?? "acquired",
     modality,
     dataOrigin: existingProduct?.dataOrigin ?? "observed",
@@ -1180,6 +1213,7 @@ function adminProductView(record: ProductRecord): Record<string, unknown> {
     lifecycle: adminProductLifecycle(record, mocBuild ? mocBuildStore.get(String(mocBuild.name)) : undefined),
     ...(record.retiredAt ? { retiredAt: record.retiredAt } : {}),
     ...(record.retirementReason ? { retirementReason: record.retirementReason } : {}),
+    ...(record.restoredAt ? { restoredAt: record.restoredAt, restorationReason: record.restorationReason } : {}),
   };
 }
 
@@ -1461,7 +1495,7 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": String(encoded.length),
-    "Cache-Control": "no-cache",
+    "Cache-Control": String(response.getHeader("Cache-Control") ?? "no-cache"),
   });
   response.end(encoded);
 }
@@ -1815,7 +1849,7 @@ async function sendPreview(request: IncomingMessage, response: ServerResponse, l
 }
 
 async function sendStatic(response: ServerResponse, pathname: string): Promise<void> {
-  if (/^\/admin\/(?:overview(?:\/surveys\/[^/]+)?|sources|tasks|review(?:\/products\/[^/]+)?|releases)\/?$/.test(pathname)) pathname = "/admin/";
+  if (/^\/admin\/(?:overview(?:\/surveys\/[^/]+)?|sources|tasks|review(?:\/products\/[^/]+)?|releases|api)\/?$/.test(pathname)) pathname = "/admin/";
   const requested = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
   const resolved = path.resolve(siteRoot, requested.endsWith("/") ? path.join(requested, "index.html") : requested);
   const relative = path.relative(siteRoot, resolved);
@@ -1894,8 +1928,8 @@ async function createMocBuild(body: Record<string, unknown>): Promise<ReturnType
   if (!discoveryRequestName.trim()) throw new AdminHttpError(400, "discoveryRequestName is required");
   const candidateId = typeof body.candidateId === "string" ? body.candidateId : "";
   if (!candidateId.trim()) throw new AdminHttpError(400, "candidateId is required");
-  const discovery = await admin.getMocDiscoveryRequest(discoveryRequestName);
-  const candidate = resolveMocDiscoveryCandidate(discovery, candidateId);
+  const discovery = await discoveryView(discoveryRequestName);
+  const candidate = discoveryCandidate(discovery, candidateId);
   const requestedProductId = typeof body.productId === "string" && body.productId.trim() ? body.productId.trim() : undefined;
   if (discovery.productId && requestedProductId && discovery.productId !== requestedProductId) {
     throw new AdminHttpError(400, "productId does not match the discovery work item");
@@ -1915,8 +1949,8 @@ async function createMocBuild(body: Record<string, unknown>): Promise<ReturnType
 async function retryMocBuild(name: string): Promise<ReturnType<MocBuildStore["get"]>> {
   const existing = mocBuildStore.get(name);
   if (!(existing.phase === "FAILED" || existing.phase === "DUPLICATE")) throw new AdminHttpError(409, `MOC build ${name} is not retryable`);
-  const discovery = await admin.getMocDiscoveryRequest(existing.discoveryRequestName);
-  const candidate = resolveMocDiscoveryCandidate(discovery, existing.candidateId);
+  const discovery = await discoveryView(existing.discoveryRequestName);
+  const candidate = discoveryCandidate(discovery, existing.candidateId);
   const request = await mocBuildStore.create({
     discoveryRequestName: discovery.name,
     candidate,
@@ -1938,8 +1972,8 @@ async function registerMocBuildProduct(name: string, body: Record<string, unknow
     const existing = products.get(build.productId);
     return { request: build, product: adminProductView(existing) };
   }
-  const discovery = await admin.getMocDiscoveryRequest(build.discoveryRequestName);
-  const candidate = resolveMocDiscoveryCandidate(discovery, build.candidateId);
+  const discovery = await discoveryView(build.discoveryRequestName);
+  const candidate = discoveryCandidate(discovery, build.candidateId);
   const requestedProductId = typeof body.productId === "string" && body.productId.trim() ? body.productId.trim() : undefined;
   let product: ProductRecord;
   if (requestedProductId) {
@@ -1972,16 +2006,29 @@ async function registerMocBuildProduct(name: string, body: Record<string, unknow
   }
   const workTitle = `${product.draft.surveyId.toUpperCase()} · ${product.draft.releaseId} · ${product.draft.name}`.slice(0, 255);
   const request = await mocBuildStore.bindProduct(name, { productId: product.productId, surveyId: product.draft.surveyId, releaseId: product.draft.releaseId, workKey: `product:${product.productId}`, workTitle });
+  await editorial.sync(adminInventoryIndex(runtimeSurveyIndex, products.list()).surveys);
   return { request, product: adminProductView(product) };
 }
 
 async function sendAdmin(request: IncomingMessage, response: ServerResponse, pathname: string): Promise<void> {
   if (pathname === "/api/v1/admin/config" && request.method === "GET") {
-    return json(response, 200, admin.publicConfig());
+    return json(response, 200, { ...admin.publicConfig(), mocDiscovery: { cdsUrl: CDS_SEARCH_URL, llmAvailable: llmDiscovery.configured } });
   }
   if (!admin.config.enabled) return json(response, 404, { error: "Assets administration is disabled" });
   try {
     admin.authorize(adminFromRequest(request));
+    if (pathname.startsWith("/api/v1/admin/api-management")) {
+      if (!apiManagement) throw new AdminHttpError(503, "API management backend unavailable");
+      response.setHeader("Cache-Control", "no-store");
+      const base = "/api/v1/admin/api-management";
+      if (pathname === base && request.method === "GET") return json(response, 200, apiManagement.view());
+      if (pathname === base + "/llm" && request.method === "PUT") { await apiManagement.updateProvider(await requestJsonBody(request, 16384) as Record<string, unknown>); return json(response, 200, apiManagement.view()); }
+      if (pathname === base + "/llm/test" && request.method === "POST") return json(response, 200, await apiManagement.testProvider());
+      if (pathname === base + "/keys" && request.method === "POST") return json(response, 201, await apiManagement.createKey(await requestJsonBody(request, 16384) as Record<string, unknown>));
+      const revoke = /^\/api\/v1\/admin\/api-management\/keys\/([^/]+)\/revoke$/.exec(pathname);
+      if (revoke && request.method === "POST") { await apiManagement.revokeKey(revoke[1]!); return json(response, 200, { revoked: true }); }
+      throw new AdminHttpError(404, "API management route not found");
+    }
     if (pathname === "/api/v1/admin/overview" && request.method === "GET") {
       return json(response, 200, await adminOverview());
     }
@@ -2009,7 +2056,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     if (pathname === "/api/v1/admin/catalog/reload" && request.method === "POST") {
       const catalogState = await reloadRuntimeCoverage();
       runtimeSurveyIndex = applyPublishedProductMetadata(runtimeSurveyIndex);
-      await editorial.sync(runtimeSurveyIndex.surveys);
+      await editorial.sync(adminInventoryIndex(runtimeSurveyIndex, products.list()).surveys);
       return json(response, 200, { catalog: { ...catalogState, revision: coverageCatalog.revision } });
     }
     if (pathname === "/api/v1/admin/tasks" && request.method === "GET") return json(response, 200, { tasks: await admin.listTasks() });
@@ -2042,10 +2089,12 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       return json(response, 201, { task: await admin.createTask(input) });
     }
     if (pathname === "/api/v1/admin/moc-discovery" && request.method === "GET") {
-      return json(response, 200, { requests: await admin.listMocDiscoveryRequests() });
+      return json(response, 200, { requests: (await admin.listMocDiscoveryRequests()).map(r => llmDiscovery.view(r)) });
     }
     if (pathname === "/api/v1/admin/moc-discovery" && request.method === "POST") {
       const body = await requestJsonBody(request);
+      if (body.llmEnabled !== undefined && typeof body.llmEnabled !== "boolean") throw new AdminHttpError(400, "llmEnabled 必须是布尔值");
+      if (body.llmEnabled && !llmDiscovery.configured) throw new AdminHttpError(409, "LLM 服务未配置");
       const input: MocDiscoveryInput = {
         surveyName: body.surveyName as string,
         ...(typeof body.releaseHint === "string" ? { releaseHint: body.releaseHint } : {}),
@@ -2056,15 +2105,20 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         ...(typeof body.workTitle === "string" ? { workTitle: body.workTitle } : {}),
         ...(body.workContext && typeof body.workContext === "object" && !Array.isArray(body.workContext) ? { workContext: body.workContext as MocDiscoveryInput["workContext"] } : {}),
       };
-      return json(response, 201, { request: await admin.createMocDiscoveryRequest(input) });
+      const created = await admin.createMocDiscoveryRequest(input);
+      if (body.llmEnabled === true) await llmDiscovery.enable(created);
+      return json(response, 201, { request: llmDiscovery.view(created) });
     }
     const mocRetryMatch = /^\/api\/v1\/admin\/moc-discovery\/([^/]+)\/resubmit$/.exec(pathname);
     if (mocRetryMatch?.[1] && request.method === "POST") {
-      return json(response, 201, { request: await admin.resubmitMocDiscoveryRequest(decodeURIComponent(mocRetryMatch[1])) });
+      const previousName = decodeURIComponent(mocRetryMatch[1]);
+      const created = await admin.resubmitMocDiscoveryRequest(previousName);
+      if (llmDiscovery.enabled(previousName)) await llmDiscovery.enable(created);
+      return json(response, 201, { request: llmDiscovery.view(created) });
     }
     const mocMatch = /^\/api\/v1\/admin\/moc-discovery\/([^/]+)$/.exec(pathname);
     if (mocMatch?.[1] && request.method === "GET") {
-      return json(response, 200, { request: await admin.getMocDiscoveryRequest(decodeURIComponent(mocMatch[1])) });
+      return json(response, 200, { request: await discoveryView(decodeURIComponent(mocMatch[1])) });
     }
     if (pathname === "/api/v1/admin/moc-builds" && request.method === "GET") {
       return json(response, 200, { requests: mocBuildStore.list().map(adminMocBuildView), syncStatus: await apiSyncStatus("moc-build") });
@@ -2133,6 +2187,33 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         return json(response, 200, { editorial: editorialApiRecord(record), syncStatus: await apiSyncStatus("editorial") });
       }
     }
+    const preflightMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/preflight$/.exec(pathname);
+    if (preflightMatch?.[1] && request.method === "GET") {
+      const record = products.get(decodeAdminPathSegment(preflightMatch[1]));
+      const revision = record.revision;
+      let maxOrder: number | undefined;
+      let error: string | undefined;
+      try {
+        // Read staged bytes without preparing/publishing a candidate or mutating the build.
+        const staged = mocBuildStore.list().find(b => b.productId === record.productId && b.phase === "STAGED");
+        if (staged?.outputs?.moc) {
+          const file = staged.outputs.moc;
+          const bytes = await readFile(path.resolve(evidenceRoot, file.ref));
+          if (nativeSha256(bytes) !== file.sha256) throw new Error("MOC 校验和不一致，请重新校验构建输出。");
+          maxOrder = decodeNativeMoc(bytes).maxOrder;
+          assertPublicCoverageOrder(maxOrder);
+        } else {
+          const material = await productGeometry(record, { root: catalog.root, files: catalog.manifest.files,
+            publications: mocPublicationStore.list(), publicationFile: file => mocPublicationStore.absolutePath(file) });
+          if (!material) throw new Error("尚无可验证的原生 MOC，请先构建并校验覆盖。非预览阶数检查。");
+          maxOrder = material.moc.maxOrder;
+        }
+      } catch (failure) { error = failure instanceof Error ? failure.message : "原生覆盖精度检查失败"; }
+      return json(response, 200, { productId: record.productId, revision, nativeOrder: {
+        minimum: MIN_PUBLIC_COVERAGE_ORDER, state: error ? "blocked" : "passed", ...(maxOrder !== undefined ? { maxOrder } : {}),
+        message: error ?? `真实原生最高阶数 O${maxOrder} ≥ O${MIN_PUBLIC_COVERAGE_ORDER}（已读取并校验 MOC）`,
+      } });
+    }
     const productMatch = /^\/api\/v1\/admin\/products\/([^/]+)$/.exec(pathname);
     const draftMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/draft$/.exec(pathname);
     if (productMatch?.[1] && request.method === "GET") {
@@ -2186,6 +2267,23 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       return json(response, 201, { product: adminProductView(product), readiness: productReadiness(product), syncStatus: await apiSyncStatus("products") });
     }
     const publishMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/publish$/.exec(pathname);
+    const restoreMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/restore$/.exec(pathname);
+    if (restoreMatch?.[1] && request.method === "POST") {
+      const body = await requestJsonBody(request);
+      if (Object.keys(body).some(key => !["revision", "reason"].includes(key))
+        || !Number.isSafeInteger(body.revision) || Number(body.revision) < 1 || typeof body.reason !== "string" || !body.reason.trim()) {
+        throw new AdminHttpError(400, "恢复产品需要当前 revision 和恢复原因。");
+      }
+      const productId = decodeAdminPathSegment(restoreMatch[1]);
+      const record = products.get(productId);
+      if (publicState.records.has(productId)) throw new AdminHttpError(409, "公开版本尚未撤下，请先发布撤下并等待网站生效。");
+      const active = (await publisher.list()).find(run => ["queued", "building", "uploading", "verifying"].includes(run.status)
+        && (run.selectedProducts?.some(p => p.productId === productId) || (!run.selectedProducts?.length && run.surveyIds.includes(record.draft.surveyId))));
+      if (active) throw new AdminHttpError(409, `相关发布任务 ${active.runId} 尚未结束，请等待或取消后再恢复。`);
+      const product = await products.restore(productId, Number(body.revision), body.reason);
+      await editorial.sync(adminInventoryIndex(runtimeSurveyIndex, products.list()).surveys);
+      return json(response, 200, { product: adminProductView(product), syncStatus: await apiSyncStatus("products") });
+    }
     const retireMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/retire$/.exec(pathname);
     const reviewMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/review$/.exec(pathname);
     if (reviewMatch?.[1] && request.method === "POST") {
@@ -2210,7 +2308,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       const reason = body.reason === undefined ? undefined : typeof body.reason === "string" ? body.reason : (() => { throw new AdminHttpError(400, "reason must be a string"); })();
       const product = await products.retire(decodeAdminPathSegment(retireMatch[1]), expectedRevision(request, body), reason);
       runtimeSurveyIndex = applyPublishedProductMetadata(runtimeSurveyIndex);
-      await editorial.sync(runtimeSurveyIndex.surveys);
+      await editorial.sync(adminInventoryIndex(runtimeSurveyIndex, products.list()).surveys);
       return json(response, 200, { product: adminProductView(product), readiness: productReadiness(product), syncStatus: await apiSyncStatus("products") });
     }
     if (publishMatch?.[1] && request.method === "POST") {
@@ -2472,8 +2570,27 @@ async function publicTileEntrypoints(layerIds: readonly string[], order: number,
   return { entries, selections, truncated };
 }
 
+async function withRegionAccess(request:IncomingMessage,response:ServerResponse,action:(identity:string)=>Promise<void>):Promise<void> {
+  const token = request.headers["x-assets-api-key"];
+  const managedHeader = typeof token === "string" && token.startsWith(MANAGED_KEY_PREFIX);
+  const managedCookie = /(?:^|;\s*)assets_download=managed\./.test(String(request.headers.cookie ?? ""));
+  if (role === "site" && (managedHeader || managedCookie)) {
+    if (!managedHeader) accessGate.sameOrigin(request);
+    return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+  }
+  const identity = managedHeader ? undefined : accessGate.identity(request);
+  if (!managedHeader && !identity?.startsWith("managed-key:")) return action(identity!);
+  if (!apiManagement) throw new AccessError(503, "API management unavailable");
+  const route = requestPath(request), started = Date.now();
+  const id = managedHeader ? apiManagement.authorize(token as string, "region:query", route) : apiManagement.authorizeId(identity!.slice("managed-key:".length), "region:query", route);
+  let status = 200;
+  try { await action(`managed-key:${id}`); }
+  catch (e) { status = e instanceof AccessError || e instanceof AdminHttpError ? e.statusCode : 500; throw e; }
+  finally { apiManagement.recordKey(id, route, status, Date.now()-started); }
+}
+
 async function sendCoverageReverseLookup(request:IncomingMessage,response:ServerResponse):Promise<void> {
-  accessGate.identity(request);
+ return withRegionAccess(request,response,async identity => {
   const body=await requestJsonBody(request,256*1024);
   if(!Array.isArray(body.layerIds)||body.layerIds.some(id=>typeof id!=="string"))throw new AccessError(400,"layerIds required");
   const sources=body.layerIds.map(id=>{
@@ -2481,14 +2598,15 @@ async function sendCoverageReverseLookup(request:IncomingMessage,response:Server
     if(!p?.geometry)throw new AccessError(404,"Published source not found");
     return {surveyId:p.content.surveyId,releaseId:p.content.releaseId,productId:p.productId,layerId:id,coverageRevision:p.geometry.coverageRevision,indexRevision:p.geometry.indexRevision};
   });
-  const result=await executeRegionQuery(request,{purpose:"download-plan",region:{coordinateFrame:"ICRS",ordering:"NESTED",order:body.order,cells:body.cells},sources,limit:body.limit});
+  const result=await executeRegionQuery(request,{purpose:"download-plan",region:{coordinateFrame:"ICRS",ordering:"NESTED",order:body.order,cells:body.cells},sources,limit:body.limit},identity,64);
   const entrypoints=result.sources.flatMap(s=>(s.downloads as Array<Record<string,unknown>>).map(d=>({...d,purpose:"data-access",layerId:s.layerId,product:s.product,order:s.order,nside:s.nside,cells:s.cells,precision:"estimated",required:true,selectionComplete:s.completeness==="complete",tileId:d.unitId,url:d.url,sourceUri:d.url,sourceScope:"tile-directory"})));
   const truncated=result.sources.some(s=>s.completeness==="truncated");
   compressedJson(request,response,200,{available:entrypoints.length>0,precision:"estimated",truncated,requested:{layerIds:body.layerIds,order:body.order,cells:body.cells},sources:result.sources,expiresAt:result.expiresAt,notes:result.sources.flatMap(s=>s.reason?[s.reason]:[]),downloadPlan:{schemaVersion:1,files:[],entrypoints,truncated,warnings:["Tile directories are candidate download units, not verified file lists."]}},"no-store");
+ });
 }
 
-async function executeRegionQuery(request:IncomingMessage,body:unknown) {
-  const identity=accessGate.identity(request),reservation=accessGate.begin(identity);
+async function executeRegionQuery(request:IncomingMessage,body:unknown,managedIdentity?:string,sourceLimit:8|64=8) {
+  const identity=managedIdentity ?? accessGate.identity(request),reservation=accessGate.begin(identity);
   const state=publicState;
   const task=queryRegion(state,body,async(layerId,order,cells,limit,indexRevision)=>{
     const product=state.records.get(state.coverage.records.get(layerId)!.productId)!;
@@ -2496,17 +2614,18 @@ async function executeRegionQuery(request:IncomingMessage,body:unknown) {
     if(material?.facts.indexRevision!==indexRevision)throw new AccessError(409,"Index revision changed");
     const index=await sourceUnitsReadyWithin(3000);
     return index?await index.match(layerId,order,cells,limit):null;
-  });
+  },sourceLimit);
   let timer:ReturnType<typeof setTimeout>|undefined;
   // Keep the concurrency slot while timed-out worker work is still running.
   void task.then(r=>reservation.finish(r.sources.reduce((sum,s)=>sum+(s.cells as number[]).length+(s.sourceUnits as unknown[]).length,0)),()=>reservation.finish(11000));
   try{return await Promise.race([task,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new AccessError(504,"Region query timed out")),10000);})]);}finally{if(timer)clearTimeout(timer);}
 }
 async function sendProtectedRegionQuery(request:IncomingMessage,response:ServerResponse):Promise<void> {
-  accessGate.identity(request);
+ return withRegionAccess(request,response,async identity => {
   const body=await requestJsonBody(request,256*1024);
-  const result=await executeRegionQuery(request,body);
+  const result=await executeRegionQuery(request,body,identity);
   compressedJson(request,response,200,result,"no-store");
+ });
 }
 
 let adminMutationTail: Promise<void> = Promise.resolve();
@@ -2715,11 +2834,16 @@ let shuttingDown = false;
 function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
+  llmDiscovery.stop();
+  if (apiStatsTimer) clearInterval(apiStatsTimer);
+  if (llmTimer) clearInterval(llmTimer);
   const closed = new Promise<void>(resolve => server.close(() => resolve()));
   void (async () => {
     await publicationScheduler?.stop();
     await sourceUnitsPromise?.then(store => store.terminate()).catch(() => undefined);
     await closed;
+    await apiManagement?.flush();
+    apiManagement?.close();
     await releaseBackendOwnership?.();
     process.exit(0);
   })().catch(error => { console.error("Shutdown failed", error); process.exit(1); });

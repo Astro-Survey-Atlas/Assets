@@ -131,3 +131,33 @@ test("ProductStore retires a published product without deleting its historical c
     await rm(contentRoot, { recursive: true, force: true });
   }
 });
+
+test("restoration requires completed withdrawal, preserves identity/history and invalidates approval", async () => {
+  const root = await fixtureRoot(), contentRoot = await mkdtemp(path.join(os.tmpdir(), "assets-restore-"));
+  try {
+    const store = new ProductStore(undefined, contentRoot); await store.initialize(root);
+    const product = await store.createMocProduct(input());
+    await store.review(product.productId, product.revision); await store.publish(product.productId, product.revision);
+    await store.retire(product.productId, product.revision, "Missing evidence");
+    const retiredRevision = product.revision;
+    await assert.rejects(() => store.restore(product.productId, retiredRevision, "Rebuild coverage"), /撤下/);
+    store.projectPublished([], new Date().toISOString());
+    await assert.rejects(() => store.restore(product.productId, retiredRevision - 1, "Rebuild coverage"), /revision/i);
+    await assert.rejects(() => store.restore(product.productId, retiredRevision, ""), /reason/i);
+    const restored = await store.restore(product.productId, retiredRevision, "Rebuild coverage");
+    assert.equal(restored.productId, product.productId); assert.equal(restored.revision, retiredRevision + 1);
+    assert.equal(restored.retiredAt, undefined); assert.equal(restored.review, undefined); assert.equal(restored.published, null);
+    assert.ok(restored.restoredAt); assert.equal(restored.restorationReason, "Rebuild coverage");
+    assert.equal(restored.draft.surveyId, "demo");
+    await assert.rejects(() => store.restore(product.productId, restored.revision, "again"), /退休/);
+    await assert.rejects(() => store.review(product.productId, restored.revision), /原生 MOC/);
+    await assert.rejects(() => store.publish(product.productId, restored.revision), /review/i);
+    const restarted = new ProductStore(undefined, contentRoot); await restarted.initialize(root);
+    assert.equal(restarted.get(product.productId).restoredAt, restored.restoredAt);
+    const history = await restarted.history(product.productId);
+    assert.ok(history.some(e => (e as {action:string}).action === "retire"));
+    assert.ok(history.some(e => (e as {action:string;reason?:string}).action === "restore" && (e as {reason:string}).reason === "Rebuild coverage"));
+    const updated = await restarted.updateDraft(product.productId, structuredClone(restored.draft), restored.revision);
+    assert.equal(updated.revision, retiredRevision + 2); assert.ok(updated.restoredAt);
+  } finally { await rm(root, { recursive: true, force: true }); await rm(contentRoot, { recursive: true, force: true }); }
+});

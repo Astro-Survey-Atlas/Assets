@@ -23,14 +23,25 @@ export class AccessGate {
     if(typeof origin!=="string" || new URL(origin).host!==request.headers.host)throw new AccessError(403,"Same-origin browser request required");
     if(request.headers["sec-fetch-site"] && request.headers["sec-fetch-site"]!=="same-origin")throw new AccessError(403,"Cross-site request rejected");
   }
-  unlock(request:IncomingMessage,password:unknown):string {
+  private checkUnlock(request:IncomingMessage):string {
     this.sameOrigin(request);
     const id=`browser:${request.socket.remoteAddress??"unknown"}`,q=this.quota(id);
     if(++q.failures>5)throw new AccessError(429,"Too many unlock attempts; retry next minute");
-    if(typeof password!=="string"||!equal(password,this.password))throw new AccessError(401,"Invalid download password");
+    return id;
+  }
+  private session(identity:string,managed=false):string {
     const now=Date.now();for(const [id,s]of this.sessions)if(s.until<=now)this.sessions.delete(id);
     if(this.sessions.size>=10000)throw new AccessError(429,"Session capacity exceeded");
-    const token=randomBytes(32).toString("hex");this.sessions.set(token,{until:now+3600000,identity:id});return token;
+    const token=(managed?"managed.":"")+randomBytes(32).toString("hex");this.sessions.set(token,{until:now+3600000,identity});return token;
+  }
+  unlock(request:IncomingMessage,password:unknown):string {
+    const id=this.checkUnlock(request);
+    if(typeof password!=="string"||!equal(password,this.password))throw new AccessError(401,"Invalid download password");
+    return this.session(id);
+  }
+  unlockKey(request:IncomingMessage,authorize:()=>string):string {
+    this.checkUnlock(request);
+    return this.session(`managed-key:${authorize()}`,true);
   }
   identity(request:IncomingMessage):string {
     const key=request.headers["x-assets-api-key"];
@@ -55,14 +66,14 @@ export interface RegionRequest {
   sources:Array<{surveyId:string;releaseId:string;productId:string;layerId:string;sourceId?:string;coverageRevision:string;indexRevision?:string|null}>;
   limit?:number;
 }
-export function validateRegion(input:unknown):RegionRequest {
+export function validateRegion(input:unknown,sourceLimit:8|64=8):RegionRequest {
   if(!input||typeof input!=="object")throw new AccessError(400,"Region request required");
   const x=input as RegionRequest,r=x.region;
   if(!["fine-overlap","download-plan"].includes(x.purpose)||!r||r.coordinateFrame!=="ICRS"||r.ordering!=="NESTED")throw new AccessError(400,"purpose and ICRS/NESTED region are required");
   if(!Number.isInteger(r.order)||r.order<0||r.order>13||!Array.isArray(r.cells)||!r.cells.length||r.cells.length>4096||r.cells.some(p=>!Number.isSafeInteger(p)||p<0||p>=12*4**r.order)||r.nside!==undefined&&r.nside!==2**r.order)throw new AccessError(400,"Invalid region order, nside or cells (maximum 4096 cells, O13)");
   const cells=[...new Set(r.cells)].sort((a,b)=>a-b);
   if(cells.length*41252.96124941927/(12*4**r.order)>100)throw new AccessError(413,"Region exceeds 100 square degrees");
-  if(!Array.isArray(x.sources)||x.sources.length<1||x.sources.length>8)throw new AccessError(400,"Provide 1–8 concrete sources");
+  if(!Array.isArray(x.sources)||x.sources.length<1||x.sources.length>sourceLimit)throw new AccessError(400,`Provide 1–${sourceLimit} concrete sources`);
   const ids=new Set<string>();
   for(const s of x.sources){
     if(!s || [s.surveyId,s.releaseId,s.productId,s.layerId,s.coverageRevision].some(v=>typeof v!=="string"||!v||v.length>128)||s.layerId.startsWith("public:")||s.sourceId!==undefined&&s.sourceId!==s.layerId||ids.has(s.layerId))throw new AccessError(400,"Invalid, duplicate or non-concrete source identity");
@@ -72,8 +83,8 @@ export function validateRegion(input:unknown):RegionRequest {
   if(x.limit!==undefined&&(!Number.isInteger(x.limit)||x.limit<1||x.limit>1000))throw new AccessError(400,"limit must be 1–1000");
   return {...x,region:{...r,cells,nside:2**r.order},limit:x.limit??500};
 }
-export async function queryRegion(state:PublicState,input:unknown,match:(layerId:string,order:number,cells:number[],limit:number,indexRevision:string)=>Promise<SourceUnitMatch|null>) {
-  const request=validateRegion(input),sources:Array<Record<string,unknown>>=[];
+export async function queryRegion(state:PublicState,input:unknown,match:(layerId:string,order:number,cells:number[],limit:number,indexRevision:string)=>Promise<SourceUnitMatch|null>,sourceLimit:8|64=8) {
+  const request=validateRegion(input,sourceLimit),sources:Array<Record<string,unknown>>=[];
   let remainingGeometry=10000,remainingUnits=request.limit!;
   for(const source of request.sources){
     const product=state.snapshot.products.find(p=>p.productId===source.productId),g=product?.geometry;

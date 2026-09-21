@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { isDeniedSurvey } from "./publication-policy.js";
 import { AdminHttpError } from "./admin.js";
 import { queueStateSnapshot, type StateSnapshotSink } from "./state-snapshot.js";
 import { PUBLICATION_POLICY, type GeometryFacts } from "./approved-release.js";
@@ -41,7 +42,7 @@ export interface ProductExecutionRecord {
   checks: ProductExecutionCheck[];
   error?: string;
 }
-export interface ProductRecord { productId: string; draft: ProductContent; published: ProductContent | null; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; contentSha256: string; review?: ProductReviewRecord; executions?: ProductExecutionRecord[]; /** A reversible retirement marker; historical published content remains addressable in release history. */ retiredAt?: string; retirementReason?: string }
+export interface ProductRecord { productId: string; draft: ProductContent; published: ProductContent | null; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; contentSha256: string; review?: ProductReviewRecord; executions?: ProductExecutionRecord[]; /** A reversible retirement marker; historical published content remains addressable in release history. */ retiredAt?: string; retirementReason?: string; restoredAt?: string; restorationReason?: string }
 
 interface PersistedProductDocument {
   schemaVersion: 1;
@@ -539,6 +540,7 @@ export class ProductStore {
   async review(id: string, expectedRevision?: number, acceptedGaps: string[] = [], geometry: GeometryFacts | null = null): Promise<ProductRecord> {
     const record = this.get(id);
     assertNotRetired(record);
+    if (record.restoredAt && !geometry) throw new AdminHttpError(422, "恢复产品必须重新校验并绑定原生 MOC，不能沿用旧覆盖概览。");
     if (expectedRevision !== undefined && expectedRevision !== record.revision) throw new AdminHttpError(409, "Product revision conflict");
     const reviewedAt = new Date().toISOString();
     record.review = { revision: record.revision, contentSha256: record.contentSha256, reviewedAt, acceptedGaps: [...new Set(acceptedGaps)].slice(0, 64), policy: PUBLICATION_POLICY, geometry };
@@ -596,6 +598,26 @@ export class ProductStore {
     record.updatedAt = retiredAt;
     delete record.review;
     const audit = { action: "retire", productId: id, revision: record.revision, at: retiredAt, ...(normalizedReason ? { reason: normalizedReason } : {}) };
+    this.#history.push(audit);
+    await this.persist();
+    await appendFile(this.#historyFile(), `${JSON.stringify(audit)}\n`);
+    return record;
+  }
+  async restore(id: string, expectedRevision: number, reason: string): Promise<ProductRecord> {
+    const record = this.get(id);
+    if (expectedRevision !== record.revision) throw new AdminHttpError(409, "Product revision conflict");
+    if (!record.retiredAt) throw new AdminHttpError(409, "产品未退休，请刷新当前状态。");
+    if (isDeniedSurvey(record.draft.surveyId)) throw new AdminHttpError(409, "此巡天不允许恢复到 Assets。");
+    if (record.published) throw new AdminHttpError(409, "请先发布撤下并等待网站生效，再恢复为草稿。");
+    const normalizedReason = boundedEvidenceText(reason, "reason", 2000, true)!;
+    const retiredAt = record.retiredAt, retirementReason = record.retirementReason;
+    record.restoredAt = new Date().toISOString();
+    record.restorationReason = normalizedReason;
+    delete record.retiredAt; delete record.retirementReason; delete record.review;
+    record.revision += 1; record.updatedAt = record.restoredAt;
+    record.contentSha256 = hashContent(record.draft);
+    const audit = { action: "restore", productId: id, revision: record.revision, at: record.restoredAt,
+      reason: normalizedReason, retiredAt, retirementReason };
     this.#history.push(audit);
     await this.persist();
     await appendFile(this.#historyFile(), `${JSON.stringify(audit)}\n`);

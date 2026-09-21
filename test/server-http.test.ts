@@ -358,9 +358,16 @@ test("staged MOC builds can be registered, reviewed and published as a dynamic s
   assert.equal(executionBody.product.executionEvidence?.at(-1)?.executionId, "moc-output-check-1");
 
   const review = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products?view=surveys`, { headers });
-  const reviewBody = await review.json() as { surveys: Array<{ id: string; unmatchedBuilds?: unknown[]; unmatchedProducts?: Array<{ productId: string }> }> };
+  const reviewBody = await review.json() as { surveys: Array<{ id: string; releases: Array<{ products: Array<{ productId: string }> }>; unmatchedBuilds?: unknown[]; unmatchedProducts?: Array<{ productId: string }> }> };
   assert.equal(reviewBody.surveys.some((survey) => survey.id === "__moc-builds__"), false);
-  assert.ok(reviewBody.surveys.find((survey) => survey.id === "__unmatched__")?.unmatchedProducts?.some((product) => product.productId === registered.product.productId));
+  assert.ok(reviewBody.surveys.find((survey) => survey.id === "jwst")?.releases.some(release => release.products.some(product => product.productId === registered.product.productId)));
+  const editorialGroup = await fetch(`http://127.0.0.1:${port}/api/v1/admin/catalog/surveys/jwst/editorial`, { headers });
+  assert.equal(editorialGroup.status, 200, "newly registered survey copy is editable before publication");
+  const preflight = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${registered.product.productId}/preflight`, { headers });
+  assert.equal(preflight.status, 200);
+  const gate = await preflight.json() as { nativeOrder: { state: string; maxOrder: number } };
+  assert.equal(gate.nativeOrder.state, "passed");
+  assert.ok(gate.nativeOrder.maxOrder >= 4);
 
   const registeredDetail = await fetch(`http://127.0.0.1:${port}/api/v1/admin/products/${registered.product.productId}`, { headers });
   assert.equal(registeredDetail.status, 200);

@@ -22,7 +22,7 @@ export interface MocReviewSummary {
 }
 
 export interface MocDiscoveryCandidate {
-  provider: typeof MOC_DISCOVERY_PROVIDER;
+  provider: typeof MOC_DISCOVERY_PROVIDER | "llm";
   requestName: string;
   candidate: MocCandidateSummary;
   sourceUrl: string;

@@ -164,3 +164,14 @@ splitRoles:
   backendReplicas: 1
   cacheStorageClass: local-path
   cacheSize: 8Gi
+
+# Optional Assets-only fallback after a confirmed empty CDS search.
+llm:
+  enabled: false
+  baseUrl: "https://token.72602.space"
+  model: "glm-5.3"
+  secretName: "assets-llm-provider"
+
+# Stable encryption key, supplied only to the backend. Never rotate without re-encryption.
+apiManagement:
+  secretName: ""

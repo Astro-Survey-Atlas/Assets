@@ -177,6 +177,7 @@ export interface PublicationVerificationExpectation {
 
 export interface PublicationRun {
   runId: string;
+  operation?: "publish" | "withdraw" | "mixed";
   selectedProducts?: Array<{productId:string;revision:number}>;
   queue?: { phase: string; attempts: number; nextAttemptAt?: string; cancellable: boolean; syncDelayed: boolean };
 
@@ -654,6 +655,7 @@ export class PublicReleasePublisher {
     if (active.some(r => r.selectedProducts?.some(p => versions.some(v => p.productId === v.productId)))) throw new PublicationConflictError("Product already has an active publication task");
     const run: PublicationRun = {
       runId: `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`,
+      operation: selected.every(p => p.change === "removed") ? "withdraw" : selected.some(p => p.change === "removed") ? "mixed" : "publish",
       selectedProducts:selected.map(p=>({productId:p.productId,revision:p.draftRevision})),
       planId: plan.planId,
       baselineBundle: plan.baselineBundle,

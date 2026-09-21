@@ -1151,7 +1151,9 @@ async function downloadOverlapCsv(components: OverlapComponentView[], filename: 
   button.disabled = true;
   button.textContent = t("coverage.downloadLoading");
   try {
-    const results = await Promise.all(components.map((component) => fetchOverlapEvidence(component)));
+    const results: Array<OverlapEvidenceResult | null> = [];
+    // One download operation must not exceed the per-identity concurrency limit.
+    for (const component of components) results.push(await fetchOverlapEvidence(component));
     const rows = components.flatMap((component, index) => overlapCsvRows(component, downloadPlanFor(results[index]), publicLayerEntry, results[index]?.precision));
     if (!rows.length) {
       toast(t("coverage.noDownloadEntries"));
@@ -1165,8 +1167,8 @@ async function downloadOverlapCsv(components: OverlapComponentView[], filename: 
     link.click();
     URL.revokeObjectURL(url);
     toast(t("coverage.downloadReady"));
-  } catch {
-    toast(t("coverage.downloadUnavailable"));
+  } catch (error) {
+    toast(`${t("coverage.downloadUnavailable")}: ${error instanceof Error ? error.message : t("coverage.reverseFailed")}`, 8000);
   } finally {
     button.disabled = false;
     button.replaceChildren(icon("download"), document.createTextNode(original));
@@ -1180,7 +1182,9 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
   button.disabled = true;
   button.textContent = t("coverage.downloadLoading");
   try {
-    const results = await Promise.all(components.map((component) => fetchOverlapEvidence(component)));
+    const results: Array<OverlapEvidenceResult | null> = [];
+    // One download operation must not exceed the per-identity concurrency limit.
+    for (const component of components) results.push(await fetchOverlapEvidence(component));
     const payload = {
       schemaVersion: 1,
       coordinateFrame: "ICRS",
@@ -1202,8 +1206,8 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
     link.click();
     URL.revokeObjectURL(url);
     toast(t("coverage.downloadReady"));
-  } catch {
-    toast(t("coverage.downloadUnavailable"));
+  } catch (error) {
+    toast(`${t("coverage.downloadUnavailable")}: ${error instanceof Error ? error.message : t("coverage.reverseFailed")}`, 8000);
   } finally {
     button.disabled = false;
     button.replaceChildren(icon("file-json-2"), document.createTextNode(original));
@@ -1356,7 +1360,7 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
     if (request === overlapEvidenceSequence && !controller.signal.aborted) renderEvidencePlan(node, result);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") return;
-    if (request === overlapEvidenceSequence) node.replaceChildren(Object.assign(document.createElement("small"), { textContent: t("coverage.reverseFailed") }));
+    if (request === overlapEvidenceSequence) node.replaceChildren(Object.assign(document.createElement("small"), { textContent: `${t("coverage.reverseFailed")}: ${error instanceof Error ? error.message : ""}` }));
   } finally {
     if (overlapEvidenceController === controller) overlapEvidenceController = null;
   }
@@ -2000,11 +2004,13 @@ function bytes(value: number): string {
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function toast(message: string): void {
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+function toast(message: string, durationMs = 1800): void {
   const element = byId("toast");
   element.textContent = message;
   element.dataset.visible = "true";
-  window.setTimeout(() => { element.dataset.visible = "false"; }, 1800);
+  if (toastTimer !== undefined) window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => { element.dataset.visible = "false"; }, durationMs);
 }
 
 async function copy(value: string, message = "SHA-256 已复制"): Promise<void> {

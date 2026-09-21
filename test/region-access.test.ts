@@ -43,3 +43,19 @@ test("region results remain bounded and never infer scientific files from geomet
  const g=state.snapshot.products[0]!.geometry!;g.indexRevision="b".repeat(64);
  const missing=await queryRegion(state,{...request,sources:[{...request.sources[0]!,indexRevision:g.indexRevision}]},async()=>null);assert.equal(missing.sources[0]!.accessAvailability,"unavailable");assert.equal(missing.sources[0]!.completeness,"incomplete");
 });
+test("multi-product download plans accept 13 layers without raising direct query or aggregate output limits",async t=>{
+ const f=await reviewedFixture();t.after(()=>rm(f.base,{recursive:true,force:true}));
+ const p=new PublicReleasePublisher(f.options),plan=await p.plan();const run=await p.submit({planId:plan.planId,expectedBaselineSha256:plan.baselineBundle.sha256,surveyIds:["m42"],productIds:["product-1"]});assert.equal((await p.execute(run.runId)).status,"published");
+ const installed=path.join(f.base,"installed");await syncReleaseFromObjectStore(f.store,installed);const state=await loadPublicState(await loadCatalog(path.join(installed,"current")));
+ const template=state.snapshot.products[0]!;
+ for(let i=1;i<13;i++){const copy=structuredClone(template);copy.productId=copy.content.productId=`product-${i+1}`;copy.geometry!.layerId=`layer-${i+1}`;state.snapshot.products.push(copy);state.geometry.set(copy.geometry!.layerId,f.moc);}
+ const sources=state.snapshot.products.map(p=>({surveyId:p.content.surveyId,releaseId:p.content.releaseId,productId:p.productId,layerId:p.geometry!.layerId,coverageRevision:p.geometry!.coverageRevision,indexRevision:null}));
+ const request={...input,sources};
+ await assert.rejects(queryRegion(state,request,async()=>null),/1–8/);
+ const response=await queryRegion(state,request,async()=>{throw Error("geometry-only is not a file index");},64);
+ assert.equal(response.sources.length,13);assert.ok(response.sources.every(s=>s.accessAvailability==="geometry-only"&&Array.isArray(s.downloads)&&s.downloads.length===0));
+ assert.ok(response.sources.reduce((n,s)=>n+(Array.isArray(s.cells)?s.cells.length:0),0)<=10000);
+ assert.throws(()=>validateRegion({...request,sources:Array(65).fill(sources[0])},64),/1–64/);
+ assert.throws(()=>validateRegion({...request,region:{...request.region,cells:Array(4097).fill(163327)}},64),/maximum 4096/);
+ assert.throws(()=>validateRegion({...request,limit:1001},64),/1–1000/);
+});

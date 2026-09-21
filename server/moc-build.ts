@@ -1,3 +1,4 @@
+import { fetchPublicSource, publicSourceUrl } from "./public-source-fetch.js";
 import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -81,7 +82,7 @@ export interface MocBuildRequest {
   createdAt: string;
   updatedAt: string;
   discoveryRequestName: string;
-  provider: "cds";
+  provider: "cds" | "llm";
   candidateId: string;
   candidateTitle?: string;
   surveyId?: string;
@@ -302,7 +303,7 @@ export class MocBuildStore {
 
   async create(input: MocBuildRequestInput): Promise<MocBuildRequest> {
     await this.initialize();
-    const sourceUrl = assertSourceUrl(input.candidate.sourceUrl);
+    const sourceUrl = input.candidate.provider === "llm" ? publicSourceUrl(input.candidate.sourceUrl).href : assertSourceUrl(input.candidate.sourceUrl);
     const timestamp = now().replace(/[-:.TZ]/g, "").slice(0, 14);
     const base = safeMocName(input.name ?? `${input.candidate.candidate.candidateId}-moc-build`);
     let name = `${base}-${timestamp}`.slice(0, 63).replace(/-+$/, "");
@@ -451,9 +452,11 @@ export class MocBuildService {
     const root = immutableRef(this.evidenceRoot, path.join(this.evidenceRoot, "moc-build", safeMocName(name)));
     const sourcePath = immutableRef(root, path.join(root, "source.moc"));
     try {
-      await this.store.update(name, { phase: "FETCHING", progress: { phase: "FETCHING", step: 1, totalSteps: DEFAULT_TOTAL_STEPS, percent: 12, message: "下载 CDS MOC 并计算来源哈希" } });
-      const url = assertSourceUrl(candidate.sourceUrl);
-      const response = await this.fetchImpl(url, { redirect: "error", headers: { Accept: "application/fits,application/octet-stream" } });
+      await this.store.update(name, { phase: "FETCHING", progress: { phase: "FETCHING", step: 1, totalSteps: DEFAULT_TOTAL_STEPS, percent: 12, message: "下载来源 MOC 并计算哈希" } });
+      const url = candidate.provider === "llm" ? publicSourceUrl(candidate.sourceUrl).href : assertSourceUrl(candidate.sourceUrl);
+      const response = candidate.provider === "llm"
+        ? new Response(new Uint8Array((await fetchPublicSource(url, this.maxBytes, AbortSignal.timeout(120_000))).bytes))
+        : await this.fetchImpl(url, { redirect: "error", headers: { Accept: "application/fits,application/octet-stream" } });
       if (!response.ok || !response.body) throw new Error(`CDS returned HTTP ${response.status}`);
       const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];

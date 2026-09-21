@@ -5,7 +5,7 @@ import type { ProductContent, ProductRecord } from "./products.js";
 import type { MocPublication, MocPublicationFile } from "./moc-build.js";
 import type { PublicAssetRecord } from "./types.js";
 import { decodeNativeMoc, projectMoc, sha256, type NativeMoc } from "./native-moc.js";
-import { assertPublicCoverageOrder } from "./coverage-policy.js";
+import { assertPublicCoverageOrder, CoveragePrecisionError } from "./coverage-policy.js";
 import { isDeniedSurvey } from "./publication-policy.js";
 import { readResourcePackageManifest, readZipEntry, validateReviewedPackage } from "./resource-package-inspection.js";
 import { publicReleaseBundleDigest } from "./catalog.js";
@@ -23,6 +23,7 @@ export interface ApprovedRelease {
   policy: typeof PUBLICATION_POLICY; releaseId: string; generatedAt: string;
   products: ApprovedProduct[]; assetIds: string[]; packages: Array<Record<string, unknown>>;
   withdrawals: Array<{ productId: string; reason: string }>;
+  packageVersionMinors?: Record<string, number>;
 }
 export interface GeometryMaterial { facts: GeometryFacts; bytes: Buffer; moc: NativeMoc; sourcePath: string }
 interface MaterialOptions {
@@ -53,7 +54,10 @@ export async function productGeometry(product: ProductRecord, options: MaterialO
     const entry=options.files.find(f => f.kind === "moc" && (f.id === `approved-${layerId}-moc` || f.id === `layer-${layerId}-moc` || f.path.includes(`/layers/${layerId}/`)));
     if (entry) { sourcePath=path.join(options.root,entry.path); expected=entry.sha256; }
   }
-  if (!sourcePath || !layerId) return null;
+  if (!sourcePath || !layerId) {
+    if (product.restoredAt) throw new CoveragePrecisionError("恢复产品尚未绑定可校验的原生 MOC；请从真实来源构建，不能沿用旧覆盖概览。");
+    return null;
+  }
   const bytes=await readFile(sourcePath);
   if (sha256(bytes)!==expected) throw new Error(`Geometry checksum mismatch: ${product.productId}`);
   const moc=decodeNativeMoc(bytes);
@@ -125,7 +129,14 @@ export async function buildApprovedRelease(options: ApprovedBuildOptions): Promi
     material.set(product.productId,{facts:product.geometry,bytes,moc,sourcePath});
   }
   const generatedAt=new Date().toISOString(),releaseId=`reviewed-${options.runId}`;
-  const snapshot:ApprovedRelease={policy:PUBLICATION_POLICY,releaseId,generatedAt,products:[...approved.values()],assetIds:[],packages:[],withdrawals};
+  const packageVersionMinors = { ...previous.packageVersionMinors };
+  for (const entry of [...previous.packages, ...options.files.filter(f => f.kind === "package")]) {
+    const surveyId = entry.surveyId, minor = Number(String(entry.version ?? "").split(".")[1]);
+    if (typeof surveyId === "string" && Number.isSafeInteger(minor) && minor >= 0) {
+      packageVersionMinors[surveyId] = Math.max(packageVersionMinors[surveyId] ?? 0, minor);
+    }
+  }
+  const snapshot:ApprovedRelease={policy:PUBLICATION_POLICY,releaseId,generatedAt,products:[...approved.values()],assetIds:[],packages:[],withdrawals,packageVersionMinors};
   const files:PublicAssetRecord[]=[];
   const put=async(record:Omit<PublicAssetRecord,"sha256"|"sizeBytes">,bytes:Buffer,expose=false):Promise<PublicAssetRecord>=>{
     const target=path.join(options.stagingRoot,record.path);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,bytes);
@@ -155,8 +166,9 @@ export async function buildApprovedRelease(options: ApprovedBuildOptions): Promi
     if(!products.length)continue;
     const id=`public-${surveyId}-footprints`;
     // Allocate above every retained version, including unpublished historical inputs.
-    let minor=0;
+    let minor=packageVersionMinors[surveyId] ?? 0;
     for(const record of options.files.filter(f=>f.kind==="package" && f.surveyId===surveyId)) minor=Math.max(minor,Number(record.version?.split(".")[1] ?? 0));
+    packageVersionMinors[surveyId] = minor + 1;
     const version=`3.${minor+1}.0`,entries:Array<{path:string;bytes:Buffer}>=[],layers:Array<Record<string,unknown>>=[],provenance:unknown[]=[],footprints:unknown[]=[];
     for(const product of products) {
       const g=material.get(product.productId)!,c=product.content,layerId=g.facts.layerId;

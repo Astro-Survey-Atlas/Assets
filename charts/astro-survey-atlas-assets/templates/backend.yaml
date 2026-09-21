@@ -97,6 +97,28 @@ spec:
           env:
             - name: ASSETS_ROLE
               value: backend
+            {{- with .Values.apiManagement }}
+            {{- if .secretName }}
+            - name: ASSETS_API_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName | quote }}
+                  key: master-key
+            {{- end }}
+            {{- end }}
+            {{- with .Values.llm }}
+            {{- if .enabled }}
+            - name: ASSETS_LLM_BASE_URL
+              value: {{ .baseUrl | quote }}
+            - name: ASSETS_LLM_MODEL
+              value: {{ .model | quote }}
+            - name: ASSETS_LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "llm.secretName is required" .secretName | quote }}
+                  key: api-key
+            {{- end }}
+            {{- end }}
             - name: HOST
               value: 0.0.0.0
             - name: PORT

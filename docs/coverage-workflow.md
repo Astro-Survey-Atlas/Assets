@@ -77,5 +77,5 @@ The `/releases/` page presents the two current input paths: existing MOC discove
 and bounded Warehouse scans, followed by explicit construction, version review,
 incremental publication and website verification. Full release archives remain
 export/restore artifacts. See [publication runtime](publication-runtime-split.md).
-The [LLM discovery enhancement](moc-discovery-enhancement-design.md) is a proposal,
-not an active source or a replacement for scientific validation and human review.
+The [LLM discovery enhancement](moc-discovery-enhancement-design.md) is an optional Assets fallback after a complete zero-result CDS query. It does not
+replace scientific validation and human review.

@@ -114,8 +114,12 @@ export class PublicationScheduler implements PublicationRunRepository {
   async get(id: string): Promise<PublicationRun | undefined> {
     let run = this.tasks.readRun<PublicationRun>(id);
     if (!run) return undefined;
-    const task = this.tasks.get(id);
+    const task = this.tasks.get<FrozenPublication>(id);
     if (!task) return run;
+    if (!run.operation && task.payload.products?.length) {
+      const removed = task.payload.products.filter(product => product.retiredAt).length;
+      run = { ...run, operation: removed === task.payload.products.length ? "withdraw" : removed ? "mixed" : "publish" };
+    }
     const activatedAt = run.verification?.authority.checkedAt ?? run.finishedAt;
     run = { ...run, queue: { phase: task.phase, attempts: task.attempts,
       ...(task.phase === "queued" && task.attempts > 0 ? { nextAttemptAt: new Date(task.readyAt).toISOString() } : {}),
@@ -242,7 +246,7 @@ export class PublicationScheduler implements PublicationRunRepository {
     await this.#childDone;
   }
   async cancel(id: string): Promise<void> {
-    const task = this.tasks.get(id);
+    const task = this.tasks.get<FrozenPublication>(id);
     if (!task || !["queued", "running"].includes(task.phase)) throw new PublicationConflictError("Cannot cancel activation or an already activated publication");
     if (this.#active?.id === id) {
       this.#cancelling.add(id);

@@ -109,6 +109,8 @@ export const STATE_SNAPSHOT_NAMESPACES = [
   "connector-inventory",
   "editorial",
   "moc-build",
+  "llm-discovery",
+  "api-management",
   "moc-publications",
   "resource-packages",
   "publication-runs",

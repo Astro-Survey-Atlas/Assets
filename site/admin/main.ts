@@ -1,3 +1,5 @@
+import { loadApiSettings, mountApiSettings } from "./api-settings.js";
+import { discoveryResultMarkup, onlyLeads } from "./moc-result.js";
 import type { DiscoveryFailure } from "../../server/discovery-failure.js";
 import { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Unlock, Upload, X, Sun, createIcons } from "lucide";
 import "./styles.css";
@@ -12,6 +14,7 @@ import { surveyPresentationImage, surveyPresentationAttribution } from "./presen
 import { mountRecordTabs, mountTaskTabs } from "./task-tabs.js";
 
 mountLocaleControls();
+mountApiSettings();
 const taskTabs = mountTaskTabs(document.getElementById("admin-step-tasks")!);
 const publicationTabs = mountRecordTabs(document.getElementById("admin-step-releases")!, "publication", ["plan", "runs"] as const, "assets-admin-publication-tab");
 
@@ -25,12 +28,12 @@ document.addEventListener("error", event => {
 }, true);
 
 type ConnectorType = "s3" | "oss" | "local";
-interface AdminConfig { enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; modalities?: string[]; connectorTypes: ConnectorType[]; backends: string[]; scanRequestApiVersion?: string } }
+interface AdminConfig { mocDiscovery?: { cdsUrl: string; llmAvailable: boolean }; enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; modalities?: string[]; connectorTypes: ConnectorType[]; backends: string[]; scanRequestApiVersion?: string } }
 interface Connector { name: string; type: ConnectorType | string; endpoint?: string; region?: string; bucket?: string; prefix?: string; accessKeyConfigured?: boolean; pvcName?: string; basePath?: string; localPath?: string; phase?: string; message?: string; checkedAt?: string; createdAt?: string; resourceKind?: "ConfigMap" | "AstroDataSource"; configurationPhase?: string; scope?: { kind?: string; pvcName?: string; basePath?: string; legacyPath?: string; endpoint?: string; region?: string; bucket?: string; prefix?: string }; inventory?: { state?: "unknown" | "running" | "complete" | "partial" | "failed"; denominatorKnown?: boolean; observedObjectCount?: number; totalObjectCount?: number; totalBytes?: number; processedObjects?: number; observedAt?: string; updatedAt?: string; source?: string; note?: string }; usage?: { scanTaskCount?: number; productCount?: number; latestTask?: { name?: string; phase?: string; createdAt?: string } } }
 interface TaskStatus { phase: string; reason?: string; backend?: string; runId?: string; discoveredFiles?: number; processedHdus?: number; coverageDocuments?: number; objectDocuments?: number; errorCount?: number; availableOrders?: number[]; evidencePath?: string; sourceSnapshot?: { uri?: string; sha256: string; sizeBytes?: number }; startedAt?: string; completedAt?: string; message?: string }
 interface Task { name: string; createdAt?: string; layerId?: string; surveyId?: string; releaseId?: string; product?: string; productId?: string; modality?: string; mode?: string; backend?: string; sourceConnector?: string; sourcePaths: string[]; tags: string[]; batchId?: string; workKey?: string; workTitle?: string; recipe?: { mode?: string; outputOrder?: number; catalog?: Record<string, unknown> }; status: TaskStatus }
 interface ProductLifecycle {
-  publication?: { state?: string; publishedAt?: string; publicationId?: string };
+  publication?: { state?: string; publishedAt?: string; publicationId?: string; withdrawalState?: "pending" | "withdrawn" };
   runtime?: { state?: string; layerId?: string; catalogRevision?: string; availableOrders?: number[]; overviewOrder?: number; maxOrder?: number };
   links?: { product?: string; sky?: string; catalog?: string; moc?: string };
 }
@@ -60,15 +63,15 @@ interface AdminOverviewRelease { id: string; label: string; kind?: string; readi
 interface AdminOverviewSurvey { id: string; surveyId: string; name: string; mission: string; modalities: string[]; statistics?: Record<string, number>; readiness?: { draft: ReadinessAggregate; published: ReadinessAggregate }; releases: AdminOverviewRelease[] }
 interface AdminOverview { schemaVersion: 1; generatedAt: string; coverage: CatalogStatus; totals: { surveys: number; releases: number; products: number; publishedProducts: number; retiredProducts?: number }; readiness: ReadinessAggregate; readinessVersions?: { draft: ReadinessAggregate; published: ReadinessAggregate }; surveys: AdminOverviewSurvey[]; connectors: Connector[]; workflows: { tasks: { total: number; phases: Record<string, number> }; discovery: { total: number; phases: Record<string, number> }; builds: { total: number; phases: Record<string, number> } }; syncStatus?: Record<string, unknown> }
 interface MocBuildSummary { name: string; discoveryRequestName: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; sourceUrl?: string; phase: string; progress?: { phase?: string; step?: number; totalSteps?: number; percent?: number; message?: string }; createdAt?: string; updatedAt?: string; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; query?: { order?: number }; preview?: { order?: number }; manifest?: { ref?: string; sha256?: string; sizeBytes?: number } }; error?: { reason?: string; message?: string }; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
-interface Product { productId: string; draft: { productId: string; surveyId: string; releaseId: string; name: string; layerId?: string; modality?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; sourceUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: { name: string; mission: string; description: string; color: string; modalities: string[] }; publicRelease?: { label: string; kind: string; releasedYear?: number }; publicDescription?: string; publicStatus?: string; scanDefaults?: { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }; recipeVersion?: number; recipeHash?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } } }; published: unknown; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; retiredAt?: string; retirementReason?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; readiness?: ReadinessVersions; review?: { revision?: number; reviewedAt?: string; acceptedGaps?: string[] }; executionEvidence?: ExecutionEvidence[]; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle }
+interface Product { productId: string; draft: { productId: string; surveyId: string; releaseId: string; name: string; layerId?: string; modality?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; sourceUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: { name: string; mission: string; description: string; color: string; modalities: string[] }; publicRelease?: { label: string; kind: string; releasedYear?: number }; publicDescription?: string; publicStatus?: string; scanDefaults?: { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }; recipeVersion?: number; recipeHash?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; presentation: { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } } }; published: unknown; revision: number; publishedRevision: number | null; updatedAt: string; publishedAt: string | null; retiredAt?: string; retirementReason?: string; restoredAt?: string; restorationReason?: string; coverage?: { availableOrders: number[]; overviewOrder: number; maxOrder: number }; readiness?: ReadinessVersions; review?: { revision?: number; reviewedAt?: string; acceptedGaps?: string[] }; executionEvidence?: ExecutionEvidence[]; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle }
 interface ExecutionEvidence { executionId: string; revision: number; stepId: string; status: string; startedAt: string; finishedAt?: string; tool?: { name?: string; version?: string; imageDigest?: string }; inputs?: Array<{ label?: string; ref?: string; sha256?: string; sizeBytes?: number }>; parameters?: Record<string, string | number | boolean>; outputs?: Array<{ label?: string; ref?: string; sha256?: string; sizeBytes?: number }>; checks?: Array<{ id: string; status: string; detail?: string }>; error?: string }
 interface RuntimeLayer { layerId: string; surveyId: string; releaseId: string; name: string; source: "release" | "warehouse" | "product-moc"; availableOrders: number[]; productId?: string; productState: string; productPublished: boolean }
 interface CatalogStatus { mode: string; loadedAt: string; revision?: string; layers: number; footprints: number; warehouseConfigured: boolean; runtimeLayers?: RuntimeLayer[] }
-interface MocCandidateSummary { candidateId: string; title?: string; recordUrl?: string; mocUrl?: string; hipsUrl?: string }
+interface MocCandidateSummary { identityMatch?: boolean; buildable?: boolean; citation?: string; coverageCategory?: string; provider?: string; candidateId: string; title?: string; recordUrl?: string; mocUrl?: string; hipsUrl?: string }
 interface MocReviewSummary { schemaVersion: 2; truncated: boolean; summaryTruncated: boolean; searchRecordCount?: number; candidates: MocCandidateSummary[] }
 type MocDiscoveryState = "running" | "ready" | "empty" | "incomplete" | "failed";
 interface MocDiscoveryStatus { failure?: DiscoveryFailure; phase: string; jobName?: string; reason?: string; message?: string; evidencePath?: string; candidateCount?: number; lastTransitionTime?: string; reviewSummary?: MocReviewSummary; reviewSummaryState?: "available" | "missing"; discoveryState?: MocDiscoveryState }
-interface MocDiscoveryRequest { name: string; observation?: DiscoveryObservation; namespace?: string; createdAt?: string; surveyName: string; releaseHint?: string; productHint?: string; surveyId?: string; releaseId?: string; productId?: string; policyRef: string; workKey?: string; workTitle?: string; status: MocDiscoveryStatus }
+interface MocDiscoveryRequest { llmEnabled?: boolean; llmPhase?: string; name: string; observation?: DiscoveryObservation; namespace?: string; createdAt?: string; surveyName: string; releaseHint?: string; productHint?: string; surveyId?: string; releaseId?: string; productId?: string; policyRef: string; workKey?: string; workTitle?: string; status: MocDiscoveryStatus }
 interface MocBuildProgress { phase: string; step: number; totalSteps: number; percent?: number; message?: string }
 interface MocBuildRequest { schemaVersion: 1; kind: "MocBuildRequest"; name: string; discoveryRequestName: string; provider: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; workKey?: string; workTitle?: string; createdAt: string; updatedAt: string; phase: string; progress: MocBuildProgress; source: { url: string; snapshotSha256?: string; sizeBytes?: number; evidenceRef?: string }; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; moc?: { ref: string; sha256: string; sizeBytes?: number }; query?: { ref: string; sha256?: string; order: number }; preview?: { ref: string; sha256?: string; order: number }; statistics?: { ref: string; sha256?: string; sizeBytes?: number }; manifest?: { ref: string; sha256?: string; sizeBytes?: number } }; error?: { reason: string; message: string }; duplicateOf?: string; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
 interface MocRegistrationDefaults { releaseId: string; releaseLabel: string; releaseKind: string; productName: string; productDescription: string; productStatus: string; modality: string; dataOrigin: string }
@@ -818,7 +821,7 @@ function runtimeLayersMarkup(surveyId: string, coverage: CatalogStatus): string 
 }
 function productSkyStatus(product:{publicCoverage?:{published:boolean;orders:number[];retired:boolean};review?:Partial<NonNullable<ReviewProduct["review"]>>}):string {
   const state=product.publicCoverage;
-  const label=state?.published?(state.orders.length?`已公开 · 天球可显示 · ${orderLabel(state.orders)}`:"已公开 · 暂无覆盖几何"):state?.retired?"已下架":"未公开 · "+(product.review?.reviewedRevision===product.review?.draftRevision&&product.review?.reviewedRevision?"已审核待发布":"待审核");
+  const label=state?.retired ? (state.published ? "已退休 · 待发布撤下" : "已退休 · 已撤下") : state?.published?(state.orders.length?`已公开 · 天球可显示 · ${orderLabel(state.orders)}`:"已公开 · 暂无覆盖几何"):state?.retired?"已下架":"未公开 · "+(product.review?.reviewedRevision===product.review?.draftRevision&&product.review?.reviewedRevision?"已审核待发布":"待审核");
   return `<span class="readiness-chip runtime-coverage-chip"><strong>${escapeText(label)}</strong></span>`;
 }
 
@@ -1022,7 +1025,8 @@ function mocDiscoveryStateForStatus(status: MocDiscoveryStatus): MocDiscoverySta
   return summary.candidates.length ? "ready" : "empty";
 }
 
-function mocDiscoveryStateLabel(state: MocDiscoveryState): string {
+function mocDiscoveryStateLabel(state: MocDiscoveryState, candidates?: MocCandidateSummary[]): string {
+  if (state === "ready" && onlyLeads(candidates)) return "探查完成，仅有线索";
   return ({
     running: "探查进行中",
     ready: "候选可审核",
@@ -1035,7 +1039,7 @@ function mocDiscoveryStateLabel(state: MocDiscoveryState): string {
 function mocReviewAction(request: MocDiscoveryRequest, dataAttribute: "data-moc-review" | "data-moc-review-output"): string {
   const state = mocDiscoveryStateForStatus(request.status);
   const iconName = state === "ready" ? "shield-check" : state === "failed" ? "circle-alert" : "eye";
-  const label = state === "ready" ? "审核候选" : state === "failed" ? "失败详情" : "查看状态";
+  const label = state === "ready" ? onlyLeads(request.status.reviewSummary?.candidates) ? "查看线索" : "查看候选" : state === "failed" ? "失败详情" : "查看状态";
   const title = state === "ready" ? "查看候选并创建构建请求" : state === "failed" ? "查看探查失败原因" : "查看探查状态";
   return `<button type="button" class="admin-quiet" ${dataAttribute}="${escapeText(request.name)}" title="${title}"><i data-lucide="${iconName}"></i><span>${label}</span></button>`;
 }
@@ -1162,15 +1166,15 @@ function renderMocDiscoveryRequests(requests: MocDiscoveryRequest[]): void {
     const hints = [request.releaseHint, request.productHint].filter(Boolean).join(" · ");
     const discoveryState = mocDiscoveryStateForStatus(status);
     const counts = discoveryState === "ready" && status.candidateCount !== undefined
-        ? `${status.candidateCount} 个候选`
+        ? `${status.candidateCount} 个${onlyLeads(status.reviewSummary?.candidates) ? "来源线索" : "探索结果"}`
       : discoveryState === "empty"
-        ? "Warehouse 已完成查询，候选数为 0"
+        ? request.llmPhase === "complete" ? "CDS 与 LLM 补充查找完成，暂无候选" : "Warehouse 已完成查询，候选数为 0"
         : discoveryState === "failed"
           ? `${mocFailureReasonLabel(status.reason)}${status.message ? ` · ${status.message}` : ""}`
           : discoveryState === "incomplete"
             ? "Warehouse 已结束，但候选摘要不完整"
             : discoveryProgress(request);
-    const reviewState = discoveryState === "running" && !status.jobName ? discoveryObservationLabel(request.observation) : mocDiscoveryStateLabel(discoveryState);
+    const reviewState = discoveryState === "running" && !status.jobName ? discoveryObservationLabel(request.observation) : mocDiscoveryStateLabel(discoveryState, request.status.reviewSummary?.candidates);
     const retrying = mocRetryInFlight === request.name;
     const retry = ["SUCCEEDED", "FAILED", "COMPLETED", "ERROR", "INVALID", "CANCELLED"].includes(phaseLabel(status.phase)) ? `<button type="button" class="admin-quiet" data-moc-retry="${escapeText(request.name)}" title="重新探查"${retrying ? " disabled" : ""}><i data-lucide="rotate-ccw"></i><span>${retrying ? "探查中…" : "重新探查"}</span></button>` : "";
     return `<article class="resource-row moc-discovery-row" data-row-key="${escapeText(request.name)}"><div><div class="task-identity"><i data-lucide="search"></i><strong>${escapeText(workTitle(undefined, request))}</strong></div><span>${escapeText(request.name)}${hints ? ` · ${escapeText(hints)}` : ""}</span><p>${escapeText(counts)}</p><small>提交 ${escapeText(formatDate(request.createdAt))} · 最近检查 ${escapeText(formatDate(request.observation?.checkedAt))}</small></div><div class="moc-discovery-row-actions">${discoveryState === "running" && !status.jobName ? `<span class="discovery-observation-state" data-state="${request.observation?.state ?? "waiting"}">${escapeText(reviewState)}</span>` : phaseMarkup(status.phase)}${mocReviewAction(request, "data-moc-review")}${retry}</div></article>`;
@@ -1198,7 +1202,7 @@ function updateMocObservation(request: MocDiscoveryRequest, fetchFailed = false)
   }
   state.textContent = `${discoveryProgress(request)} 提交时间：${formatDate(request.createdAt)}；最近检查：${formatDate(observation?.checkedAt)}；最后进展：${formatDate(observation?.lastProgressAt ?? request.status.lastTransitionTime)}。`;
   const outcome = mocDiscoveryStateForStatus(request.status);
-  byId("moc-review-title").textContent = `${workTitle(undefined, request)} · ${outcome === "running" && !request.status.jobName ? discoveryObservationLabel(observation) : mocDiscoveryStateLabel(outcome)}`;
+  byId("moc-review-title").textContent = `${workTitle(undefined, request)} · ${outcome === "running" && !request.status.jobName ? discoveryObservationLabel(observation) : mocDiscoveryStateLabel(outcome, request.status.reviewSummary?.candidates)}`;
   state.dataset.state = observation?.state ?? "running";
   if (observation?.executor.reason) {
     const details = document.createElement("details");
@@ -1223,16 +1227,16 @@ function renderMocReviewSummary(request: MocDiscoveryRequest): void {
   const retry = byId<HTMLButtonElement>("moc-review-retry");
   const create = byId<HTMLButtonElement>("moc-create-build");
   const protocol = byId("moc-review-protocol");
-  kicker.textContent = discoveryState === "ready" ? "BUILD REVIEW" : "MOC DISCOVERY";
-  title.textContent = `${identity} · ${discoveryState === "running" && !request.status.jobName ? discoveryObservationLabel(request.observation) : mocDiscoveryStateLabel(discoveryState)}`;
+  kicker.textContent = discoveryState === "ready" && !onlyLeads(summary?.candidates) ? "BUILD REVIEW" : "MOC DISCOVERY";
+  title.textContent = `${identity} · ${discoveryState === "running" && !request.status.jobName ? discoveryObservationLabel(request.observation) : mocDiscoveryStateLabel(discoveryState, request.status.reviewSummary?.candidates)}`;
   state.dataset.state = discoveryState;
   failure.hidden = true;
   failure.replaceChildren();
   retry.hidden = discoveryState === "running";
   candidateFields.hidden = discoveryState !== "ready";
-  protocol.hidden = discoveryState !== "ready";
+  protocol.hidden = discoveryState !== "ready" || onlyLeads(summary?.candidates);
   select.disabled = discoveryState !== "ready";
-  select.replaceChildren(new Option("选择候选", ""));
+  select.replaceChildren(new Option("选择探索结果", ""));
   const candidateDetail = byId("moc-candidate-detail");
   candidateDetail.replaceChildren();
   if (discoveryState === "failed") {
@@ -1261,7 +1265,7 @@ function renderMocReviewSummary(request: MocDiscoveryRequest): void {
       for (const text of items) { const line = document.createElement("p"); line.textContent = text; failure.append(line); }
     } else {
       const line = document.createElement("p");
-      line.textContent = "执行方：Warehouse。此历史任务未提供详细错误摘要，不能仅凭通用错误码判定责任方；原始原因保留在 evidence。";
+      line.textContent = request.llmPhase && request.llmPhase !== "skipped" ? "执行方：Assets LLM 增强；来源与模型响应保存在 evidence。" : "执行方：Warehouse。此历史任务未提供详细错误摘要，不能仅凭通用错误码判定责任方；原始原因保留在 evidence。";
       failure.append(line);
     }
     if (request.status.evidencePath) {
@@ -1280,11 +1284,12 @@ function renderMocReviewSummary(request: MocDiscoveryRequest): void {
   }
   if (discoveryState === "running") {
     updateMocObservation(request);
+    if (request.llmPhase === "running" || request.llmPhase === "waiting" && request.status.message?.includes("LLM")) state.textContent = "CDS 无候选，LLM 补充查找中…";
     create.disabled = true;
     return;
   }
   if (discoveryState === "empty") {
-    state.textContent = "探查已完成，本次 CDS 查询没有候选 MOC。";
+    state.textContent = request.llmPhase === "complete" ? request.status.message ?? "CDS 与 LLM 补充查找均未取得候选。" : "探查已完成，本次 CDS 查询没有候选 MOC。";
     create.disabled = true;
     return;
   }
@@ -1298,8 +1303,8 @@ function renderMocReviewSummary(request: MocDiscoveryRequest): void {
     create.disabled = true;
     return;
   }
-  state.textContent = `已找到 ${summary.candidates.length} 个候选 MOC，可选择后创建构建请求。`;
-  summary.candidates.forEach((candidate) => select.add(new Option(`${candidate.title ?? candidate.candidateId}${candidateBuildLabel(candidate)}`, candidate.candidateId)));
+  state.textContent = request.llmPhase === "complete" ? request.status.message ?? "LLM 补充查找完成" : `已找到 ${summary.candidates.length} 个候选 MOC，可选择后创建构建请求。`;
+  summary.candidates.forEach((candidate) => select.add(new Option(`${candidate.provider === "llm" ? "LLM · " : "CDS · "}${candidate.buildable === false ? "线索 · " : ""}${candidate.title ?? candidate.candidateId}${candidate.buildable === false ? "" : candidateBuildLabel(candidate)}`, candidate.candidateId)));
   select.value = activeMocCandidateId && summary.candidates.some((candidate) => candidate.candidateId === activeMocCandidateId) ? activeMocCandidateId : summary.candidates[0]?.candidateId ?? "";
   activeMocCandidateId = select.value;
   select.onchange = () => { activeMocCandidateId = select.value; syncMocCandidateSelection(); };
@@ -1328,9 +1333,9 @@ function syncMocCandidateSelection(): void {
   const select = byId<HTMLSelectElement>("moc-build-candidate");
   const candidate = request?.status.reviewSummary?.candidates.find((entry) => entry.candidateId === select.value);
   byId("moc-candidate-detail").innerHTML = candidate
-    ? `<strong>${escapeText(candidate.title ?? candidate.candidateId)}</strong><p>${escapeText(candidateBuildLabel(candidate))}</p><small>${escapeText(candidate.mocUrl ?? candidate.hipsUrl ?? "没有可下载 MOC URL")}</small>${candidateExistingBuild(candidate) ? `<button type="button" class="admin-quiet" id="candidate-existing-build">查看已有构建与产品</button><p>此候选已有结果，通常无需重复构建。来源更新后可再次构建，系统会按实际内容哈希判重。</p>` : ""}`
-    : `<span class="resource-empty">请选择一个候选</span>`;
-  byId<HTMLButtonElement>("moc-create-build").disabled = !candidate || !request || mocDiscoveryStateForStatus(request.status) !== "ready";
+    ? discoveryResultMarkup(candidate) + (candidateExistingBuild(candidate) ? `<button type="button" class="admin-quiet" id="candidate-existing-build">查看已有构建与产品</button>` : "")
+    : `<span class="resource-empty">请选择探索结果</span>`;
+  byId<HTMLButtonElement>("moc-create-build").disabled = !candidate || candidate.buildable === false || !request || mocDiscoveryStateForStatus(request.status) !== "ready";
   document.getElementById("candidate-existing-build")?.addEventListener("click", () => {
     const build = candidate && candidateExistingBuild(candidate);
     if (!build) return;
@@ -1356,7 +1361,7 @@ async function submitMocDiscovery(event: SubmitEvent): Promise<void> {
   setMessage("moc-discovery", "正在提交…");
   try {
     const selectedProduct = productRecords.find((product) => product.productId === formValue(form, "productId"));
-    await api("/api/v1/admin/moc-discovery", { method: "POST", body: JSON.stringify({ surveyName: selectedProduct?.draft.surveyId ?? formValue(form, "surveyName"), releaseHint: selectedProduct?.draft.releaseId ?? (formValue(form, "releaseHint") || undefined), productHint: selectedProduct?.draft.name ?? (formValue(form, "productHint") || undefined), productId: selectedProduct?.productId, surveyId: selectedProduct?.draft.surveyId, releaseId: selectedProduct?.draft.releaseId, workTitle: selectedProduct ? `${selectedProduct.draft.surveyId.toUpperCase()} · ${selectedProduct.draft.releaseId} · ${selectedProduct.draft.name}` : undefined }) });
+    await api("/api/v1/admin/moc-discovery", { method: "POST", body: JSON.stringify({ llmEnabled: byId<HTMLInputElement>("moc-llm-enabled").checked, surveyName: selectedProduct?.draft.surveyId ?? formValue(form, "surveyName"), releaseHint: selectedProduct?.draft.releaseId ?? (formValue(form, "releaseHint") || undefined), productHint: selectedProduct?.draft.name ?? (formValue(form, "productHint") || undefined), productId: selectedProduct?.productId, surveyId: selectedProduct?.draft.surveyId, releaseId: selectedProduct?.draft.releaseId, workTitle: selectedProduct ? `${selectedProduct.draft.surveyId.toUpperCase()} · ${selectedProduct.draft.releaseId} · ${selectedProduct.draft.name}` : undefined }) });
     form.reset();
     byId<HTMLDialogElement>("moc-discovery-dialog").close();
     toast("MOC 探测请求已提交");
@@ -1706,7 +1711,7 @@ function renderReviewSurveys(surveys: ReviewSurvey[]): void {
   const content = byId("review-survey-content");
   reconcileMarkup(content, `<div class="review-browser-toolbar"><div class="review-filters" aria-label="产品审核状态">${(Object.keys(reviewFilterLabels) as ReviewFilter[]).map(state => `<button type="button" class="admin-quiet" data-review-filter="${state}" aria-pressed="${reviewFilter === state}">${reviewFilterLabels[state]} <span>${state === "all" ? entries.length : entries.filter(({product}) => reviewProductState(product) === state).length}</span></button>`).join("")}</div>${survey.id.startsWith("__") ? "" : `<button type="button" class="admin-quiet" data-edit-editorial="${escapeText(survey.id)}"><i data-lucide="pencil-line"></i><span>编辑巡天文案</span></button>`}</div><div class="review-compact-list">${filtered.map(({product, release, unmatched}) => {
     const state = reviewProductState(product);
-    return `<article class="review-product-row review-compact-row${state === "retired" ? " is-retired" : ""}" data-row-key="${escapeText(product.productId)}"><div class="review-compact-name"><i data-lucide="${modalityIcon(product.modality)}"></i><div><strong>${escapeText(product.name)}</strong><small>${escapeText(product.modality ?? "模态未指定")}${unmatched ? " · 待匹配目录" : ""}</small></div></div><div class="review-compact-release"><small>Release</small><span>${escapeText(release)}</span></div>${(() => { const run = productPublicationRun(product.productId); const active = run && ["queued", "building", "uploading", "verifying"].includes(run.status); const label = active ? `发布中 · ${publicationStatusLabel(run.status)}` : run?.status === "failed" ? "发布失败 · 查看详情" : reviewFilterLabels[state]; return `<span class="review-state review-state-${active ? "publishing" : run?.status === "failed" ? "failed" : state}">${active ? `<i data-lucide="loader-circle" class="button-spinner"></i>` : ""}${escapeText(label)}</span>`; })()}<div class="product-row-actions"><button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}"><i data-lucide="eye"></i><span>${state === "pending" ? "查看并审核" : "产品详情"}</span></button>${state === "reviewed" && !["queued", "building", "uploading", "verifying"].includes(productPublicationRun(product.productId)?.status ?? "") ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish><i data-lucide="upload"></i><span>发布</span></button>` : ""}</div></article>`;
+    return `<article class="review-product-row review-compact-row${state === "retired" ? " is-retired" : ""}" data-row-key="${escapeText(product.productId)}"><div class="review-compact-name"><i data-lucide="${modalityIcon(product.modality)}"></i><div><strong>${escapeText(product.name)}</strong><small>${escapeText(product.modality ?? "模态未指定")}${unmatched ? " · 待匹配目录" : ""}</small></div></div><div class="review-compact-release"><small>Release</small><span>${escapeText(release)}</span></div>${(() => { const run = productPublicationRun(product.productId); const active = run && ["queued", "building", "uploading", "verifying"].includes(run.status); const label = active ? publicationRunStatusLabel(run) : run?.status === "failed" ? "发布失败 · 查看详情" : state === "retired" ? `已退休 · ${withdrawalLabel(product)}` : reviewFilterLabels[state]; return `<span class="review-state review-state-${active ? "publishing" : run?.status === "failed" ? "failed" : state}">${active ? `<i data-lucide="loader-circle" class="button-spinner"></i>` : ""}${escapeText(label)}</span>`; })()}<div class="product-row-actions"><button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}"><i data-lucide="eye"></i><span>${state === "pending" ? "查看并审核" : "产品详情"}</span></button>${state === "reviewed" && !["queued", "building", "uploading", "verifying"].includes(productPublicationRun(product.productId)?.status ?? "") ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish><i data-lucide="upload"></i><span>发布</span></button>` : ""}</div></article>`;
   }).join("") || '<p class="resource-empty">当前分类没有产品</p>'}</div>${(reviewFilter === "all" || reviewFilter === "pending") && survey.unmatchedBuilds?.length ? `<section class="review-registration-queue"><h5>待登记构建 · ${survey.unmatchedBuilds.length}</h5>${survey.unmatchedBuilds.map(build => `<article class="review-product-row review-compact-row"><div class="review-compact-name"><i data-lucide="box"></i><div><strong>${escapeText(build.candidateTitle ?? build.candidateId)}</strong><small>${escapeText(build.phase)}</small></div></div><div class="product-row-actions"><button type="button" class="admin-quiet" data-moc-build-details="${escapeText(build.name)}">构建详情</button><button type="button" class="admin-quiet" data-register-moc-build="${escapeText(build.name)}">登记产品</button></div></article>`).join("")}</section>` : ""}`);
   content.querySelectorAll<HTMLButtonElement>("[data-review-filter]").forEach(button => button.onclick = () => { reviewFilter = button.dataset.reviewFilter as ReviewFilter; renderReviewSurveys(reviewSurveyRecords); });
   content.querySelectorAll<HTMLButtonElement>("[data-edit-editorial]").forEach(button => button.onclick = () => void openEditorial(button.dataset.editEditorial ?? ""));
@@ -1766,6 +1771,7 @@ function productHistoryActionLabel(action?: string): string {
     review: "审核版本",
     publish: "发布版本",
     retire: "退休产品",
+    restore: "恢复为草稿",
     "recipe-migration": "迁移 recipe",
     "scan-defaults-migration": "迁移扫描默认值",
     "source-metadata-migration": "迁移来源事实",
@@ -1848,9 +1854,10 @@ function readinessAction(productId: string, step: ReadinessActionStep): void {
 async function retireProduct(productId: string): Promise<void> {
   const product = productRecords.find((entry) => entry.productId === productId);
   if (!product || product.retiredAt) return;
-  const reason = window.prompt("请输入退休原因（可选）", product.retirementReason ?? "");
+  const reason = window.prompt("请输入退休原因（必填）", product.retirementReason ?? "");
   if (reason === null) return;
-  if (!window.confirm(`确认退休产品“${product.draft.name}”吗？公开内容会隐藏，但历史发布记录会保留。`)) return;
+  if (!reason.trim()) { toast("请填写退休原因", true); return; }
+  if (!window.confirm(`确认退休产品“${product.draft.name}”吗？这会停止编辑和审核；公开版本仍需通过发布队列撤下。历史记录会保留。`)) return;
   try {
     await api(`/api/v1/admin/products/${encodeURIComponent(productId)}/retire`, {
       method: "POST",
@@ -1858,11 +1865,38 @@ async function retireProduct(productId: string): Promise<void> {
     });
     activeProductDialogId = "";
     if (byId<HTMLDialogElement>("product-dialog").open) byId<HTMLDialogElement>("product-dialog").close();
-    toast("产品已退休，公开目录和覆盖已隐藏");
+    toast("产品已退休。请在产品详情点击“发布撤下”，等待网站生效后才算完成下架。");
     await refresh();
   } catch (error) {
     toast(error instanceof Error ? error.message : "产品退休失败", true);
   }
+}
+
+async function restoreProduct(productId: string): Promise<void> {
+  const product = productRecords.find(entry => entry.productId === productId);
+  if (!product?.retiredAt) return;
+  const reason = window.prompt("请输入恢复原因（必填）。恢复后需要重新校验、审核和发布。", "");
+  if (reason === null) return;
+  if (!reason.trim()) { toast("请填写恢复原因", true); return; }
+  const button = byId<HTMLButtonElement>("product-dialog-restore");
+  button.disabled = true;
+  try {
+    await api(`/api/v1/admin/products/${encodeURIComponent(productId)}/restore`, {
+      method: "POST", body: JSON.stringify({ revision: product.revision, reason: reason.trim() }),
+    });
+    byId<HTMLDialogElement>("product-dialog").close();
+    toast("已恢复为新草稿，尚未公开。请重新校验来源与 MOC，再审核发布。");
+    await refresh();
+    openProduct(productId);
+  } catch (error) {
+    setMessage("product", error instanceof Error ? error.message : "恢复失败", true);
+    if (activeProductDialogId === productId) button.disabled = false;
+  }
+}
+
+function withdrawalLabel(product: { lifecycle?: ProductLifecycle; published?: unknown }): string {
+  const state = product.lifecycle?.publication?.withdrawalState;
+  return state === "pending" ? "待发布撤下" : state === "withdrawn" ? "已撤下" : "撤下状态待刷新";
 }
 
 function openProduct(productId: string): void {
@@ -1879,9 +1913,11 @@ function openProduct(productId: string): void {
   const runtimeInvalid = lifecycle?.runtime?.state === "INVALID";
   const reload = runtimeInvalid ? `<button type="button" class="admin-quiet lifecycle-reload" data-reload-catalog title="Reload runtime Catalog"><i data-lucide="rotate-cw"></i><span>Reload Catalog</span></button>` : "";
   const retired = Boolean(product.retiredAt);
-  const retirement = retired ? `<div class="product-retirement-notice"><strong>产品已退休</strong><span>${escapeText(product.retirementReason ?? "未填写退休原因")} · ${escapeText(formatDate(product.retiredAt))}</span></div>` : "";
-  facts.innerHTML = `<div class="section-heading"><div><span class="section-index">PUBLIC FACTS</span><h4>${escapeText(product.draft.name)}</h4></div><span class="section-note">read-only · /surveys/ source</span></div><dl class="product-fact-grid">${detailValue("survey", product.draft.surveyId)}${detailValue("release", product.draft.releaseId)}${detailValue("modality", publicProduct?.modality ?? product.draft.modality)}${detailValue("catalog status", publicProduct?.status)}${detailValue("description", publicProduct?.description)}${detailValue("coverage orders", (publicProduct?.coverage?.availableOrders ?? product.coverage?.availableOrders ?? product.draft.coverage?.availableOrders)?.map((order) => `O${order}`).join(" / "))}${detailValue("layer", publicProduct?.coverage?.layerId ?? product.draft.layerId)}${detailValue("MOC build", mocBuildStatusText(mocBuild) || "not started")}${detailValue("review", product.review?.revision === product.revision ? `已审核 ${formatDate(product.review.reviewedAt)}` : "当前版本未审核")}</dl>${retirement}${readinessDetailMarkup(product.readiness)}${executionEvidenceMarkup(product.executionEvidence, product.revision)}${lifecycleMarkup(lifecycle, retired ? "RETIRED" : product.published ? "PUBLISHED" : "DRAFT", mocBuild?.outputs?.availableOrders)}${lifecycleLinksMarkup(product.lifecycle)}${reload}<section class="product-history"><div class="section-heading"><div><span class="section-index">AUDIT HISTORY</span><h4>产品历史</h4></div><span class="section-note">按需读取</span></div><div id="product-history" class="product-history-content"><p class="resource-empty">正在读取产品历史…</p></div></section>`;
+  const withdrawal = product.lifecycle?.publication?.withdrawalState;
+  const retirement = retired ? `<div class="product-retirement-notice"><strong>产品已退休 · ${withdrawalLabel(product)}</strong><span>${escapeText(product.retirementReason ?? "未填写退休原因")} · ${escapeText(formatDate(product.retiredAt))}</span><p>${withdrawal === "pending" ? "旧版本仍在公开目录。请发布撤下并等待网站生效，再恢复为草稿。" : "公开目录已无此产品。恢复只生成新草稿，需补齐原生 MOC、重新校验并审核后才能再次发布。"}</p></div>` : product.restoredAt ? `<div class="product-retirement-notice"><strong>已恢复${product.review?.revision === product.revision ? " · 当前版本已审核" : "为草稿 · 需要重新审核"}</strong><span>${escapeText(product.restorationReason ?? "")} · ${escapeText(formatDate(product.restoredAt))}</span></div>` : "";
+  facts.innerHTML = `<div class="section-heading"><div><span class="section-index">REGISTERED FACTS</span><h4>${escapeText(product.draft.name)}</h4></div><span class="section-note">登记身份 · 公开状态见下方</span></div><dl class="product-fact-grid">${detailValue("survey", product.draft.surveyId)}${detailValue("release", product.draft.releaseId)}${detailValue("modality", publicProduct?.modality ?? product.draft.modality)}${detailValue("catalog status", publicProduct?.status)}${detailValue("description", publicProduct?.description)}${detailValue("coverage orders", (publicProduct?.coverage?.availableOrders ?? product.coverage?.availableOrders ?? product.draft.coverage?.availableOrders)?.map((order) => `O${order}`).join(" / "))}${detailValue("layer", publicProduct?.coverage?.layerId ?? product.draft.layerId)}${detailValue("MOC build", mocBuildStatusText(mocBuild) || "not started")}${detailValue("review", product.review?.revision === product.revision ? `已审核 ${formatDate(product.review.reviewedAt)}` : "当前版本未审核")}</dl>${retirement}${readinessDetailMarkup(product.readiness)}${executionEvidenceMarkup(product.executionEvidence, product.revision)}${lifecycleMarkup(lifecycle, retired ? "RETIRED" : product.published ? "PUBLISHED" : "DRAFT", mocBuild?.outputs?.availableOrders)}${lifecycleLinksMarkup(product.lifecycle)}${reload}<section class="product-history"><div class="section-heading"><div><span class="section-index">AUDIT HISTORY</span><h4>产品历史</h4></div><span class="section-note">按需读取</span></div><div id="product-history" class="product-history-content"><p class="resource-empty">正在读取产品历史…</p></div></section>`;
   facts.querySelector<HTMLButtonElement>("[data-reload-catalog]")?.addEventListener("click", (event) => void reloadCatalogRuntime(event.currentTarget as HTMLButtonElement));
+  facts.querySelectorAll<HTMLButtonElement>("[data-readiness-action]").forEach(button => { button.disabled = retired; });
   facts.querySelectorAll<HTMLButtonElement>("[data-readiness-action]").forEach((button) => button.addEventListener("click", () => readinessAction(productId, button.dataset.readinessAction as ReadinessActionStep)));
   (form.elements.namedItem("productId") as HTMLInputElement).value = productId;
   (form.elements.namedItem("summaryMarkdown") as HTMLTextAreaElement).value = product.draft.presentation.summaryMarkdown;
@@ -1907,17 +1943,40 @@ function openProduct(productId: string): void {
   const gaps = product.readiness?.draft.gaps ?? [];
   const blocking = gaps.filter((gap) => gapGuidance[gap]?.blocking);
   const preflight = byId("product-review-preflight");
-  preflight.innerHTML = `<div class="review-preflight-summary"><h4>发布前检查</h4><span>${blocking.length ? `${blocking.length} 项待解决` : "发布门禁已通过"}</span></div>${gaps.map(gap => {
+  preflight.hidden = retired;
+  preflight.innerHTML = `<div class="review-preflight-summary"><h4>发布前检查</h4><span>${blocking.length ? `${blocking.length} 项待解决` : "正在检查原生精度…"}</span></div><div id="product-native-order-gate" class="preflight-item is-pending"><i data-lucide="loader-circle" class="button-spinner"></i><div><strong>原生 MOC order ≥ 4</strong><p>正在读取并校验真实像元阶数…</p></div></div>${gaps.map(gap => {
     const guide = gapGuidance[gap];
     const action = readinessActionForGap(gap);
     const verify = Boolean(mocBuild) && ["output-validation-missing", "execution-record-missing", "validated-coverage-missing"].includes(gap);
     const step = gap === "output-validation-missing" && !mocBuild ? "tasks" : action.step;
     return `<div class="preflight-item ${guide?.blocking ? "is-blocking" : "is-pending"}"><i data-lucide="${guide?.blocking ? "circle-alert" : "circle-dot"}"></i><div><strong>${escapeText(guide?.title ?? gap)}</strong><p>${escapeText(guide?.description ?? "查看产品证据与能力限制。")}</p></div><button type="button" class="admin-quiet" ${verify ? "data-preflight-verify" : `data-preflight-step="${step}"`}>${verify ? "校验已有构建" : step === "tasks" ? "选择候选并构建" : escapeText(action.label)}</button></div>`;
-  }).join("")}${!blocking.length ? `<div class="preflight-item is-passed"><i data-lucide="circle-check"></i><span>来源与输出门禁已满足，请确认当前版本的能力与限制。</span></div>` : ""}${mocBuild ? `<button type="button" class="admin-quiet" id="product-verify-build">重新校验来源与输出</button>` : ""}${gaps.length && !blocking.length ? `<label><input type="checkbox" id="review-accept-limitations" /><span>我已阅读能力限制，同意按当前可证实能力发布；隔离恢复由发布流程执行。</span></label>` : ""}`;
+  }).join("")}${!blocking.length ? `<div class="preflight-item is-passed"><i data-lucide="circle-check"></i><span>来源与输出检查已满足。</span></div>` : ""}${mocBuild ? `<button type="button" class="admin-quiet" id="product-verify-build">重新校验来源与输出</button>` : ""}${gaps.length && !blocking.length ? `<label><input type="checkbox" id="review-accept-limitations" /><span>我已阅读能力限制，同意按当前可证实能力发布；隔离恢复由发布流程执行。</span></label>` : ""}`;
   preflight.querySelectorAll<HTMLButtonElement>("[data-preflight-step]").forEach(button => button.addEventListener("click", () => readinessAction(productId, button.dataset.preflightStep as ReadinessActionStep)));
   preflight.querySelectorAll<HTMLButtonElement>("[data-preflight-verify]").forEach(button => button.addEventListener("click", () => document.getElementById("product-verify-build")?.click()));
-  reviewButton.disabled = blocking.length > 0 || gaps.length > 0;
-  document.getElementById("review-accept-limitations")?.addEventListener("change", (event) => { reviewButton.disabled = !(event.target as HTMLInputElement).checked; });
+  let nativeOrderPassed = false;
+  const updateReviewGate = () => {
+    reviewButton.disabled = retired || !nativeOrderPassed || blocking.length > 0 || (gaps.length > 0 && !document.querySelector<HTMLInputElement>("#review-accept-limitations")?.checked);
+    publishButton.disabled = retired || !nativeOrderPassed || blocking.length > 0;
+  };
+  updateReviewGate();
+  document.getElementById("review-accept-limitations")?.addEventListener("change", updateReviewGate);
+  const gate = byId("product-native-order-gate");
+  if (!retired) void api<{ revision: number; nativeOrder: { state: string; message: string } }>(`/api/v1/admin/products/${encodeURIComponent(productId)}/preflight`).then(result => {
+    if (byId("product-native-order-gate") !== gate) return;
+    nativeOrderPassed = result.revision === product.revision && result.nativeOrder.state === "passed";
+    gate.className = `preflight-item ${nativeOrderPassed ? "is-passed" : "is-blocking"}`;
+    gate.innerHTML = `<i data-lucide="${nativeOrderPassed ? "circle-check" : "circle-alert"}"></i><div><strong>原生 MOC order ≥ 4 · ${nativeOrderPassed ? "通过" : "未通过"}</strong><p>${escapeText(result.revision === product.revision ? result.nativeOrder.message : "产品版本已变化，请重新打开检查。")}</p></div>`;
+    preflight.querySelector(".review-preflight-summary span")!.textContent = nativeOrderPassed && !blocking.length ? "发布门禁已通过" : `${blocking.length + (nativeOrderPassed ? 0 : 1)} 项待解决`;
+    updateReviewGate();
+    renderIcons();
+  }).catch(error => {
+    if (byId("product-native-order-gate") !== gate) return;
+    gate.className = "preflight-item is-blocking";
+    gate.innerHTML = `<i data-lucide="circle-alert"></i><div><strong>原生 MOC order ≥ 4 · 检查失败</strong><p>${escapeText(error instanceof Error ? error.message : "请重试")}</p></div>`;
+    preflight.querySelector(".review-preflight-summary span")!.textContent = "发布门禁未通过";
+    updateReviewGate();
+    renderIcons();
+  });
   document.getElementById("product-verify-build")?.addEventListener("click", async (event) => {
     const button = event.currentTarget as HTMLButtonElement;
     button.disabled = true;
@@ -1933,6 +1992,17 @@ function openProduct(productId: string): void {
   const retireButton = byId<HTMLButtonElement>("product-dialog-retire");
   retireButton.hidden = retired || !product.published;
   retireButton.dataset.retireProduct = productId;
+  const restoreButton = byId<HTMLButtonElement>("product-dialog-restore");
+  restoreButton.hidden = !retired;
+  restoreButton.dataset.restoreProduct = productId;
+  const activeRun = publicationRuns.some(run => ["queued", "building", "uploading", "verifying"].includes(run.status)
+    && (run.selectedProducts?.some(p => p.productId === productId) || (!run.selectedProducts?.length && run.surveyIds.includes(product.draft.surveyId))));
+  restoreButton.disabled = withdrawal !== "withdrawn" || activeRun;
+  restoreButton.title = withdrawal !== "withdrawn" ? "先发布撤下并等待网站生效" : activeRun ? "等待相关发布任务结束" : "生成新草稿；不会自动公开";
+  const withdrawButton = byId<HTMLButtonElement>("product-dialog-withdraw");
+  withdrawButton.hidden = !retired || withdrawal !== "pending";
+  withdrawButton.disabled = activeRun;
+  withdrawButton.dataset.publishProduct = productId;
   const editableFields = form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input:not([type=hidden]), select, textarea");
   editableFields.forEach((field) => { field.disabled = retired; });
   byId<HTMLDialogElement>("product-dialog").showModal();
@@ -2022,7 +2092,7 @@ function syncProductOperationButtons(): void {
       button.disabled = true;
       button.setAttribute("aria-busy", "true");
       const isThisAction = operation === "publish" ? Boolean(button.dataset.publishProduct) : Boolean(button.dataset.reviewProduct);
-      if (isThisAction) button.innerHTML = `<i data-lucide="loader-circle" class="button-spinner"></i><span>${operation === "publish" ? pending ? publicationStatusLabel(run.status) : "正在提交…" : "正在审核…"}</span>`;
+      if (isThisAction) button.innerHTML = `<i data-lucide="loader-circle" class="button-spinner"></i><span>${operation === "publish" ? pending ? publicationRunStatusLabel(run) : "正在提交…" : "正在审核…"}</span>`;
     } else {
       const original = operationButtonOriginals.get(button);
       if (original) { button.innerHTML = original.html; button.disabled = original.disabled; operationButtonOriginals.delete(button); }
@@ -2091,7 +2161,7 @@ async function publishProduct(productId: string): Promise<void> {
     const { run } = await api<{run:PublicationRun}>(`/api/v1/admin/products/${encodeURIComponent(productId)}/publish`, { method: "POST", body: JSON.stringify({ revision: product.revision }) });
     if (activeProductDialogId === productId && byId<HTMLDialogElement>("product-dialog").open) byId<HTMLDialogElement>("product-dialog").close();
     publicationRuns = [run, ...publicationRuns.filter(r => r.runId !== run.runId)];
-    toast(`${product.draft.name} · 发布已提交，正在同步该产品产物；站点生效后才会公开`);
+    toast(product.retiredAt ? `${product.draft.name} · 撤下任务已提交，等待网站生效` : `${product.draft.name} · 发布已提交，正在同步该产品产物；站点生效后才会公开`);
     if (refreshInFlight) await refreshInFlight;
     await refresh();
   } catch (error) { toast(error instanceof Error ? error.message : "发布失败", true); }
@@ -2112,9 +2182,11 @@ async function reloadCatalogRuntime(button?: HTMLButtonElement): Promise<void> {
 }
 
 async function refresh(background = false): Promise<void> {
+  if (activeStep === "api") { if (!background) await loadApiSettings(api, renderIcons); return; }
   if (refreshInFlight) return refreshInFlight;
   const version = ++refreshVersion;
   const step = activeStep;
+  const planLoad = step === "releases" && (!background || !publicationPlan) ? loadPublicationPlan() : Promise.resolve();
   const button = byId<HTMLButtonElement>("refresh-button");
   if (!background) button.disabled = true;
   byId("refresh-state").textContent = background ? "" : "正在更新…";
@@ -2181,7 +2253,7 @@ async function refresh(background = false): Promise<void> {
     pendingUpdates = false;
     byId("refresh-state").textContent = failures ? "部分数据更新失败，保留上次结果" : "";
     if (!failures) byId("refresh-time").textContent = '上次更新 ' + new Date().toLocaleTimeString("zh-CN", { hour12: false });
-    if (step === "releases") { await loadPublicationRuns(); if (!background || !publicationPlan) await loadPublicationPlan(); }
+    if (step === "releases") await Promise.all([loadPublicationRuns(), planLoad]);
     const route = parseAdminRoute(location.pathname);
     if (route?.productId && !document.querySelector("dialog[open]")) {
       if (productRecords.some(product => product.productId === route.productId)) openProduct(route.productId);
@@ -2217,6 +2289,7 @@ interface PublicationPlan {
 }
 
 interface PublicationRun {
+  operation?: "publish" | "withdraw" | "mixed";
   queue?: { phase: string; attempts: number; nextAttemptAt?: string; cancellable: boolean; syncDelayed: boolean };
   selectedProducts?: Array<{productId:string;revision:number}>;
   manifestKey?: string;
@@ -2241,21 +2314,29 @@ interface PublicationRun {
 }
 
 let publicationPlan: PublicationPlan | null = null;
+let publicationPlanRequests = 0;
+let publicationPlanRequestId = 0;
 const selectedPublicationSurveys = new Set<string>();
 const selectedPublicationProducts = new Set<string>();
 let publicationRuns: PublicationRun[] = [];
 
 
-function publicationStatusLabel(status: string): string {
+function publicationStatusLabel(status: string, withdrawal = false): string {
+  if (withdrawal) return ({ queued: "撤下排队中", building: "准备撤下", uploading: "同步撤下结果", verifying: "核验网站撤下", published: "撤下完成", failed: "撤下失败", cancelled: "撤下已取消" } as Record<string, string>)[status] ?? status;
   const labels: Record<string, string> = { queued: "排队中", building: "构建中", uploading: "上传中", verifying: "隔离验证中", published: "发布完成", failed: "失败", cancelled: "已取消" };
   return labels[status] ?? status;
 }
 
+function publicationIsWithdrawal(run: PublicationRun): boolean {
+  return run.operation === "withdraw";
+}
+
 function publicationRunStatusLabel(run: PublicationRun): string {
-  if (run.status === "published" && !run.queue && run.verification?.overall !== "verified") return "权威已发布";
+  const withdrawal = publicationIsWithdrawal(run);
+  if (run.status === "published" && !run.queue && run.verification?.overall !== "verified") return withdrawal ? "撤下结果已保存，等待网站核验" : "权威已发布";
   if (run.queue?.phase === "site-pending") return run.queue.syncDelayed ? "网站同步延迟，正在重试" : "等待网站生效";
   if (run.queue?.nextAttemptAt) return `等待自动重试（第 ${run.queue.attempts} 次尝试已结束）`;
-  return run.recovery ? "任务中断，可恢复" : publicationStatusLabel(run.status);
+  return run.recovery ? "任务中断，可恢复" : publicationStatusLabel(run.status, withdrawal);
 }
 
 function publicationVerificationLabel(state?: string): string {
@@ -2267,11 +2348,17 @@ function publicationFailureStageLabel(stage?: string): string {
 }
 
 async function loadPublicationPlan(): Promise<void> {
+  const requestId = ++publicationPlanRequestId;
+  publicationPlanRequests++;
+  byId("publication-plan-loading").hidden = false;
+  byId("publication-panel-plan").setAttribute("aria-busy", "true");
+  byId<HTMLButtonElement>("publication-refresh-button").disabled = true;
+  updatePublicationPublishButton();
   try {
     const step = activeStep;
     const version = refreshVersion;
     const { plan } = await api<{ plan: PublicationPlan }>("/api/v1/admin/publication-plan");
-    if (step !== activeStep || version !== refreshVersion) return;
+    if (step !== activeStep || version !== refreshVersion || requestId !== publicationPlanRequestId) return;
     if (businessSignature(plan) === businessSignature(publicationPlan)) return;
     publicationPlan = plan;
     for (const surveyId of [...selectedPublicationSurveys]) {
@@ -2279,8 +2366,15 @@ async function loadPublicationPlan(): Promise<void> {
     }
     renderPublicationPlan();
   } catch (error) {
+    if (requestId !== publicationPlanRequestId) return;
     if (!publicationPlan) byId("publication-plan-list").innerHTML = `<tr><td colspan="8" class="resource-empty">${escapeText(error instanceof Error ? error.message : "发布计划读取失败")}</td></tr>`;
     byId("publication-plan-summary").textContent = publicationPlan ? "发布计划更新失败，保留上次结果；提交时仍检查版本" : "发布计划不可用";
+  } finally {
+    publicationPlanRequests--;
+    byId("publication-plan-loading").hidden = publicationPlanRequests === 0;
+    byId("publication-panel-plan").setAttribute("aria-busy", String(publicationPlanRequests > 0));
+    byId<HTMLButtonElement>("publication-refresh-button").disabled = publicationPlanRequests > 0;
+    updatePublicationPublishButton();
   }
 }
 
@@ -2322,12 +2416,12 @@ function renderPublicationPlan(): void {
 }
 
 function updatePublicationPublishButton(): void {
-  byId<HTMLButtonElement>("publication-publish-button").disabled = selectedPublicationProducts.size === 0;
+  byId<HTMLButtonElement>("publication-publish-button").disabled = publicationPlanRequests > 0 || selectedPublicationProducts.size === 0;
 }
 
 async function publishSelectedSurveys(): Promise<void> {
   const plan = publicationPlan;
-  if (!plan || selectedPublicationSurveys.size === 0) return;
+  if (!plan || publicationPlanRequests > 0 || selectedPublicationSurveys.size === 0) return;
   const button = byId<HTMLButtonElement>("publication-publish-button");
   button.disabled = true;
   try {
@@ -2390,7 +2484,7 @@ function renderPublicationRuns(): void {
 }
 
 function openPublicationRun(run: PublicationRun): void {
-  byId("publication-run-title").textContent = `发布详情 · ${run.runId}`;
+  byId("publication-run-title").textContent = `${publicationIsWithdrawal(run) ? "撤下详情" : "发布详情"} · ${run.runId}`;
   const facts = [
     ["状态", publicationRunStatusLabel(run)],
     ["巡天", run.surveyIds.join(", ")],
@@ -2408,9 +2502,9 @@ function openPublicationRun(run: PublicationRun): void {
   ];
   const cancel = run.queue?.cancellable ? `<button type="button" class="admin-quiet" data-cancel-publication="${escapeText(run.runId)}"><i data-lucide="square"></i><span>${run.status === "queued" ? "取消排队" : "停止本次发布"}</span></button>` : "";
   const verify = run.status === "published" || run.queue?.phase === "site-pending" ? `<button type="button" class="admin-primary" data-verify-publication="${escapeText(run.runId)}"><i data-lucide="shield-check"></i><span>重新核验目标站点</span></button>` : "";
-  const retry = run.status === "failed" && !run.recovery ? `<button type="button" class="admin-primary" data-retry-publication="${escapeText(run.runId)}"><i data-lucide="rotate-ccw"></i><span>重试原审核版本</span></button>` : "";
+  const retry = run.status === "failed" && !run.recovery ? `<button type="button" class="admin-primary" data-retry-publication="${escapeText(run.runId)}"><i data-lucide="rotate-ccw"></i><span>${publicationIsWithdrawal(run) ? "重试撤下" : "重试原审核版本"}</span></button>` : "";
   const recover = run.recovery ? `<button type="button" class="admin-primary" data-recover-publication="${escapeText(run.runId)}"><i data-lucide="refresh-cw"></i><span>恢复并重试</span></button>` : "";
-  byId("publication-run-detail").innerHTML = `<dl class="admin-context">${facts.map(([label, value]) => `<div><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`).join("")}</dl><div class="publication-verification-actions">${cancel}${recover}${retry}${verify}</div>`;
+  byId("publication-run-detail").innerHTML = `${publicationIsWithdrawal(run) ? "<p>正在更新公开目录以移除此产品。网站核验通过后才算撤下完成；历史证据保留。</p>" : ""}<dl class="admin-context">${facts.map(([label, value]) => `<div><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`).join("")}</dl><div class="publication-verification-actions">${cancel}${recover}${retry}${verify}</div>`;
   byId("publication-run-detail").querySelector<HTMLButtonElement>("[data-cancel-publication]")?.addEventListener("click", event => void cancelPublicationRun((event.currentTarget as HTMLButtonElement).dataset.cancelPublication ?? ""));
   byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-verify-publication]")?.addEventListener("click", (event) => void verifyPublicationRun((event.currentTarget as HTMLButtonElement).dataset.verifyPublication ?? ""));
   byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-retry-publication]")?.addEventListener("click", (event) => void retryPublicationRun((event.currentTarget as HTMLButtonElement).dataset.retryPublication ?? ""));
@@ -2522,6 +2616,9 @@ async function initialize(): Promise<void> {
   renderIcons();
   try {
     adminConfig = await api<AdminConfig>("/api/v1/admin/config", { headers: {} });
+    byId<HTMLInputElement>("moc-llm-enabled").disabled = !adminConfig.mocDiscovery?.llmAvailable;
+    byId<HTMLInputElement>("moc-cds-url").value = adminConfig.mocDiscovery?.cdsUrl ?? "https://alasky.cds.unistra.fr/MocServer/query";
+    byId("moc-llm-availability").textContent = adminConfig.mocDiscovery?.llmAvailable ? "默认查询 CDS；增强选项仅在 CDS 成功且无候选时生效。" : "LLM 服务未配置，仍可使用 CDS 探索。";
     setTaskSubmitEnabled(false);
     byId("admin-namespace").textContent = adminConfig.namespace;
     byId("admin-capability").textContent = adminConfig.enabled && adminConfig.kubernetesConfigured ? "接口已连接" : "接口未配置";
@@ -2549,7 +2646,7 @@ byId<HTMLFormElement>("login-form").addEventListener("submit", async (event) => 
   showWorkspace();
   await refresh();
 });
-byId("logout-button").addEventListener("click", () => { token = ""; sessionStorage.removeItem(tokenKey); if (pollTimer !== undefined) window.clearTimeout(pollTimer); pollTimer = undefined; connectorProbeResults.clear(); connectorRecords = []; overviewRecord = null; showLogin(); });
+byId("logout-button").addEventListener("click", () => { byId<HTMLDialogElement>("api-key-created").close(); byId("api-settings-content").replaceChildren(); token = ""; sessionStorage.removeItem(tokenKey); if (pollTimer !== undefined) window.clearTimeout(pollTimer); pollTimer = undefined; connectorProbeResults.clear(); connectorRecords = []; overviewRecord = null; showLogin(); });
 applyAdminTheme(storedAdminTheme() ?? adminSystemTheme());
 byId("theme-toggle").addEventListener("click", () => applyAdminTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark", true));
 window.matchMedia?.("(prefers-color-scheme: light)").addEventListener("change", () => { if (!storedAdminTheme()) applyAdminTheme(adminSystemTheme()); });
@@ -2580,6 +2677,8 @@ byId<HTMLDialogElement>("review-survey-dialog").addEventListener("close", () => 
 byId("product-dialog-cancel").addEventListener("click", () => { history.replaceState(null, "", "/admin/review"); activeProductDialogId = ""; byId<HTMLDialogElement>("product-dialog").close(); });
 byId<HTMLButtonElement>("product-dialog-review").addEventListener("click", (event) => { const productId = (event.currentTarget as HTMLButtonElement).dataset.reviewProduct; if (productId) void reviewProduct(productId); });
 byId<HTMLButtonElement>("product-dialog-publish").addEventListener("click", (event) => { const productId = (event.currentTarget as HTMLButtonElement).dataset.publishProduct; if (productId) void publishProduct(productId); });
+byId<HTMLButtonElement>("product-dialog-restore").addEventListener("click", (event) => { const id = (event.currentTarget as HTMLButtonElement).dataset.restoreProduct; if (id) void restoreProduct(id); });
+byId<HTMLButtonElement>("product-dialog-withdraw").addEventListener("click", (event) => { const id = (event.currentTarget as HTMLButtonElement).dataset.publishProduct; if (id) void publishProduct(id); });
 byId<HTMLButtonElement>("product-dialog-retire").addEventListener("click", (event) => { const productId = (event.currentTarget as HTMLButtonElement).dataset.retireProduct; if (productId) void retireProduct(productId); });
 byId("editorial-dialog-close").addEventListener("click", () => {
   if (activeEditorial && JSON.stringify(activeEditorial.document.draft) !== JSON.stringify(activeEditorial.baseline) && !window.confirm("目录有未保存修改，确定关闭吗？")) return;

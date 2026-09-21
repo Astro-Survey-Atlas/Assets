@@ -1,11 +1,11 @@
-export type AdminStep = "overview" | "sources" | "tasks" | "review" | "releases";
+export type AdminStep = "overview" | "sources" | "tasks" | "review" | "releases" | "api";
 export interface AdminRoute { step: AdminStep; surveyId?: string; productId?: string }
 export function parseAdminRoute(pathname: string, hash = ""): AdminRoute | null {
   if (/^\/admin\/?$/.test(pathname)) {
     const step = hash.slice(1);
-    return { step: ["overview", "sources", "tasks", "review", "releases"].includes(step) ? step as AdminStep : "overview" };
+    return { step: ["overview", "sources", "tasks", "review", "releases", "api"].includes(step) ? step as AdminStep : "overview" };
   }
-  const match = /^\/admin\/(overview|sources|tasks|review|releases)(?:\/(surveys|products)\/([^/]+))?\/?$/.exec(pathname);
+  const match = /^\/admin\/(overview|sources|tasks|review|releases|api)(?:\/(surveys|products)\/([^/]+))?\/?$/.exec(pathname);
   if (!match) return null;
   const step = match[1] as AdminStep;
   if (!match[2]) return { step };
