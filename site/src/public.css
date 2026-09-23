@@ -993,7 +993,7 @@ body.public-site.atlas-page .coverage-layer-pending {
 }
 body.public-site.atlas-page .coverage-detail-product {
   border-color: color-mix(in srgb, var(--product-color, var(--brand-indigo)) 48%, var(--public-line-strong));
-  background: color-mix(in srgb, var(--product-color, var(--brand-indigo)) 52%, var(--public-surface));
+  background: color-mix(in srgb, var(--product-color, var(--brand-indigo)) 22%, var(--public-surface));
   color: var(--public-text);
 }
 body.public-site.atlas-page .coverage-detail-product-modality {

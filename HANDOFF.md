@@ -6,30 +6,29 @@
 ## 当前修复：ACT 图层同步、重合分页与发布详情排版（2026-09-23）
 
 - 线上 `/api/v1/surveys` 中 ACT 的 `modalities` 为 `radio`，coverage catalog 当前有
-  3 个 ACT layer，Atlas 图层行可选并显示 Radio 图标。前端把 survey 声明的覆盖与目录
-  图层分开处理：已声明覆盖但目录短暂未同步时显示“覆盖目录同步中”，保留可勾选状态，并
-  在初始化、重新获得焦点、回到可见状态或点击该行时刷新 catalog；没有覆盖声明的巡天仍保持
-  禁用。这样发布切换期间的旧目录不会把 ACT 永久显示为不可选。
+  3 个 ACT layer，Atlas 图层行可选并显示 Radio 图标。页面先直接读取公开巡天目录，再读取
+  当前覆盖目录并按 `surveyId` 关联；没有对应公开覆盖的巡天显示“暂无公开覆盖”并保持禁用。
 - 重合结果区继续只展示匿名预览；“继续浏览”只挂在展开的 overlap drawer 中，位于
   `匹配的 Tile / 文件` section 后、`<h3>PUBLIC SOURCES</h3>` 前。按钮铺满抽屉内容宽度、
   高约 30px，点击后先要求带 `region:query` 权限的 Assets API Key，再按 cursor 分页。
 - 参与覆盖产品条目按巡天图例色着色，公开 Atlas 底色使用 52% 色彩混合，产品名单行省略并
   通过 title 保留完整值；每个条目顶部显示对应模态的 Lucide 图标，并提供 tooltip/ARIA 标签。
-- 覆盖目录刷新会识别“survey 已声明覆盖但当前 catalog 暂无 layer”的短暂状态；该状态下
-  使用带时间戳且不带 `If-None-Match` 的 refresh URL 绕过旧 HTTP/浏览器缓存，并在目录
-  revision 相同或响应 304 时仍重试未应用的目录，避免 ACT 等新发布巡天永久停在“覆盖目录同步中”。
+- 公开目录改为直接读取接口：页面先请求 `/api/v1/surveys`，成功后再请求
+  `/api/v1/coverage/catalog`；不再写入或读取 `localStorage` 目录快照，也不发送 ETag
+  条件请求，因此公开巡天和覆盖图层始终来自同一次页面加载的当前响应。覆盖区块仍只保留
+  页面内存缓存和单层失败后的重试按钮。
 - 管理台发布详情中超过 48 个字符的 Bundle、发布清单、目标站点、错误等值使用可点击的
   省略按钮，悬停可看完整 title，点击可展开换行；弹窗和双列 context 使用 `minmax(0, 1fr)`，
   不再被长值撑宽。
-- Assets Helm revision **223**、镜像
-  `0.1.0-20260923-150842` 已部署，site/backend 均 1/1 Ready、0 restarts。线上 bundle 为
+- Assets Helm revision **224**、镜像
+  `0.1.0-20260923-164927` 已部署，site/backend 均 1/1 Ready、0 restarts。线上 bundle 为
   `reviewed-mudn3em1-aa5db98b`，SHA-256 为
   `499f0aabd7f0cb5f02301b47104290a58b3db6731912f0e774caac7ea46c745b`，508 files；
   未修改 Warehouse、MOC、资源包、扫描任务或发布数据。
 - `npm run build`、251 项 Node 测试与 Core wheel、Helm lint、`git diff --check` 通过。
-  Chromium 线上验收确认 ACT 可选、overlap 抽屉顺序和 30px 按钮、产品模态图标/底色、
-  管理台长值展开以及桌面页面无横向溢出；健康、coverage catalog 和 FITS Range（206，
-  `X-Content-SHA256`）通过。
+  Chromium 线上验收确认请求顺序为 surveys → coverage catalog、无目录 localStorage/ETag、
+  ACT 可选、overlap 抽屉顺序和 30px 按钮、产品模态图标/底色、管理台长值展开以及桌面页面
+  无横向溢出；健康、coverage catalog 和 FITS Range（206，`X-Content-SHA256`）通过。
 
 ## 当前清单入口：Euclid Q1 VIS 单 Tile 扫描（2026-09-23）
 

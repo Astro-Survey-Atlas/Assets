@@ -10,7 +10,6 @@ import { coverageLayerTooltipPosition } from "./atlas/layer-panel-layout.js";
 import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-layout.js";
 import { joinUnique, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch } from "./overlap-download.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
-import { loadPublicCatalogResource, type PublicCatalogResource, type PublicCatalogSource } from "./public-catalog.js";
 import { createRevisionHydrationQueue } from "./revision-hydration-queue.js";
 import { mountSiteChrome } from "./site-chrome.js";
 
@@ -150,19 +149,7 @@ const assetGroupDefinitions: Array<{ id: "moc" | "geometry" | "package" | "evide
 let manifest: ReleaseManifest | null = null;
 let surveyIndex: SurveyIndex | null = null;
 let search = "";
-const PUBLIC_CATALOG_CACHE_KEYS = {
-  surveys: "astro-assets:public-surveys:v1",
-  coverage: "astro-assets:coverage-catalog:v1",
-  assets: "astro-assets:release-manifest:v1",
-} as const;
 const PUBLIC_REQUEST_RETRY_DELAYS_MS = [150, 400, 900] as const;
-let usedCachedPublicCatalog = false;
-type PublicCatalogName = keyof typeof PUBLIC_CATALOG_CACHE_KEYS;
-const publicCatalogSources: Record<PublicCatalogName, PublicCatalogSource | undefined> = {
-  surveys: undefined,
-  coverage: undefined,
-  assets: undefined,
-};
 const selectedModalities = new Set<Modality>();
 let modalityFilterInitialized = false;
 let coverageDots: AtlasCoverageGlobe | null = null;
@@ -174,11 +161,6 @@ type CoverageLayerLoadState = "loading" | "ready" | "empty" | "error";
 const coverageLayerLoadStates = new Map<string, CoverageLayerLoadState>();
 const coverageLayerLoadErrors = new Map<string, string>();
 const COVERAGE_CACHE_LIMIT = 128;
-const COVERAGE_REFRESH_INTERVAL_MS = 60_000;
-let coverageRefreshTimer: number | null = null;
-let coverageCatalogEtag = "";
-let coverageInitializationComplete = false;
-let coverageRefreshInFlight: Promise<void> | null = null;
 interface SkyDeepLinkTarget { surveyId?: string; productId?: string; layerId?: string; error?: string }
 let deepLinkTarget: SkyDeepLinkTarget | null = null;
 let pendingCoverageState: SurveyLayerState | null = null;
@@ -211,25 +193,6 @@ function setOverlapMode(active: boolean): void {
   else document.body.removeAttribute("data-overlap-mode");
 }
 
-function cachePublicCatalog<T>(key: string, value: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify({ savedAt: new Date().toISOString(), value }));
-  } catch {
-    // Private browsing and quota limits must not make the public catalog fail.
-  }
-}
-
-function readCachedPublicCatalog<T>(key: string, isValue: (value: unknown) => value is T): T | undefined {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw) as { value?: unknown };
-    return isValue(parsed?.value) ? parsed.value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function isSurveyIndex(value: unknown): value is SurveyIndex {
   return Boolean(value && typeof value === "object" && !Array.isArray(value)
     && (value as Partial<SurveyIndex>).schemaVersion === 1
@@ -254,7 +217,7 @@ async function fetchPublicResponse(url: string, init: RequestInit = {}): Promise
   let lastError: unknown;
   for (let attempt = 0; attempt <= PUBLIC_REQUEST_RETRY_DELAYS_MS.length; attempt += 1) {
     try {
-      const response = await fetch(url, { ...init, cache: "no-cache" });
+      const response = await fetch(url, { ...init, cache: init.cache ?? "no-store" });
       if (response.ok || response.status === 304) return response;
       const error = new Error(`Public catalog request failed (${response.status})`);
       if (response.status < 500 && response.status !== 408 && response.status !== 429) throw new NonRetryablePublicRequestError(error.message);
@@ -276,17 +239,6 @@ async function fetchPublicJson<T>(url: string, init: RequestInit = {}): Promise<
   return await response.json() as T;
 }
 
-function recordPublicCatalogResult(name: PublicCatalogName, result: PublicCatalogResource<unknown>): void {
-  publicCatalogSources[name] = result.source;
-  if (result.source !== "fresh") usedCachedPublicCatalog = true;
-  if (result.error) console.warn(`Public catalog ${name} ${result.source}: ${result.error}`);
-  const sources = Object.values(publicCatalogSources);
-  document.body.dataset.publicCatalogState = sources.includes("unavailable")
-    ? "unavailable"
-    : sources.some((source) => source !== undefined && source !== "fresh")
-      ? "degraded"
-      : "fresh";
-}
 const overlapEvidenceCache = new Map<string, OverlapEvidenceResult>();
 const overlapDetailsCache = new Map<string, OverlapDetailsResponse>();
 let lastEscapeAt = -Infinity;
@@ -704,20 +656,6 @@ function positionOverlapPanel(): void {
 
 function layersForSurvey(surveyId: string): CoverageCatalog["layers"] {
   return coverageCatalog?.layers.filter((layer) => layer.surveyId === surveyId) ?? [];
-}
-
-function surveyHasCoverageClaim(survey: SurveyRecord | undefined): boolean {
-  return Boolean(
-    survey?.releases.some((release) => release.products.some((product) => product.coverage))
-    || survey?.assets.some((asset) => asset.kind === "moc" || asset.kind === "geometry")
-    || (survey?.statistics.footprintCells ?? 0) > 0,
-  );
-}
-
-function coverageCatalogHasPendingSurveys(): boolean {
-  return Boolean(coverageCatalog && surveyIndex?.surveys.some((survey) =>
-    surveyHasCoverageClaim(survey) && !coverageCatalog?.layers.some((layer) => layer.surveyId === survey.id),
-  ));
 }
 
 function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLElement {
@@ -2145,12 +2083,10 @@ function renderCoverageLayers(): void {
   for (const surveyId of surveyIds) {
     const layers = grouped.get(surveyId) ?? [];
     const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
-    const hasDeclaredCoverage = surveyHasCoverageClaim(survey);
-    const awaitingCatalog = layers.length === 0 && hasDeclaredCoverage;
-    const unavailable = layers.length === 0 && !awaitingCatalog;
+    const unavailable = layers.length === 0;
     const label = document.createElement("div");
-    label.className = `coverage-layer-toggle${unavailable ? " is-unavailable" : awaitingCatalog ? " is-pending" : ""}`;
-    label.setAttribute("title", unavailable ? "暂无公开覆盖，暂不可在天球中显示" : awaitingCatalog ? "覆盖目录正在同步，点击后会在目录到达时显示" : "拖动三横线把手以调整图层顺序");
+    label.className = `coverage-layer-toggle${unavailable ? " is-unavailable" : ""}`;
+    label.setAttribute("title", unavailable ? "暂无公开覆盖，暂不可在天球中显示" : "拖动三横线把手以调整图层顺序");
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = !unavailable && queuedLayerIds.has(surveyId);
@@ -2161,7 +2097,7 @@ function renderCoverageLayers(): void {
     const releaseGroups = new Map<string, CoverageCatalog["layers"]>();
     for (const layer of layers) releaseGroups.set(layer.releaseId, [...(releaseGroups.get(layer.releaseId) ?? []), layer]);
     const releaseModalities = [...releaseGroups.values()].map(group => [...new Set(group.flatMap(layer => { const product = survey?.releases.find(r => r.id === layer.releaseId)?.products.find(p => p.productId === layer.productId || p.name === layer.product); return product?.modality ? [product.modality] : []; }))]);
-    const commonModalities = [...new Set(unavailable || awaitingCatalog ? (survey?.modalities ?? []) : releaseModalities.flat())];
+    const commonModalities = [...new Set(unavailable ? (survey?.modalities ?? []) : releaseModalities.flat())];
     name.textContent = survey?.name ?? surveyId.toUpperCase();
     name.className = "coverage-layer-name";
     const swatch = document.createElement("span");
@@ -2193,7 +2129,6 @@ function renderCoverageLayers(): void {
       if (overlapMode) {
         void (enabled.length >= 2 ? activateOverlap(true) : activateOverlap(false));
       }
-      if (awaitingCatalog) void refreshCoverageCatalog();
     });
     if (!unavailable) {
       label.draggable = true;
@@ -2214,7 +2149,6 @@ function renderCoverageLayers(): void {
     label.append(input, swatch, handle, name);
     const common = document.createElement("span"); common.innerHTML = modalityIconsMarkup(commonModalities, `${survey?.name ?? surveyId} 共同覆盖模态`); label.append(common);
     if (unavailable) label.append(Object.assign(document.createElement("small"), { className: "coverage-layer-unavailable", textContent: "暂无公开覆盖" }));
-    if (awaitingCatalog) label.append(Object.assign(document.createElement("small"), { className: "coverage-layer-unavailable coverage-layer-pending", textContent: "覆盖目录同步中" }));
     host.append(label);
   }
   if (host.dataset.tooltipBound !== "true") {
@@ -2532,19 +2466,12 @@ function renderSurveys(): void {
   renderIcons();
 }
 
-async function fetchCoverageCatalogDocument(forceFresh = false): Promise<CoverageCatalog | null> {
+async function fetchCoverageCatalogDocument(): Promise<CoverageCatalog> {
   const headers = new Headers({ Accept: "application/json" });
-  // A cache-busting refresh must also omit the validator. The catalog endpoint
-  // may otherwise return 304 for the new URL when its revision is unchanged,
-  // leaving a stale browser catalog unable to receive newly published layers.
-  if (coverageCatalogEtag && !forceFresh) headers.set("If-None-Match", coverageCatalogEtag);
-  const endpoint = forceFresh ? `/api/v1/coverage/catalog?refresh=${Date.now()}` : "/api/v1/coverage/catalog";
-  const response = await fetchPublicResponse(endpoint, { headers });
-  if (response.status === 304) return null;
-  coverageCatalogEtag = response.headers.get("etag") ?? coverageCatalogEtag;
+  const response = await fetchPublicResponse("/api/v1/coverage/catalog", { headers, cache: "no-store" });
+  if (response.status === 304) throw new Error("Coverage catalog returned 304 without a cached response");
   const next = await response.json() as unknown;
   if (!isCoverageCatalog(next)) throw new Error("Coverage catalog response is invalid");
-  cachePublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.coverage, next);
   return next;
 }
 
@@ -2615,46 +2542,6 @@ function retryCoverageSurvey(surveyId: string): void {
   });
 }
 
-function refreshCoverageCatalog(): Promise<void> {
-  if (document.hidden || !coverageDots || !coverageInitializationComplete) return Promise.resolve();
-  if (coverageRefreshInFlight) return coverageRefreshInFlight;
-  const request = (async (): Promise<void> => {
-    try {
-      const forceFresh = coverageCatalogHasPendingSurveys();
-      const next = await fetchCoverageCatalogDocument(forceFresh);
-      if (next) {
-        const nextRevision = coverageCatalogRevisionKey(next);
-        const currentRevision = coverageCatalog ? coverageCatalogRevisionKey(coverageCatalog) : null;
-        if (forceFresh || nextRevision !== currentRevision || coverageHydration.appliedRevision !== nextRevision) {
-          await hydrateCoverageCatalog(next, forceFresh);
-          if (deepLinkTarget?.surveyId) focusSkyTarget(deepLinkTarget);
-        }
-      } else if (coverageCatalog) {
-        // A failed hydration may have already recorded the catalog ETag. A
-        // subsequent refresh therefore returns 304; retry the un-applied
-        // catalog instead of treating that response as a successful load.
-        const currentRevision = coverageCatalogRevisionKey(coverageCatalog);
-        if (coverageHydration.appliedRevision !== currentRevision) {
-          await hydrateCoverageCatalog(coverageCatalog, true);
-          if (deepLinkTarget?.surveyId) focusSkyTarget(deepLinkTarget);
-        }
-      }
-    } catch (error) {
-      byId("coverage-state").textContent = error instanceof Error ? error.message : "COVERAGE CATALOG REFRESH FAILED";
-    }
-  })();
-  coverageRefreshInFlight = request;
-  void request.finally(() => {
-    if (coverageRefreshInFlight === request) coverageRefreshInFlight = null;
-  });
-  return request;
-}
-
-function scheduleCoverageRefresh(): void {
-  if (coverageRefreshTimer !== null) window.clearInterval(coverageRefreshTimer);
-  coverageRefreshTimer = window.setInterval(() => void refreshCoverageCatalog(), COVERAGE_REFRESH_INTERVAL_MS);
-}
-
 // Global enterAtlasExperience function for inline onclick handlers if needed
 declare global {
   interface Window {
@@ -2692,46 +2579,37 @@ async function initialize(): Promise<void> {
     console.warn("HEALPix globe unavailable", error);
     byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
   }
-  const assetsPromise = loadPublicCatalogResource<ReleaseManifest>(async () => {
-    const value = await fetchPublicJson<unknown>("/api/v1/assets", { headers: { Accept: "application/json" } });
-    if (!isReleaseManifest(value)) throw new Error("Public asset catalog response is invalid");
-    cachePublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.assets, value);
-    return value;
-  }, {
-    current: manifest,
-    cached: readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.assets, isReleaseManifest),
-  });
-  const coveragePromise = loadPublicCatalogResource<CoverageCatalog>(fetchCoverageCatalogDocument, {
-    current: coverageCatalog,
-    cached: readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.coverage, isCoverageCatalog),
-  });
-  const surveysPromise = loadPublicCatalogResource<SurveyIndex>(async () => {
+  const assetsPromise = (async (): Promise<ReleaseManifest | null> => {
+    try {
+      const value = await fetchPublicJson<unknown>("/api/v1/assets", { headers: { Accept: "application/json" } });
+      if (!isReleaseManifest(value)) throw new Error("Public asset catalog response is invalid");
+      return value;
+    } catch (error) {
+      console.warn("Public asset catalog unavailable", error);
+      return null;
+    }
+  })();
+
+  let surveysResult: SurveyIndex | null = null;
+  try {
     const value = await fetchPublicJson<unknown>("/api/v1/surveys", { headers: { Accept: "application/json" } });
     if (!isSurveyIndex(value)) throw new Error("Public survey catalog response is invalid");
-    cachePublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.surveys, value);
-    return value;
-  }, {
-    current: surveyIndex,
-    cached: readCachedPublicCatalog(PUBLIC_CATALOG_CACHE_KEYS.surveys, isSurveyIndex),
-  });
-  const [assetsResult, coverageResult, surveysResult] = await Promise.all([assetsPromise, coveragePromise, surveysPromise]);
-  recordPublicCatalogResult("assets", assetsResult);
-  recordPublicCatalogResult("coverage", coverageResult);
-  recordPublicCatalogResult("surveys", surveysResult);
-
-  if (surveysResult.value) {
-    surveyIndex = surveysResult.value;
+    surveysResult = value;
+    surveyIndex = value;
     initializeModalityFilter();
     renderSurveys();
-  } else if (!surveyIndex) {
+  } catch (error) {
+    console.warn("Public survey catalog unavailable", error);
     byId("survey-list").replaceChildren(Object.assign(document.createElement("div"), { className: "error-row", textContent: t("coverage.catalogLoadFailed") }));
   }
 
-  if (coverageResult.value) {
+  let coverageResult: CoverageCatalog | null = null;
+  if (surveysResult) {
     // Keep the catalog and URL state usable even when the optional WebGL
     // viewer could not be created (for example, in a headless browser).
     try {
-      await hydrateCoverageCatalog(coverageResult.value);
+      coverageResult = await fetchCoverageCatalogDocument();
+      await hydrateCoverageCatalog(coverageResult);
       applySkyDeepLink();
 
       // Setup a subtle auto-rotation for the background visual if we are on the homepage
@@ -2739,19 +2617,16 @@ async function initialize(): Promise<void> {
           coverageDots.resetView(); // This should trigger a continuous slow rotation if implemented in AtlasCoverageGlobe
       }
     } catch (error) {
-      console.warn("Coverage preview unavailable", error);
-      byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
+      console.warn("Public coverage catalog unavailable", error);
+      byId("coverage-state").textContent = "COVERAGE CATALOG UNAVAILABLE";
     }
-    // Keep retrying a catalog whose first viewer hydration failed. The
-    // refresh path can reuse the un-applied catalog even when the server
-    // answers 304 for its already-recorded ETag.
-    scheduleCoverageRefresh();
   } else {
     byId("coverage-state").textContent = "COVERAGE CATALOG UNAVAILABLE";
   }
 
-  if (assetsResult.value) {
-    manifest = assetsResult.value;
+  const assetsResult = await assetsPromise;
+  if (assetsResult) {
+    manifest = assetsResult;
     byId("footer-release").textContent = `${manifest.bundle.id.toUpperCase()} · VERIFIED`;
     byId("stat-releases").textContent = String(manifest.statistics.releases);
     byId("stat-acquired").textContent = String(manifest.statistics.acquired);
@@ -2764,9 +2639,6 @@ async function initialize(): Promise<void> {
     const provenance = manifest.files.find((record) => record.kind === "provenance");
     if (provenance) byId<HTMLAnchorElement>("provenance-download").href = provenance.downloadUrl;
   }
-  if (usedCachedPublicCatalog) byId("coverage-state").textContent = "PUBLIC CATALOG CACHED · RETRYING";
-  coverageInitializationComplete = true;
-  if (coverageCatalogHasPendingSurveys()) void refreshCoverageCatalog();
 }
 
 byId<HTMLInputElement>("survey-search").addEventListener("input", (event) => {
@@ -2953,12 +2825,6 @@ window.addEventListener("popstate", () => {
   enterAtlasExperience(target.surveyId, target.productId);
 });
 
-window.addEventListener("pageshow", () => void refreshCoverageCatalog());
-window.addEventListener("focus", () => void refreshCoverageCatalog());
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) void refreshCoverageCatalog();
-});
-
 window.addEventListener("resize", () => {
   positionSelectionQueue();
   positionOverlapPanel();
@@ -3037,5 +2903,4 @@ void initialize().catch((error) => {
   console.error(error);
   byId("coverage-state").textContent = t("coverage.releaseUnavailable");
   if (!surveyIndex) byId("survey-list").replaceChildren(Object.assign(document.createElement("div"), { className: "error-row", textContent: t("coverage.catalogLoadFailed") }));
-  coverageInitializationComplete = true;
 });
