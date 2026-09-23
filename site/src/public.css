@@ -985,9 +985,15 @@ body.public-site.atlas-page .coverage-layer-toggle.is-unavailable:hover {
   background: transparent;
   color: var(--public-muted);
 }
+body.public-site.atlas-page .coverage-layer-toggle.is-pending {
+  cursor: pointer;
+}
+body.public-site.atlas-page .coverage-layer-pending {
+  color: var(--brand-indigo-strong);
+}
 body.public-site.atlas-page .coverage-detail-product {
   border-color: color-mix(in srgb, var(--product-color, var(--brand-indigo)) 48%, var(--public-line-strong));
-  background: color-mix(in srgb, var(--product-color, var(--brand-indigo)) 36%, var(--public-surface));
+  background: color-mix(in srgb, var(--product-color, var(--brand-indigo)) 52%, var(--public-surface));
   color: var(--public-text);
 }
 body.public-site.atlas-page .coverage-detail-product-modality {

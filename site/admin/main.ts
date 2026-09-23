@@ -614,6 +614,14 @@ function escapeText(value: unknown): string {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character] ?? character);
 }
 
+function publicationFactMarkup(label: string, value: unknown): string {
+  const text = String(value ?? "");
+  const escapedLabel = escapeText(label);
+  const escapedValue = escapeText(text);
+  if (text.length <= 48) return `<div><dt>${escapedLabel}</dt><dd>${escapedValue}</dd></div>`;
+  return `<div class="is-long"><dt>${escapedLabel}</dt><dd><button type="button" class="admin-context-value" data-publication-detail="true" aria-expanded="false" title="${escapedValue}">${escapedValue}</button></dd></div>`;
+}
+
 function toast(message: string, error = false): void {
   const element = byId("admin-toast");
   element.textContent = message;
@@ -2520,7 +2528,14 @@ function openPublicationRun(run: PublicationRun): void {
   const verify = run.status === "published" || run.queue?.phase === "site-pending" ? `<button type="button" class="admin-primary" data-verify-publication="${escapeText(run.runId)}"><i data-lucide="shield-check"></i><span>重新核验目标站点</span></button>` : "";
   const retry = run.status === "failed" && !run.recovery ? `<button type="button" class="admin-primary" data-retry-publication="${escapeText(run.runId)}"><i data-lucide="rotate-ccw"></i><span>${publicationIsWithdrawal(run) ? "重试撤下" : "重试原审核版本"}</span></button>` : "";
   const recover = run.recovery ? `<button type="button" class="admin-primary" data-recover-publication="${escapeText(run.runId)}"><i data-lucide="refresh-cw"></i><span>恢复并重试</span></button>` : "";
-  byId("publication-run-detail").innerHTML = `${publicationIsWithdrawal(run) ? "<p>正在更新公开目录以移除此产品。网站核验通过后才算撤下完成；历史证据保留。</p>" : ""}<dl class="admin-context">${facts.map(([label, value]) => `<div><dt>${escapeText(label)}</dt><dd>${escapeText(value)}</dd></div>`).join("")}</dl><div class="publication-verification-actions">${cancel}${recover}${retry}${verify}</div>`;
+  byId("publication-run-detail").innerHTML = `${publicationIsWithdrawal(run) ? "<p>正在更新公开目录以移除此产品。网站核验通过后才算撤下完成；历史证据保留。</p>" : ""}<dl class="admin-context">${facts.map(([label, value]) => publicationFactMarkup(label, value)).join("")}</dl><div class="publication-verification-actions">${cancel}${recover}${retry}${verify}</div>`;
+  byId("publication-run-detail").querySelectorAll<HTMLButtonElement>("[data-publication-detail]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const expanded = button.getAttribute("aria-expanded") === "true";
+      button.setAttribute("aria-expanded", String(!expanded));
+      button.classList.toggle("is-expanded", !expanded);
+    });
+  });
   byId("publication-run-detail").querySelector<HTMLButtonElement>("[data-cancel-publication]")?.addEventListener("click", event => void cancelPublicationRun((event.currentTarget as HTMLButtonElement).dataset.cancelPublication ?? ""));
   byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-verify-publication]")?.addEventListener("click", (event) => void verifyPublicationRun((event.currentTarget as HTMLButtonElement).dataset.verifyPublication ?? ""));
   byId<HTMLButtonElement>("publication-run-detail").querySelector("[data-retry-publication]")?.addEventListener("click", (event) => void retryPublicationRun((event.currentTarget as HTMLButtonElement).dataset.retryPublication ?? ""));

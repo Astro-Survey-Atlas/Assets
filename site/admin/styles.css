@@ -95,6 +95,14 @@ html, body { min-height: 100vh; background: var(--paper); color: var(--ink); }
 :root { background: #050a10; }
 .admin-header { border-bottom-color: rgba(70, 97, 107, .62); background: rgba(5, 10, 16, .72); }
 .admin-brand { color: var(--ink); }
+.admin-context { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.admin-context > div, .admin-context dt, .admin-context dd { min-width: 0; }
+.admin-context > div.is-long { grid-column: 1 / -1; }
+.admin-context dt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-context dd { max-width: 100%; overflow: hidden; }
+.admin-context-value { display: block; width: 100%; min-width: 0; margin: 8px 0 0; padding: 0; border: 0; background: transparent; color: var(--ink); cursor: help; font: 600 12px/1.25 var(--font-mono), monospace; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-context-value:hover, .admin-context-value:focus-visible { color: var(--teal); text-decoration: underline; outline: 0; }
+.admin-context-value.is-expanded { overflow-wrap: anywhere; white-space: normal; word-break: break-word; cursor: text; }
 .admin-mark { width: 34px; height: 34px; border: 0; border-radius: 0; }
 .admin-mark circle:first-child, .admin-mark circle:nth-child(2), .admin-mark ellipse { fill: none; stroke: var(--teal); stroke-width: .9; opacity: .9; }
 .admin-mark circle:nth-child(2) { stroke: var(--ochre); opacity: .75; }
@@ -663,6 +671,8 @@ button.admin-primary:disabled svg { color: currentColor; }
   .overview-release > header { flex-direction: column; }
   .overview-product { grid-template-columns: 1fr; gap: 8px; }
   .overview-product > .admin-quiet { grid-column: auto; }
+  .admin-context { grid-template-columns: 1fr; }
+  .admin-context > div.is-long { grid-column: auto; }
 }
 /* Compact survey-first navigation and readiness controls. */
 .admin-main { padding-top: 34px; }
