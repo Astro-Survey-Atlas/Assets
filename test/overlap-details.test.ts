@@ -75,6 +75,7 @@ test("overlap details separate public claims from current Warehouse evidence", (
   assert.equal(details.component.id, "C01");
   assert.equal(details.publicSources[0]?.coverageClaim?.kind, "moc");
   assert.equal(details.publicSources[0]?.sourceUrl, "https://www.euclid.example/q1");
+  assert.equal(details.publicSources[0]?.surveyColor, "#a7d9ff");
   assert.equal(details.warehouseEvidence[0]?.state, "ACTIVE");
   assert.equal(details.warehouseEvidence[0]?.coverageCells, 1);
   assert.equal(details.warehouseEvidence[0]?.connector.status, "unavailable");

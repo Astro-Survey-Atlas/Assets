@@ -1,7 +1,201 @@
 # Assets 项目交接
 
-更新：2026-09-21（Asia/Shanghai）。本文件为当前状态入口；旧版本记录见
+更新：2026-09-23（Asia/Shanghai）。本文件为当前状态入口；旧版本记录见
 [历史交接](docs/handoff-history-through-20260920.md)，不可将旧部署或待办当成现状。
+
+## 当前修复：ACT 模态、重合分页与产品条目展示（2026-09-23）
+
+- 公开 survey 索引现在将产品已声明的模态与 survey-level 声明取并集。ACT 的
+  `modalities` 不再为空；线上 `/api/v1/surveys` 与 coverage catalog 均返回
+  `radio`，因此 Atlas 图层列表可选 ACT 并显示 Radio 图标。
+- 重合结果面板继续只展示匿名预览，不创建分页按钮；“继续浏览”只挂在展开的
+  overlap drawer 中，并位于最后一个 `.overlap-drawer-section`（DOWNLOAD PLAN）之后。
+  点击按钮会先要求带 `region:query` 权限的 Assets API Key，再按 cursor 请求下一页。
+- 参与覆盖产品条目按巡天颜色着色，公开页产品底色提高到 36%（通用样式 30%），产品名
+  保持单行省略，模态改为条目顶部 Lucide 图标并提供 tooltip/ARIA 标签。结果预览标题
+  明确显示“已展示”，分页后才显示“已加载”。
+- Assets Helm revision **218**、镜像
+  `0.1.0-20260923-121154` 已部署，site/backend 均 1/1 Running、0 restarts。线上
+  bundle SHA-256 仍为 `a694dc6e156d96923c84fdc19fae9a9d7171a9df2f1f58ff84d2259564d4551b`；
+  未修改 Warehouse、MOC、资源包、扫描任务或发布数据。
+- `npm run build`、251 项 Node 测试与 Core wheel、Helm lint、`git diff --check` 通过。
+  浏览器验收覆盖桌面与 390px 移动视口、ACT 选择、Radio/产品图标、结果/抽屉分页位置、
+  API Key 对话框和无横向溢出。
+
+## 当前清单入口：Euclid Q1 VIS 单 Tile 扫描（2026-09-23）
+
+- 目前只有一个真实成功扫描：
+  `euclid-q1-vis-mer-tile-102018211-retry-20260921083420`。原始失败任务
+  `euclid-q1-vis-mer-tile-102018211` 仍保留，不能把失败任务当作清单。
+- Warehouse 的 `ast_layer_index_v1` 显示该层为 `ACTIVE`，当前
+  `file_count=1`、`coverage_count=10`。文件清单在 `ast_file_index_v1`，文件与
+  ICRS/NESTED 像元的关系在 `ast_coverage_index_v1`；两者是查看文件和 Tile/像元
+  关系的权威位置。
+- 当前文件是
+  `EUC_MER_BGSUB-MOSAIC-VIS_TILE102018211-ACBD03_20241018T142710.276838Z_00.00.fits`，
+  Tile 为 `102018211`，大小 `1,474,565,760` bytes；对应 10 条 O8、
+  `fits_wcs`、`estimated` coverage edge。source snapshot SHA-256 为
+  `877ae38cc85e7f97f210d939418536b89ed60e738a7f935ce79469ec4005aa6e`。
+- Assets `/atlas/` 的重合抽屉只提供最多 6 条公开预览入口，方便确认当前区域，
+  不是完整清单。要取得完整文件/Tile 反查结果，使用
+  `POST /api/v1/coverage/reverse-lookup`，请求头带有 `region:query` 权限的
+  `X-Assets-API-Key`；响应中的 `files[]`、`entrypoints[]` 和每个文件的
+  `matchingCoverage[]` 分别表示文件、公开 Tile/目录入口和覆盖关系。
+- Workspace 的 `/api/sky/reverse-lookup` 会把同一批 Warehouse 证据映射到
+  `fileEvidence`，适合在 Workspace 页面核对文件名、大小和 Tile。具备 Warehouse
+  访问权限时，也可以直接查看 `ast_file_index_v1` 与 `ast_coverage_index_v1`。
+- `euclid-q1-mer-catalog` 指向整个 MER 前缀，但目前没有完整关联扫描；当前单个
+  VIS Tile 不能代表 Q1 全量文件或 Tile 清单。后续必须按 VIS/NISP 波段和 Tile
+  范围逐步扫描，并继续披露 `completeness=incomplete`，不得把前缀对象数当成科学
+  文件清单。
+
+## 当前修复：公开重合入口覆盖所有图层与 Cell Inspector 排版（2026-09-22）
+
+- 反查预览入口改用公开覆盖目录，不再因 Warehouse 只扫描了部分图层而隐藏 Euclid 等
+  entrypoint-only 产品。每个组件最多显示 6 个 Tile/文件/官方入口；先保留每个有结果的
+  图层代表链接，再填充其他 Tile，超出部分明确显示“还有更多结果”。
+- Cell Inspector 移除内层分隔线并向右统一，字段采用“名称左、值右”的单行布局，长值
+  省略并通过悬停保留完整内容。公开来源卡片使用对应巡天图例颜色和可点击的官方发布页、
+  覆盖 MOC/边界链接。
+- 重合抽屉的 Atlas 覆盖索引区改为说明 MOC、查询投影和预览制品的用途；无制品时不再
+  显示空区块。它们用于天球绘制、重合计算和版本核对，不是科学文件清单。
+- Assets Helm revision **214**、镜像
+  `1.0.0-20260922-public-overlap-representative` 已部署，site/backend 均 1/1 Ready、
+  0 restarts。公开 bundle 仍为 `reviewed-muaxa1h2-cfe90933`、503 文件、SHA-256
+  `d69e3366aaeb7c72c7f176a09a41f666c7dd49ad9805494b785355160d2e18e8`。
+- 线上验收：Euclid × DESI C02/C04 的 6 条预览均包含 Euclid 官方入口并保留 DESI Tile；
+  C02 返回 `omitted=22`，C04 返回 `omitted=32`，超出结果标记为更多。健康、Range FITS
+  （206，`X-Content-SHA256`）通过；未修改 Warehouse、MOC、资源包、扫描任务或发布数据。
+- `npm run build`、247 项 Node 测试与 Core wheel、Helm lint、`git diff --check` 通过。本轮
+  代码与交接文档仍未提交，所有既有修改保留。
+
+## 当前修复：重合自动预览、展开面板与 API Key 导出（2026-09-22）
+
+- 重合模式在组件选中后自动执行有界反查预览，不再显示“反查此区域”按钮或额外步骤；参与覆盖产品列表默认展开。展开的 `#overlap-drawer` 复用同一预览并显示 Tile/文件链接。
+- 匿名预览请求使用 `preview=true`，每个组件最多返回 6 个 Tile/文件链接。结果被截断时显示“还有更多结果”；完整文件/Tile 清单只在下载或导出时请求。
+- 预览摘要只显示实际存在的文件、Tile 或来源入口数量；没有文件但有 Tile 时显示“已展示 N 个 Tile”，不再显示一串零计数造成误导。
+- 下载与导出仅接受具有 `region:query` 权限的 Assets API Key；旧下载密码入口和 Helm 密码注入已移除。Workspace 服务 API Key 仍用于服务端调用，公开 MOC、资源包和预览保持匿名。
+- Assets Helm revision **211**、镜像
+  `1.0.0-20260922-drawer-tile-results` 已部署，site/backend 均 1/1 Ready、0 restarts；公开 bundle 仍为 `reviewed-muaxa1h2-cfe90933`、503 文件、SHA-256
+  `d69e3366aaeb7c72c7f176a09a41f666c7dd49ad9805494b785355160d2e18e8`。
+- `npm test`（247 项 Node 测试与 Core wheel）、`npm run build`、Helm lint、`git diff --check` 和桌面/390px 浏览器回归通过。未修改 Warehouse、MOC、资源包或发布数据；本轮代码与文档仍未提交。
+
+## 当前修复：天球重合按组件反查真实文件（2026-09-22）
+
+- 根因是 overlap 主接口把所选巡天的全部产品复制到每个 component；现在按 component
+  的真实 NESTED 像元筛选图层，重合面板只列出实际相交产品。自动预览与 API Key 导出行为见上方当前修复。
+- Warehouse file evidence 继续由现有反查接口提供。对 Euclid Q1 标准
+  `EUC_MER_BGSUB-MOSAIC-(VIS|NIR...)_TILE*.fits` 文件，Assets 解析 Tile 身份并生成
+  ESA SAS-DD 官方下载链接；原始 `oss://` 只保留为定位符，未修改 Warehouse、MOC、
+  Resource Package、扫描任务或发布数据。仅扫描子集，响应仍明确披露完整性未知。
+- Assets Helm revision **209**、镜像
+  `1.0.0-20260922-overlap-file-links` 已 Ready，site/backend 各 1/1、0 restarts。
+  bundle 仍为 `reviewed-muaxa1h2-cfe90933`、503 文件、SHA-256
+  `d69e3366aaeb7c72c7f176a09a41f666c7dd49ad9805494b785355160d2e18e8`。
+- 线上验收：Euclid × DES C02 返回 `TILE 102018211`、真实 VIS FITS、
+  `https://eas.esac.esa.int/sas-dd/data?...RELEASE=q1...` 和原始 OSS 定位；Euclid ×
+  DESI C01 返回 DESI DR1 `TILE 82406` 官方目录。健康、Range FITS、ESA HEAD 均成功。
+- `npm run build`、247 项 Node 测试、Core wheel、site 类型检查、Helm lint 和
+  `git diff --check` 通过。本轮只更新代码和交接记录，未提交 Git。
+
+## Workspace Assets API Key 轮换（2026-09-21）
+
+- 通过 Assets API 管理创建实例级 Key `workspace-region-query`，权限仅为
+  `region:query`，有效期至 2027-09-21；明文只保存在创建响应和 Workspace 私有
+  `system-secrets.json`，未写入 Git、镜像、日志或交接文档。
+- Workspace 的 `/state/system-config/system-secrets.json` 已替换为新 Key；重启
+  `asa-workspace` 后仍能读取，使用该值访问 Assets 受保护区域接口得到参数校验响应（不是
+  401/403）。公开 Resource Package catalog 继续匿名读取。
+- Assets 旧受管 `test` Key 已撤销。legacy `workspace-api-key` 已换成随机新值并重启
+  site/backend，旧 legacy 值不再被接受；当前两个 Pod 均已加载新值。
+- 当前 Workspace 镜像的公开资源包同步仍是匿名 catalog 路径；实例 Key 保存在服务端，供
+  受保护 Assets 区域查询契约使用，不改变公开目录、资源包或发布数据。
+
+## 上一轮修复：巡天图例与天球颜色一致（2026-09-22）
+
+- 根因是 Atlas 图例优先读取 coverage layer 的旧通用蓝 `#376b9b`，再由
+  `surveyDisplayColor()` 哈希成 Euclid 玫红 `rgb(224, 86, 195)`；Three.js 天球则读取
+  survey item，所以显示蓝色。现在图例、详情和目录优先读取同一个 survey item 原始基础
+  色；Three.js 以该基础色为每个产品生成稳定的同色相深浅变体，共享像元继续用扇区拼色。
+  不再对图例做独立 HSL 转换，也不会因旧 layer 颜色改变巡天基础色。
+- 线上用旧 layer `#376b9b` 和当前 Euclid survey `#a7d9ff` 的混合缓存场景回归：
+  `.coverage-layer-swatch` 为 `rgb(167, 217, 255)`，勾选后天球覆盖同色，无 console 或
+  page error。该修复兼容旧浏览器缓存，不修改 MOC、Resource Package 或发布记录。
+- Workspace 资源包同步兼容 Assets 公共投影中的空模态、空描述、`null` 可选字段和站内相对
+  来源 URL，并把 `surveyColor` 传给 `/api/public-surveys` 与天球层目录。Workspace Helm
+  revision **42**、镜像 `0.10.38-dev-20260922-survey-display-color` 已 Ready；线上颜色与
+  Assets canonical catalog 一致。公开目录仍匿名读取，未改发布数据或 Key。revision 42
+  rollout 后已重新核验 `/api/public-surveys` 与 `/api/resource-packages`，Euclid、DESI、
+  SDSS、Gaia、DES、SUMSS、JWST、GALEX、2MASS 等巡天返回各自颜色。
+- Assets Helm revision **208**、镜像 `1.0.0-20260922-survey-product-shades` 已 Ready，site/backend
+  均 1/1、0 restarts。Assets `npm run build`、244 项 Node 测试、Core wheel、Helm lint 和
+  浏览器回归通过。线上 bundle 仍为 `reviewed-muaxa1h2-cfe90933`、503 个 manifest 文件、
+  SHA-256 `d69e3366aaeb7c72c7f176a09a41f666c7dd49ad9805494b785355160d2e18e8`；Range 下载返回
+  206。本轮代码与交接文档仍未提交，所有既有修改保留。
+
+## 当前闭环：Euclid Q1 VIS 单 Tile 扫描与 Warehouse 反查（2026-09-21）
+
+- 修复旧 ScanRequest 重提兼容性：`resubmitTask()` 会移除历史 Warehouse v1
+  `spec.plan.layer.product`，保留其余冻结计划、来源和失败证据。新建任务继续使用
+  `backoffLimit=0` 与 Warehouse v2 `LayerSpec`。`build:server`、完整 **240 项 Node
+  测试**和 Core 校验通过。
+- 原始失败任务 `euclid-q1-vis-mer-tile-102018211` 与第一次非法 retry 均保留；仅从原始
+  任务重提成功任务 `euclid-q1-vis-mer-tile-102018211-retry-20260921083420`。
+  Warehouse 状态为 **SUCCEEDED**：1 个文件、10 条 coverage edge、O8、0 errors，
+  source snapshot SHA-256 为
+  `877ae38cc85e7f97f210d939418536b89ed60e738a7f935ce79469ec4005aa6e`。
+- 已核实 Warehouse `ast_layer_index_v1` 为 ACTIVE（file_count=1、coverage_count=10），
+  `ast_coverage_index_v1` 的 10 条边均为 ICRS/NESTED、`fits_wcs`、O8、estimated；
+  `ast_file_index_v1` 记录真实 VIS FITS
+  `EUC_MER_BGSUB-MOSAIC-VIS_TILE102018211-ACBD03_20241018T142710.276838Z_00.00.fits`，
+  1,474,565,760 bytes。该闭环只覆盖一个 MER Tile，不能代表整个 Q1 VIS 完整性。
+- `/api/v1/coverage/reverse-lookup` 现在优先合并配置 Warehouse 的 coverage/file evidence，
+  没有 ACTIVE evidence 的图层继续走原有 geometry/tile fallback。Euclid 真实验收返回 1
+  个文件、10 个匹配 cell、`precision=estimated`、`completeness=incomplete`，内部
+  `oss://` 仅作为定位符，不生成伪造下载地址；官方 ESA/CDS 入口仍单独列出。DESI
+  Tile 反查回归保持原有官方目录结果。
+- 已完成一个可复核的天球闭环：公开 Euclid Q1 VIS MOC 与该文件的 WCS coverage edge 在
+  O8 像元 **549012** 相交。Workspace `/api/sky/reverse-lookup` 线上返回该公共来源、
+  `fileEvidence`、真实 FITS 文件名
+  `EUC_MER_BGSUB-MOSAIC-VIS_TILE102018211-ACBD03_20241018T142710.276838Z_00.00.fits`
+  和 1,474,565,760 bytes；`oss://` 仅作为服务端定位符，因没有公共 HTTP 下载地址仍标为
+  不可直接下载。该结果证明反查链路已通，但只覆盖一个 MER Tile，不能代表整个 Q1 VIS。
+- 已部署 revision **203**，镜像
+  `1.0.0-20260921-warehouse-reverse-lookup-clarity`，site/backend 均 Ready、0 restarts。
+  健康 bundle 仍为 `reviewed-muaxa1h2-cfe90933`、503 文件、SHA-256
+  `d69e3366aaeb7c72c7f176a09a41f666c7dd49ad9805494b785355160d2e18e8`；没有修改公开 MOC、
+  Resource Package、发布记录或 Workspace/Warehouse 源码。
+- 后续扩展仍应按 VIS/NISP 波段和 Tile 范围逐步扫描，不把整个 MER 混合前缀当作科学影像，
+  不把当前单 Tile 结果升级为全量文件清单；每个新增范围都要保留 source snapshot、真实
+  order 和 completeness 限制。
+
+## 当前修复：Connector 删除与 Euclid MER 核实（2026-09-21）
+
+- 已部署 revision **198**，镜像 `1.0.0-20260921-connector-delete`；site/backend 均
+  1/1 Ready、0 restarts。沿用拆分架构，Helm --reuse-values；未改 Warehouse/Workspace。
+- 数据来源详情新增带图标的“删除连接”和确认提示；DELETE 管理接口只移除 Assets
+  管理的连接 ConfigMap、探测/盘点缓存。未完成扫描或无法读取任务状态时拒绝删除。
+  Warehouse 原生连接在来源系统管理。本轮没有实际删除任何线上 connector。
+- 源文件、桶/PVC、扫描历史、覆盖与发布数据保留；Secret 也保留供冻结任务/共享引用。
+  重新创建同名连接使用新 Secret，不覆盖旧凭证。删除不等于撤销存储访问凭证。
+- `euclid-q1-mer-catalog` 实际指向整个 MER 前缀，目前零关联扫描。只读完整列举
+  17,597 个对象条目，包含 VIS BGSUB-MOSAIC 352 个、NISP H/J/Y 各 352 个，以及
+  地面辅助影像、背景、PSF、RMS、FLAG；未找到普通源星表命名对象。
+  CATALOG-PSF 抽样是 IMAGE；VIS 科学影像抽样包含 ICRS/TAN 和完整 WCS。
+  当前 Warehouse catalog-radec 读取文本星表，不能据此声称支持 FITS BINTABLE。
+- 下一步应以科学影像/Tile 为单位建立 WCS 覆盖和文件反查，按波段筛选并披露扫描范围，
+  让重合区域返回必要文件及大小；不是将整个 MER 当星表扫，也不是新增一张无文件关联的 MOC。
+  未启动扫描/构建/发布；建议保留 Euclid 连接。详见
+  [Connector 与 Euclid 核实](docs/connector-cleanup-and-euclid-mer.md)。
+- build、240 项 Node 测试、Core、site tsc、Helm lint、diff check 通过。回归覆盖任务
+  占用/状态不可用、状态清理、外部资源保护、同名重建不覆盖凭证。修正既有 globe toast
+  的浏览器定时器类型。线上浏览器验证确认/取消、409、成功刷新、外部连接禁用，
+  1440/900/390px 与明暗主题通过；所有浏览器写请求 mock。
+- 部署前后公开 bundle 均 `reviewed-muaxa1h2-cfe90933`、503 文件、SHA256
+  `d69e3366aaeb7c72c7f176a09a41f666c7dd49ad9805494b785355160d2e18e8`，未改发布数据。
+  实际 connector GET 200，原五个连接均保留。代码与本文未提交；会话开始 worktree 干净。
+- 临时验证：`/dev/shm/assets-connector-*`、`/dev/shm/assets-euclid-mer-inspection.jsonl`；
+  `/tmp/verify-connector-delete.py` 与 `/tmp/inspect-euclid-connector.mjs`。无凭证日志。
 
 ## 当前修复：多图层重合下载计划（2026-09-21）
 
@@ -33,12 +227,13 @@
   现在加载转圈、成功、模型未列出和失败均在按钮下方显示，最多等待 25 秒。
   保存/清除、创建/撤销分别在对应区域反馈；公开下载解锁按钮不受管理页样式影响。
 - `region:query` 统一授权区域查询和 `/api/v1/coverage/reverse-lookup` 下载计划。
-  天球“下载密码或 API Key”框支持已签发 Key，使用请求头提交，明文不写浏览器存储。
+  天球下载解锁框仅接受已签发的 `region:query` API Key，使用请求头提交，明文不写浏览器存储。
   Key 解锁得到最长一小时的 HttpOnly/SameSite 会话；后台只保存关联 Key ID，查询时
   重新检查有效期、撤销、scope、限流并记统计，撤销立即影响已解锁会话。
-  解锁也计入 Key 次数；原密码/Workspace Key 保持兼容。Key 会话重启后需重新解锁。
-- site 将 managed Key/会话请求转发 backend，并保留原 Host 供同源检查；普通密码会话
-  仍由 site 处理。区域查询与反查共用授权检查，反查仍保留 layerIds/order/cells 输入
+  解锁也计入 Key 次数；旧下载密码不再接受，Workspace 服务 Key 只用于服务端调用。
+  Key 会话重启后需重新解锁。
+- site 将 managed Key/会话请求转发 backend，并保留原 Host 供同源检查；不再处理普通密码会话。
+  区域查询与反查共用授权检查，反查仍保留 layerIds/order/cells 输入
   和 downloadPlan 输出，不能误按 region-query 请求体处理；授权不补造缺失文件索引。
 - build、236 项测试、Core、site 类型检查、Helm lint/diff check 通过。
   HTTP fixture 覆盖代理同源、密码兼容、Key 会话实际下载计划、已解锁后撤销/限流与

@@ -28,6 +28,17 @@ export interface OverlapResult {
   components: OverlapComponent[];
 }
 
+/** Return only the published layers whose real cells intersect one component. */
+export function layersForOverlapComponent(
+  layers: readonly CoverageCellLayer[],
+  result: OverlapResult,
+  component: OverlapComponent,
+): CoverageCellLayer[] {
+  const componentCells = new Set(component.cells);
+  return layers.filter((layer) => result.surveyIds.includes(layer.surveyId)
+    && Boolean(layer.cells.get(component.order)?.some((cell) => componentCells.has(cell))));
+}
+
 const SIDE_NEIGHBOUR_INDICES = [0, 2, 4, 6] as const;
 const healpixCache = new Map<number, Healpix>();
 

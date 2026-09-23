@@ -60,6 +60,15 @@ export class ConnectorProbeStateStore {
     await this.#writeQueue;
   }
 
+  async remove(name: string): Promise<void> {
+    this.#writeQueue = this.#writeQueue.then(async () => {
+      const state = await this.load();
+      delete state.probes[name];
+      await this.persist(state);
+    });
+    await this.#writeQueue;
+  }
+
   private async load(): Promise<PersistedConnectorProbeState> {
     if (this.#state) return this.#state;
     if (!this.#loadPromise) {
@@ -129,6 +138,15 @@ export class ConnectorInventoryStateStore {
     this.#writeQueue = this.#writeQueue.then(async () => {
       const state = await this.load();
       state.inventories[normalizedName] = { ...value };
+      await this.persist(state);
+    });
+    await this.#writeQueue;
+  }
+
+  async remove(name: string): Promise<void> {
+    this.#writeQueue = this.#writeQueue.then(async () => {
+      const state = await this.load();
+      delete state.inventories[name];
       await this.persist(state);
     });
     await this.#writeQueue;

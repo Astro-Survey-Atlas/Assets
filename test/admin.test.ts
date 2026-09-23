@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { AdminHttpError, AssetsAdmin, buildConnectorResource, buildConnectorResources, buildTaskResource, connectorView, mocDiscoveryState, taskView, type ObjectStorageProbeInput } from "../server/admin.js";
+import { AdminHttpError, KubernetesApiError, AssetsAdmin, buildConnectorResource, buildConnectorResources, buildTaskResource, connectorView, mocDiscoveryState, taskView, type ObjectStorageProbeInput } from "../server/admin.js";
 import { ConnectorInventoryStateStore, ConnectorProbeStateStore } from "../server/connector-state.js";
 import { aggregateWorkAttempts } from "../site/admin/work-items.js";
 
@@ -362,6 +362,8 @@ test("local coverage tasks translate relative paths into a read-only source PVC 
     basePath: "cosmos-parameter-prediction",
   } as never);
   const plan = resource.spec?.plan as Record<string, unknown>;
+  assert.equal((plan.layer as Record<string, unknown>).product, undefined);
+  assert.equal((resource.spec?.scanner as Record<string, unknown>).backoffLimit, 0);
   assert.deepEqual((plan.source as Record<string, unknown>).location, { rootPath: "/data/web_predictions_COSMOS_prediction_dataset.csv" });
   assert.deepEqual((resource.spec?.scanner as Record<string, unknown>).sourceVolume, {
     claimName: "atlas-source-catalogs",
@@ -682,6 +684,7 @@ test("task resubmission preserves the plan and creates a fresh immutable identit
   assert.deepEqual(Object.keys(metadata).sort(), ["labels", "name", "namespace"]);
   const plan = ((created?.spec as Record<string, unknown>).plan as Record<string, unknown>);
   assert.notEqual(plan.scanRunId, "image-probe-run");
+  assert.equal((plan.layer as Record<string, unknown>).product, undefined);
   assert.match(((plan.evidence as Record<string, unknown>).outputPath as string), /^\/evidence\/image-probe-retry-/);
   assert.equal(((plan.source as Record<string, unknown>).connector as Record<string, unknown>).endpoint, "https://new-object.example");
   assert.deepEqual((created?.spec as Record<string, unknown>).credentials, { source: { secretName: "image-source-credentials", accessKeyKey: "accessKey", secretKeyKey: "secretKey" } });
@@ -759,6 +762,7 @@ test("local task resubmission refreshes the PVC mount without adding credentials
   await new AssetsAdmin(config, kube as never).resubmitTask("cosmos-catalog-scan");
   const spec = created?.spec as Record<string, unknown>;
   assert.deepEqual(spec.credentials, {});
+  assert.equal(((spec.plan as Record<string, unknown>).layer as Record<string, unknown>).product, undefined);
   assert.deepEqual((spec.scanner as Record<string, unknown>).sourceVolume, { claimName: "atlas-source-catalogs", mountPath: "/data", subPath: "cosmos-parameter-prediction" });
 });
 
@@ -814,4 +818,68 @@ test("discovery errors survive the Warehouse status projection without leaking r
   assert.equal(JSON.stringify(detail).includes("private evidence"), false);
   assert.equal(JSON.stringify(detail).includes("token=secret"), false);
   assert.deepEqual((await admin.listMocDiscoveryRequests())[0]?.status.failure, detail.status.failure);
+});
+
+test("connector deletion blocks unfinished scans, preserves history and never deletes storage or credentials", async () => {
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const resource = buildConnectorResources({ name: "old-source", type: "s3", endpoint: "https://object.example", bucket: "data", accessKey: "key", secretKey: "secret" }, "warehouse").configMap;
+  const root = await mkdtemp(path.join(os.tmpdir(), "delete-connector-"));
+  try {
+    const probes = new ConnectorProbeStateStore(root);
+    const inventories = new ConnectorInventoryStateStore(root);
+    await probes.set("old-source", { phase: "READY", checkedAt: new Date().toISOString() });
+    await inventories.set("old-source", { phase: "COMPLETE", updatedAt: new Date().toISOString() });
+    const deleted: string[] = [];
+    let phase: string | undefined = "RUNNING";
+    let fail = false;
+    const kube = {
+      getCore: async () => resource,
+      list: async () => {
+        if (fail) throw new Error("status unavailable");
+        return [{ metadata: { name: "scan", labels: { "astro.zhejianglab.org/source-connector": "old-source" } }, status: { phase } }];
+      },
+      deleteCore: async (plural: string, name: string) => { deleted.push(`${plural}/${name}`); },
+    };
+    const admin = new AssetsAdmin(config, kube as never, undefined, probes, inventories);
+    for (phase of ["RUNNING", "PENDING", undefined]) {
+      await assert.rejects(admin.deleteConnector("old-source"), (e: unknown) => e instanceof AdminHttpError && e.statusCode === 409);
+    }
+    fail = true;
+    await assert.rejects(admin.deleteConnector("old-source"), /status unavailable/);
+    assert.deepEqual(deleted, []);
+    fail = false;
+    phase = "SUCCEEDED";
+    assert.deepEqual(await admin.deleteConnector("old-source"), { deleted: true, name: "old-source" });
+    assert.deepEqual(deleted, ["configmaps/old-source"]);
+    assert.equal(await new ConnectorProbeStateStore(root).get("old-source"), undefined);
+    assert.equal(await new ConnectorInventoryStateStore(root).get("old-source"), undefined);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("connector deletion refuses Warehouse-owned resources and unknown names", async () => {
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const native = { apiVersion: "org.zhejianglab.astro.metadata/v1alpha1", kind: "AstroDataSource", metadata: { name: "native" }, spec: { type: "s3" } };
+  let resource: typeof native | null = native;
+  const admin = new AssetsAdmin(config, { getCore: async () => null, getDataSource: async () => resource, deleteCore: async () => assert.fail("must not delete") } as never);
+  await assert.rejects(admin.deleteConnector("native"), (e: unknown) => e instanceof AdminHttpError && e.statusCode === 409);
+  resource = null;
+  await assert.rejects(admin.deleteConnector("missing"), (e: unknown) => e instanceof AdminHttpError && e.statusCode === 404);
+});
+
+
+test("recreating a deleted connector leaves historical credentials unchanged", async () => {
+  const config = { enabled: true, namespace: "warehouse", adminToken: "token", kubeToken: "token", apiBaseUrl: "https://kube", tokenFile: "", caFile: "", warehouseEsUrl: "http://es", scannerImage: "scanner", evidenceClaimName: "evidence", evidenceMountPath: "/evidence" };
+  const created: Array<{ plural: string; resource: ReturnType<typeof buildConnectorResource> }> = [];
+  const admin = new AssetsAdmin(config, {
+    createCore: async (plural: string, resource: ReturnType<typeof buildConnectorResource>) => {
+      if (plural === "secrets" && resource.metadata?.name === "old-source-credentials") throw new KubernetesApiError(409, "exists");
+      created.push({ plural, resource: structuredClone(resource) });
+      return resource;
+    },
+    deleteCore: async () => assert.fail("must not delete old credentials"),
+  } as never);
+  await admin.createConnector({ name: "old-source", type: "s3", endpoint: "https://object.example", bucket: "data", accessKey: "new-key", secretKey: "new-secret" });
+  assert.equal(created.length, 2);
+  assert.match(created[0]!.resource.metadata!.name!, /^old-source-cred-/);
+  assert.equal(created[1]!.resource.data!.credentialSecretName, created[0]!.resource.metadata!.name);
 });

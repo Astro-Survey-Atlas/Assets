@@ -38,7 +38,7 @@ test("HTTP hot activation, frozen dossier, protected queries and atomic withdraw
  assert.equal((await query({})).status,401);
  const result=await query({"X-Assets-API-Key":"test-service-key"});assert.equal(result.status,200);const data=await result.json() as any;assert.deepEqual(data.sources[0].cells,[163327]);assert.equal(data.sources[0].accessAvailability,"geometry-only");assert.deepEqual(data.sources[0].downloads,[]);
  assert.equal((await query({"X-Assets-API-Key":"test-service-key"},{...body,sources:[{...body.sources[0]!,coverageRevision:"stale"}]})).status,409);
- const unlock=await fetch(`${base}/api/v1/access/unlock`,{method:"POST",headers:{Origin:base,"Content-Type":"application/json"},body:JSON.stringify({password:"123"})});assert.equal(unlock.status,200);const cookie=unlock.headers.get("set-cookie")!;assert.match(cookie,/HttpOnly/);assert.equal((await query({Origin:base,Cookie:cookie})).status,200);assert.equal((await query({Origin:"https://evil.invalid",Cookie:cookie})).status,403);
+ const unlock=await fetch(`${base}/api/v1/access/unlock`,{method:"POST",headers:{Origin:base,"Content-Type":"application/json"},body:JSON.stringify({password:"123"})});assert.equal(unlock.status,401,"password unlock is retired");
  // Mutable retirement alone must not hide the frozen public release.
  f.products[0]!.retiredAt=new Date().toISOString();f.products[0]!.retirementReason="Withdraw fixture";f.products[0]!.revision++;
  assert.equal((await get("/api/v1/products/product-1")).status,200);

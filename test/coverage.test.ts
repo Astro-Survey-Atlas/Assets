@@ -4,6 +4,7 @@ import test from "node:test";
 import { coverageCatalogFromWarehouse, type CoverageCellLayer } from "../server/coverage.js";
 import type { WarehouseCoverageCatalogSnapshot } from "../server/evidence-store.js";
 import { footprintManifest, type CoverageCatalog } from "../site/src/atlas-coverage-globe.js";
+import { sourceVariantColor } from "../site/src/atlas/survey-layer-viewer.js";
 import { buildSurveyLayerModel, visibleCoverageAtPixel, visibleSurveySlots } from "../site/src/atlas/survey-layer-model.js";
 import { buildSphericalCellSourceSectorGeometry } from "../site/src/atlas/spherical-cell-geometry.js";
 import * as THREE from "three";
@@ -187,6 +188,22 @@ test("single-survey source membership is keyed by layer identity and sorted dete
   assert.deepEqual(model.sourcesBySurveyPixel.get("demo")?.get(5)?.map((source) => [source.identity, source.label]), [["layer-a", "Product A"], ["layer-z", "Product Z"]]);
   assert.deepEqual(model.sourceIdentitiesBySurvey.get("demo"), ["layer-a", "layer-z"]);
   assert.deepEqual(visibleCoverageAtPixel(model, 5, ["demo"])?.artifacts.map((artifact) => artifact.layerId), ["layer-a", "layer-z"]);
+});
+
+test("every survey keeps its base hue while products receive distinct shade variants", () => {
+  for (const value of ["#a7d9ff", "#f3b55d", "#95dc9b"]) {
+    const base = new THREE.Color(value);
+    const baseHsl = { h: 0, s: 0, l: 0 };
+    base.getHSL(baseHsl);
+    const variants = [0, 1, 2].map((index) => sourceVariantColor(base, index, 3));
+    const lightness = variants.map((variant) => {
+      const hsl = { h: 0, s: 0, l: 0 };
+      variant.getHSL(hsl);
+      assert.ok(Math.abs(hsl.h - baseHsl.h) < 1e-9);
+      return hsl.l;
+    });
+    assert.ok(lightness[0]! < lightness[1]! && lightness[1]! < lightness[2]!);
+  }
 });
 
 test("source sector geometry emits one center fan sector per source", () => {

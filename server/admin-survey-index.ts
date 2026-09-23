@@ -28,7 +28,7 @@ export function adminInventoryIndex(index: PublicSurveyIndex, records: readonly 
       survey.releases.push(release);
     }
     // Registration preserves the scientific identity; no guess based on a candidate title.
-    const allowed: PublicSurveyModality[] = ["imaging", "spectroscopy", "photometry", "time-domain", "integral-field", "ultraviolet", "infrared", "catalog", "simulation"];
+    const allowed: PublicSurveyModality[] = ["imaging", "spectroscopy", "photometry", "time-domain", "integral-field", "ultraviolet", "infrared", "catalog", "simulation", "radio"];
     const modality: PublicSurveyModality = draft.modality === "image" ? "imaging" : draft.modality === "spectrum" ? "spectroscopy"
       : allowed.includes(draft.modality as PublicSurveyModality) ? draft.modality as PublicSurveyModality : "catalog";
     if (!release.modalities.includes(modality)) release.modalities.push(modality);

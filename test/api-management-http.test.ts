@@ -41,6 +41,12 @@ test("API management HTTP authorization and managed region requests preserve ano
  const proxy=http.createServer((req,res)=>proxyAdmin(req,res,base,true));await new Promise<void>(r=>proxy.listen(0,"127.0.0.1",r));
  t.after(()=>new Promise<void>(r=>proxy.close(()=>r())));
  const publicBase=`http://127.0.0.1:${(proxy.address() as net.AddressInfo).port}`;
+ const previewBody={layerIds:[f.layerId],order:8,cells:[163327],preview:true};
+ const preview=await fetch(publicBase+"/api/v1/coverage/reverse-lookup",{method:"POST",headers:{Origin:publicBase,"Content-Type":"application/json"},body:JSON.stringify(previewBody)});
+ assert.equal(preview.status,200,"anonymous overlap preview is available");
+ assert.equal((await preview.json()).preview.limit,6);
+ const unauthenticatedPlan=await fetch(publicBase+"/api/v1/coverage/reverse-lookup",{method:"POST",headers:{Origin:publicBase,"Content-Type":"application/json"},body:JSON.stringify({...previewBody,preview:false})});
+ assert.equal(unauthenticatedPlan.status,401,"full reverse lookup requires an API Key");
  const unlock=(origin:string)=>fetch(publicBase+"/api/v1/access/unlock",{method:"POST",headers:{Origin:origin,"X-Assets-API-Key":issued.key,"Content-Type":"application/json"},body:"{}"});
  assert.equal((await unlock("https://other.example")).status,403);
  const unlocked=await unlock(publicBase);assert.equal(unlocked.status,200);const cookie=unlocked.headers.get("set-cookie")!;
@@ -54,7 +60,7 @@ test("API management HTTP authorization and managed region requests preserve ano
  await fetch(base+route+`/keys/${issued.id}/revoke`,{method:"POST",headers:auth});
  assert.equal((await browserQuery("/api/v1/access/region-query")).status,401,"revoke invalidates already unlocked sessions");
  assert.equal((await browserQuery("/api/v1/coverage/reverse-lookup")).status,401);
- const passwordUnlock=await fetch(base+"/api/v1/access/unlock",{method:"POST",headers:{Origin:base,"Content-Type":"application/json"},body:JSON.stringify({password:"123"})});assert.equal(passwordUnlock.status,200,"original password preserved");
+ const passwordUnlock=await fetch(base+"/api/v1/access/unlock",{method:"POST",headers:{Origin:base,"Content-Type":"application/json"},body:JSON.stringify({password:"123"})});assert.equal(passwordUnlock.status,401,"password unlock is retired");
  const limited=await (await fetch(base+route+"/keys",{method:"POST",headers:auth,body:JSON.stringify({name:"limited browser",scopes:["region:query"],perMinute:1})})).json();
  const limitedUnlock=await fetch(base+"/api/v1/access/unlock",{method:"POST",headers:{Origin:base,"X-Assets-API-Key":limited.key,"Content-Type":"application/json"},body:"{}"});assert.equal(limitedUnlock.status,200);
  const limitQuery=await fetch(base+"/api/v1/coverage/reverse-lookup",{method:"POST",headers:{Origin:base,Cookie:limitedUnlock.headers.get("set-cookie")!.split(";")[0]!,"Content-Type":"application/json"},body:"{}"});assert.equal(limitQuery.status,429,"browser session retains Key rate limit");

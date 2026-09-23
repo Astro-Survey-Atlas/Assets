@@ -5,6 +5,8 @@ import { publicManifest, type LoadedCatalog } from "./catalog.js";
 import type { PublicAssetProjection, PublicAssetRecord, PublicCoverageOrderSummary, PublicSurveyCatalog, PublicSurveyRecord } from "./types.js";
 import { productId } from "./products.js";
 
+export type SurveyModality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog" | "simulation" | "radio";
+
 type DownloadableAsset = PublicAssetProjection;
 
 export interface PublicSurveyIndex {

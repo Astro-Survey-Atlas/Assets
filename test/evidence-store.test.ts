@@ -11,7 +11,7 @@ test("download plans deduplicate files while retaining every matching cell", () 
       { edgeId: "edge-3", layerId: "layer-2", sourceFileId: "file-2", sourceUri: "https://data.example/image.fits", fileName: "image.fits", order: 8, ipix: 101, precision: "estimated" },
     ],
     sourceFiles: [
-      { file_id: "file-1", source_uri: "s3://bucket/catalog.fits", file_name: "catalog.fits", file_type: "FITS", size_bytes: 12 },
+      { file_id: "file-1", source_uri: "s3://bucket/catalog.fits", file_name: "catalog.fits", file_type: "FITS", size_bytes: 12, unit_kind: "tile", unit_id: "101", download_provider: "example" },
       { file_id: "file-2", source_uri: "https://data.example/image.fits", file_name: "image.fits", file_type: "FITS", size_bytes: 34 },
     ],
     entrypoints: [{ kind: "coverage-moc", purpose: "coverage-reference", layerId: "layer-1", url: "https://data.example/coverage.moc.fits", precision: "entrypoint-only" }],
@@ -23,6 +23,9 @@ test("download plans deduplicate files while retaining every matching cell", () 
   assert.equal(plan.files[0]?.sourceUri, "s3://bucket/catalog.fits");
   assert.equal(plan.files[0]?.downloadable, false);
   assert.equal(plan.files[0]?.downloadUrl, undefined);
+  assert.equal(plan.files[0]?.unitKind, "tile");
+  assert.equal(plan.files[0]?.unitId, "101");
+  assert.equal(plan.files[0]?.downloadProvider, "example");
   assert.equal(plan.files[1]?.downloadable, true);
   assert.equal(plan.files[1]?.downloadUrl, "https://data.example/image.fits");
   assert.equal(plan.entrypoints[0]?.kind, "coverage-moc");

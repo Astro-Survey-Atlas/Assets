@@ -65,7 +65,7 @@ export interface PublicAssetManifest {
   files: PublicAssetRecord[];
 }
 
-export type PublicSurveyModality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog" | "simulation";
+export type PublicSurveyModality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog" | "simulation" | "radio";
 export type PublicProductStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
 
 export interface PublicCoverageOrders {

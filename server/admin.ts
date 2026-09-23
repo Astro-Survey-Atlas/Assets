@@ -1,5 +1,5 @@
 import { discoveryFailureView, type DiscoveryFailure } from "./discovery-failure.js";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage, type RequestOptions as HttpRequestOptions } from "node:http";
 import { request as httpsRequest, type RequestOptions as HttpsRequestOptions } from "node:https";
@@ -1285,7 +1285,6 @@ function buildTaskResource(
       surveyId,
       releaseId,
       productId: resolvedProductId,
-      product: product,
       modality: warehouseModality(input.modality, mode),
       coverageRole: warehouseCoverageRole(coverageRole),
     },
@@ -1316,7 +1315,9 @@ function buildTaskResource(
     spec: {
       scanner: {
         image: config.scannerImage,
-        backoffLimit: 1,
+        // Warehouse treats extraction failures as terminal; retries are
+        // explicit new ScanRequests rather than Job-level retries.
+        backoffLimit: 0,
         activeDeadlineSeconds: 86_400,
         ttlSecondsAfterFinished: 86_400,
         evidence: { claimName: config.evidenceClaimName, mountPath: config.evidenceMountPath },
@@ -1600,13 +1601,48 @@ export class AssetsAdmin {
     }
   }
 
+  async deleteConnector(name: string): Promise<{ deleted: true; name: string }> {
+    const normalized = dnsName(name, "connector name");
+    const resource = await this.connectorResource(normalized);
+    if (!resource) throw new AdminHttpError(404, `Connector ${normalized} was not found`);
+    if (!isManagedConnector(resource) || isWarehouseDataSource(resource)) {
+      throw new AdminHttpError(409, "此连接由 Warehouse 管理，请在其来源系统删除。");
+    }
+    // Fail closed when task status cannot be read. Completed history remains intact.
+    const tasks = await this.kube.list("scanrequests", "");
+    const active = tasks.filter(task => {
+      const plan = task.spec?.plan as Record<string, unknown> | undefined;
+      const source = plan?.source as Record<string, unknown> | undefined;
+      const connector = source?.connector as Record<string, unknown> | undefined;
+      const related = task.metadata?.labels?.["astro.zhejianglab.org/source-connector"] === normalized || connector?.name === normalized;
+      return related && !["SUCCEEDED", "FAILED", "CANCELLED", "CANCELED"].includes(String(task.status?.phase ?? "").toUpperCase());
+    });
+    if (active.length) throw new AdminHttpError(409, `连接仍被未完成的扫描任务使用：${active.map(task => task.metadata?.name).join("、")}。请等待任务结束后删除。`);
+    // Retain credential Secrets: historical frozen ScanPlans can reference them.
+    // Deleting a connection must not break historical retries or shared credentials.
+    await this.kube.deleteCore("configmaps", normalized, this.config.namespace);
+    await this.probeStateStore?.remove(normalized);
+    await this.inventoryStateStore?.remove(normalized);
+    return { deleted: true, name: normalized };
+  }
+
   async createConnector(input: ConnectorInput): Promise<ConnectorView> {
     const resources = connectorDetails(input, this.config.namespace);
     const resource = resources.configMap;
     const created: Array<{ plural: string; name: string; namespace?: string }> = [];
     try {
       if (resources.secret && resources.secretName) {
-        await this.kube.createCore("secrets", resources.secret, this.config.namespace);
+        try {
+          await this.kube.createCore("secrets", resources.secret, this.config.namespace);
+        } catch (error) {
+          if (!(error instanceof KubernetesApiError && error.statusCode === 409)) throw error;
+          // A deleted connector's credentials may still serve frozen historical plans.
+          // A replacement gets a fresh Secret and must never overwrite those credentials.
+          resources.secretName = managedResourceName(String(resource.metadata?.name), `cred-${randomUUID().slice(0, 8)}`);
+          resources.secret.metadata = { ...resources.secret.metadata, name: resources.secretName };
+          resource.data!.credentialSecretName = resources.secretName;
+          await this.kube.createCore("secrets", resources.secret, this.config.namespace);
+        }
         created.push({ plural: "secrets", name: resources.secretName, namespace: this.config.namespace });
       }
       return connectorView(await this.kube.createCore("configmaps", resource, this.config.namespace));
@@ -1781,6 +1817,12 @@ export class AssetsAdmin {
     }
     const originalSource = originalPlan.source && typeof originalPlan.source === "object"
       ? originalPlan.source as Record<string, unknown> : {};
+    // Older Assets tasks carried a display-only `product` field in LayerSpec.
+    // Warehouse v2 rejects that field, so normalize it during resubmission
+    // while preserving every other part of the historical plan.
+    const originalLayer = originalPlan.layer && typeof originalPlan.layer === "object"
+      ? originalPlan.layer as Record<string, unknown> : {};
+    const { product: _legacyProduct, ...normalizedLayer } = originalLayer;
     const refreshedSpec = structuredClone(originalSpec);
     const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
     const retryName = dnsName(`${normalized.slice(0, 45)}-retry-${timestamp}`, "retry task name");
@@ -1805,6 +1847,7 @@ export class AssetsAdmin {
     }
     refreshedSpec.plan = {
       ...structuredClone(originalPlan),
+      layer: normalizedLayer,
       source: { ...structuredClone(originalSource), connector: buildSourceConnectorPlan(definition) },
       scanRunId: retryRunId,
       evidence: { ...structuredClone(evidence), outputPath: `${this.config.evidenceMountPath.replace(/\/+$/, "")}/${retryRunId}` },

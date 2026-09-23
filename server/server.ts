@@ -9,7 +9,7 @@ import { ReleaseSynchronizer } from "./release-synchronizer.js";
 import { PublicationScheduler } from "./publication-scheduler.js";
 import { proxyAdmin } from "./admin-proxy.js";
 import { createReadStream } from "node:fs";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { open, readFile, realpath, stat } from "node:fs/promises";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
@@ -22,7 +22,7 @@ import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } fro
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex } from "./surveys.js";
 import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog, withCoverageRevisions, type CoverageCellLayer } from "./coverage.js";
-import { overlapForLayers } from "./overlap.js";
+import { layersForOverlapComponent, overlapForLayers } from "./overlap.js";
 import { AccessGate, AccessError, queryRegion } from "./region-access.js";
 import { loadPublicState } from "./public-state.js";
 import { ProductStore, type MocProductRegistrationInput, type ProductExecutionRecord, type ProductRecord } from "./products.js";
@@ -30,7 +30,9 @@ import { currentReview, productGeometry, readApprovedRelease, PUBLICATION_POLICY
 import { aggregateReadiness, deriveProductReadiness, type ProductReadiness, type ReadinessAggregate, type ReadinessLayer } from "./admin-readiness.js";
 import { SurveyEditorialStore, type SurveyEditorialContent, type SurveyEditorialRecord } from "./editorial.js";
 import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
-import { CoverageEvidenceStore, EvidenceStoreError, type DownloadPlanEntrypoint, type ReverseLookupResult, type WarehouseLayerSnapshot } from "./evidence-store.js";
+import { buildDownloadPlan, CoverageEvidenceStore, EvidenceStoreError, type DownloadPlan, type DownloadPlanEntrypoint, type ReverseLookupResult, type WarehouseLayerSnapshot } from "./evidence-store.js";
+import { decodeReverseCursor, encodeReverseCursor, pageReversePlan, reversePageSize, reversePlanItems, REVERSE_PAGE_SIZE } from "./reverse-pagination.js";
+import { resolveEuclidQ1MerFile } from "./euclid-data-links.js";
 import { buildOverlapDetails, publicExternalUrl, publicLocator } from "./overlap-details.js";
 import { resolveMocDiscoveryCandidate } from "./moc-discovery.js";
 import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
@@ -51,20 +53,15 @@ const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
 const accessGate=new AccessGate();
 async function handleDownloadUnlock(request:IncomingMessage,response:ServerResponse):Promise<void> {
-  let token: string;
   const apiKey = request.headers["x-assets-api-key"];
-  if (typeof apiKey === "string" && apiKey.startsWith(MANAGED_KEY_PREFIX)) {
-    accessGate.sameOrigin(request);
-    if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
-    if (!apiManagement) throw new AccessError(503, "API management unavailable");
-    const started = Date.now(), route = "/api/v1/access/unlock";
-    let id: string | undefined;
-    token = accessGate.unlockKey(request, () => { id = apiManagement.authorize(apiKey, "region:query", route); return id; });
-    apiManagement.recordKey(id!, route, 200, Date.now()-started);
-  } else {
-    const body=await requestJsonBody(request,8192);
-    token=accessGate.unlock(request,body.password);
-  }
+  if (typeof apiKey !== "string" || !apiKey.startsWith(MANAGED_KEY_PREFIX)) throw new AccessError(401, "API Key required");
+  accessGate.sameOrigin(request);
+  if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+  if (!apiManagement) throw new AccessError(503, "API management unavailable");
+  const started = Date.now(), route = "/api/v1/access/unlock";
+  let id: string | undefined;
+  const token = accessGate.unlockKey(request, () => { id = apiManagement.authorize(apiKey, "region:query", route); return id; });
+  apiManagement.recordKey(id!, route, 200, Date.now()-started);
   response.setHeader("Cache-Control", "no-store");
   const secure=request.headers["x-forwarded-proto"]==="https"?"; Secure":"";
   response.setHeader("Set-Cookie",`assets_download=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600${secure}`);
@@ -449,7 +446,7 @@ function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurv
   if (!published.length) return index;
   const records = new Map(published.map((record) => [record.productId, record.published]));
   const publicModality = (value: string | undefined): PublicSurveyModality => {
-    const allowed: PublicSurveyModality[] = ["imaging", "spectroscopy", "photometry", "time-domain", "integral-field", "ultraviolet", "infrared", "catalog", "simulation"];
+    const allowed: PublicSurveyModality[] = ["imaging", "spectroscopy", "photometry", "time-domain", "integral-field", "ultraviolet", "infrared", "catalog", "simulation", "radio"];
     return value && allowed.includes(value as PublicSurveyModality) ? value as PublicSurveyModality : "catalog";
   };
   const applyOverride = <T extends object>(product: T, override: ProductRecord["published"]): T => ({
@@ -2032,6 +2029,10 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     if (pathname === "/api/v1/admin/overview" && request.method === "GET") {
       return json(response, 200, await adminOverview());
     }
+    const connectorDeleteMatch = /^\/api\/v1\/admin\/connectors\/([^/]+)$/.exec(pathname);
+    if (connectorDeleteMatch?.[1] && request.method === "DELETE") {
+      return json(response, 200, await admin.deleteConnector(decodeURIComponent(connectorDeleteMatch[1])));
+    }
     const connectorProbeMatch = /^\/api\/v1\/admin\/connectors\/([^/]+)\/probe$/.exec(pathname);
     if (connectorProbeMatch?.[1] && request.method === "POST") {
       return json(response, 200, { connector: await admin.probeConnector(decodeURIComponent(connectorProbeMatch[1])) });
@@ -2412,7 +2413,25 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
   const result = overlapForLayers([...publicCoverageCatalog().records.values()], surveyIds, requestedOrder);
   if (!result) return json(response, 400, { error: "At least two surveys with a common HEALPix order are required" });
   const selectedLayers = [...publicCoverageCatalog().records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
-  const componentDetails=result.components.map(component=>({...component,evidenceLookup:{endpoint:"/api/v1/coverage/reverse-lookup",layerIds:selectedLayers.map(l=>l.layerId),order:component.order,precision:"estimated",deferred:true},surveys:selectedLayers.map(layer=>({surveyId:layer.surveyId,releaseId:layer.releaseId,product:layer.product,modality:layer.modality??"coverage"}))}));
+  const componentDetails = result.components.map((component) => {
+    const componentLayers = layersForOverlapComponent(selectedLayers, result, component);
+    return {
+      ...component,
+      evidenceLookup: {
+        endpoint: "/api/v1/coverage/reverse-lookup",
+        layerIds: componentLayers.map((layer) => layer.layerId),
+        order: component.order,
+        precision: "estimated" as const,
+        deferred: false as const,
+      },
+      surveys: componentLayers.map((layer) => ({
+        surveyId: layer.surveyId,
+        releaseId: layer.releaseId,
+        product: layer.product,
+        modality: layer.modality ?? "coverage",
+      })),
+    };
+  });
 
   return compressedJson(request, response, 200, { ...result, components: componentDetails }, "public, max-age=60, stale-while-revalidate=120");
 }
@@ -2428,7 +2447,7 @@ async function sendCoverageOverlapDetails(request: IncomingMessage, response: Se
   const component = result.components.find((candidate) => candidate.id === componentId);
   if (!component) return json(response, 404, { error: "Overlap component not found for the current survey selection" });
   const selectedLayers = [...publicCoverageCatalog().records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
-  const details = buildOverlapDetails({ result, component, layers: selectedLayers, surveyIndex: publicSurveyIndex(), catalog:publicState.catalog, sourceUnitsByLayer:new Map(), warehouseSnapshots:new Map() });
+  const details = buildOverlapDetails({ result, component, layers: selectedLayers, surveyIndex: publicSurveyIndex(), sourceIndex: runtimeSurveyIndex, catalog:publicState.catalog, sourceUnitsByLayer:new Map(), warehouseSnapshots:new Map() });
 
   return compressedJson(request, response, 200, details, "public, max-age=60, stale-while-revalidate=120");
 }
@@ -2436,7 +2455,10 @@ async function sendCoverageOverlapDetails(request: IncomingMessage, response: Se
 function publicReverseEntrypoints(layerIds: readonly string[], order: number, cells: readonly number[]): Array<Record<string, unknown>> {
   const requested = new Set(cells);
   return layerIds.flatMap((layerId) => {
-    const layer = coverageCatalog.records.get(layerId);
+    // Reverse lookup previews are a public contract. The runtime warehouse
+    // catalog may contain only scanned layers, so use the published coverage
+    // catalog here to keep entrypoint-only products visible as well.
+    const layer = publicCoverageCatalog().records.get(layerId);
     if (!layer) return [];
     const matchedCells = (layer.cells.get(order) ?? []).filter((cell) => requested.has(cell));
     if (!matchedCells.length) return [];
@@ -2527,6 +2549,71 @@ function normalizeReverseEntrypoints(entries: Array<Record<string, unknown>>): D
 
 const TILE_SELECTION_RULE = "all official tile footprints intersecting the current component cells";
 const TILE_SELECTION_NOTE = "下载本组件列出的全部 Tile 可获得覆盖当前重合区域的相关数据；Tile 内容可能超出组件边界，未做空间裁剪。";
+const PUBLIC_REVERSE_PREVIEW_LIMIT = 6;
+const reverseCursorSecret = process.env.ASSETS_REVERSE_CURSOR_SECRET?.trim() || randomUUID();
+
+function reverseQueryFingerprint(layerIds: readonly string[], order: number, cells: readonly number[]): string {
+  const revisions = layerIds.map((layerId) => ({ layerId, revision: publicCoverageCatalog().records.get(layerId)?.revision ?? "" }));
+  return nativeSha256(JSON.stringify({
+    releaseId: publicState.snapshot.releaseId,
+    layerIds: [...new Set(layerIds)].sort(),
+    order,
+    cells: [...new Set(cells)].sort((left, right) => left - right),
+    revisions,
+  }));
+}
+
+function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LIMIT): { plan: DownloadPlan; shown: number; omitted: number; hasMore: boolean } {
+  const files = plan.files.slice(0, limit);
+  const remaining = Math.max(0, limit - files.length);
+  const dataEntrypoints = plan.entrypoints.filter((entry) => entry.purpose === "data-access");
+  // Prefer concrete Tile/file entrypoints in the bounded preview. General
+  // release pages remain useful for layers without a file index, but they
+  // must not hide a real Tile link from another selected survey.
+  const concreteDataEntrypoints = dataEntrypoints.filter((entry) => entry.kind !== "official-release");
+  const releaseEntrypoints = dataEntrypoints.filter((entry) => entry.kind === "official-release");
+  const referenceEntrypoints = plan.entrypoints.filter((entry) => entry.purpose !== "data-access");
+  const entrypoints: DownloadPlanEntrypoint[] = [];
+  const selectedLayers = new Set<string>();
+  // Show one concrete result for every layer first. This keeps an overlap
+  // preview representative when one survey has many matching Tiles.
+  for (const entry of concreteDataEntrypoints) {
+    const layerId = entry.layerId ?? `${entry.surveyId ?? ""}:${entry.releaseId ?? ""}:${entry.product ?? ""}`;
+    if (selectedLayers.has(layerId) || entrypoints.length >= remaining) continue;
+    selectedLayers.add(layerId);
+    entrypoints.push(entry);
+  }
+  for (const entry of releaseEntrypoints) {
+    const layerId = entry.layerId ?? `${entry.surveyId ?? ""}:${entry.releaseId ?? ""}:${entry.product ?? ""}`;
+    if (selectedLayers.has(layerId) || entrypoints.length >= remaining) continue;
+    selectedLayers.add(layerId);
+    entrypoints.push(entry);
+  }
+  for (const entry of [...concreteDataEntrypoints, ...releaseEntrypoints, ...referenceEntrypoints]) {
+    if (entrypoints.length >= remaining) break;
+    if (entrypoints.includes(entry)) continue;
+    entrypoints.push(entry);
+  }
+  const shown = files.length + entrypoints.length;
+  const omitted = Math.max(0, plan.files.length + plan.entrypoints.length - shown);
+  const hasMore = plan.truncated || omitted > 0 || Boolean(plan.tileSelections?.some((selection) => selection.tileIds.length > limit));
+  const warnings = hasMore
+    ? [...new Set([...plan.warnings, `预览仅显示前 ${limit} 个 Tile/文件链接；还有更多结果，下载或导出完整清单需要 API Key。`])]
+    : plan.warnings;
+  return {
+    shown,
+    omitted,
+    hasMore,
+    plan: {
+      ...plan,
+      files,
+      entrypoints,
+      tileSelections: undefined,
+      truncated: hasMore,
+      warnings,
+    },
+  };
+}
 
 async function publicTileEntrypoints(layerIds: readonly string[], order: number, cells: readonly number[], limit: number): Promise<{ entries: DownloadPlanEntrypoint[]; selections: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; tileIds: string[]; selectionRule: string; complete: boolean; note: string }>; truncated: boolean }> {
   const layers = layerIds.map((layerId) => publicCoverageCatalog().records.get(layerId)).filter((layer): layer is CoverageCellLayer => Boolean(layer && layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "tile"));
@@ -2590,19 +2677,181 @@ async function withRegionAccess(request:IncomingMessage,response:ServerResponse,
 }
 
 async function sendCoverageReverseLookup(request:IncomingMessage,response:ServerResponse):Promise<void> {
- return withRegionAccess(request,response,async identity => {
+  if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
   const body=await requestJsonBody(request,256*1024);
+  const preview=body.preview===true;
+  const action=(identity:string)=>buildCoverageReverseLookup(request,response,body,identity,preview);
+  if (preview) return action(`preview:${request.socket.remoteAddress ?? "unknown"}`);
+  return withRegionAccess(request,response,action);
+}
+
+async function buildCoverageReverseLookup(request:IncomingMessage,response:ServerResponse,body:Record<string,unknown>,identity:string,preview:boolean):Promise<void> {
   if(!Array.isArray(body.layerIds)||body.layerIds.some(id=>typeof id!=="string"))throw new AccessError(400,"layerIds required");
+  if (!Number.isSafeInteger(body.order) || Number(body.order) < 0 || Number(body.order) > 13 || !Array.isArray(body.cells)) throw new AccessError(400, "order and cells are required");
+  const order = Number(body.order);
+  const cells = body.cells as number[];
+  const fingerprint = reverseQueryFingerprint(body.layerIds as string[], order, cells);
+  const cursor = decodeReverseCursor(body.cursor, identity, fingerprint, reverseCursorSecret);
+  if (preview && cursor) throw new AccessError(400, "Preview requests cannot continue a protected reverse lookup page");
+  const requestedPageSize = reversePageSize(body.pageSize);
+  const pageSize = requestedPageSize ?? (cursor ? REVERSE_PAGE_SIZE : undefined);
+  const seenKeys = new Set(cursor?.seenKeys ?? []);
+  const queryLimit = preview
+    ? PUBLIC_REVERSE_PREVIEW_LIMIT
+    : cursor
+      ? Math.min(1000, Math.max(pageSize! + seenKeys.size + 1, 1))
+      : body.limit;
   const sources=body.layerIds.map(id=>{
     const p=publicState.snapshot.products.find(p=>p.geometry?.layerId===id);
     if(!p?.geometry)throw new AccessError(404,"Published source not found");
     return {surveyId:p.content.surveyId,releaseId:p.content.releaseId,productId:p.productId,layerId:id,coverageRevision:p.geometry.coverageRevision,indexRevision:p.geometry.indexRevision};
   });
-  const result=await executeRegionQuery(request,{purpose:"download-plan",region:{coordinateFrame:"ICRS",ordering:"NESTED",order:body.order,cells:body.cells},sources,limit:body.limit},identity,64);
-  const entrypoints=result.sources.flatMap(s=>(s.downloads as Array<Record<string,unknown>>).map(d=>({...d,purpose:"data-access",layerId:s.layerId,product:s.product,order:s.order,nside:s.nside,cells:s.cells,precision:"estimated",required:true,selectionComplete:s.completeness==="complete",tileId:d.unitId,url:d.url,sourceUri:d.url,sourceScope:"tile-directory"})));
-  const truncated=result.sources.some(s=>s.completeness==="truncated");
-  compressedJson(request,response,200,{available:entrypoints.length>0,precision:"estimated",truncated,requested:{layerIds:body.layerIds,order:body.order,cells:body.cells},sources:result.sources,expiresAt:result.expiresAt,notes:result.sources.flatMap(s=>s.reason?[s.reason]:[]),downloadPlan:{schemaVersion:1,files:[],entrypoints,truncated,warnings:["Tile directories are candidate download units, not verified file lists."]}},"no-store");
- });
+  const result=await executeRegionQuery(request,{purpose:"download-plan",region:{coordinateFrame:"ICRS",ordering:"NESTED",order,cells},sources,limit:queryLimit},identity,64);
+  const fallbackEntrypoints=result.sources.flatMap(s=>(s.downloads as Array<Record<string,unknown>>).map(d=>({...d,purpose:"data-access",layerId:s.layerId,product:s.product,order:s.order,nside:s.nside,cells:s.cells,precision:"estimated",required:true,selectionComplete:s.completeness==="complete",tileId:d.unitId,url:d.url,sourceUri:d.url,sourceScope:"tile-directory"})));
+  const warehouseResults = new Map<string, ReverseLookupResult>();
+  if (evidenceStore.configured) {
+    const lookups = await Promise.all(body.layerIds.map(async (layerId) => {
+      try {
+        const lookup = await evidenceStore.reverseLookup({
+          layerIds: [layerId],
+          order,
+          cells,
+          ...(typeof queryLimit === "number" ? { limit: queryLimit } : {}),
+        }, { tolerateUnavailable: true });
+        return lookup.available ? [layerId, lookup] as const : undefined;
+      } catch (error) {
+        // A published layer may not have a Warehouse scan yet. Keep the
+        // existing geometry/tile response for that layer instead of failing
+        // a mixed survey overlap because one evidence lookup is absent.
+        if (!(error instanceof EvidenceStoreError) || error.statusCode >= 500) {
+          console.warn(`Warehouse reverse lookup skipped for ${layerId}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        return undefined;
+      }
+    }));
+    for (const lookup of lookups) if (lookup) warehouseResults.set(lookup[0], lookup[1]);
+  }
+
+  const warehouseEdges = [...warehouseResults.values()].flatMap(lookup => lookup.edges);
+  const warehouseFileLayerIds = new Map<string, Set<string>>();
+  for (const edge of warehouseEdges) {
+    if (!edge.sourceFileId || !edge.layerId) continue;
+    const layerIds = warehouseFileLayerIds.get(edge.sourceFileId) ?? new Set<string>();
+    layerIds.add(edge.layerId);
+    warehouseFileLayerIds.set(edge.sourceFileId, layerIds);
+  }
+  const warehouseFiles = [...new Map([...warehouseResults.values()].flatMap(lookup => lookup.sourceFiles)
+    .map((source) => {
+      const id = typeof source.file_id === "string" ? source.file_id : typeof source.fileId === "string" ? source.fileId : typeof source._id === "string" ? source._id : undefined;
+      return id ? [id, source] as const : undefined;
+    }).filter((entry): entry is readonly [string, Record<string, unknown>] => Boolean(entry))).values()]
+    .map((source) => {
+      const sourceId = typeof source.file_id === "string" ? source.file_id : typeof source.fileId === "string" ? source.fileId : typeof source._id === "string" ? source._id : undefined;
+      const fileName = typeof source.file_name === "string" ? source.file_name : typeof source.fileName === "string" ? source.fileName : typeof source.name === "string" ? source.name : undefined;
+      const euclidLayer = [...(sourceId ? warehouseFileLayerIds.get(sourceId) ?? [] : [])]
+        .map((layerId) => publicCoverageCatalog().records.get(layerId))
+        .find((layer) => layer?.surveyId === "euclid" && layer.releaseId === "euclid-q1");
+      const euclidLink = euclidLayer ? resolveEuclidQ1MerFile(fileName, euclidLayer) : undefined;
+      return euclidLink
+        ? { ...source, download_url: euclidLink.downloadUrl, downloadProvider: euclidLink.downloadProvider, unitKind: euclidLink.unitKind, unitId: euclidLink.tileId }
+        : source;
+    });
+  const warehouseLayerSources = new Map<string, Record<string, unknown>>();
+  for (const [layerId, lookup] of warehouseResults) {
+    const product = publicState.snapshot.products.find(entry => entry.geometry?.layerId === layerId);
+    if (!product) continue;
+    const edges = lookup.edges.filter(edge => edge.layerId === layerId);
+    const matchedCells = [...new Set(edges.map(edge => edge.ipix))].sort((a, b) => a - b);
+    const fileIds = [...new Set(edges.map(edge => edge.sourceFileId).filter((value): value is string => Boolean(value)))];
+    const precision = lookup.precision;
+    warehouseLayerSources.set(layerId, {
+      surveyId: product.content.surveyId,
+      releaseId: product.content.releaseId,
+      productId: product.productId,
+      layerId,
+      product: product.content.name,
+      modality: product.content.modality,
+      sourceId: layerId,
+      order: body.order,
+      nside: 2 ** (body.order as number),
+      cells: matchedCells,
+      geometryPrecision: precision,
+      geometryOperation: "warehouse-coverage-edge-intersection",
+      accessAvailability: edges.length ? "file-resolved" : "geometry-only",
+      completeness: lookup.truncated ? "truncated" : edges.length ? "incomplete" : "incomplete",
+      reason: edges.length
+        ? `Warehouse file evidence currently covers ${fileIds.length} scanned file${fileIds.length === 1 ? "" : "s"}; the published MOC scope is broader.`
+        : "No Warehouse coverage edge intersects the requested cells.",
+      sourceUnits: {
+        status: edges.length ? "exact" : "unavailable",
+        unitKind: "file",
+        units: fileIds.map(fileId => ({ unitId: fileId, unitKind: "file", matchingCells: edges.filter(edge => edge.sourceFileId === fileId).map(edge => edge.ipix) })),
+        totalUnits: fileIds.length,
+        truncated: lookup.truncated,
+        notes: "File metadata and coverage edges come from the configured Warehouse evidence indices; this is not a public file download proxy.",
+      },
+      downloads: [],
+    });
+  }
+  const sourcesByLayer = new Map(result.sources.map(source => [String(source.layerId), source]));
+  for (const [layerId, source] of warehouseLayerSources) sourcesByLayer.set(layerId, source);
+  const responseSources = body.layerIds.map(layerId => sourcesByLayer.get(layerId)).filter((source): source is Record<string, unknown> => Boolean(source));
+  // Public release and coverage links exist even when a layer has no Warehouse
+  // file index yet. Keep those links in the mixed overlap result so a missing
+  // scan is visible as a limitation instead of making the product disappear.
+  const indexedLayerIds = new Set(warehouseResults.keys());
+  const publicEntrypoints = normalizeReverseEntrypoints(publicReverseEntrypoints(body.layerIds as string[], order, cells))
+    .map((entry) => ({
+      ...entry,
+      note: entry.kind === "official-release"
+        ? indexedLayerIds.has(String(entry.layerId))
+          ? "Official release page; the Warehouse file plan currently covers only the scanned source subset."
+          : "Official release page; no published file-level index is available for this product yet."
+        : entry.kind === "coverage-moc" || entry.kind === "coverage-source"
+          ? indexedLayerIds.has(String(entry.layerId))
+            ? "Coverage reference for the published MOC; file evidence is returned separately when the scanned subset intersects."
+            : "Coverage reference for the published MOC; this product has no file-level index yet."
+          : entry.note,
+    }));
+  const downloadPlan = buildDownloadPlan({
+    edges: warehouseEdges,
+    sourceFiles: warehouseFiles,
+    // The legacy tile path already carries its public URL and selection
+    // metadata; keep those fields intact while adding normalized Warehouse
+    // evidence entrypoints.
+    entrypoints: [...publicEntrypoints, ...(fallbackEntrypoints as unknown as DownloadPlanEntrypoint[])],
+    truncated: warehouseResults.size > 0 && [...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.truncated) || result.sources.some(source => source.completeness === "truncated"),
+  });
+  const previewPlan = preview ? capReversePreview(downloadPlan) : undefined;
+  const pagedPlan = !preview && pageSize !== undefined ? pageReversePlan(downloadPlan, seenKeys, pageSize) : undefined;
+  const responsePlan = previewPlan?.plan ?? pagedPlan?.plan ?? downloadPlan;
+  const responseItems = reversePlanItems(responsePlan);
+  const pageHasMore = preview
+    ? Boolean(previewPlan?.hasMore)
+    : Boolean(pagedPlan?.hasMore);
+  const nextCursor = pageHasMore
+    ? encodeReverseCursor({
+      version: 1,
+      identity: preview ? "preview" : identity,
+      fingerprint,
+      seenKeys: preview ? responseItems.map((item) => item.key) : pagedPlan!.keys,
+    }, reverseCursorSecret)
+    : undefined;
+  const truncated = responsePlan.truncated;
+  const precision = warehouseEdges.length
+    ? ([...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.precision === "truncated") ? "truncated" : [...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.precision !== "exact") ? "estimated" : "exact")
+    : "estimated";
+  const notes = [
+    ...result.sources.filter(source => !warehouseResults.has(String(source.layerId))).flatMap(source => source.reason ? [String(source.reason)] : []),
+    ...[...warehouseResults.values()].flatMap(lookup => lookup.notes),
+    ...(warehouseEdges.length ? ["Warehouse file evidence is limited to the scanned source subset; no completeness percentage is inferred."] : []),
+  ];
+  const shown = responsePlan.files.length + responsePlan.entrypoints.length;
+  const omitted = preview ? Math.max(0, downloadPlan.files.length + downloadPlan.entrypoints.length - shown) : 0;
+  const responsePage = pageSize !== undefined || preview
+    ? { pageSize: preview ? PUBLIC_REVERSE_PREVIEW_LIMIT : pageSize!, shown, omitted, hasMore: pageHasMore || truncated, ...(nextCursor ? { nextCursor } : {}) }
+    : undefined;
+  compressedJson(request,response,200,{available:responsePlan.files.length>0 || responsePlan.entrypoints.length>0,precision,truncated,preview:preview ? { limit:PUBLIC_REVERSE_PREVIEW_LIMIT, shown, omitted, hasMore:pageHasMore || truncated } : undefined,page:responsePage,requested:{layerIds:body.layerIds,order,cells},sources:responseSources,edges:preview ? warehouseEdges.slice(0, PUBLIC_REVERSE_PREVIEW_LIMIT) : warehouseEdges,sourceFiles:preview ? warehouseFiles.slice(0, PUBLIC_REVERSE_PREVIEW_LIMIT) : warehouseFiles,expiresAt:result.expiresAt,notes:[...new Set(notes)],downloadPlan:responsePlan},"no-store");
 }
 
 async function executeRegionQuery(request:IncomingMessage,body:unknown,managedIdentity?:string,sourceLimit:8|64=8) {

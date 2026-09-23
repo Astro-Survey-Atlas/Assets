@@ -898,7 +898,8 @@ body.public-site.atlas-page .coverage-layer-detail-kicker {
 body.public-site.atlas-page .coverage-help dt,
 body.public-site.atlas-page .overlap-drawer-section > h3,
 body.public-site.atlas-page .overlap-tile-heading strong,
-body.public-site.atlas-page .overlap-evidence-plan > strong {
+body.public-site.atlas-page .overlap-evidence-plan > strong,
+body.public-site.atlas-page .overlap-products > summary {
   color: var(--brand-magenta-strong);
 }
 
@@ -914,6 +915,17 @@ body.public-site.atlas-page .overlap-download-button:focus-visible {
   background: var(--brand-indigo-soft);
   color: var(--brand-indigo-strong);
 }
+body.public-site.atlas-page .overlap-evidence-more-button {
+  border-color: color-mix(in srgb, var(--brand-indigo) 72%, transparent);
+  background: var(--public-surface);
+  color: var(--brand-indigo-strong);
+}
+body.public-site.atlas-page .overlap-evidence-more-button:hover,
+body.public-site.atlas-page .overlap-evidence-more-button:focus-visible {
+  border-color: var(--brand-indigo);
+  background: var(--brand-indigo-soft);
+  color: var(--brand-indigo-strong);
+}
 
 body.public-site.atlas-page .overlap-drawer-card.is-warehouse {
   border-left-color: var(--brand-magenta);
@@ -922,8 +934,19 @@ body.public-site.atlas-page .overlap-drawer-card.is-warehouse {
 body.public-site.atlas-page .overlap-drawer-card.is-assets {
   border-left-color: var(--brand-indigo);
 }
+body.public-site.atlas-page .overlap-drawer-card.is-public-source {
+  border-left-width: 4px;
+  border-left-color: var(--source-color, var(--brand-indigo));
+  background: color-mix(in srgb, var(--source-color, var(--brand-indigo)) 14%, var(--public-surface));
+}
 
 @media (max-width: 820px) {
+  body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) {
+    right: 14px;
+    left: 14px;
+    width: auto;
+    border: 0;
+  }
   body.public-site.atlas-page .coverage-status {
     flex-basis: 100%;
   }
@@ -931,8 +954,7 @@ body.public-site.atlas-page .overlap-drawer-card.is-assets {
 
 /* Layers and Cell Inspector share the atlas surface geometry. The inspector
    stays unfilled so the selected sky remains visible behind its readout. */
-body.public-site.atlas-page .coverage-layers,
-body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) {
+body.public-site.atlas-page .coverage-layers {
   box-sizing: border-box;
   border: 1px solid var(--public-line-strong);
   border-radius: 8px;
@@ -944,15 +966,45 @@ body.public-site.atlas-page .coverage-layers {
   backdrop-filter: blur(14px) saturate(1.05);
 }
 body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) {
-  padding: 14px 14px max(14px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 0;
+  right: 28px;
+  width: min(360px, calc(100vw - 56px));
+  padding: 0;
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
 }
+body.public-site.atlas-page .coverage-layer-toggle.is-unavailable {
+  cursor: not-allowed;
+  opacity: .62;
+}
+body.public-site.atlas-page .coverage-layer-toggle.is-unavailable:hover {
+  border-color: var(--public-line-strong);
+  background: transparent;
+  color: var(--public-muted);
+}
+body.public-site.atlas-page .coverage-detail-product {
+  border-color: color-mix(in srgb, var(--product-color, var(--brand-indigo)) 48%, var(--public-line-strong));
+  background: color-mix(in srgb, var(--product-color, var(--brand-indigo)) 36%, var(--public-surface));
+  color: var(--public-text);
+}
+body.public-site.atlas-page .coverage-detail-product-modality {
+  color: var(--product-color, var(--brand-indigo));
+}
+body.public-site.atlas-page .coverage-layer-unavailable {
+  margin-left: auto;
+  color: var(--public-muted);
+  font: 600 8px/1.2 var(--font-mono), monospace;
+  white-space: nowrap;
+}
 body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) > div:last-child {
-  margin-inline: 12px;
+  margin-inline: 0;
   background: transparent;
 }
+body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) dt { text-align: left; }
+body.public-site.atlas-page .coverage-detail-panel:not(.is-overlap-panel) dd { text-align: right; }
 
 /* Overlap Result sits directly on the sky so the selected cells remain
    visible behind its evidence readout. Keep the inner content inset from the
@@ -963,7 +1015,7 @@ body.public-site.atlas-page .coverage-detail-panel.is-overlap-panel {
   backdrop-filter: none;
 }
 body.public-site.atlas-page .coverage-detail-panel > div:last-child {
-  margin-inline: 12px;
+  margin-inline: 0;
   background: transparent;
 }
 

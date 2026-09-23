@@ -9,6 +9,7 @@ import {
 } from "./atlas/survey-layer-viewer.js";
 import type { SurveyFootprintManifest } from "./atlas/survey-footprints.js";
 import type { SurveyCard } from "./atlas/survey-registry.js";
+import { surveyColorFor } from "./atlas/survey-colors.js";
 
 export interface CoverageLayer {
   layerId: string;
@@ -61,7 +62,7 @@ function surveyCardFor(record: CoverageSurvey): SurveyCard {
     id: record.id,
     name: record.name,
     mission: record.mission,
-    color: record.color,
+    color: surveyColorFor(record.id, record.color),
     description: record.description,
     modalities: record.modalities as SurveyCard["modalities"],
     origin: "public",

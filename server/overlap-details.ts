@@ -1,6 +1,6 @@
 import type { CoverageCellLayer } from "./coverage.js";
 import type { WarehouseLayerSnapshot } from "./evidence-store.js";
-import type { OverlapComponent, OverlapResult } from "./overlap.js";
+import { layersForOverlapComponent, type OverlapComponent, type OverlapResult } from "./overlap.js";
 import type { PublicSurveyIndex } from "./surveys.js";
 import type { LoadedCatalog } from "./catalog.js";
 
@@ -11,6 +11,7 @@ export interface PublicOverlapSource {
   layerId: string;
   surveyId: string;
   surveyName: string;
+  surveyColor?: string;
   releaseId: string;
   releaseLabel?: string;
   product: string;
@@ -66,7 +67,7 @@ export interface OverlapDetails {
     layerIds: string[];
     order: number;
     precision: DetailPrecision;
-    deferred: true;
+    deferred: boolean;
   };
 }
 
@@ -104,20 +105,28 @@ function claimKind(product: string, geometryUrl?: string): CoverageClaimKind {
   return "overview";
 }
 
-function selectedLayers(layers: readonly CoverageCellLayer[], result: OverlapResult, component: OverlapComponent): CoverageCellLayer[] {
-  const componentCells = new Set(component.cells);
-  return layers.filter((layer) => result.surveyIds.includes(layer.surveyId) && Boolean(layer.cells.get(component.order)?.some((cell) => componentCells.has(cell))));
-}
-
-function publicSourcesFor(layers: readonly CoverageCellLayer[], surveyIndex: PublicSurveyIndex, result: OverlapResult, component: OverlapComponent, sourceUnitsByLayer: ReadonlyMap<string, unknown> = new Map()): PublicOverlapSource[] {
+function publicSourcesFor(
+  layers: readonly CoverageCellLayer[],
+  surveyIndex: PublicSurveyIndex,
+  result: OverlapResult,
+  component: OverlapComponent,
+  sourceUnitsByLayer: ReadonlyMap<string, unknown> = new Map(),
+  sourceIndex?: PublicSurveyIndex,
+): PublicOverlapSource[] {
   const seen = new Set<string>();
   const sources: PublicOverlapSource[] = [];
-  for (const layer of selectedLayers(layers, result, component)) {
+  for (const layer of layersForOverlapComponent(layers, result, component)) {
     const survey = surveyIndex.surveys.find((candidate) => candidate.id === layer.surveyId);
     const release = survey?.releases.find((candidate) => candidate.id === layer.releaseId);
     const product = release?.products.find((candidate) => candidate.name === layer.product);
-    const sourceUrl = publicExternalUrl(product?.sourceUrl ?? layer.recipe?.sourceUrl);
-    const geometrySourceUrl = publicExternalUrl(product?.geometrySourceUrl);
+    const sourceSurvey = sourceIndex?.surveys.find((candidate) => candidate.id === layer.surveyId);
+    const sourceRelease = sourceSurvey?.releases.find((candidate) => candidate.id === layer.releaseId);
+    const sourceProduct = sourceRelease?.products.find((candidate) => candidate.name === layer.product);
+    const sourceUrl = publicExternalUrl(product?.sourceUrl)
+      ?? publicExternalUrl(sourceProduct?.sourceUrl)
+      ?? publicExternalUrl(layer.recipe?.sourceUrl);
+    const geometrySourceUrl = publicExternalUrl(product?.geometrySourceUrl)
+      ?? publicExternalUrl(sourceProduct?.geometrySourceUrl);
     const key = `${layer.layerId}:${layer.releaseId}:${layer.product}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -125,6 +134,7 @@ function publicSourcesFor(layers: readonly CoverageCellLayer[], surveyIndex: Pub
       layerId: layer.layerId,
       surveyId: layer.surveyId,
       surveyName: survey?.name ?? layer.surveyId,
+      ...(survey?.color ? { surveyColor: survey.color } : {}),
       releaseId: layer.releaseId,
       ...(release?.label ? { releaseLabel: release.label } : {}),
       product: product?.name ?? layer.product,
@@ -147,7 +157,7 @@ function assetsEvidenceFor(layers: readonly CoverageCellLayer[], surveyIndex: Pu
   if (!catalog) return [];
   const manifestFiles = catalog.manifest.files;
   const seen = new Set<string>();
-  return selectedLayers(layers, result, component).flatMap((layer) => {
+  return layersForOverlapComponent(layers, result, component).flatMap((layer) => {
     const survey = surveyIndex.surveys.find((entry) => entry.id === layer.surveyId);
     const release = survey?.releases.find((entry) => entry.id === layer.releaseId);
     const product = release?.products.find((entry) => entry.name === layer.product);
@@ -173,7 +183,7 @@ function warehouseEvidenceFor(
   snapshots: ReadonlyMap<string, WarehouseLayerSnapshot>,
 ): WarehouseOverlapEvidence[] {
   const componentCells = new Set(component.cells);
-  return selectedLayers(layers, result, component)
+  return layersForOverlapComponent(layers, result, component)
     .map((layer): WarehouseOverlapEvidence | null => {
       const snapshot = snapshots.get(layer.layerId);
       if (!snapshot) return null;
@@ -213,9 +223,10 @@ export function buildOverlapDetails(input: {
   surveyIndex: PublicSurveyIndex;
   catalog?: LoadedCatalog;
   sourceUnitsByLayer?: ReadonlyMap<string, unknown>;
+  sourceIndex?: PublicSurveyIndex;
   warehouseSnapshots?: ReadonlyMap<string, WarehouseLayerSnapshot>;
 }): OverlapDetails {
-  const componentLayers = selectedLayers(input.layers, input.result, input.component);
+  const componentLayers = layersForOverlapComponent(input.layers, input.result, input.component);
   const warehouseEvidence = warehouseEvidenceFor(input.layers, input.result, input.component, input.warehouseSnapshots ?? new Map());
   const warehousePrecision = new Map(warehouseEvidence.map((entry) => [entry.layerId, entry.precision]));
   const precisions: DetailPrecision[] = componentLayers.map((layer) => warehousePrecision.get(layer.layerId) ?? layer.sourceUnitIndex?.status ?? "entrypoint-only");
@@ -234,10 +245,10 @@ export function buildOverlapDetails(input: {
   return {
     schemaVersion: 1,
     component: input.component,
-    publicSources: publicSourcesFor(input.layers, input.surveyIndex, input.result, input.component, input.sourceUnitsByLayer),
+    publicSources: publicSourcesFor(input.layers, input.surveyIndex, input.result, input.component, input.sourceUnitsByLayer, input.sourceIndex),
     assetsEvidence: assetsEvidenceFor(input.layers, input.surveyIndex, input.result, input.component, input.catalog),
     warehouseEvidence,
     method,
-    reverseLookup: { endpoint: "/api/v1/coverage/reverse-lookup", layerIds, order: input.component.order, precision, deferred: true },
+    reverseLookup: { endpoint: "/api/v1/coverage/reverse-lookup", layerIds, order: input.component.order, precision, deferred: false },
   };
 }

@@ -11,6 +11,9 @@ export interface DownloadPlanMatch {
 export interface DownloadPlanFile {
   fileId: string;
   metadataState: "complete" | "missing";
+  unitKind?: string;
+  unitId?: string;
+  downloadProvider?: string;
   fileName?: string;
   fileType?: string;
   sizeBytes?: number;
@@ -119,7 +122,7 @@ export function overlapCsvRows(
       file.fileId, file.fileName ?? "", file.fileType ?? "", file.sizeBytes === undefined ? "" : String(file.sizeBytes),
       file.sourceUri ?? "", String(file.downloadable), file.downloadUrl ?? "",
       JSON.stringify(file.matchingCoverage.map((match) => ({ layerId: match.layerId, order: match.order, ipix: match.ipix, precision: match.precision }))),
-      joinUnique(file.matchingCoverage.map((match) => match.coverageMethod)), "", "", "", "", "", "", "", "",
+      joinUnique(file.matchingCoverage.map((match) => match.coverageMethod)), "", file.unitId ?? "", "", "", "", "", "", "",
       String(component.bounds.raMin), String(component.bounds.raMax), String(component.bounds.decMin), String(component.bounds.decMax), String(component.bounds.areaDeg2), notes,
     ]);
   });

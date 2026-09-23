@@ -48,6 +48,9 @@ export interface DownloadPlanMatch {
 export interface DownloadPlanFile {
   fileId: string;
   metadataState: "complete" | "missing";
+  unitKind?: string;
+  unitId?: string;
+  downloadProvider?: string;
   fileName?: string;
   fileType?: string;
   sizeBytes?: number;
@@ -260,12 +263,18 @@ export function buildDownloadPlan(input: DownloadPlanInput): DownloadPlan {
     if (!source) warnings.add(`FileAsset metadata is missing for ${fileId}`);
     const fileName = sourceString(source ?? {}, ["fileName", "file_name", "name"]) ?? edge.fileName;
     const fileType = sourceString(source ?? {}, ["fileType", "file_type", "type"]);
+    const unitKind = sourceString(source ?? {}, ["unitKind", "unit_kind"]);
+    const unitId = sourceString(source ?? {}, ["unitId", "unit_id", "tileId", "tile_id"]);
+    const downloadProvider = sourceString(source ?? {}, ["downloadProvider", "download_provider"]);
     const sizeBytes = sourceNumber(source ?? {}, ["sizeBytes", "size_bytes", "size"]) ?? edge.sizeBytes;
     const lastModified = sourceString(source ?? {}, ["lastModified", "last_modified"]);
     const etag = sourceString(source ?? {}, ["etag", "eTag", "ETag"]) ?? edge.etag;
     files.set(fileId, {
       fileId,
       metadataState,
+      ...(unitKind ? { unitKind } : {}),
+      ...(unitId ? { unitId } : {}),
+      ...(downloadProvider ? { downloadProvider } : {}),
       ...(fileName ? { fileName } : {}),
       ...(fileType ? { fileType } : {}),
       ...(sizeBytes !== undefined ? { sizeBytes } : {}),

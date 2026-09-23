@@ -25,9 +25,9 @@ test("region validation rejects oversized, pseudo identity and ambiguous revisio
  for(const bad of [{...input,purpose:"scan"},{...input,region:{...input.region,nside:16}},{...input,region:{...input.region,order:0,cells:[1]}},{...input,region:{...input.region,cells:Array(4097).fill(1)}},{...input,sources:[{...input.sources[0],layerId:"public:desi"}]},{...input,sources:[{...input.sources[0],indexRevision:undefined}]},{...input,limit:1001}])assert.throws(()=>validateRegion(bad));
 });
 test("access sessions reject cross-origin requests and enforce concurrency and output quotas",()=>{
- const gate=new AccessGate("123","secret"),req=new IncomingMessage(new Socket());req.headers={host:"assets.test",origin:"http://assets.test"};
- assert.throws(()=>gate.identity(req),/Unlock/);assert.throws(()=>gate.unlock(req,"bad"),/Invalid/);
- const token=gate.unlock(req,"123");req.headers.cookie=`assets_download=${token}`;assert.match(gate.identity(req),/^browser:/);
+ const gate=new AccessGate("secret"),req=new IncomingMessage(new Socket());req.headers={host:"assets.test",origin:"http://assets.test"};
+ assert.throws(()=>gate.identity(req),/Unlock/);
+ const token=gate.unlockKey(req,()=>"managed-id");req.headers.cookie=`assets_download=${token}`;assert.equal(gate.identity(req),"managed-key:managed-id");
  req.headers.origin="https://evil.test";assert.throws(()=>gate.identity(req),/Same-origin/);
  req.headers={"x-assets-api-key":"secret"};assert.equal(gate.identity(req),"service:workspace");
  const a=gate.begin("service:workspace"),b=gate.begin("service:workspace");assert.throws(()=>gate.begin("service:workspace"),/quota/);a.finish(10000);a.finish(0);b.finish(10000);

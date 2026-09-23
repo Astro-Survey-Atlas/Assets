@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-export type SurveyModality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog" | "simulation";
+export type SurveyModality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog" | "simulation" | "radio";
 export type ReleaseKind = "public_release" | "quick_release" | "early_release" | "science_results" | "archive_snapshot" | "planned";
 export type ReleaseAvailability = "available" | "metadata_only" | "planned";
 export type FootprintStatus = "verified" | "summary_only" | "pending";
@@ -70,7 +70,7 @@ export interface SurveyRegistrationInput {
 
 export type SurveyReleaseRegistrationInput = SurveyRelease;
 
-const MODALITIES: readonly SurveyModality[] = ["imaging", "spectroscopy", "photometry", "time-domain", "integral-field", "ultraviolet", "infrared", "catalog", "simulation"];
+const MODALITIES: readonly SurveyModality[] = ["imaging", "spectroscopy", "photometry", "time-domain", "integral-field", "ultraviolet", "infrared", "catalog", "simulation", "radio"];
 const RELEASE_KINDS: readonly ReleaseKind[] = ["public_release", "quick_release", "early_release", "science_results", "archive_snapshot", "planned"];
 const RELEASE_AVAILABILITIES: readonly ReleaseAvailability[] = ["available", "metadata_only", "planned"];
 const FOOTPRINT_STATUSES: readonly FootprintStatus[] = ["verified", "summary_only", "pending"];

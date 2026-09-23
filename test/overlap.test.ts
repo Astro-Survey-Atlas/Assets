@@ -3,7 +3,7 @@ import test from "node:test";
 import { Healpix, Pointing } from "healpixjs";
 
 import type { CoverageCellLayer } from "../server/coverage.js";
-import { highestCommonOrder, overlapForLayers } from "../server/overlap.js";
+import { highestCommonOrder, layersForOverlapComponent, overlapForLayers } from "../server/overlap.js";
 import { SourceUnitStore } from "../server/source-units.js";
 import { buildOverlapHighlight } from "../site/src/atlas/overlap-highlight.js";
 import { largestConnectedPixelComponent, recenteredOrbitPose } from "../site/src/atlas/survey-layer-viewer.js";
@@ -41,6 +41,17 @@ test("overlap falls back to a lower real common order when the highest order has
   assert.equal(result?.commonOrder, 4);
   assert.deepEqual(result?.pixels, [637]);
   assert.equal(result?.components[0]?.order, 4);
+});
+
+test("overlap component layers contain only products touching that component", () => {
+  const layers = [
+    layer("euclid-a", "euclid", { 4: [10] }),
+    layer("euclid-b", "euclid", { 4: [20] }),
+    layer("desi", "desi", { 4: [10, 20] }),
+  ];
+  const result = overlapForLayers(layers, ["euclid", "desi"], 4)!;
+  const first = result.components.find((component) => component.cells.includes(10))!;
+  assert.deepEqual(layersForOverlapComponent(layers, result, first).map((entry) => entry.layerId), ["euclid-a", "desi"]);
 });
 
 test("overlap components use side neighbours and remain stable", () => {

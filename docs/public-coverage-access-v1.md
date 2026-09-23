@@ -12,12 +12,13 @@ overview/max order, `coverageRevision`, `indexRevision`, stable product/source
 identity and an explicit geometry/access capability. Footprint JSON is only a
 display projection; it must not be expanded to claim finer precision.
 
-Scientific downloads, tile/file reverse lookup and download plans require the
-Assets download session (`POST /api/v1/access/unlock`, password configured by
-`ASSETS_DOWNLOAD_PASSWORD`, development default `123`) or a server-to-server
-`X-Assets-API-Key`. Public MOC and Resource Package downloads remain open so
-Workspace can synchronize normally. The browser never receives the Workspace
-API key.
+Public overlap previews use a bounded reverse lookup and show at most six
+matching Tile/file links. Full tile/file reverse lookup, scientific downloads
+and download plans require a managed `region:query` API Key via
+`X-Assets-API-Key`. `POST /api/v1/access/unlock` accepts only that API Key and
+issues a short-lived HttpOnly session for browser exports. Public MOC and
+Resource Package downloads remain open so Workspace can synchronize normally.
+The browser never receives the Workspace service key.
 
 ## Region query
 

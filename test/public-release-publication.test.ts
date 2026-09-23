@@ -36,6 +36,8 @@ test("whole publication verifies and activates package, native geometry and prod
   const catalog=await loadCatalog(path.join(f.base,"installed/current")),state=await loadPublicState(catalog);
   assert.equal(state.records.size,1);assert.equal(state.geometry.get(f.layerId)?.revision,f.moc.revision);
   assert.equal(state.index.surveys[0]?.releases[0]?.products[0]?.productId,"product-1");
+  assert.equal(state.index.surveys[0]?.color, "#123456", "public survey colors come from the canonical survey catalog");
+  assert.equal(state.coverage.records.get(f.layerId)?.color, "#123456", "coverage layers use the same survey color");
   const packages=[...state.catalog.files.values()].filter(f=>f.record.kind==="package");assert.equal(packages.length,1);
   const bytes=await readFile(packages[0]!.absolutePath),manifest=await readResourcePackageManifest(bytes);
   assert.equal(manifest.layers[0]?.productId,"product-1");assert.equal(manifest.layers[0]?.coverageRevision,f.moc.revision);
@@ -44,6 +46,23 @@ test("whole publication verifies and activates package, native geometry and prod
   const history=JSON.parse(await readFile(path.join(catalog.root,"artifacts/public-survey-footprints/release-history.json"),"utf8"));
   assert.equal(history.releases[0].packages[0].sha256,sha256(bytes));
   assert.equal((await new PublicReleasePublisher(f.options).get(run.runId))?.status,"published","durable run survives process restart");
+});
+
+test("public survey modalities include a product modality when the survey declaration is empty", async t => {
+  const f = await reviewedFixture(); t.after(() => rm(f.base, { recursive: true, force: true }));
+  const product = f.products[0]!;
+  product.draft.modality = "radio";
+  product.draft.publicSurvey = { name: "M42", mission: "Test", description: "", color: "#123456", modalities: [] };
+  product.contentSha256 = sha256(JSON.stringify(product.draft));
+  product.review!.contentSha256 = product.contentSha256;
+  const publisher = new PublicReleasePublisher(f.options);
+  const run = await queue(publisher);
+  const finished = await publisher.execute(run.runId);
+  assert.equal(finished.status, "published", finished.error);
+  await syncReleaseFromObjectStore(f.store, path.join(f.base, "installed"));
+  const state = await loadPublicState(await loadCatalog(path.join(f.base, "installed/current")));
+  assert.deepEqual(state.index.surveys[0]?.modalities, ["radio"]);
+  assert.deepEqual(state.index.surveys[0]?.releases[0]?.modalities, ["radio"]);
 });
 
 test("a publication interrupted after claim is released and can be retried", async t => {

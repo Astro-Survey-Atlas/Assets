@@ -110,11 +110,6 @@ spec:
               value: "4180"
             - name: ASSET_RELEASE_ROOT
               value: /data/current
-            - name: ASSETS_DOWNLOAD_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.regionAccess.secretName | quote }}
-                  key: download-password
             - name: ASSETS_WORKSPACE_API_KEY
               valueFrom:
                 secretKeyRef:

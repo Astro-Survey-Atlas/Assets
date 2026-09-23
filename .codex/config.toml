@@ -1,8 +1,6 @@
 model = "gpt-6-astra"
 review_model = "gpt-6-astra"
 model_reasoning_effort = "low"
-disable_response_storage = true
-network_access = "enabled"
 sandbox_mode = "danger-full-access"
 approval_policy = "never"
 model_context_window = 272000

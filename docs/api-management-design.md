@@ -26,7 +26,7 @@ Assets 查询 CDS/读取公开网页后提供材料给模型，不依赖供应�
 
 公开 Catalog、资源包列表和下载继续匿名。首期唯一 scope 为 `region:query`，
 授权已有 `POST /api/v1/access/region-query` 区域查询与
-`POST /api/v1/coverage/reverse-lookup` 重合区域下载计划，请求头为：
+`POST /api/v1/coverage/reverse-lookup` 重合区域完整下载计划，请求头为：
 
 ```http
 X-Assets-API-Key: <创建时取得的 Key>
@@ -39,9 +39,9 @@ Content-Type: application/json
 总计 10000 个几何结果、1000 个索引单元及 2 MiB 响应限制。
 “下载全部区块”依次请求，避免单次点击产生超过并发上限的查询；错误展示具体原因。
 Key 不授权管理、审核、发布或签发 Key，也不用于 URL query 参数。
-原 Workspace 服务 Key 与浏览器密码解锁会话保持兼容。
-天球的“下载密码或 API Key”输入框接受以上 Key，经 `/api/v1/access/unlock` 验证后
-签发最长一小时的 HttpOnly/SameSite 会话。浏览器不保存 Key 明文，每次查询重新检查
+匿名重合预览通过 `preview: true` 请求，仅返回最多 6 个 Tile/文件链接；完整反查不接受匿名请求。
+天球只在下载或导出时显示 API Key 输入框，经 `/api/v1/access/unlock` 验证后
+签发最长一小时的 HttpOnly/SameSite 会话。浏览器不保存 Key 明文，每次完整查询重新检查
 关联 Key 的有效期、撤销与限流；撤销会阻止已解锁会话的后续请求。
 解锁本身计入 Key 调用额度，查询与下载计划共享同一 Key 限额。后台重启需重新解锁。
 授权不会生成原本缺失的科学文件索引，只返回产品实际具备的下载计划。

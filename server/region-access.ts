@@ -9,7 +9,7 @@ const equal=(a:string,b:string):boolean=>{const x=Buffer.from(a),y=Buffer.from(b
 export class AccessGate {
   private sessions=new Map<string,{until:number;identity:string}>();
   private quotas=new Map<string,{minute:number;requests:number;active:number;day:number;units:number;failures:number}>();
-  constructor(private password=process.env.ASSETS_DOWNLOAD_PASSWORD??"123",private apiKey=process.env.ASSETS_WORKSPACE_API_KEY??""){}
+  constructor(private apiKey=process.env.ASSETS_WORKSPACE_API_KEY??""){}
   private quota(id:string){
     const now=Date.now(),minute=Math.floor(now/60000),day=Math.floor(now/86400000);
     for(const [key,q] of this.quotas)if(q.day<day&&!q.active)this.quotas.delete(key);
@@ -33,11 +33,6 @@ export class AccessGate {
     const now=Date.now();for(const [id,s]of this.sessions)if(s.until<=now)this.sessions.delete(id);
     if(this.sessions.size>=10000)throw new AccessError(429,"Session capacity exceeded");
     const token=(managed?"managed.":"")+randomBytes(32).toString("hex");this.sessions.set(token,{until:now+3600000,identity});return token;
-  }
-  unlock(request:IncomingMessage,password:unknown):string {
-    const id=this.checkUnlock(request);
-    if(typeof password!=="string"||!equal(password,this.password))throw new AccessError(401,"Invalid download password");
-    return this.session(id);
   }
   unlockKey(request:IncomingMessage,authorize:()=>string):string {
     this.checkUnlock(request);

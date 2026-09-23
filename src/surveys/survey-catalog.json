@@ -6,7 +6,7 @@
       "id": "euclid",
       "name": "Euclid",
       "mission": "ESA Euclid",
-      "color": "#a7d9ff",
+      "color": "#3b82f6",
       "description": "ESA visible and near-infrared space survey releases, represented by their actual release families rather than a fabricated radial shell.",
       "modalities": [
         "imaging",
@@ -220,7 +220,7 @@
       "id": "desi",
       "name": "DESI",
       "mission": "Dark Energy Spectroscopic Instrument",
-      "color": "#f3b55d",
+      "color": "#f59e0b",
       "description": "Public DESI spectroscopic release families. Local COSMOS-derived volume data remains a separate registered artifact, not a proxy for this footprint.",
       "modalities": [
         "spectroscopy",
@@ -273,7 +273,7 @@
       "id": "sdss",
       "name": "SDSS",
       "mission": "Sloan Digital Sky Survey I-V",
-      "color": "#95dc9b",
+      "color": "#22c55e",
       "description": "Nineteen public data releases grouped under one survey card. A release may contain several products with different sky footprints.",
       "modalities": [
         "imaging",
@@ -781,7 +781,7 @@
       "id": "galex",
       "name": "GALEX",
       "mission": "Galaxy Evolution Explorer",
-      "color": "#cf96ed",
+      "color": "#c026d3",
       "description": "Ultraviolet imaging, grism spectroscopy and time-domain survey archive releases.",
       "modalities": [
         "ultraviolet",
@@ -958,7 +958,7 @@
       "id": "legacy-surveys",
       "name": "DESI Legacy Surveys",
       "mission": "DECaLS, BASS and MzLS",
-      "color": "#fd8ea1",
+      "color": "#ef4444",
       "description": "DESI Legacy Surveys optical imaging and Tractor catalogs. These DR1-DR10 releases are imaging products, not DESI spectroscopic data releases.",
       "modalities": [
         "imaging",
@@ -1300,7 +1300,7 @@
       "id": "hsc-ssp",
       "name": "HSC-SSP",
       "mission": "Subaru Hyper Suprime-Cam",
-      "color": "#63d5c7",
+      "color": "#14b8a6",
       "description": "Subaru Strategic Program public releases, with Wide, Deep and UltraDeep layers recorded as product families rather than radial distances.",
       "modalities": [
         "imaging",
@@ -1584,7 +1584,7 @@
       "id": "des",
       "name": "DES",
       "mission": "Dark Energy Survey",
-      "color": "#ef7f79",
+      "color": "#f97316",
       "description": "Southern-sky optical imaging, catalogs and time-domain supernova fields. The bundled footprint represents the DR2 color image product.",
       "modalities": [
         "imaging",
@@ -1680,7 +1680,7 @@
       "id": "2mass",
       "name": "2MASS",
       "mission": "Two Micron All Sky Survey",
-      "color": "#ffb36b",
+      "color": "#e11d48",
       "description": "Near-infrared all-sky imaging and source catalogs. The bundled artifact is specifically the All-Sky J-band image coverage.",
       "modalities": [
         "imaging",
@@ -2080,7 +2080,7 @@
       "id": "gaia",
       "name": "Gaia",
       "mission": "ESA Gaia",
-      "color": "#f2c14e",
+      "color": "#eab308",
       "description": "ESA Gaia DR3 astrometric and photometric source catalog. The published coverage is the exact CDS catalog-row object-presence MOC and covers the full sky at overview order.",
       "modalities": [
         "catalog",
@@ -2642,7 +2642,7 @@
       "id": "sumss",
       "name": "SUMSS",
       "mission": "Sydney University Molonglo Sky Survey",
-      "color": "#b8b5ff",
+      "color": "#6366f1",
       "description": "Public SUMSS coverage represented by reviewed CDS HiPS/MOC products.",
       "modalities": [
         "imaging"
