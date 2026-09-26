@@ -72,6 +72,11 @@ export async function mergePackageHistory(inputs: HistoricalPackage[], version: 
   const records = [...layers.values()].sort((a, b) => a.layerId.localeCompare(b.layerId));
   entries.set("provenance.json", Buffer.from(JSON.stringify({ ...provenance, packageVersion: version, layers: [...provenanceLayers.values()] })));
   entries.set("footprints/survey-footprints.json", Buffer.from(JSON.stringify({ ...preview, footprints: [...footprints.values()] })));
+  // Legacy repair preserves the historical manifest contract: older layers may
+  // lack product identity. Do not carry version-bound, partial sidecars from one
+  // input into the merged archive or invent missing identities to regenerate them.
+  entries.delete("healpix/order4.json");
+  entries.delete("healpix/order8.json");
   const files = ["README.md", "provenance.json", "footprints/survey-footprints.json"].map((name) => ({ path: name, sizeBytes: entries.get(name)!.length, sha256: sha(entries.get(name)!) }));
   entries.set("resource-package.json", Buffer.from(JSON.stringify({ schemaVersion: 3, id: latest.id, version, surveyId: latest.surveyId, layers: records, files })));
   const sources = [...new Map(inputs.flatMap((input) => input.entry.sources).map((source) => [`${source.releaseId}:${source.url}`, source])).values()];

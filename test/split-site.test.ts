@@ -60,6 +60,13 @@ test("site has no draft writes, proxies admin, hot-syncs its own cache and resta
     await assert.rejects(() => stat(forbiddenContent), { code: "ENOENT" });
     assert.equal((await fetch(`${base}/api/v1/admin/products`)).status, 401);
     assert.equal((await fetch(`${base}/api/v1/admin/products`, { headers: { Authorization: "Bearer fixture" } })).status, 200);
+    const overlapDetails = await fetch(`${base}/api/v1/coverage/overlap/details`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer fixture" },
+      body: "{}",
+    });
+    assert.equal(overlapDetails.status, 200);
+    assert.deepEqual(await overlapDetails.json(), { path: "/api/v1/coverage/overlap/details" });
     const publisher = new PublicReleasePublisher({ ...f.options, store });
     const plan = await publisher.plan();
     const run = await publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["m42"], productIds: ["product-1"] });

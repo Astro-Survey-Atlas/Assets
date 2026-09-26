@@ -1,7 +1,15 @@
-model = "gpt-6-astra"
+model = "gpt-6-luna"
 review_model = "gpt-6-astra"
-model_reasoning_effort = "low"
+model_reasoning_effort = "max"
 sandbox_mode = "danger-full-access"
 approval_policy = "never"
 model_context_window = 272000
 model_auto_compact_token_limit = 240000
+
+[agents]
+enabled = true
+default_subagent_model = "gpt-6-luna"
+default_subagent_reasoning_effort = "max"
+
+[features]
+multi_agent_v2 = true

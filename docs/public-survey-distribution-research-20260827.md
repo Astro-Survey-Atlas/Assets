@@ -129,9 +129,11 @@ DESI 还清楚地区分 DESI 光谱和 Legacy Surveys 成像。Assets 的 layer 
 
 Assets 是公开巡天的**发现、覆盖、证据和发布资源包层**。它读取 Warehouse 提供的规范化扫描状态，并把经过审查的公开制品组织成稳定的产品档案。Workspace 安装 Resource Package v3 后管理用户自己的数据；Warehouse 负责扫描执行和当前 FileAsset/SpatialCoverage 状态。
 
-当前 Assets **不**：
+Assets 的长期职责边界（下载计划指来源清单文件，科学数据由用户在源站自行获取）：
 
-- 代理下载完整科学文件或替代官方档案；
+Assets **不**：
+
+- 替用户下载科学数据、代理科学文件或替代官方档案；
 - 对外承诺 TAP/ADQL、ObsCore/ObsTAP 或 SIA 服务；
 - 把输入 manifest、normalized scan、任务快照或内部 Elasticsearch 暴露给浏览器初始请求；
 - 用示意面积、中心点、相邻产品或低阶 overview 制造精确覆盖；

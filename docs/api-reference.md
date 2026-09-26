@@ -38,7 +38,7 @@ GET /api/v1/assets
 Package v3 JSON Schema，作为普通 allowlisted metadata/documentation 制品下载。
 data-warehouse task schema 是 Assets 用来生成标准 CRD 的公开输入约束；该公开
 API 本身保持只读，不创建或执行任务。认证后的管理端点另有明确的
-`POST`/`PUT` 路由，用于创建 Connector、提交 ScanRequest 和编辑产品。
+`POST`/`PUT` 路由，用于创建 Connector、提交 ScanRequest/ScanBatchRequest 和编辑产品。
 远程 Connector 由 ConfigMap + Secret 保存；本地 Connector 只引用 Warehouse
 Infra 已授权的源 PVC 和可选相对 base path，Assets 不创建 PV/PVC 或接受 hostPath。
 
@@ -125,9 +125,13 @@ connected component's metadata on demand:
 
 The response contains the component bounds, `publicSources` (public survey,
 release, product, modality and public MOC/tile/archive claims), and
-`warehouseEvidence` (ACTIVE layer, scan run, source snapshot, file/coverage
-counts and connector status). Infrastructure endpoints, credentials and
-evidence-storage paths are omitted. Each component's deferred `evidenceLookup`
+`warehouseEvidence` (ACTIVE layer, file/coverage counts, precision and
+connector status). A single-file scan may include `scanRunId` and
+`sourceSnapshotSha256`; a partitioned scope reports `scanRunCount`,
+`sourceSnapshotCount` and `scanScope` with its scope snapshot and
+`committedPartitions/expectedPartitions`. Scope completeness applies only to
+the frozen roster, not to the entire survey. Infrastructure endpoints,
+credentials and evidence-storage paths are omitted. Each component's deferred `evidenceLookup`
 includes every layer that actually participates in that component, including
 public MOC, Tile and Warehouse FileAsset layers. File/Tile reverse lookup
 remains bounded and deferred through `/api/v1/coverage/reverse-lookup`.
@@ -155,7 +159,16 @@ edges, source file IDs, URI/name/ETag/WCS bounds, download entrypoints and a
 
 The service unions published products within each selected survey, then intersects the resulting survey coverages. It uses the highest real order shared by every selected survey that does not exceed `requestedOrder`; no layer is upsampled to an order it does not publish. The response reports `commonOrder`, explicit NESTED `pixels`, four-side-connected components with stable `C01` identifiers and RA/DEC bounds, plus source-unit/download matches when a release has a locked reverse index. At least two distinct survey IDs are required.
 
-#### Download plan
+#### Download plan file (source manifest)
+
+A download plan is a downloadable JSON/CSV manifest of overlap-region data
+sources, not scientific data. It identifies surveys, releases, products and
+known Tile/block/file units, matching evidence and optional retrieval links.
+Assets never downloads the referenced scientific data on users’ behalf. The
+`region:query` Key authorizes full lookup and manifest export only; source
+permissions are independent. Source data blocks are not the coverage blocks
+used to render/query the globe. Existing fields remain unchanged; the optional
+`coverageEvidence[]` field adds coverage-only provenance.
 
 `downloadPlan` is the authoritative export for this lookup. It deliberately keeps
 coverage matches, real files and general public entrypoints separate:
@@ -170,6 +183,7 @@ coverage matches, real files and general public entrypoints separate:
       "fileName": "tile.fits",
       "sourceUri": "s3://bucket/path/tile.fits",
       "downloadable": false,
+      "matchingCoverageTruncated": false,
       "matchingCoverage": [
         { "layerId": "layer-1", "order": 8, "ipix": 123, "precision": "exact" }
       ]
@@ -179,38 +193,70 @@ coverage matches, real files and general public entrypoints separate:
     { "kind": "tile-directory", "purpose": "data-access", "tileId": "1234", "cells": [123], "url": "https://data.example/tiles/1234/" },
     { "kind": "coverage-moc", "purpose": "coverage-reference", "url": "/api/v1/coverage/layers/layer-1/moc.fits" }
   ],
+  "coverageEvidence": [
+    {
+      "layerId": "layer-1",
+      "surveyId": "euclid",
+      "releaseId": "q1",
+      "product": "VIS imaging",
+      "evidenceKind": "published-moc",
+      "order": 8,
+      "nside": 256,
+      "availableOrders": [4, 8],
+      "matchedCells": [123],
+      "precision": "entrypoint-only",
+      "summary": "Published coverage intersects; this alone does not verify a scientific file."
+    }
+  ],
   "truncated": false,
   "warnings": []
 }
 ```
 
-Each source `FileAsset` appears at most once in `files[]`; every matching
-`order`/`ipix` edge is retained in its `matchingCoverage[]`. `metadataState`
-is `missing` when Warehouse returned an edge without a matching FileAsset, so
-the response never invents a complete file record. `downloadable=true` and
+Each source `FileAsset` appears at most once in `files[]`. Its returned
+`order`/`ipix` edges appear in `matchingCoverage[]`; when the bounded Warehouse
+edge query ends in the middle of one file's matches,
+`matchingCoverageTruncated=true` marks that file row and `warnings[]` explains
+the omitted edges. The overall `truncated` flag also remains true when a page
+or manifest hit a result limit. Anonymous preview requests return at most six
+manifest items and cannot submit a cursor. When a preview has more results,
+`page.nextCursor` can seed the first API-Key-authorized page; subsequent cursors
+are bound to that authorization identity. `metadataState` is `missing` when Warehouse returned an edge
+without a matching FileAsset, so the response never invents a complete file
+record. `downloadable=true` and
 `downloadUrl` are reserved for a public HTTP(S) file URL. Canonical `s3://`,
 `oss://` and hostless `file:///...` values remain visible verbatim as
 `sourceUri` location hints but are not clickable and are explicitly not direct
 browser downloads. A `file:///...` locator names the path in the Warehouse
 scanner's mounted data environment; it does not claim that the same path
 exists on the public Assets host. Assets does not proxy credentials, presign
-objects or translate local paths.
+objects, translate local paths or download the scientific files for the user.
+`downloadable` describes a source link, not an Assets transfer capability;
+a missing link does not invalidate known file identity or spatial evidence.
 
 `entrypoints[]` contains links that are useful for reaching the official data
 service or checking the coverage itself, not additional file rows. Current
 entrypoint kinds are `official-release`, `official-data`, `official-query`,
-`coverage-source`, `coverage-moc` and `tile-directory`. MOC URLs and tile
-directories therefore appear only as coverage/data entrypoints. A
+`coverage-source`, `coverage-moc`, `source-path` and `tile-directory`. MOC URLs
+and tile directories therefore appear only as coverage/data entrypoints. A
 `tile-directory` entry carries `tileId` and only the requested NESTED cells
 that actually intersect that Tile; its URL is the official directory and
 Assets does not crawl or expand the directory into inferred file rows. The
 historical top-level `edges`, `sourceFiles` and `entrypoints` fields remain for
 clients that have not migrated; new exports should consume `downloadPlan`.
 
+`coverageEvidence[]` separately records published MOC, official Tile footprint
+or WCS-derived coverage matches with their actual order, source orders,
+precision and matched cells. It remains present when a component has no
+matching FileAsset or retrieval URL. A coverage hit describes the basis for
+the spatial result, not a verified scientific file or target at every cell.
+
 #### CSV and JSON exports
 
 The browser's overlap export requests the same bounded `downloadPlan`. JSON
-preserves it without flattening. CSV emits one row per real item and uses:
+preserves it without flattening inside a component envelope with its ID, order,
+cells and bounds. Both formats contain metadata and links only. CSV emits one
+row per real item and uses:
 
 - `item_kind=file` for a Warehouse FileAsset. `source_file_id`, `source_uri`,
   `downloadable`, `download_url` and the complete `matching_cells` JSON value
@@ -219,10 +265,17 @@ preserves it without flattening. CSV emits one row per real item and uses:
   `entrypoint_kind=tile-directory`, include `tile_id`, put the exact Tile
   intersection in `matching_cells`, and put the official directory in
   `entrypoint_url`.
+- `item_kind=coverage-evidence` for a published coverage source without
+  treating it as a science file. The row records its evidence kind, source
+  summary, matched NESTED cells, actual/source orders and optional source/MOC
+  URLs.
 
-When a component has neither a real FileAsset locator nor an entrypoint, the
-CSV contains no data row for that component. It never manufactures a blank
-`entrypoint-only` placeholder such as `no-public-download-entrypoint`.
+When a component has coverage material but no file record or retrieval
+entrypoint, JSON retains its `coverageEvidence[]` and CSV emits a separate
+coverage-evidence row. This does not manufacture a file record. If the current
+index has no matching file, the summary says so without claiming that the
+source has no data. Truncation and scan-scope limits remain meaningful in a
+download plan; exporting it does not establish completeness.
 
 ## Legacy Coverage Index
 
@@ -346,12 +399,13 @@ GET  /api/v1/admin/moc-discovery/{name}
 POST /api/v1/admin/moc-discovery/{name}/resubmit
 GET  /api/v1/admin/moc-builds
 POST /api/v1/admin/moc-builds
+POST /api/v1/admin/moc-builds/from-evidence
 GET  /api/v1/admin/moc-builds/{name}
 POST /api/v1/admin/moc-builds/{name}/retry
 POST /api/v1/admin/moc-builds/{name}/register-product
 ```
 
-创建 discovery 只提交巡天、Release/产品提示，或可选的 `productId`/`workContext`。
+创建 CDS discovery 只提交巡天、Release/产品提示，或可选的 `productId`/`workContext`。
 Assets 为 discovery 和文件扫描写入同一个稳定的 work identity/title annotation，
 因此 02A 可以把不同 attempt 聚合到同一产品工作项。列表响应只包含 phase、计数和
 evidence 引用；单项详情才包含 Warehouse 投影的有界 `status.reviewSummary`。
@@ -383,6 +437,46 @@ truncation sentinel，因此 `truncated=true` 表示还有候选没有进入审�
 `QUEUED → FETCHING → SNAPSHOT_LOCKED → VALIDATING → BUILDING → PROJECTING → BUNDLING → STAGED`
 执行；它调用 MOC-Core-SDK，证据和构建输出先留在 evidence。失败或重复快照分别为
 `FAILED`、`DUPLICATE`，retry 会创建新的不可变 build attempt，不会触碰 ScanRequest。
+
+`POST /api/v1/admin/moc-builds/from-evidence` 是受限的本地证据导入入口，适用于已有
+MAST CAOM 快照、锁定的观测清单、DS9 区域、recipe/provenance 和 MOC-Core 输出的小批
+闭环。请求为每个证据文件提供 evidence-root 下的相对路径、SHA-256 与大小；服务端重新
+读取并校验文件，核对所选 HST observation 的 proposal、仪器、滤镜、时间范围、区域几何、
+原生 NUNIQ order 与投影后，创建未发布产品和 `STAGED` build。产品明确保留 estimated
+footprint、not-scanned science files 和不完整归档范围；它仍须经过正常产品审核和发布，
+不会修改 Warehouse 索引或静态 layer registry。
+
+HST 新来源通过现有 discovery API 的 `mast-hst-observations-v1` policy 获取，
+由 Warehouse 执行有界 MAST 元数据查询；不要绕过系统手工抓取后导入。请求示例：
+
+```json
+{
+  "policyRef": "mast-hst-observations-v1",
+  "publishedLayerId": "euclid-euclid-q1-euclid-q1-vis-moc",
+  "stagedBuildName": "<staged-hst-build-name>",
+  "order": 10,
+  "componentIndex": 0
+}
+```
+
+`componentIndex` 从 0 开始。Assets 读取并校验当前公开 Q1 VIS MOC 和未发布的 HST
+草稿 MOC，按真实原生精度计算交集与所选连通区域，冻结 MOC SHA、ICRS cone 和
+NESTED cells 后提交 Warehouse。调用方不能提供坐标、cells、哈希或任意来源 URL；
+阶数不能超过任一来源的原生上限。当前 policy 只接受上述 Q1 VIS 图层作为范围锚点。
+
+详情响应的 `status.observationSummary` 返回最多 50 个候选 obsid、仪器、滤镜、
+截断状态和快照 SHA/大小；不会向浏览器发送完整 CAOM 表或对象存储路径。查询只收录
+公开 HST image 元数据。cone 候选不等于 footprint 与原交集相交，必须用构建的真实
+footprint 核对；零候选也不证明该区域没有 HST 数据。
+
+对成功任务，向 `POST /api/v1/admin/moc-builds` 提交
+`{"discoveryRequestName":"<request-name>","candidateId":"<MAST-obsid>"}`。
+Assets 从配置的共享证据存储读取不可变快照，校验任务身份、查询、SHA 和公开来源行，
+通过 Core 将 `s_region` 构建为 estimated footprint。输出为
+`hst-mast-observations` 下的未发布产品与 `STAGED` build，保留
+`observation-footprint`、obsid/proposal/target、仪器/滤镜、sourceSnapshotSha256、
+`completeness: incomplete`、`scienceFileScan: not-scanned`。这条路径不读取科学数组，
+不写 Warehouse 文件扫描索引，也不自动审核或发布。
 
 如果创建时没有绑定产品，`STAGED` build 会出现在
 `GET /api/v1/admin/products?view=surveys` 返回的 `__moc-builds__` 编辑队列中，
@@ -487,6 +581,49 @@ summary、source snapshot hash 和 evidence path；不内嵌 manifest、normaliz
 scan 或错误文件。重提创建新的不可变 ScanRequest、run ID 和 evidence path，原
 任务保持不变。
 
+`catalog-radec` 可以在任务请求顶层指定 `hduName` 或 `hduIndex`（从 0 开始，0 有效），
+用于选择 FITS 表，并同时指定精确值 `coordinateFrame: "ICRS"`；两个 HDU 选择器互斥。
+也可仅用 `coordinateFrame: "ICRS"` 声明无选择器的 CSV 坐标系。字段省略时保持既有
+catalog-radec 行为；其他解析 mode 显式传入这些字段会被拒绝。Assets 不按文件后缀猜 HDU。
+
+多产品同源扫描使用 `GET|POST /api/v1/admin/scan-batches` 与
+`GET /api/v1/admin/scan-batches/{name}`。POST 接受一个 `sourceConnector`、一个
+`sourcePaths` root、1–32 条产品规则和 `direct-child-prefixes` partitioning；Warehouse
+负责枚举并冻结 Tile roster、创建分区任务和调度并发，Assets 只创建一个
+`ScanBatchRequest`，不会逐 Tile 创建 ScanRequest。`sourcePaths` 必须恰好有一个值，且
+对象存储位置必须位于 Connector 配置的 bucket/prefix 内；本地位置相对于已授权的 PVC
+与 base path。每条规则以 `productId` 选择产品；layer identity、modality、data origin
+和 source tier 均来自当前产品草稿，不能由请求覆盖。可用 `scanMode` 选择本批次的
+文件解析方式；省略时仅回退到产品草稿中已有的 `fits-wcs`、`fits-header-position`、
+`catalog-radec` 或 `nested-healpix` mode。`tile-table`、`native-moc` 等非文件扫描模式
+需要显式提供 `scanMode`。`maxOrder`、列名、`allowedSuffixes`、filename glob
+`includePattern` 以及 `relativePrefix` 是每条规则的 recipe 参数。`maxOrder` 范围为
+1–12，固定 `healpixOrder` 范围为 1–29。`relativePrefix` 可为空；可输入一个末尾 `/`，
+Assets 会在提交前去掉。其余部分必须是无空段、无点段、无绝对路径/反斜线的相对 POSIX 前缀；
+`includePattern` 只匹配文件名，不接受路径分隔符。规则名与 layer ID 必须唯一。
+`catalog-radec` 规则也可顶层指定互斥的 `hduName` / 零起始 `hduIndex`（0 有效），并需同时
+声明精确的 `coordinateFrame: "ICRS"`；仅声明 `coordinateFrame: "ICRS"` 可用于 CSV。其他
+`scanMode` 不接受这些字段，Assets 不根据扩展名自动选择 HDU。
+
+列表和详情只返回产品/规则摘要及有界状态：`status.scope.rules` 中有每个规则的冻结
+scope ID、snapshot SHA-256 和预期 partition 数；`status.summary.rules` 中有预期、完成、
+失败、运行中 partition 数、文件/coverage 计数和可用 orders。响应不含 credential Secret
+引用、完整 roster、evidence 文件或 evidence path。批次证据仍由 Warehouse 保存在 evidence
+存储，不进入浏览器初始页面。
+
+```json
+{
+  "name": "euclid-q1-vis-batch",
+  "sourceConnector": "euclid-q1",
+  "sourcePaths": ["oss://survey-data/MER/Q1"],
+  "partitioning": { "mode": "direct-child-prefixes", "scopeId": "euclid-q1-vis-q1", "maxPartitions": 256 },
+  "maxConcurrent": 8,
+  "rules": [
+    { "name": "vis-images", "productId": "euclid-q1-vis-images", "scanMode": "fits-wcs", "relativePrefix": "VIS", "includePattern": "*.fits", "allowedSuffixes": ".fits", "maxOrder": 8 }
+  ]
+}
+```
+
 `GET /api/v1/admin/catalog/status` 返回当前 coverage 的加载模式、时间、内容 revision 和记录数；
 `POST /api/v1/admin/catalog/reload` 重新加载静态公开覆盖，并用 Warehouse ACTIVE
 layer 按 layer identity 覆盖或追加。Warehouse 不可用时保留静态 catalog，并将
@@ -496,6 +633,11 @@ layer 按 layer identity 覆盖或追加。Warehouse 不可用时保留静态 ca
 `GET|POST /api/v1/admin/publications`、`GET /api/v1/admin/publications/{runId}` 和
 失败任务的 `POST /api/v1/admin/publications/{runId}/retry`。
 计划包含每个受影响产品的 added/modified 字段差异，并在 revision 未审核时阻塞提交。
+仅更新已公开资源包时，POST 可指定 `rebuildPackages: true`、当前 `planId`、
+`expectedBaselineSha256` 和公开包的 `surveyIds`，不指定 `productIds`。
+该模式使用当前批准快照中的产品和原生 MOC，生成递增版本及
+`healpix/order4.json`、`healpix/order8.json`，不会发布工作区草稿或待撤回改动。
+它沿用同一上传、隔离恢复、CAS 激活和目标站点核验流程。
 执行阶段将变更文件按 SHA-256 增量上传，写入不可变对象 manifest，再在隔离目录恢复、
 校验 manifest、文件哈希及 Resource Package 的 id/version/surveyId，最后通过 CAS
 切换 schema-3 current 指针。完整 archive 仅用于导出/恢复及旧成员兼容，不是单产品

@@ -1,3 +1,4 @@
+import { mountScanBatches } from "./scan-batches.js";
 import { loadApiSettings, mountApiSettings } from "./api-settings.js";
 import { discoveryResultMarkup, onlyLeads } from "./moc-result.js";
 import type { DiscoveryFailure } from "../../server/discovery-failure.js";
@@ -2205,6 +2206,8 @@ async function reloadCatalogRuntime(button?: HTMLButtonElement): Promise<void> {
   }
 }
 
+const scanBatches = mountScanBatches(byId("scan-batches"), { api, products: () => productRecords, connectors: () => connectorRecords });
+
 async function refresh(background = false): Promise<void> {
   if (activeStep === "api") { if (!background) await loadApiSettings(api, renderIcons); return; }
   if (refreshInFlight) return refreshInFlight;
@@ -2253,6 +2256,7 @@ async function refresh(background = false): Promise<void> {
       apply<{ requests: MocBuildRequest[] }>("mocBuilds", data => { mocBuildRecords = data.requests; renderWorkOutputs(taskRecords, mocDiscoveryRecords, mocBuildRecords); });
       if (step === "tasks") {
         apply<{ tasks: Task[] }>("tasks", data => renderTasks(data.tasks));
+        await scanBatches.refresh();
         apply<{ requests: MocDiscoveryRequest[] }>("mocDiscovery", data => renderMocDiscoveryRequests(data.requests));
       }
     }

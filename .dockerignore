@@ -14,7 +14,11 @@ coverage
 .asa
 
 artifacts/public-survey-footprints/packages/*.zip
+!artifacts/public-survey-footprints/moc-core/
+artifacts/public-survey-footprints/moc-core/*
 !artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.1.0-py3-none-any.whl
+!artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.2.0-py3-none-any.whl
+!artifacts/public-survey-footprints/moc-core/moc-core-source-1.2.0-d4357fe.tar.gz
 artifacts/public-survey-footprints/csst/
 artifacts/public-survey-footprints/raw/
 artifacts/public-survey-footprints/normalized/

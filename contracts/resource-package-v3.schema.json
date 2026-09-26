@@ -37,7 +37,7 @@
     "files": {
       "type": "array",
       "minItems": 3,
-      "maxItems": 3,
+      "maxItems": 5,
       "items": {
         "$ref": "#/$defs/supportFile"
       },
@@ -100,7 +100,9 @@
           "enum": [
             "README.md",
             "footprints/survey-footprints.json",
-            "provenance.json"
+            "provenance.json",
+            "healpix/order4.json",
+            "healpix/order8.json"
           ]
         },
         "sizeBytes": {
@@ -248,7 +250,15 @@
         "geometryPrecision": {
           "enum": [
             "exact",
-            "estimated"
+            "estimated",
+            "unknown"
+          ]
+        },
+        "completeness": {
+          "enum": [
+            "complete",
+            "incomplete",
+            "unknown"
           ]
         },
         "precisionNote": {

@@ -15,6 +15,11 @@ src/layers/recipes/csst-*
 # Public release bytes are hydrated from the S3 authority into a disposable
 # local cache. Generated packages and release metadata must not re-enter Git.
 artifacts/public-survey-footprints/*
+!artifacts/public-survey-footprints/moc-core/
+artifacts/public-survey-footprints/moc-core/*
+!artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.1.0-py3-none-any.whl
+!artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.2.0-py3-none-any.whl
+!artifacts/public-survey-footprints/moc-core/moc-core-source-1.2.0-d4357fe.tar.gz
 artifacts/moc-source-probe.json
 artifacts/moc-source-probe-*.json
 .tmp-screens

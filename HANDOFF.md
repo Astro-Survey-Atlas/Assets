@@ -1,7 +1,758 @@
 # Assets 项目交接
 
-更新：2026-09-23（Asia/Shanghai）。本文件为当前状态入口；旧版本记录见
+续接：2026-09-26 10:03（Asia/Shanghai）。Warehouse overlap evidence 的 dev 验收与站点边界修复已完成。
+site 进程不持有 Warehouse 证据，之前从 site NodePort 请求 `/api/v1/coverage/overlap/details` 会返回空的
+`warehouseEvidence`；现在该只读详情请求由 site 转发到 backend，backend 保持唯一 Warehouse 读取边界。
+批次证据还补充了 `scanRunCount`、`sourceSnapshotCount` 和冻结 `scanScope`（scope ID、scope snapshot、
+expected/committed partitions、completeness），不会把多分区的输入 snapshot 冒充成一个 snapshot；单文件批次
+继续返回具体 scan run 与 source snapshot。详情抽屉同步显示这些字段。
+
+- dev Helm revision **250**，镜像
+  `0.1.0-20260926-095338-overlap-scope-evidence`，容器 digest
+  `sha256:8178f3cd02f77ac1b09b22b7bf70be5a466696dedcadcac6c2c7bf26027ee3f7`；site/backend 均 Ready、0 restarts。
+  `/healthz` 仍为 bundle `reviewed-mugfs3x1-846ba75f` / SHA
+  `5c9bde3801522ce35127d8d83152f0fee5970939ba9d55433b746ba369be0675`、526 files；没有重建资源包、修改 MOC
+  或改变公开指针。
+- backend 启动日志明确记录 coverage catalog 因 DESI 约 27 万条 edge 超过 200000 上限而使用 checked-in
+  public geometry；随后加载 5 条 Warehouse layer metadata。大目录不会阻断公开图层或详情证据。
+- 线上 Euclid × HST C31（O8、22 cells）从 site 请求详情返回 Euclid Q1 NISP.H/J/Y/VIS 四条 ACTIVE
+  Warehouse 证据，每条 `352 files / 4044 edges / exact / O8`，`scanRunCount=352`、`sourceSnapshotCount=352`，
+  scope `352/352 complete`，并带独立 scope snapshot SHA；HST 仍只显示公开覆盖/观测依据，没有伪造科学文件。
+- Euclid × DESI 与 DESI × HST 详情均返回 DESI `exposures-iron.fits` 的 1 file / 4323 coverage、具体 scan run
+  `batch-8f48029258d7-exposure-tile-centers-a720888c5890`、source snapshot
+  `52a257569f9c0d7a5bda15b7b9bb87b47db7bd93d9ca212fa7722aaf6557a784`，且不受大 coverage catalog fallback 阻断。
+- C31 匿名反查预览实测 HTTP 200：6 条预览、46 条 omitted、`hasMore=true`，返回四个 Euclid frozen scope；带 API
+  Key 的完整分页契约未改。单文件 Euclid VIS 命中仍返回真实 FITS 文件名、Tile、OSS URI、ESA 链接、scan run、
+  source snapshot 和 `downloadable=true`。
+- `/api/v1/coverage/catalog` live smoke 保持 ICRS/NESTED、35 个显式 layer records 和 revision
+  `6fa0606f0f6798f7c2f34efd5a6e3186`；公开 FITS byte-range smoke 返回 `206`、32 bytes 和匹配的
+  `X-Content-SHA256`。资源包 catalog 仍为 11 packages。
+- `npm run build`、`npm test`（319：317 passed、2 skipped、0 failed）、Core wheel 校验、Helm lint、
+  `git diff --check` 通过；新增站点 overlap-details proxy 回归和批次 scope/多 snapshot 详情回归均通过。
+
+本轮源码和文档仍未提交；继续保留所有已有 staged/unstaged 修改。没有发布 HST 新草稿、写入 Elasticsearch、
+删除失败批次、修改 MOC 或读取用户科学文件。
+
+续接：2026-09-26 00:49（Asia/Shanghai）。DESI DR1 exposure Tile 中心的正式单对象批次
+`desi-dr1-exposures-iron-20260926-r4` 已由 Assets → Warehouse 正常流程完成，未修改或删除
+此前的 r1/r2/r3 失败记录。Warehouse `ScanBatchRequest` 为 `SUCCEEDED`：精确对象
+`oss://data-and-computing/projects/CSST/shared-data/desi/dr1/public/dr1/spectro/redux/iron/exposures-iron.fits`
+冻结为 1/1 分区，roster SHA 为
+`dc5b1efc17661cfb217f1b623568372c00c546d3f652a51ebbc713a4e14371ff`，scope snapshot SHA 为
+`87b245aa44fe171ba8fd8549f08130f65c8683185a34cd4c12bc469675c52a26`。扫描 run
+`batch-8f48029258d7-exposure-tile-centers-a720888c5890` 使用 scanner/operator 的
+`0.2.0-20260926-exact-object-roster`（scanner digest
+`sha256:4d889be9c67b6723b5862d3827dd52e7546dbce0928647db7084e8b499cc1d43`），读取
+`EXPOSURES` HDU 的 `TILERA/TILEDEC`：9,176/9,176 行有效、0 invalid、0 errors，生成
+4,323 条 O8 `catalog_radec` occupancy coverage。输入快照 SHA 为
+`52a257569f9c0d7a5bda15b7b9bb87b47db7bd93d9ca212fa7722aaf6557a784`，证据位于
+`/var/lib/atlas-evidence/desi-dr1-exposures-iron-20260926-r4`。
+
+- `ast_partition_index_v1` 已提交该 scope 的 1 个 `ACTIVE` partition；对应
+  `ast_file_observation_index_v1` 保存 `exposures-iron.fits`（57,162,240 bytes）及 scan run、
+  source URI。该层 4,323 条边全部为 ICRS/NESTED、order 8、`catalog_radec`、`occupancy`、
+  `exact`，无重复 HEALPix cell。
+- 公开反查已验证该批次通过 `assets-batch-cc7665b2435c322ec3c9` 映射回
+  `desi-dr1-spectra-footprint`；与 Euclid Q1 已提交覆盖的真实 O8 交集可返回
+  `exposures-iron.fits`、Euclid MER 文件、各自 source snapshot 和两个 frozen scope 的
+  有限性说明。DESI 当前公开证据仍只有 2 个扫描文件（另含 `zall-pix-iron.fits`），不代表
+  完整 DR1，也不把 exposure Tile 中心当作目标级光谱覆盖。
+- Assets dev 仍为 Helm revision 245、镜像 `0.1.0-20260926-exact-object-roster`；
+  `/healthz` 返回 bundle `reviewed-mugfs3x1-846ba75f` / SHA
+  `5c9bde3801522ce35127d8d83152f0fee5970939ba9d55433b746ba369be0675`、526 files。此次
+  扫描没有发布 MOC、重建资源包或改变公开指针。
+
+下一步按原计划推进 HST 有限子集的来源/观测反查与 DESI 真实文件组织补齐；若扩大 DESI，优先
+在系统支持有界分块读取和长任务续租后扫描 canonical `zall-pix-iron.fits`，不要把 42 个
+原始 byte shard 当作独立 FITS。所有新增结果继续保留实际 order、精度、source snapshot
+和 frozen scope 限制。
+
+续接：2026-09-25 20:49（Asia/Shanghai）。Euclid Q1 frozen batch
+`euclid-q1-mer-images-20260924` 已由 Warehouse 正常完成：VIS、NISP-H、NISP-J、NISP-Y
+均为 352/352，合计 1,408/1,408 partitions，0 failed；每个规则有 352 个 FITS 文件、4,044
+条 order-8 `fits_wcs` coverage，available order 为 `[8]`。批次 phase 为 `SUCCEEDED`，没有
+重提、修改 frozen roster 或发布新的 MOC；roster SHA 仍为
+`2545cf6ee5a7cbea25484500c3e14a954c893259d9cb10ae8f5cfa381faf0aa3`。这只证明冻结 MER
+清单范围完整，不代表完整 Euclid Q1。
+
+- 终态索引核验：`ast_partition_index_v1` 有四个 batch logical layer 的 1,408 个 ACTIVE
+  partition 指针，每层 352 个，scope hash 与 expected count 均匹配，全部 order 8；
+  `ast_file_observation_index_v1` 有 1,408 个对应 FITS observation，VIS/H/J/Y 各 352，
+  无重复 file ID；按这些 committed partition layer 过滤，`ast_coverage_index_v1` 有 16,176
+  条 coverage edge，全部 `healpix_order=8`、`fits_wcs`、`footprint`，对应 1,408 个 source
+  file/URI。partitioned batch 文件元数据按约定保存在 observation index，普通扫描仍使用
+  `ast_file_index_v1`。
+- 最终真实三方 O8 C06 反查已用 API Key 分页复验：10 页、58 条去重结果，其中 17 个已扫描
+  Euclid/DESI 文件、33 个公开来源入口、8 条覆盖依据；末页 `hasMore=false`、`omitted=0`。
+  结果含 NISP.Y 文件并保留四个规则 `352/352` 的 frozen-scope 说明；整体仍标记
+  `truncated=true`，因为公开 MOC 范围不等于本次 MER 文件清单完整性。
+- 资源包最高优先项仍已发布并核验：11 个 ZIP 的 catalog SHA 全部匹配，均含
+  `healpix/order4.json` / `healpix/order8.json`；ACT O8 明确列出 native O7 的三层 omission，
+  未升采样。DESI 目标级扫描、三个已授权 HST 产品和 Workspace caller 验证保持原记录不变。
+
+续接：2026-09-25 17:25（Asia/Shanghai）。最高优先级资源包 O4/O8 HEALPix sidecar 已发布，线上仍为
+bundle `reviewed-mugfs3x1-846ba75f` / SHA
+`5c9bde3801522ce35127d8d83152f0fee5970939ba9d55433b746ba369be0675`，526 files；本次 dev
+升级没有重新生成或发布资源包/MOC。Assets 测试 319 项（317 passed、2 skipped、0 failed），Core
+wheel 与 `npm run build` 通过。dev Helm revision 243，镜像
+`0.1.0-20260925-155015-desi-range-catalog`，site/backend rollout 与 `/healthz` 通过。
+
+- Euclid frozen batch `euclid-q1-mer-images-20260924` 仍 RUNNING：VIS、NISP-H、NISP-J 各
+  352/352；NISP-Y 172/352；总计 1228/1408 partitions，0 failed、180 pending；当前有 2 个 Y
+  子任务运行中。批次仍由 Operator 按 maxConcurrent=2 继续调度。Roster SHA
+  `2545cf6ee5a7cbea25484500c3e14a954c893259d9cb10ae8f5cfa381faf0aa3` 未修改。只代表冻结 MER
+  规则范围，不代表完整 Q1。
+- Warehouse FITS BINTABLE 有界 range 读取实现与验证已完成，scanner JAR 中确认包含该解析器。
+  Assets 当前 `warehouseScannerImage` pin 为 pullable digest
+  `sha256:766c7d95c75b984964568f0c2d2b5411248dbba7fec9b1846b79ee60a55a94c8`。
+- DESI 目标级任务 `desi-dr1-zall-target-catalog-20260925-r3` 已 `SUCCEEDED`：1 个 FITS、
+  28,425,963 个有效目录行、266,051 条 O8 coverage、0 errors；source snapshot
+  `0511a614c4268cf86688612cac695156aa122fa9736e556bb7e96496ecd5d44e`，证据路径和
+  `ast_file_index_v1`、`ast_coverage_index_v1` 均已核实。r1/r2 失败任务保留，不删除或改写。
+  结果只覆盖这个已扫描的 `zall-pix-iron.fits`，不代表完整 DR1；42 个原始 byte shard 仍不作为独立 FITS。
+- 已核验三个获授权的 HST 产品均已发布并 ACTIVE：ACS archive、WFC3 archive，以及 MAST
+  obsid 24796973；它们仍明确标记为覆盖/观测证据的有限子集，不代表完整 HST。
+- Euclid Q1 的公开 VIS/H/J/Y 图层已经绑定到批次证据层，带 API Key 的 O8 反查可返回真实
+  FITS 文件、Tile、OSS URI、大小和 `fits_wcs` 证据；VIS/H/J 当前各 352/352，Y 在最近一次
+  反查时为 172/352。结果同时保留 frozen scope 和不完整性说明，未将公开 MOC 当作文件索引。
+- Warehouse caller 验证已通过：Workspace sourceVolume（1 file/2 coverage）和 Workspace
+  remote connector（1 file/1 coverage）均 `SUCCEEDED`、0 errors，测试请求保留供审计；未读取用户科学数据。
+
+更新：2026-09-25 13:08（Asia/Shanghai）。本文件为当前状态入口；旧版本记录见
 [历史交接](docs/handoff-history-through-20260920.md)，不可将旧部署或待办当成现状。
+
+续接：2026-09-25 15:11（Asia/Shanghai）。Euclid Q1 原批次仍使用同一 frozen roster，VIS、NISP-H、
+NISP-J 已各完成 352/352，失败 0；NISP-Y 已启动并完成 12/352（1,068/1,408 partitions），
+其余 340 个 Y 分区待调度。没有重提批次、修改 roster、发布 MOC 或改变公开包。对 DESI DR1 做了
+一次只读 FITS 头探查（每个对象最多读取 128 KiB，未读取科学行、未写 Warehouse 索引）：完整
+`zall-pix-iron.fits` 和 `part-00000` 均声明 `ZCATALOG` BINTABLE、`NAXIS1=787`、
+`NAXIS2=28425963`、`TARGET_RA/TARGET_DEC`；`part-00001` 没有 FITS 头，42 个 `part-*` 是
+原始字节切片而非独立 FITS。当前 scanner 的单文件 FITS catalog 读取和 64 MiB 行数据限制不能
+直接安全地扫描这些分片，因此尚未提交目标级 DESI 扫描；已完成的 `tiles-iron.csv` Tile
+覆盖仍是唯一真实 DESI 文件扫描结果。
+
+续接：2026-09-25 14:10（Asia/Shanghai）。dev Assets Helm revision 241 已完成 rollout，
+前后端均 Ready、0 restarts；镜像为 `0.1.0-20260925-135717`。健康接口返回 bundle
+`reviewed-mugfs3x1-846ba75f` / `5c9bde3801522ce35127d8d83152f0fee5970939ba9d55433b746ba369be0675`，
+当前 manifest 为 526 files；本次仅包含扫描提交契约修复，未改变公开包、MOC 或历史数据。
+
+- DESI DR1 首个真实单文件扫描已通过 Assets 管理 API 提交并完成：任务
+  `desi-dr1-tiles-catalog-20260925`，connector `desi-dr1-spectro-oss`（OSS endpoint
+  `http://oss-cn-hangzhou-zjy-d01-a.res.cloud.zhejianglab.com`，bucket
+  `data-and-computing`，配置根 `projects/CSST/shared-data/desi/dr1/public/dr1/spectro/redux/iron/`）。
+  输入为 `tiles-iron.csv`，使用 `catalog-radec`、ICRS、`TILERA/TILEDEC`、O8，Warehouse
+  返回 `SUCCEEDED`、1 file、1 HDU、4,323 coverage documents、0 errors、available order 8；
+  run ID `desi-dr1-tiles-catalog-20260925-20260925060447`，source snapshot SHA
+  `382d84e58303906f2bfb66bb86b01ae5217f7cbb3262fd83936525310aa6e0e3`，evidence path
+  `/var/lib/atlas-evidence/desi-dr1-tiles-catalog-20260925-20260925060447`。反查已在
+  Euclid Q1 × DESI C04 真实区域返回 `tiles-iron.csv`、精确 O8 `catalog_radec` occupancy
+  记录和 DESI 公开入口；结果只代表这一个已扫描目录文件，不代表完整 DR1 光谱文件集或完整
+  footprint。公开反查还保留扫描文件有限、覆盖 MOC 更广的完整性说明。
+- Euclid Q1 原批次 `euclid-q1-mer-images-20260924` 仍 RUNNING，最新查询为 VIS 352/352、
+  NISP-H 352/352、NISP-J 294/352（2 running）、NISP-Y 0/352，0 failed；总完成 998/1408。
+  未重提、未改变 frozen roster；仍只代表冻结 MER 文件规则范围，不是完整 Q1。
+
+续接：2026-09-25 14:30（Asia/Shanghai）。同一 Euclid 批次继续推进到 VIS 352/352、
+NISP-H 352/352、NISP-J 320/352（2 running）、NISP-Y 0/352，0 failed；总完成 1024/1408。
+未重提或修改任务。公开覆盖验收确认 Euclid×HST 有 138 个 O8 像元、DESI×HST 有真实重合
+组件，三方 Euclid×DESI×HST 有 15 个 O8 像元；反查按证据层级区分已扫描文件与覆盖依据。
+三方示例中 Euclid 扫描文件可返回真实 FITS、OSS URI 和 ESA 获取链接；没有对应扫描命中的
+DESI/HST 结果仍保留覆盖来源和完整性限制，不伪造文件或链接。验收证据保存在
+`/tmp/assets-three-way-c06-reverse.json`、`/tmp/assets-desi-q1-reverse.json`。
+
+续接：2026-09-25 13:08（Asia/Shanghai）。HEALPix sidecar 后的历史包修复 run
+`mugfs3x1-846ba75f` 已发布并通过 authority/site 核验，当前 bundle 为
+`reviewed-mugfs3x1-846ba75f` / `5c9bde3801522ce35127d8d83152f0fee5970939ba9d55433b746ba369be0675`。
+11 个上一版本固定 URL 均仍可下载，SHA 全部与原包一致；新目录仍只有 11 个当前包，Euclid
+3.17.0 与 ACT 3.5.0 均带 O4/O8 sidecar，旧包不在当前目录中。dev Assets Helm r239，镜像仍为
+`0.1.0-20260925-114800-historical-package-retention`。Q1 批次未重提，已由 Warehouse operator
+分页/OOM 修复恢复调度；最新 Warehouse 快照为 VIS/H 各 352/352、J 238/352（2 running）、
+Y 0/352、0 failed，942/1408。
+
+- 2026-09-25 13:08：Warehouse 原生 smoke、Assets caller smoke 和 Workspace PVC caller smoke
+  均已通过。原生 smoke session `84945` 的 S3/local/MOC 请求分别成功；Assets caller
+  `warehouse-caller-assets-scan-20260925050233-703c8fb28f63baf9` 成功并返回 1 文件/1 覆盖及
+  51 个截断候选；Workspace caller `warehouse-caller-workspace-scan-20260925050444-5f35ae69932ab6f8`
+  成功并返回 1 文件/2 覆盖。请求资源按 `KEEP_REQUESTS=1` 保留，未读取用户科学数据。
+
+## 最新验收与数据进度（2026-09-25）
+
+- **资源包 O4/O8 HEALPix 列表已正式发布到 dev，最高优先项完成。** Reviewed run
+  `mugdqevw-ddf6b6d5`，release `reviewed-mugdqevw-ddf6b6d5`，bundle SHA
+  `395ce15d091a8e93181b259f07550f739ffbb0e926e0db8807cb870ca1adf09f`，515 files/11
+  packages。11 个当前公开包均有 `healpix/order4.json`、`healpix/order8.json`；逐包从
+  dev 下载、校验 catalog size/SHA、manifest support-file SHA、ICRS/NESTED/order/version，
+  并使用包内原生 MOC 重算每层像元及 union，全部通过。ACT 的 3 层和 SDSS 的 2 层因原生
+  MOC 阶数低于 O8，在 O8 sidecar 显式 omitted；没有由 O4 升采样。证据
+  `/tmp/assets-published-healpix-verification.json`、`/tmp/assets-healpix-after-catalog.json`。
+  site/backend 最终 `/data/current` 均指向新 bundle；管理发布 run 的当前 site verification
+  为 `verified` 且 observed SHA 与新 bundle 一致。
+- 本次为 package-only 重建，冻结当前 approved products/native MOCs，没有选入工作草稿或退休项。
+  镜像 `0.1.0-20260925-110300-healpix-upload-timeout`，Helm r238，values 将
+  `objectStore.requestTimeoutMs` 设为 300000；对象客户端从该配置取超时。首次上传在默认
+  60 秒时多次超时并失败，权威指针未动；修复后同一基线 package-only run 成功。authority
+  更新后 site PVC 一度仍用旧 symlink，已由正常 init sync 重启 site/backend 并核验新指针；
+  不是直接改写 PVC。build、319 Node tests（317 pass/2 Core-image skips）、Core wheel、site
+  TypeScript、Helm lint/render 和 diff check 通过。日志 `/tmp/assets-healpix-timeout-*`、
+  首次失败和成功 run 分别为 `mugcqmn5-a4ebc400`、`mugdqevw-ddf6b6d5`。旧 bundle 与包文件留在
+  immutable release/cache；不要据此恢复旧公开指针。
+- 下一最高项：Euclid Q1 原 Warehouse ScanBatchRequest
+  `euclid-q1-mer-images-20260924` 仍 RUNNING，未重提。最新快照 VIS 352/352、NISP-H 352/352、
+  NISP-J 238/352（2 running）、NISP-Y 0/352（352 pending），0 failed；总完成 942/1408
+  partitions。只有冻结 MER 文件规则范围可视为已完成，非完整 Q1。roster SHA
+  `2545cf6ee5a7cbea25484500c3e14a954c893259d9cb10ae8f5cfa381faf0aa3`，bucket/prefix 为
+  `data-and-computing/projects/CSST/shared-data/euclid/aws-mirrors/q1/MER/`。
+- 按用户授权对 `projects/CSST/shared-data/` 做了限量只读 OSS `ListObjectsV2`，没有读科学文件。
+  顶层发现 `desi/`；DR1 下有 `desi/dr1/public/dr1/` 与 `desi/aws-mirror/dr1/`，镜像有
+  `spectro/`、`vac/`；公开目录包含 `spectro/`、`survey/`、`target/`，另有 `dr1/bgs_coadds/`。
+  接下来应限量列举这些谱文件子目录，确认文件组织和命名，再通过 Assets→Warehouse 正式提交
+  DR1 扫描；目前不得把目录存在等同于扫描或目标关联完成。DESI 目录发现临时使用 Euclid
+  connector Secret，仅用于用户授权的路径列举，凭据未输出。六个前缀的受限目录快照保存在
+  `/tmp/assets-desi-dr1-directory-probe.json`（SHA `2966e9536978e6ee0f24fc998debda03f07226dda4ab52e31e718c44267bf7d0`）。
+- 2026-09-25 13:14 的后续只读布局探查保存为
+  `/tmp/assets-desi-dr1-layout-probe.json`（SHA
+  `c693395e1ab87175c98003452215c3fa077028b004ae3789a111a4effa995442`）。公开 DR1
+  `spectro/data/20200201/00045677/` 仅含 GFA、请求和校验清单，而
+  `00045681/` 含 `desi-00045681.fits.fz`（约 272 MB）及请求/校验清单；代表性的
+  `redux/iron/exposures/20210106/00071051/` 含 44 个对象（13 个 frame、30 个 PSF、
+  1 个校验文件），没有读取对象内容。`zall-pix-iron.fits` 的
+  22.4 GB 单文件及 42 个 512 MiB 分片只作为目录事实保留，不能直接当作已扫描的
+  目标目录。AWS mirror 的 DR1 目前只列出 `spectro/redux/iron/zcatalog/` 和
+  `desi_spectro_calib/0.4.0/` 子树，未发现独立的可扫描目标清单。
+- **本次 dev：Assets Helm revision 239**，镜像 `0.1.0-20260925-114800-historical-package-retention`，
+  site/backend Ready，0 restarts；线上包目录仍为 11 项，版本：2mass 3.5.0、act 3.5.0、
+  des 3.4.0、desi 3.4.0、euclid 3.17.0、gaia 3.3.0、galex 3.7.0、hst 3.4.0、
+  jwst 3.4.0、sdss 3.6.0、sumss 3.3.0。活跃入口 `http://10.15.51.75:32083/`。
+
+- H累计164/352时，再验同一Euclid×DESI C04反查：185个文件，前次153/153全保留，
+  新增32；8页、138个来源入口、8项覆盖依据，分页计数与去重数量一致，末页hasMore=false。
+  H仍incomplete，VIS352/352仅冻结规则范围complete。证据
+  `/tmp/assets-q1-desi-expanded-h-{pagination,comparison}.json`。首屏14325ms，后续666–1088ms，
+  间歇延迟仍存在；Warehouse owner继续只读分项诊断fetch/资源等待/存储，不重启或调参。
+
+- 在同一已保存Warehouse snapshot内，经Assets moc-builds API串行新增4条HST观测草稿，
+  全部201/STAGED，未新查源、未下载科学文件、未发布：obsid26379957（ACS F775W，
+  product332b1034ce84c2c0961d）、26323986（ACS F850LP，74673f7010e5669fb4a8）、
+  23848193（WFC3/IR F160W，b797812498d2a9b60d02）、26517950（WFC3/UVIS F336W，
+  0f8e3541e2e726388a8c）。build命名均为 `hst-observation-<obsid>-155b688c`。
+  4条均native O10，与冻结Q1/WFC3范围分别相交5/5/2/4 cells；来源快照、原生MOC、
+  build/product/executionEvidence绑定及estimated/incomplete声明全部验证通过。
+  证据 `/tmp/assets-hst-snapshot-small-batch.jsonl`、`/tmp/assets-hst-footprint-<obsid>.json`。
+  加上原F105W观测现有5条真实观测草稿，仍是有限子集，不代表完整HST。
+  公开响应hash与r236基线完全一致（`/tmp/assets-after-hst-small-batch.json`）。
+  这4条不自动加入之前待用户确认的3份发布范围；继续保持草稿。
+
+- 续接核实：Q1原批次仍RUNNING，VIS352/352、NISP H144/352、2个运行中、0失败，
+  J/Y待调度；未重新提交。Assets当前connector清单只有Euclid MER、smoke和本地来源，
+  没有真实DESI连接。已向用户请求DESI DR1 connector或endpoint/bucket/prefix及授权连接关系，
+  不读取用户私有connector或用测试源代替。HST三份草稿的发布确认也仍待答复。
+  `docs/scan-batches.md` 已从“仅本地开发”更新为当前dev状态，并明确Workspace消费公开
+  反查证据、私有扫描独立，以及remote connector caller gate尚未覆盖的限制。
+
+- **当前 dev：Assets Helm revision 236**，镜像 `0.1.0-20260925-055534-hst-native-order`，
+  digest `sha256:4f153d75e1a785422fac49dac0233d9eaaf1d8ae5c83327a90f37a23bbcc455d`。
+  修复 regions wrapper 将请求计算上限O10错误地要求为输出原生最大阶；实际合法O9现可导入，
+  仍要求native不低于queryOrder8/公开最低4且不高于请求上限，不制造O10。另修复JVM启动参数
+  `ExitOnOutOfMemoryError` 被诊断为OOM的误报，live GET现为unknown（就绪但未独立证明执行循环）。
+  317 tests/0 skips、build、site tsc、Core pin、Helm lint/render通过；镜像内断网合成导入及
+  真实obsid24796973锁定region复跑通过，实际O9/hash与原输入生成物一致。manifest仅image变化，
+  site/backend Ready、0 restarts、实际digest一致。公开health/assets/coverage/catalog/packages
+  响应hash均与部署前一致；Q1 MOC Range206/32bytes/source SHA未变；真实反查43cells匿名+Key
+  6页200、26不同文件、原4/4文件存在、末页hasMore=false。相关日志/证据
+  `/tmp/assets-hst-native-{build,tests,types,helm-lint,image-build,image-push,rollout}.log`、
+  `/tmp/assets-{before,after}-hst-native-rollout.json`、`/tmp/assets-hst-native-live-pagination.json`、
+  `/tmp/assets-hst-native-range.json`。live values/rendered/manifest是0600配置，不输出或提交。
+- 同一Warehouse快照的正式HST导入现已201：`hst-observation-24796973-155b688c`，
+  product `9334e8aecae1d80a40b9`，STAGED/unpublished，native O9/[9]/1cell，MOC SHA
+  `5b268f896d391ed32404bfafec62e133b9b9737eb29b75f4fbcbaa1caf0c8630`。
+  `/tmp/assets-hst-native-live-import.json`。真实几何已核对：冻结O10的69cells降到O9有24
+  parents；Q1/CDS范围两输入均覆盖24/24，新观测cell2299879命中其中1个。未升采样O10。
+  verifier所有检查通过（ok=true/failures=[]），包含product.mocBuild/executionEvidence绑定、
+  CR身份、快照三方hash和三份MOC hash；`/tmp/assets-hst-native-live-footprint-proof.json`。
+  没有重新发现源、没有科学文件下载、
+  没有发布草稿。已向用户提交3份HST草稿的具体发布确认，尚待答复，不视为已授权发布。
+- Warehouse r11基础与Assets caller gates通过；Workspace sourceVolume caller通过。
+  Workspace remote connector未覆盖：没有已识别的合成远端凭据，未使用用户connector。
+  详细run IDs/evidence见Warehouse HANDOFF；不能称全路径验收完成。
+
+- r235 真实匿名浏览器验收通过：Euclid/DESI/HST 均可选择；Euclid×DESI O8
+  总587 cells，C04为506 cells，详情200。抽屉显示真实Q1 VIS/NISP H文件、OSS URI、
+  DESI/Euclid来源及继续浏览按钮；点击打开空API Key框后取消，未提交Key或解锁请求。
+  桌面1440/手机390均无页面横向溢出、console/page/API错误；WebGL初始化成功。
+  证据 `/tmp/assets235-euclid-desi-c04-browser-acceptance.json` 与同前缀 desktop/mobile PNG。
+  此验收不证明新HST观测已发布或三方交集存在。
+
+- HST CRD 的空候选 default `[]` 已上线。原失败请求由正常 controller 从原 Job
+  证据重新投影，Assets GET 现在显示真实 FAILED/DiscoveryTransportError，保留
+  candidates=[]、queryExhausted=false，不再被 ReconcileError 遮蔽；未重提、删除或手工
+  修改旧 CR/Job。证据 `/tmp/assets-hst-original-after-schema.json`。新的 typed-failure
+  worker 已随 Warehouse r11 部署；原尝试不能追溯恢复已经丢失的异常类型。
+
+- 真实重合→来源分页闭环补验：公开 Euclid × DESI O8 的 C04（506 cells、8 个实际
+  参与图层）经匿名预览 + Key 续页，共 8 页/153 个不同文件/138 个不同来源入口/
+  8 项覆盖依据；页计数与去重后计数相同，最后 hasMore=false。文件包括 Q1 VIS/NISP H，
+  DESI EDR/DR1 保留 Tile footprint 与实际来源入口，不宣称已核实光谱科学文件。
+  此时 H 仍 incomplete，VIS 的冻结规则范围 complete；未制造三方交集。
+  证据 `/tmp/assets-q1-desi-{live-overlap,component-details,component-reverse,pagination-proof}.json`，
+  分页脚本 `/tmp/assets-q1-desi-pagination-proof.mjs`。这是对真实公开重合区域的验证，
+  不是使用孤立已知 cell 代替重合链路验收。
+
+- 前次工作记录（下述422已由r236修复，以上方结果为准）：Warehouse operator r11 已部署，两个 controller Ready；discovery worker
+  digest `sha256:a1ddf6de697b015b6648c408fe9c98a8f8aab16283a0e3f558489cfdb88d2a3f`。
+  通过 Assets API 唯一重试
+  `hubble-space-telescope-moc-discovery-20260-retry-20260924213213` 已成功，100 个候选，
+  truncated=true/queryExhausted=false；snapshot SHA
+  `155b688ce20a0e48aa7227d326201eb417fb79c5e916e42e60ef0d5ed9ad6f87`，52866 bytes。
+  证据 `/tmp/assets-hst-system-discovery-retry{,-poll}.json`；原失败请求与证据保留。
+  导入真实 WFC3/IR F105W obsid24796973 经 Assets moc-builds API 返回422
+  `MOC Core rejected the locked MAST observation footprint`，尚未形成成功草稿；
+  `/tmp/assets-hst-system-import.json`。owner `/root/hst_metadata_assets` 正定位实际
+  snapshot/Core 转换，不以换候选或忽略错误掩盖问题。候选中心锥命中不等于实际 footprint
+  相交；导入成功后还需验证冻结范围交集。verifier 也需分开校验输入CDS MOC与新观测
+  输出MOC，不能要求两者SHA相同。两份CDS草稿仍未发布，DESI真实来源仍待提供。
+  最新Q1批次VIS352/352、NISP H90/352（1032 edges）、J/Y待调度，0失败，RUNNING。
+  Warehouse owner 正补核 r11 caller smoke gates。Assets executor OutOfMemory 已定位为
+  启动日志 `-XX:+ExitOnOutOfMemoryError` 被宽松正则误中，assets_batch_api 正最小修复
+  与回归。controller/worker无OOMKilled；operator一次重启为启动探针503触发SIGTERM。
+
+- **前次 dev：Assets Helm revision 235**，镜像
+  `0.1.0-20260925-043333-hst-identity`，registry digest
+  `sha256:2686bc2ba209433509d80c2dc4d44633a31e1f694d2d3bf6e7e31e3a7c58534e`。
+  修复 HST discovery 的 work/release identity 仍硬编码 `hst-mast-observations-2026`、
+  与 importer `hst-mast-observations` 不一致的问题；旧 CR 保留原身份，不改写历史。
+  build、313 tests（0 skipped）、Core pin、site tsc、Helm lint/render 通过；manifest
+  仅 image 变化，site/backend Ready、0 restarts，实际 digest 一致。公开 bundle/512 files、
+  coverage/catalog（除生成时间）、resource package catalog 未变。部署后固定 43 cells
+  分页返回 26 个文件，原 4/4 都存在，6 页 HTTP200，22–73ms，末页 hasMore=false；
+  Q1 VIS MOC Range206/32 bytes 与 source SHA 一致。证据
+  `/tmp/assets-hst-identity-{build,tests,types,helm-lint,image-build,image-push,rollout}.log`、
+  `/tmp/assets-after-hst-identity-rollout.json`、`/tmp/assets-hst-identity-live-pagination.json`、
+  `/tmp/assets-hst-identity-range.json`。live values/rendered/manifest 为 0600 配置文件，不提交。
+
+- **Q1 VIS 冻结范围已完成**：原批次 `euclid-q1-mer-images-20260924` 的 VIS 352/352，
+  352 files/4044 O8 estimated edges，0 failed；NISP H 已自动开始（2 running），
+  J/Y 待调度，整个 batch 仍 RUNNING。这只代表冻结 MER 科学影像规则范围，不是完整 Q1。
+  完成后的固定 43 cells 真实分页再次通过：26 个不同文件，原 4/4 文件均保留，6 页
+  HTTP200，最终 hasMore=false，每页 23–97ms；
+  `/tmp/assets-q1-vis-complete-pagination.json`。间歇 ES 延迟仍未证明已解决。
+- NISP H 已有真实反查正例：从本批次 ACTIVE partition pointer 选择实际 O8 cell163705，
+  公开 API 返回 Tile102158272 的 `EUC_MER_BGSUB-MOSAIC-NIR-H_TILE102158272-...fits`、
+  原 OSS URI、实际 O8 estimated/fits_wcs、run/snapshot/partition 关联；此时 scope22/352
+  incomplete。证据 `/tmp/assets-q1-nisp-h-committed-proof.json`；另测 cell549012 无文件，
+  仍披露已扫描范围，未断言该区域没有数据。这里只读系统已生成的索引和公开 API，
+  没有绕过 Warehouse 枚举或读取源科学文件。
+
+- **前次 dev：Assets Helm revision 234**，镜像
+  `0.1.0-20260925-033952-hst-evidence`，registry digest
+  `sha256:1607388d5d416a09f1d2d0bf30a2c9c2f7100f1b5cf030fd6dd0fae8b8c54f1b`。
+  网站与 backend 均 Ready。完整 build、313 tests（0 skipped）、Core pin、site tsc、
+  live-values Helm lint/render 通过。最终镜像以 UID 10001、network=none、真实默认 Core
+  runner 完成合成 HST import→STAGED；使用与 Helm 一致的 MOC_BUILDER_SCRIPT 配置。
+  日志 `/tmp/assets-hst-integrated-{build,tests,site-types}.log`，镜像验证
+  `/tmp/assets-hst-final-image-smoke.json`；这是合成 importer 验证，不是 MAST 真实获取。
+- r234 已部署公开图层 allowlist 和 metadata-only 草稿状态查询，启动只加载 1 个批准的
+  Warehouse layer/11 edges，不再出现此前 200000-document catalog overfetch 警告。
+  公开 bundle `reviewed-muedpg06-8e4a45a0` / SHA
+  `4f76e8e726ac31457edc320de105fe867b8f4f9c2c0594c6528a50f46d36e8b7`、512 files、
+  32 layers，以及 coverage/catalog/package 响应均与部署前一致；证据
+  `/tmp/assets-{before,after}-hst-rollout.json`。旧普通 VIS layer/11 edges 的保护 SHA 未变。
+- r234 固定 43 个 O8 cells 的真实匿名预览/API Key 分页返回 22 个不同文件，原始 4/4
+  目标存在，6 页全部 200，最后 hasMore=false。首请求 14867ms，其后 22–81ms，
+  `/tmp/assets-hst-live-pagination.json`。目录过量读取已修复，但间歇延迟尚未解决，
+  不能将两者混为同一根因；只读诊断正在区分 API 外围与 ES/Store 用时。
+- 本次续接 Q1 原批次仍 RUNNING：VIS 310/352，310 files/3559 O8 edges，2 running、
+  0 failed，H/J/Y 尚未调度。仍使用原 roster，不重新提交或重启，不代表完整 Q1。
+- HST scope resolver、Warehouse snapshot 校验/import 和无链接 footprint 来源展示已在
+  r234 部署。Warehouse 新 operator/discovery 镜像已构建验证；部署前 CRD dry-run 发现
+  radius exclusiveMinimum 类型错误，已改为 minimum:0/exclusiveMinimum:true，完整静态
+  gate 通过。Warehouse rollout/live gate 尚在进行；真实 MAST 请求需经 Assets API 提交。
+  两个 CDS HST 草稿仍未发布。以下 r233 及更早的计数和“尚未部署”是过程记录。
+- Warehouse operator 已更新至 Helm r10，MOC CRD 已接受新 policy；两个 controller Ready，
+  scanner pin 与现有 Q1 batch 保留。首个真实请求通过 Assets API 返回 201：
+  `hubble-space-telescope-moc-discovery-20260924201028`，范围为 WFC3/Q1 O10 C16 的
+  69 cells。其 Job 使用已验证的新 discovery digest，但 worker 业务结果为
+  FAILED/DiscoveryTransportError（request stage，0 response pages/0 bytes，无 snapshot）。
+  不能将进程退出 0 / Kubernetes Job Complete 当成发现成功或零候选科学结论。
+  Operator 回写空 candidates 又被 CRD 拒绝，掩盖原始错误为 ReconcileError；Warehouse
+  owner 正修复并保留原任务/evidence，不盲目重试。提交与 CR 证据分别在
+  `/tmp/assets-hst-system-discovery-submit.json`、`/tmp/assets-hst-first-discovery-resource.json`。
+- 反查慢的同参诊断已纠正早期不等价探测：只查普通 VIS 层的几十毫秒不能代表包含批次
+  alias 的实际请求。同一 public layer + batch binding/43 O8 cells/limit 6 的 Store 查询
+  实测 11673ms，其中 ES layer 查询 took9266ms，file observations took2285ms；
+  partition/coverage 查询仅 1/2ms。完整无凭据请求与分项计时保留于
+  `/tmp/assets-hst-batch-alias-same-args-timing.json`，尚未确定这两个 ES 慢查询的根因。
+  后续 Lucene profile 与 `_source` 对照及限制见
+  [延迟诊断](docs/warehouse-reverse-lookup-latency-20260925.md)；最新快请求不能证明慢点已修复。
+- Workspace 已部署 Helm `asa` / `asa-workspace` revision 47，镜像
+  `0.10.38-dev-20260925-assets-reverse-evidence`，digest
+  `sha256:21915eb3e89c2b7a3ae03095fa99269a2b7b565593c6c250c4bab498bd47019f`，
+  Pod Ready/0 restarts。实际镜像与当前构建 hash 一致，Helm manifest 仅 image 变化，
+  原 state/evidence PVC 与 11 packages/4 active packages 保留。公开 Q1 VIS/O4 cell637、
+  includeWorkspace:false 的真实 Workspace 反查 HTTP200，0 files 但保留 1 项覆盖依据，
+  scope 336/352 incomplete。未读取私有 CSST、未安装/激活包、未运行改变状态的 e2e。
+  build、284 tests/2 optional skips 通过；详细记录在 Workspace
+  `docs/resource-package-compatibility.md`，临时证据目录
+  `/tmp/asa-workspace-reverse-evidence.7DtThpzP/`（含配置快照，不输出或提交）。
+- 现有公开 HST COSMOS 的来源契约已单独实测：
+  `hst-mast-cosmos-obs-26442812` / O8 cell436132 的匿名预览 HTTP200，0 files，
+  但保留 `observation-footprint`、MAST obsid/proposal/target、ACS/WFC、filter、snapshot
+  SHA、estimated/incomplete/not-scanned。Workspace 当前 HST 包未安装，因此未改用户
+  激活状态去强行测试；跨端字段透传和展示只有合成测试证据，不能宣称该 HST 行已完成
+  live Workspace 链路。这也不是 HST/Q1 新范围补齐的验收。
+
+- 本次续接核实 Q1 原批次仍为 RUNNING：VIS 196/352，196 files/2243 O8 edges，
+  2 running/0 failed；NISP H/J/Y 待调度。冻结 roster SHA 未变；未重复提交任务。
+- 公开图层 allowlist 与草稿 metadata-only 查询的源码修复已完成一轮 build/test：
+  308 passed、1 skipped，尚未部署；HST API 接线仍在修改，此测试不是最终集成门禁。
+  skipped 项为未设置 `ASSETS_MOC_CORE_REGIONS_TEST_IMAGE` 的 Core regions 镜像集成测试。
+  真实 Warehouse 只读复核已通过：首个查询的 32 IDs 与当前公开目录严格一致，两次查询
+  合计 48.4ms，返回 1 layer/11 edges，ES took 分别 1ms/0ms；未请求被排除图层或私有记录。
+  查询轨迹与断言保存于 `/tmp/assets-scoped-catalog-smoke.json`。
+- HST 上线前审阅发现必须补齐的契约/运行问题：整份 MOC 投影 4097 上限会误挡小交集；
+  编译后的 Python converter 路径需匹配镜像；Warehouse 必须解析实际 MAST JSON，并输出
+  Assets 使用的 `Tables[].Columns[].dataIndex` 为列名字符串的规范表，不能用数字列索引；
+  `dataRights` 大小写索引需一致。两端 owner 正修复，完成跨端与镜像内成功路径验证前不部署。
+  已用保留的真实 Q1 VIS 原生 MOC（SHA `7f8906442664691417d5314b7cbaf2dbdeafabc4fe9f7aa32b560280cb9af5f6`）
+  复现投影问题：O10 实际有 21269 cells，4097 上限确实 truncated；并非假设性边界情况。
+  范围交集修复后已通过真实数据对照：WFC3 的 22 个区域、ACS 的 11 个区域，每个区域的
+  完整 cells 和查询 cone 均与独立完整投影结果一致；两者各有 160 个 O10 交集 cells。
+  证据 `/tmp/assets-hst-resolver-real-scope-proof.json`；这是本地 resolver 验证，尚非 live API 验收。
+- 累计扫描到 212 个 committed VIS 分区时再次检查原固定 43 个 O8 cells：真实匿名预览和
+  API Key 续页返回 21 个去重文件，原 4/4 目标均存在，最终 hasMore=false；证据
+  `/tmp/assets-progress-pagination-smoke.json`。仍明确 incomplete scope，不作为全 Q1 验收。
+- HST 来源展示还发现旧反查 mapper 将 `observation-footprint` 归为 `published-moc`，
+  overlap details 未传递 source identity/hash/completeness。backend 契约与测试正在补齐。
+  前端已支持 `publicSources[].coverageEvidence`：无可访问链接也显示来源、仪器、滤镜、
+  声明的精度/扫描范围和快照 SHA；site 类型检查通过。合成 HST fixture 的真实浏览器
+  1440/390px 检查通过，无卡片横向溢出和 pageerror；证据 `/tmp/assets-hst-source-card-browser.json`
+  与 `/tmp/assets-hst-source-card.png`。该 fixture 验证不是 HST live 发布或真实元数据获取。
+
+- **前次 dev：Helm revision 233**，镜像 `0.1.0-20260925-013751-reverse-retry`，
+  registry digest `sha256:2627763942b517b341c0b6cbe29833d47a41b18707de4eb3462ba3a58553f5b7`。
+  站点/backend 均 Ready。已修复确定的错误处理缺陷：Warehouse 查询暂时失败或解析异常时，
+  反查首屏/续页不再伪装成 HTTP 200 空结果，而返回 503 + Retry-After；原游标可重试。
+  只有明确 no-ACTIVE 的 409 保留正常覆盖来源 fallback。之前单次漏文件的根因仍未证实。
+- 本镜像全量 build、298 tests（0 skipped，包含断网 Core regions 集成）、Core pin、
+  Helm live-values lint/template 全通过。日志 `/tmp/assets-retry-{build,suite,image,push,rollout}.log`。
+  values/rendered 文件含运行配置，权限 0600，不输出内容或提交 Git。
+- 部署后真实 Q1：固定 4 个 committed 分区/43 cells，匿名 + Key 续页 4 页全部 HTTP 200，
+  返回 14 个去重文件，4/4 预期文件均找到，最终 hasMore=false；每页 24–68ms。
+  `/tmp/assets-live-reverse-pagination-smoke.mjs` 为复测脚本（Key 从 Pod 环境读取，不输出），
+  结果 `/tmp/assets-retry-live-pagination.json`。无关 cell 0 仍无文件；旧 VIS 的 1 layer/11 edges
+  两项保护 SHA 与前序基线完全一致。
+- 公开 bundle、coverage 响应、32 个 catalog layer 全字段与部署前一致：
+  `/tmp/assets-{before,after}-retry-rollout.json`。启动时仍有 Warehouse coverage catalog
+  超过 200000 文档限额的警告；本次公开图层未改变，不把此警告当成已修复或忽略其潜在性能影响。
+- 这次检查 Q1 RUNNING：VIS 92/352，92 files/1054 O8 edges，2 running/0 failed，
+  H/J/Y 尚待调度。不是完整 Q1；不重复提交或重启 batch。
+- Warehouse catalog 超限已定位：`loadCurrentCoverageCatalog` 先拉取所有 ACTIVE
+  层 coverage，`coverageCatalogFromWarehouse` 才排除 denied survey/未公开辅助层。
+  只读聚合显示单个禁止纳入 Assets 的私有巡天有约 716 万条覆盖，导致 20 万限额触发；
+  不记录其 layer ID、原始 coverage 或输入/输出快照。正在把限制提前到 ES layer query，
+  并从当前公开图层身份约束 coverage 请求；不会提高限额或迁移/删除原始索引。
+  该缺陷尚未部署修复。另做 8 次新连接对照：DNS 0–4ms、HTTP 6–48ms，均 green，
+  没有支持修改 DNS 的证据；超限与间歇连接超时不能直接视为同一根因。
+- DESI 来源继续只读核实：Warehouse 现有 `atlas-minio-desi-credentials` Secret 的存在
+  不能证明有真实 DR1 来源；当前 ScanRequest 没有 DESI 请求，配置的 ES 中只找到
+  `desi-overlap-catalog` / `desi-merger-catalog` 两个 `desi-public-catalog-demo` 层和失败 selftest。
+  已知入口是内部 MinIO 的 `astro-artifacts/demo/desi/`，不把它当成用户的 DR1 光谱目录。
+  用户的真实 connector/OSS 根路径仍待提供。查询中一次 tiny layer search 超时 5s，紧接的
+  复测 54ms、ES took=0；间歇延迟原因未定，不能仅靠增加超时掩盖。
+- HST 后续系统能力正在开发：Warehouse 通过现有 MocDiscoveryRequest 增加有界 MAST
+  观测元数据 policy，复用现有 S3/MinIO 保存摘要命名的不可变快照；Assets 只读取、校验摘要并
+  本地转换冻结 footprint。已完成通用本地 converter/Core regions worker 并包含在 r233，
+  但 discovery→artifact→STAGED API 接线与 Warehouse policy 尚未完整，不可视为 live 可用。
+  不增加独立 query 服务，不获取科学文件，不写 ast_*，不自动发布覆盖。
+
+- 当前源码 `npm run build && npm test` 全量通过：294 项 Node tests 与 Core pin；
+  日志 `/tmp/assets-live-export-{build,suite}.log`。部署仍为下述 revision 232；
+  部署后新增的独立导出 CLI 不改变运行时服务。
+- 只读当前公开接口导出 11 个巡天、32 个图层，逐层验证原生 revision 并核对导出前后
+  bundle/catalog 身份。33 个 JSON 保存在
+  `.assets-local/public-healpix/4f76e8e726ac31457edc320de105fe867b8f4f9c2c0594c6528a50f46d36e8b7/`，
+  同级 `public-healpix-4f76e8e726ac.zip` 仅包含编号清单与 provenance，不含科学数据。
+  每巡天有 `healpix/order4.json`、`order8.json`、`provenance.json`。
+  ACT 的 3 层和 SDSS 的 2 层原生最高 O7，O8 导出明确标记 omissions，不伪造 O8。
+- 原生合成 batch `warehouse-selftest-batch-20260925003405-d17858` 已成功，
+  2 规则 × 2 分区，4 文件 observation/4 coverage，无全局文件元数据写入；
+  实际部署的 store 反查命中 4 文件，无关区域 0 文件，scope 均 2/2 complete。
+  证据 `/tmp/warehouse-native-batch-live-verification.json`。
+  Warehouse 静态 Maven/quality/Helm/shell gate 通过。Assets caller 合成扫描
+  `warehouse-caller-assets-scan-20260924170026-aa2a1febad997cd7` 成功，1 file/1 edge/0 errors，
+  source SHA `c9e2d3fcbb3acb8bbf8c44de78af3ef9829976b212a6f0d33c238bbaf539c384`；
+  对应 `warehouse-caller-assets-moc-20260924170026-aa2a1febad997cd7` 成功，51 个候选、
+  truncated=true、evidence-only。Workspace caller 的授权合成本地 source PVC 路径成功，
+  1 file/2 edges/0 errors；这不是 Workspace 远程 connector 路径验收。
+  实际 Assets API → Warehouse 来源提交证据由下面真实 Q1 batch 提供。
+- 真实 Q1 batch `euclid-q1-mer-images-20260924` 已由 Assets 管理 API 提交（HTTP 201），
+  Warehouse 发现并冻结 352 个 Tile × VIS/H/J/Y 四规则，1408 个子任务，并发 2。
+  roster SHA `2545cf6ee5a7cbea25484500c3e14a954c893259d9cb10ae8f5cfa381faf0aa3`。
+  本次检查 RUNNING，VIS 完成 20/352，20 文件/230 条 O8 coverage，2 running，0 failed；
+  NISP 尚待调度。此计数是时间点，不是 Q1 完整性声明，不重启或重复提交批次。
+- 真实公开 reverse-lookup 已返回新增 VIS 文件、OSS URI、run/snapshot/partition 身份、
+  实际 O8 estimated 和 incomplete scope。早期一次空结果尚在复核输入与时序原因。
+  后续更强的真实分页验收失败：取按 partition_id 排序的 4 个 committed 分区、43 个
+  数值 cells，匿名预览后用服务 API Key 续页到 hasMore=false，仍未返回已提交文件
+  `ec3405d46fd047fc2df0aff99c313aa754a31a87ed169eb8518a92c11f26da28`。
+  随后相同数字 cells 的真实分页重跑成功：预览 + 3 次 Key 续页返回 11 个去重文件，
+  包含上述缺失文件，全部原始 4 分区目标均返回；未复现稳定漏文件。原先失败根因未证实，
+  不能归因于并发新文件入库或声称已修复。正在回归 Warehouse 暂时不可用时是否误报分页结束。
+  无关 O8 cell 0 无文件、匿名 cursor
+  续页返回 400 均已验证。旧 VIS 1 layer/11 coverage 的两项保护 SHA 再核对完全未变。
+- HST ACS/WFC3 仍为 STAGED 草稿，未自动审核发布；DESI 仍缺 connector/DR1 根前缀。
+  Workspace 本地适配通过 282 tests、2 skipped，未部署。三巡天总体目标尚未完成。
+
+## 共享连接批次与累计反查（revision 232 部署及实施记录）
+
+- **前次部署：Assets Helm revision 232**，镜像
+  `0.1.0-20260924-235812-batch`，registry digest
+  `sha256:78787033a9c4a1c6f8e91979819bf77f03b435c9e62aa6cd1d660982a31273ac`。
+  scanner pin 为 `0.2.0-20260924-235142-batch-capacity-v2`，registry digest
+  `sha256:34987407da9eec4b4b6a24ca9a76b682bd1f50e3e0f0984ba4fcf3cec49ba745`。
+  site/backend 均 Ready；批次管理 GET 已返回 200。公开 bundle SHA 和 32 个图层的
+  完整摘要与部署前相同；旧 VIS layer/11 条 coverage 文档 SHA 均未变，O8 549012
+  仍命中 1 file，无关 O8 0 返回 0 file。对比文件 `/tmp/assets-before-batch-rollout.json`、
+  `/tmp/assets-after-batch-rollout.json`，部署日志 `/tmp/assets-batch-rollout.log`。
+  最终权限修正版全量 build、289 Node tests、Core pin、Helm lint/template 均通过；
+  日志 `/tmp/assets-batch-authorized-pagination-{build,suite}.log`。
+  匿名仍最多 6 项且不能 cursor 续页；其游标仅供鉴权后接续，后续绑定 Key。
+  单文件 `matchingCoverageTruncated` 保留；cursor 通用上限 10,000 keys/1 MiB，
+  通过 1,408 个最长文件 ID 和 10,000 个正常长度 ID 回归。
+  Warehouse infra r4/operator r9 已部署，批次 CRD/增量映射和空的新索引就绪，
+  部署时原有记录数未变；其后合成批次成功，真实 Q1 已提交并运行，见顶部最新进度。下列 v1/v2/v3 镜像和失败测试说明为部署前过程记录，不是线上状态。
+
+- Assets 新增原生 `ScanBatchRequest` 的创建/列表/详情 API，以及扫描页的多规则表单。
+  一个 connector/root 配多个产品规则，目录发现、冻结 roster、子任务调度由 Warehouse
+  执行；完整开发契约见 [scan-batches.md](docs/scan-batches.md)。`scanMode` 独立于产品
+  MOC recipe：线上 Euclid Q1 VIS/NISP 产品是 `native-moc`，不能要求修改它才允许科学
+  文件扫描。原有单任务逻辑层不能被新批次静默接管。已实现独立的
+  `assets-batch-<productId>` 证据层及服务端产品关联：保留旧 ACTIVE 扫描，反查同时读取
+  原层和新批次，响应仍使用公开 layerId，同时披露实际 evidenceLayerId。该命名空间不进
+  公开覆盖目录、不替换 MOC。此新增关联的合并 build/test 已通过（286 项 Node 测试及
+  Core pin），包含旧 ACTIVE + 新 PARTITIONED 同查、别名缺失、候选/失败排除和仅别名
+  命中。公开目录 ES 查询直接排除批次证据命名空间，避免拉取无用的全量扫描几何。
+  真实 VIS 扩展在合成验收通过后已经开始。
+  已经通过 Assets API 提交四规则请求 `/tmp/euclid-q1-mer-batch-request.json`：同一 MER connector、
+  全部直接子目录冻结范围、并发 2、输出 O8，仅匹配
+  `EUC_MER_BGSUB-MOSAIC-{VIS,NIR-H,NIR-J,NIR-Y}_TILE*.fits`。规则相对目录留空，
+  在每个 Tile 内按文件名筛选，避免未经核实的子目录假设；Warehouse 本次真实发现并冻结 352 个 Tile；此数不等于文件扫描完整性。
+  四个 productId 已通过当前管理 API 再核实，产品仍为 native-moc/imaging；不修改其公开 recipe。
+  扩展前只读基线：旧 VIS 仍 ACTIVE，run=`euclid-q1-vis-mer-tile-102018212-20260924`、
+  1 file/11 edges。按 `_id` 排序后的 `{id,..._source}` JSON SHA-256：layer
+  `338ecf35f46ba860cc602ba822a6618c5d110ac73f7aea926a5951d9985b2af7`，coverage
+  `7049eae1d09347da2aefe6d64d5ce8f06be0d9c242e535da28e0cf95266fdab6`；后续可验证旧记录未变。
+- 反查按逻辑层固定 scope → committed partition pointer → candidate coverage/file
+  observation 读取；拒绝混合 scope hash/count，排除候选层，保留失败重试前的成功版本。
+  `scanScopes` 披露 frozen scope 的 committed/expected，`files[].observations` 保留同一
+  文件不同扫描记录；CSV/JSON 与抽屉保留快照、实际 order 和范围限制。空批次不覆盖已有
+  公开 footprint。没有 file observation 时保留来源 URI/边，不回退到可变全局文件元数据。
+- 本轮已验证 backend/site 构建、site 类型检查、286 项 Node 测试及最终 Core pin；专门的证据/CSV/覆盖
+  测试 33 项通过。浏览器 mock 验证两条规则共享连接、native-moc 产品显式选 fits-wcs、
+  partial 进度与 390/1200px 无溢出。证据在 `/tmp/assets-batch-*.log`、
+  `/tmp/assets-batch-browser.py`、`/tmp/assets-scan-batches.png`；该浏览器验证阶段没有提交真实批次。
+  FITS 星表规则支持互斥的 `hduName` / 零基 `hduIndex`，选择 HDU 时必须声明
+  `coordinateFrame=ICRS`。浏览器实际表单提交 FIBERMAP、TARGET_RA/TARGET_DEC，并经
+  backend parser 核验通过；脚本 `/tmp/assets-fits-batch-browser.py`，完整测试日志
+  `/tmp/assets-batch-integrated-tests.log`。别名关联后的最新完整日志为
+  `/tmp/assets-batch-final-build.log`、`/tmp/assets-batch-final-suite.log`；这尚不是实际 DESI 文件扫描验收。
+- 实际 DESI DR1 产品为 `tile-table / spectroscopy / footprint_extent`；以它提交
+  `catalog-radec` 批次时，必须为本次扫描派生 `object_presence → occupancy`，公开 Tile
+  recipe 不变。已修复并加 FIBERMAP/TARGET_RA/TARGET_DEC 回归，生成层保留 `spectrum`
+  模态。最新完整 build/test 日志 `/tmp/assets-batch-role-build.log`、
+  `/tmp/assets-batch-role-suite.log`。当前 Assets 没有 DESI connector，已向用户询问 OSS
+  前缀或 Workspace 连接名；随后也经两个线上应用的连接列表 API 只读核实，Workspace
+  同样没有 DESI connector 或 DR1 根前缀。未枚举科学文件，不从 Q1 或私有连接猜测 DESI 路径。
+- 线上只读复测：backend 的 `CoverageEvidenceStore` 查询 Euclid Q1 O8 cell 549012
+  连续三次返回 1 edge/1 file，耗时 351/13/10ms；公开匿名 reverse-lookup 返回 HTTP 200、
+  1 file/1 edge/estimated、56ms。本次没有复现旧 ES 超时，没有改超时或伪称已修根因。
+- Warehouse 原生批次 controller/roster 验证仍由子 agent 实现，必须以其源码、测试和 live
+  校验为准，不能仅凭 Assets 接口已经存在就开始真实扫描。Workspace 已保留 scanScopes、
+  observations、来源 URI 和精度限制，后续也已适配 evidenceLayerId、scope/partition ID、
+  publishedLayerId 与显式 observationLayerId。最新完整 build/test 为 282 passed、2 skipped；
+  单文件截断字段适配后的完整 build/test 仍通过：日志 `/tmp/workspace-final-build.log`、
+  `/tmp/workspace-final-test.log`；两项跳过因未配置 live Assets catalog/PostgreSQL test URL。
+  尚未部署或 live 验收（会改变激活状态的既有 e2e 未执行）。下一步：完成 Warehouse 验收
+  与跨项目消费，再通过系统扩大真实来源。
+- Core 本地分发 pin/Dockerfile 已更新 1.2.0：最小公开源码快照 SHA-256
+  `cb656ef9edc383c5a57a7d3e70f8ec4ad9c986cfb4da889d596a82b53b2ddf89`；wheel SHA-256
+  `2bc99645aa3685c7a1509b2cc8cd52cce9d15717187a4bd48903572ee393af9e`。
+  `baseCommit` 仅表示 dirty 源码基线，准确构建来源是快照；旧 1.1.0 wheel 保留。
+  最终 wheel 在 Python 3.11.2 image 中安装并逐个校验 22 个最新包通过。此前完整 image
+  重建曾受 PyPI 下载阻塞；现已成功构建 `0.1.0-20260924-batch-evidence`，image ID
+  `8e46698a6f7a963b5bda0b1e580b83c9a0739aa382e611e9c39a22446b3cc7ca`，并用其非 root
+  runtime 在断网模式下校验 Euclid 新 sidecar ZIP 通过。日志在
+  `/tmp/assets-batch-image.log` 和 `/tmp/assets-image-package-validation.log`。
+  该镜像之后 UI glob 长度上限从 512 对齐后端 256，并补齐批次证据层关联。
+  最终 `0.1.0-20260924-batch-evidence-v2` 已构建、push 成功；image ID
+  `6c19feb6f4301ea087878f3510e846bc71a189de30f3129d59284dd06130dadd`，digest
+  `sha256:f9d8dff6cf41ccd07ced65fa5921e0bfb415751adc1c49244d2c368d71fd9f16`。
+  日志 `/tmp/assets-batch-final-image.log`、`/tmp/assets-batch-final-push.log`。
+  **最新待部署镜像改为** `0.1.0-20260924-batch-evidence-v3`（包含 DESI occupancy 修复），
+  已构建并推送；image ID `27a5a4f37f5940503712d3611ba61495c6adf9eb2676d51bffdbaea3d72c0ff2`，
+  digest `sha256:76fc96389011338f8b5229be2db42fe559af422bf39471359dcf18f996590daa`。
+  日志 `/tmp/assets-batch-role-image.log`、`/tmp/assets-batch-role-push.log`；v2 保留但不用于最终 rollout。
+  **v3 也还不是最终 rollout 候选**：随后已补运行隔离的 `warehouse-selftest-` /
+  `warehouse-caller-` 合成层前缀排除（11 项 coverage 测试通过），并在修真实文件分页：
+  当前 edge limit 与已展示文件数耦合、1000 边前缀和 16KiB cursor 会阻止大清单继续。
+  需让受保护分页能推进到未展示文件，并保留每文件匹配关系截断限制；匿名仍最多 6 条。
+  分页实现/测试完成后重新完整构建测试、生成新 immutable image，再部署。
+  消费端已预先适配 `files[].matchingCoverageTruncated` 和文件 warnings：Assets 抽屉、
+  跨页累计、CSV 的 `matching_coverage_truncated` 列及 Workspace 接收/展示保留该限制。
+  最终文件清单结束不能抹掉单文件覆盖匹配截断。Assets 8 项 CSV 测试及 site 类型检查、
+  Workspace server/viewer 类型检查及 6 项消费测试通过；后端分页实现仍由其 owner 完成，
+  尚未重跑整体验证或部署。线上只读核实仍为 Assets revision 231、镜像
+  `0.1.0-20260924-021018`。
+  部署前公开基线已保存 `/tmp/assets-before-batch-rollout.json`：32 个公开图层及 revision/
+  摘要，bundle SHA 仍为 `4f76e8e726ac31457edc320de105fe867b8f4f9c2c0594c6528a50f46d36e8b7`。
+  本轮全量 build/289 Node tests/Core pin 已过，但审阅发现匿名 cursor 可续页、鉴权后反而
+  无法接续，违背最多 6 条匿名预览规则；正在修该权限回归与 1408 keys 过窄上限。
+  日志 `/tmp/assets-batch-pagination-build.log`、`/tmp/assets-batch-pagination-suite.log`
+  仅对应修正前版本，不能作为最终 rollout 门禁。修后重新验证。
+  尚未 Helm rollout，等待 Warehouse CRD/operator/增量 mapping 部署和验收；现有索引仅更新
+  template 不会获得批次字段，Warehouse 正补幂等字段追加及候选层身份保护。
+  **部署还需联动 scanner pin**：Assets 线上 `admin.warehouseScannerImage` 仍为
+  `0.2.0-20260829-pvc1`，会覆盖 Warehouse operator 默认镜像。必须在 Assets Helm rollout
+  同时设为 Warehouse 本轮验证并推送的新 scanner tag；只更新 operator 默认值不够。
+  部署门禁新增容量修复：目录发现须有分页预算；operator 当前会为全部 rule×partition
+  预建携带完整 roster 的 children，合法 32×2048 上界约复制 1.34 亿个 member 条目。
+  已要求 Warehouse 改为轻量身份/状态遍历，仅为实际并发槽生成完整计划。完成并复验前不 rollout
+  或提交真实目录扫描。最终 Assets image 已在非 root、断网模式下再次校验 Euclid ZIP，
+  日志 `/tmp/assets-final-image-package-validation.log`；批次 helper 的 runtime import 也通过。
+  已定最小容量修复边界：分页读取已创建的 child CR，释放每页完整 spec，只保留状态摘要；
+  不新增 child CRD 引用模型。API/etcd 总字节仍存在 roster 重复，须如实披露并在首批约
+  4×352 的真实规模观察查询耗时，不能将内存有界解释成没有存储/传输放大。
+  本地 manifest 更新为 484 files、SHA-256
+  `a3a9fe3e8472bf34d61e6c356defe2c41a7e0e9ed70fa417895e013521480b3a`，含源码快照和wheel。
+  所有原有修改与数据保留，本轮未部署、未公开发布或修改已发布 MOC；新候选见下节。
+
+## HST 扩展候选：已验证与 Q1 相交，尚未发布
+
+- 经 Assets 管理 API 提交发现任务 `hst-moc-discovery-20260924131237`，成功返回受限的
+  50 条候选（探测到 51 条，truncated=true），不能解释为完整 HST 目录。
+- 经正常 MOC build API 准备两个 STAGED 候选：
+  `esavo-p-hst-acs-blue-moc-build-20260924132027` 和
+  `esavo-p-hst-wfc3-moc-build-20260924132027`。来源分别为 CDS MocServer 的
+  `ESAVO/P/HST/ACS-blue`、`ESAVO/P/HST/WFC3`；完整输入与 build manifest 保留在
+  evidence root 下对应 `moc-build/<name>/`，没有放入公开初始请求或 Git。
+- ACS source SHA-256 `e26e6e77fdfef8b38d1a81f5b94e5c709494ceca561b283edb5195b46d6ac3e7`，
+  输出 MOC `1d0913edb83b09f3b8391b42cff9e22e69ba35ddfa499501247ece7d4f213ed3`；
+  WFC3 source `5144a22e550b9e47b37f378c0b50615cd85887c0912e81b1534508d51379326e`，
+  输出 MOC `1d8406bde74a6a86c8c00dfd1d6ecaf13e521dc8d73fb56c15abe43a02010bbb`。
+- 只读解码 backend evidence 的候选与当前公开 Q1 VIS 原生 MOC，在 O8 显式投影且确认
+  未截断：ACS 为 8605 cells，与 Q1 相交 **28**；WFC3 为 4604 cells，相交 **44**。
+  两个 HST 候选 native max O12，Q1 native max O10、O8 共 1476 cells，Q1 MOC SHA-256
+  `7f8906442664691417d5314b7cbaf2dbdeafabc4fe9f7aa32b560280cb9af5f6`。
+  进一步按双方均支持的 O10 验证，Q1 为 21269 cells；ACS 为 25735 cells、交集 160，
+  WFC3 为 11707 cells、交集也为 160（两组像元不相同）。所有投影均未截断。
+  这些是声明阶数下的覆盖资料交集，不是科学文件命中或精确有效像素交集。
+- 已经正常 `register-product` API 绑定到 `hst-archive-coverage` 的两个产品草稿：
+  ACS `225cb52106f79c98fcbc`，WFC3 `d862290e2bc8a845aa3f`。描述明确记录 CDS 来源、
+  仅覆盖依据、档案完整性未知及未建立逐文件/观测索引。两个 build 仍 STAGED、published=null。
+  公开 HST 仍是先前 COSMOS 三条 observation，草稿尚未审核或发布。
+  下一步通过正常审核流程补充覆盖，文件/观测来源反查仍需单独建立。
+
+## 当前施工：O4/O8 资源包清单（本地验证完成，未分发）
+
+- 静态、动态和审核包增加 `healpix/order4.json` / `healpix/order8.json`，列出每层及
+  survey union 的排序去重 NESTED 像元。输入为冻结原生 FITS MOC，保留身份、实际精度、
+  completeness 和低阶层的 `omittedLayers`；使用说明见 `docs/resource-package-integration.md`。
+- 本地生成并用候选 Core 1.2.0 wheel 校验了 **22 个巡天的新包版本**；原有 **34 个 ZIP
+  哈希全部未变**。79 份冻结 MOC 的 Python/Assets coverage revision 一致。ACT 原生最高
+  O7，O8 明确省略三层；AKARI 登记 O5 但实际只有 O0，整包重建被暂缓并保留旧目录项/ZIP。
+  未改写 MOC、发布线上资源、恢复 raw evidence 或提交科学扫描。
+- `packages:rebuild` 的包生成阶段已完成；其后 provenance 刷新曾因本地缺少
+  `raw/moc/index.json` 失败。现已修复为保留合法的原输入哈希并明确未本地重验；随后
+  provenance/catalog 阶段成功。本地 manifest 为 483 files，bundle SHA-256
+  `bf818abfc9f565f07fda1c3d63c79c1079d2e399925042bc7f710b9ced93bffd`。
+  这不是线上 bundle，且生成制品仍在忽略目录中。
+- `npm run build`、后续服务端构建和最终 `npm test`（260 项 Node 测试、现行 wheel 哈希
+  校验）通过；临时包/新包验证日志在 `/tmp/assets-sidecar-final-validation.log`，最终测试
+  在 `/tmp/assets-priority-tests-stable.log`。历史包相关测试改为验证实际目录/历史集合，
+  不再固定版本总数；旧离线 repair 工具剔除输入版本 sidecar，保持历史最小结构，测试仅
+  写临时目录，没有执行实际历史恢复。
+- Workspace 已补 sidecar 身份、哈希、union、省略资格及 precision/completeness 聚合
+  校验，34 项定向测试及服务端构建通过。sidecar 尚不参与 Workspace 覆盖/反查计算。
+- **分发状态更新见顶部**：消费 pin 已固定为 Core 1.2.0 源码快照及可复现 wheel，
+  最终 22 包在 runtime Python 下通过校验。旧临时候选 wheel 不是当前分发 pin；
+  完整镜像的最新验证见顶部；公共发布仍未执行。
+- 下一优先级是 Warehouse 原生多规则批次与 Assets 提交/状态/反查适配，随后通过系统扩展
+  Euclid VIS/NISP Tile、DESI、HST。Warehouse 当前已有未提交 partition/CAS 实现，不能
+  假设原生 batch 已完成；应检查 `ScanBatchRequest` 实际源码和测试。方案为共享 connector、
+  Warehouse Job 枚举并冻结直接子前缀、规则 relativePrefix/文件名 glob、限并发子任务，
+  failed candidate 文件 observation 独立保存。单任务同 layer 的旧覆盖替换问题仍不可忽略。
+
+## 新增真实扫描：Euclid Q1 VIS Tile 102018212（2026-09-24）
+
+- 通过 Assets 管理 API 提交 Warehouse ScanRequest
+  `euclid-q1-vis-mer-tile-102018212-20260924`。范围仅为
+  `MER/102018212/VIS/EUC_MER_BGSUB-MOSAIC-VIS_TILE102018212-` 前缀下的 `.fits`，
+  使用 `fits-wcs`、O8、`image_extent`。Warehouse 状态为 **SUCCEEDED**：发现 1 个文件、
+  处理 1 个 HDU、写入 11 条 coverage edge、0 个错误，`availableOrders=[8]`。
+- 实际文件为
+  `EUC_MER_BGSUB-MOSAIC-VIS_TILE102018212-2D6DD0_20241018T201846.882686Z_00.00.fits`，
+  1,474,565,760 bytes。11 条边均为 ICRS/NESTED、O8、`fits_wcs`、`estimated`。
+  source snapshot SHA-256 为
+  `da4fa597e9e516dbd7a4a3bbeff7f4efaf310e662523fcc848eee5498027b780`。
+- 扫描没有发布产品或改写 MOC FITS。**发现同一 layer 不支持逐 Tile 累计**：本任务复用了
+  102018211 的 `layerId`；完成后 `ast_layer_index_v1` 为 `file_count=1`、
+  `coverage_count=11`，当前 `ast_coverage_index_v1` 有 Tile 102018212 的 11 条边，旧 Tile
+  102018211 的 FileAsset 仍在 `ast_file_index_v1`，但其 `source_file_id` 当前 coverage 命中为
+  0。不要用相同 layerId 继续逐 Tile 提交并假设索引会追加；需先确定批次层身份/累计反查策略。
+- 用户可见反查尚未闭环：O8 cell `549012` 的公开 reverse-lookup（匿名预览和 Workspace
+  full-key）均返回空 `edges`/`files`，而 backend 直接调用 `CoverageEvidenceStore` 曾命中该
+  文件。已确认 `server/evidence-store.ts` 默认单次 ES 请求超时 15 秒；按生产请求形态实测，
+  `ast_layer_index_v1` 查询 16.270 秒、coverage 查询 14.716 秒、file 查询 27.330 秒。超时会被
+  `tolerateUnavailable` 降级为 geometry-only，需修复/验证后才能声称反查可用。
+- 此扫描范围只有一个 VIS Tile，不代表 Q1 VIS/NISP 全量。旧任务
+  `oss-euclid-q1-vis-tile102018212-20260826` 仍是 `FAILED/BackoffLimitExceeded`，保留原样。
+  继续其他波段或 Tile 前，先处理 reverse-lookup 的 ES 超时，以及 Warehouse 同 layer 的覆盖
+  替换语义；不恢复旧索引快照，不发布或修改 MOC。
+
+## 当前补齐：HST MAST COSMOS 三条 observation footprint（2026-09-24）
+
+- 已通过正常审核并发布三条明确选定的 MAST observation 覆盖：26442812（ACS/WFC）、
+  26554761（WFC3/IR F125W）、26704909（WFC3/IR）。它们是 CAOM `s_region` 生成的
+  estimated footprint，不是科学文件扫描结果，也不代表完整 HST archive。
+- 三层均为 ICRS/NESTED，支持 O4/O8 查询，声明 native max O10；当前每层各有一个 O8
+  cell。输入 source snapshot SHA-256 为
+  `0ddeefa369484a91b74856cc61fa6ef3fed2673ee2f29b07d9da2dc36eac1fca`。产品详情的
+  geometry precision 为 `estimated`，file reverse lookup 为 `entrypoint-only`，完整度未知；
+  `scienceFileScan=not-scanned`，没有 region-to-science-file 索引。
+- `/api/v1/coverage/overlap` 的真实验收：HST × DESI 返回 O8/C01，ipix `436132`；详情
+  包含三条 HST MAST observation 和 DESI EDR/DR1 公开来源。HST×Euclid 当前无相交组件，
+  原因是本次 HST release 只选了 COSMOS observation，而 Euclid Q1 官方区域输入是
+  EDFF/EDFN/EDFS。直接解码当前发布的 MOC 后，两边在 O4/O8/O10 的 cell 交集均为 0；
+  没有宣称三方交集。详情的整体 reverse lookup 精度为 `entrypoint-only`，不能解释成
+  科学文件级命中；HST 的 estimated footprint 限制保留在产品描述与 readiness 中。
+- 对同一 cell 的匿名 reverse-lookup preview 返回 `sourceFiles=[]`、`edges=[]`，总体标为
+  `precision=estimated`、`truncated=true`，显示 6 条并提示另有 25 条。DESI EDR 有官方
+  Tile 目录候选入口，目录内容未核实为科学文件；DESI DR1 仅有发布页，HST 仅有 MAST
+  observation 来源页。无文件命中不代表源站没有数据。无 region-to-file index 的 source
+  现标记 `completeness=incomplete`，不再错误显示 `complete`。
+- Assets Helm revision **231**、镜像 `0.1.0-20260924-021018` 已部署，site/backend 均
+  1/1 Running、0 restarts。开发站点为 `http://10.15.51.75:32083/`。线上健康接口报告
+  bundle `reviewed-muedpg06-8e4a45a0`、SHA-256
+  `4f76e8e726ac31457edc320de105fe867b8f4f9c2c0594c6528a50f46d36e8b7`、512 files；公开
+  assets 中三条 HST MOC 均可见。HST MOC Range 返回 HTTP 206，`X-Content-SHA256` 与
+  manifest 一致。没有提交 Warehouse 扫描任务或修改 DESI/Euclid 数据。
+- 这只是 HST×DESI 的覆盖到公开来源入口闭环，不代表三巡天文件索引补齐完成。后续继续按
+  冻结范围分批扩展 Euclid Q1 VIS/NISP Tile；DESI DR1 需核验实际科学文件并建立目标坐标与
+  文件关联。每批保留 source snapshot、真实 order、扫描范围与 completeness 限制。
+- `npm run build`、完整 `npm test`（258 项 Node 测试及 Core wheel）、Helm lint、
+  `git diff --check` 通过；相关浏览器验收通过。代码、发布状态和本文仍未提交，原有
+  工作树修改均保留。
+
+## 当前文档原则：下载计划是来源清单（2026-09-23）
+
+Assets 帮助用户定位数据、理解覆盖依据和追溯来源，绝不代替用户下载科学数据。
+下载计划文件是 JSON/CSV 来源清单，列出重合区域关联的巡天、Tile/block/文件、
+匹配依据与可用链接，不含科学数据。API Key 授权完整反查及清单导出，不授予源站权限。
+无链接也应展示已有来源依据；当前 CSV 缺少无文件/入口时的独立依据行，属于待补能力，
+本轮仅澄清文档，没有修改导出实现。术语和限制见[覆盖工作流](docs/coverage-workflow.md)
+与 [API 导出说明](docs/api-reference.md#csv-and-json-exports)。历史“下载全部区块”指清单导出。
+
+2026-09-23 文档修订更新了现行契约、README、规则与历史说明，保留有证据和契约价值的
+文档；该轮未部署，也未修改扫描、MOC 或发布数据。下方部署数字属于各次验收记录。
 
 ## 当前修复：ACT 图层同步、重合分页与发布详情排版（2026-09-23）
 

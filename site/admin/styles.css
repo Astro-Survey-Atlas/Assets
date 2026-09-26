@@ -999,3 +999,8 @@ button[aria-busy="true"] { cursor: wait; opacity: .8; }
 #api-key-created { max-width:min(600px,90vw); padding:24px; background:var(--bright); color:var(--ink); border:1px solid var(--line); }
 #api-key-created textarea { box-sizing:border-box; width:100%; padding:12px; margin-bottom:16px; color:var(--ink); background:var(--paper); }
 @media(max-width:800px) { .api-settings-grid { grid-template-columns:1fr; }.api-card .api-key-form { grid-template-columns:1fr; }.api-card { padding:16px; } }
+
+.scan-batch-rule { min-width: 0; margin: 12px 0; padding: 12px; border: 1px solid var(--border-color, #7775); border-radius: 8px; }
+.scan-batch-rule label { display: grid; gap: 6px; margin-bottom: 10px; }
+.scan-batch-row { display: block; min-width: 0; overflow-wrap: anywhere; }
+.scan-batch-row pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }

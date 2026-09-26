@@ -98,6 +98,28 @@ function boundsFor(pixels: number[], order: number): OverlapBounds {
   };
 }
 
+/** A conservative ICRS cone enclosing every cell boundary in one overlap component. */
+export function coneForOverlapComponent(component: Pick<OverlapComponent, "order" | "cells" | "bounds">): { raDeg: number; decDeg: number; radiusDeg: number } {
+  if (!component.cells.length) throw new Error("Cannot derive a cone for an empty overlap component");
+  const span = component.bounds.raWraps
+    ? 360 - component.bounds.raMin + component.bounds.raMax
+    : component.bounds.raMax - component.bounds.raMin;
+  const raDeg = ((component.bounds.raMin + span / 2) % 360 + 360) % 360;
+  const decDeg = (component.bounds.decMin + component.bounds.decMax) / 2;
+  const ra = raDeg * Math.PI / 180;
+  const dec = decDeg * Math.PI / 180;
+  const center = [Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec)];
+  let radiusDeg = 0;
+  for (const pixel of component.cells) {
+    for (const point of healpix(component.order).getBoundaries(pixel)) {
+      const length = Math.hypot(point.x, point.y, point.z) || 1;
+      const dot = (center[0]! * point.x + center[1]! * point.y + center[2]! * point.z) / length;
+      radiusDeg = Math.max(radiusDeg, Math.acos(Math.max(-1, Math.min(1, dot))) * 180 / Math.PI);
+    }
+  }
+  return { raDeg, decDeg, radiusDeg: radiusDeg + 0.01 };
+}
+
 function connectedComponents(pixels: number[], order: number): number[][] {
   const selected = new Set(pixels);
   const result: number[][] = [];

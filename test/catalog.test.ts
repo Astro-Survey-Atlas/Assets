@@ -159,8 +159,12 @@ test("release catalog rejects evidence records misclassified as runtime", async 
 test("package records keep current and superseded versions cumulative", async () => {
   const catalog = await loadCatalog(testDataRoot, false);
   const packages = catalog.manifest.files.filter((entry) => entry.kind === "package");
-  assert.equal(packages.length, 34);
-  assert.equal(packages.filter((entry) => /superseded/.test(entry.label)).length, 5);
+  const current = JSON.parse(await readFile(path.join(testArtifactRoot, "packages/catalog.json"), "utf8"));
+  const history = JSON.parse(await readFile(path.join(testArtifactRoot, "release-history.json"), "utf8"));
+  const currentNames = new Set(current.packages.map((entry: { id: string; version: string }) => `${entry.id}-${entry.version}.zip`));
+  const expectedNames = new Set([...currentNames, ...history.releases.flatMap((release: { packages: Array<{ id: string; version: string }> }) => release.packages.map((entry) => `${entry.id}-${entry.version}.zip`))]);
+  assert.deepEqual(new Set(packages.map((entry) => entry.downloadName)), expectedNames);
+  assert.equal(packages.filter((entry) => /superseded/.test(entry.label)).length, expectedNames.size - currentNames.size);
   assert.ok(packages.every((entry) => /^3\.\d+\.\d+$/.test(entry.version ?? "")));
   assert.ok(packages.every((entry) => entry.downloadName?.endsWith(`-${entry.version}.zip`) ?? false));
   assert.equal(new Set(packages.map((entry) => entry.id)).size, packages.length);

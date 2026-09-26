@@ -6,6 +6,13 @@ The `Assets` repository is the public front door: it publishes reviewed survey
 metadata, ICRS/NESTED HEALPix coverage, overlap results, provenance and
 versioned Resource Package v3 releases.
 
+Assets never downloads scientific data on users’ behalf. Its downloadable
+JSON/CSV **download plan** lists the surveys, Tile/block/file identities,
+source evidence and available links associated with an overlap region; it
+contains no scientific data. Users obtain that data from the source. Known
+source evidence remains useful without a download link. See the
+[coverage workflow](docs/coverage-workflow.md) for the scope and precision rules.
+
 This repository is one part of the [Astro Survey Atlas organization](https://github.com/Astro-Survey-Atlas):
 
 | Project | Role | Start here |
@@ -16,16 +23,15 @@ This repository is one part of the [Astro Survey Atlas organization](https://git
 
 ## Current implementation
 
-Verified dev checkpoint: 2026-09-20, Helm revision 182. Assets now runs a public
+Assets runs a public
 site and a single write-owning backend with independent release caches and a
 durable publication queue. Reviewed product versions are published incrementally;
 website verification completes publication. Full release archives are for export
 or restore. Warehouse execution status alone never grants public visibility.
 
-MOC discovery currently queries CDS; alias expansion and networked LLM discovery
-are designed but not enabled. The Releases page shows the source-to-publication
-workflow and labels the planned enhancement. Homepage modality icons follow each
-survey name, native precision and DR/product counts on one line.
+MOC discovery queries CDS. Assets also implements an optional, explicitly enabled
+LLM enhancement after a complete zero-result CDS response; availability depends
+on provider configuration. See the enhancement documentation for its limits.
 
 See [current handoff](HANDOFF.md), [publication runtime](docs/publication-runtime-split.md),
 [current discovery](docs/deferred-moc-discovery-plan.md) and
@@ -92,7 +98,8 @@ Git is the source of truth for small, reviewable release metadata: survey and
 layer registries, recipe locks, schemas, catalog projections, provenance
 summaries and hashes. Production S3 stores versioned MOCs, packages and large
 evidence. The checkout retains synthetic conformance fixtures, the
-Core wheel and `evidence-index.json`; private CSST data stays outside Git. Generated release, layer, raw, content,
+Core wheel and `evidence-index.json`; private CSST data, previews and recipes
+belong to Workspace and stay out of Assets Git, backend, evidence storage and releases. Generated release, layer, raw, content,
 probe and staging copies were removed after independent S3 restore and exact
 SHA-256/size checks.
 

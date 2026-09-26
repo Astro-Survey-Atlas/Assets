@@ -16,7 +16,7 @@ export interface DiscoveryObservation {
 
 /** Diagnose only known signatures; never return arbitrary log lines or credentials. */
 export function executorLogFinding(log: string): Pick<ExecutorObservation, "reason" | "message"> | undefined {
-  if (/OutOfMemoryError|Java heap space/.test(log)) return { reason: "OutOfMemory", message: "探索服务检测到内存不足，执行能力可能受影响。" };
+  if (/(?:^|\s)(?:java\.lang\.)?OutOfMemoryError(?=[:\r\n]|$)/m.test(log)) return { reason: "OutOfMemory", message: "探索服务检测到内存不足，执行能力可能受影响。" };
   if (/moc-discovery list failed: RejectedExecutionException/.test(log)) return { reason: "ExecutorRejected", message: "探索服务无法执行请求读取：执行线程池拒绝任务。" };
   if (/moc-discovery list failed:.*(?:Forbidden|403)/.test(log)) return { reason: "AccessDenied", message: "探索服务读取请求时被拒绝访问。" };
   return undefined;

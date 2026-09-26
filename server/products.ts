@@ -5,6 +5,7 @@ import { isDeniedSurvey } from "./publication-policy.js";
 import { AdminHttpError } from "./admin.js";
 import { queueStateSnapshot, type StateSnapshotSink } from "./state-snapshot.js";
 import { PUBLICATION_POLICY, type GeometryFacts } from "./approved-release.js";
+import type { CoverageSourceEvidence } from "./coverage.js";
 
 export type { PublicProductDossier, PublicProductLink, PublicProductLinkKind, PublicProductVerificationStatus } from "./types.js";
 
@@ -23,7 +24,7 @@ export interface ProductScanDefaults { allowedSuffixes?: string; maxOrder?: numb
 export type ProductPublicStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
 export interface ProductPublicSurvey { name: string; mission: string; description: string; color: string; modalities: string[] }
 export interface ProductPublicRelease { label: string; kind: string; releasedYear?: number }
-export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix" | "regions" | "tile-table" | "native-moc"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: ProductPublicSurvey; publicRelease?: ProductPublicRelease; publicDisplayName?: string; publicDescription?: string; publicReason?: string; publicManualStep?: string; publicStatus?: ProductPublicStatus; presentation: ProductPresentation }
+export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix" | "regions" | "tile-table" | "native-moc"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageEvidence?: CoverageSourceEvidence; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: ProductPublicSurvey; publicRelease?: ProductPublicRelease; publicDisplayName?: string; publicDescription?: string; publicReason?: string; publicManualStep?: string; publicStatus?: ProductPublicStatus; presentation: ProductPresentation }
 export interface ProductReviewRecord { revision: number; contentSha256: string; reviewedAt: string; acceptedGaps: string[]; policy?: string; geometry?: GeometryFacts | null }
 export type ProductExecutionStatus = "running" | "passed" | "failed" | "skipped";
 export interface ProductEvidenceReference { label?: string; ref?: string; sha256?: string; sizeBytes?: number; }
@@ -70,6 +71,11 @@ export interface MocProductRegistrationInput {
   geometrySourceUrl: string;
   geometrySourceLabel?: string;
   dataOrigin?: ProductContent["dataOrigin"];
+  sourceTier?: ProductContent["sourceTier"];
+  coverageRole?: ProductContent["coverageRole"];
+  mode?: ProductContent["mode"];
+  sourceLabel?: string;
+  coverageEvidence?: CoverageSourceEvidence;
 }
 
 const configuredContentRoot = process.env.ASSETS_CONTENT_ROOT ? path.resolve(process.env.ASSETS_CONTENT_ROOT) : "/var/lib/assets-content";
@@ -121,6 +127,37 @@ function boundedEvidenceText(value: unknown, field: string, maxLength: number, r
   if (required && !normalized) throw new AdminHttpError(400, `${field} is required`);
   if (normalized.length > maxLength || /[\u0000-\u001f\u007f]/.test(normalized)) throw new AdminHttpError(400, `${field} is invalid`);
   return normalized || undefined;
+}
+
+function normalizeCoverageEvidence(value: unknown): CoverageSourceEvidence | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new AdminHttpError(400, "coverageEvidence must be an object");
+  const item = value as Record<string, unknown>;
+  const evidenceKind = item.evidenceKind;
+  if (!['observation-footprint', 'tile-footprint', 'wcs-coverage', 'published-moc'].includes(String(evidenceKind))) throw new AdminHttpError(400, "coverageEvidence.evidenceKind is unsupported");
+  const precision = item.precision;
+  if (precision !== "exact" && precision !== "estimated") throw new AdminHttpError(400, "coverageEvidence.precision is unsupported");
+  const completeness = item.completeness;
+  if (completeness !== "complete" && completeness !== "incomplete" && completeness !== "unknown") throw new AdminHttpError(400, "coverageEvidence.completeness is unsupported");
+  const scienceFileScan = item.scienceFileScan;
+  if (scienceFileScan !== "not-scanned" && scienceFileScan !== "partial" && scienceFileScan !== "complete") throw new AdminHttpError(400, "coverageEvidence.scienceFileScan is unsupported");
+  const sourceIdentity = boundedEvidenceText(item.sourceIdentity, "coverageEvidence.sourceIdentity", 256);
+  const instrument = boundedEvidenceText(item.instrument, "coverageEvidence.instrument", 128);
+  const filters = boundedEvidenceText(item.filters, "coverageEvidence.filters", 256);
+  const sourceSnapshotSha256 = boundedEvidenceText(item.sourceSnapshotSha256, "coverageEvidence.sourceSnapshotSha256", 64);
+  const summary = boundedEvidenceText(item.summary, "coverageEvidence.summary", 2000, true)!;
+  if (sourceSnapshotSha256 && !/^[a-f0-9]{64}$/.test(sourceSnapshotSha256)) throw new AdminHttpError(400, "coverageEvidence.sourceSnapshotSha256 must be a SHA-256 hex digest");
+  return {
+    evidenceKind: evidenceKind as CoverageSourceEvidence["evidenceKind"],
+    ...(sourceIdentity ? { sourceIdentity } : {}),
+    ...(instrument ? { instrument } : {}),
+    ...(filters ? { filters } : {}),
+    ...(sourceSnapshotSha256 ? { sourceSnapshotSha256 } : {}),
+    precision,
+    completeness,
+    scienceFileScan,
+    summary,
+  };
 }
 
 function evidenceReference(value: unknown, field: string): ProductEvidenceReference {
@@ -307,6 +344,7 @@ function validateContent(value: unknown, existing: ProductRecord): ProductConten
     ...optionalField("officialQueryUrl", optionalUrl("officialQueryUrl")),
     ...optionalField("geometrySourceLabel", optionalText("geometrySourceLabel", 200)),
     ...optionalField("geometrySourceUrl", optionalUrl("geometrySourceUrl")),
+    ...optionalField("coverageEvidence", normalizeCoverageEvidence(input.coverageEvidence)),
     presentation: { summaryMarkdown: text("summaryMarkdown"), methodologyMarkdown: text("methodologyMarkdown"), limitationsMarkdown: text("limitationsMarkdown"), flow: { nodes, edges } },
   };
 }
@@ -464,8 +502,15 @@ export class ProductStore {
     const releasedYear = input.releasedYear;
     if (releasedYear !== undefined && (!Number.isSafeInteger(releasedYear) || releasedYear < 1900 || releasedYear > 2200)) throw new AdminHttpError(400, "releasedYear is invalid");
     const modality = text(input.modality, "modality", 64);
+    const mode = input.mode ?? "native-moc";
+    if (!mode || !["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "regions", "tile-table", "native-moc"].includes(mode)) throw new AdminHttpError(400, "mode is unsupported");
     const sourceUrl = publicUrl(input.sourceUrl, "sourceUrl");
     const geometrySourceUrl = publicUrl(input.geometrySourceUrl, "geometrySourceUrl");
+    const sourceTier = input.sourceTier ?? "third_party_moc";
+    if (!sourceTier || !["official_geometry", "official_inventory_derived", "third_party_moc", "best_effort_derived", "user_file_derived"].includes(sourceTier)) throw new AdminHttpError(400, "sourceTier is unsupported");
+    const coverageRole = input.coverageRole ?? "footprint_extent";
+    if (!coverageRole || !["image_extent", "object_presence", "footprint_extent"].includes(coverageRole)) throw new AdminHttpError(400, "coverageRole is unsupported");
+    const sourceEvidence = normalizeCoverageEvidence(input.coverageEvidence);
     const publicSurvey: ProductPublicSurvey = {
       name: text(input.surveyName, "surveyName", 200),
       mission: text(input.mission, "mission", 200),
@@ -484,19 +529,21 @@ export class ProductStore {
       releaseId,
       name: productName,
       modality,
-      mode: "native-moc",
-      coverageRole: "footprint_extent",
+      mode,
+      coverageRole,
       dataOrigin: input.dataOrigin ?? "observed",
-      sourceTier: "third_party_moc",
+      sourceTier,
       sourceUrl,
+      ...(input.sourceLabel?.trim() ? { sourceLabel: input.sourceLabel.trim() } : {}),
       geometrySourceLabel: input.geometrySourceLabel?.trim() || "CDS MOC source",
       geometrySourceUrl,
+      ...(sourceEvidence ? { coverageEvidence: sourceEvidence } : {}),
       publicSurvey,
       publicRelease,
       publicDescription: text(input.productDescription, "productDescription", 4000),
       publicStatus: input.productStatus ?? "acquired",
       recipeVersion: 1,
-      presentation: { summaryMarkdown: "", methodologyMarkdown: "", limitationsMarkdown: "", flow: defaultFlow({ name: productName, modality }, "native-moc", { sourceUrl, geometrySourceUrl }) },
+      presentation: { summaryMarkdown: "", methodologyMarkdown: "", limitationsMarkdown: "", flow: defaultFlow({ name: productName, modality }, mode, { sourceUrl, geometrySourceUrl }) },
     };
     const now = new Date().toISOString();
     const record: ProductRecord = { productId: id, draft, published: null, revision: 1, publishedRevision: null, updatedAt: now, publishedAt: null, contentSha256: hashContent(draft) };

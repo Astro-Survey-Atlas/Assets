@@ -5,6 +5,11 @@
 任务历史；跨项目连接使用版本化契约。Assets 不依赖旧 Assets ES；覆盖反查只
 依赖明确配置的 Warehouse Elasticsearch 索引合同。
 
+Assets 的下载计划是可下载的 JSON/CSV 区域来源清单，列出巡天、Tile/block/文件、
+匹配依据及可用链接，不包含科学数据。Assets 绝不替用户下载科学数据；用户在来源系统
+自行获取。只读下载 API 服务 Assets 发布制品与清单，不代理外部科学文件。
+无链接时保留已有来源依据；术语与限制见[覆盖工作流](coverage-workflow.md)。
+
 ## 职责
 
 | 组件 | 负责 | 不负责 |

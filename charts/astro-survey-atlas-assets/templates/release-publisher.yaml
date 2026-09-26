@@ -58,6 +58,8 @@ spec:
               value: {{ .Values.objectStore.region | quote }}
             - name: ASSETS_OBJECT_STORE_FORCE_PATH_STYLE
               value: {{ .Values.objectStore.forcePathStyle | quote }}
+            - name: ASSETS_OBJECT_STORE_REQUEST_TIMEOUT_MS
+              value: {{ .Values.objectStore.requestTimeoutMs | quote }}
             - name: ASSETS_OBJECT_STORE_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:

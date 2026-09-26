@@ -24,6 +24,7 @@ export interface ResourcePackageLayerRecord {
   path: string;
   sizeBytes: number;
   sha256: string;
+  product?: string;
   productId?: string;
   sourceId?: string;
   coordinateFrame?: "ICRS";
@@ -35,6 +36,7 @@ export interface ResourcePackageLayerRecord {
   coverageRevision?: string;
   indexRevision?: string | null;
   geometryPrecision?: string;
+  completeness?: "complete" | "incomplete" | "unknown";
   precisionNote?: string;
   accessAvailability?: string;
 }
@@ -132,7 +134,8 @@ function parseLayer(value: unknown, manifestId: string): ResourcePackageLayerRec
   if (typeof record.coverageRole === "string") layer.coverageRole = record.coverageRole;
   if (typeof record.dataOrigin === "string") layer.dataOrigin = record.dataOrigin;
   if (typeof record.sourceTier === "string") layer.sourceTier = record.sourceTier;
-  for (const key of ["productId","sourceId","coverageRevision","geometryPrecision","precisionNote","accessAvailability"] as const) if (typeof record[key] === "string") layer[key] = record[key] as never;
+  for (const key of ["productId","product","sourceId","coverageRevision","geometryPrecision","precisionNote","accessAvailability"] as const) if (typeof record[key] === "string") layer[key] = record[key] as never;
+  if (record.completeness === "complete" || record.completeness === "incomplete" || record.completeness === "unknown") layer.completeness = record.completeness;
   if (record.coordinateFrame === "ICRS") layer.coordinateFrame="ICRS";
   if (record.ordering === "NESTED") layer.ordering="NESTED";
   if (record.mocEncoding === "NUNIQ") layer.mocEncoding="NUNIQ";
@@ -194,13 +197,31 @@ export async function readResourcePackageManifest(zipBytes: Buffer): Promise<Res
 /** Public packages use the reviewed v3 contract. Historical source ZIPs may be
  * inspected internally but can never pass this publication gate. */
 export function validateReviewedPackage(manifest: ResourcePackageManifest): void {
+  const supportPaths = manifest.files.map((file) => file.path);
+  if (new Set(supportPaths).size !== supportPaths.length) throw new PackageInspectionError("Resource package support paths must be unique");
+  const requiredSupportPaths = [
+    "README.md",
+    "footprints/survey-footprints.json",
+    "provenance.json",
+    "healpix/order4.json",
+    "healpix/order8.json",
+  ];
+  if (supportPaths.length !== requiredSupportPaths.length || requiredSupportPaths.some((filePath) => !supportPaths.includes(filePath))) {
+    throw new PackageInspectionError("Reviewed Resource Packages must declare README, footprint, provenance, and O4/O8 HEALPix sidecars");
+  }
+  for (const file of manifest.files) {
+    if (!Number.isSafeInteger(file.sizeBytes) || file.sizeBytes < 1 || !/^[a-f0-9]{64}$/.test(file.sha256)) {
+      throw new PackageInspectionError(`Invalid Resource Package support metadata: ${file.path}`);
+    }
+  }
   const ids=new Set<string>();
   for(const layer of manifest.layers) {
     if(!layer.productId || layer.sourceId!==layer.layerId || ids.has(layer.layerId) || layer.coordinateFrame!=="ICRS" || layer.ordering!=="NESTED" || layer.mocEncoding!=="NUNIQ"
       || !/^[a-f0-9]{64}$/.test(layer.coverageRevision??"") || layer.indexRevision!==null&&!/^[a-f0-9]{64}$/.test(layer.indexRevision??"")
       || !layer.availableOrders?.length || layer.availableOrders.some(o=>!Number.isInteger(o)||o<0||o>13) || layer.maxOrder!==Math.max(...layer.availableOrders)
       || !Number.isInteger(layer.overviewOrder) || layer.overviewOrder!<0 || layer.overviewOrder!>layer.maxOrder!
-      || !["exact","estimated"].includes(layer.geometryPrecision??"") || !layer.precisionNote || !["geometry-only","entrypoint-only","tile-resolved","unavailable"].includes(layer.accessAvailability??""))
+      || !["exact","estimated","unknown"].includes(layer.geometryPrecision??"") || !["complete","incomplete","unknown"].includes(layer.completeness??"")
+      || !layer.precisionNote || !["geometry-only","entrypoint-only","tile-resolved","unavailable"].includes(layer.accessAvailability??""))
       throw new PackageInspectionError(`Invalid reviewed geometry metadata: ${layer.layerId}`);
     ids.add(layer.layerId);
   }

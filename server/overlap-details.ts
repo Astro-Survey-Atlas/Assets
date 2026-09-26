@@ -1,5 +1,5 @@
-import type { CoverageCellLayer } from "./coverage.js";
-import type { WarehouseLayerSnapshot } from "./evidence-store.js";
+import type { CoverageCellLayer, CoverageSourceEvidence } from "./coverage.js";
+import type { ScanScopeSummary, WarehouseLayerSnapshot } from "./evidence-store.js";
 import { layersForOverlapComponent, type OverlapComponent, type OverlapResult } from "./overlap.js";
 import type { PublicSurveyIndex } from "./surveys.js";
 import type { LoadedCatalog } from "./catalog.js";
@@ -24,7 +24,21 @@ export interface PublicOverlapSource {
   sourceTier?: string;
   sourceLabel?: string;
   geometrySourceLabel?: string;
+  coverageEvidence?: CoverageSourceEvidence;
   sourceUnits?: unknown;
+}
+
+export interface PublishedOverlapSourceMetadata {
+  sourceUrl?: string;
+  officialDataUrl?: string;
+  officialQueryUrl?: string;
+  geometrySourceUrl?: string;
+  publicDescription?: string;
+  dataOrigin?: string;
+  sourceTier?: string;
+  sourceLabel?: string;
+  geometrySourceLabel?: string;
+  coverageEvidence?: CoverageSourceEvidence;
 }
 
 export interface AssetsOverlapEvidence {
@@ -44,6 +58,7 @@ export interface WarehouseOverlapEvidence {
   modality?: string;
   state: "ACTIVE" | "FAILED" | "UNKNOWN";
   scanRunId?: string;
+  scanRunCount?: number;
   availableOrders: number[];
   commonOrder: number;
   coverageCells: number;
@@ -51,6 +66,8 @@ export interface WarehouseOverlapEvidence {
   coverageCount: number;
   precision: DetailPrecision;
   sourceSnapshotSha256?: string;
+  sourceSnapshotCount?: number;
+  scanScope?: ScanScopeSummary;
   connector: { status: "known" | "unavailable"; name?: string; type?: string };
   method: { summary: string; docsUrl?: string };
 }
@@ -112,6 +129,7 @@ function publicSourcesFor(
   component: OverlapComponent,
   sourceUnitsByLayer: ReadonlyMap<string, unknown> = new Map(),
   sourceIndex?: PublicSurveyIndex,
+  publishedSourcesByLayer: ReadonlyMap<string, PublishedOverlapSourceMetadata> = new Map(),
 ): PublicOverlapSource[] {
   const seen = new Set<string>();
   const sources: PublicOverlapSource[] = [];
@@ -122,10 +140,15 @@ function publicSourcesFor(
     const sourceSurvey = sourceIndex?.surveys.find((candidate) => candidate.id === layer.surveyId);
     const sourceRelease = sourceSurvey?.releases.find((candidate) => candidate.id === layer.releaseId);
     const sourceProduct = sourceRelease?.products.find((candidate) => candidate.name === layer.product);
-    const sourceUrl = publicExternalUrl(product?.sourceUrl)
+    const publishedSource = publishedSourcesByLayer.get(layer.layerId);
+    const sourceUrl = publicExternalUrl(publishedSource?.officialDataUrl)
+      ?? publicExternalUrl(publishedSource?.officialQueryUrl)
+      ?? publicExternalUrl(publishedSource?.sourceUrl)
+      ?? publicExternalUrl(product?.sourceUrl)
       ?? publicExternalUrl(sourceProduct?.sourceUrl)
       ?? publicExternalUrl(layer.recipe?.sourceUrl);
-    const geometrySourceUrl = publicExternalUrl(product?.geometrySourceUrl)
+    const geometrySourceUrl = publicExternalUrl(publishedSource?.geometrySourceUrl)
+      ?? publicExternalUrl(product?.geometrySourceUrl)
       ?? publicExternalUrl(sourceProduct?.geometrySourceUrl);
     const key = `${layer.layerId}:${layer.releaseId}:${layer.product}`;
     if (seen.has(key)) continue;
@@ -139,13 +162,14 @@ function publicSourcesFor(
       ...(release?.label ? { releaseLabel: release.label } : {}),
       product: product?.name ?? layer.product,
       ...(product?.modality ?? layer.modality ? { modality: product?.modality ?? layer.modality } : {}),
-      ...(product?.description ? { description: product.description } : {}),
+      ...(publishedSource?.publicDescription ?? product?.description ? { description: publishedSource?.publicDescription ?? product?.description } : {}),
       ...(sourceUrl ? { sourceUrl } : {}),
       ...(geometrySourceUrl ? { geometrySourceUrl } : {}),
-      ...(product?.dataOrigin ? { dataOrigin: product.dataOrigin } : {}),
-      ...(product?.sourceTier ? { sourceTier: product.sourceTier } : {}),
-      ...(product?.sourceLabel ? { sourceLabel: product.sourceLabel } : {}),
-      ...(product?.geometrySourceLabel ? { geometrySourceLabel: product.geometrySourceLabel } : {}),
+      ...(publishedSource?.dataOrigin ?? product?.dataOrigin ? { dataOrigin: publishedSource?.dataOrigin ?? product?.dataOrigin } : {}),
+      ...(publishedSource?.sourceTier ?? product?.sourceTier ? { sourceTier: publishedSource?.sourceTier ?? product?.sourceTier } : {}),
+      ...(publishedSource?.sourceLabel ?? product?.sourceLabel ? { sourceLabel: publishedSource?.sourceLabel ?? product?.sourceLabel } : {}),
+      ...(publishedSource?.geometrySourceLabel ?? product?.geometrySourceLabel ? { geometrySourceLabel: publishedSource?.geometrySourceLabel ?? product?.geometrySourceLabel } : {}),
+      ...(publishedSource?.coverageEvidence ?? layer.sourceEvidence ? { coverageEvidence: publishedSource?.coverageEvidence ?? layer.sourceEvidence } : {}),
       ...(sourceUnitsByLayer.has(layer.layerId) ? { sourceUnits: sourceUnitsByLayer.get(layer.layerId) } : {}),
       coverageClaim: { kind: claimKind(product?.name ?? layer.product, geometrySourceUrl), ...(geometrySourceUrl ? { url: geometrySourceUrl } : sourceUrl ? { url: sourceUrl } : { status: "no-public-geometry-url" }) },
     });
@@ -198,6 +222,7 @@ function warehouseEvidenceFor(
         ...(snapshot.modality ?? layer.modality ? { modality: snapshot.modality ?? layer.modality } : {}),
         state: snapshot.state === "ACTIVE" ? "ACTIVE" : snapshot.state === "FAILED" ? "FAILED" : "UNKNOWN",
         ...(snapshot.scanRunId ? { scanRunId: snapshot.scanRunId } : {}),
+        ...(snapshot.scanRunCount !== undefined ? { scanRunCount: snapshot.scanRunCount } : {}),
         availableOrders: snapshot.availableOrders,
         commonOrder: component.order,
         coverageCells: cells.length,
@@ -205,6 +230,8 @@ function warehouseEvidenceFor(
         coverageCount: snapshot.coverageCount,
         precision,
         ...(snapshot.sourceSnapshotSha256 ? { sourceSnapshotSha256: snapshot.sourceSnapshotSha256 } : {}),
+        ...(snapshot.sourceSnapshotCount !== undefined ? { sourceSnapshotCount: snapshot.sourceSnapshotCount } : {}),
+        ...(snapshot.scanScope ? { scanScope: snapshot.scanScope } : {}),
         connector: { status: "unavailable" },
         method: {
           summary: layer.recipe?.steps.map((step) => step.title).join(" -> ") || "Warehouse ACTIVE layer with explicit ICRS/NESTED coverage edges.",
@@ -224,12 +251,17 @@ export function buildOverlapDetails(input: {
   catalog?: LoadedCatalog;
   sourceUnitsByLayer?: ReadonlyMap<string, unknown>;
   sourceIndex?: PublicSurveyIndex;
+  publishedSourcesByLayer?: ReadonlyMap<string, PublishedOverlapSourceMetadata>;
   warehouseSnapshots?: ReadonlyMap<string, WarehouseLayerSnapshot>;
 }): OverlapDetails {
   const componentLayers = layersForOverlapComponent(input.layers, input.result, input.component);
   const warehouseEvidence = warehouseEvidenceFor(input.layers, input.result, input.component, input.warehouseSnapshots ?? new Map());
   const warehousePrecision = new Map(warehouseEvidence.map((entry) => [entry.layerId, entry.precision]));
-  const precisions: DetailPrecision[] = componentLayers.map((layer) => warehousePrecision.get(layer.layerId) ?? layer.sourceUnitIndex?.status ?? "entrypoint-only");
+  const sourcePrecision = new Map(componentLayers.map((layer) => [
+    layer.layerId,
+    input.publishedSourcesByLayer?.get(layer.layerId)?.coverageEvidence?.precision ?? layer.sourceEvidence?.precision,
+  ]));
+  const precisions: DetailPrecision[] = componentLayers.map((layer) => warehousePrecision.get(layer.layerId) ?? sourcePrecision.get(layer.layerId) ?? layer.sourceUnitIndex?.status ?? "entrypoint-only");
   const precision: DetailPrecision = precisions.includes("truncated")
     ? "truncated"
     : precisions.length > 0 && precisions.every((entry) => entry === "exact")
@@ -245,7 +277,7 @@ export function buildOverlapDetails(input: {
   return {
     schemaVersion: 1,
     component: input.component,
-    publicSources: publicSourcesFor(input.layers, input.surveyIndex, input.result, input.component, input.sourceUnitsByLayer, input.sourceIndex),
+    publicSources: publicSourcesFor(input.layers, input.surveyIndex, input.result, input.component, input.sourceUnitsByLayer, input.sourceIndex, input.publishedSourcesByLayer),
     assetsEvidence: assetsEvidenceFor(input.layers, input.surveyIndex, input.result, input.component, input.catalog),
     warehouseEvidence,
     method,

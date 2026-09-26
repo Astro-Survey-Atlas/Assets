@@ -1,10 +1,11 @@
-"""Refresh checksums for generated metadata after an intentional hard cut."""
+"""Refresh generated package metadata while retaining frozen input provenance."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,7 +28,17 @@ def main() -> None:
         "rawGeometryIndex": "raw/geometry/index.json",
     }.items():
         if key in value.get("inputs", {}):
-            value["inputs"][key]["sha256"] = sha(ARTIFACT_ROOT / relative)
+            input_path = ARTIFACT_ROOT / relative
+            if key in {"rawMocIndex", "rawGeometryIndex"} and not input_path.exists():
+                # Evidence storage need not be hydrated to rebuild packages from
+                # already verified frozen MOCs. Keep the known source identity;
+                # this is not a fresh verification of the unavailable input.
+                recorded = value["inputs"][key].get("sha256")
+                if not isinstance(recorded, str) or re.fullmatch(r"[a-f0-9]{64}", recorded) is None:
+                    raise RuntimeError(f"Missing frozen input checksum for {key}")
+                print(f"Retained recorded input checksum (not locally verified): {relative}")
+                continue
+            value["inputs"][key]["sha256"] = sha(input_path)
     manifest_path = ARTIFACT_ROOT / "normalized/survey-footprints.json"
     value["files"]["manifest"].update({"sha256": sha(manifest_path), "sizeBytes": manifest_path.stat().st_size})
     catalog_path = ARTIFACT_ROOT / "packages/catalog.json"

@@ -261,7 +261,11 @@ export class S3ArtifactStore implements ArtifactStore {
     this.prefix = options.prefix ?? "";
     this.publicBaseUrl = options.publicBaseUrl?.replace(/\/+$/, "") || undefined;
     this.#client = options.client ?? new S3Client({
-      requestHandler: { connectionTimeout: 10_000, requestTimeout: 60_000, throwOnRequestTimeout: true },
+      requestHandler: {
+        connectionTimeout: 10_000,
+        requestTimeout: Number(process.env.ASSETS_OBJECT_STORE_REQUEST_TIMEOUT_MS ?? "60000"),
+        throwOnRequestTimeout: true,
+      },
       region: options.region ?? "us-east-1",
       ...(options.endpoint ? { endpoint: options.endpoint } : {}),
       forcePathStyle: options.forcePathStyle ?? true,

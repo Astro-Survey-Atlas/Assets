@@ -8,7 +8,7 @@ import { highestCommonCoverageOrder } from "./atlas/coverage-orders.js";
 import { coverageEscapeIntent } from "./atlas/coverage-interaction.js";
 import { coverageLayerTooltipPosition } from "./atlas/layer-panel-layout.js";
 import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-layout.js";
-import { joinUnique, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch } from "./overlap-download.js";
+import { joinUnique, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch } from "./overlap-download.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { createRevisionHydrationQueue } from "./revision-hydration-queue.js";
 import { mountSiteChrome } from "./site-chrome.js";
@@ -611,12 +611,13 @@ interface OverlapEvidenceResult {
 }
 interface OverlapSurveyView { surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; unitKind?: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }
 interface OverlapComponentView { id: string; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; evidenceLookup?: OverlapEvidenceLookup; surveys?: OverlapSurveyView[] }
+type OverlapSourceEvidence = Pick<DownloadPlanCoverageEvidence, "evidenceKind" | "sourceIdentity" | "instrument" | "filters" | "sourceSnapshotSha256" | "precision" | "completeness" | "scienceFileScan" | "summary">;
 interface OverlapDetailsResponse {
   schemaVersion: 1;
   component: OverlapComponentView;
-  publicSources: Array<{ layerId: string; surveyId: string; surveyName: string; surveyColor?: string; releaseId: string; releaseLabel?: string; product: string; modality?: string; description?: string; sourceUrl?: string; geometrySourceUrl?: string; coverageClaim?: { kind: string; url?: string; status?: string }; dataOrigin?: string; sourceTier?: string; sourceLabel?: string; geometrySourceLabel?: string; sourceUnits?: { status?: string; unitKind?: string; units?: Array<{ unitId: string; exposureCount?: number; lastNight?: number; downloadUrl?: string }>; totalUnits?: number; truncated?: boolean; notes?: string } }>;
+  publicSources: Array<{ layerId: string; surveyId: string; surveyName: string; surveyColor?: string; releaseId: string; releaseLabel?: string; product: string; modality?: string; description?: string; sourceUrl?: string; geometrySourceUrl?: string; coverageClaim?: { kind: string; url?: string; status?: string }; dataOrigin?: string; sourceTier?: string; sourceLabel?: string; geometrySourceLabel?: string; coverageEvidence?: OverlapSourceEvidence; sourceUnits?: { status?: string; unitKind?: string; units?: Array<{ unitId: string; exposureCount?: number; lastNight?: number; downloadUrl?: string }>; totalUnits?: number; truncated?: boolean; notes?: string } }>;
   assetsEvidence: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; artifacts: Array<{ id: string; kind: string; label: string; downloadUrl: string; previewUrl?: string; sha256: string; sizeBytes: number }> }>;
-  warehouseEvidence: Array<{ layerId: string; surveyId: string; releaseId: string; productId: string; product?: string; modality?: string; state: string; scanRunId?: string; availableOrders: number[]; commonOrder: number; coverageCells: number; fileCount: number; coverageCount: number; precision: string; sourceSnapshotSha256?: string; connector: { status: string; name?: string; type?: string }; method: { summary: string; docsUrl?: string } }>;
+  warehouseEvidence: Array<{ layerId: string; surveyId: string; releaseId: string; productId: string; product?: string; modality?: string; state: string; scanRunId?: string; scanRunCount?: number; availableOrders: number[]; commonOrder: number; coverageCells: number; fileCount: number; coverageCount: number; precision: string; sourceSnapshotSha256?: string; sourceSnapshotCount?: number; scanScope?: { layerId: string; publishedLayerId?: string; scopeId: string; scopeSnapshotSha256: string; expectedPartitions: number; committedPartitions: number; completeness: string }; connector: { status: string; name?: string; type?: string }; method: { summary: string; docsUrl?: string } }>;
   method: { summary: string; docsUrl?: string };
   reverseLookup: OverlapEvidenceLookup;
 }
@@ -1076,24 +1077,31 @@ function mergeOverlapEvidence(current: OverlapEvidenceResult, next: OverlapEvide
       files.set(file.fileId, file);
       continue;
     }
-    const matches = new Map(previous.matchingCoverage.map((match) => [`${match.layerId ?? ""}:${match.order}:${match.ipix}:${match.precision}`, match]));
-    file.matchingCoverage.forEach((match) => matches.set(`${match.layerId ?? ""}:${match.order}:${match.ipix}:${match.precision}`, match));
-    files.set(file.fileId, { ...previous, ...file, matchingCoverage: [...matches.values()] });
+    const matches = new Map(previous.matchingCoverage.map((match) => [`${match.layerId ?? ""}:${match.order}:${match.ipix}:${match.precision}:${match.scanRunId ?? ""}:${match.sourceSnapshotSha256 ?? ""}:${match.evidenceLayerId ?? ""}:${match.observationLayerId ?? ""}:${match.scopeId ?? ""}:${match.partitionId ?? ""}`, match]));
+    file.matchingCoverage.forEach((match) => matches.set(`${match.layerId ?? ""}:${match.order}:${match.ipix}:${match.precision}:${match.scanRunId ?? ""}:${match.sourceSnapshotSha256 ?? ""}:${match.evidenceLayerId ?? ""}:${match.observationLayerId ?? ""}:${match.scopeId ?? ""}:${match.partitionId ?? ""}`, match));
+    const observations = new Map([...(previous.observations ?? []), ...(file.observations ?? [])].map(observation => [`${observation.layerId}:${observation.scanRunId}`, observation]));
+    files.set(file.fileId, { ...previous, ...file, matchingCoverage: [...matches.values()],
+      ...(previous.matchingCoverageTruncated || file.matchingCoverageTruncated ? { matchingCoverageTruncated: true } : {}),
+      warnings: [...new Set([...(previous.warnings ?? []), ...(file.warnings ?? [])])],
+      ...(observations.size ? { observations: [...observations.values()] } : {}) });
   }
   const entrypoints = new Map(currentPlan.entrypoints.map((entry) => [reversePlanEntryKey(entry), entry]));
   nextPlan.entrypoints.forEach((entry) => entrypoints.set(reversePlanEntryKey(entry), entry));
+  const coverageEvidence = new Map((currentPlan.coverageEvidence ?? []).map((evidence) => [`${evidence.layerId}:${evidence.order}`, evidence]));
+  (nextPlan.coverageEvidence ?? []).forEach((evidence) => coverageEvidence.set(`${evidence.layerId}:${evidence.order}`, evidence));
   return {
     ...current,
     ...next,
     preview: undefined,
     page: next.page,
-    sourceFiles: [...current.sourceFiles, ...next.sourceFiles].filter((source, index, values) => values.findIndex((candidate) => sourceValue(candidate, ["fileId", "file_id", "_id"]) === sourceValue(source, ["fileId", "file_id", "_id"])) === index),
+    sourceFiles: [...current.sourceFiles, ...next.sourceFiles].filter((source, index, values) => values.findIndex((candidate) => `${sourceValue(candidate, ["layer_id"])}:${sourceValue(candidate, ["fileId", "file_id", "_id"])}` === `${sourceValue(source, ["layer_id"])}:${sourceValue(source, ["fileId", "file_id", "_id"])}`) === index),
     edges: [...current.edges, ...next.edges].filter((edge, index, values) => values.findIndex((candidate) => `${candidate.edgeId ?? ""}:${candidate.layerId ?? ""}:${candidate.order}:${candidate.ipix}` === `${edge.edgeId ?? ""}:${edge.layerId ?? ""}:${edge.order}:${edge.ipix}`) === index),
     downloadPlan: {
       ...currentPlan,
       ...nextPlan,
       files: [...files.values()],
       entrypoints: [...entrypoints.values()],
+      coverageEvidence: [...coverageEvidence.values()],
       truncated: nextPlan.truncated,
       warnings: [...new Set([...currentPlan.warnings, ...nextPlan.warnings])],
     },
@@ -1274,15 +1282,15 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
     paginationHost.hidden = true;
   }
   const plan = downloadPlanFor(result);
-  if (!result.available && !plan.files.length && !plan.entrypoints.length) {
+  const coverageEvidence = plan.coverageEvidence ?? [];
+  if (!result.available && !plan.files.length && !plan.entrypoints.length && !coverageEvidence.length) {
     node.append(Object.assign(document.createElement("small"), { textContent: t("coverage.evidenceUnavailable") }));
     return;
   }
   const previewLimit = result.preview?.limit ?? Number.POSITIVE_INFINITY;
   const displayFiles = plan.files.slice(0, previewLimit);
-  const displayEntrypoints = result.preview
-    ? plan.entrypoints.slice(0, Math.max(0, previewLimit - displayFiles.length))
-    : plan.entrypoints;
+  const displayEntrypoints = plan.entrypoints;
+  const displayCoverageEvidence = coverageEvidence;
   const hasMore = Boolean(result.page?.hasMore || result.preview?.hasMore || plan.truncated);
   const tileLinks = displayEntrypoints.filter((entry) => entry.kind === "tile-directory").length;
   const otherLinks = displayEntrypoints.length - tileLinks;
@@ -1290,10 +1298,17 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
     ...(displayFiles.length ? [`${displayFiles.length} 个文件`] : []),
     ...(tileLinks ? [`${tileLinks} 个 Tile`] : []),
     ...(otherLinks ? [`${otherLinks} 个来源入口`] : []),
+    ...(displayCoverageEvidence.length ? [`${displayCoverageEvidence.length} 条覆盖依据`] : []),
   ];
   const heading = document.createElement("strong");
-  heading.textContent = `${result.preview ? "已展示" : result.page ? "已加载" : "匹配结果"} ${counts.join(" · ") || "暂无 Tile 或文件"}${hasMore ? " · 还有更多结果" : ""}`;
+  heading.textContent = `${result.preview ? "已展示" : result.page ? "已加载" : "匹配结果"} ${counts.join(" · ") || "暂无覆盖依据、Tile 或文件"}${hasMore ? " · 还有更多结果" : ""}`;
   node.append(heading);
+  for (const scope of plan.scanScopes ?? []) {
+    const summary = document.createElement("small");
+    summary.textContent = `${scope.publishedLayerId ?? scope.layerId} · 扫描范围 ${scope.scopeId}：已提交 ${scope.committedPartitions}/${scope.expectedPartitions} 个分区${scope.completeness === "incomplete" ? "（尚未完成）" : ""}；仅代表此冻结范围，不代表完整巡天。`;
+    summary.title = `证据层: ${scope.layerId}\n范围快照 SHA-256: ${scope.scopeSnapshotSha256}`;
+    node.append(summary);
+  }
   if (hasMore) {
     const more = document.createElement("small");
     more.className = "overlap-evidence-more";
@@ -1346,6 +1361,49 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
     warning.className = "overlap-evidence-warning";
     node.append(warning);
   }
+  if (displayCoverageEvidence.length) {
+    const coverageHeading = document.createElement("strong");
+    coverageHeading.textContent = `覆盖依据 · ${displayCoverageEvidence.length}`;
+    node.append(coverageHeading);
+    const list = document.createElement("div");
+    list.className = "overlap-evidence-files overlap-coverage-evidence";
+    displayCoverageEvidence.forEach((evidence) => {
+      const row = document.createElement("div");
+      row.className = "overlap-evidence-file overlap-coverage-evidence-item";
+      const title = document.createElement("strong");
+      title.textContent = `${evidence.surveyId} · ${evidence.releaseId} · ${evidence.product}`;
+      row.append(title);
+      const precision = document.createElement("small");
+      precision.textContent = `${evidence.evidenceKind} · overlap ICRS/NESTED O${evidence.order} · ${evidence.precision} · native MOC max O${evidence.nativeMaxOrder} · ${evidence.matchedCells.length} matched cell(s)${evidence.availableOrders.length ? ` · query orders ${evidence.availableOrders.map((order) => `O${order}`).join(", ")}` : ""}`;
+      row.append(precision);
+      if (evidence.sourceIdentity || evidence.instrument || evidence.filters) {
+        row.append(Object.assign(document.createElement("small"), {
+          textContent: [evidence.sourceIdentity, evidence.instrument, evidence.filters].filter(Boolean).join(" · "),
+        }));
+      }
+      if (evidence.completeness || evidence.scienceFileScan) {
+        row.append(Object.assign(document.createElement("small"), {
+          textContent: `completeness=${evidence.completeness ?? "unknown"} · science-file scan=${evidence.scienceFileScan ?? "unknown"}`,
+        }));
+      }
+      if (evidence.sourceSnapshotSha256) {
+        row.append(Object.assign(document.createElement("small"), {
+          className: "coverage-evidence-snapshot",
+          textContent: `source snapshot SHA-256 · ${evidence.sourceSnapshotSha256}`,
+        }));
+      }
+      if (evidence.sourceLabel) row.append(Object.assign(document.createElement("small"), { textContent: `来源：${evidence.sourceLabel}` }));
+      row.append(Object.assign(document.createElement("small"), { textContent: evidence.summary }));
+      const sourceLink = drawerDocLink(evidence.sourceUrl, evidence.sourceLabel ? `查看来源：${evidence.sourceLabel}` : "查看数据来源");
+      const geometryLink = drawerDocLink(evidence.geometrySourceUrl, "查看覆盖几何来源");
+      const coverageLink = drawerDocLink(evidence.coverageUrl, "查看发布覆盖 MOC");
+      if (sourceLink) row.append(sourceLink);
+      if (geometryLink && evidence.geometrySourceUrl !== evidence.sourceUrl) row.append(geometryLink);
+      if (coverageLink) row.append(coverageLink);
+      list.append(row);
+    });
+    node.append(list);
+  }
   if (displayFiles.length) {
     const filesHeading = document.createElement("strong");
     filesHeading.textContent = "FILES · coverage matches";
@@ -1362,6 +1420,23 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
       const size = file.sizeBytes === undefined ? "size unknown" : bytes(file.sizeBytes);
       matchSummary.textContent = `${file.matchingCoverage.length} coverage match${file.matchingCoverage.length === 1 ? "" : "es"} · ${joinUnique(file.matchingCoverage.map((match) => match.layerId)) || "layer unknown"} · ${joinUnique(file.matchingCoverage.map((match) => `O${match.order}:${match.ipix}`))} · ${size}${file.downloadProvider ? ` · ${file.downloadProvider}` : ""}`;
       row.append(matchSummary);
+      if (file.matchingCoverageTruncated) row.append(Object.assign(document.createElement("small"), {
+        textContent: "此文件仅展示部分覆盖匹配；文件清单加载完毕不代表已列出全部匹配区块。",
+      }));
+      if (file.observations?.length) {
+        const details = document.createElement("details");
+        const label = document.createElement("summary");
+        label.textContent = "扫描依据与文件记录";
+        details.append(label);
+        for (const observation of file.observations) {
+          const note = document.createElement("small");
+          note.textContent = `${observation.scanRunId ?? "扫描标识未知"} · ${observation.fileName ?? file.fileId} · ${observation.sizeBytes === undefined ? "大小未知" : bytes(observation.sizeBytes)} · ${observation.metadataState === "missing" ? "文件元数据缺失" : "已保留文件记录"}`;
+          note.title = `输入快照 SHA-256: ${observation.sourceSnapshotSha256 ?? "未知"}`;
+          details.append(note);
+          if (observation.sourceUri && observation.sourceUri !== file.sourceUri) appendSourceLocator(details, observation.sourceUri);
+        }
+        row.append(details);
+      }
       if (file.metadataState === "missing") row.append(Object.assign(document.createElement("small"), { textContent: "FileAsset metadata missing; not verified as a complete file record" }));
       let hasLocation = false;
       if (file.downloadUrl) {
@@ -1762,9 +1837,37 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
     title.textContent = `${drawerText(source.surveyName, source.surveyId)} · ${drawerText(source.releaseLabel ?? source.releaseId)} · ${drawerText(source.product)}`;
     heading.append(swatch, title);
     card.append(heading);
-    const metadata = document.createElement("small"); metadata.textContent = `${source.modality ? `${source.modality} · ` : ""}${source.dataOrigin ? `${source.dataOrigin} · ` : ""}${source.coverageClaim?.kind?.toUpperCase() ?? "OVERVIEW"}`; card.append(metadata);
+    const metadata = document.createElement("small"); metadata.textContent = `${source.modality ? `${source.modality} · ` : ""}${source.dataOrigin ? `${source.dataOrigin} · ` : ""}${source.coverageEvidence?.evidenceKind.toUpperCase() ?? source.coverageClaim?.kind?.toUpperCase() ?? "OVERVIEW"}`; card.append(metadata);
     if (source.sourceLabel || source.sourceTier || source.geometrySourceLabel) {
       const provenance = document.createElement("small"); provenance.textContent = `${source.sourceLabel ?? "Source"}${source.sourceTier ? ` · ${source.sourceTier}` : ""}${source.geometrySourceLabel ? ` · ${source.geometrySourceLabel}` : ""}`; card.append(provenance);
+    }
+    if (source.coverageEvidence) {
+      const evidence = source.coverageEvidence;
+      const kindLabels: Record<string, string> = locale() === "zh"
+        ? { "observation-footprint": "观测边界", "tile-footprint": "Tile 边界", "wcs-coverage": "文件 WCS 覆盖", "published-moc": "已收录 MOC" }
+        : { "observation-footprint": "Observation footprint", "tile-footprint": "Tile footprint", "wcs-coverage": "File WCS coverage", "published-moc": "Collected MOC" };
+      card.append(Object.assign(document.createElement("small"), {
+        textContent: `${kindLabels[evidence.evidenceKind] ?? evidence.evidenceKind} · ${evidence.precision} · ICRS/NESTED O${component.order}`,
+      }));
+      const identity = [evidence.sourceIdentity, evidence.instrument, evidence.filters].filter(Boolean).join(" · ");
+      if (identity) card.append(Object.assign(document.createElement("small"), { textContent: identity }));
+      const completenessLabels = locale() === "zh"
+        ? { complete: "声明范围内已收录完整", incomplete: "当前收录范围不完整", unknown: "完整性未知" }
+        : { complete: "Complete within the declared scope", incomplete: "Current coverage is incomplete", unknown: "Completeness unknown" };
+      const scanLabels = locale() === "zh"
+        ? { "not-scanned": "尚未扫描科学文件", partial: "仅扫描部分科学文件", complete: "已完成声明范围内的文件扫描" }
+        : { "not-scanned": "Science files not scanned", partial: "Science files partially scanned", complete: "File scan complete within the declared scope" };
+      const limits = [
+        evidence.completeness ? completenessLabels[evidence.completeness] : "",
+        evidence.scienceFileScan ? scanLabels[evidence.scienceFileScan] : "",
+      ].filter(Boolean).join(" · ");
+      if (limits) card.append(Object.assign(document.createElement("small"), { textContent: limits }));
+      if (evidence.sourceSnapshotSha256) card.append(Object.assign(document.createElement("code"), {
+        textContent: `source snapshot SHA-256 · ${evidence.sourceSnapshotSha256}`,
+      }));
+      if (evidence.summary) card.append(Object.assign(document.createElement("p"), {
+        className: "overlap-drawer-copy", textContent: evidence.summary,
+      }));
     }
     if (source.description) card.append(Object.assign(document.createElement("p"), { className: "overlap-drawer-copy", textContent: source.description }));
     const links = document.createElement("div"); links.className = "overlap-unit-links";
@@ -1831,7 +1934,13 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
     const status = document.createElement("span"); status.className = "overlap-drawer-card-status"; status.dataset.state = evidence.state; status.textContent = evidence.state; title.append(status); card.append(title);
     const counts = document.createElement("small"); counts.textContent = `${evidence.modality ?? "coverage"} · ${evidence.coverageCells} cells · ${evidence.fileCount} files · ${evidence.coverageCount} edges · ${evidence.precision} · O${evidence.commonOrder}`; card.append(counts);
     if (evidence.scanRunId) card.append(Object.assign(document.createElement("small"), { textContent: `SCAN RUN ${evidence.scanRunId}` }));
+    else if (evidence.scanRunCount !== undefined) card.append(Object.assign(document.createElement("small"), { textContent: `SCAN RUNS ${evidence.scanRunCount}` }));
     if (evidence.sourceSnapshotSha256) card.append(Object.assign(document.createElement("code"), { textContent: `SNAPSHOT SHA-256 ${evidence.sourceSnapshotSha256}` }));
+    else if (evidence.sourceSnapshotCount !== undefined) card.append(Object.assign(document.createElement("small"), { textContent: `INPUT SNAPSHOTS ${evidence.sourceSnapshotCount} (per committed partition)` }));
+    if (evidence.scanScope) {
+      card.append(Object.assign(document.createElement("small"), { textContent: `SCOPE ${evidence.scanScope.scopeId} · ${evidence.scanScope.committedPartitions}/${evidence.scanScope.expectedPartitions} partitions · ${evidence.scanScope.completeness}` }));
+      card.append(Object.assign(document.createElement("code"), { textContent: `SCOPE SNAPSHOT SHA-256 ${evidence.scanScope.scopeSnapshotSha256}` }));
+    }
     const connector = document.createElement("small"); connector.textContent = `${t("coverage.connector")}: ${evidence.connector.status}${evidence.connector.name ? ` · ${evidence.connector.name}` : ""}${evidence.connector.type ? ` · ${evidence.connector.type}` : ""}`; card.append(connector);
     warehouseList.append(card);
   });

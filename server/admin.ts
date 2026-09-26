@@ -1,4 +1,7 @@
 import { discoveryFailureView, type DiscoveryFailure } from "./discovery-failure.js";
+import { AdminHttpError } from "./admin-error.js";
+import { mastHstObservationSummaryView, MAST_HST_DISCOVERY_POLICY, type MastHstObservationQuery, type MastHstScopeRef } from "./moc-discovery.js";
+import { batchEvidenceLayerId, buildScanBatchResource, ScanBatchValidationError, scanBatchView, type ScanBatchRequest, type ScanBatchRuleResource } from "./scan-batch.js";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage, type RequestOptions as HttpRequestOptions } from "node:http";
@@ -70,7 +73,7 @@ interface KubernetesMetadata {
   annotations?: Record<string, string>;
 }
 
-interface KubernetesResource {
+export interface KubernetesResource {
   apiVersion?: string;
   kind?: string;
   metadata?: KubernetesMetadata;
@@ -185,8 +188,13 @@ export interface CoverageTaskInput {
   healpixColumn?: string;
   healpixOrderColumn?: string;
   healpixOrder?: number;
+  hduName?: string;
+  hduIndex?: number;
+  coordinateFrame?: string;
   batchId?: string;
 }
+
+export type ScanBatchTaskRecipe = Omit<CoverageTaskInput, "name" | "sourceConnector" | "sourcePaths" | "batchId">;
 
 export interface TaskStatusView {
   phase: string;
@@ -237,7 +245,7 @@ export interface CoverageTaskView {
 }
 
 export interface MocDiscoveryInput {
-  surveyName: string;
+  surveyName?: string;
   releaseHint?: string;
   productHint?: string;
   surveyId?: string;
@@ -245,6 +253,10 @@ export interface MocDiscoveryInput {
   productId?: string;
   workTitle?: string;
   workContext?: { key?: string; title?: string; surveyId?: string; releaseId?: string; productId?: string };
+  policyRef?: typeof MAST_HST_DISCOVERY_POLICY;
+  observationQuery?: MastHstObservationQuery;
+  observationScopeRef?: MastHstScopeRef;
+  observationComponentId?: string;
 }
 
 export interface WorkContextView {
@@ -269,6 +281,16 @@ export interface MocDiscoveryView {
   surveyId?: string;
   releaseId?: string;
   productId?: string;
+  observationScope?: {
+    publishedLayerId: string;
+    stagedBuildName: string;
+    componentIndex: number;
+    componentId?: string;
+    order: number;
+    cellCount: number;
+    q1MocSha256: string;
+    hstMocSha256: string;
+  };
   status: {
     phase: string;
     jobName?: string;
@@ -279,17 +301,13 @@ export interface MocDiscoveryView {
     candidateCount?: number;
     lastTransitionTime?: string;
     reviewSummary?: MocReviewSummary;
+    observationSummary?: ReturnType<typeof mastHstObservationSummaryView>;
     reviewSummaryState?: "available" | "missing";
     discoveryState?: MocDiscoveryState;
   };
 }
 
-export class AdminHttpError extends Error {
-  constructor(readonly statusCode: number, message: string) {
-    super(message);
-    this.name = "AdminHttpError";
-  }
-}
+export { AdminHttpError } from "./admin-error.js";
 
 export class KubernetesApiError extends Error {
   constructor(readonly statusCode: number, message: string, readonly details?: unknown) {
@@ -319,7 +337,7 @@ export function loadAdminConfig(environment: NodeJS.ProcessEnv = process.env): A
     caFile: environment.ASSETS_KUBE_CA_FILE?.trim() || "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
     warehouseEsUrl: environment.ASSETS_WAREHOUSE_ES_URL?.trim() || "http://atlas-warehouse-elasticsearch.atlas-warehouse.svc.cluster.local:9200",
     scannerImage: environment.ASSETS_WAREHOUSE_SCANNER_IMAGE?.trim()
-      || "crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260826-shutdownfix1",
+      || "crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260924-235142-batch-capacity-v2",
     evidenceClaimName: environment.ASSETS_WAREHOUSE_EVIDENCE_CLAIM?.trim() || "atlas-evidence",
     evidenceMountPath: environment.ASSETS_WAREHOUSE_EVIDENCE_MOUNT_PATH?.trim() || "/var/lib/atlas-evidence",
   };
@@ -779,6 +797,33 @@ function reviewSummaryView(value: unknown): MocReviewSummary | undefined {
   return { schemaVersion: 2, truncated: item.truncated, summaryTruncated: item.summaryTruncated, ...(searchRecordCount !== undefined ? { searchRecordCount } : {}), candidates };
 }
 
+function mocDiscoveryObservationScope(resource: KubernetesResource): MocDiscoveryView["observationScope"] {
+  if (resource.spec?.policyRef !== MAST_HST_DISCOVERY_POLICY) return undefined;
+  const query = resource.spec.query && typeof resource.spec.query === "object" ? resource.spec.query as Record<string, unknown> : {};
+  const observationQuery = query.observationQuery && typeof query.observationQuery === "object" ? query.observationQuery as Record<string, unknown> : {};
+  const scope = observationQuery.scope && typeof observationQuery.scope === "object" ? observationQuery.scope as Record<string, unknown> : {};
+  const cells = scope.cells;
+  const refValue = resource.metadata?.annotations?.["assets.atlas.zhejianglab.org/mast-hst-scope-ref"];
+  let ref: Record<string, unknown> | undefined;
+  try { ref = refValue ? JSON.parse(refValue) as Record<string, unknown> : undefined; } catch { ref = undefined; }
+  if (!Array.isArray(cells) || typeof scope.order !== "number" || !Number.isSafeInteger(scope.order)
+    || typeof scope.q1MocSha256 !== "string" || !/^[a-f0-9]{64}$/.test(scope.q1MocSha256)
+    || typeof scope.hstMocSha256 !== "string" || !/^[a-f0-9]{64}$/.test(scope.hstMocSha256)
+    || typeof ref?.publishedLayerId !== "string" || typeof ref.stagedBuildName !== "string"
+    || !Number.isSafeInteger(ref.componentIndex)) return undefined;
+  const componentId = resource.metadata?.annotations?.["assets.atlas.zhejianglab.org/mast-hst-component-id"];
+  return {
+    publishedLayerId: ref.publishedLayerId,
+    stagedBuildName: ref.stagedBuildName,
+    componentIndex: Number(ref.componentIndex),
+    ...(typeof componentId === "string" && /^C\d{2}$/.test(componentId) ? { componentId } : {}),
+    order: Number(scope.order),
+    cellCount: cells.length,
+    q1MocSha256: scope.q1MocSha256,
+    hstMocSha256: scope.hstMocSha256,
+  };
+}
+
 function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = false): MocDiscoveryView {
   const spec = resource.spec ?? {};
   const query = spec.query && typeof spec.query === "object" ? spec.query as Record<string, unknown> : {};
@@ -789,17 +834,25 @@ function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = f
   const value = (key: string): string | undefined => typeof status[key] === "string" ? status[key] as string : undefined;
   const number = (key: string): number | undefined => typeof status[key] === "number" ? status[key] as number : undefined;
   const summary = reviewSummaryView(status.reviewSummary);
+  const observationSummary = mastHstObservationSummaryView(status.observationSummary, includeReviewSummary);
   const operational = status.summary && typeof status.summary === "object" ? status.summary as Record<string, unknown> : {};
   const failure = discoveryFailureView(operational.failure);
   const work = parseWorkContext(resource.metadata?.annotations?.["assets.atlas.zhejianglab.org/work-ref"]);
-  const candidateCount = number("candidateCount") ?? summary?.candidates.length;
+  const candidateCount = number("candidateCount") ?? observationSummary?.candidateCount ?? summary?.candidates.length;
   const phase = (value("phase") ?? "PENDING").toUpperCase();
   const reviewSummaryState = summary ? "available" as const : "missing" as const;
+  const discoveryState = resource.spec?.policyRef === MAST_HST_DISCOVERY_POLICY
+    ? ["FAILED", "ERROR", "INVALID", "CANCELLED"].includes(phase) ? "failed" as const
+      : !["SUCCEEDED", "COMPLETED"].includes(phase) ? "running" as const
+        : !observationSummary || observationSummary.truncated || !observationSummary.queryExhausted ? "incomplete" as const
+          : observationSummary.candidateCount ? "ready" as const : "empty" as const
+    : mocDiscoveryState({ phase, reviewSummary: summary, reviewSummaryState });
   return {
     name: resource.metadata?.name ?? "",
     namespace: resource.metadata?.namespace,
     createdAt: resource.metadata?.creationTimestamp,
-    surveyName: typeof query.surveyName === "string" ? query.surveyName : "",
+    surveyName: typeof query.surveyName === "string" ? query.surveyName
+      : resource.spec?.policyRef === MAST_HST_DISCOVERY_POLICY ? "Hubble Space Telescope" : "",
     ...(typeof query.releaseHint === "string" ? { releaseHint: query.releaseHint } : {}),
     ...(typeof query.productHint === "string" ? { productHint: query.productHint } : {}),
     policyRef: typeof spec.policyRef === "string" ? spec.policyRef : "",
@@ -808,6 +861,7 @@ function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = f
     ...(work?.surveyId ? { surveyId: work.surveyId } : {}),
     ...(work?.releaseId ? { releaseId: work.releaseId } : {}),
     ...(work?.productId ? { productId: work.productId } : {}),
+    ...(mocDiscoveryObservationScope(resource) ? { observationScope: mocDiscoveryObservationScope(resource) } : {}),
     status: {
       phase,
       ...(failure ? { failure } : {}),
@@ -818,8 +872,9 @@ function mocDiscoveryView(resource: KubernetesResource, includeReviewSummary = f
       ...(candidateCount !== undefined ? { candidateCount } : {}),
       ...(value("lastTransitionTime") ? { lastTransitionTime: value("lastTransitionTime") } : {}),
       reviewSummaryState,
-      discoveryState: mocDiscoveryState({ phase, reviewSummary: summary, reviewSummaryState }),
+      discoveryState,
       ...(includeReviewSummary && summary ? { reviewSummary: summary } : {}),
+      ...(observationSummary ? { observationSummary } : {}),
     },
   };
 }
@@ -854,10 +909,17 @@ function workContextForMoc(input: MocDiscoveryInput, surveyName: string, release
 }
 
 function buildMocDiscoveryResource(input: MocDiscoveryInput, namespace: string): KubernetesResource {
-  const surveyName = discoveryText(input.surveyName, "surveyName");
+  const policyRef = input.policyRef ?? "cds-public-moc-v2";
+  const mastHst = policyRef === MAST_HST_DISCOVERY_POLICY;
+  const surveyName = mastHst ? "Hubble Space Telescope" : discoveryText(input.surveyName, "surveyName");
   const releaseHint = discoveryOptionalText(input.releaseHint, "releaseHint");
   const productHint = discoveryOptionalText(input.productHint, "productHint");
-  const work = workContextForMoc(input, surveyName, releaseHint, productHint);
+  if (mastHst && (!input.observationQuery || !input.observationScopeRef || !input.observationComponentId)) {
+    throw new AdminHttpError(400, "HST discovery requires a server-resolved scope and observation query");
+  }
+  const work = mastHst
+    ? workContextForMoc({ ...input, surveyId: "hst", releaseId: "hst-mast-observations" }, surveyName, "MAST HST observations", productHint)
+    : workContextForMoc(input, surveyName, releaseHint, productHint);
   const base = `${productSlug(surveyName)}-moc-discovery`;
   const suffix = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const name = dnsName(`${base.slice(0, Math.max(1, 63 - suffix.length - 1))}-${suffix}`, "name");
@@ -875,11 +937,17 @@ function buildMocDiscoveryResource(input: MocDiscoveryInput, namespace: string):
         ...(work.releaseId ? { "astro.zhejianglab.org/release-id": productSlug(work.releaseId) } : {}),
         ...(work.productId ? { "astro.zhejianglab.org/product-id": work.productId } : {}),
       },
-      annotations: { "assets.atlas.zhejianglab.org/work-ref": JSON.stringify(work) },
+      annotations: {
+        "assets.atlas.zhejianglab.org/work-ref": JSON.stringify(work),
+        ...(mastHst && input.observationScopeRef ? { "assets.atlas.zhejianglab.org/mast-hst-scope-ref": JSON.stringify(input.observationScopeRef) } : {}),
+        ...(mastHst && input.observationComponentId ? { "assets.atlas.zhejianglab.org/mast-hst-component-id": input.observationComponentId } : {}),
+      },
     },
     spec: {
-      query: { surveyName, ...(releaseHint ? { releaseHint } : {}), ...(productHint ? { productHint } : {}) },
-      policyRef: "cds-public-moc-v2",
+      query: mastHst
+        ? { observationQuery: input.observationQuery }
+        : { surveyName, ...(releaseHint ? { releaseHint } : {}), ...(productHint ? { productHint } : {}) },
+      policyRef,
     },
   };
 }
@@ -1196,6 +1264,21 @@ function objectLocation(inputPath: string, connector: ConnectorDefinition): { bu
   return { bucket, ...(prefix ? { prefix } : {}) };
 }
 
+function ensureBatchSourceWithinConnectorRoot(inputPath: string, connector: ConnectorDefinition): void {
+  const value = inputPath.trim();
+  const uri = /^(?:s3|oss):\/\/[^/]+(?:\/(.*))?$/.exec(value);
+  const sourcePath = uri ? (uri[1] ?? "") : value;
+  if ((!uri && sourcePath.startsWith("/")) || sourcePath.includes("\\") || sourcePath.split("/").some((segment) => segment === "." || segment === "..")) {
+    throw new AdminHttpError(400, "sourcePaths[0] must stay within the connector root");
+  }
+  const location = objectLocation(value, connector);
+  const root = (connector.prefix ?? "").replace(/^\/+|\/+$/g, "");
+  const target = (location.prefix ?? "").replace(/^\/+|\/+$/g, "");
+  if (root && target !== root && !target.startsWith(`${root}/`)) {
+    throw new AdminHttpError(400, "sourcePaths[0] must stay within the connector root");
+  }
+}
+
 function localSourceLocation(inputPath: string, connector: ConnectorDefinition): {
   rootPath: string;
   sourceVolume: { claimName: string; mountPath: string; subPath?: string };
@@ -1260,9 +1343,28 @@ function buildTaskResource(
 
   const extractionMode = mode === "nested-healpix" ? "catalog-healpix" : mode;
   const catalog: Record<string, unknown> = {};
+  const hasHduName = input.hduName !== undefined;
+  const hasHduIndex = input.hduIndex !== undefined;
+  const hasCoordinateFrame = input.coordinateFrame !== undefined;
+  if ((hasHduName || hasHduIndex || hasCoordinateFrame) && mode !== "catalog-radec") {
+    throw new AdminHttpError(400, "hduName, hduIndex, and coordinateFrame are supported only with catalog-radec");
+  }
+  if (hasHduName && hasHduIndex) throw new AdminHttpError(400, "Specify either hduName or hduIndex, not both");
+  if (hasCoordinateFrame && input.coordinateFrame !== "ICRS") throw new AdminHttpError(400, "coordinateFrame must be exactly ICRS");
+  if ((hasHduName || hasHduIndex) && input.coordinateFrame !== "ICRS") {
+    throw new AdminHttpError(400, "hduName or hduIndex requires coordinateFrame ICRS");
+  }
   if (extractionMode === "catalog-radec") {
     catalog.raColumn = requireText(input.raColumn, "raColumn", 128);
     catalog.decColumn = requireText(input.decColumn, "decColumn", 128);
+    if (hasHduName) catalog.hduName = requireText(input.hduName, "hduName", 128);
+    if (hasHduIndex) {
+      if (typeof input.hduIndex !== "number" || !Number.isSafeInteger(input.hduIndex) || input.hduIndex < 0) {
+        throw new AdminHttpError(400, "hduIndex must be a non-negative integer");
+      }
+      catalog.hduIndex = input.hduIndex;
+    }
+    if (hasCoordinateFrame) catalog.coordinateFrame = "ICRS";
   }
   if (extractionMode === "catalog-healpix") {
     catalog.healpixColumn = requireText(input.healpixColumn, "healpixColumn", 128);
@@ -1608,7 +1710,7 @@ export class AssetsAdmin {
     if (!isManagedConnector(resource) || isWarehouseDataSource(resource)) {
       throw new AdminHttpError(409, "此连接由 Warehouse 管理，请在其来源系统删除。");
     }
-    // Fail closed when task status cannot be read. Completed history remains intact.
+    // Fail closed when task or batch status cannot be read. Completed history remains intact.
     const tasks = await this.kube.list("scanrequests", "");
     const active = tasks.filter(task => {
       const plan = task.spec?.plan as Record<string, unknown> | undefined;
@@ -1618,6 +1720,12 @@ export class AssetsAdmin {
       return related && !["SUCCEEDED", "FAILED", "CANCELLED", "CANCELED"].includes(String(task.status?.phase ?? "").toUpperCase());
     });
     if (active.length) throw new AdminHttpError(409, `连接仍被未完成的扫描任务使用：${active.map(task => task.metadata?.name).join("、")}。请等待任务结束后删除。`);
+    const batches = await this.kube.list("scanbatchrequests", "");
+    const activeBatches = batches.filter(batch => {
+      const related = batch.metadata?.labels?.["astro.zhejianglab.org/source-connector"] === normalized;
+      return related && !["INVALID", "PARTIAL", "SUCCEEDED", "FAILED", "CANCELLED", "CANCELED"].includes(String(batch.status?.phase ?? "").toUpperCase());
+    });
+    if (activeBatches.length) throw new AdminHttpError(409, `连接仍被未完成的扫描批次使用：${activeBatches.map(batch => batch.metadata?.name).join("、")}。请等待批次结束后删除。`);
     // Retain credential Secrets: historical frozen ScanPlans can reference them.
     // Deleting a connection must not break historical retries or shared credentials.
     await this.kube.deleteCore("configmaps", normalized, this.config.namespace);
@@ -1676,6 +1784,11 @@ export class AssetsAdmin {
     return resources.map(taskView).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   }
 
+  async listScanBatches(): Promise<Record<string, unknown>[]> {
+    const resources = await this.kube.list("scanbatchrequests", `app.kubernetes.io/managed-by=${ASSETS_MANAGED_BY},astro.zhejianglab.org/resource-kind=scan-batch`);
+    return resources.map(scanBatchView).sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
+  }
+
   async listMocDiscoveryRequests(): Promise<MocDiscoveryView[]> {
     const resources = await this.kube.list("mocdiscoveryrequests", "app.kubernetes.io/managed-by=" + ASSETS_MANAGED_BY + ",astro.zhejianglab.org/resource-kind=moc-discovery");
     const executor = await this.observeExecutor();
@@ -1717,13 +1830,19 @@ export class AssetsAdmin {
   }
 
   async getMocDiscoveryRequest(name: string): Promise<MocDiscoveryView> {
+    const resource = await this.getMocDiscoveryResource(name);
+    return this.withDiscoveryObservation(mocDiscoveryView(resource, true), await this.observeExecutor());
+  }
+
+  /** Raw owned resource for server-side evidence validation; never serialize directly to clients. */
+  async getMocDiscoveryResource(name: string): Promise<KubernetesResource> {
     const normalized = dnsName(name, "MOC discovery request name");
     const resource = await this.kube.get("mocdiscoveryrequests", normalized);
     if (!resource || resource.metadata?.labels?.["app.kubernetes.io/managed-by"] !== ASSETS_MANAGED_BY
       || resource.metadata?.labels?.["astro.zhejianglab.org/resource-kind"] !== "moc-discovery") {
       throw new AdminHttpError(404, `MOC discovery request ${normalized} was not found`);
     }
-    return this.withDiscoveryObservation(mocDiscoveryView(resource, true), await this.observeExecutor());
+    return resource;
   }
 
   async createMocDiscoveryRequest(input: MocDiscoveryInput): Promise<MocDiscoveryView> {
@@ -1767,9 +1886,11 @@ export class AssetsAdmin {
       apiVersion: resource.apiVersion ?? "atlas.zhejianglab.org/v1alpha1",
       kind: resource.kind ?? "MocDiscoveryRequest",
       metadata,
-      // A retry is a new v2 intent even when the source record is a legacy
-      // v1 request. The historical object and its evidence remain immutable.
-      spec: { ...structuredClone(resource.spec ?? {}), policyRef: "cds-public-moc-v2" },
+      // Keep the selected fixed policy when retrying; legacy requests become v2.
+      spec: {
+        ...structuredClone(resource.spec ?? {}),
+        policyRef: resource.spec?.policyRef === MAST_HST_DISCOVERY_POLICY ? MAST_HST_DISCOVERY_POLICY : "cds-public-moc-v2",
+      },
     };
     try {
       return mocDiscoveryView(await this.kube.create("mocdiscoveryrequests", retryResource));
@@ -1787,6 +1908,16 @@ export class AssetsAdmin {
       throw new AdminHttpError(404, `Coverage task ${normalized} was not found`);
     }
     return taskView(resource);
+  }
+
+  async getScanBatch(name: string): Promise<Record<string, unknown>> {
+    const normalized = dnsName(name, "scan batch name");
+    const resource = await this.kube.get("scanbatchrequests", normalized);
+    if (!resource || resource.metadata?.labels?.["app.kubernetes.io/managed-by"] !== ASSETS_MANAGED_BY
+      || resource.metadata?.labels?.["astro.zhejianglab.org/resource-kind"] !== "scan-batch") {
+      throw new AdminHttpError(404, `Scan batch ${normalized} was not found`);
+    }
+    return scanBatchView(resource);
   }
 
   async resubmitTask(name: string): Promise<CoverageTaskView> {
@@ -1894,6 +2025,124 @@ export class AssetsAdmin {
       return taskView(await this.kube.create("scanrequests", resource));
     } catch (error) {
       if (error instanceof KubernetesApiError && error.statusCode === 409) throw new AdminHttpError(409, `Coverage task ${String(resource.metadata?.name)} already exists`);
+      throw error;
+    }
+  }
+
+  async createScanBatch(input: ScanBatchRequest, recipes: ScanBatchTaskRecipe[]): Promise<Record<string, unknown>> {
+    if (recipes.length !== input.rules.length) throw new AdminHttpError(400, "Each scan batch rule must resolve to one product recipe");
+    const sourceName = dnsName(input.sourceConnector, "sourceConnector");
+    const source = await this.connectorResource(sourceName);
+    if (!source) throw new AdminHttpError(400, `Source connector ${sourceName} was not found`);
+    const definition = connectorDefinition(source);
+    if (definition.type !== "s3" && definition.type !== "oss" && definition.type !== "local") {
+      throw new AdminHttpError(400, "Source connector must be S3 / OSS or local");
+    }
+    if (definition.type === "local") {
+      await this.ensureLocalSourceVolume(definition, sourceName);
+    } else {
+      if (!definition.credentialSecretName) throw new AdminHttpError(400, `Source connector ${sourceName} has no credential Secret reference`);
+      const credentialSecret = await this.kube.getCore("secrets", definition.credentialSecretName, this.config.namespace);
+      if (!credentialSecret) throw new AdminHttpError(400, `Source connector ${sourceName} credential Secret is missing`);
+      ensureBatchSourceWithinConnectorRoot(input.sourcePaths[0], definition);
+    }
+
+    const normalized = recipes.map((recipe, index) => {
+      if (typeof recipe.productId !== "string" || !recipe.productId.trim()) {
+        throw new AdminHttpError(400, `Scan batch rule ${index + 1} is missing a productId`);
+      }
+      let evidenceLayerId: string;
+      try {
+        evidenceLayerId = batchEvidenceLayerId(recipe.productId);
+      } catch (error) {
+        if (error instanceof ScanBatchValidationError) throw new AdminHttpError(400, error.message);
+        throw error;
+      }
+      return buildTaskResource({
+        ...recipe,
+        coverageRole: recipe.mode === "catalog-radec" ? "object_presence" : recipe.coverageRole,
+        layerId: evidenceLayerId,
+        name: `batch-rule-${index + 1}`,
+        sourceConnector: sourceName,
+        sourcePaths: input.sourcePaths,
+        batchId: input.name,
+      }, this.config.namespace, definition, this.config);
+    });
+    const first = normalized[0]!;
+    const firstSpec = first.spec ?? {};
+    const firstPlan = firstSpec.plan as Record<string, unknown>;
+    const common = {
+      source: firstPlan.source as Record<string, unknown>,
+      credentials: (firstSpec.credentials ?? {}) as Record<string, unknown>,
+      sink: firstPlan.sink as Record<string, unknown>,
+      evidence: firstPlan.evidence as Record<string, unknown>,
+      scanner: firstSpec.scanner as Record<string, unknown>,
+    };
+    const rules: ScanBatchRuleResource[] = normalized.map((resource, index) => {
+      const spec = resource.spec ?? {};
+      const plan = spec.plan as Record<string, unknown>;
+      const sourcePlan = plan.source as Record<string, unknown>;
+      const credentials = (spec.credentials ?? {}) as Record<string, unknown>;
+      const sink = plan.sink as Record<string, unknown>;
+      const evidence = plan.evidence as Record<string, unknown>;
+      const scanner = spec.scanner as Record<string, unknown>;
+      for (const [field, actual, expected] of [
+        ["source", sourcePlan, common.source],
+        ["credentials", credentials, common.credentials],
+        ["sink", sink, common.sink],
+        ["evidence", evidence, common.evidence],
+        ["scanner", scanner, common.scanner],
+      ] as const) {
+        if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+          throw new AdminHttpError(400, `Scan batch rules must share the same ${field}`);
+        }
+      }
+      const layer = plan.layer as Record<string, unknown>;
+      const extraction = plan.extraction as Record<string, unknown>;
+      const filters = plan.filters as Record<string, unknown>;
+      const requestRule = input.rules[index]!;
+      const includeSuffixes = Array.isArray(filters.includeSuffixes)
+        ? filters.includeSuffixes.filter((value): value is string => typeof value === "string")
+        : [];
+      const excludePatterns = requestRule.filters?.excludePatterns ?? [];
+      return {
+        name: requestRule.name,
+        layer: {
+          layerId: String(layer.layerId),
+          surveyId: String(layer.surveyId),
+          releaseId: String(layer.releaseId),
+          productId: String(layer.productId),
+          modality: String(layer.modality),
+          coverageRole: layer.coverageRole as ScanBatchRuleResource["layer"]["coverageRole"],
+        },
+        filters: { includeSuffixes, ...(excludePatterns.length ? { excludePatterns } : {}) },
+        extraction,
+        relativePrefix: requestRule.relativePrefix,
+        ...(requestRule.includePattern ? { includePattern: requestRule.includePattern } : {}),
+      };
+    });
+    let batch: Record<string, unknown>;
+    try {
+      batch = buildScanBatchResource({
+        name: input.name,
+        namespace: this.config.namespace,
+        sourceConnector: sourceName,
+        sourcePaths: input.sourcePaths,
+        rules,
+        partitioning: input.partitioning,
+        maxConcurrent: input.maxConcurrent,
+        ...common,
+      });
+    } catch (error) {
+      if (error instanceof ScanBatchValidationError) throw new AdminHttpError(400, error.message);
+      throw error;
+    }
+    try {
+      return scanBatchView(await this.kube.create("scanbatchrequests", batch as KubernetesResource));
+    } catch (error) {
+      if (error instanceof KubernetesApiError && error.statusCode === 409) {
+        throw new AdminHttpError(409, `Scan batch ${input.name} already exists`);
+      }
       throw error;
     }
   }

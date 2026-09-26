@@ -8,7 +8,7 @@ import { uploadObjectRelease, activateObjectRelease } from "../server/object-rel
 import { reviewedFixture } from "./reviewed-fixture.js";
 import { s3HttpFixture } from "./s3-http-fixture.js";
 import { createArtifactStoreFromProcess } from "../server/artifact-store.js";
-import { PublicReleasePublisher } from "../server/public-release-publication.js";
+import { PublicReleasePublisher, type PublicationRun } from "../server/public-release-publication.js";
 import { PublicationScheduler } from "../server/publication-scheduler.js";
 
 async function until(work: () => boolean | Promise<boolean>, timeout = 15000): Promise<void> {
@@ -67,4 +67,55 @@ test("real IPC executor activates frozen product, parent persists state, verific
     for (const key of Object.keys(s3.env)) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
     await s3.close(); await rm(f.base, { recursive: true, force: true });
   }
+});
+
+test("scheduler freezes package-mode payloads and keys duplicates by mode, baseline and surveys", async t => {
+  const f = await reviewedFixture();
+  t.after(() => rm(f.base, { recursive: true, force: true }));
+  const scheduler = new PublicationScheduler({
+    contentRoot: f.contentRoot,
+    baselineRoot: f.root,
+    store: f.store,
+    freeze: async () => ({ products: f.products, publications: [] }),
+    synchronize: async () => {},
+  });
+  await scheduler.initialize();
+  const run = {
+    runId: "package-run",
+    operation: "publish",
+    selectedProducts: [],
+    rebuildPackages: true,
+    rebuildSurveyIds: ["m42"],
+    planId: "plan",
+    baselineBundle: f.manifest.bundle,
+    surveyIds: ["m42"],
+    status: "queued",
+    requestedBy: undefined,
+    createdAt: new Date().toISOString(),
+    startedAt: undefined,
+    finishedAt: undefined,
+    bundle: undefined,
+    archiveKey: undefined,
+    archiveSizeBytes: undefined,
+    archiveSha256: undefined,
+    files: undefined,
+    packages: undefined,
+    error: undefined,
+    log: [],
+  } as PublicationRun;
+  const queued = await scheduler.submit(run);
+  assert.equal(queued.runId, run.runId);
+  assert.deepEqual(scheduler.tasks.get<{ products: unknown[] }>(run.runId)?.payload.products, []);
+  const duplicate = await scheduler.submit({ ...run, runId: "package-duplicate" });
+  assert.equal(duplicate.runId, run.runId);
+  const different = await scheduler.submit({ ...run, runId: "package-other", rebuildSurveyIds: ["other-survey"], surveyIds: ["other-survey"] });
+  assert.equal(different.runId, "package-other");
+  const task = scheduler.tasks.claim()!;
+  scheduler.tasks.fail(task.id, task.attemptId!, "fixture failure", false);
+  const retry = await scheduler.retry((await scheduler.get(run.runId))!);
+  assert.ok(retry);
+  assert.equal(retry.rebuildPackages, true);
+  assert.deepEqual(retry.rebuildSurveyIds, ["m42"]);
+  assert.deepEqual(retry.selectedProducts, []);
+  scheduler.tasks.close();
 });

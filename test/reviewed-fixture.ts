@@ -25,7 +25,14 @@ export function fitsMoc(cells:Array<{order:number;pixel:number}>=[{order:8,pixel
   cells.forEach((c,i)=>rows.writeBigInt64BE(BigInt(4*4**c.order+c.pixel),i*8));
   return Buffer.concat([header(["SIMPLE  =                    T","BITPIX  =                    8","NAXIS   =                    0","EXTEND  =                    T","END"]),header(["XTENSION= 'BINTABLE'","BITPIX  =                    8","NAXIS   =                    2","NAXIS1  =                    8",`NAXIS2  = ${cells.length}`,"PCOUNT  =                    0","GCOUNT  =                    1","TFIELDS =                    1","TTYPE1  = 'UNIQ'","TFORM1  = '1K'","ORDERING= 'NUNIQ'","COORDSYS= 'C'","MOCDIM  = 'SPACE'","MOCVERS = '2.0'","END"]),rows]);
 }
-export async function reviewedFixture() {
+export async function reviewedFixture(identity: Partial<{
+  productId: string;
+  surveyId: string;
+  releaseId: string;
+  productName: string;
+  layerId: string;
+  coverageEvidence: ProductRecord["draft"]["coverageEvidence"];
+}> = {}) {
   const base=await mkdtemp(path.join(tmpdir(),"reviewed-release-")),root=path.join(base,"baseline"),contentRoot=path.join(base,"content");
   await mkdir(contentRoot,{recursive:true});
   const files:PublicAssetRecord[]=[];
@@ -33,13 +40,17 @@ export async function reviewedFixture() {
     await mkdir(path.dirname(path.join(root,relative)),{recursive:true});await writeFile(path.join(root,relative),bytes);
     files.push({id,path:relative,kind,label:id,description:id,downloadName:path.basename(relative),mediaType:kind==="moc"?"application/fits":"application/json",sha256:sha256(bytes),sizeBytes:bytes.length,deliveryClass:"runtime"});
   }
-  const layerId="m42-dr1-image",bytes=fitsMoc([{order:8,pixel:163327},{order:10,pixel:2608000}]);
+  const productId=identity.productId??"product-1";
+  const surveyId=identity.surveyId??"m42";
+  const releaseId=identity.releaseId??"dr1";
+  const productName=identity.productName??"Image";
+  const layerId=identity.layerId??"m42-dr1-image",bytes=fitsMoc([{order:8,pixel:163327},{order:10,pixel:2608000}]);
   const moc=decodeNativeMoc(bytes);
-  const content={productId:"product-1",surveyId:"m42",releaseId:"dr1",name:"Image",layerId,modality:"imaging",sourceUrl:"https://example.org/survey",mode:"native-moc" as const,presentation:{summaryMarkdown:"",methodologyMarkdown:"",limitationsMarkdown:"",flow:{nodes:[],edges:[]}}};
+  const content={productId,surveyId,releaseId,name:productName,layerId,modality:"imaging",sourceUrl:"https://example.org/survey",mode:"native-moc" as const,...(identity.coverageEvidence?{coverageEvidence:identity.coverageEvidence}:{}),presentation:{summaryMarkdown:"",methodologyMarkdown:"",limitationsMarkdown:"",flow:{nodes:[],edges:[]}}};
   const record:ProductRecord={productId:content.productId,draft:content,published:null,revision:1,publishedRevision:null,updatedAt:new Date().toISOString(),publishedAt:null,contentSha256:sha256(JSON.stringify(content))};
   record.review={policy:PUBLICATION_POLICY,revision:1,contentSha256:record.contentSha256,reviewedAt:new Date().toISOString(),acceptedGaps:[],geometry:{layerId,coverageRevision:moc.revision,mocSha256:moc.sha256,indexRevision:null}};
   await put(`layer-${layerId}-moc`,`artifacts/public-survey-footprints/layers/${layerId}/moc.fits`,bytes,"moc");
-  await put("survey-catalog","src/surveys/survey-catalog.json",Buffer.from(JSON.stringify({schemaVersion:1,generatedAt:new Date().toISOString(),surveys:[{id:"m42",name:"M42",mission:"Test",color:"#123456",description:"Test",modalities:["imaging"],releases:[{id:"dr1",label:"DR1",kind:"release",modalities:["imaging"],products:[{name:"Image",modality:"imaging",sourceUrl:"https://example.org/survey",status:"acquired"}]}]}]})));
+  await put("survey-catalog","src/surveys/survey-catalog.json",Buffer.from(JSON.stringify({schemaVersion:1,generatedAt:new Date().toISOString(),surveys:[{id:surveyId,name:surveyId.toUpperCase(),mission:"Test",color:"#123456",description:"Test",modalities:["imaging"],releases:[{id:releaseId,label:releaseId.toUpperCase(),kind:"release",modalities:["imaging"],products:[{name:productName,modality:"imaging",sourceUrl:"https://example.org/survey",status:"acquired"}]}]}]})));
   await put("layer-registry","src/layers/layer-registry.json",Buffer.from(JSON.stringify({schemaVersion:1,layers:[]})));
   await put("manifest-canonical","src/footprints/survey-footprints.json",Buffer.from(JSON.stringify({schemaVersion:1,nside:16,coordinateFrame:"ICRS",generatedAt:new Date().toISOString(),footprints:[]})));
   await put("packages-catalog","artifacts/public-survey-footprints/packages/catalog.json",Buffer.from(JSON.stringify({schemaVersion:3,version:"3.0.0",packages:[]})));

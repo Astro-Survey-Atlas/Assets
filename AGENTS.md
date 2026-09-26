@@ -5,6 +5,16 @@
 Read `HANDOFF.md` at the start of a new session for the current implementation,
 verification baseline, known problems, dirty worktree, and next priorities.
 
+## Product purpose
+
+Assets locates survey data and explains its spatial evidence and provenance.
+A download plan is a downloadable JSON/CSV source manifest, not scientific data.
+Keep known source identities and evidence visible even without a retrieval link;
+never invent a file or link. Assets must not download scientific data on behalf
+of users. Users obtain it from the source under that source's access policy.
+For reverse-lookup, export or access documentation, follow
+`docs/coverage-workflow.md` and distinguish manifest export from data retrieval.
+
 ## Coverage data boundary
 
 - Assets is the public release, MOC, preview, evidence and reverse-lookup owner.

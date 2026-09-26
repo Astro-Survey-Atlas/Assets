@@ -33,6 +33,7 @@ export interface ReadinessLayer {
     mode?: string;
     coordinateFrame?: string;
     ordering?: string;
+    precision?: "exact" | "estimated";
     sourceSnapshotSha256?: string;
   };
   sourceUnitIndex?: {
@@ -63,6 +64,9 @@ export interface ReadinessCompletenessInput {
   state: CompletenessState;
   processed?: number;
   total?: number;
+  fileCount?: number;
+  coverageCount?: number;
+  errorCount?: number;
   asOf?: string;
   scope?: string;
 }
@@ -137,19 +141,19 @@ function geometryPrecision(content: ReadinessProductContent, layer: ReadinessLay
   // Public MOC extents preserve a useful spatial query but do not establish a
   // per-exposure or depth mask.  Their limitation is part of the product
   // contract, so expose that distinction instead of calling every layer exact.
-  if (content.mode === "native-moc" || layer.recipe?.mode === "native-moc" || content.sourceTier === "third_party_moc") return "estimated";
+  if (layer.recipe?.precision === "estimated" || content.mode === "native-moc" || layer.recipe?.mode === "native-moc" || content.sourceTier === "third_party_moc") return "estimated";
   return "exact";
 }
 
 function completenessFor(input: ProductReadinessInput, layer: ReadinessLayer | undefined): ReadinessCompletenessInput {
   if (input.completeness) return { ...input.completeness };
   if (layer?.errorCount && layer.errorCount > 0) {
-    return { state: "partial", ...(layer.updatedAt ? { asOf: layer.updatedAt } : {}), scope: "current layer" };
+    return { state: "partial", ...(layer.fileCount !== undefined ? { fileCount: layer.fileCount } : {}), ...(layer.coverageCount !== undefined ? { coverageCount: layer.coverageCount } : {}), errorCount: layer.errorCount, ...(layer.updatedAt ? { asOf: layer.updatedAt } : {}), scope: "current layer" };
   }
   // A processed count without a known denominator is useful evidence, but it
   // is not a percentage or a claim that the source was completely enumerated.
   if (layer?.fileCount !== undefined || layer?.coverageCount !== undefined) {
-    return { state: "unknown", ...(layer.updatedAt ? { asOf: layer.updatedAt } : {}), scope: "current layer; denominator unavailable" };
+    return { state: "unknown", ...(layer.fileCount !== undefined ? { fileCount: layer.fileCount } : {}), ...(layer.coverageCount !== undefined ? { coverageCount: layer.coverageCount } : {}), ...(layer.errorCount !== undefined ? { errorCount: layer.errorCount } : {}), ...(layer.updatedAt ? { asOf: layer.updatedAt } : {}), scope: "current layer; denominator unavailable" };
   }
   return { state: "unknown" };
 }

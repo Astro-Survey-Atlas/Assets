@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { AdminHttpError } from "./admin.js";
 import type { MocDiscoveryCandidate } from "./moc-discovery.js";
+import type { CoverageSourceEvidence } from "./coverage.js";
 import { queueStateSnapshot, queueStateSnapshotFile, stateSnapshotFileKey, type StateSnapshotSink } from "./state-snapshot.js";
 
 export const MOC_BUILD_PHASES = [
@@ -57,6 +58,7 @@ export interface MocPublication {
   releaseId: string;
   product: string;
   layerId: string;
+  sourceEvidence?: CoverageSourceEvidence;
   sourceUrl: string;
   sourceSnapshotSha256?: string;
   sourceSnapshotSizeBytes?: number;
@@ -82,9 +84,10 @@ export interface MocBuildRequest {
   createdAt: string;
   updatedAt: string;
   discoveryRequestName: string;
-  provider: "cds" | "llm";
+  provider: "cds" | "llm" | "evidence";
   candidateId: string;
   candidateTitle?: string;
+  layerId?: string;
   surveyId?: string;
   releaseId?: string;
   productId?: string;
@@ -95,6 +98,8 @@ export interface MocBuildRequest {
     snapshotSha256?: string;
     sizeBytes?: number;
     evidenceRef?: string;
+    evidenceInputs?: Array<{ label: string; ref: string; sha256: string; sizeBytes: number }>;
+    sourceEvidence?: CoverageSourceEvidence;
   };
   progress: MocBuildProgress;
   phase: MocBuildPhase;
@@ -127,6 +132,7 @@ export interface MocBuildProductBinding {
 export interface MocCoreRunner {
   validate(sourcePath: string): Promise<Record<string, unknown>>;
   build(sourcePath: string, outputDir: string, options: { maxOrder: number; queryOrder: number; previewOrder: number }): Promise<Record<string, unknown>>;
+  buildRegions?(specPath: string, outputDir: string): Promise<Record<string, unknown>>;
 }
 
 const DEFAULT_TOTAL_STEPS = 7;
@@ -334,6 +340,53 @@ export class MocBuildStore {
     return record;
   }
 
+  async createVerifiedEvidenceBuild(input: {
+    name: string;
+    layerId: string;
+    candidateId: string;
+    candidateTitle: string;
+    surveyId: string;
+    releaseId: string;
+    productId: string;
+    source: MocBuildRequest["source"] & { snapshotSha256: string; sizeBytes: number; evidenceRef: string };
+    outputs: MocBuildOutput & { moc: NonNullable<MocBuildOutput["moc"]> };
+  }): Promise<MocBuildRequest> {
+    await this.initialize();
+    const name = safeMocName(input.name);
+    if (this.#records.has(name)) {
+      const existing = this.get(name);
+      if (existing.provider === "evidence" && existing.productId === input.productId
+        && existing.source.snapshotSha256 === input.source.snapshotSha256 && existing.layerId === input.layerId) return existing;
+      throw new AdminHttpError(409, `MOC evidence build ${name} already exists with different locked evidence`);
+    }
+    if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.layerId)) throw new AdminHttpError(400, "layerId is invalid");
+    const createdAt = now();
+    const record: MocBuildRequest = {
+      schemaVersion: 1,
+      kind: "MocBuildRequest",
+      name,
+      createdAt,
+      updatedAt: createdAt,
+      discoveryRequestName: `evidence-import-${name}`,
+      provider: "evidence",
+      candidateId: input.candidateId,
+      candidateTitle: input.candidateTitle,
+      layerId: input.layerId,
+      surveyId: input.surveyId,
+      releaseId: input.releaseId,
+      productId: input.productId,
+      workKey: `product:${input.productId}`,
+      source: input.source,
+      phase: "STAGED",
+      progress: { phase: "STAGED", step: DEFAULT_TOTAL_STEPS, totalSteps: DEFAULT_TOTAL_STEPS, percent: 100, message: "受校验证据构建已登记，等待产品审核与发布" },
+      outputs: input.outputs,
+    };
+    this.#records.set(name, record);
+    await this.queuedPersist();
+    await this.queueOutputFiles(record, this.#evidenceRoot);
+    return record;
+  }
+
   async update(name: string, patch: Partial<Pick<MocBuildRequest, "phase" | "progress" | "source" | "outputs" | "error" | "duplicateOf" | "publishedAt" | "publicationId">>): Promise<MocBuildRequest> {
     await this.initialize();
     const record = this.get(name);
@@ -416,7 +469,8 @@ export class MocBuildService {
     if (build.phase !== "STAGED" || !build.outputs?.moc) throw new AdminHttpError(409, "此产品尚无可校验的构建产物，请先从探索候选构建覆盖。");
     const source = { ref: build.source.evidenceRef, sha256: build.source.snapshotSha256, sizeBytes: build.source.sizeBytes };
     const outputs = Object.values(build.outputs).filter((entry): entry is MocBuildOutputFile => Boolean(entry && typeof entry === "object" && "ref" in entry));
-    for (const [label, file] of [["来源快照", source], ...outputs.map((file) => [file.ref, file] as const)] as const) {
+    const inputEvidence = build.source.evidenceInputs ?? [];
+    for (const [label, file] of [["来源快照", source], ...inputEvidence.map((file) => [file.label, file] as const), ...outputs.map((file) => [file.ref, file] as const)] as const) {
       if (!file.ref || !file.sha256) throw new AdminHttpError(409, `${label} 缺少锁定记录，请重新构建。`);
       const absolute = immutableRef(this.evidenceRoot, path.resolve(this.evidenceRoot, file.ref));
       try {
@@ -440,6 +494,11 @@ export class MocBuildService {
     this.previewOrder = options.previewOrder ?? 4;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.runner = options.runner ?? new PythonMocCoreRunner();
+  }
+
+  async buildRegions(specPath: string, outputDir: string): Promise<Record<string, unknown>> {
+    if (!this.runner.buildRegions) throw new AdminHttpError(503, "Configured MOC Core runner does not support locked region builds");
+    return this.runner.buildRegions(specPath, outputDir);
   }
 
   enqueue(request: MocBuildRequest, candidate: MocDiscoveryCandidate): void {
@@ -502,6 +561,7 @@ export interface MocPublicationProduct {
   surveyId: string;
   releaseId: string;
   name: string;
+  layerId?: string;
 }
 
 /**
@@ -647,7 +707,7 @@ export class MocPublicationStore {
       return existing;
     }
     const candidateDigest = createHash("sha256").update(`${request.provider}:${request.candidateId}`).digest("hex").slice(0, 12);
-    const layerId = `moc-${safeMocName(product.surveyId).slice(0, 12)}-${safeMocName(product.releaseId).slice(0, 12)}-${candidateDigest}`.slice(0, 63).replace(/-+$/, "");
+    const layerId = product.layerId ?? request.layerId ?? `moc-${safeMocName(product.surveyId).slice(0, 12)}-${safeMocName(product.releaseId).slice(0, 12)}-${candidateDigest}`.slice(0, 63).replace(/-+$/, "");
     const id = `moc-publication-${createHash("sha256").update(request.name).digest("hex").slice(0, 16)}`;
     const sourceRoot = immutableRef(this.evidenceRoot, path.join(this.evidenceRoot, "moc-build", safeMocName(request.name)));
     const relativeRoot = path.posix.join("moc-releases", safeMocName(request.name));
@@ -692,6 +752,7 @@ export class MocPublicationStore {
       releaseId: product.releaseId,
       product: product.name,
       layerId,
+      ...(request.source.sourceEvidence ? { sourceEvidence: request.source.sourceEvidence } : {}),
       sourceUrl: request.source.url,
       ...(request.source.snapshotSha256 ? { sourceSnapshotSha256: request.source.snapshotSha256 } : {}),
       ...(request.source.sizeBytes !== undefined ? { sourceSnapshotSizeBytes: request.source.sizeBytes } : {}),
@@ -774,6 +835,10 @@ export class PythonMocCoreRunner implements MocCoreRunner {
 
   build(sourcePath: string, outputDir: string, options: { maxOrder: number; queryOrder: number; previewOrder: number }): Promise<Record<string, unknown>> {
     return this.run(["build", "--source", sourcePath, "--output", outputDir, "--max-order", String(options.maxOrder), "--query-order", String(options.queryOrder), "--preview-order", String(options.previewOrder)]);
+  }
+
+  buildRegions(specPath: string, outputDir: string): Promise<Record<string, unknown>> {
+    return this.run(["build-regions", "--spec", specPath, "--output", outputDir]);
   }
 
   private run(args: string[]): Promise<Record<string, unknown>> {

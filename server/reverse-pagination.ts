@@ -1,9 +1,12 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-import type { DownloadPlan, DownloadPlanEntrypoint } from "./evidence-store.js";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import type { DownloadPlan, DownloadPlanCoverageEvidence, DownloadPlanEntrypoint } from "./evidence-store.js";
 import { AccessError } from "./region-access.js";
 
 export const REVERSE_PAGE_SIZE = 20;
 export const REVERSE_PAGE_SIZE_MAX = 100;
+export const REVERSE_CURSOR_MAX_BYTES = 1_048_576;
+export const REVERSE_CURSOR_MAX_KEYS = 10_000;
+export const REVERSE_CURSOR_MAX_KEY_LENGTH = 517;
 
 export interface ReverseCursorPayload {
   version: 1;
@@ -14,39 +17,57 @@ export interface ReverseCursorPayload {
 
 export type ReversePlanItem =
   | { key: string; kind: "file"; value: DownloadPlan["files"][number] }
-  | { key: string; kind: "entrypoint"; value: DownloadPlanEntrypoint };
+  | { key: string; kind: "entrypoint"; value: DownloadPlanEntrypoint }
+  | { key: string; kind: "coverage-evidence"; value: DownloadPlanCoverageEvidence };
 
 export function reversePlanFileKey(file: DownloadPlan["files"][number]): string {
   return `file:${file.fileId}`;
 }
 
 export function reversePlanEntrypointKey(entry: DownloadPlanEntrypoint): string {
-  return [
+  const identity = [
     "entry",
     entry.kind,
     entry.layerId ?? "",
     entry.tileId ?? "",
     entry.url ?? entry.sourceUri ?? entry.sourceUrl ?? entry.mocUrl ?? "",
     entry.product ?? entry.productId ?? "",
-  ].join(":");
+  ];
+  return `entry:${createHash("sha256").update(JSON.stringify(identity)).digest("hex")}`;
+}
+
+export function reversePlanCoverageEvidenceKey(evidence: DownloadPlanCoverageEvidence): string {
+  const identity = `${evidence.layerId}:${evidence.order}`;
+  return `coverage:${createHash("sha256").update(identity).digest("hex")}`;
 }
 
 export function reversePlanItems(plan: DownloadPlan): ReversePlanItem[] {
   return [
     ...plan.files.map((value) => ({ key: reversePlanFileKey(value), kind: "file" as const, value })),
     ...plan.entrypoints.map((value) => ({ key: reversePlanEntrypointKey(value), kind: "entrypoint" as const, value })),
+    ...(plan.coverageEvidence ?? []).map((value) => ({ key: reversePlanCoverageEvidenceKey(value), kind: "coverage-evidence" as const, value })),
   ];
 }
 
 export function encodeReverseCursor(payload: ReverseCursorPayload, secret: string): string {
-  const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  if (!Array.isArray(payload.seenKeys)) throw new AccessError(400, "Invalid reverse lookup cursor payload");
+  const seenKeys = [...new Set(payload.seenKeys)];
+  if (payload.version !== 1 || typeof payload.identity !== "string" || typeof payload.fingerprint !== "string"
+    || seenKeys.length > REVERSE_CURSOR_MAX_KEYS
+    || seenKeys.some((key) => typeof key !== "string" || key.length > REVERSE_CURSOR_MAX_KEY_LENGTH)) {
+    throw new AccessError(400, "Invalid reverse lookup cursor payload");
+  }
+  const normalized = { ...payload, seenKeys };
+  const encoded = Buffer.from(JSON.stringify(normalized), "utf8").toString("base64url");
   const signature = createHmac("sha256", secret).update(encoded).digest("base64url");
-  return `${encoded}.${signature}`;
+  const cursor = `${encoded}.${signature}`;
+  if (cursor.length > REVERSE_CURSOR_MAX_BYTES) throw new AccessError(400, "Reverse lookup cursor exceeds the size limit");
+  return cursor;
 }
 
 export function decodeReverseCursor(value: unknown, identity: string, fingerprint: string, secret: string): ReverseCursorPayload | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.length > 16_384) throw new AccessError(400, "Invalid reverse lookup cursor");
+  if (typeof value !== "string" || value.length > REVERSE_CURSOR_MAX_BYTES) throw new AccessError(400, "Invalid reverse lookup cursor");
   const parts = value.split(".");
   if (parts.length !== 2 || !parts[0] || !parts[1]) throw new AccessError(400, "Invalid reverse lookup cursor");
   const [encoded, signature] = parts as [string, string];
@@ -59,7 +80,7 @@ export function decodeReverseCursor(value: unknown, identity: string, fingerprin
   catch { throw new AccessError(400, "Invalid reverse lookup cursor"); }
   if (payload.version !== 1 || typeof payload.fingerprint !== "string" || payload.fingerprint !== fingerprint
     || typeof payload.identity !== "string" || !Array.isArray(payload.seenKeys)
-    || payload.seenKeys.length > 10_000 || payload.seenKeys.some((key) => typeof key !== "string" || key.length > 512)) {
+    || payload.seenKeys.length > REVERSE_CURSOR_MAX_KEYS || payload.seenKeys.some((key) => typeof key !== "string" || key.length > REVERSE_CURSOR_MAX_KEY_LENGTH)) {
     throw new AccessError(400, "Reverse lookup cursor does not match this query");
   }
   if (payload.identity !== "preview" && payload.identity !== identity) throw new AccessError(403, "Reverse lookup cursor belongs to another access session");
@@ -84,6 +105,7 @@ export function pageReversePlan(plan: DownloadPlan, seenKeys: ReadonlySet<string
       ...plan,
       files: pageItems.filter((item): item is Extract<ReversePlanItem, { kind: "file" }> => item.kind === "file").map((item) => item.value),
       entrypoints: pageItems.filter((item): item is Extract<ReversePlanItem, { kind: "entrypoint" }> => item.kind === "entrypoint").map((item) => item.value),
+      coverageEvidence: pageItems.filter((item): item is Extract<ReversePlanItem, { kind: "coverage-evidence" }> => item.kind === "coverage-evidence").map((item) => item.value),
       tileSelections: undefined,
       truncated: plan.truncated || remaining.length > pageItems.length,
     },

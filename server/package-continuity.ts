@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { readResourcePackageManifest, readZipEntry, type ResourcePackageLayerRecord } from "./resource-package-inspection.js";
+import { productId as stableProductId } from "./products.js";
 
 export function assertReleaseContinuity(previous: readonly string[], next: readonly string[]): void {
   const missing = [...new Set(previous)].filter((id) => !next.includes(id));
@@ -38,9 +39,18 @@ export async function retainedPackageLayers(root: string | undefined, surveyId: 
   for (const layer of retained) {
     const data = await readZipEntry(bytes, layer.path);
     if (data.length !== layer.sizeBytes || createHash("sha256").update(data).digest("hex") !== layer.sha256) throw new Error(`Baseline MOC hash mismatch: ${layer.layerId}`);
-    layers.push(layer); entries.set(layer.path, data);
     const source = originalProvenance.layers.find((item: { layerId: string }) => item.layerId === layer.layerId);
     if (!source) throw new Error(`Missing baseline provenance: ${layer.layerId}`);
+    const sourceRecord = source as { product?: unknown; sourceId?: unknown };
+    const product = typeof layer.product === "string" ? layer.product : typeof sourceRecord.product === "string" ? sourceRecord.product : undefined;
+    if (!product) throw new Error(`Missing baseline product identity: ${layer.layerId}`);
+    layers.push({
+      ...layer,
+      product,
+      productId: layer.productId ?? stableProductId(layer.surveyId, layer.releaseId, product),
+      ...(layer.sourceId || typeof sourceRecord.sourceId !== "string" ? {} : { sourceId: sourceRecord.sourceId }),
+    });
+    entries.set(layer.path, data);
     provenance.push(source);
     for (const footprint of originalFootprints.footprints.filter((item: { releaseId: string; product: string }) => item.releaseId === layer.releaseId && item.product === source.product)) {
       if (!footprints.includes(footprint)) footprints.push(footprint);

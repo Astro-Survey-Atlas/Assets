@@ -3,7 +3,10 @@
 Archived checkpoints, not current operating instructions. Later entries supersede
 earlier ones; use [current HANDOFF](../HANDOFF.md) for the active baseline.
 Statements about dirty worktrees, counts, deployment topology and next steps below
-apply only to the recorded checkpoint.
+apply only to the recorded checkpoint. Historical “download plan” and
+“download all components” wording refers to JSON/CSV source-manifest exports,
+not scientific-file transfer. Current product boundaries are defined in
+[the coverage workflow](coverage-workflow.md).
 
 # Assets Session Handoff
 

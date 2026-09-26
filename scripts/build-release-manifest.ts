@@ -316,7 +316,12 @@ async function build(): Promise<PublicAssetManifest> {
     description: "Allowlisted MOC/HiPS discovery records, locked orders, coverage roles, provenance requirements and attribution status.",
     filePath: path.join(root, "src", "moc-sources", "source-registry.json"), downloadName: "moc-source-registry.json", mediaType: "application/json",
   });
-  const mocCoreSource = await json<{ version: string; wheel: string; wheelSha256: string }>(path.join(root, "requirements", "moc-core-source.json"));
+  const mocCoreSource = await json<{
+    version: string;
+    wheel: string;
+    wheelSha256: string;
+    sourceSnapshot: { file: string; sha256: string };
+  }>(path.join(root, "requirements", "moc-core-source.json"));
   await push({
     id: "sdk-moc-core-lock", kind: "sdk", label: "MOC Core dependency lock",
     description: "Pinned scientific dependencies for the shared Astro Survey MOC Core build environment.",
@@ -324,7 +329,7 @@ async function build(): Promise<PublicAssetManifest> {
   });
   await push({
     id: "sdk-moc-core-source", kind: "sdk", label: "MOC Core source provenance",
-    description: "Repository commit and wheel hash for the organization-level Astro Survey MOC Core.",
+    description: "Core base commit, exact source snapshot hash, build environment and wheel hash for the pinned organization-level Core.",
     filePath: path.join(root, "requirements", "moc-core-source.json"), downloadName: "moc-core-source.json", mediaType: "application/json", version: mocCoreSource.version,
   });
   await push({
@@ -333,6 +338,13 @@ async function build(): Promise<PublicAssetManifest> {
     filePath: path.join(artifactRoot, "moc-core", mocCoreSource.wheel),
     downloadName: mocCoreSource.wheel, mediaType: "application/zip", version: mocCoreSource.version,
     expectedSha256: mocCoreSource.wheelSha256,
+  });
+  await push({
+    id: "sdk-moc-core-source-snapshot", kind: "sdk", label: "Astro Survey MOC Core source snapshot",
+    description: "Reproducible source snapshot corresponding to the pinned Core wheel; the base commit is not presented as the exact dirty source revision.",
+    filePath: path.join(artifactRoot, "moc-core", mocCoreSource.sourceSnapshot.file),
+    downloadName: mocCoreSource.sourceSnapshot.file, mediaType: "application/gzip", version: mocCoreSource.version,
+    expectedSha256: mocCoreSource.sourceSnapshot.sha256,
   });
   await push({
     id: "metadata-public-build-plan", kind: "metadata", label: "Locked public Core build plan",

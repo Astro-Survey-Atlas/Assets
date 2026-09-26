@@ -10,9 +10,12 @@ import yazl from "yazl";
 import { historicalPackages, mergePackageHistory, type PackageMetadata } from "./package-history.js";
 import { assertReleaseContinuity, retainedPackageLayers } from "./package-continuity.js";
 import type { MocPublication } from "./moc-build.js";
+import { decodeNativeMoc, sha256, type NativeMoc } from "./native-moc.js";
 import { deriveAccessModes, sourceAuthorityForUrl, sourceTierAuthority } from "./package-access-policy.js";
 import { isDeniedSurvey } from "./publication-policy.js";
 import type { ProductContent, ProductRecord } from "./products.js";
+import { readResourcePackageManifest, readZipEntry } from "./resource-package-inspection.js";
+import { buildResourcePackageHealpixFiles } from "./resource-package-healpix.js";
 import { queueStateSnapshot, queueStateSnapshotFile, stateSnapshotFileKey, type StateSnapshotSink } from "./state-snapshot.js";
 
 const PACKAGE_SCHEMA_VERSION = 3;
@@ -57,6 +60,9 @@ export interface DynamicResourcePackageEntry {
 
 export interface DynamicResourcePackageAsset {
   id: string;
+  kind: "package" | "geometry";
+  mediaType: "application/zip" | "application/json";
+  description: string;
   path: string;
   downloadName: string;
   sizeBytes: number;
@@ -76,6 +82,7 @@ interface LayerBytes {
   publication: MocPublication;
   product: ProductContent;
   moc: Buffer;
+  nativeMoc: NativeMoc;
   query?: { order: number; pixels: number[] };
   preview?: { order: number; pixels: number[] };
 }
@@ -247,10 +254,12 @@ async function loadLayer(publication: MocPublication, products: readonly Product
   if (!publication || !LAYER_ID_PATTERN.test(publication.layerId) || !publication.surveyId.trim() || !publication.releaseId.trim()) return undefined;
   const product = productForPublication(publication, products);
   let moc: Buffer;
+  let nativeMoc: NativeMoc;
   try {
     moc = await readFile(absolutePath(publication.files.moc));
     if (moc.length !== publication.files.moc.sizeBytes || hash(moc) !== publication.files.moc.sha256) return undefined;
     validateMocFits(moc);
+    nativeMoc = decodeNativeMoc(moc);
   }
   catch { return undefined; }
   const readOptionalProjection = async (file: MocPublication["files"]["query"]): Promise<{ order: number; pixels: number[] } | undefined> => {
@@ -261,7 +270,7 @@ async function loadLayer(publication: MocPublication, products: readonly Product
   const query = await readOptionalProjection(publication.files.query);
   const preview = await readOptionalProjection(publication.files.preview);
   if (!query && !preview) return undefined;
-  return { publication, product, moc, ...(query ? { query } : {}), ...(preview ? { preview } : {}) };
+  return { publication, product, moc, nativeMoc, ...(query ? { query } : {}), ...(preview ? { preview } : {}) };
 }
 
 function projectToOrder(pixels: readonly number[], fromOrder: number, toOrder: number): number[] {
@@ -459,6 +468,9 @@ export class DynamicResourcePackageStore {
   assets(): DynamicResourcePackageAsset[] {
     return [...this.#entries.values()].map((entry) => ({
       id: dynamicResourcePackageAssetId(entry),
+      kind: "package",
+      mediaType: "application/zip",
+      description: entry.description,
       path: entry.archivePath,
       downloadName: `${entry.id}-${entry.version}.zip`,
       sizeBytes: entry.sizeBytes,
@@ -527,7 +539,16 @@ export class DynamicResourcePackageStore {
       id: publication.id,
       layerId: publication.layerId,
       publishedAt: publication.publishedAt,
-      product: { productId: product.productId, revision: product.publicRelease, modality: product.modality, coverageRole: product.coverageRole, dataOrigin: product.dataOrigin, sourceTier: product.sourceTier },
+      product: {
+        productId: product.productId,
+        revision: product.publicRelease,
+        modality: product.modality,
+        coverageRole: product.coverageRole,
+        dataOrigin: product.dataOrigin,
+        sourceTier: product.sourceTier,
+        coverageEvidence: product.coverageEvidence,
+        sourceUnitIndex: product.sourceUnitIndex,
+      },
       source: publication.sourceSnapshotSha256,
       files: { moc: hash(moc), query, preview },
     })).sort((left, right) => left.layerId.localeCompare(right.layerId))]));
@@ -568,10 +589,13 @@ export class DynamicResourcePackageStore {
     }, new Map<string, { releaseId: string; label: string; url: string; authority: string }>()).values()].sort((left, right) => left.releaseId.localeCompare(right.releaseId));
     Object.assign(releaseLabels, retained.metadata.releaseLabels);
     for (const source of retained.metadata.sources) if (releases.includes(source.releaseId) && !sources.some((item) => item.releaseId === source.releaseId)) sources.push(source);
-    const layerRecords = layers.map(({ publication, product, moc }) => ({
+    const layerRecords = layers.map(({ publication, product, moc, nativeMoc, preview, query }) => ({
       layerId: publication.layerId,
       surveyId,
       releaseId: publication.releaseId,
+      productId: publication.productId,
+      product: publication.product,
+      ...(product.coverageEvidence?.sourceIdentity ? { sourceId: product.coverageEvidence.sourceIdentity } : {}),
       modality: product.modality ?? "catalog",
       coverageRole: product.coverageRole ?? "footprint_extent",
       dataOrigin: product.dataOrigin ?? "observed",
@@ -579,14 +603,36 @@ export class DynamicResourcePackageStore {
       path: `mocs/${publication.layerId}.moc.fits`,
       sizeBytes: moc.length,
       sha256: hash(moc),
+      coordinateFrame: "ICRS" as const,
+      ordering: "NESTED" as const,
+      mocEncoding: "NUNIQ" as const,
+      availableOrders: nativeMoc.availableOrders,
+      overviewOrder: Math.min(nativeMoc.maxOrder, preview?.order ?? query?.order ?? 4),
+      maxOrder: nativeMoc.maxOrder,
+      coverageRevision: nativeMoc.revision,
+      indexRevision: null,
+      geometryPrecision: product.coverageEvidence?.precision ?? "unknown",
+      completeness: product.coverageEvidence?.completeness ?? "unknown",
+      precisionNote: product.coverageEvidence?.summary || "Published coverage precision and source completeness were not recorded.",
+      accessAvailability: product.sourceUnitIndex?.status === "exact" ? "tile-resolved" : product.sourceUnitIndex ? "entrypoint-only" : "geometry-only",
     })).sort((left, right) => left.layerId.localeCompare(right.layerId));
-    const support = new Map<string, Buffer>([["README.md", Buffer.from(`# ${surveyId.toUpperCase()} public coverage\n\nThis immutable Resource Package v3 was generated from published Assets MOC outputs. FITS MOCs are authoritative ICRS/NESTED coverage; the footprint JSON is an explicit display projection at order ${overviewOrder}.\n`, "utf8")], ["footprints/survey-footprints.json", footprint], ["provenance.json", provenance]]);
+    const packageLayers = [...layerRecords, ...retained.layers].sort((left, right) => left.layerId.localeCompare(right.layerId));
+    const mocBytesByLayer = new Map<string, Uint8Array>([
+      ...layers.map(({ publication, moc }) => [publication.layerId, moc] as const),
+      ...retained.layers.map((layer) => {
+        const bytes = retained.entries.get(layer.path);
+        if (!bytes) throw new Error(`Retained package MOC bytes are missing: ${layer.layerId}`);
+        return [layer.layerId, bytes] as const;
+      }),
+    ]);
+    const healpixFiles = buildResourcePackageHealpixFiles({ packageId, packageVersion, surveyId, layers: packageLayers, mocBytesByLayer });
+    const support = new Map<string, Buffer>([["README.md", Buffer.from(`# ${surveyId.toUpperCase()} public coverage\n\nThis immutable Resource Package v3 was generated from published Assets MOC outputs. FITS MOCs are authoritative ICRS/NESTED coverage; the footprint JSON is an explicit display projection at order ${overviewOrder}.\n`, "utf8")], ["footprints/survey-footprints.json", footprint], ["provenance.json", provenance], ...healpixFiles.map((file) => [file.path, file.bytes] as const)]);
     const packageManifest = {
       schemaVersion: PACKAGE_SCHEMA_VERSION,
       id: packageId,
       version: packageVersion,
       surveyId,
-      layers: [...layerRecords, ...retained.layers].sort((a, b) => a.layerId.localeCompare(b.layerId)),
+      layers: packageLayers,
       files: [...support.entries()].map(([filePath, bytes]) => ({ path: filePath, sizeBytes: bytes.length, sha256: hash(bytes) })).sort((left, right) => left.path.localeCompare(right.path)),
     };
     const entries = new Map<string, Buffer>([["resource-package.json", Buffer.from(`${JSON.stringify(packageManifest, null, 2)}\n`, "utf8")], ...support.entries(), ...retained.entries, ...layers.map(({ publication, moc }) => [`mocs/${publication.layerId}.moc.fits`, moc] as const)]);

@@ -104,10 +104,20 @@ export class PublicationScheduler implements PublicationRunRepository {
   async submit(run: PublicationRun): Promise<PublicationRun> {
     const frozen = await this.#options.freeze();
     const selected = [...(run.selectedProducts ?? [])].sort((a, b) => a.productId.localeCompare(b.productId));
-    if (!selected.length || selected.some(value => !frozen.products.some(product => product.productId === value.productId && product.revision === value.revision))) throw new Error("Selected revision changed before queue submission");
-    // Only selected products are needed by the builder; baseline carries the rest.
-    frozen.products = frozen.products.filter(product => selected.some(value => value.productId === product.productId));
-    const key = createHash("sha256").update(JSON.stringify(selected)).digest("hex");
+    let selection: unknown;
+    if (run.rebuildPackages === true) {
+      const surveyIds = [...new Set(run.rebuildSurveyIds ?? run.surveyIds)].sort();
+      if (!surveyIds.length || selected.length) throw new Error("Package rebuild requires surveys and cannot select products");
+      run = { ...run, selectedProducts: [], rebuildSurveyIds: surveyIds };
+      frozen.products = [];
+      selection = { mode: "rebuild-packages", baselineSha256: run.baselineBundle.sha256, surveyIds };
+    } else {
+      if (!selected.length || selected.some(value => !frozen.products.some(product => product.productId === value.productId && product.revision === value.revision))) throw new Error("Selected revision changed before queue submission");
+      // Only selected products are needed by the builder; baseline carries the rest.
+      frozen.products = frozen.products.filter(product => selected.some(value => value.productId === product.productId));
+      selection = { mode: "products", products: selected };
+    }
+    const key = createHash("sha256").update(JSON.stringify(selection)).digest("hex");
     const task = this.tasks.submit(run.runId, key, frozen, run);
     return (await this.get(task.id))!;
   }

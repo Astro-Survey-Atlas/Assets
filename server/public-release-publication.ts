@@ -143,6 +143,7 @@ export interface PublicationRunRequest {
   expectedBaselineSha256: string;
   surveyIds: string[];
   productIds?: string[];
+  rebuildPackages?: boolean;
 }
 
 export type PublicationRunStatus = "queued" | "building" | "uploading" | "verifying" | "published" | "failed" | "cancelled";
@@ -179,6 +180,8 @@ export interface PublicationRun {
   runId: string;
   operation?: "publish" | "withdraw" | "mixed";
   selectedProducts?: Array<{productId:string;revision:number}>;
+  rebuildPackages?: boolean;
+  rebuildSurveyIds?: string[];
   queue?: { phase: string; attempts: number; nextAttemptAt?: string; cancellable: boolean; syncDelayed: boolean };
 
   planId: string;
@@ -290,7 +293,7 @@ function packageMinor(version: string): number {
 function productDiffFields(product: ProductRecord): string[] {
   if (product.retiredAt) return ["retirement", ...(product.retirementReason ? ["retirementReason"] : [])];
   if (!product.published) return ["identity", "source", "coverage", "presentation"];
-  const fields = ["name", "modality", "mode", "layerId", "coverageRole", "dataOrigin", "sourceTier", "originNote", "sourceLabel", "sourceUrl", "officialDataUrl", "officialQueryUrl", "geometrySourceUrl", "publicDescription", "publicStatus", "presentation"] as const;
+  const fields = ["name", "modality", "mode", "layerId", "coverageRole", "coverageEvidence", "dataOrigin", "sourceTier", "originNote", "sourceLabel", "sourceUrl", "officialDataUrl", "officialQueryUrl", "geometrySourceUrl", "publicDescription", "publicStatus", "presentation"] as const;
   return fields.filter((field) => JSON.stringify(product.draft[field]) !== JSON.stringify(product.published?.[field]));
 }
 
@@ -391,6 +394,8 @@ function isPublicationRun(value: unknown): value is PublicationRun {
     && typeof run.status === "string"
     && ["queued", "building", "uploading", "verifying", "published", "failed", "cancelled"].includes(run.status)
     && Array.isArray(run.surveyIds)
+    && (run.rebuildPackages === undefined || typeof run.rebuildPackages === "boolean")
+    && (run.rebuildSurveyIds === undefined || (Array.isArray(run.rebuildSurveyIds) && run.rebuildSurveyIds.every(surveyId => typeof surveyId === "string")))
     && Array.isArray(run.log);
 }
 
@@ -636,27 +641,47 @@ export class PublicReleasePublisher {
     if (request.expectedBaselineSha256 !== plan.baselineBundle.sha256) {
       throw new PublicationConflictError(`Baseline release changed; expected ${plan.baselineBundle.sha256}`);
     }
-    const requested = [...new Set(request.surveyIds ?? [])];
-    if (!request.productIds?.length) throw new PublicationConflictError("Select explicit reviewed product versions",400);
+    const requested = [...new Set((request.surveyIds ?? []).map(surveyId => surveyId.trim()))];
     if (!requested.length) throw new PublicationConflictError("Select at least one changed survey to publish", 400);
-    const notChanged = requested.filter((surveyId) => !plan.changedSurveyIds.includes(surveyId));
-    if (notChanged.length) throw new PublicationConflictError(`Surveys have no publication changes: ${notChanged.join(", ")}`);
-    const blocked = plan.surveys.filter((survey) => requested.includes(survey.surveyId) && survey.blockers.length).map((survey) => `${survey.surveyId}: ${survey.blockers.join("; ")}`);
-    if (blocked.length) throw new PublicationConflictError(`Blocked surveys cannot be published: ${blocked.join(" | ")}`);
-    const eligible=plan.surveys.filter(s=>requested.includes(s.surveyId)).flatMap(s=>s.productDiffs).filter(p=>p.reviewed);
-    const selected=eligible.filter(p=>!request.productIds || request.productIds.includes(p.productId));
-    if(!selected.length || request.productIds?.some(id=>!eligible.some(p=>p.productId===id)))throw new PublicationConflictError("Select reviewed product versions only",400);
-
+    const rebuildingPackages=request.rebuildPackages === true;
+    let selected: PublicationProductDiff[]=[];
+    let rebuildSurveyIds: string[] | undefined;
+    if (rebuildingPackages) {
+      if (request.productIds?.length) throw new PublicationConflictError("Package rebuild cannot select product versions", 400);
+      rebuildSurveyIds=[...requested].sort();
+      const approved=await readApprovedRelease(this.#options.baselineRoot);
+      const approvedSurveys=new Set(approved.packages
+        .filter(pkg=>pkg.hidden !== true && pkg.deprecated !== true)
+        .map(pkg=>typeof pkg.surveyId === "string" ? pkg.surveyId : undefined)
+        .filter((surveyId): surveyId is string => Boolean(surveyId) && !isDeniedSurvey(surveyId)));
+      const unavailable=rebuildSurveyIds.filter(surveyId=>!surveyId || isDeniedSurvey(surveyId) || !approvedSurveys.has(surveyId));
+      if(unavailable.length)throw new PublicationConflictError(`Package rebuild requires approved public surveys: ${unavailable.join(", ")}`,400);
+    } else {
+      if (!request.productIds?.length) throw new PublicationConflictError("Select explicit reviewed product versions",400);
+      const notChanged = requested.filter((surveyId) => !plan.changedSurveyIds.includes(surveyId));
+      if (notChanged.length) throw new PublicationConflictError(`Surveys have no publication changes: ${notChanged.join(", ")}`);
+      const blocked = plan.surveys.filter((survey) => requested.includes(survey.surveyId) && survey.blockers.length).map((survey) => `${survey.surveyId}: ${survey.blockers.join("; ")}`);
+      if (blocked.length) throw new PublicationConflictError(`Blocked surveys cannot be published: ${blocked.join(" | ")}`);
+      const eligible=plan.surveys.filter(s=>requested.includes(s.surveyId)).flatMap(s=>s.productDiffs).filter(p=>p.reviewed);
+      selected=eligible.filter(p=>request.productIds?.includes(p.productId));
+      if(!selected.length || request.productIds?.some(id=>!eligible.some(p=>p.productId===id)))throw new PublicationConflictError("Select reviewed product versions only",400);
+    }
     const versions = selected.map(p => ({ productId: p.productId, revision: p.draftRevision }));
-    const now = Date.now();
     const active = (await this.list()).filter(r => ["queued", "building", "uploading", "verifying"].includes(r.status));
-    const duplicate = active.find(r => r.selectedProducts?.length === versions.length && versions.every(v => r.selectedProducts?.some(p => p.productId === v.productId && p.revision === v.revision)));
+    const sameSurveySet=(left:readonly string[]|undefined,right:readonly string[]):boolean=>{
+      const a=[...new Set(left ?? [])].sort(),b=[...new Set(right)].sort();
+      return a.length===b.length&&a.every((surveyId,index)=>surveyId===b[index]);
+    };
+    const duplicate = active.find(r => r.baselineBundle?.sha256 === plan.baselineBundle.sha256 && (rebuildingPackages
+      ? r.rebuildPackages === true && sameSurveySet(r.rebuildSurveyIds ?? r.surveyIds,rebuildSurveyIds!)
+      : r.rebuildPackages !== true && r.selectedProducts?.length === versions.length && versions.every(v => r.selectedProducts?.some(p => p.productId === v.productId && p.revision === v.revision))));
     if (duplicate) return duplicate;
-    if (active.some(r => r.selectedProducts?.some(p => versions.some(v => p.productId === v.productId)))) throw new PublicationConflictError("Product already has an active publication task");
+    if (!rebuildingPackages && active.some(r => r.rebuildPackages !== true && r.selectedProducts?.some(p => versions.some(v => p.productId === v.productId)))) throw new PublicationConflictError("Product already has an active publication task");
     const run: PublicationRun = {
       runId: `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`,
-      operation: selected.every(p => p.change === "removed") ? "withdraw" : selected.some(p => p.change === "removed") ? "mixed" : "publish",
+      operation: rebuildingPackages ? "publish" : selected.every(p => p.change === "removed") ? "withdraw" : selected.some(p => p.change === "removed") ? "mixed" : "publish",
       selectedProducts:selected.map(p=>({productId:p.productId,revision:p.draftRevision})),
+      ...(rebuildingPackages ? { rebuildPackages: true, rebuildSurveyIds } : {}),
       planId: plan.planId,
       baselineBundle: plan.baselineBundle,
       surveyIds: requested,
@@ -699,11 +724,11 @@ export class PublicReleasePublisher {
     const durableRetry = await this.#options.runRepository?.retry?.(previous);
     if (durableRetry) return durableRetry;
     const currentProducts = this.#options.loadProducts ? await this.#options.loadProducts() : [];
-    if (previous.selectedProducts?.some(selected => !currentProducts.some(product => product.productId === selected.productId && product.revision === selected.revision))) {
+    if (previous.rebuildPackages !== true && previous.selectedProducts?.some(selected => !currentProducts.some(product => product.productId === selected.productId && product.revision === selected.revision))) {
       throw new PublicationConflictError("Selected revision changed; review and submit a new publication instead of retrying");
     }
     const plan = await this.plan();
-    return this.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: previous.surveyIds, productIds: previous.selectedProducts?.map(p=>p.productId) }, requestedBy);
+    return this.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: previous.rebuildPackages ? previous.rebuildSurveyIds ?? previous.surveyIds : previous.surveyIds, productIds: previous.rebuildPackages ? undefined : previous.selectedProducts?.map(p=>p.productId), ...(previous.rebuildPackages ? { rebuildPackages: true } : {}) }, requestedBy);
   }
 
   /** Release a stale worker lease and immediately create a fresh queued attempt. */
@@ -801,8 +826,10 @@ export class PublicReleasePublisher {
     }, heartbeatMs);
     heartbeatTimer.unref?.();
     try {
-      if(!run.selectedProducts?.length)throw new PublicationConflictError("Legacy publication task must be resubmitted under reviewed-release-v1");
-      const candidate = await buildApprovedRelease({stagingRoot,runId,root:this.#options.baselineRoot,baseline:await this.#baselineManifest(),files:(await this.#baselineManifest()).files,products:this.#options.loadProducts?await this.#options.loadProducts():[],publications:await this.#options.loadPublications(),publicationFile:this.#options.publicationFile,selected:run.selectedProducts});
+      if(!run.selectedProducts?.length && run.rebuildPackages !== true)throw new PublicationConflictError("Legacy publication task must be resubmitted under reviewed-release-v1");
+      if(run.rebuildPackages === true && (!run.rebuildSurveyIds?.length || run.selectedProducts?.length))throw new PublicationConflictError("Package rebuild task has an invalid frozen survey selection");
+      const baseline=await this.#baselineManifest();
+      const candidate = await buildApprovedRelease({stagingRoot,runId,root:this.#options.baselineRoot,baseline,files:baseline.files,products:this.#options.loadProducts?await this.#options.loadProducts():[],publications:await this.#options.loadPublications(),publicationFile:this.#options.publicationFile,selected:run.selectedProducts ?? [],...(run.rebuildPackages ? { rebuildSurveyIds: run.rebuildSurveyIds } : {})});
       const approved = await readApprovedRelease(candidate.root);
       const previous = await readApprovedRelease(this.#options.baselineRoot);
       run.expected = {

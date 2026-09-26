@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { coverageCatalogFromWarehouse, type CoverageCellLayer } from "../server/coverage.js";
+import { batchEvidenceLayerId } from "../server/scan-batch.js";
 import type { WarehouseCoverageCatalogSnapshot } from "../server/evidence-store.js";
 import { footprintManifest, type CoverageCatalog } from "../site/src/atlas-coverage-globe.js";
 import { sourceVariantColor } from "../site/src/atlas/survey-layer-viewer.js";
@@ -41,6 +42,24 @@ function warehouseLayer(layerId: string, surveyId: string, productId = `${layerI
     errorCount: 0,
   };
 }
+
+test("batch evidence does not add a public layer or replace its reviewed footprint", () => {
+  const published = layer("euclid-q1-vis", "euclid", [1, 2]);
+  const evidenceId = batchEvidenceLayerId(published.productId);
+  const base = {
+    schemaVersion: 2, coordinateFrame: "ICRS" as const, ordering: "NESTED" as const,
+    tileScheme: "ipix-range-4096" as const, layers: [],
+    records: new Map([[published.layerId, published]]),
+  };
+  const merged = coverageCatalogFromWarehouse(base, {
+    layers: [warehouseLayer(evidenceId, "euclid", published.productId)],
+    coverages: [{ layerId: evidenceId, order: 8, ipix: 549012 }],
+    truncated: false,
+  });
+  assert.deepEqual([...merged.records.keys()], [published.layerId]);
+  assert.deepEqual(merged.records.get(published.layerId)!.cells, published.cells);
+  assert.deepEqual(merged.records.get(published.layerId)!.availableOrders, [4]);
+});
 
 test("Warehouse coverage preserves static layers, overrides matching identities, and adds new layers", () => {
   const staticBase = layer("static-layer", "static", [1, 2], "static product");
@@ -108,7 +127,7 @@ test("known test layers remain excluded with old Helm overrides, without keyword
   const previous = process.env.ASSETS_WAREHOUSE_EXCLUDED_LAYER_IDS;
   process.env.ASSETS_WAREHOUSE_EXCLUDED_LAYER_IDS = "warehouse-selftest-s3,custom-excluded";
   try {
-    const denied = ["smoke-catalog", "assets-smoke-image-euclid-vis", "assets-atlas-spectrum-sdss-current", "custom-excluded"];
+    const denied = ["smoke-catalog", "assets-smoke-image-euclid-vis", "assets-atlas-spectrum-sdss-current", "custom-excluded", "warehouse-caller-assets-20260924", "warehouse-caller-workspace-20260924", "warehouse-selftest-s3-20260924"];
     const ids = [...denied, "science-smoke-nebula"];
     const base = { schemaVersion: 1, coordinateFrame: "ICRS" as const, ordering: "NESTED" as const, tileScheme: "ipix-range-4096" as const, layers: [], records: new Map([["smoke-catalog", layer("smoke-catalog", "smoke", [1])]]) };
     const merged = coverageCatalogFromWarehouse(base, { layers: ids.map(id => warehouseLayer(id, "example")), coverages: ids.map(layerId => ({ layerId, order: 8, ipix: 12 })), truncated: false });
@@ -228,4 +247,14 @@ test("source sector geometry keeps single-source cells filled when another cell 
   ]);
   assert.equal(geometry.getAttribute("position").count, 27);
   assert.ok(geometry.getAttribute("color").count > 0);
+});
+
+test('a frozen batch with no committed geometry preserves its published footprint', () => {
+  const published = layer('euclid-vis', 'euclid', [7, 8]);
+  const base = { schemaVersion: 1, coordinateFrame: 'ICRS' as const, ordering: 'NESTED' as const, tileScheme: 'ipix-range-4096' as const, layers: [], records: new Map([[published.layerId, published]]) };
+  const pending = { ...warehouseLayer('euclid-vis', 'euclid'), state: 'PARTITIONED', availableOrders: [], scanScope: { layerId: 'euclid-vis', scopeId: 'q1', scopeSnapshotSha256: 'a'.repeat(64), expectedPartitions: 2, committedPartitions: 0, completeness: 'incomplete' as const } };
+  const merged = coverageCatalogFromWarehouse(base, { layers: [pending], coverages: [], truncated: false });
+  assert.deepEqual(merged.records.get('euclid-vis')?.cells, published.cells);
+  assert.equal(merged.records.get('euclid-vis')?.productId, published.productId);
+  assert.deepEqual(merged.records.get('euclid-vis')?.availableOrders, [4]);
 });

@@ -60,6 +60,31 @@ structure unchanged, rewrites the package catalog hashes, refreshes release
 provenance, and rebuilds `release-manifest.json`. Source manifests and
 normalized scans are evidence inputs and are deliberately not ZIP members.
 
+New packages also contain `healpix/order4.json` and `healpix/order8.json`.
+Read `surveyUnion.cells` for the survey's sorted, unique HEALPix block numbers,
+or `layers[].cells` for the list belonging to a specific release/product.
+Each file declares its `order`, `coordinateFrame: ICRS`, `ordering: NESTED`,
+package identity, precision and completeness. These are coverage block numbers,
+not scientific Tile IDs or a file inventory.
+
+The lists are derived from the package's native FITS MOCs. A layer with a
+native maximum below the requested order is recorded in
+`surveyUnion.omittedLayers`; an empty list with omissions does not mean there
+is no coverage. Such a union is marked incomplete. For example, an O7 native
+MOC can provide an O4 list but cannot supply an O8 list under this contract.
+Historical packages can lack both files. The rebuild command defers a survey
+whose frozen MOC is below the public O4 minimum and preserves its existing
+archive and catalog entry; it does not upgrade the geometry or publish it.
+Consumers must use a validator that supports these two additional paths.
+The previously distributed Core 1.1.0 validator rejects them as unexpected ZIP
+entries; keeping the manifest at v3 does not make that older validator compatible.
+Assets pins Core 1.2.0 for the Docker runtime and distributes its wheel beside a
+SHA-256-pinned source snapshot. This candidate was built from a dirty Core
+worktree based on `d4357fe`; the pin records the snapshot hash and fixed build
+environment, so that short base commit is not presented as the exact source
+revision. The source snapshot and wheel remain candidates until an Assets
+release is explicitly published.
+
 ## Workspace synchronization and installation
 
 Workspace must be configured with the public Assets catalog URL, for example
@@ -127,7 +152,7 @@ Install the pinned MOC Core wheel published by `/api/v1/assets`, then validate
 the archive against the downloaded public catalog:
 
 ```bash
-python3 -m pip install astro_survey_moc_core-1.1.0-py3-none-any.whl
+python3 -m pip install astro_survey_moc_core-1.2.0-py3-none-any.whl
 python3 -m astro_survey_moc_core.cli package validate package.zip \
   --public-catalog catalog.json
 ```
@@ -156,6 +181,21 @@ Online clients may instead use `/api/v1/coverage/catalog` and immutable
 `/api/v1/coverage/blocks/<layer-id>` responses. Reverse lookup remains an
 optional Assets/Warehouse online capability and is not required to consume the
 offline package.
+
+To export the current public catalog's O4/O8 coverage blocks for local analysis,
+run the read-only live exporter with a new output directory:
+
+```bash
+npm run coverage:export-healpix -- https://assets.example /tmp/assets-healpix-export
+```
+
+The command verifies the bundle and catalog identity before and after reading
+all public layer MOCs, checks each MOC response SHA-256 and any catalog layer
+coverage revision, then writes `<survey-id>/healpix/order4.json`,
+`<survey-id>/healpix/order8.json`, and `<survey-id>/provenance.json`. A missing
+layer coverage revision is recorded as missing in provenance. The command
+refuses to write to an output directory that already exists. These JSON files
+are coverage manifests, not scientific data or Resource Package ZIPs.
 
 ## Incremental publication and Release continuity
 

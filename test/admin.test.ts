@@ -387,6 +387,63 @@ test("local coverage tasks translate relative paths into a read-only source PVC 
   }, "warehouse", { name: "cosmos-source", type: "local", pvcName: "atlas-source-catalogs" } as never), (error: unknown) => error instanceof AdminHttpError && error.statusCode === 400 && /dot segments/.test(error.message));
 });
 
+test("catalog-radec tasks map explicit FITS HDU selectors and preserve selector-free CSV calls", () => {
+  const input = {
+    name: "desi-catalog-scan",
+    layerId: "desi-catalog",
+    surveyId: "desi",
+    releaseId: "dr1",
+    product: "DESI catalog",
+    mode: "catalog-radec" as const,
+    coverageRole: "object_presence" as const,
+    dataOrigin: "catalog" as const,
+    sourceTier: "official_inventory_derived" as const,
+    sourceConnector: "desi-source",
+    sourcePaths: ["targets.fits"],
+    raColumn: "TARGET_RA",
+    decColumn: "TARGET_DEC",
+  };
+  const byName = buildTaskResource({ ...input, hduName: "TARGETS", coordinateFrame: "ICRS" }, "warehouse");
+  const byNamePlan = byName.spec?.plan as Record<string, unknown>;
+  assert.deepEqual((byNamePlan.extraction as { catalog: Record<string, unknown> }).catalog, {
+    raColumn: "TARGET_RA",
+    decColumn: "TARGET_DEC",
+    hduName: "TARGETS",
+    coordinateFrame: "ICRS",
+  });
+
+  const byIndex = buildTaskResource({ ...input, hduIndex: 0, coordinateFrame: "ICRS" }, "warehouse");
+  const byIndexPlan = byIndex.spec?.plan as Record<string, unknown>;
+  assert.deepEqual((byIndexPlan.extraction as { catalog: Record<string, unknown> }).catalog, {
+    raColumn: "TARGET_RA",
+    decColumn: "TARGET_DEC",
+    hduIndex: 0,
+    coordinateFrame: "ICRS",
+  });
+
+  const csvInput = { ...input, sourcePaths: ["targets.csv"] };
+  const legacyCsv = buildTaskResource(csvInput, "warehouse");
+  assert.deepEqual(((legacyCsv.spec?.plan as Record<string, unknown>).extraction as { catalog: Record<string, unknown> }).catalog, {
+    raColumn: "TARGET_RA",
+    decColumn: "TARGET_DEC",
+  });
+  const declaredCsvFrame = buildTaskResource({ ...csvInput, coordinateFrame: "ICRS" }, "warehouse");
+  assert.equal((((declaredCsvFrame.spec?.plan as Record<string, unknown>).extraction as { catalog: Record<string, unknown> }).catalog).coordinateFrame, "ICRS");
+
+  for (const invalid of [
+    { hduName: "TARGETS", hduIndex: 0, coordinateFrame: "ICRS" },
+    { hduIndex: 0 },
+    { hduName: "TARGETS", coordinateFrame: "icrs" },
+    { hduName: "TARGETS", coordinateFrame: "ICRS " },
+    { hduIndex: -1, coordinateFrame: "ICRS" },
+    { hduIndex: 0.5, coordinateFrame: "ICRS" },
+  ]) {
+    assert.throws(() => buildTaskResource({ ...input, ...invalid }, "warehouse"), AdminHttpError);
+  }
+  assert.throws(() => buildTaskResource({ ...input, mode: "fits-wcs", coverageRole: "image_extent", hduIndex: 0, coordinateFrame: "ICRS" }, "warehouse"), /only with catalog-radec/);
+  assert.throws(() => buildTaskResource({ ...input, mode: "fits-wcs", coverageRole: "image_extent", coordinateFrame: "ICRS" }, "warehouse"), /only with catalog-radec/);
+});
+
 test("legacy local connector records remain visible but cannot submit scans", () => {
   const view = connectorView({ metadata: { name: "legacy-local" }, data: { type: "local", localPath: "eva7028:/data/coverage-inputs", nodeName: "eva7028", nodePath: "/data/coverage-inputs" } });
   assert.equal(view.localPath, "eva7028:/data/coverage-inputs");
@@ -831,12 +888,15 @@ test("connector deletion blocks unfinished scans, preserves history and never de
     await inventories.set("old-source", { phase: "COMPLETE", updatedAt: new Date().toISOString() });
     const deleted: string[] = [];
     let phase: string | undefined = "RUNNING";
-    let fail = false;
+    let batchPhase: string | undefined = "SUCCEEDED";
+    let failPlural: string | undefined;
     const kube = {
       getCore: async () => resource,
-      list: async () => {
-        if (fail) throw new Error("status unavailable");
-        return [{ metadata: { name: "scan", labels: { "astro.zhejianglab.org/source-connector": "old-source" } }, status: { phase } }];
+      list: async (plural: string) => {
+        if (failPlural === plural) throw new Error("status unavailable");
+        if (plural === "scanrequests") return [{ metadata: { name: "scan", labels: { "astro.zhejianglab.org/source-connector": "old-source" } }, status: { phase } }];
+        if (plural === "scanbatchrequests") return [{ metadata: { name: "batch", labels: { "astro.zhejianglab.org/source-connector": "old-source" } }, status: { phase: batchPhase } }];
+        return [];
       },
       deleteCore: async (plural: string, name: string) => { deleted.push(`${plural}/${name}`); },
     };
@@ -844,11 +904,19 @@ test("connector deletion blocks unfinished scans, preserves history and never de
     for (phase of ["RUNNING", "PENDING", undefined]) {
       await assert.rejects(admin.deleteConnector("old-source"), (e: unknown) => e instanceof AdminHttpError && e.statusCode === 409);
     }
-    fail = true;
+    failPlural = "scanrequests";
     await assert.rejects(admin.deleteConnector("old-source"), /status unavailable/);
     assert.deepEqual(deleted, []);
-    fail = false;
+    failPlural = undefined;
     phase = "SUCCEEDED";
+    for (batchPhase of ["PENDING", "DISCOVERING", "RUNNING", undefined]) {
+      await assert.rejects(admin.deleteConnector("old-source"), (e: unknown) => e instanceof AdminHttpError && e.statusCode === 409);
+    }
+    failPlural = "scanbatchrequests";
+    await assert.rejects(admin.deleteConnector("old-source"), /status unavailable/);
+    assert.deepEqual(deleted, []);
+    failPlural = undefined;
+    batchPhase = "SUCCEEDED";
     assert.deepEqual(await admin.deleteConnector("old-source"), { deleted: true, name: "old-source" });
     assert.deepEqual(deleted, ["configmaps/old-source"]);
     assert.equal(await new ConnectorProbeStateStore(root).get("old-source"), undefined);

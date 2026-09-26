@@ -36,16 +36,14 @@ The eight reviewed entries in `src/moc-sources/source-registry.json` remain
 reviewed fixtures. No discovery candidate is promoted automatically; source
 terms, product copy, and publication remain explicit Assets admin decisions.
 
-## Proposed enhanced discovery (not enabled)
+## Optional Assets enhancement
 
-See [MOC discovery enhancement design](moc-discovery-enhancement-design.md) for
-curated aliases followed by explicitly requested, networked LLM source discovery.
-The current worker still performs only the CDS query described above. A completed
-zero-result search is distinct from execution failure; a source page is not itself
-a validated MOC. Model-suggested candidates must follow the same file validation,
-manual review and explicit incremental publication path.
+Assets implements the optional [MOC discovery enhancement](moc-discovery-enhancement-design.md)
+when explicitly enabled and configured, after CDS returns a complete zero-result
+response. Warehouse still performs the bounded CDS query described above.
+This is distinct from discovery failure; model-suggested candidates must follow
+source validation, manual review and explicit publication. Runtime provider
+availability is not implied by this capability description.
 
-The public `/releases/` page explains the actual workflow and labels the enhanced
-branch as planned. The workflow is always visible, with peer existing-MOC and
-source-scan cards; the existing-MOC card links the CDS query endpoint. It is
-explanatory content, not a live task/status dashboard.
+The public `/releases/` workflow explains existing-MOC discovery and source
+scanning as peer inputs. It is explanatory content, not a live task/status dashboard.

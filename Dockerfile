@@ -1,7 +1,12 @@
+ARG MOC_CORE_WHEEL=astro_survey_moc_core-1.2.0-py3-none-any.whl
+ARG MOC_CORE_SOURCE_SNAPSHOT=moc-core-source-1.2.0-d4357fe.tar.gz
+
 FROM node:22.22.1-bookworm-slim AS build
 
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG FRONTEND_ONLY=false
+ARG MOC_CORE_WHEEL
+ARG MOC_CORE_SOURCE_SNAPSHOT
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --registry=${NPM_REGISTRY}
@@ -12,7 +17,8 @@ COPY scripts ./scripts
 COPY site ./site
 COPY test ./test
 COPY requirements ./requirements
-COPY artifacts/public-survey-footprints/moc-core/astro_survey_moc_core-1.1.0-py3-none-any.whl /tmp/astro_survey_moc_core-1.1.0-py3-none-any.whl
+COPY artifacts/public-survey-footprints/moc-core/${MOC_CORE_WHEEL} /tmp/${MOC_CORE_WHEEL}
+COPY artifacts/public-survey-footprints/moc-core/${MOC_CORE_SOURCE_SNAPSHOT} /tmp/${MOC_CORE_SOURCE_SNAPSHOT}
 RUN if [ "$FRONTEND_ONLY" = "true" ]; then \
       echo "FRONTEND_ONLY=true is incompatible with the archive-only runtime image (dist/server is required)" >&2; \
       exit 1; \
@@ -21,6 +27,9 @@ RUN if [ "$FRONTEND_ONLY" = "true" ]; then \
     && npm prune --omit=dev --offline
 
 FROM node:22.22.1-bookworm-slim AS runtime
+
+ARG MOC_CORE_WHEEL
+ARG MOC_CORE_SOURCE_SNAPSHOT
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
@@ -39,10 +48,14 @@ RUN apt-get update \
     && mkdir -p /data /tmp \
     && chown -R atlas:atlas /data /tmp
 COPY --from=build /app/requirements/requirements.lock /tmp/moc-requirements.lock
-COPY --from=build /tmp/astro_survey_moc_core-1.1.0-py3-none-any.whl /tmp/astro_survey_moc_core-1.1.0-py3-none-any.whl
+COPY --from=build /app/requirements/moc-core-source.json /tmp/moc-core-source.json
+COPY --from=build /app/scripts/verify_core_wheel.py /tmp/verify_core_wheel.py
+COPY --from=build /tmp/${MOC_CORE_WHEEL} /tmp/${MOC_CORE_WHEEL}
+COPY --from=build /tmp/${MOC_CORE_SOURCE_SNAPSHOT} /tmp/${MOC_CORE_SOURCE_SNAPSHOT}
 RUN python3 -m pip install --break-system-packages --no-cache-dir -r /tmp/moc-requirements.lock \
-    && python3 -m pip install --break-system-packages --no-cache-dir --no-deps /tmp/astro_survey_moc_core-1.1.0-py3-none-any.whl \
-    && rm -f /tmp/moc-requirements.lock /tmp/astro_survey_moc_core-1.1.0-py3-none-any.whl
+    && python3 /tmp/verify_core_wheel.py --source /tmp/moc-core-source.json --wheel /tmp/${MOC_CORE_WHEEL} --snapshot /tmp/${MOC_CORE_SOURCE_SNAPSHOT} \
+    && python3 -m pip install --break-system-packages --no-cache-dir --no-deps /tmp/${MOC_CORE_WHEEL} \
+    && rm -f /tmp/moc-requirements.lock /tmp/moc-core-source.json /tmp/verify_core_wheel.py /tmp/${MOC_CORE_WHEEL} /tmp/${MOC_CORE_SOURCE_SNAPSHOT}
 COPY --from=build --chown=atlas:atlas /app/dist/server ./dist/server
 COPY --from=build --chown=atlas:atlas /app/dist/scripts ./dist/scripts
 COPY --from=build --chown=atlas:atlas /app/dist/site ./site

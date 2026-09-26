@@ -7,6 +7,7 @@ import test from "node:test";
 
 import { FilesystemArtifactStore, type ArtifactObject, type ArtifactObjectWithBody, type ArtifactPutOptions, type ArtifactStore } from "../server/artifact-store.js";
 import { DynamicResourcePackageStore } from "../server/resource-package-publication.js";
+import { readResourcePackageManifest, readZipEntry } from "../server/resource-package-inspection.js";
 import type { MocPublication } from "../server/moc-build.js";
 import type { ProductRecord } from "../server/products.js";
 import { StateSnapshotCoordinator, stateSnapshotFileKey } from "../server/state-snapshot.js";
@@ -103,9 +104,30 @@ const moc = await readFile(path.join(testArtifactRoot, "layers", "euclid-q1-deep
   assert.equal(initial[0]!.version, "3.1.0");
   assert.equal(initial[0]!.id, "public-jwst-footprints");
   const archive = store.assets()[0]!;
+  const archiveBytes = await readFile(path.join(contentRoot, archive.path));
   assert.equal(archive.sha256, initial[0]!.sha256);
   assert.equal((await stat(path.join(contentRoot, archive.path))).size, archive.sizeBytes);
-  assert.equal(sha256(await readFile(path.join(contentRoot, archive.path))), archive.sha256);
+  assert.equal(sha256(archiveBytes), archive.sha256);
+  const manifest = await readResourcePackageManifest(archiveBytes);
+  assert.deepEqual(new Set(manifest.files.map((file) => file.path)), new Set([
+    "README.md", "footprints/survey-footprints.json", "provenance.json",
+    "healpix/order4.json", "healpix/order8.json",
+  ]));
+  for (const order of [4, 8]) {
+    const filePath = `healpix/order${order}.json`;
+    const record = manifest.files.find((file) => file.path === filePath)!;
+    const bytes = await readZipEntry(archiveBytes, filePath);
+    const sidecar = JSON.parse(bytes.toString("utf8")) as { packageId: string; packageVersion: string; surveyId: string; order: number; coordinateFrame: string; ordering: string; layers: Array<{ cells: number[] }>; surveyUnion: { cells: number[] } };
+    assert.equal(record.sizeBytes, bytes.length);
+    assert.equal(record.sha256, sha256(bytes));
+    assert.equal(sidecar.packageId, manifest.id);
+    assert.equal(sidecar.packageVersion, manifest.version);
+    assert.equal(sidecar.surveyId, manifest.surveyId);
+    assert.equal(sidecar.order, order);
+    assert.equal(sidecar.coordinateFrame, "ICRS");
+    assert.equal(sidecar.ordering, "NESTED");
+    assert.deepEqual(sidecar.surveyUnion.cells, [...new Set(sidecar.layers.flatMap((layer) => layer.cells))].sort((left, right) => left - right));
+  }
 
   const changedMoc = await readFile(path.join(testArtifactRoot, "layers", "desi-dr1-spectra-footprint", "desi-dr1-spectra-footprint.moc.fits"));
   await writeFile(path.join(buildRoot, "moc.fits"), changedMoc);

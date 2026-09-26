@@ -5,6 +5,11 @@ Astro Survey Atlas 是面向公开天文巡天的数据基础设施，用来回�
 审阅的巡天元数据、ICRS/NESTED HEALPix 覆盖、重合结果、provenance 和版本化
 Resource Package v3。
 
+Assets 绝不代替用户下载科学数据。可下载的 JSON/CSV **下载计划文件**列出重合区域
+关联的巡天、Tile/block/文件、来源依据和可用链接，不包含科学数据本身；用户自行在
+来源系统获取数据。没有下载链接时，已有来源依据仍有价值。范围和精度规则见
+[覆盖工作流](docs/coverage-workflow.md)。
+
 本仓库属于 [Astro Survey Atlas 组织](https://github.com/Astro-Survey-Atlas)：
 
 | 项目 | 职责 | 入口 |
@@ -15,13 +20,13 @@ Resource Package v3。
 
 ## 当前实现
 
-2026-09-20 已核实 dev revision 182。Assets 已拆分为公开网站与单写者后台，
+Assets 已拆分为公开网站与单写者后台，
 使用独立 release 缓存及持久化发布队列。审核后的具体产品版本走增量发布，网站
 核验通过后才完成发布；完整 release 归档用于导出或恢复。Warehouse 执行状态
 不会自动授予公开可见性。
 
-MOC 探索目前调用 CDS；别名扩展和联网 LLM 增强已有设计，尚未启用。发布页直接
-展示来源到发布的流程，并明确标记规划能力；首页模态图标位于巡天名称后，精度在下一行。
+MOC 探索调用 CDS；Assets 已实现可选 LLM 增强，仅在显式开启且 CDS 完整返回零候选
+时触发，可用性取决于供应商配置。具体限制见增强说明。
 
 当前部署、验收和待办见 [交接文档](HANDOFF.md)。技术详情见
 [发布运行架构](docs/publication-runtime-split.md)、[当前探索](docs/deferred-moc-discovery-plan.md)
@@ -78,7 +83,7 @@ Assets 不会把 preview 当成更高精度的测量。每个响应都会返回�
 
 Git 保存小型、可审阅的发布元数据：survey/layer registry、recipe lock、schema、
 catalog 投影、provenance 摘要和 hash。版本化 MOC、资源包和大型 evidence 由生产
-S3 保存；真实 CSST 私有数据不进入 Git，可保留于受控后台与证据存储。当前 checkout 保留合成 conformance fixture、Core wheel 和
+S3 保存；真实 CSST 私有数据、预览和配方由 Workspace 持有，不进入 Assets Git、后台、证据存储或发布。当前 checkout 保留合成 conformance fixture、Core wheel 和
 `evidence-index.json`。生成的 release、layer、raw、content、probe 和 staging 副本
 已在独立 S3 恢复及 SHA-256/size 校验后删除。
 

@@ -4,6 +4,7 @@ import path from "node:path";
 
 import type { WarehouseCoverageCatalogSnapshot } from "./evidence-store.js";
 import { isDeniedLayerId, isDeniedSurvey } from "./publication-policy.js";
+import { isBatchEvidenceLayerId } from "./scan-batch.js";
 
 export interface CoverageCellLayer {
   layerId: string;
@@ -22,6 +23,7 @@ export interface CoverageCellLayer {
   tileScheme: string;
   cells: Map<number, number[]>;
   recipe?: CoverageRecipeSummary;
+  sourceEvidence?: CoverageSourceEvidence;
   sourceUnitIndex?: SourceUnitIndexSummary;
   /** Stable content revision used to version browser/cache block requests. */
   revision?: string;
@@ -39,7 +41,20 @@ export interface CoverageRecipeSummary {
   /** Hash/size of the immutable input snapshot; never expose its local path. */
   sourceSnapshotSha256?: string;
   sourceSnapshotSizeBytes?: number;
+  precision?: "exact" | "estimated";
   steps: Array<{ id: string; kind: string; title: string; bodyMarkdown: string; order: number; implementationRef: string }>;
+}
+
+export interface CoverageSourceEvidence {
+  evidenceKind: "observation-footprint" | "tile-footprint" | "wcs-coverage" | "published-moc";
+  sourceIdentity?: string;
+  instrument?: string;
+  filters?: string;
+  sourceSnapshotSha256?: string;
+  precision: "exact" | "estimated";
+  completeness: "complete" | "incomplete" | "unknown";
+  scienceFileScan: "not-scanned" | "partial" | "complete";
+  summary: string;
 }
 
 export interface SourceUnitIndexSummary {
@@ -78,6 +93,12 @@ function excludedWarehouseLayerIds(): Set<string> {
   return new Set([...defaultExcludedWarehouseLayerIds, ...(configured ?? "").split(",").map((value) => value.trim()).filter(Boolean)]);
 }
 
+export function isExcludedWarehouseLayerId(layerId: string): boolean {
+  return excludedWarehouseLayerIds().has(layerId)
+    || layerId.startsWith("warehouse-selftest-")
+    || layerId.startsWith("warehouse-caller-");
+}
+
 function colorFor(id: string): string {
   const palette = ["#1e857b", "#376b9b", "#a66a25", "#b64b3e", "#3b8054", "#7a5a9e", "#b27b2d", "#2b7887"];
   let hash = 0;
@@ -98,6 +119,8 @@ function revisionPayload(record: CoverageCellLayer): Record<string, unknown> {
     product: record.product,
     modality: record.modality,
     coverageRole: record.coverageRole,
+    sourceEvidence: record.sourceEvidence,
+    spatialPrecision: record.recipe?.precision,
     availableOrders: [...record.availableOrders].sort((left, right) => left - right),
     overviewOrder: record.overviewOrder,
     maxOrder: record.maxOrder,
@@ -179,6 +202,7 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
     const cells = new Map<number, number[]>([[order, [...new Set(footprint.pixels)].sort((a, b) => a - b)]]);
     const registeredRecipe: Record<string, unknown> = {};
     let registeredSourceUrl: string | undefined;
+    let registeredPrecision: "exact" | "estimated" | undefined;
     let registeredMode: string | undefined;
     let registeredQueryOrder = 8;
     let registeredPreviewOrder = 4;
@@ -186,6 +210,7 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
       try {
         const raw = JSON.parse(await readFile(path.join(root, registered.recipePath), "utf8")) as Record<string, unknown>;
         Object.assign(registeredRecipe, raw.recipe && typeof raw.recipe === "object" ? raw.recipe : {});
+        if (registeredRecipe.precision === "exact" || registeredRecipe.precision === "estimated") registeredPrecision = registeredRecipe.precision;
         if (typeof raw.input === "string") registeredRecipe.input = raw.input;
         if (typeof raw.sourceUrl === "string") registeredRecipe.sourceUrl = raw.sourceUrl;
         if (raw.snapshot && typeof raw.snapshot === "object") {
@@ -222,6 +247,7 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
       ...(registeredSourceUrl ? { sourceUrl: registeredSourceUrl } : {}),
       ...(typeof registeredRecipe.snapshotSha256 === "string" ? { sourceSnapshotSha256: registeredRecipe.snapshotSha256 } : {}),
       ...(typeof registeredRecipe.snapshotSizeBytes === "number" ? { sourceSnapshotSizeBytes: registeredRecipe.snapshotSizeBytes } : {}),
+      ...(registeredPrecision ? { precision: registeredPrecision } : {}),
       steps: recipeSteps(mode, registeredRecipe),
     };
     const hasWarehouseFileEvidence = registered?.sourceTier === "user_file_derived"
@@ -283,11 +309,16 @@ export function coverageCatalogFromWarehouse(
 ): CoverageCatalog & { records: Map<string, CoverageCellLayer> } {
   const fallbackById = base.records;
   const excluded = excludedWarehouseLayerIds();
-  const records = new Map([...base.records].filter(([id]) => !excluded.has(id)));
+  const isExcluded = (id: string): boolean => excluded.has(id)
+    || id.startsWith("warehouse-selftest-") || id.startsWith("warehouse-caller-");
+  const records = new Map([...base.records].filter(([id]) => !isExcluded(id)));
   for (const layer of snapshot.layers) {
+    // Batch scans add file evidence to a product, not another public footprint.
+    // Their geometry must never replace the reviewed MOC or create a duplicate.
+    if (isBatchEvidenceLayerId(layer.layerId)) continue;
     // Smoke and self-test layers remain evidence-only even if a stale
     // Warehouse index briefly reports them as ACTIVE.
-    if (excluded.has(layer.layerId)) continue;
+    if (isExcluded(layer.layerId)) continue;
     if (isDeniedSurvey(layer.surveyId) || isDeniedLayerId(layer.layerId)) continue;
     const fallback = fallbackById.get(layer.layerId);
     const cells = new Map<number, number[]>();
@@ -300,6 +331,9 @@ export function coverageCatalogFromWarehouse(
       });
     for (const [order, values] of cells) cells.set(order, [...new Set(values)].sort((a, b) => a - b));
     const availableOrders = [...cells.keys()].sort((a, b) => a - b);
+    // A newly frozen batch has no committed geometry yet. Keep any published
+    // footprint instead of replacing it with an invented order-zero layer.
+    if (layer.scanScope && !availableOrders.length) continue;
     const overviewOrder = availableOrders[0] ?? layer.availableOrders[0] ?? 0;
     const overviewCells = cells.get(overviewOrder) ?? [];
     const modality = layer.modality ?? fallback?.modality;

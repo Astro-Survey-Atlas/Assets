@@ -20,6 +20,7 @@
     "artifacts:validate": "tsx scripts/public_footprint_artifacts.ts validate",
     "moc:validate": "tsx scripts/validate-moc-source-registry.ts",
     "moc:probe": "tsx scripts/validate-moc-source-registry.ts --probe --output=artifacts/moc-source-probe.json",
+    "coverage:export-healpix": "tsx scripts/export-live-coverage-healpix.ts",
     "packages:rebuild": "PYTHONPATH=${MOC_CORE_ROOT:-../MOC-Core-SDK} SOURCE_DATE_EPOCH=1787184000 python3 scripts/rebuild_resource_packages.py && python3 scripts/update_provenance_hashes.py && npm run catalog:build",
     "core:wheel": "SOURCE_DATE_EPOCH=1787184000 python3 -m pip wheel --no-deps --no-build-isolation ${MOC_CORE_ROOT:-../MOC-Core-SDK} --wheel-dir artifacts/public-survey-footprints/moc-core",
     "core:rebuild-public": "PYTHONPATH=${MOC_CORE_ROOT:-../MOC-Core-SDK} SOURCE_DATE_EPOCH=1787184000 python3 -m astro_survey_moc_core.cli rebuild-public --base-dir .",

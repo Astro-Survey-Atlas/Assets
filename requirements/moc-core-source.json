@@ -1,9 +1,35 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "repository": "https://github.com/Astro-Survey-Atlas/MOC-Core-SDK",
-  "commit": "a539dfe",
+  "baseCommit": "d4357fe56fcc367ebb5adf3d4033932940bb6700",
+  "sourceState": "dirty-worktree-snapshot",
+  "sourceSnapshot": {
+    "file": "moc-core-source-1.2.0-d4357fe.tar.gz",
+    "sha256": "cb656ef9edc383c5a57a7d3e70f8ec4ad9c986cfb4da889d596a82b53b2ddf89",
+    "archiveCommand": "tar --create --file=- --sort=name --mtime='@1787184000' --owner=0 --group=0 --numeric-owner --pax-option=delete=atime,delete=ctime -- pyproject.toml README.md LICENSE NOTICE astro_survey_moc_core/__init__.py astro_survey_moc_core/cli.py astro_survey_moc_core/contract.py astro_survey_moc_core/core.py astro_survey_moc_core/resource_package.py astro_survey_moc_core/task_contract.py | gzip -n > moc-core-source-1.2.0-d4357fe.tar.gz",
+    "files": [
+      "LICENSE",
+      "NOTICE",
+      "README.md",
+      "astro_survey_moc_core/__init__.py",
+      "astro_survey_moc_core/cli.py",
+      "astro_survey_moc_core/contract.py",
+      "astro_survey_moc_core/core.py",
+      "astro_survey_moc_core/resource_package.py",
+      "astro_survey_moc_core/task_contract.py",
+      "pyproject.toml"
+    ]
+  },
   "package": "astro-survey-moc-core",
-  "version": "1.1.0",
-  "wheel": "astro_survey_moc_core-1.1.0-py3-none-any.whl",
-  "wheelSha256": "188bdc26a4b0bfcebef734bc4494a22131a2ea52a72199c6f8f059c2132a31c1"
+  "version": "1.2.0",
+  "wheel": "astro_survey_moc_core-1.2.0-py3-none-any.whl",
+  "wheelSha256": "2bc99645aa3685c7a1509b2cc8cd52cce9d15717187a4bd48903572ee393af9e",
+  "build": {
+    "sourceDateEpoch": 1787184000,
+    "python": "3.14.4",
+    "pip": "26.1.1",
+    "setuptools": "78.1.1",
+    "command": "CORE_BUILD_ROOT=$(mktemp -d) && mkdir \"$CORE_BUILD_ROOT/source\" \"$CORE_BUILD_ROOT/wheelhouse\" && tar -xzf artifacts/public-survey-footprints/moc-core/moc-core-source-1.2.0-d4357fe.tar.gz -C \"$CORE_BUILD_ROOT/source\" && SOURCE_DATE_EPOCH=1787184000 python3 -m pip wheel --no-deps --no-build-isolation \"$CORE_BUILD_ROOT/source\" --wheel-dir \"$CORE_BUILD_ROOT/wheelhouse\"",
+    "reproducedFromSnapshot": true
+  }
 }

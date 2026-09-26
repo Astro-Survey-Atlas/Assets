@@ -1,5 +1,31 @@
 # Coverage workflow and evidence boundary
 
+## Product purpose and download plans
+
+Assets helps users discover where survey data exists, understand the evidence,
+and identify its source. Assets never downloads scientific data on users’ behalf.
+Users retrieve scientific data themselves from the source under its access policy.
+
+A **download plan** is a downloadable JSON/CSV source manifest: it identifies
+the surveys, releases, products and known Tile/block/file units associated with
+an overlap region, their matching evidence, source locations and optional links.
+It contains metadata and links, not the scientific data itself. A missing link
+does not invalidate existing source evidence; show the known source and limits
+without fabricating a file or URL. See [the API reference](api-reference.md#csv-and-json-exports)
+for the current export format and its known limitations.
+
+Coverage from a collected MOC or footprint and matches from scanned files are
+different evidence. An overlap is an intersection at the declared spatial
+precision within the indexed scope, not proof of complete data, valid pixels
+everywhere or ongoing source availability. Scientific Tile/block identities
+come from the source; coverage blocks used to render/query the globe are not
+scientific data units.
+
+The `region:query` API Key authorizes full lookup and manifest export, not
+access to external data. Serving MOCs, Resource Packages and manifest files,
+and reading necessary scan/build inputs, remain separate from downloading
+scientific data on users’ behalf.
+
 Every coverage recipe must retain provenance and its coordinate/order contract.
 Warehouse scanning and Assets MOC/package construction are separate workflows;
 a completed scan does not automatically generate a MOC or Resource Package.
@@ -58,7 +84,7 @@ flowchart LR
   C --> D[Connected components C01...]
   D --> E[Warehouse coverage-edge lookup]
   E --> F[File/WCS/tile/brick metadata]
-  F --> G[Download plan with exactness and limits]
+  F --> G[Download plan file: sources, links, evidence and limits]
 ```
 
 The reverse lookup never mixes orders. Each result includes `order`, `nside`,
@@ -68,8 +94,11 @@ If a selected layer only has order 4, the common result is limited to order 4
 and explicitly says so.
 
 `coverage_edges.parquet` is the offline reconstruction source. Online lookup
-uses the warehouse `ast_coverage_index_v1` and `ast_file_index_v1` indices;
-the old Assets ES is never a runtime dependency.
+uses Warehouse coverage edges and file records. Ordinary scans use
+`ast_file_index_v1`; native batches resolve the fixed scope and committed
+partition pointers before joining `ast_file_observation_index_v1`. See
+[shared connector batches](scan-batches.md) for the development contract and
+completeness limits. The old Assets ES is never a runtime dependency.
 
 ## Public workflow explanation and discovery design
 

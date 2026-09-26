@@ -42,6 +42,13 @@ test("whole publication verifies and activates package, native geometry and prod
   const bytes=await readFile(packages[0]!.absolutePath),manifest=await readResourcePackageManifest(bytes);
   assert.equal(manifest.layers[0]?.productId,"product-1");assert.equal(manifest.layers[0]?.coverageRevision,f.moc.revision);
   assert.deepEqual(await readZipEntry(bytes,manifest.layers[0]!.path),f.bytes);
+  assert.deepEqual(new Set(manifest.files.map(file=>file.path)),new Set(["README.md","footprints/survey-footprints.json","provenance.json","healpix/order4.json","healpix/order8.json"]));
+  for(const order of [4,8]) {
+    const filePath=`healpix/order${order}.json`,record=manifest.files.find(file=>file.path===filePath)!;
+    const sidecarBytes=await readZipEntry(bytes,filePath),sidecar=JSON.parse(sidecarBytes.toString("utf8"));
+    assert.equal(record.sizeBytes,sidecarBytes.length);assert.equal(record.sha256,sha256(sidecarBytes));
+    assert.equal(sidecar.packageId,manifest.id);assert.equal(sidecar.packageVersion,manifest.version);assert.equal(sidecar.order,order);
+  }
   assert.equal(state.catalog.files.has("manifest-canonical"),false,"private baseline stays unavailable");
   const history=JSON.parse(await readFile(path.join(catalog.root,"artifacts/public-survey-footprints/release-history.json"),"utf8"));
   assert.equal(history.releases[0].packages[0].sha256,sha256(bytes));
@@ -154,4 +161,72 @@ test("successful publication never reports failed verification while building or
     assert.ok(updates.length > 0, `observed ${status}`);
     for (const update of updates) assert.equal(update.verification?.overall, "pending", `${status} must not display failure before verification`);
   }
+});
+
+test("package-only rebuild freezes the approved baseline and preserves mode across retry", async t => {
+  const f = await reviewedFixture();
+  t.after(() => rm(f.base, { recursive: true, force: true }));
+  const initialPublisher = new PublicReleasePublisher(f.options);
+  const initial = await queue(initialPublisher);
+  assert.equal((await initialPublisher.execute(initial.runId)).status, "published");
+  const installed = path.join(f.base, "installed");
+  await syncReleaseFromObjectStore(f.store, installed);
+  const baselineRoot = path.join(installed, "current");
+  const baselineManifest = JSON.parse(await readFile(path.join(baselineRoot, "artifacts/public-survey-footprints/release-manifest.json"), "utf8")) as { files: Array<{ id: string; kind: string; path: string; surveyId?: string; version?: string; sha256: string }> };
+  const baselineApproved = JSON.parse(await readFile(path.join(baselineRoot, "artifacts/public-survey-footprints/approved-release.json"), "utf8")) as { products: Array<{ productId: string; revision: number; geometry: { mocSha256: string } | null }>; packages: Array<{ id: string; surveyId: string; version: string }>; historicalPackages?: Array<{ id: string; surveyId: string; version: string; sha256: string; sizeBytes: number }> };
+  const oldPackage = baselineApproved.packages.find(entry => entry.surveyId === "m42")!;
+  const oldPackageAsset = baselineManifest.files.find(entry => entry.kind === "package" && entry.surveyId === "m42" && entry.version === oldPackage.version)!;
+  const oldPackageBytes = await readFile(path.join(baselineRoot, oldPackageAsset.path));
+
+  const unreviewed = structuredClone(f.products[0]!);
+  unreviewed.productId = "unreviewed-package-draft";
+  unreviewed.draft.productId = unreviewed.productId;
+  delete unreviewed.review;
+  const retired = structuredClone(f.products[0]!);
+  retired.productId = "retired-package-draft";
+  retired.draft.productId = retired.productId;
+  retired.retiredAt = new Date().toISOString();
+  retired.retirementReason = "Draft-only fixture";
+  retired.revision += 1;
+  f.products.push(unreviewed, retired);
+
+  const publisher = new PublicReleasePublisher({ ...f.options, baselineRoot });
+  const plan = await publisher.plan();
+  await assert.rejects(() => publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["m42"], productIds: ["product-1"], rebuildPackages: true }), /cannot select/);
+  await assert.rejects(() => publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["unknown-survey"], rebuildPackages: true }), /approved public/);
+  await assert.rejects(() => publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["csst"], rebuildPackages: true }), /approved public/);
+
+  const run = await publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["m42"], productIds: [], rebuildPackages: true });
+  assert.equal(run.rebuildPackages, true);
+  assert.deepEqual(run.rebuildSurveyIds, ["m42"]);
+  assert.deepEqual(run.selectedProducts, []);
+  const duplicate = await publisher.submit({ planId: plan.planId, expectedBaselineSha256: plan.baselineBundle.sha256, surveyIds: ["m42"], rebuildPackages: true });
+  assert.equal(duplicate.runId, run.runId);
+  const retryPath = path.join(f.contentRoot, "publication", "runs", run.runId + ".json");
+  await writeFile(retryPath, JSON.stringify({ ...run, status: "failed", error: "fixture failure" }, null, 2) + "\n");
+  const retry = await publisher.retry(run.runId);
+  assert.equal(retry.rebuildPackages, true);
+  assert.deepEqual(retry.rebuildSurveyIds, ["m42"]);
+  assert.deepEqual(retry.selectedProducts, []);
+
+  const finished = await publisher.execute(retry.runId);
+  assert.equal(finished.status, "published", finished.error);
+  await syncReleaseFromObjectStore(f.store, installed);
+  const nextRoot = path.join(installed, "current");
+  const nextApproved = JSON.parse(await readFile(path.join(nextRoot, "artifacts/public-survey-footprints/approved-release.json"), "utf8")) as typeof baselineApproved;
+  assert.deepEqual(nextApproved.products, baselineApproved.products, "draft-only records cannot change approved product content");
+  const nextPackage = nextApproved.packages.find(entry => entry.surveyId === "m42")!;
+  assert.equal(nextPackage.version, "3." + (Number(oldPackage.version.split(".")[1]) + 1) + ".0");
+  const nextManifest = JSON.parse(await readFile(path.join(nextRoot, "artifacts/public-survey-footprints/release-manifest.json"), "utf8")) as typeof baselineManifest;
+  const nextPackageAsset = nextManifest.files.find(entry => entry.kind === "package" && entry.surveyId === "m42" && entry.version === nextPackage.version)!;
+  const nextPackageBytes = await readFile(path.join(nextRoot, nextPackageAsset.path));
+  const nextPackageManifest = await readResourcePackageManifest(nextPackageBytes);
+  const oldPackageManifest = await readResourcePackageManifest(oldPackageBytes);
+  assert.equal(nextPackageManifest.layers[0]!.sha256, oldPackageManifest.layers[0]!.sha256, "native MOC hash remains frozen");
+  assert.deepEqual(await readZipEntry(nextPackageBytes, nextPackageManifest.layers[0]!.path), await readZipEntry(oldPackageBytes, oldPackageManifest.layers[0]!.path));
+  assert.deepEqual(new Set(nextPackageManifest.files.map(file => file.path)), new Set(["README.md", "footprints/survey-footprints.json", "provenance.json", "healpix/order4.json", "healpix/order8.json"]));
+  const historical = nextApproved.historicalPackages?.find(entry => entry.surveyId === "m42" && entry.version === oldPackage.version);
+  assert.ok(historical, "the prior reviewed package stays available for version-pinned consumers");
+  assert.equal(historical!.sha256, oldPackageAsset.sha256);
+  assert.ok(nextManifest.files.some(entry => entry.kind === "package" && entry.surveyId === "m42" && entry.version === oldPackage.version && entry.sha256 === oldPackageAsset.sha256));
 });

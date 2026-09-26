@@ -21,6 +21,64 @@ test("empty download plans do not manufacture placeholder rows", () => {
   assert.deepEqual(overlapCsvRows(component, plan, () => layer), []);
 });
 
+test("a completed file list still exports incomplete matching coverage and missing metadata", () => {
+  const plan: DownloadPlan = {
+    schemaVersion: 1, truncated: false, warnings: [], entrypoints: [],
+    files: [{ fileId: "partial", metadataState: "missing", downloadable: false,
+      matchingCoverage: [{ layerId: "desi", order: 8, ipix: 101, precision: "estimated" }],
+      matchingCoverageTruncated: true, warnings: ["Retained source evidence only"],
+    }],
+  };
+  const row = record(overlapCsvRows(component, plan, () => layer)[0]!);
+  assert.equal(row.matching_coverage_truncated, "true");
+  assert.match(row.notes!, /FileAsset metadata missing/);
+  assert.match(row.notes!, /file coverage matches truncated/);
+  assert.match(row.notes!, /Retained source evidence only/);
+});
+
+test("coverage-only results export a separate coverage evidence row", () => {
+  const plan: DownloadPlan = {
+    schemaVersion: 1,
+    files: [],
+    entrypoints: [],
+    coverageEvidence: [{
+      layerId: "hst-cosmos-footprint",
+      productId: "hst-product",
+      surveyId: "hst",
+      releaseId: "hst-mast-snapshot-2026",
+      product: "HST COSMOS observations",
+      evidenceKind: "observation-footprint",
+      order: 4,
+      nside: 16,
+      nativeMaxOrder: 10,
+      availableOrders: [4],
+      matchedCells: [101, 102],
+      precision: "estimated",
+      sourceIdentity: "MAST observation 26442812",
+      instrument: "ACS/WFC",
+      filters: "F606W, F814W",
+      sourceSnapshotSha256: "a".repeat(64),
+      completeness: "incomplete",
+      scienceFileScan: "not-scanned",
+      geometrySourceUrl: "https://archive.stsci.edu/",
+      summary: "Coverage material intersects; no science file match is asserted.",
+    }],
+    truncated: false,
+    warnings: [],
+  };
+  const row = record(overlapCsvRows(component, plan, () => ({ ...layer, surveyId: "hst" }))[0]!);
+  assert.equal(row.item_kind, "coverage-evidence");
+  assert.equal(row.evidence_kind, "observation-footprint");
+  assert.equal(row.layer_id, "hst-cosmos-footprint");
+  assert.deepEqual(JSON.parse(row.matching_cells ?? "[]"), [101, 102]);
+  assert.equal(row.geometry_source_url, "https://archive.stsci.edu/");
+  assert.equal(row.native_max_order, "10");
+  assert.equal(row.source_identity, "MAST observation 26442812");
+  assert.equal(row.science_file_scan, "not-scanned");
+  assert.equal(row.source_snapshot_sha256, "a".repeat(64));
+  assert.match(row.notes ?? "", /no science file match/);
+});
+
 test("file rows retain local URIs and all matching coverage", () => {
   const plan: DownloadPlan = {
     schemaVersion: 1,
@@ -159,4 +217,17 @@ test("source-path rows preserve the original locator and tile selection metadata
   assert.equal(tile.required, "true");
   assert.equal(tile.selection_complete, "true");
   assert.deepEqual(JSON.parse(tile.required_tile_ids!), ["1234"]);
+});
+
+test('file manifest CSV retains committed observations and frozen-scope limits', () => {
+  const snapshot = 'a'.repeat(64);
+  const observations = [{ layerId: 'vis', scanRunId: 'run-1', sourceSnapshotSha256: snapshot, fileName: 'vis.fits', sizeBytes: 42, metadataState: 'complete' as const }];
+  const scanScopes = [{ layerId: 'assets-batch-vis', publishedLayerId: 'vis', scopeId: 'q1-mer', scopeSnapshotSha256: 'b'.repeat(64), expectedPartitions: 2, committedPartitions: 1, completeness: 'incomplete' as const }];
+  const match = { layerId: 'vis', evidenceLayerId: 'assets-batch-vis', observationLayerId: 'candidate-1', scopeId: 'q1-mer', partitionId: 'tile-1', order: 8, ipix: 101, precision: 'estimated', scanRunId: 'run-1', sourceSnapshotSha256: snapshot };
+  const plan: DownloadPlan = { schemaVersion: 1, files: [{ fileId: 'file', metadataState: 'complete', downloadable: false, observations, matchingCoverage: [match] }], entrypoints: [], truncated: false, warnings: [], scanScopes };
+  const row = record(overlapCsvRows(component, plan, () => layer)[0]!);
+  assert.equal(row.source_snapshot_sha256, snapshot);
+  assert.deepEqual(JSON.parse(row.file_observations!), observations);
+  assert.deepEqual(JSON.parse(row.scan_scopes!), scanScopes);
+  assert.deepEqual(JSON.parse(row.matching_cells!), [match]);
 });

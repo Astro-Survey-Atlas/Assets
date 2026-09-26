@@ -8,6 +8,8 @@ import { decodeNativeMoc, projectMoc, sha256, type NativeMoc } from "./native-mo
 import { assertPublicCoverageOrder, CoveragePrecisionError } from "./coverage-policy.js";
 import { isDeniedSurvey } from "./publication-policy.js";
 import { readResourcePackageManifest, readZipEntry, validateReviewedPackage } from "./resource-package-inspection.js";
+import { buildResourcePackageHealpixFiles } from "./resource-package-healpix.js";
+import type { ResourcePackageLayerRecord } from "./resource-package-inspection.js";
 import { publicReleaseBundleDigest } from "./catalog.js";
 
 export const PUBLICATION_POLICY = "reviewed-release-v1";
@@ -22,6 +24,8 @@ export interface ApprovedProduct {
 export interface ApprovedRelease {
   policy: typeof PUBLICATION_POLICY; releaseId: string; generatedAt: string;
   products: ApprovedProduct[]; assetIds: string[]; packages: Array<Record<string, unknown>>;
+  /** Version-pinned reviewed archives retained outside the current catalog. */
+  historicalPackages?: Array<{ id: string; version: string; surveyId: string; sha256: string; sizeBytes: number }>;
   withdrawals: Array<{ productId: string; reason: string }>;
   packageVersionMinors?: Record<string, number>;
 }
@@ -39,7 +43,7 @@ export async function readApprovedRelease(root: string): Promise<ApprovedRelease
     return value;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    return { policy: PUBLICATION_POLICY, releaseId: "", generatedAt: "", products: [], assetIds: [], packages: [], withdrawals: [] };
+    return { policy: PUBLICATION_POLICY, releaseId: "", generatedAt: "", products: [], assetIds: [], packages: [], historicalPackages: [], withdrawals: [] };
   }
 }
 
@@ -93,6 +97,8 @@ export function zipBuffers(entries: Array<{ path: string; bytes: Buffer }>): Pro
 
 export interface ApprovedBuildOptions extends MaterialOptions {
   stagingRoot: string; products: readonly ProductRecord[]; selected: Array<{productId:string; revision:number}>;
+  /** Rebuild package archives from the approved baseline without selecting draft products. */
+  rebuildSurveyIds?: readonly string[];
   baseline: { bundle:{id:string;sha256:string}; statistics: Record<string,unknown>; files: PublicAssetRecord[] };
   runId: string;
 }
@@ -102,6 +108,15 @@ export interface ApprovedBuildOptions extends MaterialOptions {
 export async function buildApprovedRelease(options: ApprovedBuildOptions): Promise<{root:string;files:PublicAssetRecord[];packages:Array<Record<string,unknown>>}> {
   const previous=await readApprovedRelease(options.root);
   const selected=new Map(options.selected.map(p=>[p.productId,p.revision]));
+  const rebuildSurveyIds=[...new Set((options.rebuildSurveyIds ?? []).map(id => id.trim()))].sort();
+  if (rebuildSurveyIds.some(id => !id || isDeniedSurvey(id))) throw new Error("Package rebuild survey is excluded by publication policy");
+  const approvedPackageSurveys=new Set(previous.packages
+    .filter(packageEntry => packageEntry.hidden !== true && packageEntry.deprecated !== true)
+    .map(packageEntry => typeof packageEntry.surveyId === "string" ? packageEntry.surveyId : undefined)
+    .filter((surveyId): surveyId is string => Boolean(surveyId) && !isDeniedSurvey(surveyId)));
+  const unavailable=rebuildSurveyIds.filter(surveyId => !approvedPackageSurveys.has(surveyId));
+  if (unavailable.length) throw new Error(`Package rebuild requires an approved public package: ${unavailable.join(", ")}`);
+  if (rebuildSurveyIds.length && selected.size) throw new Error("Package rebuild cannot select products");
   const approved=new Map(previous.products.map(p=>[p.productId,p]));
   const withdrawals=[...previous.withdrawals];
   const material=new Map<string,GeometryMaterial>();
@@ -136,7 +151,8 @@ export async function buildApprovedRelease(options: ApprovedBuildOptions): Promi
       packageVersionMinors[surveyId] = Math.max(packageVersionMinors[surveyId] ?? 0, minor);
     }
   }
-  const snapshot:ApprovedRelease={policy:PUBLICATION_POLICY,releaseId,generatedAt,products:[...approved.values()],assetIds:[],packages:[],withdrawals,packageVersionMinors};
+  const historicalPackages = [...(previous.historicalPackages ?? [])];
+  const snapshot:ApprovedRelease={policy:PUBLICATION_POLICY,releaseId,generatedAt,products:[...approved.values()],assetIds:[],packages:[],historicalPackages,withdrawals,packageVersionMinors};
   const files:PublicAssetRecord[]=[];
   const put=async(record:Omit<PublicAssetRecord,"sha256"|"sizeBytes">,bytes:Buffer,expose=false):Promise<PublicAssetRecord>=>{
     const target=path.join(options.stagingRoot,record.path);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,bytes);
@@ -152,7 +168,7 @@ export async function buildApprovedRelease(options: ApprovedBuildOptions): Promi
   }
   const footprintRows:unknown[]=[];
   for(const surveyId of [...new Set(snapshot.products.map(p=>p.content.surveyId))].sort()) {
-    const changedSurvey = options.products.some(p => selected.has(p.productId) && p.draft.surveyId === surveyId);
+    const changedSurvey = rebuildSurveyIds.includes(surveyId) || options.products.some(p => selected.has(p.productId) && p.draft.surveyId === surveyId);
     if (!changedSurvey && previous.packages.some(p => p.surveyId === surveyId)) {
       snapshot.packages.push(...previous.packages.filter(p => p.surveyId === surveyId));
       for (const record of options.files.filter(f => f.surveyId === surveyId && previous.assetIds.includes(f.id) && (f.kind === "package" || f.kind === "moc"))) {
@@ -169,16 +185,38 @@ export async function buildApprovedRelease(options: ApprovedBuildOptions): Promi
     let minor=packageVersionMinors[surveyId] ?? 0;
     for(const record of options.files.filter(f=>f.kind==="package" && f.surveyId===surveyId)) minor=Math.max(minor,Number(record.version?.split(".")[1] ?? 0));
     packageVersionMinors[surveyId] = minor + 1;
-    const version=`3.${minor+1}.0`,entries:Array<{path:string;bytes:Buffer}>=[],layers:Array<Record<string,unknown>>=[],provenance:unknown[]=[],footprints:unknown[]=[];
+    const version=`3.${minor+1}.0`,entries:Array<{path:string;bytes:Buffer}>=[],layers:ResourcePackageLayerRecord[]=[],provenance:unknown[]=[],footprints:unknown[]=[];
+    // Keep prior reviewed package bytes available for version-pinned consumers,
+    // while leaving them out of the current catalog and asset allowlist.
+    for (const record of options.files.filter((candidate) => candidate.kind === "package"
+      && candidate.surveyId === surveyId && candidate.id.startsWith("approved-") && candidate.version && candidate.version !== version)) {
+      if (!record.version || !record.downloadName.endsWith(`-${record.version}.zip`)) continue;
+      const historicalId = record.downloadName.slice(0, -(record.version.length + 5));
+      if (historicalId !== id) continue;
+      const bytes = await readFile(path.join(options.root, record.path));
+      if (sha256(bytes) !== record.sha256) throw new Error(`Historical package checksum mismatch: ${record.path}`);
+      await put(record, bytes);
+      if (!historicalPackages.some((entry) => entry.id === historicalId && entry.version === record.version)) {
+        historicalPackages.push({ id: historicalId, version: record.version, surveyId, sha256: record.sha256, sizeBytes: record.sizeBytes });
+      }
+    }
     for(const product of products) {
       const g=material.get(product.productId)!,c=product.content,layerId=g.facts.layerId;
       const overviewOrder=Math.min(4,g.moc.maxOrder),pixels=projectMoc(g.moc,overviewOrder).cells;
       const row={surveyId,releaseId:c.releaseId,product:c.name,productId:product.productId,layerId,nside:2**overviewOrder,pixels};footprints.push(row);footprintRows.push(row);
       const mocPath=`mocs/${layerId}.moc.fits`;entries.push({path:mocPath,bytes:g.bytes});
-      layers.push({layerId,sourceId:layerId,productId:product.productId,product:c.name,surveyId,releaseId:c.releaseId,modality:c.modality??"coverage",coverageRole:c.coverageRole??"footprint_extent",dataOrigin:c.dataOrigin??"observed",sourceTier:c.sourceTier??"best_effort_derived",path:mocPath,sizeBytes:g.bytes.length,sha256:g.moc.sha256,coordinateFrame:"ICRS",ordering:"NESTED",mocEncoding:"NUNIQ",availableOrders:g.moc.availableOrders,overviewOrder,maxOrder:g.moc.maxOrder,coverageRevision:g.moc.revision,indexRevision:g.facts.indexRevision,geometryPrecision:"estimated",precisionNote:"Exact cell-set operations on supplied MOC; physical footprint boundary is limited by the source method and HEALPix resolution.",accessAvailability:g.facts.indexRevision?"tile-resolved":"geometry-only"});
+      layers.push({layerId,sourceId:layerId,productId:product.productId,product:c.name,surveyId,releaseId:c.releaseId,modality:c.modality??"coverage",coverageRole:c.coverageRole??"footprint_extent",dataOrigin:c.dataOrigin??"observed",sourceTier:c.sourceTier??"best_effort_derived",path:mocPath,sizeBytes:g.bytes.length,sha256:g.moc.sha256,coordinateFrame:"ICRS",ordering:"NESTED",mocEncoding:"NUNIQ",availableOrders:g.moc.availableOrders,overviewOrder,maxOrder:g.moc.maxOrder,coverageRevision:g.moc.revision,indexRevision:g.facts.indexRevision,geometryPrecision:"estimated",completeness:c.coverageEvidence?.completeness??"unknown",precisionNote:"Exact cell-set operations on supplied MOC; physical footprint boundary is limited by the source method and HEALPix resolution.",accessAvailability:g.facts.indexRevision?"tile-resolved":"geometry-only"});
       provenance.push({productId:product.productId,layerId,reviewedAt:product.reviewedAt,productRevision:product.revision,geometrySourceUrl:c.geometrySourceUrl??c.sourceUrl,geometryRevision:g.moc.revision,mocSha256:g.moc.sha256,method:c.mode??"native-moc",indexRevision:g.facts.indexRevision});
       await put({id:`approved-${layerId}-moc`,kind:"moc",label:c.name,description:"Reviewed public coverage geometry",path:`artifacts/public-survey-footprints/approved/${layerId}.fits`,downloadName:`${layerId}.fits`,mediaType:"application/fits",surveyId,releaseId:c.releaseId,product:c.name,deliveryClass:"runtime"},g.bytes,true);
     }
+    const healpixFiles=buildResourcePackageHealpixFiles({
+      packageId:id,
+      packageVersion:version,
+      surveyId,
+      layers,
+      mocBytesByLayer:new Map(products.map(product=>[product.geometry!.layerId,material.get(product.productId)!.bytes])),
+    });
+    for(const file of healpixFiles)entries.push({path:file.path,bytes:file.bytes});
     entries.push({path:"footprints/survey-footprints.json",bytes:Buffer.from(JSON.stringify({schemaVersion:1,coordinateFrame:"ICRS",ordering:"NESTED",generatedAt,footprints}))},{path:"provenance.json",bytes:Buffer.from(JSON.stringify({schemaVersion:2,policy:PUBLICATION_POLICY,releaseId,layers:provenance}))},{path:"README.md",bytes:Buffer.from("# Reviewed public coverage\nNative MOC is authoritative. The overview is a conservative display projection. Geometry sources are not science-file lists.\n")});
     const manifest={schemaVersion:3,id,version,surveyId,layers,files:entries.filter(e=>!e.path.startsWith("mocs/")).map(e=>({path:e.path,sizeBytes:e.bytes.length,sha256:sha256(e.bytes)}))};
     entries.push({path:"resource-package.json",bytes:Buffer.from(JSON.stringify(manifest))});
@@ -186,6 +224,10 @@ export async function buildApprovedRelease(options: ApprovedBuildOptions): Promi
     // Validate the bytes actually going into the release, not just the build inputs.
     const parsed=await readResourcePackageManifest(zip);
     validateReviewedPackage(parsed);
+    for(const supportFile of parsed.files) {
+      const bytes=await readZipEntry(zip,supportFile.path);
+      if(bytes.length!==supportFile.sizeBytes || sha256(bytes)!==supportFile.sha256)throw new Error(`Package support file checksum mismatch: ${supportFile.path}`);
+    }
     for(const layer of parsed.layers)if(sha256(await readZipEntry(zip,layer.path))!==layer.sha256)throw new Error("Package member checksum mismatch");
     const asset=await put({id:`approved-${id}-${version.replaceAll(".","-")}`,kind:"package",label:id,description:"Reviewed public survey geometry",path:`artifacts/public-survey-footprints/packages/${id}-${version}.zip`,downloadName:`${id}-${version}.zip`,mediaType:"application/zip",surveyId,version,deliveryClass:"runtime"},zip,true);
     snapshot.packages.push({id,version,surveyId,name:products[0]!.content.publicSurvey?.name??surveyId,description:asset.description,releases:[...new Set(products.map(p=>p.content.releaseId))],releaseLabels:Object.fromEntries(products.map(p=>[p.content.releaseId,p.content.publicRelease?.label??p.content.releaseId])),modalities:[...new Set(products.map(p=>p.content.modality??"coverage"))],facilities:[surveyId],accessModes:["Resource Package v3"],sources:[],archiveUrl:`/api/v1/resource-packages/${id}/versions/${version}/download`,sizeBytes:asset.sizeBytes,sha256:asset.sha256,updatedAt:generatedAt,hidden:false,deprecated:false,replacedBy:[]});

@@ -1,11 +1,17 @@
 export interface DownloadPlanMatch {
   layerId?: string;
+  evidenceLayerId?: string;
+  observationLayerId?: string;
+  scopeId?: string;
+  partitionId?: string;
   order: number;
   ipix: number;
   precision: string;
   coverageMethod?: string;
   coverageRole?: string;
   sourceOrder?: number;
+  scanRunId?: string;
+  sourceSnapshotSha256?: string;
 }
 
 export interface DownloadPlanFile {
@@ -23,6 +29,9 @@ export interface DownloadPlanFile {
   downloadable: boolean;
   downloadUrl?: string;
   matchingCoverage: DownloadPlanMatch[];
+  matchingCoverageTruncated?: boolean;
+  warnings?: string[];
+  observations?: Array<{ layerId?: string; scanRunId?: string; sourceSnapshotSha256?: string; fileName?: string; sizeBytes?: number; lastModified?: string; sourceUri?: string; metadataState: "complete" | "missing" }>;
 }
 
 export interface DownloadPlanEntrypoint {
@@ -62,13 +71,42 @@ export interface DownloadPlanTileSelection {
   note: string;
 }
 
+export interface DownloadPlanCoverageEvidence {
+  layerId: string;
+  productId: string;
+  surveyId: string;
+  releaseId: string;
+  product: string;
+  modality?: string;
+  evidenceKind: "observation-footprint" | "published-moc" | "tile-footprint" | "wcs-coverage";
+  order: number;
+  nside: number;
+  nativeMaxOrder: number;
+  availableOrders: number[];
+  matchedCells: number[];
+  precision: "exact" | "estimated";
+  completeness?: "complete" | "incomplete" | "unknown";
+  scienceFileScan?: "not-scanned" | "partial" | "complete";
+  sourceIdentity?: string;
+  instrument?: string;
+  filters?: string;
+  sourceSnapshotSha256?: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
+  geometrySourceUrl?: string;
+  coverageUrl?: string;
+  summary: string;
+}
+
 export interface DownloadPlan {
   schemaVersion: 1;
   files: DownloadPlanFile[];
   entrypoints: DownloadPlanEntrypoint[];
+  coverageEvidence?: DownloadPlanCoverageEvidence[];
   tileSelections?: DownloadPlanTileSelection[];
   truncated: boolean;
   warnings: string[];
+  scanScopes?: Array<{ layerId: string; publishedLayerId?: string; scopeId: string; scopeSnapshotSha256: string; expectedPartitions: number; committedPartitions: number; completeness: "complete" | "incomplete" }>;
 }
 
 export interface DownloadComponent {
@@ -88,7 +126,8 @@ export interface DownloadLayerEntry {
 export const OVERLAP_DOWNLOAD_HEADER = [
   "component_id", "item_kind", "order", "nside", "precision", "layer_id", "survey_id", "release_id", "product", "modality",
   "source_file_id", "file_name", "file_type", "size_bytes", "source_uri", "downloadable", "download_url", "matching_cells", "coverage_methods", "entrypoint_kind", "tile_id", "entrypoint_url", "source_scope", "required", "selection_complete", "selection_rule", "required_tile_ids",
-  "ra_min_deg", "ra_max_deg", "dec_min_deg", "dec_max_deg", "area_deg2", "notes",
+  "ra_min_deg", "ra_max_deg", "dec_min_deg", "dec_max_deg", "area_deg2", "notes", "evidence_kind", "source_label", "source_url", "geometry_source_url", "coverage_url", "available_orders", "native_max_order", "source_identity", "instrument", "filters", "source_snapshot_sha256", "completeness", "science_file_scan",
+  "file_observations", "scan_scopes", "matching_coverage_truncated",
 ] as const;
 
 export function csvCell(value: unknown): string {
@@ -112,7 +151,12 @@ export function overlapCsvRows(
     const firstLayer = resolveLayer(file.matchingCoverage[0]?.layerId);
     const layerEntries = [...new Set(layers.filter((value): value is string => Boolean(value)))].map(resolveLayer);
     const precision = joinUnique(file.matchingCoverage.map((match) => match.precision)) || fallbackPrecision;
-    const notes = file.metadataState === "missing" ? "FileAsset metadata missing" : plan.truncated ? "coverage result truncated" : "";
+    const notes = joinUnique([
+      file.metadataState === "missing" ? "FileAsset metadata missing" : undefined,
+      plan.truncated ? "coverage result truncated" : undefined,
+      file.matchingCoverageTruncated ? "file coverage matches truncated" : undefined,
+      ...(file.warnings ?? []),
+    ]);
     rows.push([
       component.id, "file", String(component.order), String(2 ** component.order), precision,
       joinUnique(layers), joinUnique(layerEntries.map((entry) => entry.surveyId)) || firstLayer.surveyId,
@@ -121,7 +165,7 @@ export function overlapCsvRows(
       joinUnique(layerEntries.map((entry) => entry.modality)) || firstLayer.modality,
       file.fileId, file.fileName ?? "", file.fileType ?? "", file.sizeBytes === undefined ? "" : String(file.sizeBytes),
       file.sourceUri ?? "", String(file.downloadable), file.downloadUrl ?? "",
-      JSON.stringify(file.matchingCoverage.map((match) => ({ layerId: match.layerId, order: match.order, ipix: match.ipix, precision: match.precision }))),
+      JSON.stringify(file.matchingCoverage),
       joinUnique(file.matchingCoverage.map((match) => match.coverageMethod)), "", file.unitId ?? "", "", "", "", "", "", "",
       String(component.bounds.raMin), String(component.bounds.raMax), String(component.bounds.decMin), String(component.bounds.decMax), String(component.bounds.areaDeg2), notes,
     ]);
@@ -140,7 +184,26 @@ export function overlapCsvRows(
       String(component.bounds.raMin), String(component.bounds.raMax), String(component.bounds.decMin), String(component.bounds.decMax), String(component.bounds.areaDeg2), entry.note ?? "",
     ]);
   });
-  return rows;
+  (plan.coverageEvidence ?? []).forEach((evidence) => {
+    rows.push([
+      component.id, "coverage-evidence", String(evidence.order), String(evidence.nside), evidence.precision,
+      evidence.layerId, evidence.surveyId, evidence.releaseId, evidence.product, evidence.modality ?? "",
+      "", "", "", "", "", "", "", JSON.stringify(evidence.matchedCells), "", evidence.evidenceKind,
+      "", evidence.coverageUrl ?? "", "", "", "", "", "",
+      String(component.bounds.raMin), String(component.bounds.raMax), String(component.bounds.decMin), String(component.bounds.decMax), String(component.bounds.areaDeg2), evidence.summary,
+      evidence.evidenceKind, evidence.sourceLabel ?? "", evidence.sourceUrl ?? "", evidence.geometrySourceUrl ?? "", evidence.coverageUrl ?? "", JSON.stringify(evidence.availableOrders),
+      String(evidence.nativeMaxOrder), evidence.sourceIdentity ?? "", evidence.instrument ?? "", evidence.filters ?? "", evidence.sourceSnapshotSha256 ?? "", evidence.completeness ?? "", evidence.scienceFileScan ?? "",
+    ]);
+  });
+  return rows.map((row) => {
+    const padded = [...row, ...Array(Math.max(0, OVERLAP_DOWNLOAD_HEADER.length - row.length)).fill("")];
+    const file = row[1] === "file" ? plan.files.find(file => file.fileId === row[10]) : undefined;
+    padded[OVERLAP_DOWNLOAD_HEADER.indexOf("file_observations")] = file?.observations?.length ? JSON.stringify(file.observations) : "";
+    padded[OVERLAP_DOWNLOAD_HEADER.indexOf("scan_scopes")] = plan.scanScopes?.length ? JSON.stringify(plan.scanScopes) : "";
+    padded[OVERLAP_DOWNLOAD_HEADER.indexOf("matching_coverage_truncated")] = file?.matchingCoverageTruncated === undefined ? "" : String(file.matchingCoverageTruncated);
+    if (file) padded[OVERLAP_DOWNLOAD_HEADER.indexOf("source_snapshot_sha256")] = joinUnique(file.matchingCoverage.map(match => match.sourceSnapshotSha256));
+    return padded;
+  });
 }
 
 export function overlapCsvDocument(rows: string[][]): string {

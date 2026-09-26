@@ -35,6 +35,16 @@ test("unavailable diagnosis retains delay and unknown submission time does not i
   assert.equal(executorLogFinding("moc-discovery list failed: RejectedExecutionException")?.reason, "ExecutorRejected");
 });
 
+test("JVM startup options do not look like an OutOfMemoryError", () => {
+  const log = "Picked up JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60.0 -XX:InitialRAMPercentage=20.0 -XX:+ExitOnOutOfMemoryError";
+  assert.equal(executorLogFinding(log), undefined);
+});
+
+test("actual Java OutOfMemoryError signatures remain diagnosed", () => {
+  const finding = executorLogFinding('Exception in thread "main" java.lang.OutOfMemoryError: Java heap space');
+  assert.equal(finding?.reason, "OutOfMemory");
+});
+
 test("admin API independently observes a broken executor, caches probes and keeps terminal CR status intact", async () => {
   let probes = 0;
   const resource = { metadata: { name: "euclid", creationTimestamp: request.createdAt, labels: { "app.kubernetes.io/managed-by": "astro-survey-atlas-assets", "astro.zhejianglab.org/resource-kind": "moc-discovery" } }, spec: { query: { surveyName: "euclid" } } };

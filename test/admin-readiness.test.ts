@@ -43,6 +43,20 @@ test("a validated public MOC is L1 with its real orders and entrypoint-only reve
   assert.ok(result.gaps.includes("file-level-reverse-index-missing"));
 });
 
+test("an explicit estimated footprint remains estimated with real ICRS/NESTED orders", () => {
+  const result = deriveProductReadiness({
+    content: { ...content, mode: "regions", sourceTier: "official_geometry" },
+    layer: layer({ recipe: { mode: "regions", coordinateFrame: "ICRS", ordering: "NESTED", precision: "estimated" } }),
+  });
+  assert.equal(result.level, 1);
+  assert.deepEqual(result.geometry.orders, [4, 8]);
+  assert.equal(result.geometry.precision, "estimated");
+  assert.equal(result.geometry.basis, "layer");
+  assert.equal(result.geometry.coordinateFrame, "ICRS");
+  assert.equal(result.geometry.ordering, "NESTED");
+  assert.equal(result.reverseLookup.precision, "entrypoint-only");
+});
+
 test("a stable tile index reaches L2 while preserving estimated spatial precision", () => {
   const result = deriveProductReadiness({
     content: { ...content, mode: "tile-table", sourceTier: "official_inventory_derived" },
@@ -64,6 +78,32 @@ test("an exact file index reaches L3 and does not claim completeness without a d
   assert.equal(result.reverseLookup.precision, "exact");
   assert.equal(result.completeness.state, "unknown");
   assert.ok(result.gaps.includes("completeness-unknown"));
+});
+
+test("draft Warehouse counters remain visible without claiming loaded geometry", () => {
+  const result = deriveProductReadiness({
+    content: { ...content, mode: "native-moc", sourceTier: "third_party_moc" },
+    completeness: {
+      state: "partial",
+      fileCount: 42,
+      coverageCount: 84,
+      errorCount: 3,
+      asOf: "2026-09-25T00:00:00.000Z",
+      scope: "current Warehouse layer metadata; unpublished geometry is not loaded",
+    },
+  });
+  assert.equal(result.level, 0);
+  assert.deepEqual(result.geometry.orders, []);
+  assert.equal(result.geometry.maxOrder, undefined);
+  assert.equal(result.geometry.basis, "entrypoint");
+  assert.deepEqual(result.completeness, {
+    state: "partial",
+    fileCount: 42,
+    coverageCount: 84,
+    errorCount: 3,
+    asOf: "2026-09-25T00:00:00.000Z",
+    scope: "current Warehouse layer metadata; unpublished geometry is not loaded",
+  });
 });
 
 test("aggregate readiness reports capability distributions and mixed precision", () => {
