@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -98,6 +99,71 @@ test("MOC build service locks bytes and reaches STAGED with an injected Core run
   await writeFile(path.join(evidence, store.get(build.name).outputs!.moc!.ref), "moc");
   await writeFile(path.join(evidence, store.get(build.name).source.evidenceRef!), "corrupt input");
   await assert.rejects(service.verifyOutputs(build.name), /来源快照/);
+});
+
+test("CDS product builds use the record's native order through MocServer", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "atlas-cds-moc-content-"));
+  const evidence = await mkdtemp(path.join(os.tmpdir(), "atlas-cds-moc-evidence-"));
+  const store = new MocBuildStore(root);
+  const candidate = resolveMocDiscoveryCandidate(request({
+    schemaVersion: 2,
+    truncated: false,
+    summaryTruncated: false,
+    candidates: [{
+      candidateId: "CDS/P/2MASS/H",
+      title: "2MASS H (1.66um)",
+      recordUrl: "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2F2MASS%2FH&get=record&fmt=json",
+      mocUrl: "http://alasky.u-strasbg.fr/2MASS/H/Moc.fits",
+      hipsUrl: "https://alasky.cds.unistra.fr/2MASS/H",
+    }],
+  }), "CDS/P/2MASS/H");
+  const build = await store.create({ discoveryRequestName: candidate.requestName, candidate, productId: "2mass-h" });
+  const recordBytes = Buffer.from(JSON.stringify([{ ID: "CDS/P/2MASS/H", moc_order: 9 }]));
+  const requestedUrls: URL[] = [];
+  const fetchImpl = async (input: string | URL | Request): Promise<Response> => {
+    const url = new URL(String(input));
+    requestedUrls.push(url);
+    return url.searchParams.get("get") === "record" ? new Response(recordBytes) : new Response("native-moc");
+  };
+  const runner = {
+    validate: async (source: string) => {
+      assert.equal(await readFile(source, "utf8"), "native-moc");
+      return { valid: true };
+    },
+    build: async (_source: string, output: string) => {
+      await writeFile(path.join(output, "moc.fits"), "moc");
+      await writeFile(path.join(output, "query-order8.json"), "{}");
+      await writeFile(path.join(output, "preview-order4.json"), "{}");
+      await writeFile(path.join(output, "statistics.json"), "{}");
+      return { cells: 3, availableOrders: [8], maxOrder: 8 };
+    },
+  };
+  const service = new MocBuildService({ store, evidenceRoot: evidence, fetchImpl, runner });
+  service.enqueue(build, candidate);
+  for (let attempt = 0; attempt < 100 && store.get(build.name).phase !== "STAGED"; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  const staged = store.get(build.name);
+  assert.equal(staged.phase, "STAGED");
+  assert.equal(requestedUrls.length, 2);
+  assert.equal(requestedUrls[0]?.searchParams.get("get"), "record");
+  assert.equal(requestedUrls[1]?.searchParams.get("get"), "smoc");
+  assert.equal(requestedUrls[1]?.searchParams.get("order"), "9");
+  assert.equal(staged.source.url, requestedUrls[1]?.href);
+  assert.equal(staged.source.evidenceInputs?.[0]?.sha256, createHash("sha256").update(recordBytes).digest("hex"));
+  const manifest = JSON.parse(await readFile(path.join(evidence, staged.outputs!.manifest!.ref), "utf8")) as {
+    sourceRecord?: { nativeSpatialOrder?: number; exportOrder?: number };
+  };
+  assert.deepEqual(manifest.sourceRecord, {
+    url: candidate.candidate.recordUrl,
+    sha256: createHash("sha256").update(recordBytes).digest("hex"),
+    sizeBytes: recordBytes.length,
+    nativeSpatialOrder: 9,
+    exportOrder: 9,
+  });
+  await rm(root, { recursive: true, force: true });
+  await rm(evidence, { recursive: true, force: true });
 });
 
 test("staged MOC outputs publish immutably and can be restored", async () => {

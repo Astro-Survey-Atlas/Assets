@@ -138,6 +138,7 @@ export interface MocCoreRunner {
 const DEFAULT_TOTAL_STEPS = 7;
 const DEFAULT_MAX_BYTES = 256 * 1024 * 1024;
 const CDS_HOSTS = ["alasky.cds.unistra.fr", "alasky.unistra.fr", "cds.unistra.fr"];
+const CDS_MOC_SERVER = "https://alasky.cds.unistra.fr/MocServer/query";
 
 function now(): string { return new Date().toISOString(); }
 
@@ -156,6 +157,57 @@ function assertSourceUrl(value: string): string {
 }
 
 function hash(value: Uint8Array): string { return createHash("sha256").update(value).digest("hex"); }
+
+interface CdsProductSource {
+  url: string;
+  recordUrl: string;
+  recordBytes: Buffer;
+  nativeOrder: number;
+  exportOrder: number;
+}
+
+async function responseBytes(response: Response, maxBytes: number, label: string): Promise<Buffer> {
+  if (!response.body) throw new Error(`${label} response has no body`);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const next = await reader.read();
+    if (next.done) break;
+    total += next.value.byteLength;
+    if (total > maxBytes) throw new Error(`${label} exceeds ${maxBytes} byte limit`);
+    chunks.push(next.value);
+  }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
+}
+
+async function cdsProductSource(candidate: MocDiscoveryCandidate, fetchImpl: typeof fetch, maxOrder: number, maxBytes: number): Promise<CdsProductSource | undefined> {
+  const candidateId = candidate.candidate.candidateId;
+  if (candidate.provider !== "cds" || !candidateId.startsWith("CDS/P/")) return undefined;
+  if (!candidate.candidate.recordUrl) throw new Error("CDS image product candidate has no locked record URL");
+
+  const recordUrl = assertSourceUrl(candidate.candidate.recordUrl);
+  const recordResponse = await fetchImpl(recordUrl, { redirect: "error", headers: { Accept: "application/json" } });
+  if (!recordResponse.ok) throw new Error(`CDS record returned HTTP ${recordResponse.status}`);
+  const recordBytes = await responseBytes(recordResponse, Math.min(maxBytes, 4 * 1024 * 1024), "CDS record");
+  let parsed: unknown;
+  try { parsed = JSON.parse(recordBytes.toString("utf8")); }
+  catch { throw new Error("CDS record is not valid JSON"); }
+  const rows = Array.isArray(parsed) ? parsed : [parsed];
+  const matches = rows.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object" && !Array.isArray(row))
+    && String((row as Record<string, unknown>).ID ?? "") === candidateId);
+  if (matches.length !== 1) throw new Error("CDS record does not identify exactly the selected product");
+  const nativeOrder = Number(matches[0]!.moc_order);
+  if (!Number.isSafeInteger(nativeOrder) || nativeOrder < 0 || nativeOrder > 29) throw new Error("CDS record has no valid native spatial MOC order");
+
+  const exportOrder = Math.min(nativeOrder, maxOrder);
+  const url = new URL(CDS_MOC_SERVER);
+  url.searchParams.set("ID", candidateId);
+  url.searchParams.set("get", "smoc");
+  url.searchParams.set("order", String(exportOrder));
+  url.searchParams.set("fmt", "fits");
+  return { url: assertSourceUrl(url.href), recordUrl, recordBytes, nativeOrder, exportOrder };
+}
 
 function immutableRef(root: string, value: string): string {
   const resolvedRoot = path.resolve(root);
@@ -512,22 +564,34 @@ export class MocBuildService {
     const sourcePath = immutableRef(root, path.join(root, "source.moc"));
     try {
       await this.store.update(name, { phase: "FETCHING", progress: { phase: "FETCHING", step: 1, totalSteps: DEFAULT_TOTAL_STEPS, percent: 12, message: "下载来源 MOC 并计算哈希" } });
-      const url = candidate.provider === "llm" ? publicSourceUrl(candidate.sourceUrl).href : assertSourceUrl(candidate.sourceUrl);
+      const cdsSource = await cdsProductSource(candidate, this.fetchImpl, this.maxOrder, this.maxBytes);
+      const url = cdsSource?.url ?? (candidate.provider === "llm" ? publicSourceUrl(candidate.sourceUrl).href : assertSourceUrl(candidate.sourceUrl));
+      if (cdsSource) {
+        await mkdir(root, { recursive: true });
+        const recordPath = immutableRef(root, path.join(root, "source-record.json"));
+        const recordSha256 = hash(cdsSource.recordBytes);
+        try { await writeFile(recordPath, cdsSource.recordBytes, { flag: "wx" }); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+          if (hash(await readFile(recordPath)) !== recordSha256) throw new Error("immutable CDS record snapshot conflicts with existing bytes");
+        }
+        const recordRef = path.relative(this.evidenceRoot, recordPath);
+        const recordEvidence = {
+          label: `CDS source record (native order ${cdsSource.nativeOrder}, exported order ${cdsSource.exportOrder})`,
+          ref: recordRef,
+          sha256: recordSha256,
+          sizeBytes: cdsSource.recordBytes.length,
+        };
+        const source = this.store.get(name).source;
+        await this.store.update(name, {
+          source: { ...source, url, evidenceInputs: [...(source.evidenceInputs ?? []).filter((entry) => entry.ref !== recordRef), recordEvidence] },
+        });
+      }
       const response = candidate.provider === "llm"
         ? new Response(new Uint8Array((await fetchPublicSource(url, this.maxBytes, AbortSignal.timeout(120_000))).bytes))
         : await this.fetchImpl(url, { redirect: "error", headers: { Accept: "application/fits,application/octet-stream" } });
       if (!response.ok || !response.body) throw new Error(`CDS returned HTTP ${response.status}`);
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let total = 0;
-      while (true) {
-        const next = await reader.read();
-        if (next.done) break;
-        total += next.value.byteLength;
-        if (total > this.maxBytes) throw new Error(`source exceeds ${this.maxBytes} byte limit`);
-        chunks.push(next.value);
-      }
-      const body = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
+      const body = await responseBytes(response, this.maxBytes, "MOC source");
       const snapshotSha256 = hash(body);
       await mkdir(root, { recursive: true });
       try { await writeFile(sourcePath, body, { flag: "wx" }); }
@@ -545,7 +609,24 @@ export class MocBuildService {
       await this.store.update(name, { phase: "PROJECTING", progress: { phase: "PROJECTING", step: 5, totalSteps: DEFAULT_TOTAL_STEPS, percent: 74, message: "生成 query / preview 投影" } });
       const output = await outputSummary(root, this.evidenceRoot, build, this.queryOrder, this.previewOrder, (sha256) => this.store.objectKeyForFile(sha256));
       await this.store.update(name, { phase: "BUNDLING", progress: { phase: "BUNDLING", step: 6, totalSteps: DEFAULT_TOTAL_STEPS, percent: 88, message: "写入证据 manifest 和不可变构建产物" }, outputs: output });
-      await writeJsonImmutable(path.join(root, "build-manifest.json"), { schemaVersion: 1, kind: "moc-build-evidence", requestName: name, candidateId: candidate.candidate.candidateId, provider: candidate.provider, source: { url, sha256: snapshotSha256, sizeBytes: body.length }, outputs: output });
+      await writeJsonImmutable(path.join(root, "build-manifest.json"), {
+        schemaVersion: 1,
+        kind: "moc-build-evidence",
+        requestName: name,
+        candidateId: candidate.candidate.candidateId,
+        provider: candidate.provider,
+        source: { url, sha256: snapshotSha256, sizeBytes: body.length },
+        ...(cdsSource ? {
+          sourceRecord: {
+            url: cdsSource.recordUrl,
+            sha256: hash(cdsSource.recordBytes),
+            sizeBytes: cdsSource.recordBytes.length,
+            nativeSpatialOrder: cdsSource.nativeOrder,
+            exportOrder: cdsSource.exportOrder,
+          },
+        } : {}),
+        outputs: output,
+      });
       const staged = await this.store.update(name, { phase: "STAGED", progress: { phase: "STAGED", step: DEFAULT_TOTAL_STEPS, totalSteps: DEFAULT_TOTAL_STEPS, percent: 100, message: "构建完成，等待产品审核与发布" }, outputs: { ...output, manifest: await fileObject(root, this.evidenceRoot, "build-manifest.json", (sha256) => this.store.objectKeyForFile(sha256)) } });
       await this.store.queueOutputFiles(staged, this.evidenceRoot);
     } catch (error) {

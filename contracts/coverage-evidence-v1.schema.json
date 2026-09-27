@@ -3,7 +3,11 @@
   "$id": "https://astro-survey-atlas-assets.dev/contracts/coverage-evidence-v1.schema.json",
   "title": "Astro Survey Atlas coverage evidence v1",
   "type": "object",
-  "required": ["schemaVersion", "layerId", "surveyId", "releaseId", "productId", "coordinateFrame", "ordering", "availableOrders", "overviewOrder", "maxOrder", "scanRunId", "sourceSnapshot", "steps", "outputs"],
+  "required": ["schemaVersion", "layerId", "surveyId", "releaseId", "productId", "coordinateFrame", "ordering", "availableOrders", "overviewOrder", "maxOrder", "sourceSnapshot", "steps", "outputs"],
+  "anyOf": [
+    { "required": ["scanRunId"] },
+    { "required": ["scanBatchId", "scanRunIds"] }
+  ],
   "properties": {
     "schemaVersion": { "const": 1 },
     "layerId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
@@ -17,6 +21,8 @@
     "overviewOrder": { "type": "integer", "minimum": 0, "maximum": 29 },
     "maxOrder": { "type": "integer", "minimum": 0, "maximum": 29 },
     "scanRunId": { "type": "string", "minLength": 1 },
+    "scanBatchId": { "type": "string", "minLength": 1 },
+    "scanRunIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true, "minItems": 1 },
     "sourceSnapshot": {
       "type": "object",
       "required": ["uri", "sha256"],

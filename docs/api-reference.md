@@ -113,12 +113,20 @@ evidence is marked `entrypoint-only`.
 
 Content-Type: application/json
 
+Both requests accept an optional `modalities` array. When present, the server
+filters product layers by modality before choosing the shared order and
+computing the overlap. For example, `{"surveyIds":["desi","euclid"],"modalities":["redshift","imaging"]}`
+uses DESI redshift layers and Euclid imaging layers; it does not pull in other
+products registered under those surveys. Omitting `modalities`, or sending an
+empty array, keeps the existing all-modalities behavior.
+
 `overlap/details` keeps the geometry response small and loads the selected
 connected component's metadata on demand:
 
 ```json
 {
   "surveyIds": ["euclid", "sdss"],
+  "modalities": ["imaging", "photometry"],
   "componentId": "C01"
 }
 ```
@@ -445,6 +453,18 @@ MAST CAOM 快照、锁定的观测清单、DS9 区域、recipe/provenance 和 MO
 原生 NUNIQ order 与投影后，创建未发布产品和 `STAGED` build。产品明确保留 estimated
 footprint、not-scanned science files 和不完整归档范围；它仍须经过正常产品审核和发布，
 不会修改 Warehouse 索引或静态 layer registry。
+
+`POST /api/v1/admin/moc-builds/from-path-healpix-evidence` 导入已完成的文件路径分区扫描，
+当前仅接受登记的 DESI DR1 bright redrock 产品。请求包含公开来源说明、evidence-root 下的
+`input-manifest.json` 引用，以及逐项锁定的输入和输出文件（相对路径、SHA-256、大小）。
+服务端复核冻结 Warehouse scope、所有分区 run、文件清单中的 OSS URI、order-6 NESTED
+cell 集合、原生 MOC 和 O6/O4 投影；成功后登记 `STAGED` build，不会扫描或下载科学文件。
+输入清单、run 明细、coverage evidence、recipe、provenance 和构建输出留在 evidence 存储；
+它们不进入首页请求。该产品仍须经过 `verify-build`、正常审核与发布。DESI order-6 路径
+分区是文件反查身份，不是 DESI Tile。
+
+`coverage-evidence-v1` 可用 `scanBatchId` 与唯一的 `scanRunIds[]` 表示一个包含多个
+Warehouse run 的冻结扫描批次；单文件任务继续使用 `scanRunId`。
 
 HST 新来源通过现有 discovery API 的 `mast-hst-observations-v1` policy 获取，
 由 Warehouse 执行有界 MAST 元数据查询；不要绕过系统手工抓取后导入。请求示例：

@@ -9,6 +9,7 @@ export interface SurveyFootprint {
   /** A footprint belongs to exactly one registered data release. Survey coverage is its release union. */
   releaseId: string;
   product: string;
+  modality?: string;
   label: string;
   nside: number;
   pixels: number[];

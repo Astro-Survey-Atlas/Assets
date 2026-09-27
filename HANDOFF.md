@@ -1,5 +1,133 @@
 # Assets 项目交接
 
+## 最新续接：DESI redrock 发布与 bright 目录清点（2026-09-27，Asia/Shanghai）
+
+- 用户授权发布 DESI DR1 bright redrock 产品。publication run `mujxdzwx-a0fcfc8b` 已为 `published` / `verified`，只选择 product ID `08f093bcebd4cd3ef4c3` revision 4。公开 bundle `reviewed-mujxdzwx-a0fcfc8b` SHA-256 为 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`，603 files、28 package references、162 coverage documents；站点核验检查 107 个产品。
+- 线上 `/healthz` 返回上述 bundle SHA，`/api/v1/coverage/catalog` 返回 105 layers。`desi-dr1-redrock-bright-file-index` 已公开，`modality=redshift`、`mode=path-healpix`、ICRS/NESTED order 6，904 cells。MOC Range `bytes=0-31` 返回 HTTP 206、32 bytes、总长 8,640 bytes、SHA-256 `a5c9b6978e4156316acee8381260974d4bdec45b3febe9f07f399eedfb1a48aa`。
+- 公开匿名反查样例 order 6 / cell 128 返回 `precision=exact`，真实 URI `oss://si000925lshd/27-Class/DESI/DR1/spectro/redux/iron/healpix/main/bright/1/128/redrock-main-bright-128.fits`，不是聚合大文件。其下载链接状态为 `downloadable=false`，Assets 只返回来源清单，不代用户下载。Warehouse 冻结扫描范围为 228/228 partitions、904 files；这只是用户提供的部分 OSS 副本，不代表完整 DR1/BGS，没有读取 FITS 科学数组或做 BGS 行筛选。
+- catalog 的 `sourceUnitIndex.status` 目前仍显示 `entrypoint-only`，与上述 live Warehouse file reverse lookup 可返回精确文件这一事实不一致；后续应单独核对公开能力元数据/readiness，不要把这个字段当作反查 API 的实测结果。
+- site 曾因 750m CPU limit 下启动探针超时而反复重启。Helm revision **261** 只把 site CPU request/limit 调整为 `500m` / `2`；镜像仍为 `0.1.0-20260927-220441`。滚动后 site 1/1 Ready、0 restarts，公开健康检查和 run 的 site verification 均通过。未改源码或 MOC 文件。
+- publication run 已发布，但 `publication-tasks` 状态快照截至 generation `1549` 仍 pending；本地 upload spool 正在逐个上传（截至 2026-09-27 15:17 UTC，15 个快照 uploaded、generation 1435 uploading、114 个 pending）。这是状态归档同步，不改变已经核实的公开 bundle。保留 spool，不重提 publication，也不手动清理这些快照；之后可再确认同步收敛。
+- 先前对 `bright/` 的目录清点估算约 20,078 files / 5.245 TB，数字仅对应当时看到的用户部分 OSS 副本，不是完整、冻结的 DR1 inventory。`redrock-main-bright-*.fits` 约 904 个已扫描；`spectra-main-bright-*.fits.gz` 约 904 个、约 271.7 GB，**尚未扫描**；`coadd` 约 12,855 个、约 4.79 TB，也未扫描。目录还包含 emission-line、QSO MgII/QN、`rrdetails` HDF5、`hpixexp` CSV 和 checksum 文件。后续若扫描这些产品，先确认各自来源身份与 modality，再走 Assets → Warehouse 标准任务流程。
+- 本次未扫描 spectra/coadd，没有处理 `cosmos-data-linkage` 或 CSST，没有发布其他产品，也没有改动静态 MOC 源文件。工作树既有修改均保留。
+
+## 方向复核与 DESI redrock 样本（2026-09-27，Asia/Shanghai）
+
+本节记录 Euclid、DESI、HST 的空间身份复核和 DESI redrock 单文件样本。本次没有发布产品、修改 MOC、读取 FITS 科学内容或处理 `cosmos-data-linkage`。
+
+### 三个巡天的空间关系
+
+- **Euclid Q1 MER**：保留文件名中的 ESA Tile ID 作为来源定位身份；每幅图像自己的天空足迹来自该 FITS 的 WCS。Tile ID 与像素覆盖不是同一字段。
+- **DESI**：`tiles-iron` 等 Tile 产品仍按 DESI 来源 Tile 身份反查；`healpix/main/bright` 下的 redrock 文件按父路径中的 NESTED order-6 HEALPix 分区反查。redrock 的像素分区不是 Tile。
+- **HST**：用户天区与 MAST observation 的 `s_region` 相交，再返回同一 observation ID 的公开 image 产品；空间单位是 observation region，不是 Tile。
+- 产品 `modality`（如 `redshift`）与 Warehouse `scanMode`（如 `catalog-radec`、`path-healpix`）相互独立。压缩 FITS 扩展现有 `catalog-radec` 表格读取；没有新增红移扫描模式。`path-healpix` 只读路径身份和对象元数据，不读 FITS 科学内容。
+
+### DESI 用户文件样本
+
+- 对 `si000925lshd/27-Class/DESI/DR1/spectro/redux/iron/healpix/main/bright/` 的先前目录抽样见到 228 个直接分组目录，但不是冻结的完整 inventory。单文件 ScanRequest `desi-redrock-128-sample-pinned-20260927` 已通过 Assets API 成功：1 个真实文件、1 条 coverage、0 errors；`ast_file_index_v1` 和 `ast_coverage_index_v1` 都命中 URI `oss://si000925lshd/27-Class/DESI/DR1/spectro/redux/iron/healpix/main/bright/1/128/redrock-main-bright-128.fits`，order 6 / cell 128，ICRS/NESTED，`coverage_method=path_healpix`，`modality=redshift`，`precision=exact`。此 exact 表示文件到路径分区键的对应精确，不表示像元内每个天体均被观测。
+- 成功任务的 source snapshot SHA-256 为 `f6bc70e63677ffa97c9b15bda0056bfbbf45aa632d754e7b1eab895dcfd7d771`，evidence 位于 `/var/lib/atlas-evidence/desi-redrock-128-sample-pinned-20260927`。文件大小 671,040 bytes；扫描只检查路径/对象 metadata，没有读取 FITS 数据。
+- 用户说明约 12 TB 是此前下载的部分数据，不是完整 BGS/DR1。样本只含 `redrock-main-bright-128.fits`，未验证全目录文件规则，也没有 BGS-only 行筛选；不要描述为完整 DESI 或映射成 Tile。
+- 首两次请求因 registry digest 不可拉取失败；第三次因手工录入的 digest 少一位而报 `InvalidImageName`。三条失败任务均保留。Registry 实际 digest `sha256:415a731fc768bb40aa75c53085a36c880b8833b7d52abc00785c2cadbdad4198` 已配置到 Assets Helm 默认值和 dev runtime。
+- DESI DR1 产品记录 `DR1 bright-program redrock files` 已加入 survey catalog 与 layer registry，Admin 产品 ID 为 `08f093bcebd4cd3ef4c3`。运行时记录为 `modality=redshift`、`mode=path-healpix`、order 6 / group size 100，仅匹配 `redrock-main-bright-*.fits*`；产品仍为 `DRAFT` / `INACTIVE`，公开产品 API 返回 404，未生成或发布 MOC 和公开图层。
+- Assets → Warehouse 批次 `desi-dr1-redrock-bright-user-oss-20260927-r1` 已 `SUCCEEDED`：228/228 个直接子目录完成，228 个 ScanRequest 全部成功、0 failed，904 个文件与 904 条 order-6 coverage，228 个 scan run 和 source snapshot。命中的 14 个分组为 `0`、`1`、`100`–`111`；其余 214 个已扫描分组没有匹配 `redrock-main-bright-*.fits*` 的文件（这不表示目录中没有其他产品文件）。冻结 roster SHA-256 为 `b136e3dbec18890fec95a78bd7cfb34fb9275c95b6973e8303e30e81ac247912`，scope snapshot SHA-256 为 `5086236359fa62b4953357077f7fb3798ef48e5903f0a0828053673a9566cf75`。此结果只表示用户提供的部分 OSS 副本，不代表完整 DR1/BGS。
+- `bright/1/` 分区发现 22 个文件、生成 22 条 coverage、0 errors；source snapshot SHA-256 为 `c044339bec8800ffdd37d92cf1d11c8e259570679f445e0e28643cc4be19ea65`。URI `oss://si000925lshd/27-Class/DESI/DR1/spectro/redux/iron/healpix/main/bright/1/128/redrock-main-bright-128.fits` 在 `ast_file_index_v1` 有文件记录，并在本批次 `ast_coverage_index_v1` 命中 order 6 / cell 128、`path_healpix`、`redshift`、`exact`；此前单文件样本记录仍保留。扫描没有读取 FITS 科学内容，也没有应用 BGS 行筛选。
+
+### HST 与验证状态
+
+- HST 实现仍按公开 MAST `s_region` 匹配 ICRS/NESTED cell，再以 obsid 返回同 observation 的公开 image products；当前只做了本地代码验证，没有发起 live MAST 查询，也没有恢复或发布此前暂停的 HST 覆盖草稿。
+- Assets dev Helm revision **257**，镜像 `0.1.0-20260927-161556-redrock-admin-draft`、digest `sha256:4463cff88b8508ae0a17c3cfe8d0bb6bf22452f6d7de3561fc02e28575817453`；site/backend 均 Ready、0 restarts。`/healthz` bundle SHA 仍为 `c66125a8474a1983aeb6ad4f714f962fa5ea23f1e4d563ab960a564ac723a2d5`（605 files），公开 catalog 仍 104 层。没有改变公开 bundle 或 MOC。
+- Warehouse 的 `mvn test`、`mvn verify`、`mvn -Pquality verify`、Helm lint/template、Compose、mapping、shell syntax、`git diff --check` 均通过；Warehouse baseline、Assets caller，以及实际 `asa-workspace` 中的 Workspace synthetic caller 均通过。集群没有 `astro-data-workspace` namespace；Workspace 测试使用 `asa-workspace` 专用 synthetic PVC，没有读取 CSST 数据。
+- 两个仓库中既有工作树修改均保留。不要把该单文件样本或 228 个目录抽样描述为完整 inventory；不发布 redrock 产品、不修改 MOC、不处理 `cosmos-data-linkage`。
+
+## 最新交接摘要（2026-09-27，Asia/Shanghai）
+
+先读本节。覆盖发布结果以本节为准；此前一批 22 个产品的记录保留在下节。本次范围不包含 `cosmos-data-linkage`。
+
+### 覆盖发布
+
+- Assets publication run `muiweapt-e5de51ad` 已完成，状态 `published`，site verification 为 `verified`。冻结并发布了 47 个产品、47 个 coverage layer，涉及 15 个巡天：2MASS 2、CFHTLS 6、DECaLS 1、DECaPS 1、FDS 5、IPHAS 3、KiDS 1、Rubin 1、SDSS 1、SkyMapper 1、SPHEREx 7、VISTA 7、VPHAS+ 6、WENSS 1、ZTF 4。没有选择 HST、Euclid、DESI 或 COSMOS 草稿。
+- 当前 bundle 为 `reviewed-muiweapt-e5de51ad`，SHA-256 `c66125a8474a1983aeb6ad4f714f962fa5ea23f1e4d563ab960a564ac723a2d5`，605 files、28 package references、162 coverage documents。候选恢复、authority SHA、site SHA 均通过；site verification 检查了 106 个产品。线上 `/healthz`、assets manifest 和 run SHA 一致，公开 catalog 返回 104 层。
+- 47 个目标 layer 均在公开 catalog 中；47 个 FITS MOC 的 32-byte Range 请求均返回 HTTP 206，`Content-Range` 和 `X-Content-SHA256`/ETag 与公开 asset manifest 一致。解码后的 MOC 均为 ICRS/NUNIQ，原生最高阶 O5–O10（O5: 1、O7: 7、O9: 3、O10: 36）；没有从低阶预览上采样。
+- 这 47 层均为 estimated coverage、`sourceUnitIndex: entrypoint-only`，完整性未知；没有 source-unit 或 file-level reverse index，也没有 Warehouse 扫描执行证据。这批是有限覆盖产品，不表示巡天完整。
+
+### Dev 状态
+
+- Assets Helm revision **253**，镜像 `0.1.0-20260927-024112-native-cds-order`。site 与 backend 均 Ready、0 restarts；backend limit 4Gi、site limit 1536Mi。站点自动同步对象存储 authority 后加载新 bundle，没有重新构建/发布服务镜像。
+- publication run 已发布并通过 site verification，但当前 `syncStatus` 的 `publication-tasks` 快照仍为 `pending`：generation 1338，SHA-256 `33b3befeda4e9212120264ec94da40bf73ee5ccf217c2b0767af002d10728f15`。快照仍在 upload-spool PVC；需后续确认同步收敛，这不影响已验证的公开 bundle。
+- 本轮只发布已有覆盖产品并核验线上结果；没有下载科学观测数据、启动 Warehouse 扫描、写 Elasticsearch 或修改 MOC 源文件。HST 错误数据继续暂停，当前 HST 源码/UI 工作区修改保留。
+
+### 后续
+
+- 确认 `publication-tasks` 最新快照由 pending 变为已同步；不得删除本地 spool 或重提 publication run。
+- 按来源和审核状态继续评估尚无覆盖的巡天。文件级反查不是本批范围；HST 数据保持暂停。
+- 2026-09-26 摘要列出的两个 Assets 问题仍需复核。保留工作树修改，不恢复失败数据，也不处理 `cosmos-data-linkage`。
+
+## 前一批交接摘要（2026-09-27，22 个产品）
+
+以下记录是 47 个产品发布前的状态，保留作历史依据。下方 2026-09-26 的摘要及续接记录同为历史状态。
+
+### 覆盖发布
+
+- 用户明确授权发布已审核的其他巡天覆盖。Assets 正式 publication run `muis50ny-28522148` 已完成，状态 `published`，site verification 为 `verified`；操作只选了 7 个巡天和 22 个产品，没有包含 HST、Euclid、DESI 或其他未审核草稿。
+- 当前公开 bundle 为 `reviewed-muis50ny-28522148`，SHA-256 `2d03bb8108a074805c5e8c435a0f6a41d9c670c6049f869ae7e8b375cf8a87fa`，547 files、15 个动态资源包、162 coverage documents。候选恢复校验、authority SHA 和 site SHA 均通过，site verification 检查了 59 个产品。
+- 新增或更新的公开覆盖层共 22 个：AllWISE 2（W3/W4）、DES DR2 5、GALEX 3、Legacy Surveys DR10 1、NVSS 1、Pan-STARRS DR1 7、SDSS DR9 3。AllWISE W1/W2 的候选原生阶数为 O0，未审核且未发布。
+- 公开 `/api/v1/coverage/catalog` 返回 ICRS/NESTED、57 层，目标 22 个产品均存在，实际最高阶为 O4 至 O12。22 个 FITS MOC 的 Range 检查均返回 206、32 bytes 和有效 `X-Content-SHA256`。
+- 这 22 层的 `sourceUnitIndex` 是 `entrypoint-only`；本次没有建立文件级反查索引，也不代表这些巡天覆盖完整。其他未审核候选未纳入。
+- HST 数据仍按用户要求暂停；没有发布 HST 草稿或更改 HST 源码/UI 工作区。当前工作树中的已有未提交修改继续保留。
+
+### Dev 状态
+
+- Assets Helm revision **252**，镜像 `0.1.0-20260927-024112-native-cds-order`。site 和 backend 当前 Ready、0 restarts；`/healthz` 返回上述 bundle SHA 和 547 files。
+- 新覆盖加载时 site 的 Node V8 heap 在约 379 MiB 触顶，旧容器 limit 为 768 MiB，随后进入 CrashLoop。Helm revision 252 只把 site memory request/limit 调至 512Mi/1536Mi，保留原镜像和其他 Helm release values；滚动后健康、coverage catalog、publication verification 和 22 个 MOC Range 检查均通过。backend 未改资源限制。
+- 本次没有下载科学观测数据、写 Elasticsearch 或改动扫描记录。MOC publication 只通过 Assets 正常 publication API 完成。
+
+### 后续
+
+- 继续按来源证据、审核状态和实际原生阶数检查其他巡天覆盖缺口；文件级反查不是本批验收范围。
+- HST 错误数据保持暂停，等待可信来源和可核验范围后再继续。
+- 2026-09-26 摘要列出的两个 Astra low 问题没有在本轮处理，仍需后续复核。不要恢复失败数据、覆盖工作树修改或处理 `cosmos-data-linkage`。
+
+## 历史交接摘要（2026-09-26 19:08，Asia/Shanghai）
+
+先读本节。下方较早时间戳的内容是当时状态记录；若与本节冲突，以本节为准，不要按旧记录重复提交扫描、发布或恢复旧数据。本交接范围不包含 `cosmos-data-linkage`。
+
+### 仓库与提交
+
+- Assets：`d9dffcd`（`feat: ship coverage batches and reverse lookup evidence`），`main` 与 `origin/main` 同步；开始编写本交接时工作树干净，当前唯一未提交改动是本文件 `HANDOFF.md`。
+- Warehouse：`b887e4a`（`feat: add bounded scan batches and evidence indexing`），`main` 本地领先 `origin/main` 1 个提交，工作树干净。
+- Workspace：`fe8b041`（`feat: display public coverage evidence in workspace`），`main` 本地领先 `origin/main` 1 个提交，工作树干净。
+- MOC-Core SDK：`761810e`（`feat: add resource package HEALPix sidecars`），`main` 本地领先 `origin/main` 1 个提交，工作树干净。
+- 以上改动已提交但没有 push。不要因本地 ahead 状态重做或覆盖提交；推送需按后续任务要求处理。
+
+### 已完成与验证基线
+
+- 资源包最高优先项已完成：dev 当前 11 个资源包均提供 `healpix/order4.json` 与 `healpix/order8.json`。ACT 原生最高阶为 O7，因此 O8 明确省略 ACT 图层，没有升采样。
+- Euclid Q1 冻结 MER 清单批次已完成 1,408/1,408 分区：VIS、NISP H/J/Y 各 352 个文件，输出 O8 `fits_wcs` coverage。完整性只适用于冻结清单，不代表完整 Q1。
+- DESI 当前有界扫描包括 `zall-pix-iron.fits`（28,425,963 个目录行、266,051 条 O8 coverage）和 `exposures-iron.fits`（9,176 个 Tile 中心、4,323 条 O8 coverage）。这些不代表完整 DR1；Tile 中心不是目标级光谱覆盖，42 个原始 byte shard 不是独立 FITS。
+- HST 有 6 个有限公开图层，另有 4 个观测草稿保持 `STAGED`、未发布。已发布内容不代表完整 HST；不要自动发布草稿。
+- 之前 dev overlap 验收得到 Euclid×DESI O8 587 cells、Euclid×HST 138、DESI×HST 6,109、三方 15。匿名反查预览最多 6 条，完整分页需要 API Key。数字是当时已发布数据范围的验收记录，不表示完整巡天覆盖。
+- 当前 dev 是 Assets Helm revision **250**，镜像 `0.1.0-20260926-095338-overlap-scope-evidence`；site/backend Ready、0 restarts。`/healthz` bundle 为 `reviewed-mugfs3x1-846ba75f`，SHA `5c9bde3801522ce35127d8d83152f0fee5970939ba9d55433b746ba369be0675`，526 files。Warehouse catalog 超过约 200,000 edges 时会回退到 checked-in public geometry；详情和反查证据仍可单独查询。反查延迟间歇性偏高，根因未定位。
+- 验证：Assets `npm run build` 通过，`npm test` 319 项（317 pass、2 skip、0 fail）；Warehouse `mvn test` 通过；Workspace `npm test` 286 项（284 pass、2 skip、0 fail）；MOC-Core `unittest` 21 pass、3 因科学依赖未安装而 skip，环境没有 `pytest`。此前的 Helm lint、Core wheel 检查和 `git diff --check` 通过。
+- 提交这些组件代码之后没有新部署、资源包发布或扫描；dev 仍是上述 revision 250 状态。Workspace 的真实线上端到端调用展示仍需单独验收。
+
+### Astra low 复核发现，尚未修复
+
+1. **P2：package-only rebuild 可能把历史包暴露进当前公共清单。** `server/approved-release.ts:191-200` 在保留旧版包时调用 `put(record, bytes)`，需核对生成的公共 release manifest 与 `/api/v1/assets` allowlist 是否会包含这些历史记录。线上当前仍显示 11 个包；风险发生在后续 rebuild 路径。补回归测试，确保版本固定的历史下载按预期保留，同时历史包不会误入当前目录/清单。
+2. **Coverage catalog ETag 与响应表示不匹配。** `server/server.ts:3471-3474` 的 ETag 取自运行时 `coverageCatalog.revision`，响应体来自 `publicCoverageCatalog()`，且带 `generatedAt` 和 `publicReleaseId`。复核实测 ETag 为 `"catalog-631637265497df2abed49e2dbaba2b60"`，body revision 为 `6fa0606f0f6798f7c2f34efd5a6e3186`；带该 ETag 的条件请求返回 304。修复 ETag 与实际响应表示的绑定，并添加条件请求回归测试。
+
+### 下一步
+
+1. 先修复并测试上述两个 Assets 代码问题，再做构建与测试。
+2. 单独完成 Workspace 线上公开覆盖证据的端到端验收。
+3. 之后再按来源和冻结范围补 DESI/HST 证据；不要把已完成的 Euclid 冻结批次或当前有限扫描描述为完整巡天。
+
+### 持续约束
+
+- 所有扫描必须经过 Assets → Warehouse 标准系统流程；Warehouse 是扫描执行和状态 owner。不要手工写 ES 或绕过任务系统。
+- 不要自行发布 HST 草稿、修改 MOC、恢复旧数据或改变公开指针。扫描、MOC、重合、证据、反查代码变更前先读 `astro-survey-atlas-coverage-workflow` skill 和 `docs/coverage-workflow.md`。
+- 保留 source snapshot、真实 order、ICRS/NESTED、exact/estimated/entrypoint-only/truncated 和冻结范围完整性限制。没有数据链接时展示实际来源，不编造文件或 URL；下载计划是来源清单，不是科学数据下载。
+- 不要把私有 CSST 数据、用户输入或扫描结果放进 Assets Git、公开包或证据归档。
+
 续接：2026-09-26 10:03（Asia/Shanghai）。Warehouse overlap evidence 的 dev 验收与站点边界修复已完成。
 site 进程不持有 Warehouse 证据，之前从 site NodePort 请求 `/api/v1/coverage/overlap/details` 会返回空的
 `warehouseEvidence`；现在该只读详情请求由 site 转发到 backend，backend 保持唯一 Warehouse 读取边界。

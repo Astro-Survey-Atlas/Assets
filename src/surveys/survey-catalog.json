@@ -224,6 +224,7 @@
       "description": "Public DESI spectroscopic release families. Local COSMOS-derived volume data remains a separate registered artifact, not a proxy for this footprint.",
       "modalities": [
         "spectroscopy",
+        "redshift",
         "catalog"
       ],
       "releases": [
@@ -254,6 +255,7 @@
           "releasedYear": 2025,
           "modalities": [
             "spectroscopy",
+            "redshift",
             "catalog"
           ],
           "products": [
@@ -264,6 +266,19 @@
               "status": "acquired",
               "sourceUrl": "https://data.desi.lbl.gov/doc/releases/dr1/",
               "geometrySourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/tiles-iron.fits"
+            },
+            {
+              "name": "DR1 bright-program redrock files",
+              "modality": "redshift",
+              "description": "Redrock files from the user-provided partial OSS copy, indexed by their native order-6 HEALPix path partition. This file-level scope does not select BGS-only rows or represent the complete DR1 release.",
+              "status": "awaiting_geometry",
+              "sourceTier": "user_file_derived",
+              "sourceLabel": "User-provided partial OSS copy",
+              "originNote": "Coverage evidence is limited to the files present in the user's partial OSS copy; it is not a complete DESI DR1 or BGS inventory.",
+              "sourceUrl": "https://data.desi.lbl.gov/doc/releases/dr1/",
+              "geometrySourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/",
+              "reason": "A completed Warehouse scan indexed 904 redrock files in the user's partial OSS copy at their native order-6 HEALPix path cells. This exact file scope is awaiting normal product review and publication; it is not a complete DESI DR1 or BGS inventory.",
+              "manualStep": "Use the order-6 HEALPix cell to find indexed redrock file URIs. Treat these cells as file partitions, not DESI Tiles; no BGS-only row filter is applied."
             }
           ]
         }

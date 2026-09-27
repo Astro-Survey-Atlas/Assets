@@ -18,6 +18,7 @@ interface ReleaseManifest {
   generatedAt: string;
   bundle: { id: string; sha256: string };
   files: PublicAssetRecord[];
+  retainedPackages?: PublicAssetRecord[];
 }
 
 export interface PackagedRelease extends ReleaseArchiveDescriptor {
@@ -117,13 +118,14 @@ export async function packageRelease(options: { root?: string; stagingRoot?: str
   const releaseManifestPath = path.join(sourceRoot, manifestRelativePath);
   const manifest = JSON.parse(await readFile(releaseManifestPath, "utf8")) as ReleaseManifest;
   if (manifest.schemaVersion !== 1 || !manifest.bundle?.id || !/^[a-f0-9]{64}$/.test(manifest.bundle.sha256) || !Array.isArray(manifest.files) || !manifest.files.length) throw new Error("Unsupported or empty release manifest");
-  if (publicReleaseBundleDigest(manifest.files) !== manifest.bundle.sha256) throw new Error("Release manifest bundle digest does not cover its own records");
+  if (publicReleaseBundleDigest(manifest.files, manifest.retainedPackages) !== manifest.bundle.sha256) throw new Error("Release manifest bundle digest does not cover its own records");
   const stagingRoot = options.stagingRoot ?? process.env.ASSETS_PACKAGE_STAGING_ROOT;
   const outputPath = path.resolve(options.outputPath ?? process.env.ASSETS_RELEASE_ARCHIVE ?? path.join(sourceRoot, "dist", "release", `${manifest.bundle.sha256}.tar.gz`));
   await mkdir(path.dirname(outputPath), { recursive: true });
   const temporaryRoot = await mkdtemp(path.join(path.dirname(outputPath), `.release-tree-${process.pid}-`));
   try {
-    for (const record of manifest.files) {
+    const releaseFiles = [...manifest.files, ...(manifest.retainedPackages ?? [])];
+    for (const record of releaseFiles) {
       if (!record.id || !record.path || !Number.isSafeInteger(record.sizeBytes) || record.sizeBytes < 1 || !/^[a-f0-9]{64}$/.test(record.sha256)) throw new Error(`Invalid release asset record: ${record.id}`);
       if (record.deliveryClass === "evidence") throw new Error(`Release archive must not package evidence records: ${record.id}`);
       await validateAndCopy(sourceRoot, record, stagingRoot, temporaryRoot);
@@ -132,7 +134,7 @@ export async function packageRelease(options: { root?: string; stagingRoot?: str
     await mkdir(path.dirname(manifestDestination), { recursive: true });
     await copyFile(releaseManifestPath, manifestDestination);
     const archivedFiles = await listFiles(temporaryRoot);
-    const expectedFiles = new Set([...manifest.files.map((record) => inside(temporaryRoot, record.path)), manifestDestination]);
+    const expectedFiles = new Set([...releaseFiles.map((record) => inside(temporaryRoot, record.path)), manifestDestination]);
     const absoluteFiles = archivedFiles.map((file) => path.resolve(temporaryRoot, file));
     if (archivedFiles.length !== expectedFiles.size || absoluteFiles.some((file) => !expectedFiles.has(file))) {
       const unexpected = absoluteFiles.filter((file) => !expectedFiles.has(file));

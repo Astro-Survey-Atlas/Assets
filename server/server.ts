@@ -9,14 +9,14 @@ import { ReleaseSynchronizer } from "./release-synchronizer.js";
 import { PublicationScheduler } from "./publication-scheduler.js";
 import { proxyAdmin } from "./admin-proxy.js";
 import { createReadStream } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { lstat, open, readFile, realpath, stat } from "node:fs/promises";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 
 import { AdminHttpError, AssetsAdmin, KubernetesApiError, SUPPORTED_COVERAGE_MODES, adminFromRequest, type ConnectorInput, type CoverageTaskInput, type KubernetesResource, type MocDiscoveryInput, type ScanBatchTaskRecipe } from "./admin.js";
-import { batchEvidenceLayerId, parseScanBatchRequest, resolveScanBatchMode, ScanBatchValidationError } from "./scan-batch.js";
+import { batchEvidenceLayerId, parseScanBatchRequest, resolveScanBatchIncludePattern, resolveScanBatchMode, ScanBatchValidationError } from "./scan-batch.js";
 import { ConnectorInventoryStateStore, ConnectorProbeStateStore } from "./connector-state.js";
 import { createArtifactStoreFromProcess } from "./artifact-store.js";
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
@@ -35,9 +35,11 @@ import { buildDownloadPlan, CoverageEvidenceStore, EvidenceStoreError, type Down
 import { decodeReverseCursor, encodeReverseCursor, pageReversePlan, reversePageSize, reversePlanCoverageEvidenceKey, reversePlanEntrypointKey, reversePlanFileKey, reversePlanItems, REVERSE_CURSOR_MAX_KEYS, REVERSE_PAGE_SIZE } from "./reverse-pagination.js";
 import { resolveEuclidQ1MerFile } from "./euclid-data-links.js";
 import { buildOverlapDetails, publicExternalUrl, publicLocator } from "./overlap-details.js";
+import { filterByModalities } from "../src/modality-filter.js";
 import { MAST_HST_DISCOVERY_POLICY, resolveMocDiscoveryCandidate } from "./moc-discovery.js";
 import { decodeScopeMoc, parseMastHstScopeRef, resolveMastHstScope } from "./mast-hst-discovery.js";
 import { importMastHstObservation } from "./mast-hst-import.js";
+import { lookupHstImages } from "./hst-image-lookup.js";
 import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
 import { DynamicResourcePackageStore, dynamicResourcePackageAssetId } from "./resource-package-publication.js";
 import { PublicReleasePublisher, PublicationConflictError, type ReleaseHistoryDocument } from "./public-release-publication.js";
@@ -45,6 +47,7 @@ import { isDeniedPackageId, isDeniedSurvey } from "./publication-policy.js";
 import { ContentArchiveError } from "./content-archive.js";
 import { buildPublicProductEvidence } from "./public-product-evidence.js";
 import { registerEvidenceMoc } from "./evidence-moc-import.js";
+import { registerPathHealpixMoc } from "./path-healpix-moc-import.js";
 import { mergeWarehouseSourceFiles, warehouseLogicalLayersForSource } from "./reverse-observations.js";
 import { StateSnapshotCoordinator, STATE_SNAPSHOT_NAMESPACES, type StateSnapshotSink, type StateSnapshotSyncStatus } from "./state-snapshot.js";
 import { UploadSpool } from "./upload-spool.js";
@@ -73,6 +76,7 @@ async function handleDownloadUnlock(request:IncomingMessage,response:ServerRespo
   json(response,200,{unlocked:true,expiresAt:new Date(Date.now()+3600000).toISOString()});
 }
 const releaseRoot = path.resolve(process.env.ASSET_RELEASE_ROOT ?? process.env.ASSET_WORKTREE_ROOT ?? projectRoot);
+const productCatalogRoot = path.resolve(process.env.ASSETS_PRODUCT_CATALOG_ROOT ?? releaseRoot);
 const siteRoot = path.resolve(process.env.PUBLIC_SITE_ROOT ?? path.join(projectRoot, "dist", "site"));
 const authorityStore = role !== "legacy" ? createArtifactStoreFromProcess() : undefined;
 const releaseSynchronizer = authorityStore ? new ReleaseSynchronizer(authorityStore, path.dirname(releaseRoot), process.env.ASSETS_OBJECT_STORE_CURRENT_KEY) : undefined;
@@ -247,13 +251,29 @@ async function publicationLayer(publication: MocPublication): Promise<CoverageCe
   const maxOrder = availableOrders[availableOrders.length - 1]!;
   const overviewCells = cellMap.get(overviewOrder) ?? [];
   const areaDeg2 = overviewCells.length * (41252.96124941927 / (12 * 2 ** (2 * overviewOrder)));
+  const productRecord = products.list().find((record) => record.productId === publication.productId);
+  const productContent = productRecord?.published ?? productRecord?.draft;
+  const pathIndex = productContent?.mode === "path-healpix" && publication.sourceEvidence?.precision === "exact";
+  const recipeSteps = pathIndex
+    ? productContent.presentation.flow.nodes.map((node, order) => ({
+      id: node.id,
+      kind: node.kind ?? node.id,
+      title: node.title,
+      bodyMarkdown: node.bodyMarkdown,
+      order,
+      implementationRef: `assets.coverage.${node.kind ?? node.id}`,
+    }))
+    : undefined;
   return {
     layerId: publication.layerId,
     productId: publication.productId,
     surveyId: publication.surveyId,
     releaseId: publication.releaseId,
     product: publication.product,
-    color: "#42d5c4",
+    ...(productContent?.modality ? { modality: productContent.modality } : {}),
+    ...(productContent?.coverageRole ? { coverageRole: productContent.coverageRole } : {}),
+    ...(publication.sourceEvidence ? { sourceEvidence: publication.sourceEvidence } : {}),
+    color: productContent?.publicSurvey?.color ?? "#42d5c4",
     availableOrders,
     overviewOrder,
     maxOrder,
@@ -263,14 +283,14 @@ async function publicationLayer(publication: MocPublication): Promise<CoverageCe
     cells: cellMap,
     recipe: {
       recipeVersion: 1,
-      mode: "native-moc",
+      mode: pathIndex ? "path-healpix" : "native-moc",
       coordinateFrame: "ICRS",
       ordering: "NESTED",
       maxOrder,
       queryOrder: query?.order ?? maxOrder,
       previewOrder: preview?.order ?? overviewOrder,
       ...(publication.sourceEvidence ? { precision: publication.sourceEvidence.precision } : {}),
-      steps: [
+      steps: recipeSteps ?? [
         { id: "input", kind: "native-moc-source", title: "原生 FITS MOC 来源", bodyMarkdown: `sourceUrl=${publication.buildName}`, order: 0, implementationRef: "assets.moc.discovery" },
         { id: "validate", kind: "moc-validation", title: "IVOA MOC / ICRS / NUNIQ 校验", bodyMarkdown: "coordinateFrame=ICRS; ordering=NESTED", order: 1, implementationRef: "astro_survey_moc_core.core:validate_moc_fits" },
         { id: "project", kind: "order-projection", title: "发布 order 投影", bodyMarkdown: `queryOrder=${query?.order ?? maxOrder}; previewOrder=${preview?.order ?? overviewOrder}`, order: 2, implementationRef: "astro_survey_moc_core.core:project_cells" },
@@ -282,9 +302,16 @@ async function publicationLayer(publication: MocPublication): Promise<CoverageCe
       ...(publication.sourceSnapshotSizeBytes !== undefined ? { sourceSnapshotSizeBytes: publication.sourceSnapshotSizeBytes } : {}),
     },
     ...(publication.sourceEvidence ? { sourceEvidence: publication.sourceEvidence } : {}),
-    sourceUnitIndex: { status: "entrypoint-only", notes: "这是公开来源 MOC 的覆盖层；没有源文件级反向索引。" },
+    sourceUnitIndex: pathIndex
+      ? { status: "exact", unitKind: `NESTED order-${productContent?.scanDefaults?.pathHealpixOrder ?? maxOrder} HEALPix partition`, indexUrl: "/api/v1/coverage/reverse-lookup", notes: "每个已扫描文件 URI 与其来源路径中的 NESTED HEALPix 分区精确对应；分区不是 DESI Tile，也不证明整个分区内每个天体都有观测。" }
+      : { status: "entrypoint-only", notes: "这是公开来源 MOC 的覆盖层；没有源文件级反向索引。" },
   };
 }
+
+const products = new ProductStore(stateSnapshotSink, contentRoot);
+// Drafts use the image-bundled catalog; public products remain bound to releaseRoot.
+if (managesContent) await products.initialize(productCatalogRoot, coverageCatalog.layers);
+productsForWarehouseStatus = products;
 
 const activePublishedMocLayers = new Set<string>();
 async function activatePublishedMocs(): Promise<void> {
@@ -416,9 +443,6 @@ function discoveryCandidate(discovery: Awaited<ReturnType<typeof discoveryView>>
 }
 const llmTimer = managesContent ? setInterval(() => { void llmDiscovery.tick().catch(() => console.error("LLM discovery state update failed")); }, 5000) : undefined;
 llmTimer?.unref();
-const products = new ProductStore(stateSnapshotSink, contentRoot);
-if (managesContent) await products.initialize(releaseRoot, coverageCatalog.layers);
-productsForWarehouseStatus = products;
 try {
   await reloadWarehouseDraftStatuses();
 } catch (error) {
@@ -518,7 +542,7 @@ function applyPublishedProductMetadata(index: Awaited<ReturnType<typeof loadSurv
   if (!published.length) return index;
   const records = new Map(published.map((record) => [record.productId, record.published]));
   const publicModality = (value: string | undefined): PublicSurveyModality => {
-    const allowed: PublicSurveyModality[] = ["imaging", "spectroscopy", "photometry", "time-domain", "integral-field", "ultraviolet", "infrared", "catalog", "simulation", "radio"];
+    const allowed: PublicSurveyModality[] = ["imaging", "spectroscopy", "redshift", "photometry", "time-domain", "integral-field", "ultraviolet", "infrared", "catalog", "simulation", "radio"];
     return value && allowed.includes(value as PublicSurveyModality) ? value as PublicSurveyModality : "catalog";
   };
   const applyOverride = <T extends object>(product: T, override: ProductRecord["published"]): T => ({
@@ -800,13 +824,21 @@ function readinessLayerFromBuild(build: ReturnType<MocBuildStore["get"]> | undef
   const orders = outputs?.availableOrders?.filter((order): order is number => Number.isSafeInteger(order) && order >= 0) ?? [];
   if (!outputs || !orders.length || !["STAGED", "PUBLISHED", "DUPLICATE"].includes(build?.phase ?? "")) return undefined;
   const overviewOrder = Math.min(...orders);
+  const product = build?.productId ? products.list().find((record) => record.productId === build.productId) : undefined;
+  const pathIndex = build?.provider === "evidence" && product?.draft.mode === "path-healpix"
+    && product.draft.coverageEvidence?.precision === "exact"
+    && product.draft.coverageEvidence?.completeness === "incomplete"
+    && build.source.sourceEvidence?.sourceSnapshotSha256 === product.draft.coverageEvidence.sourceSnapshotSha256;
   return {
     availableOrders: [...new Set(orders)].sort((a, b) => a - b),
     overviewOrder,
     maxOrder: outputs.maxOrder ?? Math.max(...orders),
     ...(outputs.cellCount !== undefined ? { cellCount: outputs.cellCount } : {}),
-    recipe: { mode: "native-moc", coordinateFrame: "ICRS", ordering: "NESTED", sourceSnapshotSha256: build?.source.snapshotSha256 },
-    sourceUnitIndex: { status: "entrypoint-only", notes: "已锁定 MOC 构建输出；尚未生成单元到文件反查索引。" },
+    recipe: { mode: pathIndex ? "path-healpix" : "native-moc", coordinateFrame: "ICRS", ordering: "NESTED", ...(pathIndex ? { precision: "exact" as const } : {}), sourceSnapshotSha256: build?.source.snapshotSha256 },
+    sourceUnitIndex: pathIndex
+      ? { status: "exact", unitKind: "file", notes: "已校验 DESI order-6 路径分区 URI 与已提交 Warehouse 文件索引。" }
+      : { status: "entrypoint-only", notes: "已锁定 MOC 构建输出；尚未生成单元到文件反查索引。" },
+    ...(pathIndex && outputs.cellCount !== undefined ? { fileCount: outputs.cellCount, coverageCount: outputs.cellCount, errorCount: 0 } : {}),
   };
 }
 
@@ -835,6 +867,7 @@ function productReadinessForContent(record: ProductRecord, content: ProductRecor
       geometrySourceUrl: content.geometrySourceUrl,
       geometrySourceLabel: content.geometrySourceLabel,
       recipeHash: content.recipeHash,
+      coverageCompleteness: content.coverageEvidence?.completeness,
     },
     layer: readinessLayer(layer) ?? readinessLayerFromBuild(build),
     ...(warehouseStatus ? { completeness: {
@@ -2355,6 +2388,13 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         if (!product.coverageRole || !product.dataOrigin || !product.sourceTier) {
           throw new AdminHttpError(400, `Product ${product.productId} is not executable by the configured recipe`);
         }
+        let includePattern: string | undefined;
+        try {
+          includePattern = resolveScanBatchIncludePattern(rule.includePattern, product.scanDefaults?.includePattern);
+        } catch (error) {
+          if (error instanceof ScanBatchValidationError) throw new AdminHttpError(400, error.message);
+          throw error;
+        }
         const suffixes = rule.allowedSuffixes
           ?? (rule.filters?.includeSuffixes !== undefined ? rule.filters.includeSuffixes.join(",") : product.scanDefaults?.allowedSuffixes);
         return {
@@ -2369,12 +2409,15 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
           dataOrigin: product.dataOrigin,
           sourceTier: product.sourceTier,
           ...(suffixes !== undefined ? { allowedSuffixes: suffixes } : {}),
+          ...(includePattern ? { includePattern } : {}),
           ...(rule.maxOrder !== undefined ? { maxOrder: rule.maxOrder } : product.scanDefaults?.maxOrder !== undefined ? { maxOrder: product.scanDefaults.maxOrder } : {}),
           ...((rule.raColumn ?? product.scanDefaults?.raColumn) ? { raColumn: rule.raColumn ?? product.scanDefaults?.raColumn } : {}),
           ...((rule.decColumn ?? product.scanDefaults?.decColumn) ? { decColumn: rule.decColumn ?? product.scanDefaults?.decColumn } : {}),
           ...((rule.healpixColumn ?? product.scanDefaults?.healpixColumn) ? { healpixColumn: rule.healpixColumn ?? product.scanDefaults?.healpixColumn } : {}),
           ...((rule.healpixOrderColumn ?? product.scanDefaults?.healpixOrderColumn) ? { healpixOrderColumn: rule.healpixOrderColumn ?? product.scanDefaults?.healpixOrderColumn } : {}),
           ...((rule.healpixOrder ?? product.scanDefaults?.healpixOrder) !== undefined ? { healpixOrder: rule.healpixOrder ?? product.scanDefaults?.healpixOrder } : {}),
+          ...((rule.pathHealpixOrder ?? product.scanDefaults?.pathHealpixOrder) !== undefined ? { pathHealpixOrder: rule.pathHealpixOrder ?? product.scanDefaults?.pathHealpixOrder } : {}),
+          ...((rule.pathHealpixGroupSize ?? product.scanDefaults?.pathHealpixGroupSize) !== undefined ? { pathHealpixGroupSize: rule.pathHealpixGroupSize ?? product.scanDefaults?.pathHealpixGroupSize } : {}),
           ...(rule.hduName !== undefined ? { hduName: rule.hduName } : {}),
           ...(rule.hduIndex !== undefined ? { hduIndex: rule.hduIndex } : {}),
           ...(rule.coordinateFrame !== undefined ? { coordinateFrame: rule.coordinateFrame } : {}),
@@ -2460,6 +2503,10 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     if (pathname === "/api/v1/admin/moc-builds/from-evidence" && request.method === "POST") {
       const imported = await registerEvidenceMoc({ evidenceRoot, products, builds: mocBuildStore, buildService: mocBuildService }, await requestJsonBody(request));
       await editorial.sync(adminInventoryIndex(runtimeSurveyIndex, products.list()).surveys);
+      return json(response, 201, { request: adminMocBuildView(imported.request), product: adminProductView(imported.product), syncStatus: await apiSyncStatus("products") });
+    }
+    if (pathname === "/api/v1/admin/moc-builds/from-path-healpix-evidence" && request.method === "POST") {
+      const imported = await registerPathHealpixMoc({ evidenceRoot, products, builds: mocBuildStore, buildService: mocBuildService }, await requestJsonBody(request));
       return json(response, 201, { request: adminMocBuildView(imported.request), product: adminProductView(imported.product), syncStatus: await apiSyncStatus("products") });
     }
     const mocBuildRetryMatch = /^\/api\/v1\/admin\/moc-builds\/([^/]+)\/retry$/.exec(pathname);
@@ -2751,10 +2798,12 @@ function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, p
 async function sendCoverageOverlap(request: IncomingMessage, response: ServerResponse): Promise<void> {
   const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
   const surveyIds = Array.isArray(body.surveyIds) ? body.surveyIds.filter((value): value is string => typeof value === "string") : [];
+  const modalities = Array.isArray(body.modalities) ? body.modalities.filter((value): value is string => typeof value === "string") : [];
   const requestedOrder = typeof body.requestedOrder === "number" && Number.isInteger(body.requestedOrder) ? body.requestedOrder : undefined;
-  const result = overlapForLayers([...publicCoverageCatalog().records.values()], surveyIds, requestedOrder);
+  const eligibleLayers = filterByModalities([...publicCoverageCatalog().records.values()], modalities);
+  const result = overlapForLayers(eligibleLayers, surveyIds, requestedOrder);
   if (!result) return json(response, 400, { error: "At least two surveys with a common HEALPix order are required" });
-  const selectedLayers = [...publicCoverageCatalog().records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
+  const selectedLayers = eligibleLayers.filter((layer) => surveyIds.includes(layer.surveyId));
   const componentDetails = result.components.map((component) => {
     const componentLayers = layersForOverlapComponent(selectedLayers, result, component);
     return {
@@ -2781,14 +2830,16 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
 async function sendCoverageOverlapDetails(request: IncomingMessage, response: ServerResponse): Promise<void> {
   const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
   const surveyIds = Array.isArray(body.surveyIds) ? body.surveyIds.filter((value): value is string => typeof value === "string" && value.length > 0) : [];
+  const modalities = Array.isArray(body.modalities) ? body.modalities.filter((value): value is string => typeof value === "string") : [];
   const componentId = typeof body.componentId === "string" ? body.componentId : "";
   const requestedOrder = typeof body.requestedOrder === "number" && Number.isInteger(body.requestedOrder) ? body.requestedOrder : undefined;
   if (surveyIds.length < 2 || !componentId) return json(response, 400, { error: "surveyIds and componentId are required" });
-  const result = overlapForLayers([...publicCoverageCatalog().records.values()], surveyIds, requestedOrder);
+  const eligibleLayers = filterByModalities([...publicCoverageCatalog().records.values()], modalities);
+  const result = overlapForLayers(eligibleLayers, surveyIds, requestedOrder);
   if (!result) return json(response, 400, { error: "No common coverage is available for the selected surveys" });
   const component = result.components.find((candidate) => candidate.id === componentId);
   if (!component) return json(response, 404, { error: "Overlap component not found for the current survey selection" });
-  const selectedLayers = [...publicCoverageCatalog().records.values()].filter((layer) => surveyIds.includes(layer.surveyId));
+  const selectedLayers = eligibleLayers.filter((layer) => surveyIds.includes(layer.surveyId));
   const publishedSourcesByLayer = new Map(publicState.snapshot.products.flatMap((product) => {
     const layerId = product.geometry?.layerId;
     if (!layerId) return [];
@@ -3371,6 +3422,20 @@ const server = http.createServer((request, response) => {
     }
     if (pathname === "/api/v1/access/region-query" && request.method === "POST") return sendProtectedRegionQuery(request,response);
     if (pathname === "/api/v1/coverage/overlap" && request.method === "POST") return sendCoverageOverlap(request, response);
+    if (pathname === "/api/v1/coverage/hst-images" && request.method === "POST") {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      const body = await requestJsonBody(request, 32 * 1024);
+      const quota = accessGate.begin(`hst-images:${request.socket.remoteAddress ?? "unknown"}`);
+      let cost = 1;
+      try {
+        const result = await lookupHstImages(body, authorityStore);
+        cost += result.observations.length + result.observations.reduce((sum, observation) => sum + observation.files.length, 0);
+        response.setHeader("Cache-Control", "no-store");
+        return json(response, 200, result);
+      } finally {
+        quota.finish(cost);
+      }
+    }
     if (pathname === "/api/v1/coverage/overlap/details" && request.method === "POST") {
       // The site owns the read-only public geometry, but Warehouse evidence is
       // loaded only by the backend.  Proxy this read-only detail request so a
@@ -3470,7 +3535,8 @@ const server = http.createServer((request, response) => {
     if (pathname === "/api/v1/coverage/catalog") {
       const { records: _records, ...publicCoverage } = publicCoverageCatalog();
       const body = { ...publicCoverage, schemaVersion: 2, generatedAt: coverageLoadedAt, publicationPolicy: PUBLICATION_POLICY, publicReleaseId: approvedRelease.releaseId || null };
-      const etag = `"catalog-${coverageCatalog.revision ?? "unknown"}"`;
+      const bodyBytes = Buffer.from(`${JSON.stringify(body)}\n`);
+      const etag = `W/"catalog-${createHash("sha256").update(bodyBytes).digest("hex")}"`;
       return compressedJson(request, response, 200, body, "no-cache, must-revalidate", etag);
     }
     if (pathname.startsWith("/api/v1/coverage/blocks/")) return sendCoverageBlock(request, response, pathname);

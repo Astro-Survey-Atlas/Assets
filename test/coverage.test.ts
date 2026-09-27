@@ -168,6 +168,31 @@ test("coverage globe keeps O8-only Warehouse layers in the O4 visual overview", 
   assert.deepEqual(gaia?.pixels, [60]);
 });
 
+test("coverage globe filters product layers by modality at their real order", () => {
+  const catalog: CoverageCatalog = {
+    schemaVersion: 1,
+    coordinateFrame: "ICRS",
+    ordering: "NESTED",
+    tileScheme: "ipix-range-4096",
+    layers: [
+      {
+        layerId: "desi-spectrum", productId: "desi-spectrum", surveyId: "desi", releaseId: "dr1", product: "spectra", modality: "spectroscopy", color: "#fff",
+        availableOrders: [8], overviewOrder: 8, maxOrder: 8, cellCount: 1, areaDeg2: 1, tileScheme: "ipix-range-4096", tileIdsByOrder: { "8": [0] },
+      },
+      {
+        layerId: "desi-redshift", productId: "desi-redshift", surveyId: "desi", releaseId: "dr1", product: "redrock files", modality: "redshift", color: "#fff",
+        availableOrders: [6], overviewOrder: 6, maxOrder: 6, cellCount: 1, areaDeg2: 1, tileScheme: "ipix-range-4096", tileIdsByOrder: { "6": [0] },
+      },
+    ],
+  };
+  const manifest = footprintManifest(catalog, new Map([
+    ["desi-spectrum:8", [100]],
+    ["desi-redshift:6", [20]],
+  ]), ["redshift"]);
+  assert.equal(manifest.nside, 64);
+  assert.deepEqual(manifest.footprints.map((footprint) => [footprint.product, footprint.modality, footprint.pixels]), [["redrock files", "redshift", [20]]]);
+});
+
 test("coverage viewer keeps a Warehouse-only survey visible when public metadata is absent", () => {
   const manifest = {
     schemaVersion: 1,

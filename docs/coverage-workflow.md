@@ -51,6 +51,27 @@ unrelated DRs or infer full coverage from a partial file set. Catalog RA/Dec
 positions describe source distributions, not image footprints without WCS or
 other justified field geometry.
 
+Product modality and spatial extraction are separate contracts. Redshift
+classifies a product; it does not imply that every source in a position catalog
+has a redshift. The catalog-radec mode remains for deriving source occupancy
+from table coordinates. The path-healpix mode is for inventories whose
+directory structure assigns each real file URI to an explicit NESTED pixel and
+group. For DESI DR1 bright-program redrock files, RA/Dec first maps to the native
+order-6 cell, then reverse lookup returns only indexed redrock file URIs for
+that cell. The bright-program rule matches `redrock-main-bright-*.fits*` because
+the same pixel directory also contains coadd, emission-line and QSO products.
+It does not return the aggregate zall-pix-iron.fits in place of the partition
+files, and it does not claim BGS-only row selection.
+
+Survey-specific spatial units stay distinct. Euclid Q1 MER files retain the
+official Tile ID from the filename for source selection; each image's sky
+footprint still comes from its own FITS WCS. DESI tile products use the source
+Tile identity and tile coverage, while DESI redrock files use their native
+order-6 HEALPix path partition; redrock partitions are not Tiles. HST uses the
+MAST observation ID and `s_region`, then returns image products for that same
+observation. A Tile ID, an image WCS footprint, a HEALPix file partition and an
+observation region are related lookup evidence, not interchangeable identities.
+
 Runtime assets are the catalog, layer metadata, overview/query blocks, previews
 and published products. Evidence assets are input manifests, normalized scans,
 task snapshots, raw MOCs and provenance. Retained evidence is recoverable under

@@ -10,13 +10,15 @@ export interface LoadedCatalog {
   root: string;
   manifest: PublicAssetManifest;
   files: Map<string, { record: PublicAssetRecord; absolutePath: string }>;
+  retainedFiles: Map<string, { record: PublicAssetRecord; absolutePath: string }>;
 }
 
 const RELEASE_MANIFEST_PATH = "artifacts/public-survey-footprints/release-manifest.json";
 
 /** Bundle identity covers the complete manifest records so delivery/API metadata changes rotate the archive key. */
-export function publicReleaseBundleDigest(files: ReadonlyArray<PublicAssetRecord>): string {
-  return createHash("sha256").update(JSON.stringify(files)).digest("hex");
+export function publicReleaseBundleDigest(files: ReadonlyArray<PublicAssetRecord>, retainedPackages: ReadonlyArray<PublicAssetRecord> = []): string {
+  const payload = retainedPackages.length ? JSON.stringify({ files, retainedPackages }) : JSON.stringify(files);
+  return createHash("sha256").update(payload).digest("hex");
 }
 
 async function sha256(filePath: string): Promise<string> {
@@ -36,10 +38,17 @@ function resolveInside(root: string, relativePath: string): string {
 export async function loadCatalog(root: string, verifyFiles = true): Promise<LoadedCatalog> {
   const normalizedRoot = path.resolve(root);
   const manifestPath = path.join(normalizedRoot, "artifacts", "public-survey-footprints", "release-manifest.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as PublicAssetManifest;
-  if (manifest.schemaVersion !== 1 || !manifest.bundle?.sha256 || !Array.isArray(manifest.files)) throw new Error("Unsupported public asset release manifest");
+  const parsed = JSON.parse(await readFile(manifestPath, "utf8")) as PublicAssetManifest & { retainedPackages?: PublicAssetRecord[] };
+  if (parsed.schemaVersion !== 1 || !parsed.bundle?.sha256 || !Array.isArray(parsed.files)
+    || (parsed.retainedPackages !== undefined && !Array.isArray(parsed.retainedPackages))) throw new Error("Unsupported public asset release manifest");
+  const retainedPackages = parsed.retainedPackages ?? [];
+  const { retainedPackages: _retainedPackages, ...manifest } = parsed;
   const files = new Map<string, { record: PublicAssetRecord; absolutePath: string }>();
-  for (const record of manifest.files) {
+  const retainedFiles = new Map<string, { record: PublicAssetRecord; absolutePath: string }>();
+  for (const [record, retained] of [
+    ...manifest.files.map((record) => [record, false] as const),
+    ...retainedPackages.map((record) => [record, true] as const),
+  ]) {
     if (!record.id || files.has(record.id) || !/^[a-z0-9][a-z0-9-]*$/.test(record.id)) throw new Error(`Invalid or duplicate public asset ID: ${record.id}`);
     if (!/^[a-f0-9]{64}$/.test(record.sha256) || !Number.isSafeInteger(record.sizeBytes) || record.sizeBytes < 1) throw new Error(`Invalid public asset checksum record: ${record.id}`);
     if (record.deliveryClass !== undefined && record.deliveryClass !== "runtime" && record.deliveryClass !== "evidence") throw new Error(`Invalid delivery class: ${record.id}`);
@@ -66,16 +75,21 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
       }
       if (!verified) throw new Error(`Public asset SHA-256 mismatch: ${record.id}`);
     }
-    files.set(record.id, { record, absolutePath });
+    const entry = { record, absolutePath };
+    files.set(record.id, entry);
+    if (retained) retainedFiles.set(record.id, entry);
   }
-  const bundleHash = publicReleaseBundleDigest(manifest.files);
+  const bundleHash = publicReleaseBundleDigest(manifest.files, retainedPackages);
   if (bundleHash !== manifest.bundle.sha256) throw new Error("Public asset bundle digest does not match the release manifest");
-  return { root: normalizedRoot, manifest, files };
+  return { root: normalizedRoot, manifest, files, retainedFiles };
 }
 
 /** Reject release trees with missing, extra or unsafe members beyond the manifest and its own manifest record. */
 export async function assertExactReleaseTree(root: string, catalog: LoadedCatalog): Promise<void> {
-  const expected = new Set(catalog.manifest.files.map((record) => record.path.replaceAll("\\", "/")));
+  const expected = new Set([
+    ...catalog.manifest.files,
+    ...Array.from(catalog.retainedFiles.values(), (entry) => entry.record),
+  ].map((record) => record.path.replaceAll("\\", "/")));
   expected.add(RELEASE_MANIFEST_PATH);
   // Optional runtime marker written by sync after a verified archive pull.
   const optional = new Set([".archive-sha256"]);

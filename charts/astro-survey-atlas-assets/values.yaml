@@ -18,7 +18,7 @@ admin:
   discoveryObserverNamespace: atlas-system
   discoveryObserverSelector: app.kubernetes.io/name=astro-atlas-moc-discovery
   discoveryAcceptTimeoutSeconds: 120
-  warehouseScannerImage: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner:0.2.0-20260926-exact-object-roster@sha256:4d889be9c67b6723b5862d3827dd52e7546dbce0928647db7084e8b499cc1d43
+  warehouseScannerImage: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-atlas-scanner@sha256:415a731fc768bb40aa75c53085a36c880b8833b7d52abc00785c2cadbdad4198
   warehouseEvidenceClaim: atlas-evidence
   warehouseEvidenceMountPath: /var/lib/atlas-evidence
   adminTokenSecret:

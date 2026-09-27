@@ -240,7 +240,13 @@ export async function buildApprovedRelease(options: ApprovedBuildOptions): Promi
   const history={schemaVersion:2,latestReleaseId:releaseId,releases:[{releaseId,sequence:Date.now(),bundleId:releaseId,releasedAt:generatedAt,notes:"Hard cutover: historical products require explicit re-review; unapproved historical packages are withdrawn.",catalogSha256:sha256(catalogBytes),collection:{fileName:collection.downloadName,sizeBytes:collection.sizeBytes,sha256:collection.sha256,downloadUrl:`/api/v1/releases/${releaseId}/download`},packages:snapshot.packages.map(p=>({...p,downloadUrl:p.archiveUrl,survey:{id:p.surveyId,displayName:p.name},releases:(p.releases as string[]).map(id=>({id,label:id,modalities:p.modalities,layerCount:snapshot.products.filter(product=>product.content.releaseId===id && product.geometry).length}))}))}]};
   await put({id:"approved-release-history",kind:"manifest",label:"Release history",description:"Reviewed releases",path:"artifacts/public-survey-footprints/release-history.json",downloadName:"release-history.json",mediaType:"application/json",deliveryClass:"runtime"},Buffer.from(JSON.stringify(history)),true);
   await put({id:"approved-release-snapshot",kind:"manifest",label:"Approved snapshot",description:"Internal authorization snapshot",path:APPROVED_RELEASE_PATH,downloadName:"approved-release.json",mediaType:"application/json",deliveryClass:"runtime"},Buffer.from(JSON.stringify(snapshot)));
-  const manifest={schemaVersion:1,generatedAt,bundle:{id:releaseId,sha256:publicReleaseBundleDigest(files)},statistics:{...options.baseline.statistics,packages:snapshot.packages.length,totalBytes:files.reduce((s,f)=>s+f.sizeBytes,0)},files};
+  const retainedPackages = files.filter((record) => record.kind === "package"
+    && !snapshot.assetIds.includes(record.id)
+    && historicalPackages.some((entry) => entry.id === record.downloadName.slice(0, -(String(record.version ?? "").length + 5))
+      && entry.version === record.version && entry.sha256 === record.sha256));
+  const retainedIds = new Set(retainedPackages.map((record) => record.id));
+  const publicFiles = files.filter((record) => !retainedIds.has(record.id));
+  const manifest={schemaVersion:1,generatedAt,bundle:{id:releaseId,sha256:publicReleaseBundleDigest(publicFiles,retainedPackages)},statistics:{...options.baseline.statistics,packages:snapshot.packages.length,totalBytes:publicFiles.reduce((s,f)=>s+f.sizeBytes,0)},files:publicFiles,...(retainedPackages.length ? {retainedPackages} : {})};
   await writeFile(path.join(options.stagingRoot,"artifacts/public-survey-footprints/release-manifest.json"),JSON.stringify(manifest));
-  return {root:options.stagingRoot,files,packages:snapshot.packages};
+  return {root:options.stagingRoot,files:[...publicFiles,...retainedPackages],packages:snapshot.packages};
 }

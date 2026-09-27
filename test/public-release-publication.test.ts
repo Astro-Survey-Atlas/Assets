@@ -172,7 +172,7 @@ test("package-only rebuild freezes the approved baseline and preserves mode acro
   const installed = path.join(f.base, "installed");
   await syncReleaseFromObjectStore(f.store, installed);
   const baselineRoot = path.join(installed, "current");
-  const baselineManifest = JSON.parse(await readFile(path.join(baselineRoot, "artifacts/public-survey-footprints/release-manifest.json"), "utf8")) as { files: Array<{ id: string; kind: string; path: string; surveyId?: string; version?: string; sha256: string }> };
+  const baselineManifest = JSON.parse(await readFile(path.join(baselineRoot, "artifacts/public-survey-footprints/release-manifest.json"), "utf8")) as { files: Array<{ id: string; kind: string; path: string; surveyId?: string; version?: string; sha256: string }>; retainedPackages?: Array<{ id: string; kind: string; path: string; surveyId?: string; version?: string; sha256: string }> };
   const baselineApproved = JSON.parse(await readFile(path.join(baselineRoot, "artifacts/public-survey-footprints/approved-release.json"), "utf8")) as { products: Array<{ productId: string; revision: number; geometry: { mocSha256: string } | null }>; packages: Array<{ id: string; surveyId: string; version: string }>; historicalPackages?: Array<{ id: string; surveyId: string; version: string; sha256: string; sizeBytes: number }> };
   const oldPackage = baselineApproved.packages.find(entry => entry.surveyId === "m42")!;
   const oldPackageAsset = baselineManifest.files.find(entry => entry.kind === "package" && entry.surveyId === "m42" && entry.version === oldPackage.version)!;
@@ -228,5 +228,11 @@ test("package-only rebuild freezes the approved baseline and preserves mode acro
   const historical = nextApproved.historicalPackages?.find(entry => entry.surveyId === "m42" && entry.version === oldPackage.version);
   assert.ok(historical, "the prior reviewed package stays available for version-pinned consumers");
   assert.equal(historical!.sha256, oldPackageAsset.sha256);
-  assert.ok(nextManifest.files.some(entry => entry.kind === "package" && entry.surveyId === "m42" && entry.version === oldPackage.version && entry.sha256 === oldPackageAsset.sha256));
+  assert.ok(!nextManifest.files.some(entry => entry.kind === "package" && entry.surveyId === "m42" && entry.version === oldPackage.version), "historical versions are not in the current asset manifest");
+  assert.ok(nextManifest.retainedPackages?.some(entry => entry.kind === "package" && entry.surveyId === "m42" && entry.version === oldPackage.version && entry.sha256 === oldPackageAsset.sha256), "the versioned download retains its separately recorded archive");
+  const nextCatalog = await loadCatalog(nextRoot);
+  const nextPublicState = await loadPublicState(nextCatalog);
+  assert.ok(nextCatalog.retainedFiles.has(oldPackageAsset.id), "the server can still resolve the retained versioned archive");
+  assert.ok(!nextPublicState.catalog.files.has(oldPackageAsset.id), "the generic public asset allowlist excludes historical packages");
+  assert.ok(!nextPublicState.index.surveys[0]?.assets.some(entry => entry.id === oldPackageAsset.id), "the current survey directory excludes historical packages");
 });

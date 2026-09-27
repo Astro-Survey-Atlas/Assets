@@ -1,7 +1,7 @@
 import { discoveryFailureView, type DiscoveryFailure } from "./discovery-failure.js";
 import { AdminHttpError } from "./admin-error.js";
 import { mastHstObservationSummaryView, MAST_HST_DISCOVERY_POLICY, type MastHstObservationQuery, type MastHstScopeRef } from "./moc-discovery.js";
-import { batchEvidenceLayerId, buildScanBatchResource, ScanBatchValidationError, scanBatchView, type ScanBatchRequest, type ScanBatchRuleResource } from "./scan-batch.js";
+import { batchEvidenceLayerId, buildScanBatchResource, resolveScanBatchIncludePattern, ScanBatchValidationError, scanBatchView, type ScanBatchRequest, type ScanBatchRuleResource } from "./scan-batch.js";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage, type RequestOptions as HttpRequestOptions } from "node:http";
@@ -15,9 +15,9 @@ const API_GROUP = "/apis/atlas.zhejianglab.org/v1alpha1";
 const WAREHOUSE_DATA_SOURCE_GROUP = "/apis/org.zhejianglab.astro.metadata/v1alpha1";
 export const ASSETS_MANAGED_BY = "astro-survey-atlas-assets";
 export const PUBLIC_COVERAGE_KIND = "public-coverage";
-export const SUPPORTED_COVERAGE_MODES = ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix"] as const;
+export const SUPPORTED_COVERAGE_MODES = ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "path-healpix"] as const;
 export const CONNECTOR_TYPES = ["s3", "oss", "local"] as const;
-export const SUPPORTED_MODALITIES = ["image", "spectrum", "cube", "catalog", "timeseries", "visibility", "event", "other"] as const;
+export const SUPPORTED_MODALITIES = ["image", "spectrum", "redshift", "cube", "catalog", "timeseries", "visibility", "event", "other"] as const;
 const SOURCE_VOLUME_LABEL = "atlas.zhejianglab.org/scanner-source";
 const CONNECTOR_PROBE_TIMEOUT_MS = 5_000;
 
@@ -188,13 +188,15 @@ export interface CoverageTaskInput {
   healpixColumn?: string;
   healpixOrderColumn?: string;
   healpixOrder?: number;
+  pathHealpixOrder?: number;
+  pathHealpixGroupSize?: number;
   hduName?: string;
   hduIndex?: number;
   coordinateFrame?: string;
   batchId?: string;
 }
 
-export type ScanBatchTaskRecipe = Omit<CoverageTaskInput, "name" | "sourceConnector" | "sourcePaths" | "batchId">;
+export type ScanBatchTaskRecipe = Omit<CoverageTaskInput, "name" | "sourceConnector" | "sourcePaths" | "batchId"> & { includePattern?: string };
 
 export interface TaskStatusView {
   phase: string;
@@ -1242,6 +1244,7 @@ function warehouseModality(value: string | undefined, mode: CoverageMode): strin
   const normalized = (value ?? "").trim().toLowerCase();
   if (["image", "imaging", "photometry", "infrared", "ultraviolet"].includes(normalized)) return "image";
   if (["spectrum", "spectroscopy"].includes(normalized)) return "spectrum";
+  if (normalized === "redshift") return "redshift";
   if (normalized === "catalog" || mode === "catalog-radec" || mode === "nested-healpix") return "catalog";
   if (["cube", "timeseries", "visibility", "event"].includes(normalized)) return normalized;
   return "other";
@@ -1374,6 +1377,19 @@ function buildTaskResource(
     if (hasFixedOrder) catalog.healpixOrder = safePositiveInteger(input.healpixOrder, "healpixOrder", 8, 29);
     else catalog.healpixOrderColumn = requireText(input.healpixOrderColumn, "healpixOrderColumn", 128);
   }
+  let pathHealpix: { order: number; groupSize: number } | undefined;
+  const hasPathHealpixSettings = input.pathHealpixOrder !== undefined || input.pathHealpixGroupSize !== undefined;
+  if (mode === "path-healpix") {
+    if (!Number.isSafeInteger(input.pathHealpixOrder) || input.pathHealpixOrder! < 0 || input.pathHealpixOrder! > 29) {
+      throw new AdminHttpError(400, "pathHealpixOrder must be an integer between 0 and 29");
+    }
+    if (!Number.isSafeInteger(input.pathHealpixGroupSize) || input.pathHealpixGroupSize! < 1) {
+      throw new AdminHttpError(400, "pathHealpixGroupSize must be a positive integer");
+    }
+    pathHealpix = { order: input.pathHealpixOrder!, groupSize: input.pathHealpixGroupSize! };
+  } else if (hasPathHealpixSettings) {
+    throw new AdminHttpError(400, "pathHealpixOrder and pathHealpixGroupSize are supported only with path-healpix");
+  }
 
   const localLocation = connector.type === "local" ? localSourceLocation(sourcePaths[0]!, connector) : undefined;
   const location = localLocation?.rootPath
@@ -1392,7 +1408,12 @@ function buildTaskResource(
     },
     source: { connector: sourceConnectorPlan, location },
     filters: { includeSuffixes: allowedSuffixes ? allowedSuffixes.split(/[\s,]+/).filter(Boolean) : [] },
-    extraction: { mode: extractionMode, ...(extractionMode === "catalog-healpix" ? {} : { outputOrder: maxOrder }), catalog },
+    extraction: {
+      mode: extractionMode,
+      ...(["catalog-healpix", "path-healpix"].includes(extractionMode) ? {} : { outputOrder: maxOrder }),
+      catalog,
+      ...(pathHealpix ? { pathHealpix } : {}),
+    },
     sink: { connector: { type: "elasticsearch", endpoint: config.warehouseEsUrl, credentialRef: {} } },
     evidence: { outputPath: `${config.evidenceMountPath.replace(/\/+$/, "")}/${batchId}` },
   };
@@ -2101,6 +2122,13 @@ export class AssetsAdmin {
       const extraction = plan.extraction as Record<string, unknown>;
       const filters = plan.filters as Record<string, unknown>;
       const requestRule = input.rules[index]!;
+      let includePattern: string | undefined;
+      try {
+        includePattern = resolveScanBatchIncludePattern(requestRule.includePattern, recipes[index]!.includePattern);
+      } catch (error) {
+        if (error instanceof ScanBatchValidationError) throw new AdminHttpError(400, error.message);
+        throw error;
+      }
       const includeSuffixes = Array.isArray(filters.includeSuffixes)
         ? filters.includeSuffixes.filter((value): value is string => typeof value === "string")
         : [];
@@ -2118,7 +2146,7 @@ export class AssetsAdmin {
         filters: { includeSuffixes, ...(excludePatterns.length ? { excludePatterns } : {}) },
         extraction,
         relativePrefix: requestRule.relativePrefix,
-        ...(requestRule.includePattern ? { includePattern: requestRule.includePattern } : {}),
+        ...(includePattern ? { includePattern } : {}),
       };
     });
     let batch: Record<string, unknown>;

@@ -99,6 +99,7 @@ export interface ReleaseManifestDocument {
   bundle: { id: string; sha256: string };
   statistics: Record<string, number>;
   files: PublicAssetRecord[];
+  retainedPackages?: PublicAssetRecord[];
 }
 
 export interface PublicationSurveyPlan {
@@ -454,7 +455,7 @@ function packageManifestRecord(records: Map<string, PublicAssetRecord>, id: stri
 
 /** Validate the small runtime control documents that bind packages and coverage together. */
 async function verifyReleaseDocuments(extractRoot: string, manifest: ReleaseManifestDocument): Promise<ReleaseDocumentVerification> {
-  const manifestRecords = new Map(manifest.files.map((record) => [record.path, record]));
+  const manifestRecords = new Map([...manifest.files, ...(manifest.retainedPackages ?? [])].map((record) => [record.path, record]));
   const packageCatalogPath = path.join(extractRoot, PACKAGE_CATALOG_RELATIVE_PATH);
   let packageCatalog: Record<string, unknown>;
   try { packageCatalog = objectRecord(JSON.parse(await readFile(packageCatalogPath, "utf8")), "Resource package catalog"); }
@@ -552,9 +553,10 @@ export async function verifyUploadedReleaseArchive(uploaded: UploadedReleaseArch
     const manifestPath = path.join(extractRoot, MANIFEST_RELATIVE_PATH);
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as ReleaseManifestDocument;
     if (manifest.schemaVersion !== 1 || !manifest.bundle?.id || !/^[a-f0-9]{64}$/.test(manifest.bundle.sha256) || !Array.isArray(manifest.files) || !manifest.files.length) throw new PublicationConflictError("Candidate release manifest is malformed", 500);
-    if (publicReleaseBundleDigest(manifest.files) !== manifest.bundle.sha256 || manifest.bundle.sha256 !== uploaded.bundle.sha256) throw new PublicationConflictError("Candidate release bundle digest mismatch", 409);
+    if (publicReleaseBundleDigest(manifest.files, manifest.retainedPackages) !== manifest.bundle.sha256 || manifest.bundle.sha256 !== uploaded.bundle.sha256) throw new PublicationConflictError("Candidate release bundle digest mismatch", 409);
     const expected = new Set<string>([MANIFEST_RELATIVE_PATH]);
-    for (const record of manifest.files) {
+    const releaseFiles = [...manifest.files, ...(manifest.retainedPackages ?? [])];
+    for (const record of releaseFiles) {
       const relative = safeArchivePath(record.path);
       if (expected.has(relative)) throw new PublicationConflictError(`Candidate release contains duplicate manifest path: ${relative}`, 500);
       if (!record.id || !Number.isSafeInteger(record.sizeBytes) || record.sizeBytes < 1 || !/^[a-f0-9]{64}$/.test(record.sha256)) throw new PublicationConflictError(`Candidate release has an invalid asset record: ${record.id ?? "unknown"}`, 500);
@@ -574,7 +576,7 @@ export async function verifyUploadedReleaseArchive(uploaded: UploadedReleaseArch
       throw new PublicationConflictError("Candidate archive does not exactly match its release manifest", 500);
     }
     const documents = await verifyReleaseDocuments(extractRoot, manifest);
-    return { state: "passed", checkedAt: new Date().toISOString(), bundleSha256: manifest.bundle.sha256, files: manifest.files.length, ...documents };
+    return { state: "passed", checkedAt: new Date().toISOString(), bundleSha256: manifest.bundle.sha256, files: releaseFiles.length, ...documents };
   } catch (error) {
     if (error instanceof PublicationConflictError) throw error;
     throw new PublicationConflictError(`Candidate archive isolation verification failed: ${error instanceof Error ? error.message : String(error)}`, 409);
@@ -829,7 +831,7 @@ export class PublicReleasePublisher {
       if(!run.selectedProducts?.length && run.rebuildPackages !== true)throw new PublicationConflictError("Legacy publication task must be resubmitted under reviewed-release-v1");
       if(run.rebuildPackages === true && (!run.rebuildSurveyIds?.length || run.selectedProducts?.length))throw new PublicationConflictError("Package rebuild task has an invalid frozen survey selection");
       const baseline=await this.#baselineManifest();
-      const candidate = await buildApprovedRelease({stagingRoot,runId,root:this.#options.baselineRoot,baseline,files:baseline.files,products:this.#options.loadProducts?await this.#options.loadProducts():[],publications:await this.#options.loadPublications(),publicationFile:this.#options.publicationFile,selected:run.selectedProducts ?? [],...(run.rebuildPackages ? { rebuildSurveyIds: run.rebuildSurveyIds } : {})});
+      const candidate = await buildApprovedRelease({stagingRoot,runId,root:this.#options.baselineRoot,baseline,files:[...baseline.files,...(baseline.retainedPackages ?? [])],products:this.#options.loadProducts?await this.#options.loadProducts():[],publications:await this.#options.loadPublications(),publicationFile:this.#options.publicationFile,selected:run.selectedProducts ?? [],...(run.rebuildPackages ? { rebuildSurveyIds: run.rebuildSurveyIds } : {})});
       const approved = await readApprovedRelease(candidate.root);
       const previous = await readApprovedRelease(this.#options.baselineRoot);
       run.expected = {
@@ -1190,7 +1192,7 @@ export class PublicReleasePublisher {
   async #baselineManifest(): Promise<ReleaseManifestDocument> {
     const document = JSON.parse(await readFile(path.resolve(this.#options.baselineRoot, MANIFEST_RELATIVE_PATH), "utf8")) as ReleaseManifestDocument;
     if (document.schemaVersion !== 1 || !Array.isArray(document.files) || !document.files.length) throw new PublicationConflictError("Baseline release manifest is unusable", 500);
-    if (publicReleaseBundleDigest(document.files) !== document.bundle.sha256) throw new PublicationConflictError("Baseline release manifest digest mismatch", 500);
+    if (publicReleaseBundleDigest(document.files, document.retainedPackages) !== document.bundle.sha256) throw new PublicationConflictError("Baseline release manifest digest mismatch", 500);
     return document;
   }
 

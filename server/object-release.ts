@@ -54,10 +54,15 @@ export async function uploadObjectRelease(root: string, baselineRoot: string, st
   if (previous && previous.bundle.sha256 !== expectedSha) throw new Error("Release authority changed before upload");
   const baseline = await loadCatalog(baselineRoot);
   const old = previous?.schemaVersion === 3 ? await readManifest(store, parseObjectPointer(previous)) : undefined;
-  const inherited = new Map(old?.files.map(f => [f.path, f]) ?? (previous ? baseline.manifest.files.map(f => [f.path, { path: f.path, sha256: f.sha256, sizeBytes: f.sizeBytes }] as const) : []));
+  const baselineFiles = previous ? [
+    ...baseline.manifest.files.map((record) => [record.path, { path: record.path, sha256: record.sha256, sizeBytes: record.sizeBytes }] as const),
+    ...Array.from(baseline.retainedFiles.values(), ({ record }) => [record.path, { path: record.path, sha256: record.sha256, sizeBytes: record.sizeBytes }] as const),
+  ] : [];
+  const inherited = new Map(old?.files.map(f => [f.path, f]) ?? baselineFiles);
   const catalog = await loadCatalog(root);
   await assertExactReleaseTree(root, catalog);
-  const records = [...catalog.manifest.files.map(f => ({ path: f.path, sha256: f.sha256, sizeBytes: f.sizeBytes }))];
+  const records = [...catalog.manifest.files, ...Array.from(catalog.retainedFiles.values(), ({ record }) => record)]
+    .map(record => ({ path: record.path, sha256: record.sha256, sizeBytes: record.sizeBytes }));
   const bytes = await readFile(path.join(root, manifestPath));
   records.push({ path: manifestPath, sha256: hash(bytes), sizeBytes: bytes.length });
   const files: ObjectEntry[] = [];

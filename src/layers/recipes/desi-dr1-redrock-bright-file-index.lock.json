@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "kind": "coverage-recipe-lock",
+  "layerId": "desi-dr1-redrock-bright-file-index",
+  "productId": "08f093bcebd4cd3ef4c3",
+  "surveyId": "desi",
+  "releaseId": "desi-dr1",
+  "product": "DR1 bright-program redrock files",
+  "modality": "redshift",
+  "mode": "path-healpix",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "user_file_derived",
+  "maxOrder": 6,
+  "availableOrders": [6],
+  "queryOrder": 6,
+  "overviewOrder": 4,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://data.desi.lbl.gov/doc/releases/dr1/",
+  "sourceOrder": 6,
+  "recipe": {
+    "fileNamePattern": "redrock-main-bright-*.fits*",
+    "groupSize": 100,
+    "sourcePrefix": "oss://si000925lshd/27-Class/DESI/DR1/spectro/redux/iron/healpix/main/bright/",
+    "scanBatchId": "desi-dr1-redrock-bright-user-oss-20260927-r1",
+    "scopeId": "desi-dr1-redrock-bright-user-oss-20260927",
+    "rosterSha256": "b136e3dbec18890fec95a78bd7cfb34fb9275c95b6973e8303e30e81ac247912",
+    "scopeSnapshotSha256": "5086236359fa62b4953357077f7fb3798ef48e5903f0a0828053673a9566cf75",
+    "expectedPartitions": 228,
+    "completedPartitions": 228,
+    "failedPartitions": 0,
+    "scanRunCount": 228,
+    "sourceSnapshotCount": 228,
+    "fileCount": 904,
+    "coverageCount": 904,
+    "precision": "exact",
+    "precisionJustification": "Every indexed URI is matched to its parent NESTED order-6 HEALPix path and verified group=floor(ipix/100). Exactness describes the file-to-partition association; it does not claim that every celestial source in the partition has a DESI observation.",
+    "limitations": [
+      "This index covers only the redrock-main-bright files in the user's partial OSS copy; it is not a complete DESI DR1 or BGS inventory.",
+      "DESI order-6 HEALPix path partitions are not DESI Tiles.",
+      "The scan reads object paths and metadata, not FITS science arrays, and applies no BGS-only row filter.",
+      "The order-4 preview is a projection for display and is not used for reverse lookup."
+    ]
+  },
+  "snapshot": {
+    "sourceManifest": "artifacts/public-survey-footprints/raw/desi-redrock-bright-20260927/source-manifest.json",
+    "sourceManifestSha256": "0cc4f5c4f1476909738bb7131180ce5f6e6e5d54638e5347f834bdcfcb1aec11",
+    "sourceManifestSizeBytes": 244122,
+    "pathCells": "artifacts/public-survey-footprints/raw/desi-redrock-bright-20260927/path-healpix-cells-order6.json",
+    "pathCellsSha256": "ce90c25b075bbc9bf90b0ad93e2e13deb110b88f140498b358132dbadf1fb720",
+    "pathCellsSizeBytes": 5271
+  },
+  "steps": [
+    { "id": "input", "implementationRef": "Assets source-manifest inventory snapshot", "precision": "exact" },
+    { "id": "scan", "implementationRef": "data-warehouse PathHealpixHandler", "precision": "exact" },
+    { "id": "normalize", "implementationRef": "MOC-Core-SDK canonical NESTED cell set", "precision": "exact" },
+    { "id": "moc", "implementationRef": "astro_survey_moc_core.core:write_moc_fits", "precision": "exact", "order": 6 },
+    { "id": "query", "implementationRef": "astro_survey_moc_core.core:project_cells", "precision": "exact", "order": 6 },
+    { "id": "preview", "implementationRef": "astro_survey_moc_core.core:project_cells", "precision": "estimated", "order": 4 },
+    { "id": "statistics", "implementationRef": "astro_survey_moc_core.core:canonical_cells", "precision": "exact" }
+  ],
+  "outputs": {
+    "moc": { "order": 6, "precision": "exact" },
+    "query": { "order": 6, "precision": "exact" },
+    "preview": { "order": 4, "precision": "estimated" },
+    "statistics": { "precision": "exact" }
+  }
+}

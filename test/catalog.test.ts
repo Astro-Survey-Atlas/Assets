@@ -6,8 +6,10 @@ import path from "node:path";
 import test from "node:test";
 
 import { loadCatalog, publicManifest } from "../server/catalog.js";
+import { ProductStore } from "../server/products.js";
+import { loadSurveyIndex } from "../server/surveys.js";
 import { readZipEntry } from "../server/resource-package-inspection.js";
-import { testArtifactRoot, testDataRoot } from "./test-data-root.js";
+import { testArtifactRoot, testDataRoot, testSourceRoot } from "./test-data-root.js";
 
 test("release catalog verifies every public file and bundle digest", async () => {
   const catalog = await loadCatalog(testDataRoot);
@@ -17,7 +19,7 @@ test("release catalog verifies every public file and bundle digest", async () =>
   assert.equal(catalog.manifest.statistics.footprints, 116);
   assert.equal(catalog.manifest.statistics.acquired, 107);
   assert.equal(catalog.manifest.statistics.releases, 67);
-  assert.equal(catalog.manifest.statistics.products, 159);
+  assert.equal(catalog.manifest.statistics.products, 160);
   assert.equal(catalog.files.size, catalog.manifest.files.length);
   assert.ok(catalog.manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)));
 });
@@ -32,6 +34,42 @@ test("release catalog labels projections with their locked order", async () => {
       assert.match(entry.label, new RegExp(`order-${order} query projection`));
       assert.match(entry.downloadName, new RegExp(`query-order${order}\\.json$`));
     }
+  }
+});
+
+test("DESI redshift is a DR1 product modality, separate from EDR spectroscopy", async () => {
+  const catalog = await loadCatalog(testSourceRoot, false);
+  const index = await loadSurveyIndex(testSourceRoot, catalog, { footprints: [] });
+  const desi = index.surveys.find((survey) => survey.id === "desi")!;
+  const edr = desi.releases.find((release) => release.id === "desi-edr")!;
+  const dr1 = desi.releases.find((release) => release.id === "desi-dr1")!;
+  assert.equal(edr.modalities.includes("redshift"), false);
+  assert.equal(dr1.modalities.includes("redshift"), true);
+  assert.equal(dr1.products.find((product) => product.name === "DR1 bright-program redrock files")?.modality, "redshift");
+  assert.equal(dr1.products.find((product) => product.name === "DR1 spectra and redshifts")?.modality, "spectroscopy");
+});
+
+test("DESI redrock scan defaults select only bright redrock products at native path HEALPix", async () => {
+  const contentRoot = await mkdtemp(path.join(os.tmpdir(), "assets-redrock-product-defaults-"));
+  try {
+    const products = new ProductStore(undefined, contentRoot);
+    await products.initialize(testSourceRoot);
+    const redrock = products.list().find((product) => product.draft.name === "DR1 bright-program redrock files")!;
+    assert.equal(redrock.draft.modality, "redshift");
+    assert.equal(redrock.draft.sourceTier, "user_file_derived");
+    assert.equal(redrock.published, null);
+    assert.equal(redrock.draft.mode, "path-healpix");
+    assert.deepEqual({
+      includePattern: redrock.draft.scanDefaults?.includePattern,
+      pathHealpixOrder: redrock.draft.scanDefaults?.pathHealpixOrder,
+      pathHealpixGroupSize: redrock.draft.scanDefaults?.pathHealpixGroupSize,
+    }, {
+      includePattern: "redrock-main-bright-*.fits*",
+      pathHealpixOrder: 6,
+      pathHealpixGroupSize: 100,
+    });
+  } finally {
+    await rm(contentRoot, { recursive: true, force: true });
   }
 });
 

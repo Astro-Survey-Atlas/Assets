@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Healpix, Pointing } from "healpixjs";
+import { filterByModalities } from "../src/modality-filter.js";
 
 import type { CoverageCellLayer } from "../server/coverage.js";
 import { highestCommonOrder, layersForOverlapComponent, overlapForLayers } from "../server/overlap.js";
@@ -28,6 +29,18 @@ test("overlap uses the highest order shared by surveys and unions products withi
   assert.deepEqual(overlapForLayers(layers, ["a", "b"], 4)?.pixels, [100, 101]);
   assert.deepEqual(overlapForLayers(layers, ["a", "b"], 7)?.pixels, [100, 101]);
   assert.deepEqual(overlapForLayers(layers, ["a", "b"], 8)?.pixels, [200]);
+});
+
+test("overlap respects selected product modalities within each survey", () => {
+  const layers = [
+    { ...layer("desi-spectroscopy", "desi", { 4: [10] }), modality: "spectroscopy" },
+    { ...layer("desi-redshift", "desi", { 4: [20] }), modality: "redshift" },
+    { ...layer("euclid-imaging", "euclid", { 4: [20] }), modality: "imaging" },
+  ];
+  const selected = filterByModalities(layers, ["redshift", "imaging"]);
+  const result = overlapForLayers(selected, ["desi", "euclid"], 4);
+  assert.deepEqual(result?.pixels, [20]);
+  assert.deepEqual(layersForOverlapComponent(selected, result!, result!.components[0]!).map((entry) => entry.layerId), ["desi-redshift", "euclid-imaging"]);
 });
 
 test("overlap falls back to a lower real common order when the highest order has no shared cells", () => {
@@ -123,6 +136,7 @@ test("exiting overlap rebases the orbit around the celestial sphere", () => {
 
 test("DESI source units are reconstructed from the locked TILE_COMPLETENESS snapshots", async () => {
   const store = await SourceUnitStore.load(testDataRoot);
+  assert.equal(store.match("desi-dr1-redrock-bright-file-index", 6, [128]), null);
   const requestedCells = [1087, 1130, 1173, 1216];
   const match = store.match("desi-dr1-spectra-footprint", 4, requestedCells);
   assert.ok(match);

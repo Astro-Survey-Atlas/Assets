@@ -116,6 +116,7 @@ function librariesFor(mode: string, kind: string): string[] {
   if (kind === "warehouse") return ["data-warehouse ast_* indexes"];
   if (mode === "regions") return ["astropy", "regions", "mocpy", "astropy-healpix"];
   if (mode === "tile-table") return ["astropy", "mocpy", "astropy-healpix", "desimodel (radius authority)"];
+  if (mode === "path-healpix") return ["data-warehouse ScanPlan v2", "Warehouse ast_file_index_v1", "Warehouse ast_coverage_index_v1"];
   if (mode === "native-moc") return ["astropy", "astro_survey_moc_core (MOC-Core-SDK)"];
   if (mode === "catalog-radec") return ["astropy", "astropy-healpix", "mocpy"];
   return ["astropy", "astropy.wcs", "astropy-healpix", "mocpy"];
@@ -174,6 +175,10 @@ function codeFor(mode: string, kind: string): PublicProductCodeEvidence | undefi
     "catalog-radec:rasterize": {
       snippet: "coords = _skycoord([point[0] for point in points], [point[1] for point in points])\npixels = np.asarray(hp.skycoord_to_healpix(coords), dtype=np.int64).reshape(-1)\nreturn {(order, int(pixel)) for pixel in pixels}",
       implementationRef: "astro_survey_moc_core.core:_cells_from_radec",
+    },
+    "path-healpix:validate": {
+      snippet: "segments = urlsplit(file.parent_uri).path.rstrip(\"/\").split(\"/\")\ngroup, pixel = map(int, segments[-2:])\nvalidate_nested_cell(order=spec.path_healpix.order, pixel=pixel)\nassert group == pixel // spec.path_healpix.group_size",
+      implementationRef: "data-warehouse scanner-cli:PathHealpixHandler",
     },
     "*:rasterize": {
       snippet: "cells = _cells_from_radec_circles(points, spec.max_order, radius_deg)\nresult = canonical_cells(cells, max_order=spec.max_order)",

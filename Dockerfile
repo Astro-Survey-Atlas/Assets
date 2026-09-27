@@ -13,6 +13,7 @@ RUN npm ci --registry=${NPM_REGISTRY}
 
 COPY tsconfig.server.json tsconfig.site.json vite.config.ts ./
 COPY server ./server
+COPY src ./src
 COPY scripts ./scripts
 COPY site ./site
 COPY test ./test
@@ -52,11 +53,14 @@ COPY --from=build /app/requirements/moc-core-source.json /tmp/moc-core-source.js
 COPY --from=build /app/scripts/verify_core_wheel.py /tmp/verify_core_wheel.py
 COPY --from=build /tmp/${MOC_CORE_WHEEL} /tmp/${MOC_CORE_WHEEL}
 COPY --from=build /tmp/${MOC_CORE_SOURCE_SNAPSHOT} /tmp/${MOC_CORE_SOURCE_SNAPSHOT}
-RUN python3 -m pip install --break-system-packages --no-cache-dir -r /tmp/moc-requirements.lock \
+ARG PYTHON_PACKAGE_INDEX=https://pypi.org/simple
+RUN python3 -m pip install --break-system-packages --no-cache-dir --index-url="${PYTHON_PACKAGE_INDEX}" -r /tmp/moc-requirements.lock \
     && python3 /tmp/verify_core_wheel.py --source /tmp/moc-core-source.json --wheel /tmp/${MOC_CORE_WHEEL} --snapshot /tmp/${MOC_CORE_SOURCE_SNAPSHOT} \
     && python3 -m pip install --break-system-packages --no-cache-dir --no-deps /tmp/${MOC_CORE_WHEEL} \
     && rm -f /tmp/moc-requirements.lock /tmp/moc-core-source.json /tmp/verify_core_wheel.py /tmp/${MOC_CORE_WHEEL} /tmp/${MOC_CORE_SOURCE_SNAPSHOT}
 COPY --from=build --chown=atlas:atlas /app/dist/server ./dist/server
+COPY --from=build --chown=atlas:atlas /app/dist/src ./dist/src
+COPY --from=build --chown=atlas:atlas /app/src ./src
 COPY --from=build --chown=atlas:atlas /app/dist/scripts ./dist/scripts
 COPY --from=build --chown=atlas:atlas /app/dist/site ./site
 COPY --from=build --chown=atlas:atlas /app/scripts ./scripts
@@ -65,6 +69,7 @@ COPY --from=build --chown=atlas:atlas /app/node_modules ./node_modules
 
 RUN command -v flock
 
+ENV ASSETS_PRODUCT_CATALOG_ROOT=/app
 USER 10001:10001
 EXPOSE 4180
 CMD ["node", "dist/server/server.js"]

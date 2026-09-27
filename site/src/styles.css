@@ -249,6 +249,25 @@ main { position: relative; z-index: 1; display: flow-root; }
 .coverage-detail-panel dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 12px; margin: 12px 0 0; }
 .coverage-detail-panel dt { min-width: 0; overflow: hidden; color: var(--muted); font: 700 8px/1.3 var(--font-mono), monospace; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .coverage-detail-panel dd { min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font: 600 9px/1.35 var(--font-mono), monospace; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.hst-image-lookup-region { min-width: 0; }
+.hst-image-lookup-region-note { display: block; margin-top: 10px; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.hst-image-lookup-button { width: 100%; margin-top: 14px; justify-content: flex-start; }
+.hst-image-lookup-results { display: grid; gap: 9px; margin-top: 12px; color: var(--ink); font: 500 10px/1.45 var(--font-mono), monospace; }
+.hst-image-lookup-summary, .hst-image-observation p { margin: 0; color: var(--muted); }
+.hst-image-observations { display: grid; gap: 5px; }
+.hst-image-observation { min-width: 0; border-top: 1px solid var(--line); padding-top: 6px; }
+.hst-image-observation summary { cursor: pointer; overflow-wrap: anywhere; color: var(--ink); }
+.hst-image-observation ul { display: grid; gap: 6px; margin: 7px 0 0; padding: 0; list-style: none; }
+.hst-image-observation li { min-width: 0; padding-left: 10px; border-left: 2px solid var(--line); }
+.hst-image-observation label { display: grid; grid-template-columns: 15px minmax(0, 1fr); gap: 3px 5px; align-items: start; }
+.hst-image-observation input { grid-row: span 3; margin: 2px 0 0; accent-color: var(--blue); }
+.hst-image-observation li span { overflow-wrap: anywhere; }
+.hst-image-observation small, .hst-image-lookup-provenance { color: var(--muted); font-size: 9px; overflow-wrap: anywhere; }
+.hst-image-observation a { color: var(--blue); font-size: 9px; }
+.hst-image-lookup-footer { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border-top: 1px solid var(--line); padding-top: 8px; }
+.hst-image-lookup-footer span { flex: 1 1 100%; color: var(--muted); }
+.hst-image-lookup-footer .command-button { min-width: 0; padding: 5px 8px; }
+.hst-image-lookup-provenance { display: block; }
 body[data-layers-panel="open"] #selection-queue {
   visibility: hidden;
   pointer-events: none;

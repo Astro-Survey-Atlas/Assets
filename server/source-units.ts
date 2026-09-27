@@ -169,7 +169,11 @@ export class SourceUnitStore {
     const store = new SourceUnitStore();
     const registry = JSON.parse(await readFile(path.join(root, "src/layers/layer-registry.json"), "utf8")) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; recipePath?: string }> };
     const desi = (registry.layers ?? []).filter((layer): layer is typeof layer & { recipePath: string } => layer.surveyId === "desi" && Boolean(layer.recipePath));
-    for (const layer of desi) store.#layers.set(layer.layerId, await buildDesiLayer(root, layer));
+    for (const layer of desi) {
+      const recipe = JSON.parse(await readFile(path.join(root, layer.recipePath), "utf8")) as { input?: unknown };
+      if (typeof recipe.input !== "string") continue;
+      store.#layers.set(layer.layerId, await buildDesiLayer(root, layer));
+    }
     return store;
   }
 

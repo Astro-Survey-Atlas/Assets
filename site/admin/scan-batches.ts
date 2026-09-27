@@ -1,7 +1,7 @@
 interface BatchProduct {
   productId: string;
   retiredAt?: string;
-  draft: { name: string; surveyId: string; releaseId: string; layerId?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; scanDefaults?: { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number } };
+  draft: { name: string; surveyId: string; releaseId: string; layerId?: string; mode?: string; coverageRole?: string; dataOrigin?: string; sourceTier?: string; scanDefaults?: { allowedSuffixes?: string; includePattern?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number; pathHealpixOrder?: number; pathHealpixGroupSize?: number } };
 }
 interface BatchView {
   name: string;
@@ -46,18 +46,18 @@ export function mountScanBatches(root: HTMLElement, deps: Dependencies) {
     if (rules.children.length >= 32) return;
     const row = document.createElement('fieldset');
     row.className = 'scan-batch-rule';
-    row.innerHTML = `<legend>产品规则</legend><label><span>规则名称</span><input name="ruleName" required maxlength="63" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" /></label><label><span>产品</span><select name="productId" required></select></label><p data-recipe></p><label><span>扫描解析方式 <small>独立于原有覆盖资料 recipe</small></span><select name="scanMode" required><option value="">选择解析方式</option><option value="fits-wcs">FITS 影像 WCS</option><option value="fits-header-position">FITS 表头位置</option><option value="catalog-radec">星表 RA/Dec 坐标</option><option value="nested-healpix">星表 NESTED HEALPix</option></select></label><div data-rule-radec hidden><div class="form-row"><label><span>RA 列</span><input name="raColumn" disabled /></label><label><span>Dec 列</span><input name="decColumn" disabled /></label></div><div class="form-row"><label><span>FITS 表扩展名 <small>例如 FIBERMAP；与 HDU 编号二选一</small></span><input name="hduName" placeholder="FIBERMAP" disabled /></label><label><span>FITS HDU 编号 <small>从 0 开始</small></span><input name="hduIndex" type="number" min="0" disabled /></label></div><label><span>输入坐标系 <small>FITS 目标表必须显式声明</small></span><select name="coordinateFrame" disabled><option value="">文本星表沿用现有约定</option><option value="ICRS">ICRS</option></select></label></div><div data-rule-healpix hidden><label><span>HEALPix 列</span><input name="healpixColumn" disabled /></label><div class="form-row"><label><span>order 列（与固定 order 二选一）</span><input name="healpixOrderColumn" disabled /></label><label><span>固定 order</span><input name="healpixOrder" type="number" min="1" max="29" disabled /></label></div></div><label><span>Tile 内相对目录 <small>留空表示 Tile 根目录</small></span><input name="relativePrefix" placeholder="VIS/ 或 NIR/" /></label><label><span>文件名匹配 <small>glob，留空匹配所有名称</small></span><input name="includePattern" placeholder="EUC_MER_BGSUB-MOSAIC-VIS_*.fits" maxlength="256" /></label><div class="form-row"><label><span>允许后缀</span><input name="allowedSuffixes" placeholder=".fits" /></label><label><span>输出 order</span><input name="maxOrder" type="number" min="1" max="12" value="8" /></label></div><button type="button" class="admin-quiet" data-rule-remove>移除规则</button>`;
+    row.innerHTML = `<legend>产品规则</legend><label><span>规则名称</span><input name="ruleName" required maxlength="63" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" /></label><label><span>产品</span><select name="productId" required></select></label><p data-recipe></p><label><span>扫描解析方式 <small>独立于产品模态</small></span><select name="scanMode" required><option value="">选择解析方式</option><option value="fits-wcs">FITS 影像 WCS</option><option value="fits-header-position">FITS 表头位置</option><option value="catalog-radec">星表 RA/Dec 坐标</option><option value="nested-healpix">星表 NESTED HEALPix</option><option value="path-healpix">路径 HEALPix 文件分区</option></select></label><div data-rule-radec hidden><div class="form-row"><label><span>RA 列</span><input name="raColumn" disabled /></label><label><span>Dec 列</span><input name="decColumn" disabled /></label></div><div class="form-row"><label><span>FITS 表扩展名 <small>例如 FIBERMAP；与 HDU 编号二选一</small></span><input name="hduName" placeholder="FIBERMAP" disabled /></label><label><span>FITS HDU 编号 <small>从 0 开始</small></span><input name="hduIndex" type="number" min="0" disabled /></label></div><label><span>输入坐标系 <small>FITS 目标表必须显式声明</small></span><select name="coordinateFrame" disabled><option value="">文本星表沿用现有约定</option><option value="ICRS">ICRS</option></select></label></div><div data-rule-healpix hidden><label><span>HEALPix 列</span><input name="healpixColumn" disabled /></label><div class="form-row"><label><span>order 列（与固定 order 二选一）</span><input name="healpixOrderColumn" disabled /></label><label><span>固定 order</span><input name="healpixOrder" type="number" min="1" max="29" disabled /></label></div></div><div class="form-row" data-rule-path-healpix hidden><label><span>路径 HEALPix order</span><input name="pathHealpixOrder" type="number" min="0" max="29" disabled /></label><label><span>路径分组大小</span><input name="pathHealpixGroupSize" type="number" min="1" disabled /></label></div><label><span>相对目录 <small>相对于固定扫描范围</small></span><input name="relativePrefix" placeholder="VIS/、NISP/ 或 redrock 路径" /></label><label><span>文件名匹配 <small>glob，留空匹配所有名称</small></span><input name="includePattern" placeholder="EUC_MER_BGSUB-MOSAIC-VIS_*.fits" maxlength="256" /></label><div class="form-row"><label><span>允许后缀</span><input name="allowedSuffixes" placeholder=".fits" /></label><label><span>输出 order</span><input name="maxOrder" type="number" min="1" max="12" value="8" /></label></div><button type="button" class="admin-quiet" data-rule-remove>移除规则</button>`;
     (row.elements.namedItem('ruleName') as HTMLInputElement).value = `rule-${++sequence}`;
     const select = row.elements.namedItem('productId') as HTMLSelectElement;
     select.replaceChildren(new Option('选择产品', ''), ...executable().map(product => new Option(`${product.draft.surveyId} · ${product.draft.releaseId} · ${product.draft.name}`, product.productId)));
     const scanMode = row.elements.namedItem('scanMode') as HTMLSelectElement;
     const updateMode = () => {
-      for (const [selector, enabled] of [['[data-rule-radec]', scanMode.value === 'catalog-radec'], ['[data-rule-healpix]', scanMode.value === 'nested-healpix']] as const) {
+      for (const [selector, enabled] of [['[data-rule-radec]', scanMode.value === 'catalog-radec'], ['[data-rule-healpix]', scanMode.value === 'nested-healpix'], ['[data-rule-path-healpix]', scanMode.value === 'path-healpix']] as const) {
         const group = row.querySelector<HTMLElement>(selector)!;
         group.hidden = !enabled;
-        group.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select').forEach(input => { input.disabled = !enabled; input.required = enabled && ['raColumn', 'decColumn', 'healpixColumn'].includes(input.name); });
+        group.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select').forEach(input => { input.disabled = !enabled; input.required = enabled && ['raColumn', 'decColumn', 'healpixColumn', 'pathHealpixOrder', 'pathHealpixGroupSize'].includes(input.name); });
       }
-      (row.elements.namedItem('maxOrder') as HTMLInputElement).disabled = scanMode.value === 'nested-healpix';
+      (row.elements.namedItem('maxOrder') as HTMLInputElement).disabled = ['nested-healpix', 'path-healpix'].includes(scanMode.value);
     };
     const requireFitsFrame = () => {
       (row.elements.namedItem('coordinateFrame') as HTMLSelectElement).required = scanMode.value === 'catalog-radec' && Boolean(value(row, 'hduName') || value(row, 'hduIndex'));
@@ -67,10 +67,10 @@ export function mountScanBatches(root: HTMLElement, deps: Dependencies) {
     select.addEventListener('change', () => {
       const product = executable().find(item => item.productId === select.value);
       const defaults = product?.draft.scanDefaults;
-      for (const name of ['allowedSuffixes', 'maxOrder', 'raColumn', 'decColumn', 'healpixColumn', 'healpixOrderColumn', 'healpixOrder'] as const) {
+      for (const name of ['includePattern', 'allowedSuffixes', 'maxOrder', 'raColumn', 'decColumn', 'healpixColumn', 'healpixOrderColumn', 'healpixOrder', 'pathHealpixOrder', 'pathHealpixGroupSize'] as const) {
         (row.elements.namedItem(name) as HTMLInputElement).value = String(defaults?.[name] ?? (name === 'maxOrder' ? 8 : ''));
       }
-      scanMode.value = ['fits-wcs', 'fits-header-position', 'catalog-radec', 'nested-healpix'].includes(product?.draft.mode ?? '') ? product!.draft.mode! : '';
+      scanMode.value = ['fits-wcs', 'fits-header-position', 'catalog-radec', 'nested-healpix', 'path-healpix'].includes(product?.draft.mode ?? '') ? product!.draft.mode! : '';
       updateMode();
       row.querySelector('[data-recipe]')!.textContent = product ? `原有覆盖 recipe：${product.draft.mode ?? '未指定'}。请选择本次科学文件的解析方式；光谱目标分布不能用文件表头中心点代替。` : '';
     });
@@ -99,7 +99,7 @@ export function mountScanBatches(root: HTMLElement, deps: Dependencies) {
       maxConcurrent: Number(value(form, 'maxConcurrent')),
       rules: [...rules.querySelectorAll('fieldset')].map(row => ({
         name: value(row, 'ruleName'), productId: value(row, 'productId'), scanMode: value(row, 'scanMode'), relativePrefix: value(row, 'relativePrefix'),
-        ...Object.fromEntries(['raColumn', 'decColumn', 'healpixColumn', 'healpixOrderColumn', 'healpixOrder', 'hduName', 'hduIndex', 'coordinateFrame'].filter(name => !(row.elements.namedItem(name) as HTMLInputElement).disabled && value(row, name)).map(name => [name, ['healpixOrder', 'hduIndex'].includes(name) ? Number(value(row, name)) : value(row, name)])),
+        ...Object.fromEntries(['raColumn', 'decColumn', 'healpixColumn', 'healpixOrderColumn', 'healpixOrder', 'pathHealpixOrder', 'pathHealpixGroupSize', 'hduName', 'hduIndex', 'coordinateFrame'].filter(name => !(row.elements.namedItem(name) as HTMLInputElement).disabled && value(row, name)).map(name => [name, ['healpixOrder', 'pathHealpixOrder', 'pathHealpixGroupSize', 'hduIndex'].includes(name) ? Number(value(row, name)) : value(row, name)])),
         includePattern: value(row, 'includePattern') || undefined, allowedSuffixes: value(row, 'allowedSuffixes') || undefined,
         ...((row.elements.namedItem('maxOrder') as HTMLInputElement).disabled ? {} : { maxOrder: Number(value(row, 'maxOrder')) }),
       })),

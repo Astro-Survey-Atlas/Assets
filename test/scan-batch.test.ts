@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AdminHttpError, AssetsAdmin, type ScanBatchTaskRecipe } from "../server/admin.js";
-import { batchEvidenceLayerId, parseScanBatchRequest, resolveScanBatchMode, ScanBatchValidationError, scanBatchView, validateFilenamePattern, validateRelativePrefix } from "../server/scan-batch.js";
+import { batchEvidenceLayerId, parseScanBatchRequest, resolveScanBatchIncludePattern, resolveScanBatchMode, ScanBatchValidationError, scanBatchView, validateFilenamePattern, validateRelativePrefix } from "../server/scan-batch.js";
 
 const config = {
   enabled: true,
@@ -171,6 +171,33 @@ test("scan batch parsing accepts an empty rule prefix and rejects unsafe boundar
   });
   assert.equal(orderFour.rules[0]?.maxOrder, 4);
   assert.equal(orderFour.rules[0]?.healpixOrder, 4);
+  const pathPartition = parseScanBatchRequest({
+    name: "redrock-batch",
+    sourceConnector: "source",
+    sourcePaths: ["oss://bucket/redrock"],
+    partitioning: { mode: "direct-child-prefixes", scopeId: "redrock-scope", maxPartitions: 2048 },
+    maxConcurrent: 4,
+    rules: [{ name: "redrock", productId: "desi-redrock", scanMode: "path-healpix", relativePrefix: "", pathHealpixOrder: 6, pathHealpixGroupSize: 100, allowedSuffixes: ".fits,.fits.gz" }],
+  });
+  assert.deepEqual(
+    { mode: pathPartition.rules[0]?.scanMode, order: pathPartition.rules[0]?.pathHealpixOrder, groupSize: pathPartition.rules[0]?.pathHealpixGroupSize },
+    { mode: "path-healpix", order: 6, groupSize: 100 },
+  );
+  assert.throws(() => parseScanBatchRequest({
+    name: "bad-path-order",
+    sourceConnector: "source",
+    sourcePaths: ["oss://bucket/redrock"],
+    partitioning: { mode: "direct-child-prefixes", scopeId: "redrock-scope", maxPartitions: 1 },
+    maxConcurrent: 1,
+    rules: [{ name: "redrock", productId: "desi-redrock", scanMode: "catalog-radec", pathHealpixOrder: 6 }],
+  }), /supported only with path-healpix/);
+});
+
+test("product filename rules remain required in scan batches", () => {
+  const pattern = "redrock-main-bright-*.fits*";
+  assert.equal(resolveScanBatchIncludePattern(undefined, pattern), pattern);
+  assert.equal(resolveScanBatchIncludePattern(pattern, pattern), pattern);
+  assert.throws(() => resolveScanBatchIncludePattern("*.fits", pattern), /requires includePattern/);
 });
 
 test("scan batch mode prefers a rule selection and only falls back to executable product modes", () => {
@@ -347,6 +374,44 @@ test("DESI DR1 catalog batch derives occupancy while preserving its spectrum pro
     coordinateFrame: "ICRS",
   });
   assert.equal(recipe.coverageRole, "footprint_extent");
+});
+
+test("DESI DR1 redrock batch keeps redshift modality and native path HEALPix settings", async () => {
+  const calls: Array<{ plural: string; resource: Record<string, unknown> }> = [];
+  const admin = fakeAdmin(calls, "DESI/DR1/spectro");
+  const batch = parseScanBatchRequest({
+    name: "desi-dr1-redrock-batch",
+    sourceConnector: "euclid-q1",
+    sourcePaths: ["oss://survey-data/DESI/DR1/spectro/healpix/main/bright"],
+    partitioning: { mode: "direct-child-prefixes", scopeId: "desi-dr1-redrock", maxPartitions: 2048 },
+    maxConcurrent: 8,
+    rules: [{ name: "redrock-files", productId: "desi-dr1-redrock", scanMode: "path-healpix", relativePrefix: "", allowedSuffixes: ".fits,.fits.gz", pathHealpixOrder: 6, pathHealpixGroupSize: 100 }],
+  });
+  const recipe: ScanBatchTaskRecipe = {
+    layerId: "desi-dr1-redrock-bright-file-index",
+    surveyId: "desi",
+    releaseId: "dr1",
+    product: "DESI DR1 bright-program redrock files",
+    productId: "desi-dr1-redrock",
+    modality: "redshift",
+    mode: "path-healpix",
+    includePattern: "redrock-main-bright-*.fits*",
+    coverageRole: "footprint_extent",
+    dataOrigin: "observed",
+    sourceTier: "official_inventory_derived",
+    allowedSuffixes: ".fits,.fits.gz",
+    pathHealpixOrder: 6,
+    pathHealpixGroupSize: 100,
+  };
+
+  await admin.createScanBatch(batch, [recipe]);
+  const resource = calls[0]?.resource;
+  const submittedRule = ((resource?.spec as Record<string, unknown>).rules as Array<Record<string, unknown>>)[0]!;
+  const layer = submittedRule.layer as Record<string, unknown>;
+  const extraction = submittedRule.extraction as Record<string, unknown>;
+  assert.deepEqual({ modality: layer.modality, coverageRole: layer.coverageRole }, { modality: "redshift", coverageRole: "footprint" });
+  assert.equal(submittedRule.includePattern, "redrock-main-bright-*.fits*");
+  assert.deepEqual(extraction, { mode: "path-healpix", pathHealpix: { order: 6, groupSize: 100 }, catalog: {} });
 });
 
 test("scan batch source root cannot escape a configured object connector prefix", async () => {

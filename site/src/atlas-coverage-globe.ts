@@ -10,6 +10,7 @@ import {
 import type { SurveyFootprintManifest } from "./atlas/survey-footprints.js";
 import type { SurveyCard } from "./atlas/survey-registry.js";
 import { surveyColorFor } from "./atlas/survey-colors.js";
+import { filterByModalities } from "../../src/modality-filter.js";
 
 export interface CoverageLayer {
   layerId: string;
@@ -79,10 +80,10 @@ function projectPixelsToOrder(pixels: readonly number[], sourceOrder: number, ta
   return [...new Set(pixels.map((pixel) => Math.floor(pixel / divisor)))].sort((left, right) => left - right);
 }
 
-export function footprintManifest(catalog: CoverageCatalog, blocks: ReadonlyMap<string, number[]>): SurveyFootprintManifest {
+export function footprintManifest(catalog: CoverageCatalog, blocks: ReadonlyMap<string, number[]>, modalities: Iterable<string> = []): SurveyFootprintManifest {
   // Older cached catalogs may predate the release precision gate. Never let
   // an ineligible layer lower the resolution of every other survey.
-  const layers = catalog.layers.filter(layer => layer.overviewOrder >= MIN_PUBLIC_COVERAGE_ORDER && layer.maxOrder >= MIN_PUBLIC_COVERAGE_ORDER);
+  const layers = filterByModalities(catalog.layers, modalities).filter(layer => layer.overviewOrder >= MIN_PUBLIC_COVERAGE_ORDER && layer.maxOrder >= MIN_PUBLIC_COVERAGE_ORDER);
   const overviewOrders = [...new Set(layers.map((layer) => layer.overviewOrder))];
   const order = overviewOrders.length ? Math.min(...overviewOrders) : MIN_PUBLIC_COVERAGE_ORDER;
   const nside = 2 ** order;
@@ -93,6 +94,7 @@ export function footprintManifest(catalog: CoverageCatalog, blocks: ReadonlyMap<
       layerId: layer.layerId,
       releaseId: layer.releaseId,
       product: layer.product,
+      modality: layer.modality,
       label: layer.product,
       nside,
       pixels: projectPixelsToOrder(blocks.get(`${layer.layerId}:${layer.overviewOrder}`) ?? [], layer.overviewOrder, order),
@@ -117,7 +119,10 @@ export class AtlasCoverageGlobe {
   readonly #onOverlapComponent: OverlapComponentChange;
   #viewer: SurveyLayerViewer | null = null;
   #visibleSurveyIds = new Set<string>();
+  #visibleModalities = new Set<string>();
   #surveys: CoverageSurvey[] = [];
+  #catalog: CoverageCatalog | null = null;
+  #blocks = new Map<string, number[]>();
 
   constructor(host: HTMLElement, canvas: HTMLCanvasElement, onActiveChange: ActiveChange, onInspectionChange: InspectionChange = () => undefined, onStateChange: StateChange = () => undefined, onContextMenu: ContextMenuChange = () => undefined, onOverlapComponent: OverlapComponentChange = () => undefined) {
     this.#host = host;
@@ -144,14 +149,26 @@ export class AtlasCoverageGlobe {
         document.fonts.ready,
       ]);
     } catch { /* browsers without Font Loading API use the declared fallback */ }
-    const manifest = footprintManifest(catalog, blocks);
+    this.#catalog = catalog;
+    this.#blocks = new Map(blocks);
+    this.#surveys = surveys;
+    this.#renderCatalog();
+  }
+
+  setVisibleModalities(modalities: Iterable<string>): void {
+    this.#visibleModalities = new Set(modalities);
+    if (this.#catalog) this.#renderCatalog();
+  }
+
+  #renderCatalog(): void {
+    if (!this.#catalog) return;
+    const manifest = footprintManifest(this.#catalog, this.#blocks, this.#visibleModalities);
     const selectedSurveyIds = new Set(this.#visibleSurveyIds);
     // Rebuilding the scene reuses the canvas. Releasing the WebGL context here
     // can trigger WEBGL_lose_context and leave the replacement renderer blank;
     // the context is released only when the globe itself is finally disposed.
     this.#viewer?.dispose({ releaseContext: false });
-    this.#surveys = surveys;
-    const cards = surveys.map(surveyCardFor);
+    const cards = this.#surveys.map(surveyCardFor);
     this.#viewer = new SurveyLayerViewer(
       this.#canvas,
       manifest,

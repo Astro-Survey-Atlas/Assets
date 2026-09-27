@@ -80,6 +80,28 @@ test("an exact file index reaches L3 and does not claim completeness without a d
   assert.ok(result.gaps.includes("completeness-unknown"));
 });
 
+test("an exact path-HEALPix file index stays partial when its source inventory is incomplete", () => {
+  const result = deriveProductReadiness({
+    content: { ...content, mode: "path-healpix", coverageCompleteness: "incomplete" },
+    layer: layer({
+      availableOrders: [4, 6],
+      overviewOrder: 4,
+      maxOrder: 6,
+      recipe: { mode: "path-healpix", coordinateFrame: "ICRS", ordering: "NESTED", precision: "exact" },
+      sourceUnitIndex: { status: "exact", unitKind: "file", notes: "path partition to URI" },
+      fileCount: 904,
+      coverageCount: 904,
+      errorCount: 0,
+    }),
+  });
+  assert.equal(result.level, 3);
+  assert.equal(result.geometry.precision, "exact");
+  assert.equal(result.reverseLookup.precision, "exact");
+  assert.equal(result.completeness.state, "partial");
+  assert.ok(result.gaps.includes("completeness-partial"));
+  assert.ok(!result.gaps.includes("file-level-reverse-index-missing"));
+});
+
 test("draft Warehouse counters remain visible without claiming loaded geometry", () => {
   const result = deriveProductReadiness({
     content: { ...content, mode: "native-moc", sourceTier: "third_party_moc" },

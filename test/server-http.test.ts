@@ -50,6 +50,14 @@ test("hard cutover exposes no legacy products, geometry, packages or direct down
   for(const [route,key] of [["assets","files"],["surveys","surveys"],["products","products"],["coverage/catalog","layers"],["resource-packages/catalog.json","packages"],["releases","releases"]]) {
     const response=await fetch(`${base}/api/v1/${route}`);assert.equal(response.status,200);assert.deepEqual((await response.json() as Record<string,unknown>)[key!],[]);
   }
+  const coverageResponse = await fetch(`${base}/api/v1/coverage/catalog`);
+  const coverageBody = await coverageResponse.text();
+  const coverageEtag = coverageResponse.headers.get("etag");
+  assert.equal(coverageEtag, `W/"catalog-${sha256(Buffer.from(coverageBody))}"`);
+  const unchanged = await fetch(`${base}/api/v1/coverage/catalog`, { headers: { "If-None-Match": coverageEtag! } });
+  assert.equal(unchanged.status, 304);
+  const stale = await fetch(`${base}/api/v1/coverage/catalog`, { headers: { "If-None-Match": '"catalog-stale"' } });
+  assert.equal(stale.status, 200);
   for(const route of ["assets/manifest-canonical/download","assets/manifest-canonical/preview","coverage/layers/desi-dr1-spectra-footprint/moc.fits","resource-packages/public-euclid-footprints/versions/3.0.0/download"])
     assert.equal((await fetch(`${base}/api/v1/${route}`)).status,404);
   for(const route of ["access/region-query","coverage/reverse-lookup"])
@@ -76,8 +84,8 @@ test("admin endpoints require a token and expose the configured control-plane bo
   const configBody = await config.json() as { enabled: boolean; authRequired: boolean; capabilities: { coverageModes: string[]; modalities: string[]; businessModalityProfiles?: unknown } };
   assert.equal(configBody.enabled, true);
   assert.equal(configBody.authRequired, true);
-  assert.deepEqual(configBody.capabilities.coverageModes, ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix"]);
-  assert.deepEqual(configBody.capabilities.modalities, ["image", "spectrum", "cube", "catalog", "timeseries", "visibility", "event", "other"]);
+  assert.deepEqual(configBody.capabilities.coverageModes, ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "path-healpix"]);
+  assert.deepEqual(configBody.capabilities.modalities, ["image", "spectrum", "redshift", "cube", "catalog", "timeseries", "visibility", "event", "other"]);
   assert.equal("businessModalityProfiles" in configBody.capabilities, false);
 
   const denied = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tasks`);
@@ -454,4 +462,3 @@ test("admin connector probe route checks an authorized PVC and persists its phas
   const missing = await fetch(`http://127.0.0.1:${port}/api/v1/admin/connectors/missing/probe`, { method: "POST", headers: { Authorization: "Bearer test-admin-token" } });
   assert.equal(missing.status, 404);
 });
-

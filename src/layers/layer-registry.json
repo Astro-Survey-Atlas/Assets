@@ -364,6 +364,28 @@
       "expectedSha256": "e3fb86b871d2e24e3fd40724ea241d222988d8fd7262fa6b3855f59b3aae9c40"
     },
     {
+      "layerId": "desi-dr1-redrock-bright-file-index",
+      "surveyId": "desi",
+      "releaseId": "desi-dr1",
+      "product": "DR1 bright-program redrock files",
+      "modality": "redshift",
+      "coverageRole": "footprint_extent",
+      "dataOrigin": "observed",
+      "sourceTier": "user_file_derived",
+      "maxOrder": 6,
+      "status": "awaiting_publication",
+      "mode": "path-healpix",
+      "recipePath": "src/layers/recipes/desi-dr1-redrock-bright-file-index.lock.json",
+      "pathHealpix": {
+        "order": 6,
+        "groupSize": 100
+      },
+      "includePattern": "redrock-main-bright-*.fits*",
+      "sourceUrl": "https://data.desi.lbl.gov/doc/releases/dr1/",
+      "geometrySourceUrl": "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/",
+      "pendingReason": "The exact 904-file, order-6 path index is locked from the user's partial OSS copy. It is awaiting the normal product review and publication queue; the scope is not a complete DR1/BGS inventory."
+    },
+    {
       "layerId": "desi-edr-spectra-footprint",
       "surveyId": "desi",
       "releaseId": "desi-edr",

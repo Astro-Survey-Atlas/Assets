@@ -245,16 +245,29 @@ export async function validate(): Promise<PublicFootprintStatistics> {
   const plan = await json<{ schemaVersion: number; builds: Array<{ spec: string; output: string; expectedSha256: string }> }>(path.join(root, "src", "layers", "public-build-plan.json"));
   if (registry.schemaVersion !== 1 || plan.schemaVersion !== 1) errors.push("Unsupported layer registry/build plan");
   const layerIds = new Set<string>();
-  const layerStatuses = new Set(["acquired", "frozen-review-exception", "awaiting_snapshot"]);
+  const layerStatuses = new Set(["acquired", "frozen-review-exception", "awaiting_snapshot", "awaiting_publication"]);
   for (const layer of registry.layers ?? []) {
     if (layerIds.has(layer.layerId)) errors.push(`Duplicate layerId: ${layer.layerId}`);
     layerIds.add(layer.layerId);
     if (!layerStatuses.has(layer.status)) errors.push(`Unsupported layer status: ${layer.layerId}`);
     if (layer.status === "awaiting_snapshot") {
-      if (!layer.plannedMode || !["fits-wcs", "catalog-radec", "nested-healpix", "regions", "tile-table"].includes(layer.plannedMode)) errors.push(`Pending layer lacks a valid planned mode: ${layer.layerId}`);
+      if (!layer.plannedMode || !["fits-wcs", "catalog-radec", "nested-healpix", "path-healpix", "regions", "tile-table"].includes(layer.plannedMode)) errors.push(`Pending layer lacks a valid planned mode: ${layer.layerId}`);
       if (!validUrl(layer.sourceUrl) || !validUrl(layer.geometrySourceUrl)) errors.push(`Pending layer lacks official source URLs: ${layer.layerId}`);
       if (!layer.pendingReason?.trim()) errors.push(`Pending layer lacks a reason: ${layer.layerId}`);
       if (layer.artifactPath || layer.recipePath || layer.expectedSha256) errors.push(`Pending layer must not claim a generated artifact: ${layer.layerId}`);
+    } else if (layer.status === "awaiting_publication") {
+      if (!layer.recipePath || !layer.pendingReason?.trim()) errors.push(`Publication-pending layer lacks a locked recipe or reason: ${layer.layerId}`);
+      if (!validUrl(layer.sourceUrl) || !validUrl(layer.geometrySourceUrl)) errors.push(`Publication-pending layer lacks source URLs: ${layer.layerId}`);
+      if (layer.artifactPath || layer.expectedSha256) errors.push(`Publication-pending layer must not claim a public artifact: ${layer.layerId}`);
+      try {
+        const recipe = await json<{ kind: string; layerId: string; mode: string; coordinateFrame: string; ordering: string; sourceOrder: number; queryOrder: number; previewOrder: number; maxOrder: number; recipe?: { precision?: string; scanBatchId?: string; scopeSnapshotSha256?: string } }>(path.join(root, layer.recipePath!));
+        if (recipe.kind !== "coverage-recipe-lock" || recipe.layerId !== layer.layerId || recipe.mode !== "path-healpix"
+          || recipe.coordinateFrame !== "ICRS" || recipe.ordering !== "NESTED" || recipe.sourceOrder !== 6
+          || recipe.queryOrder !== 6 || recipe.previewOrder !== 4 || recipe.maxOrder !== 6
+          || recipe.recipe?.precision !== "exact" || !recipe.recipe.scanBatchId || !SHA256.test(recipe.recipe.scopeSnapshotSha256 ?? "")) {
+          errors.push(`Publication-pending path-HEALPix recipe is incomplete: ${layer.layerId}`);
+        }
+      } catch (error) { errors.push(`Publication-pending recipe is unavailable for ${layer.layerId}: ${String(error)}`); }
     } else if (!layer.artifactPath || !SHA256.test(layer.expectedSha256 ?? "")) {
       errors.push(`Published layer lacks an artifact lock: ${layer.layerId}`);
     }

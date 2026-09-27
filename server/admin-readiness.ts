@@ -22,6 +22,7 @@ export interface ReadinessProductContent {
   geometrySourceUrl?: string;
   geometrySourceLabel?: string;
   recipeHash?: string;
+  coverageCompleteness?: "complete" | "incomplete" | "unknown";
 }
 
 export interface ReadinessLayer {
@@ -147,6 +148,9 @@ function geometryPrecision(content: ReadinessProductContent, layer: ReadinessLay
 
 function completenessFor(input: ProductReadinessInput, layer: ReadinessLayer | undefined): ReadinessCompletenessInput {
   if (input.completeness) return { ...input.completeness };
+  if (input.content.coverageCompleteness === "incomplete") {
+    return { state: "partial", scope: "coverage evidence explicitly limits this product to a partial source inventory" };
+  }
   if (layer?.errorCount && layer.errorCount > 0) {
     return { state: "partial", ...(layer.fileCount !== undefined ? { fileCount: layer.fileCount } : {}), ...(layer.coverageCount !== undefined ? { coverageCount: layer.coverageCount } : {}), errorCount: layer.errorCount, ...(layer.updatedAt ? { asOf: layer.updatedAt } : {}), scope: "current layer" };
   }

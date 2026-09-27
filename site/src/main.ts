@@ -1,5 +1,5 @@
 import { ensureDownloadAccess, resetDownloadAccess } from "./download-access";
-import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Lock, Maximize2, Minimize2, Moon, Menu, Radio, RotateCcw, Search, ShieldCheck, Sun, Telescope, X, createIcons } from "lucide";
+import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Lock, Maximize2, Minimize2, Moon, Menu, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X, createIcons } from "lucide";
 import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 import { surveyColorFor } from "./atlas/survey-colors.js";
@@ -12,12 +12,40 @@ import { joinUnique, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { createRevisionHydrationQueue } from "./revision-hydration-queue.js";
 import { mountSiteChrome } from "./site-chrome.js";
+import { canonicalModality, filterByModalities } from "../../src/modality-filter.js";
 
 import "./styles.css";
 
 type AssetKind = "package" | "moc" | "geometry" | "manifest" | "ledger" | "documentation" | "provenance" | "metadata";
 type ProductStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
-type Modality = "imaging" | "spectroscopy" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog" | "simulation" | "radio" | (string & {});
+type Modality = "imaging" | "spectroscopy" | "redshift" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog" | "simulation" | "radio" | (string & {});
+const HST_IMAGE_LOOKUP_MAX_CELLS = 256;
+
+interface HstImageLookup {
+  coordinateFrame: "ICRS";
+  ordering: "NESTED";
+  order: number;
+  nside: number;
+  cells: number[];
+  precision: "estimated" | "truncated";
+  spatialPrecision: "estimated";
+  observations: Array<{
+    obsid: string;
+    instrument?: string;
+    filters?: string;
+    target?: string;
+    startTime?: number;
+    endTime?: number;
+    productUrl: string;
+    files: Array<{ fileName: string; dataUri?: string; productType?: string; productGroup?: string; sizeBytes?: number; recommendation: "combined-image" | "exposure" | "other" }>;
+  }>;
+  truncated: boolean;
+  queryExhausted: boolean;
+  matchedObservationCount: number;
+  excludedWithoutRegion: number;
+  generatedAt: string;
+  sourceSnapshotSha256: string;
+}
 
 interface AssetRecord {
   id: string;
@@ -99,6 +127,7 @@ interface SurveyIndex {
 const modalityLabels: Record<string, string> = {
   imaging: "图像",
   spectroscopy: "光谱",
+  redshift: "红移",
   photometry: "测光",
   "time-domain": "时域",
   "integral-field": "积分场",
@@ -109,7 +138,7 @@ const modalityLabels: Record<string, string> = {
   radio: "射电",
 };
 const modalityLabelsEn: Record<string, string> = {
-  imaging: "Imaging", spectroscopy: "Spectroscopy", photometry: "Photometry", "time-domain": "Time-domain", "integral-field": "Integral-field", ultraviolet: "Ultraviolet", infrared: "Infrared", catalog: "Catalog", simulation: "Simulation", radio: "Radio",
+  imaging: "Imaging", spectroscopy: "Spectroscopy", redshift: "Redshift", photometry: "Photometry", "time-domain": "Time-domain", "integral-field": "Integral-field", ultraviolet: "Ultraviolet", infrared: "Infrared", catalog: "Catalog", simulation: "Simulation", radio: "Radio",
 };
 
 const statusLabels: Record<ProductStatus, string> = {
@@ -155,6 +184,7 @@ let modalityFilterInitialized = false;
 let coverageDots: AtlasCoverageGlobe | null = null;
 let activeSurveyId: string | null = null;
 let coverageCatalog: CoverageCatalog | null = null;
+let activeOverlapModalities: string[] = [];
 const coverageBlockCache = new Map<string, number[]>();
 const coverageRequests = new Map<string, Promise<number[]>>();
 type CoverageLayerLoadState = "loading" | "ready" | "empty" | "error";
@@ -371,13 +401,18 @@ function coverageStateText(defaultValue: string): string {
 
 function focusSkyTarget(target: SkyDeepLinkTarget | null): void {
   if (!target?.surveyId || !coverageDots) return;
-  applyCoverageSelection([target.surveyId]);
-  coverageDots.setSelectedSurvey(target.surveyId);
   const layer = target.layerId
     ? coverageCatalog?.layers.find((entry) => entry.layerId === target.layerId)
     : target.productId
       ? coverageCatalog?.layers.find((entry) => entry.productId === target.productId)
       : undefined;
+  if (layer?.modality && selectedModalities.size && !filterByModalities([layer], selectedModalities).length) {
+    selectedModalities.add(canonicalModality(layer.modality) as Modality);
+    coverageDots.setVisibleModalities(selectedModalities);
+    renderCoverageLayers();
+  }
+  applyCoverageSelection([target.surveyId]);
+  coverageDots.setSelectedSurvey(target.surveyId);
   if (layer) {
     const cells = fetchCoverageLayerOrder(layer, layer.overviewOrder);
     void cells.then((values) => {
@@ -396,7 +431,7 @@ function updateCoverageReadout(surveyId: string | null, product?: string): void 
   const meta = byId("coverage-selection-meta");
   const state = byId("coverage-state");
   const survey = surveyId ? surveyIndex?.surveys.find((entry) => entry.id === surveyId) : undefined;
-  const layers = surveyId ? (coverageCatalog?.layers.filter((layer) => layer.surveyId === surveyId) ?? []) : [];
+  const layers = surveyId ? visibleCoverageLayers().filter((layer) => layer.surveyId === surveyId) : [];
   const visualOrders = [...new Set(layers.map((layer) => layer.overviewOrder))].sort((left, right) => left - right);
   const queryOrders = [...new Set(layers.flatMap((layer) => layer.availableOrders))].sort((left, right) => left - right);
   const orderText = visualOrders.length
@@ -471,6 +506,132 @@ function updateCoverageInspector(inspection: SurveyLayerInspection | null): void
     list.append(dt, dd);
   });
   content.replaceChildren(list);
+  if (inspection.surveyIds.includes("hst") && inspection.nside >= 16) {
+    const lookup = document.createElement("button");
+    lookup.type = "button";
+    lookup.className = "command-button hst-image-lookup-button";
+    lookup.append(icon("search"), document.createTextNode(t("coverage.hstFindImages")));
+    lookup.addEventListener("click", () => void runHstImageLookup(Math.round(Math.log2(inspection.nside)), [inspection.pixel], lookup));
+    content.append(lookup);
+  }
+}
+
+function hstSize(value?: number): string {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return t("coverage.hstSizeUnknown");
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let amount = value;
+  let index = -1;
+  do { amount /= 1024; index++; } while (amount >= 1024 && index < units.length - 1);
+  return `${amount.toFixed(amount >= 10 ? 0 : 1)} ${units[index]}`;
+}
+
+async function runHstImageLookup(order: number, cells: number[], button: HTMLButtonElement): Promise<void> {
+  button.disabled = true;
+  const resultArea = document.createElement("div");
+  resultArea.className = "hst-image-lookup-results";
+  resultArea.setAttribute("aria-live", "polite");
+  if (cells.length > HST_IMAGE_LOOKUP_MAX_CELLS) {
+    resultArea.textContent = t("coverage.hstRegionTooLarge");
+    button.after(resultArea);
+    button.disabled = false;
+    return;
+  }
+  resultArea.textContent = t("coverage.hstSearching");
+  button.after(resultArea);
+  try {
+    const response = await fetch("/api/v1/coverage/hst-images", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order, cells }),
+    });
+    const result = await response.json() as HstImageLookup & { error?: string };
+    if (!response.ok) throw new Error(result.error ?? t("coverage.hstLookupFailed"));
+    renderHstImageLookup(result, resultArea);
+  } catch (error) {
+    resultArea.textContent = error instanceof Error ? error.message : t("coverage.hstLookupFailed");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderHstImageLookup(result: HstImageLookup, host: HTMLElement): void {
+  const selected = new Map<string, { obsid: string; fileName: string; dataUri?: string; productType?: string; productGroup?: string; sizeBytes?: number; recommendation: string; productUrl: string }>();
+  const summary = document.createElement("p");
+  summary.className = "hst-image-lookup-summary";
+  const fileCount = result.observations.reduce((sum, observation) => sum + observation.files.length, 0);
+  summary.textContent = `O${result.order} · ${t("coverage.hstEstimated")} · ${result.observations.length} ${t("coverage.hstObservations")} · ${fileCount} ${t("coverage.hstFiles")}${result.truncated || !result.queryExhausted ? ` · ${t("coverage.hstResultsPartial")}` : ""}`;
+  const groups = document.createElement("div");
+  groups.className = "hst-image-observations";
+  if (!result.observations.length) groups.append(Object.assign(document.createElement("p"), { className: "hst-image-lookup-summary", textContent: t("coverage.hstNoMatches") }));
+  for (const observation of result.observations) {
+    const section = document.createElement("details");
+    section.className = "hst-image-observation";
+    const heading = document.createElement("summary");
+    heading.textContent = `MAST ${observation.obsid} · ${observation.instrument ?? "HST"} · ${observation.filters ?? ""}`;
+    section.append(heading);
+    if (observation.target) {
+      const target = document.createElement("p"); target.textContent = observation.target; section.append(target);
+    }
+    const products = document.createElement("ul");
+    for (const file of observation.files) {
+      const item = document.createElement("li");
+      const key = `${observation.obsid}:${file.dataUri ?? file.fileName}`;
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) selected.set(key, { obsid: observation.obsid, fileName: file.fileName, ...(file.dataUri ? { dataUri: file.dataUri } : {}), ...(file.productType ? { productType: file.productType } : {}), ...(file.productGroup ? { productGroup: file.productGroup } : {}), ...(file.sizeBytes !== undefined ? { sizeBytes: file.sizeBytes } : {}), recommendation: file.recommendation, productUrl: observation.productUrl });
+        else selected.delete(key);
+        updateExport();
+      });
+      const name = document.createElement("span"); name.textContent = file.fileName;
+      const metadata = document.createElement("small"); metadata.textContent = `${file.recommendation} · ${file.productGroup ?? file.productType ?? "HST image"} · ${hstSize(file.sizeBytes)}`;
+      const source = document.createElement("a"); source.href = observation.productUrl; source.target = "_blank"; source.rel = "noopener noreferrer"; source.textContent = t("coverage.hstMastEntry");
+      label.append(checkbox, name, metadata, source); item.append(label); products.append(item);
+    }
+    if (!observation.files.length) products.append(Object.assign(document.createElement("li"), { textContent: t("coverage.hstNoFiles") }));
+    section.append(products);
+    groups.append(section);
+  }
+  const footer = document.createElement("div");
+  footer.className = "hst-image-lookup-footer";
+  const selection = document.createElement("span");
+  const exportJson = document.createElement("button"); exportJson.type = "button"; exportJson.className = "command-button"; exportJson.append(icon("file-json-2"), document.createTextNode("JSON"));
+  const exportCsv = document.createElement("button"); exportCsv.type = "button"; exportCsv.className = "command-button"; exportCsv.append(icon("download"), document.createTextNode("CSV"));
+  const exportPlan = (format: "json" | "csv") => {
+    const files = [...selected.values()];
+    const rows = files.map((file) => ({ surveyId: "hst", observationId: file.obsid, fileName: file.fileName, sizeBytes: file.sizeBytes ?? null, productType: file.productType ?? null, productGroup: file.productGroup ?? null, recommendation: file.recommendation, sourceUri: file.dataUri ?? null, sourceUrl: file.productUrl }));
+    const query = {
+      coordinateFrame: result.coordinateFrame,
+      ordering: result.ordering,
+      order: result.order,
+      nside: result.nside,
+      cells: result.cells,
+      precision: result.precision,
+      spatialPrecision: result.spatialPrecision,
+      truncated: result.truncated || !result.queryExhausted,
+      queryExhausted: result.queryExhausted,
+    };
+    const body = format === "json"
+      ? JSON.stringify({ schemaVersion: 1, kind: "source-download-plan", generatedAt: result.generatedAt, sourceSnapshotSha256: result.sourceSnapshotSha256, query, files: rows }, null, 2)
+      : [["surveyId", "observationId", "fileName", "sizeBytes", "productType", "productGroup", "recommendation", "sourceUri", "sourceUrl", "coordinateFrame", "ordering", "order", "nside", "cells", "precision", "spatialPrecision", "truncated", "queryExhausted", "sourceSnapshotSha256"], ...rows.map((row) => [...Object.values(row), result.coordinateFrame, result.ordering, result.order, result.nside, JSON.stringify(result.cells), result.precision, result.spatialPrecision, result.truncated, result.queryExhausted, result.sourceSnapshotSha256])].map((line) => line.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n") + "\r\n";
+    const blob = new Blob([body], { type: format === "json" ? "application/json" : "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `hst-image-download-plan.${format}`; anchor.click(); URL.revokeObjectURL(url);
+  };
+  exportJson.addEventListener("click", () => exportPlan("json")); exportCsv.addEventListener("click", () => exportPlan("csv"));
+  const updateExport = () => {
+    const files = [...selected.values()];
+    const knownBytes = files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0);
+    const unknownSizes = files.filter((file) => file.sizeBytes === undefined).length;
+    selection.textContent = `${selected.size} ${t("coverage.hstFiles")} · ${hstSize(knownBytes)}${unknownSizes ? ` · ${t("coverage.hstSizeUnknown")}: ${unknownSizes}` : ""}`;
+    exportJson.disabled = selected.size === 0; exportCsv.disabled = selected.size === 0;
+  };
+  footer.append(selection, exportJson, exportCsv); updateExport();
+  const provenance = document.createElement("small");
+  provenance.className = "hst-image-lookup-provenance";
+  provenance.textContent = `${t("coverage.hstSnapshot")} ${result.sourceSnapshotSha256.slice(0, 12)} · ${result.generatedAt}${result.excludedWithoutRegion ? ` · ${result.excludedWithoutRegion} ${t("coverage.hstMissingRegion")}` : ""}`;
+  host.replaceChildren(summary, groups, footer, provenance);
 }
 
 function updateOverlapViewport(): void {
@@ -523,6 +684,10 @@ function visibleSurveyIdsFromControls(): string[] {
     .filter((value): value is string => Boolean(value));
 }
 
+function visibleCoverageLayers(): CoverageCatalog["layers"] {
+  return filterByModalities(coverageCatalog?.layers ?? [], selectedModalities);
+}
+
 function applyCoverageSelection(surveyIds: Iterable<string>): void {
   const next = new Set(surveyIds);
   coverageSelectionInitialized = true;
@@ -536,12 +701,12 @@ function applyCoverageSelection(surveyIds: Iterable<string>): void {
 }
 
 function commonOverviewOrder(surveyIds: string[] = visibleSurveyIdsFromControls()): number | null {
-  return highestCommonCoverageOrder(coverageCatalog?.layers ?? [], surveyIds);
+  return highestCommonCoverageOrder(visibleCoverageLayers(), surveyIds);
 }
 
 function surveyCellsAtOrder(surveyId: string, order: number): Set<number> {
   const cells = new Set<number>();
-  for (const layer of coverageCatalog?.layers.filter((candidate) => candidate.surveyId === surveyId && candidate.availableOrders.includes(order)) ?? []) {
+  for (const layer of visibleCoverageLayers().filter((candidate) => candidate.surveyId === surveyId && candidate.availableOrders.includes(order))) {
     const tiles = layer.tileIdsByOrder?.[String(order)] ?? [0];
     tiles.forEach((tile) => (coverageBlockCache.get(coverageBlockKey(layer, order, tile)) ?? []).forEach((pixel) => cells.add(pixel)));
   }
@@ -656,7 +821,7 @@ function positionOverlapPanel(): void {
 }
 
 function layersForSurvey(surveyId: string): CoverageCatalog["layers"] {
-  return coverageCatalog?.layers.filter((layer) => layer.surveyId === surveyId) ?? [];
+  return visibleCoverageLayers().filter((layer) => layer.surveyId === surveyId);
 }
 
 function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLElement {
@@ -1526,12 +1691,27 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
 
 function renderOverlapComponent(component: OverlapComponentView, surveyIds: string[], content: HTMLElement): void {
   overlapEvidenceController?.abort();
-  content.querySelectorAll(".overlap-component-detail, .overlap-products, .overlap-result-actions, .overlap-evidence-plan").forEach((node) => node.remove());
+  content.querySelectorAll(".overlap-component-detail, .overlap-products, .overlap-result-actions, .overlap-evidence-plan, .hst-image-lookup-region, .hst-image-lookup-results").forEach((node) => node.remove());
   const detail = document.createElement("div");
   detail.className = "overlap-component-detail";
   const bounds = component.bounds;
   detail.textContent = `${component.id} · ${component.cells.length.toLocaleString("en-US")} cells · ${bounds.areaDeg2.toFixed(2)} deg² · RA ${bounds.raMin.toFixed(2)}°${bounds.raWraps ? "↷" : "–"}${bounds.raMax.toFixed(2)}° · DEC ${bounds.decMin.toFixed(2)}°–${bounds.decMax.toFixed(2)}°`;
   content.append(detail);
+  if (surveyIds.includes("hst") || component.surveys?.some((entry) => entry.surveyId === "hst")) {
+    const region = document.createElement("section");
+    region.className = "hst-image-lookup-region";
+    if (component.cells.length > HST_IMAGE_LOOKUP_MAX_CELLS) {
+      region.append(Object.assign(document.createElement("small"), { textContent: t("coverage.hstRegionTooLarge") }));
+    } else {
+      const lookup = document.createElement("button");
+      lookup.type = "button";
+      lookup.className = "command-button hst-image-lookup-button";
+      lookup.append(icon("search"), document.createTextNode(t("coverage.hstFindRegionImages")));
+      lookup.addEventListener("click", () => void runHstImageLookup(component.order, component.cells, lookup));
+      region.append(lookup);
+    }
+    content.append(region);
+  }
   const entries: OverlapSurveyView[] = component.surveys ?? surveyIds.flatMap((surveyId): OverlapSurveyView[] => {
     const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
     return survey?.releases.flatMap((release) => release.products.filter((product) => product.coverage).map((product) => ({ surveyId, releaseId: release.id, product: product.name, modality: product.modality, downloadUrl: product.sourceUrl }))) ?? [];
@@ -1660,7 +1840,7 @@ function setOverlapExpandVisible(visible: boolean): void {
 }
 
 function overlapDetailsCacheKey(component: OverlapComponentView): string {
-  return `${activeOverlapSurveyIds.slice().sort().join(",")}:${component.id}:${component.order}`;
+  return `${activeOverlapSurveyIds.slice().sort().join(",")}:${activeOverlapModalities.slice().sort().join(",")}:${component.id}:${component.order}`;
 }
 
 async function fetchOverlapDetails(component: OverlapComponentView, signal?: AbortSignal): Promise<OverlapDetailsResponse> {
@@ -1670,7 +1850,7 @@ async function fetchOverlapDetails(component: OverlapComponentView, signal?: Abo
   const response = await fetch("/api/v1/coverage/overlap/details", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ surveyIds: activeOverlapSurveyIds, componentId: component.id, requestedOrder: component.order }),
+    body: JSON.stringify({ surveyIds: activeOverlapSurveyIds, modalities: activeOverlapModalities, componentId: component.id, requestedOrder: component.order }),
     signal,
   });
   if (!response.ok) throw new Error(`overlap details HTTP ${response.status}`);
@@ -1799,6 +1979,18 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
     cell.append(dt, dd); geometryGrid.append(cell);
   });
   geometry.append(geometrySummary, geometryGrid);
+  if (activeOverlapSurveyIds.includes("hst")) {
+    if (component.cells.length > HST_IMAGE_LOOKUP_MAX_CELLS) {
+      geometry.append(Object.assign(document.createElement("small"), { className: "hst-image-lookup-region-note", textContent: t("coverage.hstRegionTooLarge") }));
+    } else {
+      const lookup = document.createElement("button");
+      lookup.type = "button";
+      lookup.className = "command-button hst-image-lookup-button";
+      lookup.append(icon("search"), document.createTextNode(t("coverage.hstFindRegionImages")));
+      lookup.addEventListener("click", () => void runHstImageLookup(component.order, component.cells, lookup));
+      geometry.append(lookup);
+    }
+  }
   content.append(geometry);
 
   const resultsSection = drawerSection("匹配的 Tile / 文件");
@@ -2055,6 +2247,7 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
   const surveyIds = visibleSurveyIdsFromControls();
   const activate = forceActive ?? !overlapMode;
   if (activate && surveyIds.length < 2) {
+    if (overlapMode) void activateOverlap(false);
     toast(t("coverage.needTwoSurveys"));
     return;
   }
@@ -2062,6 +2255,7 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
   if (activate) {
     order = commonOverviewOrder(surveyIds);
     if (order === null) {
+      if (overlapMode) void activateOverlap(false);
       toast(t("coverage.noCommonOrder"));
       byId("coverage-state").textContent = t("coverage.noCommonOrder");
       return;
@@ -2078,6 +2272,7 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
     overlapEvidenceController?.abort();
     overlapEvidenceSequence += 1;
     activeOverlapSurveyIds = [];
+    activeOverlapModalities = [];
     activeOverlapComponents = [];
     overlapEvidenceCache.clear();
     overlapDetailsCache.clear();
@@ -2110,9 +2305,10 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
   overlapController?.abort();
   const controller = new AbortController();
   overlapController = controller;
+  activeOverlapModalities = [...selectedModalities];
   renderOverlapLoadingPanel(surveyIds, order);
   try {
-    const response = await fetch("/api/v1/coverage/overlap", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ surveyIds, requestedOrder: order }), signal: controller.signal });
+    const response = await fetch("/api/v1/coverage/overlap", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ surveyIds, modalities: activeOverlapModalities, requestedOrder: order }), signal: controller.signal });
     if (!overlapMode || requestSequence !== overlapRequestSequence) return;
     if (!response.ok) throw new Error(`overlap request failed: ${response.status}`);
     const result = await response.json() as { components?: OverlapComponentView[]; commonOrder?: number; pixels?: number[] };
@@ -2167,7 +2363,7 @@ function openCoverageContextMenu(menuState: SurveyLayerContextMenu): void {
 }
 
 function modalityIconName(modality: string): string {
-  return ({ imaging: "image", spectroscopy: "telescope", photometry: "database", "time-domain": "rotate-ccw", "integral-field": "layers-3", ultraviolet: "sun", infrared: "circle-help", catalog: "list-checks", simulation: "box", radio: "radio" } as Record<string, string>)[modality] ?? "circle-help";
+  return ({ imaging: "image", spectroscopy: "telescope", redshift: "scan-line", photometry: "database", "time-domain": "rotate-ccw", "integral-field": "layers-3", ultraviolet: "sun", infrared: "circle-help", catalog: "list-checks", simulation: "box", radio: "radio" } as Record<string, string>)[modality] ?? "circle-help";
 }
 function escapeHtml(value: string): string { return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character] ?? character)); }
 function modalityIconsMarkup(modalities: readonly string[], label: string): string { const unique=[...new Set(modalities)].sort((a,b)=>modalityLabel(a).localeCompare(modalityLabel(b))); return unique.length ? `<span class="coverage-modalities" aria-label="${escapeHtml(label)}：${escapeHtml(unique.map(modalityLabel).join("、"))}">${unique.map(m=>`<i data-lucide="${modalityIconName(m)}" title="${escapeHtml(modalityLabel(m))}"></i>`).join("")}</span>` : `<span class="coverage-modalities-empty">模态未指定</span>`; }
@@ -2184,7 +2380,7 @@ function renderCoverageLayers(): void {
   host.append(search);
   const filterInput = search.querySelector<HTMLInputElement>("input");
   const grouped = new Map<string, CoverageCatalog["layers"]>();
-  for (const layer of coverageCatalog.layers) grouped.set(layer.surveyId, [...(grouped.get(layer.surveyId) ?? []), layer]);
+  for (const layer of visibleCoverageLayers()) grouped.set(layer.surveyId, [...(grouped.get(layer.surveyId) ?? []), layer]);
   const surveyIds = [...new Set([
     ...grouped.keys(),
     ...(surveyIndex?.surveys.map((survey) => survey.id) ?? []),
@@ -2206,7 +2402,9 @@ function renderCoverageLayers(): void {
     const releaseGroups = new Map<string, CoverageCatalog["layers"]>();
     for (const layer of layers) releaseGroups.set(layer.releaseId, [...(releaseGroups.get(layer.releaseId) ?? []), layer]);
     const releaseModalities = [...releaseGroups.values()].map(group => [...new Set(group.flatMap(layer => { const product = survey?.releases.find(r => r.id === layer.releaseId)?.products.find(p => p.productId === layer.productId || p.name === layer.product); return product?.modality ? [product.modality] : []; }))]);
-    const commonModalities = [...new Set(unavailable ? (survey?.modalities ?? []) : releaseModalities.flat())];
+    const commonModalities = [...new Set(unavailable
+      ? (survey?.modalities ?? []).filter((modality) => !selectedModalities.size || selectedModalities.has(modality))
+      : releaseModalities.flat())];
     name.textContent = survey?.name ?? surveyId.toUpperCase();
     name.className = "coverage-layer-name";
     const swatch = document.createElement("span");
@@ -2305,7 +2503,7 @@ async function copy(value: string, message = "SHA-256 已复制"): Promise<void>
 
 function renderIcons(): void {
     createIcons({
-    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Lock, Maximize2, Minimize2, Moon, Menu, Radio, RotateCcw, Search, ShieldCheck, Sun, Telescope, X },
+    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Lock, Maximize2, Minimize2, Moon, Menu, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -2345,8 +2543,17 @@ function renderSurveyFilterOptions(): void {
     input.addEventListener("change", () => {
       if (input.checked) selectedModalities.add(modality);
       else selectedModalities.delete(modality);
+      const selectedSurveys = [...queuedLayerIds];
       renderSurveys();
       updateSurveyFilterCount();
+      coverageDots?.setVisibleModalities(selectedModalities);
+      const availableSurveys = new Set(visibleCoverageLayers().map((layer) => layer.surveyId));
+      renderCoverageLayers();
+      applyCoverageSelection(selectedSurveys.filter((surveyId) => availableSurveys.has(surveyId)));
+      if (overlapMode) {
+        const enabled = visibleSurveyIdsFromControls();
+        void (enabled.length >= 2 ? activateOverlap(true) : activateOverlap(false));
+      }
     });
     const name = document.createElement("span");
     name.textContent = modalityLabel(modality);
@@ -2775,6 +2982,7 @@ function clearCoverageFocus(openLayers = true): void {
   overlapController?.abort();
   overlapController = null;
   activeOverlapSurveyIds = [];
+  activeOverlapModalities = [];
   activeOverlapComponents = [];
   overlapEvidenceCache.clear();
   overlapDetailsCache.clear();

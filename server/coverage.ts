@@ -163,9 +163,11 @@ function recipeSteps(mode: string, recipe: Record<string, unknown>): CoverageRec
     if (id === "filter") return values(["fileNamePattern", "nexpColumn", "nexpMin", "scannerMode", "scannerRunId"]);
     if (id === "header") return values(["scannerMode", "edgeSamples"]);
     if (id === "parse") return values(["format", "members"]);
+    if (mode === "path-healpix" && id === "validate") return "从文件父路径读取实际 NESTED order/ipix，并核对 group=floor(ipix/groupSize)；不读科学文件内容。";
     if (id === "icrs" || id === "validate") return "coordinateFrame=ICRS; ordering=NESTED";
     if (id === "geometry") return values(["raColumn", "decColumn", "radiusDeg", "radiusAuthority", "format", "members"]);
     if (id === "rasterize") return `${values(["values", "order"])}${values(["values", "order"]) ? "; " : ""}coordinateFrame=ICRS; ordering=NESTED; maxOrder=${recipe.maxOrder ?? "locked"}; queryOrder=${recipe.queryOrder ?? 8}; previewOrder=${recipe.previewOrder ?? 4}`;
+    if (mode === "path-healpix" && id === "normalize") return "为每个真实 source URI 保留精确的 path HEALPix order/ipix 关联；它表示文件分区键，不代表像元内每个天体都有观测。";
     if (id === "normalize") return `将 FITS-WCS 扫描结果规范化为明确的 NESTED order/ipix；输入 order=${recipe.order ?? recipe.queryOrder ?? 8}，保留扫描 run 和文件来源。`;
     if (id === "project") return `将已校验 MOC 投影为真实发布的 overview O${recipe.previewOrder ?? 4}${recipe.queryOrder ? ` 与 query O${recipe.queryOrder}` : ""}；不伪造更高精度。`;
     if (id === "union") return "按 NESTED order/ipix canonicalize、union 并去重，不推断缺失的更高阶 cell。";
@@ -176,6 +178,7 @@ function recipeSteps(mode: string, recipe: Record<string, unknown>): CoverageRec
     "fits-wcs": [["input", "source-inventory", "输入文件与发布快照", "assets.coverage.input"], ["filter", "file-filter", "文件筛选与可读性校验", "assets.coverage.filter"], ["header", "fits-wcs", "FITS header / WCS 读取", "assets.coverage.fits-wcs"], ["icrs", "coordinate-validation", "ICRS 坐标校验", "assets.coverage.icrs"], ["geometry", "boundary", "几何边界计算", "assets.coverage.geometry"], ["rasterize", "healpix", "HEALPix 栅格化", "assets.coverage.rasterize"], ["union", "union-dedup", "union / dedup", "assets.coverage.union"], ["outputs", "outputs", "MOC、FITS、preview、statistics 输出", "assets.coverage.outputs"], ["evidence", "evidence", "manifest、provenance、hash", "assets.coverage.evidence"]],
     "tile-table": [["input", "source-inventory", "官方 tile 表输入", "assets.coverage.input"], ["filter", "quality-filter", "质量字段筛选", "assets.coverage.filter"], ["geometry", "tile-geometry", "tile 几何包络计算", "assets.coverage.geometry"], ["rasterize", "healpix", "HEALPix 栅格化", "assets.coverage.rasterize"], ["union", "union-dedup", "union / dedup", "assets.coverage.union"], ["outputs", "outputs", "MOC、FITS、preview、statistics 输出", "assets.coverage.outputs"], ["evidence", "evidence", "manifest、provenance、hash", "assets.coverage.evidence"]],
     "catalog-radec": [["input", "source-inventory", "目录表输入", "assets.coverage.input"], ["filter", "quality-filter", "目录行筛选", "assets.coverage.filter"], ["geometry", "catalog-geometry", "RA/DEC 几何计算", "assets.coverage.geometry"], ["rasterize", "healpix", "HEALPix 栅格化", "assets.coverage.rasterize"], ["union", "union-dedup", "union / dedup", "assets.coverage.union"], ["outputs", "outputs", "MOC、FITS、preview、statistics 输出", "assets.coverage.outputs"], ["evidence", "evidence", "manifest、provenance、hash", "assets.coverage.evidence"]],
+    "path-healpix": [["input", "source-inventory", "文件清单与输入快照", "assets.coverage.input"], ["filter", "file-filter", "按文件后缀筛选", "assets.coverage.filter"], ["validate", "healpix-validation", "校验路径 HEALPix 与分组目录", "assets.coverage.validate"], ["normalize", "file-partition-association", "保留真实文件 URI 与 order/ipix 关联", "warehouse.path-healpix"], ["outputs", "file-index", "文件反查索引与覆盖证据", "warehouse.file-index"], ["evidence", "evidence", "冻结 scope、source snapshot、扫描 run 与错误记录", "assets.coverage.evidence"]],
     "regions": [["input", "source-inventory", "区域文件输入", "assets.coverage.input"], ["parse", "region-parser", "DS9/区域格式解析", "assets.coverage.parse"], ["icrs", "coordinate-validation", "ICRS 坐标校验", "assets.coverage.icrs"], ["union", "union-dedup", "区域 union / dedup", "assets.coverage.union"], ["rasterize", "healpix", "HEALPix 栅格化", "assets.coverage.rasterize"], ["outputs", "outputs", "MOC、FITS、preview、statistics 输出", "assets.coverage.outputs"], ["evidence", "evidence", "manifest、provenance、hash", "assets.coverage.evidence"]],
     "nested-healpix": [["input", "source-inventory", "原生 HEALPix/IPix 输入", "assets.coverage.input"], ["validate", "healpix-validation", "order、NESTED 与坐标校验", "assets.coverage.validate"], ["union", "union-dedup", "cell union / dedup", "assets.coverage.union"], ["outputs", "outputs", "MOC、FITS、preview、statistics 输出", "assets.coverage.outputs"], ["evidence", "evidence", "manifest、provenance、hash", "assets.coverage.evidence"]],
     "nested-healpix-fits-wcs": [["input", "source-inventory", "输入目录与扫描快照", "assets.coverage.input"], ["filter", "file-filter", "文件名筛选与 FITS 可读性校验", "assets.coverage.filter"], ["header", "fits-wcs", "FITS header / WCS 读取", "assets.coverage.fits-wcs"], ["icrs", "coordinate-validation", "ICRS 坐标校验", "assets.coverage.icrs"], ["geometry", "boundary", "WCS 几何边界计算", "assets.coverage.geometry"], ["rasterize", "healpix", "order 8 HEALPix 栅格化", "assets.coverage.rasterize"], ["normalize", "healpix-normalization", "NESTED order/ipix 归一化", "assets.coverage.normalize"], ["union", "union-dedup", "cell union / dedup", "assets.coverage.union"], ["project", "order-projection", "query / overview order 投影", "assets.coverage.project"], ["outputs", "outputs", "MOC、FITS、preview、statistics 输出", "assets.coverage.outputs"], ["evidence", "evidence", "manifest、provenance、hash", "assets.coverage.evidence"]],
@@ -251,9 +254,11 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
       steps: recipeSteps(mode, registeredRecipe),
     };
     const hasWarehouseFileEvidence = registered?.sourceTier === "user_file_derived"
-      && (typeof registeredRecipe.scannerRunId === "string" || (footprint.sourceId?.startsWith("workspace-coverage-") ?? false));
+      && (typeof registeredRecipe.scannerRunId === "string"
+        || (registeredMode === "path-healpix" && registeredRecipe.precision === "exact" && typeof registeredRecipe.scanBatchId === "string")
+        || (footprint.sourceId?.startsWith("workspace-coverage-") ?? false));
     const sourceUnitIndex: SourceUnitIndexSummary = hasWarehouseFileEvidence
-      ? { status: "exact", unitKind: "file", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "由 warehouse file/coverage evidence 索引按实际 NESTED order/ipix 反查源文件、WCS、ETag 与下载范围。" }
+      ? { status: "exact", unitKind: registeredMode === "path-healpix" ? "NESTED HEALPix file partition" : "file", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "由 Warehouse file/coverage evidence 按实际 NESTED order/ipix 反查源文件 URI 与对象元数据；DESI path HEALPix 是文件分区，不是 Tile。" }
       : mode === "tile-table"
         ? { status: footprint.surveyId === "desi" ? "exact" : "estimated", unitKind: "tile", indexUrl: registered?.recipePath, downloadUrlTemplate: footprint.surveyId === "desi" ? "https://data.desi.lbl.gov/public/{release}/spectro/redux/{specprod}/tiles/cumulative/{tileId}/{lastNight}/" : undefined, notes: footprint.surveyId === "desi" ? "由官方 TILE_COMPLETENESS 快照与锁定 recipe 构建运行时 tile 反向索引。" : "当前发布保存了 tile 表和几何规则；精确 tile 反向索引尚未提供。" }
         : { status: "entrypoint-only", notes: "当前 MOC 未保存可复核的原始 source-unit 反向索引，只提供 Release 官方入口。" };
@@ -283,11 +288,12 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
   // release. They are optional: a layer never advertises an order without a
   // corresponding, verified projection.
   for (const record of records.values()) {
-    const queryPath = path.join(root, "artifacts", "public-survey-footprints", "layers", record.layerId, "query-order8.json");
+    const queryOrder = record.recipe?.queryOrder ?? 8;
+    const queryPath = path.join(root, "artifacts", "public-survey-footprints", "layers", record.layerId, `query-order${queryOrder}.json`);
     try {
       const query = JSON.parse(await readFile(queryPath, "utf8")) as { order?: number; ordering?: string; pixels?: number[] };
-      if (query.order === 8 && query.ordering === "NESTED" && Array.isArray(query.pixels) && query.pixels.length) {
-        record.cells.set(8, [...new Set(query.pixels)].sort((a, b) => a - b));
+      if (query.order === queryOrder && query.ordering === "NESTED" && Array.isArray(query.pixels) && query.pixels.length) {
+        record.cells.set(queryOrder, [...new Set(query.pixels)].sort((a, b) => a - b));
         record.availableOrders = [...record.cells.keys()].sort((a, b) => a - b);
         record.maxOrder = Math.max(...record.availableOrders);
       }

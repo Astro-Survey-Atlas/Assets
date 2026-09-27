@@ -40,6 +40,7 @@ interface SurveyIndex { surveys: SurveyRecord[] }
 const modalityLabels: Record<string, { en: string; zh: string }> = {
   imaging: { en: "imaging", zh: "图像" },
   spectroscopy: { en: "spectroscopy", zh: "光谱" },
+  redshift: { en: "redshift", zh: "红移" },
   photometry: { en: "photometry", zh: "测光" },
   "time-domain": { en: "time-domain", zh: "时域" },
   "integral-field": { en: "integral-field", zh: "积分场" },
@@ -182,7 +183,7 @@ function renderFeaturedSurveys(surveys: SurveyRecord[]): void {
     name.title = survey.name;
     const details = document.createElement("span");
     const modalities = [...new Set([...(survey.modalities ?? []), ...survey.releases.flatMap((release: any) => release.products.flatMap((product: any) => product.modality ? [product.modality] : []))])];
-    const iconNames: Record<string,string> = { imaging: "image", spectroscopy: "telescope", photometry: "database", "time-domain": "rotate-ccw", "integral-field": "layers-3", ultraviolet: "sun", infrared: "circle-help", catalog: "list-checks", simulation: "box" };
+    const iconNames: Record<string,string> = { imaging: "image", spectroscopy: "telescope", redshift: "scan-line", photometry: "database", "time-domain": "rotate-ccw", "integral-field": "layers-3", ultraviolet: "sun", infrared: "circle-help", catalog: "list-checks", simulation: "box" };
     details.className = "snapshot-modalities";
     details.setAttribute("aria-label", `${survey.name} ${locale() === "zh" ? "模态：" : "modalities: "}${modalities.map((modality) => modalityLabels[modality]?.[locale()] ?? modality).join("、")}`);
     details.innerHTML = modalities.map((modality) => `<i data-lucide="${iconNames[modality] ?? "database"}" title="${modalityLabels[modality]?.[locale()] ?? modality}"></i>`).join("");

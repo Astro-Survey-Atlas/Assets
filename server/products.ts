@@ -20,11 +20,11 @@ export interface ProductFlowNode {
 }
 export interface ProductFlowEdge { from: string; to: string; label?: string; }
 export interface ProductPresentation { summaryMarkdown: string; methodologyMarkdown: string; limitationsMarkdown: string; flow: { nodes: ProductFlowNode[]; edges: ProductFlowEdge[] } }
-export interface ProductScanDefaults { allowedSuffixes?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number }
+export interface ProductScanDefaults { allowedSuffixes?: string; includePattern?: string; maxOrder?: number; raColumn?: string; decColumn?: string; healpixColumn?: string; healpixOrderColumn?: string; healpixOrder?: number; pathHealpixOrder?: number; pathHealpixGroupSize?: number }
 export type ProductPublicStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
 export interface ProductPublicSurvey { name: string; mission: string; description: string; color: string; modalities: string[] }
 export interface ProductPublicRelease { label: string; kind: string; releasedYear?: number }
-export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix" | "regions" | "tile-table" | "native-moc"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageEvidence?: CoverageSourceEvidence; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: ProductPublicSurvey; publicRelease?: ProductPublicRelease; publicDisplayName?: string; publicDescription?: string; publicReason?: string; publicManualStep?: string; publicStatus?: ProductPublicStatus; presentation: ProductPresentation }
+export interface ProductContent { productId: string; surveyId: string; releaseId: string; name: string; modality?: string; layerId?: string; mode?: "fits-wcs" | "fits-header-position" | "catalog-radec" | "nested-healpix" | "path-healpix" | "regions" | "tile-table" | "native-moc"; scanDefaults?: ProductScanDefaults; recipeVersion?: number; recipeHash?: string; sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; downloadUrlTemplate?: string; notes: string }; coverageEvidence?: CoverageSourceEvidence; coverageRole?: "image_extent" | "object_presence" | "footprint_extent"; dataOrigin?: "observed" | "simulated" | "catalog"; sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived"; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string; publicSurvey?: ProductPublicSurvey; publicRelease?: ProductPublicRelease; publicDisplayName?: string; publicDescription?: string; publicReason?: string; publicManualStep?: string; publicStatus?: ProductPublicStatus; presentation: ProductPresentation }
 export interface ProductReviewRecord { revision: number; contentSha256: string; reviewedAt: string; acceptedGaps: string[]; policy?: string; geometry?: GeometryFacts | null }
 export type ProductExecutionStatus = "running" | "passed" | "failed" | "skipped";
 export interface ProductEvidenceReference { label?: string; ref?: string; sha256?: string; sizeBytes?: number; }
@@ -94,6 +94,7 @@ function defaultFlow(product: { name: string; modality: string }, mode = "catalo
     "nested-healpix-fits-wcs": [["input", "输入目录与扫描快照"], ["filter", "文件名筛选与 FITS 可读性校验"], ["header", "FITS header / WCS 读取"], ["icrs", "ICRS 坐标校验"], ["geometry", "WCS 几何边界计算"], ["rasterize", "order 8 HEALPix 栅格化"], ["normalize", "NESTED order/ipix 归一化"], ["union", "cell union / dedup"], ["project", "query / overview order 投影"], ["outputs", "MOC、FITS、preview、statistics 输出"], ["evidence", "manifest、provenance、hash"]],
     "native-moc": [["input", "原生 FITS MOC 来源"], ["validate", "IVOA MOC / ICRS / NUNIQ 校验"], ["project", "发布 order 投影"], ["union", "cell canonicalize / dedup"], ["outputs", "MOC、preview、statistics 输出"], ["evidence", "来源、manifest、provenance、hash"]],
     "catalog-radec": [["input", "目录表输入"], ["filter", "目录行筛选"], ["geometry", "RA/DEC 几何计算"], ["rasterize", "HEALPix 栅格化"], ["union", "union / dedup"], ["outputs", "MOC、FITS、preview、statistics 输出"], ["evidence", "manifest、provenance、hash"]],
+    "path-healpix": [["input", "文件清单与扫描快照"], ["filter", "文件后缀筛选"], ["validate", "校验路径中的 NESTED order/ipix 与分组目录"], ["normalize", "建立文件 URI 到 order/ipix 的精确关联"], ["outputs", "文件反查索引与覆盖证据"], ["evidence", "冻结 scope、source snapshot、扫描 run 与错误记录"]],
   };
   const values = (keys: string[]): string => keys.filter((key) => recipe[key] !== undefined).map((key) => `${key}=${typeof recipe[key] === "string" ? recipe[key] : JSON.stringify(recipe[key])}`).join("; ");
   const body = (kind: string): string => {
@@ -391,7 +392,7 @@ export class ProductStore {
       this.#records.set(record.productId, record);
     }
     const catalog = JSON.parse(await readFile(path.join(root, "src", "surveys", "survey-catalog.json"), "utf8")) as { surveys?: Array<{ id: string; releases: Array<{ id: string; products: Array<{ name: string; modality: string; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; originNote?: string; sourceLabel?: string; sourceUrl?: string; officialDataLabel?: string; officialDataUrl?: string; officialQueryLabel?: string; officialQueryUrl?: string; geometrySourceLabel?: string; geometrySourceUrl?: string }> }> }> };
-    const registry = JSON.parse(await readFile(path.join(root, "src", "layers", "layer-registry.json"), "utf8")) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; coverageRole?: ProductContent["coverageRole"]; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; plannedMode?: string; mode?: string; recipePath?: string; status?: string; maxOrder?: number }> };
+    const registry = JSON.parse(await readFile(path.join(root, "src", "layers", "layer-registry.json"), "utf8")) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; coverageRole?: ProductContent["coverageRole"]; dataOrigin?: ProductContent["dataOrigin"]; sourceTier?: ProductContent["sourceTier"]; plannedMode?: string; mode?: string; recipePath?: string; status?: string; maxOrder?: number; includePattern?: string; pathHealpix?: { order?: number; groupSize?: number } }> };
     const definitions = new Map((registry.layers ?? []).map((layer) => [`${layer.surveyId}:${layer.releaseId}:${layer.product}`, layer]));
     for (const survey of catalog.surveys ?? []) for (const release of survey.releases ?? []) for (const product of release.products ?? []) {
       const id = productId(survey.id, release.id, product.name);
@@ -415,18 +416,25 @@ export class ProductStore {
         recipeMode = coverageDefinition.recipe.mode;
         recipeHash = createHash("sha256").update(JSON.stringify(coverageDefinition.recipe)).digest("hex");
       }
-      const supportedMode = recipeMode && ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "regions", "tile-table", "native-moc"].includes(recipeMode) ? recipeMode as ProductContent["mode"] : undefined;
-      const flowMode = recipeMode && ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "regions", "tile-table", "native-moc"].includes(recipeMode) ? recipeMode : "catalog-radec";
+      const supportedMode = recipeMode && ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "path-healpix", "regions", "tile-table", "native-moc"].includes(recipeMode) ? recipeMode as ProductContent["mode"] : undefined;
+      const flowMode = recipeMode && ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "path-healpix", "regions", "tile-table", "native-moc"].includes(recipeMode) ? recipeMode : "catalog-radec";
+      const pathHealpix = recipe.pathHealpix && typeof recipe.pathHealpix === "object"
+        ? recipe.pathHealpix as Record<string, unknown>
+        : definition?.pathHealpix;
       const coverageFlow = coverageDefinition?.recipe && !definition?.recipePath ? { nodes: coverageDefinition.recipe.steps.map((node) => ({ ...node, evidenceRefs: [] })), edges: coverageDefinition.recipe.steps.slice(1).map((node, index) => ({ from: coverageDefinition.recipe!.steps[index]!.id, to: node.id })) } : undefined;
       const scanDefaults: ProductScanDefaults = {
+        ...(supportedMode === "path-healpix" && typeof definition?.includePattern === "string" ? { includePattern: definition.includePattern } : {}),
         ...(typeof recipe.maxOrder === "number" ? { maxOrder: recipe.maxOrder } : definition?.maxOrder ? { maxOrder: definition.maxOrder } : {}),
         ...(typeof recipe.raColumn === "string" ? { raColumn: recipe.raColumn } : {}),
         ...(typeof recipe.decColumn === "string" ? { decColumn: recipe.decColumn } : {}),
         ...(typeof recipe.values === "string" ? { healpixColumn: recipe.values } : {}),
         ...(typeof recipe.order === "number" ? { healpixOrder: recipe.order } : {}),
+        ...(supportedMode === "path-healpix" && typeof pathHealpix?.order === "number" ? { pathHealpixOrder: pathHealpix.order } : {}),
+        ...(supportedMode === "path-healpix" && typeof pathHealpix?.groupSize === "number" ? { pathHealpixGroupSize: pathHealpix.groupSize } : {}),
         ...(["fits-wcs", "fits-header-position"].includes(supportedMode ?? "") ? { allowedSuffixes: ".fits,.fit,.fits.gz" } : {}),
         ...(supportedMode === "nested-healpix" ? { allowedSuffixes: ".json,.csv,.tsv,.fits" } : {}),
         ...(supportedMode === "catalog-radec" ? { allowedSuffixes: ".csv,.tsv" } : {}),
+        ...(supportedMode === "path-healpix" ? { allowedSuffixes: ".fits,.fit,.fits.gz,.fit.gz" } : {}),
       };
       const draft: ProductContent = { productId: id, surveyId: survey.id, releaseId: release.id, name: product.name, modality: product.modality, ...((definition || coverageDefinition) ? { layerId: definition?.layerId, coverageRole: definition?.coverageRole, dataOrigin: definition?.dataOrigin ?? product.dataOrigin, sourceTier: definition?.sourceTier ?? product.sourceTier, ...(supportedMode ? { mode: supportedMode, scanDefaults } : {}) } : { dataOrigin: product.dataOrigin, sourceTier: product.sourceTier }), ...(product.originNote ? { originNote: product.originNote } : {}), ...(product.sourceLabel ? { sourceLabel: product.sourceLabel } : {}), ...(product.sourceUrl ? { sourceUrl: product.sourceUrl } : {}), ...(product.officialDataLabel ? { officialDataLabel: product.officialDataLabel } : {}), ...(product.officialDataUrl ? { officialDataUrl: product.officialDataUrl } : {}), ...(product.officialQueryLabel ? { officialQueryLabel: product.officialQueryLabel } : {}), ...(product.officialQueryUrl ? { officialQueryUrl: product.officialQueryUrl } : {}), ...(product.geometrySourceLabel ? { geometrySourceLabel: product.geometrySourceLabel } : {}), ...(product.geometrySourceUrl ? { geometrySourceUrl: product.geometrySourceUrl } : {}), ...(recipeHash ? { recipeVersion: 1, recipeHash } : {}), presentation: { summaryMarkdown: "", methodologyMarkdown: "", limitationsMarkdown: "", flow: coverageFlow ?? defaultFlow(product, flowMode, recipe) } };
       if (existing) {
@@ -503,7 +511,7 @@ export class ProductStore {
     if (releasedYear !== undefined && (!Number.isSafeInteger(releasedYear) || releasedYear < 1900 || releasedYear > 2200)) throw new AdminHttpError(400, "releasedYear is invalid");
     const modality = text(input.modality, "modality", 64);
     const mode = input.mode ?? "native-moc";
-    if (!mode || !["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "regions", "tile-table", "native-moc"].includes(mode)) throw new AdminHttpError(400, "mode is unsupported");
+    if (!mode || !["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "path-healpix", "regions", "tile-table", "native-moc"].includes(mode)) throw new AdminHttpError(400, "mode is unsupported");
     const sourceUrl = publicUrl(input.sourceUrl, "sourceUrl");
     const geometrySourceUrl = publicUrl(input.geometrySourceUrl, "geometrySourceUrl");
     const sourceTier = input.sourceTier ?? "third_party_moc";

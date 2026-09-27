@@ -7,7 +7,7 @@ export class ScanBatchValidationError extends Error {
   }
 }
 
-export const SCAN_BATCH_MODES = ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix"] as const;
+export const SCAN_BATCH_MODES = ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "path-healpix"] as const;
 export type ScanBatchMode = typeof SCAN_BATCH_MODES[number];
 
 export const BATCH_EVIDENCE_LAYER_PREFIX = "assets-batch-";
@@ -45,6 +45,8 @@ export interface ScanBatchRuleRequest {
   healpixColumn?: string;
   healpixOrderColumn?: string;
   healpixOrder?: number;
+  pathHealpixOrder?: number;
+  pathHealpixGroupSize?: number;
   hduName?: string;
   hduIndex?: number;
   coordinateFrame?: string;
@@ -164,10 +166,19 @@ export function validateFilenamePattern(value: unknown): string | undefined {
   return normalized;
 }
 
+export function resolveScanBatchIncludePattern(requested: string | undefined, required: string | undefined): string | undefined {
+  const requestedPattern = validateFilenamePattern(requested);
+  const requiredPattern = validateFilenamePattern(required);
+  if (requiredPattern && requestedPattern && requestedPattern !== requiredPattern) {
+    throw new ScanBatchValidationError(`This product requires includePattern=${requiredPattern}`);
+  }
+  return requiredPattern ?? requestedPattern;
+}
+
 function normalizeRule(value: unknown, index: number): ScanBatchRuleRequest {
   const field = `rules[${index}]`;
   const rule = record(value, field);
-  exactKeys(rule, ["name", "productId", "scanMode", "relativePrefix", "includePattern", "allowedSuffixes", "filters", "maxOrder", "raColumn", "decColumn", "healpixColumn", "healpixOrderColumn", "healpixOrder", "hduName", "hduIndex", "coordinateFrame"], field);
+  exactKeys(rule, ["name", "productId", "scanMode", "relativePrefix", "includePattern", "allowedSuffixes", "filters", "maxOrder", "raColumn", "decColumn", "healpixColumn", "healpixOrderColumn", "healpixOrder", "pathHealpixOrder", "pathHealpixGroupSize", "hduName", "hduIndex", "coordinateFrame"], field);
   const normalized: ScanBatchRuleRequest = {
     name: dnsLabel(rule.name, `${field}.name`, 128),
     productId: text(rule.productId, `${field}.productId`, 128),
@@ -219,6 +230,12 @@ function normalizeRule(value: unknown, index: number): ScanBatchRuleRequest {
     if (rule[key] !== undefined) normalized[key] = text(rule[key], `${field}.${key}`, 128);
   }
   if (rule.healpixOrder !== undefined) normalized.healpixOrder = integer(rule.healpixOrder, `${field}.healpixOrder`, 1, 29);
+  if (rule.pathHealpixOrder !== undefined) normalized.pathHealpixOrder = integer(rule.pathHealpixOrder, `${field}.pathHealpixOrder`, 0, 29);
+  if (rule.pathHealpixGroupSize !== undefined) normalized.pathHealpixGroupSize = integer(rule.pathHealpixGroupSize, `${field}.pathHealpixGroupSize`, 1, Number.MAX_SAFE_INTEGER);
+  if ((normalized.pathHealpixOrder !== undefined || normalized.pathHealpixGroupSize !== undefined)
+    && normalized.scanMode !== undefined && normalized.scanMode !== "path-healpix") {
+    throw new ScanBatchValidationError(`${field}.pathHealpixOrder and pathHealpixGroupSize are supported only with path-healpix`);
+  }
   return normalized;
 }
 
