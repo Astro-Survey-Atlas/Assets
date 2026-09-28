@@ -41,6 +41,12 @@ test("managed keys persist only hashes; scopes, expiry, revocation, quotas and u
   assert.throws(()=>service.authorize(key.key,"region:query","test"),/限额/);
   assert.equal(service.view().keys[0]!.requests,3); assert.equal(service.view().llmUsage.inputTokens,12);
   await service.revokeKey(key.id); assert.throws(()=>service.authorize(key.key,"region:query","test"),/撤销/);
+  await assert.rejects(service.deleteRevokedKey("missing"),/不存在/);
+  const active=await service.createKey({name:"active",scopes:["region:query"]});
+  await assert.rejects(service.deleteRevokedKey(active.id),/只能删除已撤销/);
+  await service.deleteRevokedKey(key.id);
+  assert.equal(service.view().keys.some(saved=>saved.id===key.id),false);
+  await assert.rejects(service.deleteRevokedKey(key.id),/不存在/);
   const expiring=await service.createKey({name:"short",scopes:["region:query"],expiresAt:new Date(Date.now()+60000).toISOString()});
   const future=Date.now()+120000;const clock=t.mock.method(Date,"now",()=>future);
   assert.throws(()=>service.authorizeId(expiring.id,"region:query","test"),/过期/);clock.mock.restore();

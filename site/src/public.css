@@ -918,13 +918,13 @@ body.public-site.atlas-page .overlap-download-button:focus-visible {
 body.public-site.atlas-page .overlap-evidence-more-button {
   border-color: color-mix(in srgb, var(--brand-indigo) 72%, transparent);
   background: var(--public-surface);
-  color: var(--brand-indigo-strong);
+  color: var(--public-text);
 }
 body.public-site.atlas-page .overlap-evidence-more-button:hover,
 body.public-site.atlas-page .overlap-evidence-more-button:focus-visible {
   border-color: var(--brand-indigo);
   background: var(--brand-indigo-soft);
-  color: var(--brand-indigo-strong);
+  color: var(--public-text);
 }
 
 body.public-site.atlas-page .overlap-drawer-card.is-warehouse {

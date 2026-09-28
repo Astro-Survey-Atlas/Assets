@@ -47,6 +47,7 @@ export class AccessGate {
     throw new AccessError(401,"Unlock downloads or provide a service API key");
   }
   begin(id:string):{finish:(units:number)=>void} {
+    if(id==="service:workspace"||id.startsWith("managed-key:"))return{finish:()=>undefined};
     const q=this.quota(id);
     // Reserve the maximum operation cost before computing. Failed or abandoned
     // calls do not become a free index enumeration path.

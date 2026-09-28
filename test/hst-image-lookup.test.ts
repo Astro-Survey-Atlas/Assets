@@ -51,6 +51,7 @@ test("HST image lookup intersects s_region with the selected HEALPix cell and st
     ["hst_123_drz.fits", "combined-image", 1000],
     ["hst_123_flt.fits", "exposure", 2000],
   ]);
+  assert.deepEqual(result.errors, []);
   assert.equal(result.truncated, false);
   assert.equal(result.queryExhausted, true);
   assert.equal(result.matchedObservationCount, 1);
@@ -58,6 +59,90 @@ test("HST image lookup intersects s_region with the selected HEALPix cell and st
   assert.equal(stored.length, 1);
   assert.ok(stored[0]!.key.startsWith("hst-image-lookups/"));
   assert.match(Buffer.from(stored[0]!.body).toString(), /mast:HST\/product\/hst_123_drz\.fits/);
+});
+
+test("HST lookup retains matched FITS files when product requests fail and can retry the failed result", async (t) => {
+  const order = 8;
+  const pixel = 342_987;
+  const center = new Healpix(2 ** order).pix2vec(pixel);
+  const ra = (Math.atan2(center.y, center.x) * 180 / Math.PI + 360) % 360;
+  const dec = Math.asin(center.z) * 180 / Math.PI;
+  const inside = `POLYGON ICRS ${ra - 0.01} ${dec - 0.01} ${ra + 0.01} ${dec - 0.01} ${ra + 0.01} ${dec + 0.01} ${ra - 0.01} ${dec + 0.01} ${ra - 0.01} ${dec - 0.01}`;
+  let failSecondObservation = true;
+  let productCalls = 0;
+  const oldFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = oldFetch; });
+  globalThis.fetch = async (_input, init) => {
+    const request = new URLSearchParams(String(init?.body));
+    const envelope = JSON.parse(request.get("request") ?? "{}") as { service: string; params: Record<string, unknown> };
+    if (envelope.service === "Mast.Caom.Filtered.Position") {
+      return new Response(JSON.stringify(table(
+        ["obsid", "obs_collection", "dataproduct_type", "dataRights", "s_region"],
+        [[123, "HST", "image", "PUBLIC", inside], [124, "HST", "image", "PUBLIC", inside]],
+      )), { status: 200 });
+    }
+    productCalls++;
+    if (Number(envelope.params.obsid) === 124 && failSecondObservation) return new Response("unavailable", { status: 503 });
+    return new Response(JSON.stringify(table(
+      ["parent_obsid", "obsID", "productFilename", "dataURI", "productSubGroupDescription", "productType", "dataSize", "dataRights"],
+      [
+        [Number(envelope.params.obsid), 900_000 + Number(envelope.params.obsid), "hst_123_drz.fits", "mast:HST/product/hst_123_drz.fits", "DRZ", "SCIENCE", 1000, "PUBLIC"],
+        [999, 456, "wrong-parent.fits", "mast:HST/product/wrong-parent.fits", "DRZ", "SCIENCE", 1000, "PUBLIC"],
+        [Number(envelope.params.obsid), 789, "preview.jpg", "mast:HST/product/preview.jpg", "PREVIEW", "PREVIEW", 1000, "PUBLIC"],
+        [Number(envelope.params.obsid), 790, "auxiliary.fits", "mast:HST/product/auxiliary.fits", "AUXILIARY", "AUXILIARY", 1000, "PUBLIC"],
+      ],
+    )), { status: 200 });
+  };
+
+  const input = { order, cells: [pixel] };
+  const partial = await lookupHstImages(input);
+  assert.equal(partial.observations.length, 2);
+  assert.deepEqual(partial.observations[0]!.files.map((file) => file.fileName), ["hst_123_drz.fits"]);
+  assert.deepEqual(partial.observations[1]!.files, []);
+  assert.equal(partial.truncated, true);
+  assert.equal(partial.errors.length, 1);
+  assert.equal(partial.errors[0]!.obsid, "124");
+
+  failSecondObservation = false;
+  const retried = await lookupHstImages(input);
+  assert.equal(retried.errors.length, 0);
+  assert.ok(retried.observations.every((observation) => observation.files.length === 1));
+  assert.equal(productCalls, 4, "a partial result is not cached and both observations are retried");
+});
+
+test("HST lookup retains earlier observations when a later MAST position page fails", async (t) => {
+  const order = 8;
+  const pixel = 410_713;
+  const center = new Healpix(2 ** order).pix2vec(pixel);
+  const ra = (Math.atan2(center.y, center.x) * 180 / Math.PI + 360) % 360;
+  const dec = Math.asin(center.z) * 180 / Math.PI;
+  const inside = `POLYGON ICRS ${ra - 0.01} ${dec - 0.01} ${ra + 0.01} ${dec - 0.01} ${ra + 0.01} ${dec + 0.01} ${ra - 0.01} ${dec + 0.01} ${ra - 0.01} ${dec - 0.01}`;
+  const oldFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = oldFetch; });
+  globalThis.fetch = async (_input, init) => {
+    const request = new URLSearchParams(String(init?.body));
+    const envelope = JSON.parse(request.get("request") ?? "{}") as { service: string; params: Record<string, unknown> };
+    const page = Number((JSON.parse(request.get("request") ?? "{}").page));
+    if (envelope.service === "Mast.Caom.Filtered.Position") {
+      if (page === 2) return new Response("unavailable", { status: 503 });
+      const body = {
+        ...table(["obsid", "obs_collection", "dataproduct_type", "dataRights", "s_region"], [[234, "HST", "image", "PUBLIC", inside]]),
+        paging: { pagesFiltered: 2 },
+      };
+      return new Response(JSON.stringify(body), { status: 200 });
+    }
+    return new Response(JSON.stringify(table(
+      ["productFilename", "productSubGroupDescription", "productType", "dataRights"],
+      [["hst_234_drz.fits", "DRZ", "SCIENCE", "PUBLIC"]],
+    )), { status: 200 });
+  };
+
+  const result = await lookupHstImages({ order, cells: [pixel] });
+  assert.equal(result.observations.length, 1);
+  assert.equal(result.observations[0]!.files[0]!.fileName, "hst_234_drz.fits");
+  assert.equal(result.queryExhausted, false);
+  assert.equal(result.errors[0]!.stage, "observations");
+  assert.equal(result.errors[0]!.page, 2);
 });
 
 test("HST image lookup rejects unbounded and invalid cell requests before contacting MAST", async (t) => {
@@ -69,4 +154,17 @@ test("HST image lookup rejects unbounded and invalid cell requests before contac
   await assert.rejects(() => lookupHstImages({ order: 8, cells: [] }), /cells must contain 1 through/);
   await assert.rejects(() => lookupHstImages({ order: 8, cells: [12 * 4 ** 8] }), /invalid NESTED/);
   assert.equal(called, false);
+});
+
+test("HST image lookup reports slow MAST requests as timeouts rather than an unavailable archive", async (t) => {
+  const oldFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = oldFetch; });
+  globalThis.fetch = async () => { throw Object.assign(new Error("fixture timeout"), { name: "TimeoutError" }); };
+
+  const result = await lookupHstImages({ order: 8, cells: [256_138] });
+  assert.equal(result.observations.length, 0);
+  assert.equal(result.errors.length, 1);
+  assert.equal(result.errors[0]!.stage, "observations");
+  assert.equal(result.errors[0]!.kind, "timeout");
+  assert.match(result.errors[0]!.message, /60 seconds/);
 });

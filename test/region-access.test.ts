@@ -24,15 +24,15 @@ test("region validation rejects oversized, pseudo identity and ambiguous revisio
  assert.equal(validateRegion(input).region.nside,256);
  for(const bad of [{...input,purpose:"scan"},{...input,region:{...input.region,nside:16}},{...input,region:{...input.region,order:0,cells:[1]}},{...input,region:{...input.region,cells:Array(4097).fill(1)}},{...input,sources:[{...input.sources[0],layerId:"public:desi"}]},{...input,sources:[{...input.sources[0],indexRevision:undefined}]},{...input,limit:1001}])assert.throws(()=>validateRegion(bad));
 });
-test("access sessions reject cross-origin requests and enforce concurrency and output quotas",()=>{
+test("access sessions reject cross-origin requests and skip hard quotas for authenticated keys",()=>{
  const gate=new AccessGate("secret"),req=new IncomingMessage(new Socket());req.headers={host:"assets.test",origin:"http://assets.test"};
  assert.throws(()=>gate.identity(req),/Unlock/);
  const token=gate.unlockKey(req,()=>"managed-id");req.headers.cookie=`assets_download=${token}`;assert.equal(gate.identity(req),"managed-key:managed-id");
  req.headers.origin="https://evil.test";assert.throws(()=>gate.identity(req),/Same-origin/);
  req.headers={"x-assets-api-key":"secret"};assert.equal(gate.identity(req),"service:workspace");
- const a=gate.begin("service:workspace"),b=gate.begin("service:workspace");assert.throws(()=>gate.begin("service:workspace"),/quota/);a.finish(10000);a.finish(0);b.finish(10000);
- for(let i=0;i<7;i++)gate.begin("service:workspace").finish(11000);
- assert.throws(()=>gate.begin("service:workspace"),/quota/);
+ for(let i=0;i<40;i++)gate.begin("service:workspace").finish(1);
+ for(let i=0;i<40;i++)gate.begin("managed-key:managed-id").finish(1);
+ const a=gate.begin("anonymous:client"),b=gate.begin("anonymous:client");assert.throws(()=>gate.begin("anonymous:client"),/quota/);a.finish(10000);a.finish(0);b.finish(10000);
 });
 test("region results remain bounded and never infer scientific files from geometry",async t=>{
  const f=await reviewedFixture();t.after(()=>rm(f.base,{recursive:true,force:true}));const p=new PublicReleasePublisher(f.options),plan=await p.plan();const run=await p.submit({planId:plan.planId,expectedBaselineSha256:plan.baselineBundle.sha256,surveyIds:["m42"],productIds:["product-1"]});assert.equal((await p.execute(run.runId)).status,"published");

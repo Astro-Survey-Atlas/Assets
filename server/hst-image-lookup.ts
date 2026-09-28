@@ -10,6 +10,7 @@ const MAX_PRODUCTS = 500;
 const MAX_POSITION_PAGES = 8;
 const MAX_PRODUCT_PAGES = 2;
 const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+const MAST_REQUEST_TIMEOUT_MS = 60_000;
 const INTERSECTION_OVERSAMPLING = 4;
 const CACHE_MS = 24 * 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 256;
@@ -41,6 +42,13 @@ export interface HstImageLookupResult {
       sizeBytes?: number;
       recommendation: "combined-image" | "exposure" | "other";
     }>;
+  }>;
+  errors: Array<{
+    stage: "observations" | "products";
+    kind: "timeout" | "unavailable" | "upstream";
+    page?: number;
+    obsid?: string;
+    message: string;
   }>;
   truncated: boolean;
   queryExhausted: boolean;
@@ -81,17 +89,21 @@ function filteredPageCount(value: unknown): number | undefined {
 
 async function mast(service: string, params: Record<string, unknown>, page = 1): Promise<{ body: unknown; raw: string }> {
   let response: Response;
+  let raw: string;
   try {
     response = await fetch(MAST_URL, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
       body: new URLSearchParams({ request: JSON.stringify({ service, params, format: "json", pagesize: 100, page }) }),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(MAST_REQUEST_TIMEOUT_MS),
     });
-  } catch {
-    throw new AdminHttpError(503, "MAST metadata service is temporarily unavailable");
+    raw = await response.text();
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new AdminHttpError(504, `MAST metadata request timed out after ${MAST_REQUEST_TIMEOUT_MS / 1000} seconds`);
+    }
+    throw new AdminHttpError(503, "MAST metadata service could not be reached");
   }
-  const raw = await response.text();
   if (Buffer.byteLength(raw) > MAX_RESPONSE_BYTES) throw new AdminHttpError(502, "MAST metadata response exceeded its size limit");
   if (!response.ok) throw new AdminHttpError(503, `MAST metadata service returned HTTP ${response.status}`);
   let body: unknown;
@@ -220,6 +232,29 @@ function productKind(product: MastRow): "combined-image" | "exposure" | "other" 
   return "other";
 }
 
+function publicScienceFitsProduct(product: MastRow, obsid: string): boolean {
+  const fileName = product.productFilename;
+  if (typeof fileName !== "string" || !/\.fits(?:\.gz)?$/i.test(fileName)
+    || String(product.dataRights ?? "").toUpperCase() !== "PUBLIC"
+    || (product.dataproduct_type && String(product.dataproduct_type).toLowerCase() !== "image")) return false;
+  const parentObsid = product.parent_obsid ?? product.parentObsid;
+  if (parentObsid !== undefined && String(parentObsid) !== obsid) return false;
+  const subgroup = String(product.productSubGroupDescription ?? "").trim().toUpperCase();
+  const productType = String(product.productType ?? "").trim().toUpperCase();
+  if (productType) return productType === "SCIENCE";
+  return ["SCIENCE", "DRZ", "DRC", "FLT", "FLC", "RAW", "EXP"].includes(subgroup);
+}
+
+function failureDetails(error: unknown): { kind: "timeout" | "unavailable" | "upstream"; message: string } {
+  const message = error instanceof Error ? error.message : "MAST metadata request failed";
+  const statusCode = error && typeof error === "object" && "statusCode" in error
+    ? (error as { statusCode?: unknown }).statusCode
+    : undefined;
+  if (statusCode === 504) return { kind: "timeout", message };
+  if (statusCode === 503 && /could not be reached|temporarily unavailable/i.test(message)) return { kind: "unavailable", message };
+  return { kind: "upstream", message };
+}
+
 function portalUrl(obsid: string): string {
   const url = new URL("https://mast.stsci.edu/portal/Mashup/Clients/Mast/Portal.html");
   url.searchParams.set("searchQuery", `obsid:${obsid}`);
@@ -240,18 +275,28 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore): Pr
   let queryExhausted = false;
   let truncated = false;
   let excludedWithoutRegion = 0;
+  const errors: HstImageLookupResult["errors"] = [];
   for (let page = 1; page <= MAX_POSITION_PAGES; page++) {
-    const result = await mast("Mast.Caom.Filtered.Position", {
-      position: `${cone.ra}, ${cone.dec}, ${cone.radius}`,
-      columns: "obsid,obs_collection,dataproduct_type,proposal_id,target_name,instrument_name,filters,t_min,t_max,s_region,dataRights",
-      filters: [
-        { paramName: "obs_collection", values: ["HST"] },
-        { paramName: "dataproduct_type", values: ["image"] },
-        { paramName: "dataRights", values: ["PUBLIC"] },
-      ],
-    }, page);
-    rawResponses.push(result.raw);
-    const pageRows = rows(result.body);
+    let body: unknown;
+    let pageRows: MastRow[];
+    try {
+      const result = await mast("Mast.Caom.Filtered.Position", {
+        position: `${cone.ra}, ${cone.dec}, ${cone.radius}`,
+        columns: "obsid,obs_collection,dataproduct_type,proposal_id,target_name,instrument_name,filters,t_min,t_max,s_region,dataRights",
+        filters: [
+          { paramName: "obs_collection", values: ["HST"] },
+          { paramName: "dataproduct_type", values: ["image"] },
+          { paramName: "dataRights", values: ["PUBLIC"] },
+        ],
+      }, page);
+      rawResponses.push(result.raw);
+      body = result.body;
+      pageRows = rows(body);
+    } catch (error) {
+      errors.push({ stage: "observations", page, ...failureDetails(error) });
+      truncated = true;
+      break;
+    }
     for (const observation of pageRows) {
       const obsid = String(observation.obsid ?? "");
       if (!/^\d{1,32}$/.test(obsid) || !Number.isSafeInteger(Number(obsid)) || String(observation.obs_collection ?? "").toUpperCase() !== "HST"
@@ -261,7 +306,7 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore): Pr
       if (!shape) { excludedWithoutRegion++; continue; }
       if (intersects(order, cellSet, shape)) matched.set(obsid, observation);
     }
-    const pageCount = filteredPageCount(result.body);
+    const pageCount = filteredPageCount(body);
     queryExhausted = pageCount !== undefined ? page >= pageCount : pageRows.length < 100;
     if (!queryExhausted && matched.size >= MAX_OBSERVATIONS) {
       truncated = true;
@@ -285,17 +330,19 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore): Pr
       const responses: Array<{ obsid: string; page: number; body: unknown }> = [];
       let exhausted = false;
       for (let page = 1; page <= MAX_PRODUCT_PAGES; page++) {
-        const response = await mast("Mast.Caom.Products", { obsid: Number(obsid) }, page);
-        responses.push({ obsid, page, body: response.body });
-        products.push(...rows(response.body).filter((product) => {
-          const filename = product.productFilename;
-          const rights = product.dataRights;
-          return typeof filename === "string" && filename.length > 0 && filename.length <= 512
-            && String(rights ?? "").toUpperCase() === "PUBLIC"
-            && (!product.dataproduct_type || String(product.dataproduct_type).toLowerCase() === "image");
-        }));
-        const pageCount = filteredPageCount(response.body);
-        exhausted = pageCount !== undefined ? page >= pageCount : rows(response.body).length < 100;
+        try {
+          const response = await mast("Mast.Caom.Products", { obsid: Number(obsid) }, page);
+          responses.push({ obsid, page, body: response.body });
+          products.push(...rows(response.body).filter((product) => {
+            const fileName = product.productFilename;
+            return typeof fileName === "string" && fileName.length <= 512 && publicScienceFitsProduct(product, obsid);
+          }));
+          const pageCount = filteredPageCount(response.body);
+          exhausted = pageCount !== undefined ? page >= pageCount : rows(response.body).length < 100;
+        } catch (error) {
+          errors.push({ stage: "products", obsid, page, ...failureDetails(error) });
+          break;
+        }
         if (exhausted) break;
       }
       return { obsid, products, responses, exhausted };
@@ -340,7 +387,7 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore): Pr
   }
 
   const generatedAt = new Date().toISOString();
-  const evidence = Buffer.from(JSON.stringify({ schemaVersion: 1, generatedAt, query: { coordinateFrame: "ICRS", ordering: "NESTED", order, cells }, rawResponses, products: productResponses }));
+  const evidence = Buffer.from(JSON.stringify({ schemaVersion: 1, generatedAt, query: { coordinateFrame: "ICRS", ordering: "NESTED", order, cells }, rawResponses, products: productResponses, errors }));
   if (evidence.length > MAX_RESPONSE_BYTES) throw new AdminHttpError(502, "MAST evidence snapshot exceeded its size limit");
   const sourceSnapshotSha256 = createHash("sha256").update(evidence).digest("hex");
   if (store) {
@@ -358,6 +405,9 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore): Pr
     precision: truncated ? "truncated" : "estimated",
     spatialPrecision: "estimated",
     observations,
+    errors: [...errors].sort((left, right) => left.stage.localeCompare(right.stage)
+      || (left.obsid ?? "").localeCompare(right.obsid ?? "")
+      || (left.page ?? 0) - (right.page ?? 0)),
     truncated,
     queryExhausted,
     matchedObservationCount: matched.size,
@@ -367,7 +417,9 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore): Pr
   };
   const now = Date.now();
   for (const [key, entry] of cache) if (entry.expiresAt <= now) cache.delete(key);
-  if (cache.size >= MAX_CACHE_ENTRIES) cache.delete(cache.keys().next().value!);
-  cache.set(cacheKey, { expiresAt: now + CACHE_MS, result: response });
+  if (!errors.length) {
+    if (cache.size >= MAX_CACHE_ENTRIES) cache.delete(cache.keys().next().value!);
+    cache.set(cacheKey, { expiresAt: now + CACHE_MS, result: response });
+  }
   return response;
 }

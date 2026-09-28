@@ -2279,6 +2279,8 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       if (pathname === base + "/keys" && request.method === "POST") return json(response, 201, await apiManagement.createKey(await requestJsonBody(request, 16384) as Record<string, unknown>));
       const revoke = /^\/api\/v1\/admin\/api-management\/keys\/([^/]+)\/revoke$/.exec(pathname);
       if (revoke && request.method === "POST") { await apiManagement.revokeKey(revoke[1]!); return json(response, 200, { revoked: true }); }
+      const deleteKey = /^\/api\/v1\/admin\/api-management\/keys\/([^/]+)$/.exec(pathname);
+      if (deleteKey && request.method === "DELETE") { await apiManagement.deleteRevokedKey(deleteKey[1]!); return json(response, 200, { deleted: true }); }
       throw new AdminHttpError(404, "API management route not found");
     }
     if (pathname === "/api/v1/admin/overview" && request.method === "GET") {

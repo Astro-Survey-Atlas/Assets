@@ -1,5 +1,5 @@
 import { ensureDownloadAccess, resetDownloadAccess } from "./download-access";
-import { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Lock, Maximize2, Minimize2, Moon, Menu, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X, createIcons } from "lucide";
+import { BadgeCheck, BookOpen, Box, ChevronLeft, ChevronRight, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, LoaderCircle, Lock, Maximize2, Minimize2, Moon, Menu, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X, createIcons } from "lucide";
 import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 import { surveyColorFor } from "./atlas/survey-colors.js";
@@ -20,6 +20,8 @@ type AssetKind = "package" | "moc" | "geometry" | "manifest" | "ledger" | "docum
 type ProductStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
 type Modality = "imaging" | "spectroscopy" | "redshift" | "photometry" | "time-domain" | "integral-field" | "ultraviolet" | "infrared" | "catalog" | "simulation" | "radio" | (string & {});
 const HST_IMAGE_LOOKUP_MAX_CELLS = 256;
+const HST_IMAGE_LOOKUP_DISPLAY_LIMIT = 30;
+const OVERLAP_COMPONENT_PAGE_SIZE = 30;
 
 interface HstImageLookup {
   coordinateFrame: "ICRS";
@@ -39,6 +41,7 @@ interface HstImageLookup {
     productUrl: string;
     files: Array<{ fileName: string; dataUri?: string; productType?: string; productGroup?: string; sizeBytes?: number; recommendation: "combined-image" | "exposure" | "other" }>;
   }>;
+  errors: Array<{ stage: "observations" | "products"; kind: "timeout" | "unavailable" | "upstream"; page?: number; obsid?: string; message: string }>;
   truncated: boolean;
   queryExhausted: boolean;
   matchedObservationCount: number;
@@ -203,6 +206,9 @@ let overlapEvidenceController: AbortController | null = null;
 let overlapDetailsController: AbortController | null = null;
 let activeOverlapSurveyIds: string[] = [];
 let activeOverlapComponents: OverlapComponentView[] = [];
+let overlapComponentsPage = 0;
+let overlapDrawerComponentsPage = 0;
+const hstLookupControllers = new WeakMap<HTMLElement, AbortController>();
 const queuedLayerIds = new Set<string>();
 let selectedQueueComponent: OverlapComponentView | null = null;
 let renderedQueueComponentId: string | null = null;
@@ -474,7 +480,10 @@ function updateCoverageState(state: SurveyLayerState): void {
 function updateCoverageInspector(inspection: SurveyLayerInspection | null): void {
   const panel = byId("coverage-detail-panel");
   if (!inspection) {
-    if (!overlapMode) panel.hidden = true;
+    if (!overlapMode) {
+      abortHstLookupsWithin(byId("coverage-detail-content"));
+      panel.hidden = true;
+    }
     return;
   }
   if (overlapMode) return;
@@ -487,13 +496,13 @@ function updateCoverageInspector(inspection: SurveyLayerInspection | null): void
   byId("coverage-detail-kicker").textContent = t("coverage.cellInspector");
   byId("coverage-detail-title").textContent = `ORDER ${Math.round(Math.log2(inspection.nside))} · IPix ${inspection.pixel}`;
   const content = byId("coverage-detail-content");
+  abortHstLookupsWithin(content);
   const rows: Array<[string, string]> = [
     ["NSIDE", String(inspection.nside)],
     ["RA / DEC", `${inspection.centerRaDeg.toFixed(4)}° / ${inspection.centerDecDeg.toFixed(4)}°`],
     ["POINTER", `${inspection.pointerRaDeg.toFixed(4)}° / ${inspection.pointerDecDeg.toFixed(4)}°`],
     ["SURVEYS", inspection.surveyIds.length ? inspection.surveyIds.map((id) => surveyIndex?.surveys.find((survey) => survey.id === id)?.name ?? id).join(", ") : "--"],
     ["RELEASES", inspection.releaseIds.length ? inspection.releaseIds.join(", ") : "--"],
-    ["SOURCES", inspection.artifacts.length ? inspection.artifacts.map((artifact) => artifact.product).join(", ") : inspection.workspaceAvailable ? "workspace layer" : "--"],
   ];
   const list = document.createElement("dl");
   list.className = "coverage-detail-list";
@@ -505,14 +514,25 @@ function updateCoverageInspector(inspection: SurveyLayerInspection | null): void
     dd.title = value;
     list.append(dt, dd);
   });
+  const sourceLabel = document.createElement("dt");
+  sourceLabel.textContent = "SOURCES";
+  const sourceValue = document.createElement("dd");
+  sourceValue.className = "coverage-detail-source-value";
+  if (inspection.artifacts.length) {
+    const sources = document.createElement("ul");
+    sources.className = "coverage-detail-source-list";
+    inspection.artifacts.forEach((artifact) => {
+      const source = document.createElement("li");
+      source.textContent = artifact.product;
+      source.title = artifact.product;
+      sources.append(source);
+    });
+    sourceValue.append(sources);
+  } else sourceValue.textContent = inspection.workspaceAvailable ? "workspace layer" : "--";
+  list.append(sourceLabel, sourceValue);
   content.replaceChildren(list);
   if (inspection.surveyIds.includes("hst") && inspection.nside >= 16) {
-    const lookup = document.createElement("button");
-    lookup.type = "button";
-    lookup.className = "command-button hst-image-lookup-button";
-    lookup.append(icon("search"), document.createTextNode(t("coverage.hstFindImages")));
-    lookup.addEventListener("click", () => void runHstImageLookup(Math.round(Math.log2(inspection.nside)), [inspection.pixel], lookup));
-    content.append(lookup);
+    void appendHstImageLookupResults(content, Math.round(Math.log2(inspection.nside)), [inspection.pixel]);
   }
 }
 
@@ -526,112 +546,133 @@ function hstSize(value?: number): string {
   return `${amount.toFixed(amount >= 10 ? 0 : 1)} ${units[index]}`;
 }
 
-async function runHstImageLookup(order: number, cells: number[], button: HTMLButtonElement): Promise<void> {
-  button.disabled = true;
+function abortHstLookupsWithin(root: ParentNode): void {
+  root.querySelectorAll<HTMLElement>(".hst-image-lookup-results").forEach((host) => hstLookupControllers.get(host)?.abort());
+}
+
+async function appendHstImageLookupResults(container: HTMLElement, order: number, cells: number[]): Promise<void> {
+  const section = document.createElement("section");
+  section.className = "hst-image-lookup-region";
+  const heading = document.createElement("strong");
+  heading.className = "hst-image-lookup-heading";
+  heading.textContent = t("coverage.hstRegionFiles");
+  section.append(heading);
+  if (cells.length > HST_IMAGE_LOOKUP_MAX_CELLS) {
+    section.append(Object.assign(document.createElement("small"), { className: "hst-image-lookup-region-note", textContent: t("coverage.hstRegionTooLarge") }));
+    container.append(section);
+    return;
+  }
   const resultArea = document.createElement("div");
   resultArea.className = "hst-image-lookup-results";
   resultArea.setAttribute("aria-live", "polite");
-  if (cells.length > HST_IMAGE_LOOKUP_MAX_CELLS) {
-    resultArea.textContent = t("coverage.hstRegionTooLarge");
-    button.after(resultArea);
-    button.disabled = false;
-    return;
-  }
-  resultArea.textContent = t("coverage.hstSearching");
-  button.after(resultArea);
+  resultArea.setAttribute("aria-busy", "true");
+  const pending = document.createElement("div");
+  pending.className = "hst-image-lookup-loading";
+  pending.setAttribute("role", "status");
+  pending.append(icon("loader-circle"), document.createTextNode(t("coverage.hstSearching")));
+  resultArea.append(pending);
+  section.append(resultArea);
+  container.append(section);
+  renderIcons();
+  const controller = new AbortController();
+  hstLookupControllers.set(resultArea, controller);
   try {
     const response = await fetch("/api/v1/coverage/hst-images", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ order, cells }),
+      signal: controller.signal,
     });
     const result = await response.json() as HstImageLookup & { error?: string };
     if (!response.ok) throw new Error(result.error ?? t("coverage.hstLookupFailed"));
+    if (!resultArea.isConnected || controller.signal.aborted) return;
+    if (!Array.isArray(result.errors)) result.errors = [];
     renderHstImageLookup(result, resultArea);
   } catch (error) {
+    if (controller.signal.aborted) return;
     resultArea.textContent = error instanceof Error ? error.message : t("coverage.hstLookupFailed");
   } finally {
-    button.disabled = false;
+    resultArea.setAttribute("aria-busy", "false");
+    hstLookupControllers.delete(resultArea);
   }
 }
 
 function renderHstImageLookup(result: HstImageLookup, host: HTMLElement): void {
-  const selected = new Map<string, { obsid: string; fileName: string; dataUri?: string; productType?: string; productGroup?: string; sizeBytes?: number; recommendation: string; productUrl: string }>();
   const summary = document.createElement("p");
   summary.className = "hst-image-lookup-summary";
   const fileCount = result.observations.reduce((sum, observation) => sum + observation.files.length, 0);
-  summary.textContent = `O${result.order} · ${t("coverage.hstEstimated")} · ${result.observations.length} ${t("coverage.hstObservations")} · ${fileCount} ${t("coverage.hstFiles")}${result.truncated || !result.queryExhausted ? ` · ${t("coverage.hstResultsPartial")}` : ""}`;
+  const errors = result.errors ?? [];
+  summary.textContent = `O${result.order} · ${t("coverage.hstEstimated")} · ${result.observations.length} ${t("coverage.hstObservations")} · ${fileCount} ${t("coverage.hstFiles")}${result.truncated || !result.queryExhausted || errors.length ? ` · ${t("coverage.hstResultsPartial")}` : ""}`;
   const groups = document.createElement("div");
   groups.className = "hst-image-observations";
-  if (!result.observations.length) groups.append(Object.assign(document.createElement("p"), { className: "hst-image-lookup-summary", textContent: t("coverage.hstNoMatches") }));
-  for (const observation of result.observations) {
-    const section = document.createElement("details");
+  if (!result.observations.length && !errors.length) groups.append(Object.assign(document.createElement("p"), { className: "hst-image-lookup-summary", textContent: t("coverage.hstNoMatches") }));
+  const observationsWithProductErrors = new Set(errors.flatMap((error) => error.stage === "products" && error.obsid ? [error.obsid] : []));
+  const visibleObservations = result.observations.slice(0, HST_IMAGE_LOOKUP_DISPLAY_LIMIT);
+  let remainingFiles = HST_IMAGE_LOOKUP_DISPLAY_LIMIT;
+  let displayedFileCount = 0;
+  for (const observation of visibleObservations) {
+    const section = document.createElement("section");
     section.className = "hst-image-observation";
-    const heading = document.createElement("summary");
-    heading.textContent = `MAST ${observation.obsid} · ${observation.instrument ?? "HST"} · ${observation.filters ?? ""}`;
+    const heading = document.createElement("div");
+    heading.className = "hst-image-observation-heading";
+    const title = document.createElement("strong");
+    title.textContent = `MAST ${observation.obsid} · ${observation.instrument ?? "HST"} · ${observation.filters ?? ""}`;
+    const source = document.createElement("a"); source.href = observation.productUrl; source.target = "_blank"; source.rel = "noopener noreferrer"; source.textContent = t("coverage.hstMastEntry");
+    heading.append(title, source);
     section.append(heading);
     if (observation.target) {
       const target = document.createElement("p"); target.textContent = observation.target; section.append(target);
     }
     const products = document.createElement("ul");
-    for (const file of observation.files) {
+    const visibleFiles = observation.files.slice(0, remainingFiles);
+    remainingFiles -= visibleFiles.length;
+    displayedFileCount += visibleFiles.length;
+    for (const file of visibleFiles) {
       const item = document.createElement("li");
-      const key = `${observation.obsid}:${file.dataUri ?? file.fileName}`;
-      const label = document.createElement("label");
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.addEventListener("change", () => {
-        if (checkbox.checked) selected.set(key, { obsid: observation.obsid, fileName: file.fileName, ...(file.dataUri ? { dataUri: file.dataUri } : {}), ...(file.productType ? { productType: file.productType } : {}), ...(file.productGroup ? { productGroup: file.productGroup } : {}), ...(file.sizeBytes !== undefined ? { sizeBytes: file.sizeBytes } : {}), recommendation: file.recommendation, productUrl: observation.productUrl });
-        else selected.delete(key);
-        updateExport();
-      });
       const name = document.createElement("span"); name.textContent = file.fileName;
       const metadata = document.createElement("small"); metadata.textContent = `${file.recommendation} · ${file.productGroup ?? file.productType ?? "HST image"} · ${hstSize(file.sizeBytes)}`;
-      const source = document.createElement("a"); source.href = observation.productUrl; source.target = "_blank"; source.rel = "noopener noreferrer"; source.textContent = t("coverage.hstMastEntry");
-      label.append(checkbox, name, metadata, source); item.append(label); products.append(item);
+      item.append(name, metadata); products.append(item);
     }
-    if (!observation.files.length) products.append(Object.assign(document.createElement("li"), { textContent: t("coverage.hstNoFiles") }));
+    if (!observation.files.length) products.append(Object.assign(document.createElement("li"), { textContent: observationsWithProductErrors.has(observation.obsid) ? t("coverage.hstProductsFailed") : t("coverage.hstNoFiles") }));
     section.append(products);
     groups.append(section);
   }
-  const footer = document.createElement("div");
-  footer.className = "hst-image-lookup-footer";
-  const selection = document.createElement("span");
-  const exportJson = document.createElement("button"); exportJson.type = "button"; exportJson.className = "command-button"; exportJson.append(icon("file-json-2"), document.createTextNode("JSON"));
-  const exportCsv = document.createElement("button"); exportCsv.type = "button"; exportCsv.className = "command-button"; exportCsv.append(icon("download"), document.createTextNode("CSV"));
-  const exportPlan = (format: "json" | "csv") => {
-    const files = [...selected.values()];
-    const rows = files.map((file) => ({ surveyId: "hst", observationId: file.obsid, fileName: file.fileName, sizeBytes: file.sizeBytes ?? null, productType: file.productType ?? null, productGroup: file.productGroup ?? null, recommendation: file.recommendation, sourceUri: file.dataUri ?? null, sourceUrl: file.productUrl }));
-    const query = {
-      coordinateFrame: result.coordinateFrame,
-      ordering: result.ordering,
-      order: result.order,
-      nside: result.nside,
-      cells: result.cells,
-      precision: result.precision,
-      spatialPrecision: result.spatialPrecision,
-      truncated: result.truncated || !result.queryExhausted,
-      queryExhausted: result.queryExhausted,
-    };
-    const body = format === "json"
-      ? JSON.stringify({ schemaVersion: 1, kind: "source-download-plan", generatedAt: result.generatedAt, sourceSnapshotSha256: result.sourceSnapshotSha256, query, files: rows }, null, 2)
-      : [["surveyId", "observationId", "fileName", "sizeBytes", "productType", "productGroup", "recommendation", "sourceUri", "sourceUrl", "coordinateFrame", "ordering", "order", "nside", "cells", "precision", "spatialPrecision", "truncated", "queryExhausted", "sourceSnapshotSha256"], ...rows.map((row) => [...Object.values(row), result.coordinateFrame, result.ordering, result.order, result.nside, JSON.stringify(result.cells), result.precision, result.spatialPrecision, result.truncated, result.queryExhausted, result.sourceSnapshotSha256])].map((line) => line.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n") + "\r\n";
-    const blob = new Blob([body], { type: format === "json" ? "application/json" : "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `hst-image-download-plan.${format}`; anchor.click(); URL.revokeObjectURL(url);
-  };
-  exportJson.addEventListener("click", () => exportPlan("json")); exportCsv.addEventListener("click", () => exportPlan("csv"));
-  const updateExport = () => {
-    const files = [...selected.values()];
-    const knownBytes = files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0);
-    const unknownSizes = files.filter((file) => file.sizeBytes === undefined).length;
-    selection.textContent = `${selected.size} ${t("coverage.hstFiles")} · ${hstSize(knownBytes)}${unknownSizes ? ` · ${t("coverage.hstSizeUnknown")}: ${unknownSizes}` : ""}`;
-    exportJson.disabled = selected.size === 0; exportCsv.disabled = selected.size === 0;
-  };
-  footer.append(selection, exportJson, exportCsv); updateExport();
+  let failures: HTMLElement | undefined;
+  if (errors.length) {
+    failures = document.createElement("div");
+    failures.className = "hst-image-lookup-errors";
+    failures.append(Object.assign(document.createElement("p"), { textContent: t("coverage.hstPartialFailures").replace("{count}", String(errors.length)) }));
+    const failedRequests = document.createElement("ul");
+    errors.forEach((error) => {
+      const item = document.createElement("li");
+      const scope = error.stage === "products"
+        ? `MAST ${error.obsid ?? "?"}`
+        : `MAST · ${t("coverage.hstObservationPage")} ${error.page ?? "?"}`;
+      const message = error.kind === "timeout"
+        ? t("coverage.hstMastTimeout")
+        : error.kind === "unavailable" ? t("coverage.hstMastUnavailable") : error.message;
+      item.textContent = `${scope} · ${message}`;
+      failedRequests.append(item);
+    });
+    failures.append(failedRequests);
+  }
+  const limits: HTMLElement[] = [];
+  if (fileCount > displayedFileCount) {
+    limits.push(Object.assign(document.createElement("p"), {
+      className: "hst-image-lookup-limit",
+      textContent: t("coverage.hstDisplayedFiles").replace("{shown}", String(displayedFileCount)).replace("{total}", String(fileCount)),
+    }));
+  }
+  if (result.observations.length > visibleObservations.length) {
+    limits.push(Object.assign(document.createElement("p"), {
+      className: "hst-image-lookup-limit",
+      textContent: t("coverage.hstDisplayedObservations").replace("{shown}", String(visibleObservations.length)).replace("{total}", String(result.observations.length)),
+    }));
+  }
   const provenance = document.createElement("small");
   provenance.className = "hst-image-lookup-provenance";
   provenance.textContent = `${t("coverage.hstSnapshot")} ${result.sourceSnapshotSha256.slice(0, 12)} · ${result.generatedAt}${result.excludedWithoutRegion ? ` · ${result.excludedWithoutRegion} ${t("coverage.hstMissingRegion")}` : ""}`;
-  host.replaceChildren(summary, groups, footer, provenance);
+  host.replaceChildren(summary, ...(failures ? [failures] : []), groups, ...limits, provenance);
 }
 
 function updateOverlapViewport(): void {
@@ -1045,6 +1086,7 @@ function bindLayerCloseTimer(host: HTMLElement): void {
 function renderOverlapLoadingPanel(surveyIds: string[], order: number): void {
   const panel = byId("coverage-detail-panel");
   const content = byId("coverage-detail-content");
+  abortHstLookupsWithin(content);
   panel.classList.add("is-overlap-panel");
   panel.hidden = false;
   byId("coverage-detail-kicker").textContent = t("coverage.overlapResult");
@@ -1067,6 +1109,7 @@ function renderOverlapLoadingPanel(surveyIds: string[], order: number): void {
 function renderOverlapErrorPanel(surveyIds: string[]): void {
   const panel = byId("coverage-detail-panel");
   const content = byId("coverage-detail-content");
+  abortHstLookupsWithin(content);
   panel.classList.add("is-overlap-panel");
   panel.hidden = false;
   byId("coverage-detail-kicker").textContent = t("coverage.overlapResult");
@@ -1079,6 +1122,39 @@ function renderOverlapErrorPanel(surveyIds: string[]): void {
   positionOverlapPanel();
 }
 
+function componentPageControls(total: number, page: number, onPageChange: (page: number) => void, variant: "panel" | "drawer"): HTMLElement | null {
+  const pageCount = Math.ceil(total / OVERLAP_COMPONENT_PAGE_SIZE);
+  if (pageCount < 2) return null;
+  const start = page * OVERLAP_COMPONENT_PAGE_SIZE + 1;
+  const end = Math.min(total, start + OVERLAP_COMPONENT_PAGE_SIZE - 1);
+  const navigation = document.createElement("nav");
+  navigation.className = `overlap-component-pagination overlap-component-pagination-${variant}`;
+  navigation.setAttribute("aria-label", t("coverage.componentPages"));
+  const previous = document.createElement("button");
+  previous.type = "button";
+  previous.className = "icon-button overlap-component-page-button";
+  previous.title = t("coverage.previousPage");
+  previous.setAttribute("aria-label", t("coverage.previousPage"));
+  previous.disabled = page === 0;
+  previous.append(icon("chevron-left"));
+  previous.addEventListener("click", () => onPageChange(page - 1));
+  const label = document.createElement("span");
+  label.textContent = t("coverage.componentPageLabel")
+    .replace("{start}", String(start))
+    .replace("{end}", String(end))
+    .replace("{total}", String(total));
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "icon-button overlap-component-page-button";
+  next.title = t("coverage.nextPage");
+  next.setAttribute("aria-label", t("coverage.nextPage"));
+  next.disabled = page >= pageCount - 1;
+  next.append(icon("chevron-right"));
+  next.addEventListener("click", () => onPageChange(page + 1));
+  navigation.append(previous, label, next);
+  return navigation;
+}
+
 function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number, scope = "GLOBAL", componentData?: OverlapComponentView[]): void {
   const panel = byId("coverage-detail-panel");
   const content = byId("coverage-detail-content");
@@ -1087,6 +1163,7 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
   setOverlapExpandVisible(Boolean(componentData?.length ?? activeOverlapComponents.length));
   byId("coverage-detail-kicker").textContent = t("coverage.overlapResult");
   byId("coverage-detail-title").textContent = `${scope} · ${surveyIds.length} SURVEYS`;
+  abortHstLookupsWithin(content);
   content.replaceChildren();
   const summary = document.createElement("p");
   summary.className = "overlap-summary";
@@ -1102,10 +1179,21 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
   const heading = document.createElement("strong");
   heading.textContent = `${components.length} CONNECTED COMPONENT${components.length === 1 ? "" : "S"}`;
   componentNav.append(heading);
-  components.forEach((component, index) => {
+  const pageCount = Math.max(1, Math.ceil(components.length / OVERLAP_COMPONENT_PAGE_SIZE));
+  overlapComponentsPage = Math.min(overlapComponentsPage, pageCount - 1);
+  const pageControls = componentPageControls(components.length, overlapComponentsPage, (page) => {
+    overlapComponentsPage = page;
+    const first = components[page * OVERLAP_COMPONENT_PAGE_SIZE];
+    if (first) selectedQueueComponent = first;
+    renderOverlapPanel(surveyIds, pixels, order, scope, components);
+  }, "panel");
+  if (pageControls) componentNav.append(pageControls);
+  const visibleComponents = components.slice(overlapComponentsPage * OVERLAP_COMPONENT_PAGE_SIZE, (overlapComponentsPage + 1) * OVERLAP_COMPONENT_PAGE_SIZE);
+  visibleComponents.forEach((component) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = index === 0 ? "is-active" : "";
+    button.className = selectedQueueComponent?.id === component.id ? "is-active" : "";
+    button.setAttribute("aria-pressed", String(selectedQueueComponent?.id === component.id));
     button.textContent = component.id;
     button.addEventListener("click", () => {
       selectOverlapComponent(component, surveyIds, content);
@@ -1115,10 +1203,17 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
   content.append(componentNav);
   const initialComponent = components.find((component) => component.id === selectedQueueComponent?.id) ?? components[0]!;
   selectOverlapComponent(initialComponent, surveyIds, content);
+  renderIcons();
   positionOverlapPanel();
 }
 
 function selectOverlapComponent(component: OverlapComponentView, surveyIds = activeOverlapSurveyIds, content = byId("coverage-detail-content")): void {
+  const componentIndex = activeOverlapComponents.findIndex((entry) => entry.id === component.id);
+  if (componentIndex >= 0) {
+    overlapComponentsPage = Math.floor(componentIndex / OVERLAP_COMPONENT_PAGE_SIZE);
+    overlapDrawerComponentsPage = overlapComponentsPage;
+    if (overlapDrawerOpen) renderOverlapDrawerComponents();
+  }
   content.querySelectorAll<HTMLButtonElement>(".overlap-components button").forEach((entry) => entry.classList.toggle("is-active", entry.textContent === component.id));
   coverageDots?.setActiveOverlapComponent(component.id);
   updateOverlapHud(component);
@@ -1412,22 +1507,25 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
   }
 }
 
-function appendSourceLocator(row: HTMLElement, sourceUri: string): void {
+function appendSourceLocator(row: HTMLElement, sourceUri: string, showCopyButton: boolean): void {
   const local = sourceUri.startsWith("file:///");
   const object = /^(?:s3|oss):\/\//i.test(sourceUri);
   const remote = !local && !object;
   const locator = document.createElement("div");
-  locator.className = "overlap-source-locator";
+  locator.className = `overlap-source-locator${showCopyButton ? " is-copyable" : ""}`;
   const value = document.createElement("code");
   value.textContent = `${local ? "LOCAL FILE URI" : object ? "OBJECT URI" : "SOURCE URI"} · ${sourceUri}`;
-  const copyUri = document.createElement("button");
-  copyUri.className = "icon-button overlap-source-copy";
-  copyUri.type = "button";
-  copyUri.title = "复制源文件 URI";
-  copyUri.setAttribute("aria-label", `复制源文件 URI ${sourceUri}`);
-  copyUri.append(icon("copy"));
-  copyUri.addEventListener("click", () => void copy(sourceUri, t("coverage.uriCopied")));
-  locator.append(value, copyUri);
+  locator.append(value);
+  if (showCopyButton) {
+    const copyUri = document.createElement("button");
+    copyUri.className = "icon-button overlap-source-copy";
+    copyUri.type = "button";
+    copyUri.title = "复制源文件 URI";
+    copyUri.setAttribute("aria-label", `复制源文件 URI ${sourceUri}`);
+    copyUri.append(icon("copy"));
+    copyUri.addEventListener("click", () => void copy(sourceUri, t("coverage.uriCopied")));
+    locator.append(copyUri);
+  }
   row.append(locator);
   row.append(Object.assign(document.createElement("small"), {
     textContent: local
@@ -1598,7 +1696,7 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
           note.textContent = `${observation.scanRunId ?? "扫描标识未知"} · ${observation.fileName ?? file.fileId} · ${observation.sizeBytes === undefined ? "大小未知" : bytes(observation.sizeBytes)} · ${observation.metadataState === "missing" ? "文件元数据缺失" : "已保留文件记录"}`;
           note.title = `输入快照 SHA-256: ${observation.sourceSnapshotSha256 ?? "未知"}`;
           details.append(note);
-          if (observation.sourceUri && observation.sourceUri !== file.sourceUri) appendSourceLocator(details, observation.sourceUri);
+          if (observation.sourceUri && observation.sourceUri !== file.sourceUri) appendSourceLocator(details, observation.sourceUri, Boolean(paginationHost));
         }
         row.append(details);
       }
@@ -1613,7 +1711,7 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
         }
       }
       if (file.sourceUri) {
-        appendSourceLocator(row, file.sourceUri);
+        appendSourceLocator(row, file.sourceUri, Boolean(paginationHost));
         hasLocation = true;
       }
       if (!hasLocation) {
@@ -1653,7 +1751,7 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
       row.append(Object.assign(document.createElement("strong"), { textContent: `${reverseEntrypointLabel(entry)} · ${entry.product ?? entry.productId ?? entry.layerId ?? "entrypoint"}` }));
       if (entry.order !== undefined) row.append(Object.assign(document.createElement("small"), { textContent: `O${entry.order} · ${(entry.cells ?? []).length} cells · ${entry.precision}` }));
       if (entry.note) row.append(Object.assign(document.createElement("small"), { textContent: entry.note }));
-      if (entry.sourceUri && entry.kind !== "coverage-source") appendSourceLocator(row, entry.sourceUri);
+      if (entry.sourceUri && entry.kind !== "coverage-source") appendSourceLocator(row, entry.sourceUri, Boolean(paginationHost));
       const entryUrl = entry.url ?? entry.sourceUrl ?? entry.mocUrl;
       const tileId = typeof entry.tileId === "string" ? entry.tileId : undefined;
       const entryLabel = entry.kind === "tile-directory" && tileId
@@ -1691,6 +1789,7 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
 
 function renderOverlapComponent(component: OverlapComponentView, surveyIds: string[], content: HTMLElement): void {
   overlapEvidenceController?.abort();
+  abortHstLookupsWithin(content);
   content.querySelectorAll(".overlap-component-detail, .overlap-products, .overlap-result-actions, .overlap-evidence-plan, .hst-image-lookup-region, .hst-image-lookup-results").forEach((node) => node.remove());
   const detail = document.createElement("div");
   detail.className = "overlap-component-detail";
@@ -1698,19 +1797,7 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
   detail.textContent = `${component.id} · ${component.cells.length.toLocaleString("en-US")} cells · ${bounds.areaDeg2.toFixed(2)} deg² · RA ${bounds.raMin.toFixed(2)}°${bounds.raWraps ? "↷" : "–"}${bounds.raMax.toFixed(2)}° · DEC ${bounds.decMin.toFixed(2)}°–${bounds.decMax.toFixed(2)}°`;
   content.append(detail);
   if (surveyIds.includes("hst") || component.surveys?.some((entry) => entry.surveyId === "hst")) {
-    const region = document.createElement("section");
-    region.className = "hst-image-lookup-region";
-    if (component.cells.length > HST_IMAGE_LOOKUP_MAX_CELLS) {
-      region.append(Object.assign(document.createElement("small"), { textContent: t("coverage.hstRegionTooLarge") }));
-    } else {
-      const lookup = document.createElement("button");
-      lookup.type = "button";
-      lookup.className = "command-button hst-image-lookup-button";
-      lookup.append(icon("search"), document.createTextNode(t("coverage.hstFindRegionImages")));
-      lookup.addEventListener("click", () => void runHstImageLookup(component.order, component.cells, lookup));
-      region.append(lookup);
-    }
-    content.append(region);
+    void appendHstImageLookupResults(content, component.order, component.cells);
   }
   const entries: OverlapSurveyView[] = component.surveys ?? surveyIds.flatMap((surveyId): OverlapSurveyView[] => {
     const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
@@ -1913,7 +2000,12 @@ function renderOverlapDrawerComponents(): void {
   const heading = document.createElement("strong");
   heading.textContent = t("coverage.connectedRegions");
   host.append(heading);
-  activeOverlapComponents.forEach((component) => {
+  const pageCount = Math.max(1, Math.ceil(activeOverlapComponents.length / OVERLAP_COMPONENT_PAGE_SIZE));
+  overlapDrawerComponentsPage = Math.min(overlapDrawerComponentsPage, pageCount - 1);
+  const visible = activeOverlapComponents.slice(overlapDrawerComponentsPage * OVERLAP_COMPONENT_PAGE_SIZE, (overlapDrawerComponentsPage + 1) * OVERLAP_COMPONENT_PAGE_SIZE);
+  const list = document.createElement("div");
+  list.className = "overlap-drawer-component-list";
+  visible.forEach((component) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `overlap-drawer-component-button${selectedQueueComponent?.id === component.id ? " is-active" : ""}`;
@@ -1924,14 +2016,23 @@ function renderOverlapDrawerComponents(): void {
     summary.textContent = `O${component.order} · ${component.cells.length.toLocaleString("en-US")} cells`;
     button.append(id, summary);
     button.addEventListener("click", () => selectOverlapDrawerComponent(component));
-    host.append(button);
+    list.append(button);
   });
+  host.append(list);
+  const pageControls = componentPageControls(activeOverlapComponents.length, overlapDrawerComponentsPage, (page) => {
+    overlapDrawerComponentsPage = page;
+    const first = activeOverlapComponents[page * OVERLAP_COMPONENT_PAGE_SIZE];
+    if (first) selectOverlapDrawerComponent(first);
+  }, "drawer");
+  if (pageControls) host.append(pageControls);
+  renderIcons();
 }
 
 function renderOverlapDrawerLoading(component: OverlapComponentView): void {
   const drawer = byId("overlap-drawer");
   byId("overlap-drawer-title").textContent = `${component.id} · O${component.order}`;
   const content = byId("overlap-drawer-content");
+  abortHstLookupsWithin(content);
   const loading = document.createElement("div");
   loading.className = "overlap-drawer-loading";
   const spinner = document.createElement("span");
@@ -1946,6 +2047,7 @@ function renderOverlapDrawerLoading(component: OverlapComponentView): void {
 function renderOverlapDrawerError(message: string): void {
   byId("overlap-drawer").removeAttribute("aria-busy");
   const content = byId("overlap-drawer-content");
+  abortHstLookupsWithin(content);
   const error = document.createElement("p");
   error.className = "overlap-drawer-error";
   error.textContent = message;
@@ -1958,6 +2060,7 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
   const component: OverlapComponentView = { ...details.component, evidenceLookup: details.reverseLookup };
   byId("overlap-drawer-title").textContent = `${component.id} · O${component.order} · ${component.cells.length.toLocaleString("en-US")} cells`;
   const content = byId("overlap-drawer-content");
+  abortHstLookupsWithin(content);
   content.replaceChildren();
 
   const geometry = drawerSection("REGION");
@@ -1980,16 +2083,7 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
   });
   geometry.append(geometrySummary, geometryGrid);
   if (activeOverlapSurveyIds.includes("hst")) {
-    if (component.cells.length > HST_IMAGE_LOOKUP_MAX_CELLS) {
-      geometry.append(Object.assign(document.createElement("small"), { className: "hst-image-lookup-region-note", textContent: t("coverage.hstRegionTooLarge") }));
-    } else {
-      const lookup = document.createElement("button");
-      lookup.type = "button";
-      lookup.className = "command-button hst-image-lookup-button";
-      lookup.append(icon("search"), document.createTextNode(t("coverage.hstFindRegionImages")));
-      lookup.addEventListener("click", () => void runHstImageLookup(component.order, component.cells, lookup));
-      geometry.append(lookup);
-    }
+    void appendHstImageLookupResults(geometry, component.order, component.cells);
   }
   content.append(geometry);
 
@@ -2177,6 +2271,11 @@ function renderOverlapDrawerDetails(component: OverlapComponentView): void {
 
 function selectOverlapDrawerComponent(component: OverlapComponentView): void {
   if (!overlapDrawerOpen) return;
+  const componentIndex = activeOverlapComponents.findIndex((entry) => entry.id === component.id);
+  if (componentIndex >= 0) {
+    overlapDrawerComponentsPage = Math.floor(componentIndex / OVERLAP_COMPONENT_PAGE_SIZE);
+    overlapComponentsPage = overlapDrawerComponentsPage;
+  }
   selectedQueueComponent = component;
   coverageDots?.setActiveOverlapComponent(component.id);
   updateOverlapViewport();
@@ -2217,6 +2316,7 @@ function closeOverlapDrawer(): void {
   if (!overlapDrawerOpen && !overlapDrawerPreviousState) return;
   overlapDetailsController?.abort();
   overlapDetailsController = null;
+  abortHstLookupsWithin(byId("overlap-drawer-content"));
   overlapDrawerOpen = false;
   document.body.removeAttribute("data-overlap-drawer");
   document.body.removeAttribute("data-overlap-panels");
@@ -2274,6 +2374,8 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
     activeOverlapSurveyIds = [];
     activeOverlapModalities = [];
     activeOverlapComponents = [];
+    overlapComponentsPage = 0;
+    overlapDrawerComponentsPage = 0;
     overlapEvidenceCache.clear();
     overlapDetailsCache.clear();
     coverageDots?.setOverlapMode(false);
@@ -2283,6 +2385,7 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
     coverageDots?.resetView();
     updateOverlapHud(null);
     const panel = byId("coverage-detail-panel");
+    abortHstLookupsWithin(byId("coverage-detail-content"));
     panel.hidden = true;
     panel.classList.remove("is-overlap-panel");
     panel.style.removeProperty("left");
@@ -2300,6 +2403,8 @@ async function activateOverlap(forceActive?: boolean): Promise<void> {
   if (order === null) return;
   coverageDots?.setOverlapMode(true);
   activeOverlapComponents = [];
+  overlapComponentsPage = 0;
+  overlapDrawerComponentsPage = 0;
   overlapDetailsCache.clear();
   updateOverlapHud(null);
   overlapController?.abort();
@@ -2503,7 +2608,7 @@ async function copy(value: string, message = "SHA-256 已复制"): Promise<void>
 
 function renderIcons(): void {
     createIcons({
-    icons: { BadgeCheck, BookOpen, Box, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, Lock, Maximize2, Minimize2, Moon, Menu, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X },
+    icons: { BadgeCheck, BookOpen, Box, ChevronLeft, ChevronRight, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Layers3, ListChecks, ListFilter, LoaderCircle, Lock, Maximize2, Minimize2, Moon, Menu, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -2993,6 +3098,7 @@ function clearCoverageFocus(openLayers = true): void {
   coverageDots?.clearSelection();
   coverageDots?.resetView();
   const panel = byId("coverage-detail-panel");
+  abortHstLookupsWithin(byId("coverage-detail-content"));
   panel.hidden = true;
   panel.classList.remove("is-overlap-panel");
   panel.style.removeProperty("left");

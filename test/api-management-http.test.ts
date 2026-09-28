@@ -59,17 +59,21 @@ test("API management HTTP authorization and managed region requests preserve ano
  const route="/api/v1/admin/api-management", auth={Authorization:"Bearer fixture","Content-Type":"application/json"};
  assert.equal((await fetch(base+route)).status,401);
  const created=await fetch(base+route+"/keys",{method:"POST",headers:auth,body:JSON.stringify({name:"fixture",scopes:["region:query"],perMinute:2})});assert.equal(created.status,201);assert.equal(created.headers.get("cache-control"),"no-store");const key=await created.json();
+ assert.equal((await fetch(base+route+`/keys/${key.id}`,{method:"DELETE",headers:auth})).status,409,"active keys cannot be deleted");
  const view=await (await fetch(base+route,{headers:auth})).json();assert.equal(JSON.stringify(view).includes(key.key),false);
  const query=(token:string)=>fetch(base+"/api/v1/access/region-query",{method:"POST",headers:{"X-Assets-API-Key":token,"Content-Type":"application/json"},body:"{}"});
  assert.equal((await query("asa_live_unknown")).status,401);
  assert.equal((await query(key.key)).status,400,"authorized key reaches region validation");
  assert.equal((await query(key.key)).status,400);assert.equal((await query(key.key)).status,429);
  assert.equal((await query("legacy-workspace")).status,400,"legacy access unchanged");
+ for(let i=0;i<31;i++)assert.equal((await query("legacy-workspace")).status,400,"the configured Workspace key is not blocked by the hard query quota");
  assert.equal((await fetch(base+route,{headers:{Authorization:`Bearer ${key.key}`}})).status,401,"managed key cannot administer");
  assert.equal((await fetch(base+"/api/v1/assets")).status,200);
  assert.equal((await fetch(base+route+`/keys/${key.id}/revoke`,{method:"POST",headers:auth})).status,200);
  assert.equal((await query(key.key)).status,401);
  const after=await (await fetch(base+route,{headers:auth})).json();assert.equal(after.keys[0].requests,4);assert.equal(after.keys[0].errors,4);
+ assert.equal((await fetch(base+route+`/keys/${key.id}`,{method:"DELETE",headers:auth})).status,200,"revoked keys can be deleted");
+ assert.equal((await fetch(base+route+`/keys/${key.id}`,{method:"DELETE",headers:auth})).status,404,"deleted keys are no longer present");
  // Browser enters a Key once, then uses an HttpOnly session through the site proxy.
  const issued=await (await fetch(base+route+"/keys",{method:"POST",headers:auth,body:JSON.stringify({name:"globe",scopes:["region:query"],perMinute:30})})).json();
  const proxy=http.createServer((req,res)=>proxyAdmin(req,res,base,true));await new Promise<void>(r=>proxy.listen(0,"127.0.0.1",r));

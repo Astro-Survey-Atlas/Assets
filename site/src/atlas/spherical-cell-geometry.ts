@@ -232,6 +232,54 @@ export function buildSphericalCellEdges(cells: readonly (SphericalCellGeometryIn
   return geometry;
 }
 
+function boundaryVertexKey(point: THREE.Vector3): string {
+  return `${Math.round(point.x * 1e8)},${Math.round(point.y * 1e8)},${Math.round(point.z * 1e8)}`;
+}
+
+function boundaryEdgeKey(nside: number, radius: number, start: THREE.Vector3, end: THREE.Vector3): string {
+  const startKey = boundaryVertexKey(start);
+  const endKey = boundaryVertexKey(end);
+  return `${nside}:${radius.toFixed(8)}:${startKey < endKey ? `${startKey}|${endKey}` : `${endKey}|${startKey}`}`;
+}
+
+/** Build only the exterior edges of a same-order set of adjoining HEALPix cells. */
+export function buildSphericalCellBoundaryEdges(cells: readonly SphericalCellSheetGeometryInput[]): THREE.BufferGeometry {
+  const uniqueCells = new Map<string, SphericalCellSheetGeometryInput>();
+  cells.forEach((cell) => uniqueCells.set(`${cell.nside}:${cell.pixel}:${cell.radius.toFixed(8)}`, cell));
+  const edgeCounts = new Map<string, number>();
+
+  uniqueCells.forEach((cell) => {
+    const boundary = sphericalCellBoundary(cell.nside, cell.pixel, 1);
+    boundary.forEach((start, index) => {
+      const end = boundary[(index + 1) % boundary.length]!;
+      const key = boundaryEdgeKey(cell.nside, cell.radius, start, end);
+      edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
+    });
+  });
+
+  const positions: number[] = [];
+  const colors: number[] = [];
+  uniqueCells.forEach((cell) => {
+    const radius = cell.radius + 0.0015;
+    const originalBoundary = sphericalCellBoundary(cell.nside, cell.pixel, 1);
+    const boundary = insetBoundary(originalBoundary.map((point) => point.clone().multiplyScalar(radius)), radius, cell.inset ?? 0);
+    boundary.forEach((start, index) => {
+      const end = boundary[(index + 1) % boundary.length]!;
+      const originalStart = originalBoundary[index]!;
+      const originalEnd = originalBoundary[(index + 1) % originalBoundary.length]!;
+      if (edgeCounts.get(boundaryEdgeKey(cell.nside, cell.radius, originalStart, originalEnd)) !== 1) return;
+      positions.push(start.x, start.y, start.z, end.x, end.y, end.z);
+      colors.push(cell.color.r, cell.color.g, cell.color.b, cell.color.r, cell.color.g, cell.color.b);
+    });
+  });
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
 /** Build the visible outer boundary of a spherical HEALPix cell volume. */
 export function buildSphericalCellVolumeEdges(cells: readonly SphericalCellGeometryInput[]): THREE.BufferGeometry {
   const positions: number[] = [];

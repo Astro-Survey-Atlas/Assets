@@ -55,6 +55,52 @@ test("whole publication verifies and activates package, native geometry and prod
   assert.equal((await new PublicReleasePublisher(f.options).get(run.runId))?.status,"published","durable run survives process restart");
 });
 
+test("approved path-HEALPix coverage advertises exact file reverse lookup without changing its MOC revision", async t => {
+  const coverageEvidence = {
+    evidenceKind: "published-moc" as const,
+    sourceIdentity: "DESI DR1 partial redrock file copy",
+    sourceSnapshotSha256: "a".repeat(64),
+    precision: "exact" as const,
+    completeness: "incomplete" as const,
+    scienceFileScan: "partial" as const,
+    summary: "The scanned file list is a partial source copy.",
+  };
+  const f = await reviewedFixture({
+    surveyId: "desi",
+    releaseId: "desi-dr1",
+    productName: "DR1 bright-program redrock files",
+    layerId: "desi-dr1-redrock-bright-file-index",
+    coverageEvidence,
+  });
+  t.after(() => rm(f.base, { recursive: true, force: true }));
+  const product = f.products[0]!;
+  product.draft.modality = "redshift";
+  product.draft.mode = "path-healpix";
+  product.draft.sourceTier = "user_file_derived";
+  product.draft.scanDefaults = { pathHealpixOrder: 6 };
+  product.contentSha256 = sha256(JSON.stringify(product.draft));
+  product.review!.contentSha256 = product.contentSha256;
+
+  const publisher = new PublicReleasePublisher(f.options);
+  const plan = await publisher.plan();
+  const run = await publisher.submit({
+    planId: plan.planId,
+    expectedBaselineSha256: plan.baselineBundle.sha256,
+    surveyIds: ["desi"],
+    productIds: [product.productId],
+  });
+  const finished = await publisher.execute(run.runId);
+  assert.equal(finished.status, "published", finished.error);
+  await syncReleaseFromObjectStore(f.store, path.join(f.base, "installed"));
+  const state = await loadPublicState(await loadCatalog(path.join(f.base, "installed/current")));
+  const layer = state.coverage.records.get("desi-dr1-redrock-bright-file-index")!;
+  assert.equal(layer.sourceUnitIndex?.status, "exact");
+  assert.equal(layer.sourceUnitIndex?.unitKind, "NESTED order-6 HEALPix file partition");
+  assert.equal(layer.sourceUnitIndex?.indexUrl, "/api/v1/coverage/reverse-lookup");
+  assert.match(layer.sourceUnitIndex?.notes ?? "", /部分文件清单.*不是 DESI Tile.*不代表完整 DR1\/BGS/);
+  assert.equal(layer.revision, f.moc.revision);
+});
+
 test("public survey modalities include a product modality when the survey declaration is empty", async t => {
   const f = await reviewedFixture(); t.after(() => rm(f.base, { recursive: true, force: true }));
   const product = f.products[0]!;

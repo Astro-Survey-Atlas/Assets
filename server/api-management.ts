@@ -90,6 +90,12 @@ export class ApiManagement {
   this.state.keys.push({ id, name, prefix: key.slice(0, 17), hash: sha(key), scopes: [...new Set(scopes)], createdAt: now(), expiresAt: new Date(expiresAt).toISOString(), perMinute: Number(perMinute), window: 0, used: 0, requests: 0, errors: 0 }); this.save(); await this.flush(); return { key, id };
  }
  async revokeKey(id: string): Promise<void> { const key = this.state.keys.find(k => k.id === id); if (!key) throw new AdminHttpError(404, "Key 不存在"); key.revokedAt ??= now(); this.save(); await this.flush(); }
+ async deleteRevokedKey(id: string): Promise<void> {
+  const index = this.state.keys.findIndex(k => k.id === id);
+  if (index < 0) throw new AdminHttpError(404, "Key 不存在");
+  if (!this.state.keys[index]!.revokedAt) throw new AdminHttpError(409, "只能删除已撤销的 Key");
+  this.state.keys.splice(index, 1); this.save(); await this.flush();
+ }
  authorize(token: string, scope: string, route: string): string {
   const key = this.state.keys.find(k => k.hash === sha(token)); if (!key) throw new AdminHttpError(401, "API Key 无效");
   return this.authorizeRecord(key, scope, route);

@@ -54,6 +54,12 @@ export async function loadPublicState(catalog: LoadedCatalog) {
     const cells=new Map(orders.map(order=>[order,projectMoc(moc,order).cells]));
     const count=cells.get(orders.at(-1)!)!.length;
     const sourceEvidence=c.coverageEvidence;
+    const pathFileIndex=c.mode==="path-healpix"&&sourceEvidence?.precision==="exact";
+    const sourceUnitIndex=pathFileIndex
+      ? {status:"exact" as const,unitKind:`NESTED order-${c.scanDefaults?.pathHealpixOrder??moc.maxOrder} HEALPix file partition`,indexUrl:"/api/v1/coverage/reverse-lookup",notes:"可按精确的路径 HEALPix 分区反查已扫描文件 URI；这是部分文件清单，不是 DESI Tile，也不代表完整 DR1/BGS。"}
+      : c.sourceUnitIndex??(g.indexRevision
+        ? {status:"estimated" as const,unitKind:"tile",notes:"Official tile geometry; scientific file contents have not been verified."}
+        : {status:"entrypoint-only" as const,notes:"No region-to-science-file index is available."});
     const recipe=sourceEvidence?{
       recipeVersion:c.recipeVersion??1,
       mode:c.mode??"native-moc",
@@ -70,7 +76,7 @@ export async function loadPublicState(catalog: LoadedCatalog) {
     layers.set(g.layerId,{layerId:g.layerId,productId:c.productId,surveyId:c.surveyId,releaseId:c.releaseId,product:c.name,modality:c.modality,coverageRole:c.coverageRole,color:surveyColors.get(c.surveyId)??c.publicSurvey?.color??"#376b9b",availableOrders:orders,overviewOrder,maxOrder:moc.maxOrder,cellCount:count,areaDeg2:count*41252.96124941927/(12*4**orders.at(-1)!),tileScheme:"ipix-range-4096",cells,
       ...(recipe?{recipe}:{}),
       ...(sourceEvidence ? { sourceEvidence } : {}),
-      sourceUnitIndex:{status:g.indexRevision?"estimated":"entrypoint-only",unitKind:g.indexRevision?"tile":undefined,notes:g.indexRevision?"Official tile geometry; scientific file contents have not been verified.":"No region-to-science-file index is available."},revision:g.coverageRevision});
+      sourceUnitIndex,revision:g.coverageRevision});
   }
   const coverage=withCoverageRevisions({schemaVersion:2,coordinateFrame:"ICRS",ordering:"NESTED",tileScheme:"ipix-range-4096",records:layers,layers:[]});
   // Block revision and package coverage revision must be the same fixed identity.

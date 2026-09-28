@@ -477,7 +477,7 @@ function shortLayerLabel(value: string): string {
   return normalized.length > 12 ? `${normalized.slice(0, 10)}..` : normalized;
 }
 
-function countLabelSprite(text: string, position: THREE.Vector3, depthTest = true): THREE.Sprite {
+function countLabelSprite(text: string, position: THREE.Vector3, depthTest = true, scale = 1): THREE.Sprite {
   const canvas = document.createElement("canvas");
   canvas.width = 192;
   canvas.height = 64;
@@ -500,7 +500,7 @@ function countLabelSprite(text: string, position: THREE.Vector3, depthTest = tru
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest, depthWrite: false, toneMapped: false }));
   sprite.position.copy(position);
-  sprite.scale.set(0.15, 0.05, 1);
+  sprite.scale.set(0.15 * scale, 0.05 * scale, 1);
   sprite.renderOrder = LABEL_RENDER_ORDER;
   return sprite;
 }
@@ -1353,7 +1353,8 @@ export class SurveyLayerViewer {
       : overlapComponentsForPixels(pixels, nside);
     components.forEach((component) => {
       if (component.id === this.#activeOverlapComponentId) return;
-      const label = countLabelSprite(component.id, this.#pixelDirectionAt(nside, component.cells).multiplyScalar(overlapRadius + 0.025), false);
+      const labelScale = 2 ** -Math.max(0, component.order - 4);
+      const label = countLabelSprite(component.id, this.#pixelDirectionAt(nside, component.cells).multiplyScalar(overlapRadius + 0.025), true, labelScale);
       label.userData = { overlapComponent: component };
       this.#overlapLabelGroup.add(label);
     });
