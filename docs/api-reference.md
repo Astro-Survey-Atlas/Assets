@@ -307,6 +307,19 @@ product URI and filename belonging to that unit. `accessAvailability` is
 account or source-side availability check. Warehouse scan matches appear only
 in `scannedFiles[]` when their native unit identity agrees.
 
+The browser presents this as the primary result list. Each row foregrounds the
+source survey/release/product and native unit kind/ID, then shows the modality
+label with the survey-layer icon, matched HEALPix order/cell count and a
+localized precision label. An accessible information control explains
+`exact`, `estimated`, `entrypoint-only` and `truncated`; these states do not
+claim a complete survey inventory. Browser-safe HTTP(S) URIs are direct links;
+multiple URIs retain their filenames. Geometry notes and access-availability
+explanations are available from an accessible information control rather than
+repeated as boilerplate in every row. Scanned file evidence and general
+access/coverage entrypoints remain in separate supporting information and do
+not change the spatial-unit count. Public source records in the drawer are
+grouped by survey and expanded to show their release/product entries.
+
 For Euclid Q1, the native unit is a Tile and ESA TAP `tile_index` supplies its
 ID. In `q1.mosaic_product`, `stc_s` describes the product footprint used for
 spatial matching. HST follows a separate flow: its unit is a MAST observation

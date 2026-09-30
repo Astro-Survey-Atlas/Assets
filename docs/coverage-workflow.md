@@ -47,6 +47,20 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   Files not attached to a unit, general data/coverage entrypoints and coverage
   evidence belong in separately paged supporting information. A mixed manifest
   omitted count must never be presented as a count of remaining spatial units.
+- Make each spatial-unit result scannable in this order: source survey/release/
+  product, prominent native unit kind and ID, modality label with the same icon
+  mapping used by the survey layer list, matched HEALPix order and cell count
+  with a localized precision label, then its source URI as a direct link when
+  the URI is browser-safe. Provide an accessible information control explaining
+  `exact`, `estimated`, `entrypoint-only` and `truncated`; precision describes
+  the result evidence/completeness and must not imply complete survey inventory.
+  Keep repeated geometry caveats and access-policy details out of the main text;
+  expose meaningful notes and availability status through an accessible
+  information control. Do not replace the URI with a copy button. Keep file
+  names visible when one unit maps to multiple product URIs.
+- Group supporting public source records by survey and expand product/release
+  details on demand. This secondary grouping must not take visual priority over
+  the matched spatial-unit URI list.
 - Unit identity and footprint may come from an official partition table,
   per-unit footprint MOC, WCS, archive region such as `s_region`, or a
   documented deterministic partition rule. Compute candidate units locally

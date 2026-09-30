@@ -306,9 +306,14 @@ body[data-layers-panel="open"] #selection-queue {
 .overlap-tile-copy small { color: var(--muted); font: 600 8px/1.3 var(--font-mono), monospace; }
 .overlap-evidence-plan { display: grid; gap: 7px; margin-top: 9px; padding-top: 9px; border-top: 1px solid rgba(70, 97, 107, .45); }
 .overlap-evidence-plan > strong { margin: 0; color: var(--ochre); font: 700 9px/1.3 var(--font-mono), monospace; }
-.overlap-evidence-plan > small { color: var(--muted); font: 600 8px/1.4 var(--font-mono), monospace; }
+.overlap-evidence-plan small { min-width: 0; color: var(--muted); font: 600 8px/1.4 var(--font-mono), monospace; overflow-wrap: anywhere; }
+.overlap-evidence-plan details { display: grid; gap: 5px; min-width: 0; }
+.overlap-evidence-plan details > summary { color: var(--muted); cursor: pointer; font: 700 8px/1.4 var(--font-mono), monospace; }
+.overlap-evidence-plan details > small { display: block; margin: 0; }
 .overlap-supporting-evidence { display: grid; gap: 7px; margin-top: 4px; padding-top: 7px; border-top: 1px solid rgba(70, 97, 107, .32); }
 .overlap-supporting-evidence > summary { color: var(--muted); cursor: pointer; font: 700 8px/1.4 var(--font-mono), monospace; }
+.overlap-supporting-evidence > strong { margin: 2px 0 0; color: var(--ochre); font: 700 8px/1.4 var(--font-mono), monospace; }
+.overlap-supporting-evidence > small { display: block; min-width: 0; margin: 0; color: var(--muted); font: 600 8px/1.4 var(--font-mono), monospace; overflow-wrap: anywhere; }
 .overlap-supporting-evidence[open] > summary { color: var(--ink); }
 .overlap-evidence-more-button { justify-self: stretch; width: 100%; min-height: 30px; padding: 5px 10px; border: 1px solid color-mix(in srgb, var(--teal) 55%, transparent); color: #fff; text-align: left; font: 700 8px/1.2 var(--font-mono), monospace; }
 button.command-button.overlap-evidence-more-button { height: 30px; min-height: 30px; padding: 0 10px; }
@@ -317,15 +322,31 @@ button.command-button.overlap-evidence-more-button { height: 30px; min-height: 3
 .overlap-evidence-more-button .button-icon { display: inline-flex; margin-right: 5px; vertical-align: middle; }
 .overlap-evidence-more-error { color: var(--danger, #b14444); }
 .overlap-evidence-files { display: grid; gap: 6px; max-height: 190px; overflow: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.overlap-evidence-files.overlap-spatial-units { max-height: none; overflow: visible; }
 .overlap-evidence-file { display: grid; gap: 3px; min-width: 0; padding: 5px 0; border-bottom: 1px solid rgba(70, 97, 107, .28); }
+.overlap-spatial-unit { gap: 5px; padding: 8px 9px; border: 1px solid color-mix(in srgb, var(--line-strong) 76%, transparent); border-radius: 4px; background: var(--paper-bright); }
 .overlap-coverage-evidence-item { padding-left: 7px; border-left: 2px solid var(--ochre); }
 .overlap-evidence-file strong { margin: 0; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; font: 700 8px/1.3 var(--font-mono), monospace; }
+.overlap-evidence-file .overlap-spatial-unit-source { display: block; color: var(--muted); font: 600 8px/1.35 var(--font-mono), monospace; overflow-wrap: anywhere; white-space: normal; }
+.overlap-spatial-unit-identity { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.overlap-evidence-file .overlap-spatial-unit-title { display: block; min-width: 0; overflow: visible; color: var(--ink); text-overflow: clip; white-space: normal; overflow-wrap: anywhere; font: 700 11px/1.3 var(--font-mono), monospace; }
+.overlap-spatial-unit-info, .overlap-precision-info { display: inline-flex; flex: 0 0 16px; align-items: center; justify-content: center; width: 16px; height: 16px; color: var(--blue); cursor: help; }
+.overlap-spatial-unit-info svg, .overlap-precision-info svg { width: 14px; height: 14px; }
+.overlap-spatial-unit-info:focus-visible, .overlap-precision-info:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.overlap-spatial-unit-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; min-width: 0; color: var(--muted); font: 600 9px/1.4 var(--font-mono), monospace; }
+.overlap-spatial-unit-modality { display: inline-flex; align-items: center; gap: 5px; padding: 2px 6px; border-left: 2px solid var(--blue); background: color-mix(in srgb, var(--blue) 11%, transparent); color: var(--ink); }
+.overlap-spatial-unit-modality .button-icon { display: inline-flex; color: var(--blue); }
+.overlap-spatial-unit-modality svg { width: 14px; height: 14px; }
+.overlap-precision-indicator { display: inline-flex; align-items: center; gap: 3px; color: var(--ink); white-space: nowrap; }
+.overlap-spatial-unit-match { color: var(--muted); }
+.overlap-evidence-file .overlap-spatial-unit-file-name { color: var(--muted); font: 600 8px/1.3 var(--font-mono), monospace; overflow-wrap: anywhere; }
 .overlap-evidence-file small, .overlap-evidence-file code { overflow-wrap: anywhere; color: var(--muted); font: 600 8px/1.35 var(--font-mono), monospace; }
 .overlap-evidence-file a { min-width: 0; max-width: 100%; overflow-wrap: anywhere; color: var(--teal); font: 700 8px/1.3 var(--font-mono), monospace; text-decoration: none; }
 .overlap-source-locator { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 5px; min-width: 0; }
 .overlap-source-locator code, .overlap-source-locator a { min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
 .overlap-source-locator a { color: var(--teal); font: 700 8px/1.3 var(--font-mono), monospace; text-decoration: none; }
 .overlap-source-locator a:hover { text-decoration: underline; }
+.overlap-spatial-unit .overlap-source-locator a { color: var(--blue); font-size: 10px; line-height: 1.45; }
 .overlap-unit-links a { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
 .overlap-download-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(70, 97, 107, .45); }
 .overlap-download-button { min-height: 30px; padding: 0 9px; border-color: rgba(44, 55, 146, .7); color: var(--teal); font-size: 8px; }
@@ -1292,7 +1313,7 @@ footer > span:last-child { margin-left: auto; color: var(--teal); text-shadow: v
 .coverage-detail-panel.is-overlap-panel { position: fixed; }
 .overlap-expand-button { position: absolute; top: 8px; left: 0; width: 30px; min-height: 30px; padding: 0; color: var(--teal); background: rgba(13, 24, 33, .82); }
 .overlap-expand-button:hover, .overlap-expand-button:focus-visible { border-color: var(--teal); background: rgba(16, 47, 52, .9); outline: 0; }
-.overlap-drawer { position: fixed; z-index: 56; top: 68px; right: 0; bottom: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: min(820px, max(520px, 52vw)); border-left: 1px solid rgba(44, 55, 146, .55); background: rgba(5, 10, 16, .97); box-shadow: -18px 0 55px rgba(0, 0, 0, .42); backdrop-filter: blur(18px) saturate(1.08); }
+.overlap-drawer { position: fixed; z-index: 56; top: 68px; right: 0; bottom: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: min(1120px, max(680px, 70vw)); border-left: 1px solid rgba(44, 55, 146, .55); background: rgba(5, 10, 16, .97); box-shadow: -18px 0 55px rgba(0, 0, 0, .42); backdrop-filter: blur(18px) saturate(1.08); }
 .overlap-drawer-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 22px 26px 17px; border-bottom: 1px solid rgba(70, 97, 107, .72); }
 .overlap-drawer-heading { display: grid; gap: 7px; min-width: 0; }
 .overlap-drawer-heading strong { overflow: hidden; color: var(--ink); font: 700 18px/1.15 var(--font-mono), monospace; text-overflow: ellipsis; white-space: nowrap; }
@@ -1329,6 +1350,22 @@ footer > span:last-child { margin-left: auto; color: var(--teal); text-shadow: v
 .overlap-source-heading strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .overlap-source-swatch { width: 9px; height: 9px; flex: 0 0 auto; border: 1px solid rgba(255,255,255,.72); border-radius: 50%; box-shadow: 0 0 9px color-mix(in srgb, var(--source-color, var(--teal)) 42%, transparent); }
 .overlap-drawer-card.is-public-source { border-left-width: 4px; border-left-color: var(--source-color, var(--teal)); background: color-mix(in srgb, var(--source-color, var(--teal)) 14%, rgba(13, 24, 33, .64)); }
+.overlap-public-surveys { display: grid; gap: 9px; }
+.overlap-public-survey { min-width: 0; padding-bottom: 8px; border-bottom: 1px solid rgba(70, 97, 107, .35); }
+.overlap-public-survey-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 10px; min-height: 32px; color: var(--ink); cursor: pointer; list-style: none; }
+.overlap-public-survey-summary:focus-visible { color: var(--teal); outline: 2px solid var(--teal); outline-offset: 3px; }
+.overlap-public-survey-summary > strong { min-width: 0; color: var(--ink); font: 700 11px/1.3 var(--font-mono), monospace; }
+.overlap-public-survey-summary > small { color: var(--muted); font: 600 8px/1.3 var(--font-mono), monospace; }
+.overlap-public-survey-modalities { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-left: auto; color: var(--muted); }
+.overlap-public-survey-modality-icon { display: inline-flex; width: 16px; height: 16px; align-items: center; justify-content: center; color: var(--teal); }
+.overlap-public-survey-modality-icon svg { width: 14px; height: 14px; }
+.overlap-public-survey-products { display: grid; gap: 7px; min-width: 0; margin: 6px 0 0 17px; }
+.overlap-public-source-metadata, .overlap-public-source-evidence { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 9px; min-width: 0; }
+.overlap-public-source-evidence { justify-content: flex-start; }
+.overlap-source-modality { display: inline-flex; align-items: center; gap: 5px; color: var(--ink); font: 600 9px/1.4 var(--font-mono), monospace; }
+.overlap-source-modality .button-icon { display: inline-flex; flex: 0 0 auto; color: var(--teal); }
+.overlap-source-modality svg { width: 14px; height: 14px; }
+.overlap-warehouse-facts, .overlap-coverage-precision { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 9px; min-width: 0; }
 .overlap-drawer-card-status { display: inline-flex; align-items: center; gap: 6px; color: var(--teal) !important; }
 .overlap-drawer-card-status[data-state="FAILED"], .overlap-drawer-card-status[data-state="UNKNOWN"] { color: var(--coral) !important; }
 .overlap-drawer-card-status::before { width: 6px; height: 6px; content: ""; border-radius: 50%; background: currentColor; }
