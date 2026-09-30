@@ -42,6 +42,9 @@ export interface ReadinessLayer {
     unitKind?: string;
     notes?: string;
   };
+  warehouseFileIndex?: {
+    status: "available" | "not-indexed" | "unavailable";
+  };
   fileCount?: number;
   coverageCount?: number;
   errorCount?: number;
@@ -89,6 +92,8 @@ export interface ProductReadiness {
     orders: number[];
     precision: ReadinessPrecision;
     unitKind?: string;
+    sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string };
+    warehouseFileIndex?: { status: "available" | "not-indexed" | "unavailable" };
     basis: "file" | "unit" | "entrypoint" | "none";
   };
   completeness: ReadinessCompletenessInput;
@@ -173,7 +178,8 @@ export function deriveProductReadiness(input: ProductReadinessInput): ProductRea
   const coverageQueryable = Boolean(layer && orders.length && coordinateFrame === "ICRS" && ordering === "NESTED");
   const unitIndex = layer?.sourceUnitIndex;
   const unitQueryable = Boolean(coverageQueryable && unitIndex && unitIndex.status !== "entrypoint-only" && hasText(unitIndex.unitKind));
-  const fileQueryable = Boolean(unitQueryable && unitIndex?.status === "exact" && unitIndex.unitKind?.toLowerCase() === "file");
+  const fileQueryable = Boolean(layer?.warehouseFileIndex?.status === "available"
+    || (unitQueryable && unitIndex?.status === "exact" && unitIndex.unitKind?.toLowerCase() === "file"));
   const level: ReadinessLevel = !sourceTraceable ? -1 : fileQueryable ? 3 : unitQueryable ? 2 : coverageQueryable ? 1 : 0;
   const geometryBasis: ProductReadiness["geometry"]["basis"] = coverageQueryable ? "layer" : sourceTraceable ? "entrypoint" : "none";
   const reverseBasis: ProductReadiness["reverseLookup"]["basis"] = !sourceTraceable ? "none" : fileQueryable ? "file" : unitQueryable ? "unit" : "entrypoint";
@@ -217,6 +223,8 @@ export function deriveProductReadiness(input: ProductReadinessInput): ProductRea
       orders,
       precision: reversePrecision,
       ...(unitIndex?.unitKind ? { unitKind: unitIndex.unitKind } : {}),
+      ...(unitIndex ? { sourceUnitIndex: { status: unitIndex.status, ...(unitIndex.unitKind ? { unitKind: unitIndex.unitKind } : {}) } } : {}),
+      ...(layer?.warehouseFileIndex ? { warehouseFileIndex: layer.warehouseFileIndex } : {}),
       basis: reverseBasis,
     },
     completeness,

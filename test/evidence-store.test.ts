@@ -487,7 +487,7 @@ function partitionedEvidenceFixture(options: { corruptScope?: boolean; missingOb
   return { requests, store: new CoverageEvidenceStore({ url: 'http://warehouse:9200', fetchImpl }) };
 }
 
-test('reverse lookup joins an ordinary layer and a partitioned batch alias with complete match identity', async () => {
+test('reverse lookup prioritizes the partitioned batch alias over an older direct layer', async () => {
   const publicLayerId = 'euclid-q1-vis';
   const evidenceLayerId = batchEvidenceLayerId(publicLayerId);
   const scopeHash = 'a'.repeat(64);
@@ -536,7 +536,8 @@ test('reverse lookup joins an ordinary layer and a partitioned batch alias with 
   assert.equal(edge.partitionId, 'tile-1');
   assert.equal(edge.scanRunId, 'run-batch');
   assert.equal(edge.sourceSnapshotSha256, fileSnapshotHash);
-  assert.deepEqual(result.edges.map(candidate => candidate.ipix), [101, 102]);
+  assert.deepEqual(result.edges.map(candidate => candidate.ipix), [102]);
+  assert.deepEqual(result.downloadPlan.files.map(file => file.fileId), ['batch-file']);
   assert.deepEqual(result.scanScopes?.map(scope => [scope.layerId, scope.publishedLayerId, scope.completeness]), [[evidenceLayerId, publicLayerId, 'complete']]);
   const match = result.downloadPlan.files.find(file => file.fileId === 'batch-file')?.matchingCoverage[0];
   assert.deepEqual(match && {

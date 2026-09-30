@@ -52,7 +52,7 @@ interface ProductReadiness {
   level: ReadinessLevel;
   label: "needs-information" | "source-registered" | "coverage-queryable" | "unit-reversible" | "file-locatable";
   geometry: { orders: number[]; maxOrder?: number; precision: string; basis: string; coordinateFrame?: string; ordering?: string };
-  reverseLookup: { level: ReadinessLevel; orders: number[]; precision: string; unitKind?: string; basis: string };
+  reverseLookup: { level: ReadinessLevel; orders: number[]; precision: string; unitKind?: string; sourceUnitIndex?: { status: string; unitKind?: string }; warehouseFileIndex?: { status: string }; basis: string };
   completeness: { state: "complete" | "partial" | "unknown"; processed?: number; total?: number; asOf?: string; scope?: string };
   evidence: { inputLocked: boolean; executionRecorded: boolean; outputValidated: boolean; isolatedRestoreValidated: boolean };
   gaps: string[];

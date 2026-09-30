@@ -96,6 +96,13 @@ export function publicExternalUrl(value: unknown): string | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   let parsed: URL;
   try { parsed = new URL(value); } catch { return undefined; }
+  if (parsed.protocol === "ftp:") {
+    const trustedLegacyArchive = parsed.hostname.toLowerCase() === "archive.noao.edu"
+      && (!parsed.port || parsed.port === "21")
+      && !parsed.search && !parsed.hash
+      && /^\/public\/hlsp\/decals\/dr[12]\/coadd\//.test(parsed.pathname);
+    return trustedLegacyArchive && !parsed.username && !parsed.password ? parsed.toString() : undefined;
+  }
   if (!/^https?:$/.test(parsed.protocol) || parsed.username || parsed.password || PRIVATE_HOST.test(parsed.hostname) || INTERNAL_HOST.test(parsed.hostname)) return undefined;
   return parsed.toString();
 }

@@ -1,0 +1,739 @@
+{
+  "schemaVersion": 1,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "coarseIndexOrder": 4,
+  "deliveryClass": "evidence",
+  "layerBindings": [
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr1",
+      "product": "Coadded imaging",
+      "modality": "imaging",
+      "unitKind": "brick",
+      "snapshotKey": "legacyDr1",
+      "productPath": "coadd",
+      "status": "estimated",
+      "notes": "使用 DR1 官方 decals-bricks.fits 的原生 BRICKNAME、边界与 has_image_g/r/z 成员标记返回 brick 和对应影像 URI；只代表此冻结清单，单个文件 URI 尚未逐一 HEAD 核验。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr1",
+      "product": "Tractor catalog",
+      "modality": "catalog",
+      "unitKind": "brick",
+      "snapshotKey": "legacyDr1",
+      "productPath": "tractor",
+      "status": "estimated",
+      "notes": "使用 DR1 官方 decals-bricks.fits 的原生 BRICKNAME、边界与 has_catalog 成员标记返回 Tractor brick 和规则生成的 URI；成员标记不验证单个文件存在性。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr2",
+      "product": "Coadded imaging",
+      "modality": "imaging",
+      "unitKind": "brick",
+      "snapshotKey": "legacyDr2",
+      "productPath": "coadd",
+      "status": "estimated",
+      "notes": "使用 DR2 roster 的 NOBS_MAX_g/r/z > 0 统计筛选候选影像 brick，并按官方 DR2 文件页指向的 NOAO FTP coadd 路径生成各波段 URI。NOBS_MAX 不是逐文件清单；FTP 主机在当前核验环境无法解析，所有 URI 均为未验证候选。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr2",
+      "product": "Tractor catalog",
+      "modality": "catalog",
+      "unitKind": "brick",
+      "snapshotKey": "legacyDr2",
+      "productPath": "tractor",
+      "status": "estimated",
+      "notes": "使用 DR2 官方 release brick roster 中的原生 BRICKNAME 和边界返回 Tractor brick 及 URI。抽样 Tractor URI 可访问，但仅验证过一条；Coadd 是独立 imaging/brick 映射，按官方 NOAO FTP 路径候选返回并标为未验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr3",
+      "product": "Coadded imaging",
+      "modality": "imaging",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "coadd",
+      "status": "estimated",
+      "notes": "用 DR3 发布级 brick roster 的 NEXP_g/r/z 正值筛选候选波段；边界来自锁定 Legacy 全天天空 brick grid，并按 roster 中心核对。文件路径遵循 DR3 官方文件页；候选文件未逐项验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr3",
+      "product": "Tractor catalog",
+      "modality": "catalog",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "tractor",
+      "status": "estimated",
+      "notes": "使用 DR3 发布级 brick roster 生成 Tractor brick 候选，边界来自锁定 Legacy 全天天空 brick grid 并按 roster 中心核对。文件路径遵循 DR3 官方文件页；候选文件未逐项验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr4",
+      "product": "Coadded imaging",
+      "modality": "imaging",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "coadd",
+      "status": "estimated",
+      "notes": "用 DR4 发布级 brick roster 的 NEXP_g/r/z 正值筛选候选波段；边界来自锁定 Legacy 全天天空 brick grid，并按 roster 中心核对。文件路径遵循 DR4 官方文件页；候选文件未逐项验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr4",
+      "product": "Tractor catalog",
+      "modality": "catalog",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "tractor",
+      "status": "estimated",
+      "notes": "使用 DR4 发布级 brick roster 生成 Tractor brick 候选，边界来自锁定 Legacy 全天天空 brick grid 并按 roster 中心核对。文件路径遵循 DR4 官方文件页；候选文件未逐项验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr5",
+      "product": "Coadded imaging",
+      "modality": "imaging",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "coadd",
+      "status": "estimated",
+      "notes": "用 DR5 发布级 brick roster 的 NEXP_g/r/z 正值筛选候选波段；边界来自锁定 Legacy 全天天空 brick grid，并按 roster 中心核对。文件路径遵循 DR5 官方文件页；候选文件未逐项验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr5",
+      "product": "Tractor catalog",
+      "modality": "catalog",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "tractor",
+      "status": "estimated",
+      "notes": "使用 DR5 发布级 brick roster 生成 Tractor brick 候选，边界来自锁定 Legacy 全天天空 brick grid 并按 roster 中心核对。文件路径遵循 DR5 官方文件页；候选文件未逐项验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr6",
+      "product": "Coadded imaging",
+      "modality": "imaging",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "coadd",
+      "status": "estimated",
+      "notes": "用 DR6 发布级 brick roster 的 NEXP_g/r/z 正值筛选候选波段；边界来自锁定 Legacy 全天天空 brick grid，并按 roster 中心核对。文件路径遵循 DR6 官方文件页；候选文件未逐项验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr6",
+      "product": "Tractor catalog",
+      "modality": "catalog",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "tractor",
+      "status": "estimated",
+      "notes": "使用 DR6 发布级 brick roster 生成 Tractor brick 候选，边界来自锁定 Legacy 全天天空 brick grid 并按 roster 中心核对。文件路径遵循 DR6 官方文件页；候选文件未逐项验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr7",
+      "product": "Coadded imaging",
+      "modality": "imaging",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "coadd",
+      "status": "estimated",
+      "notes": "用 DR7 发布级 brick roster 的 NEXP_g/r/z 正值筛选候选波段；边界来自锁定 Legacy 全天天空 brick grid，并按 roster 中心核对。文件路径遵循 DR7 官方文件页；候选文件未逐项验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr7",
+      "product": "Tractor catalog",
+      "modality": "catalog",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "tractor",
+      "status": "estimated",
+      "notes": "使用 DR7 发布级 brick roster 生成 Tractor brick 候选，边界来自锁定 Legacy 全天天空 brick grid 并按 roster 中心核对。文件路径遵循 DR7 官方文件页；候选文件未逐项验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr8",
+      "product": "Coadded imaging",
+      "modality": "imaging",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "coadd",
+      "status": "estimated",
+      "notes": "使用 DR8 官方 North/South brick roster；正 NEXP_g/r/z 仅筛候选波段，brick 几何与所有清单中心/边界核对。URI 保留 north/south 路径；逐文件存在性未验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr8",
+      "product": "Tractor catalog",
+      "modality": "catalog",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "tractor",
+      "status": "estimated",
+      "notes": "使用 DR8 官方 North/South brick roster 返回候选 Tractor brick，brick 几何与清单中心核对。URI 保留 north/south 路径；逐文件存在性未验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr9",
+      "product": "Coadded imaging",
+      "modality": "imaging",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "coadd",
+      "status": "estimated",
+      "notes": "使用 DR9 官方 North/South brick roster；正 NEXP_g/r/z 仅筛候选波段，brick 几何与清单提供的边界/中心核对。URI 保留 north/south 路径；逐文件存在性未验证。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr9",
+      "product": "Tractor catalog",
+      "modality": "catalog",
+      "unitKind": "brick",
+      "snapshotKey": "legacyReleaseRosters",
+      "productPath": "tractor",
+      "status": "estimated",
+      "notes": "使用 DR9 官方 North/South brick roster 返回候选 Tractor brick，brick 几何与清单提供的边界/中心核对。URI 保留 north/south 路径；逐文件存在性未验证。"
+    },
+    {
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 deep fields",
+      "modality": "imaging",
+      "unitKind": "tile",
+      "snapshotKey": "euclidQ1",
+      "status": "estimated",
+      "notes": "点击该深场图层的 HEALPix 时，以其完整像元与锁定 Q1 BGSUB 产品 footprint 求交，并按 ESA tile_index 合并该 Tile 的产品 URI。结果仅覆盖当前 2,908 行 BGSUB 清单，不能表示完整 Q1 库存。"
+    },
+    {
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 color imaging",
+      "unitKind": "tile",
+      "snapshotKey": "euclidQ1",
+      "status": "estimated",
+      "notes": "由 ESA TAP BGSUB mosaic 清单按官方 tile_index 归集，并以该 Tile 的 stc_s footprint 匹配；文件级 URI 使用 ESA SAS-DD。该快照只覆盖锁定的文件名查询范围，不代表完整 Euclid Q1。"
+    },
+    {
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 NISP.H",
+      "unitKind": "tile",
+      "snapshotKey": "euclidQ1",
+      "status": "estimated",
+      "notes": "由 ESA TAP BGSUB mosaic 清单按官方 tile_index 归集，并以该 Tile 的 stc_s footprint 匹配；文件级 URI 使用 ESA SAS-DD。该快照只覆盖锁定的文件名查询范围，不代表完整 Euclid Q1。"
+    },
+    {
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 NISP.J",
+      "unitKind": "tile",
+      "snapshotKey": "euclidQ1",
+      "status": "estimated",
+      "notes": "由 ESA TAP BGSUB mosaic 清单按官方 tile_index 归集，并以该 Tile 的 stc_s footprint 匹配；文件级 URI 使用 ESA SAS-DD。该快照只覆盖锁定的文件名查询范围，不代表完整 Euclid Q1。"
+    },
+    {
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 NISP.Y",
+      "unitKind": "tile",
+      "snapshotKey": "euclidQ1",
+      "status": "estimated",
+      "notes": "由 ESA TAP BGSUB mosaic 清单按官方 tile_index 归集，并以该 Tile 的 stc_s footprint 匹配；文件级 URI 使用 ESA SAS-DD。该快照只覆盖锁定的文件名查询范围，不代表完整 Euclid Q1。"
+    },
+    {
+      "surveyId": "euclid",
+      "releaseId": "euclid-q1",
+      "product": "Euclid Q1 VIS",
+      "unitKind": "tile",
+      "snapshotKey": "euclidQ1",
+      "status": "estimated",
+      "notes": "由 ESA TAP BGSUB mosaic 清单按官方 tile_index 归集，并以该 Tile 的 stc_s footprint 匹配；文件级 URI 使用 ESA SAS-DD。该快照只覆盖锁定的文件名查询范围，不代表完整 Euclid Q1。"
+    },
+    {
+      "surveyId": "hsc-ssp",
+      "releaseId": "hsc-pdr2",
+      "product": "PDR2 Wide + Deep image coverage",
+      "modality": "imaging",
+      "unitKind": "tract/patch",
+      "snapshotKey": "hscPdr2",
+      "status": "estimated",
+      "notes": "由锁定的官方 PDR2 tract/patch 多边形生成运行时查询覆盖并计算候选分块；不生成或修改 MOC。具体波段文件仍须在 HSC DAS Search 中确认并按 HSC 账号策略访问。"
+    },
+    {
+      "surveyId": "hsc-ssp",
+      "releaseId": "hsc-pdr2",
+      "product": "PDR2 g-band imaging",
+      "modality": "imaging",
+      "unitKind": "tract/patch",
+      "snapshotKey": "hscPdr2",
+      "status": "estimated",
+      "notes": "由锁定的官方 PDR2 tract/patch 多边形生成运行时查询覆盖并计算候选分块；波段文件存在性与账号访问需在 HSC DAS Search 确认。"
+    },
+    {
+      "surveyId": "hsc-ssp",
+      "releaseId": "hsc-pdr2",
+      "product": "PDR2 r-band imaging",
+      "modality": "imaging",
+      "unitKind": "tract/patch",
+      "snapshotKey": "hscPdr2",
+      "status": "estimated",
+      "notes": "由锁定的官方 PDR2 tract/patch 多边形生成运行时查询覆盖并计算候选分块；波段文件存在性与账号访问需在 HSC DAS Search 确认。"
+    },
+    {
+      "surveyId": "hsc-ssp",
+      "releaseId": "hsc-pdr2",
+      "product": "PDR2 i-band imaging",
+      "modality": "imaging",
+      "unitKind": "tract/patch",
+      "snapshotKey": "hscPdr2",
+      "status": "estimated",
+      "notes": "由锁定的官方 PDR2 tract/patch 多边形生成运行时查询覆盖并计算候选分块；波段文件存在性与账号访问需在 HSC DAS Search 确认。"
+    },
+    {
+      "surveyId": "hsc-ssp",
+      "releaseId": "hsc-pdr2",
+      "product": "PDR2 z-band imaging",
+      "modality": "imaging",
+      "unitKind": "tract/patch",
+      "snapshotKey": "hscPdr2",
+      "status": "estimated",
+      "notes": "由锁定的官方 PDR2 tract/patch 多边形生成运行时查询覆盖并计算候选分块；波段文件存在性与账号访问需在 HSC DAS Search 确认。"
+    },
+    {
+      "surveyId": "hsc-ssp",
+      "releaseId": "hsc-pdr2",
+      "product": "PDR2 y-band imaging",
+      "modality": "imaging",
+      "unitKind": "tract/patch",
+      "snapshotKey": "hscPdr2",
+      "status": "estimated",
+      "notes": "由锁定的官方 PDR2 tract/patch 多边形生成运行时查询覆盖并计算候选分块；波段文件存在性与账号访问需在 HSC DAS Search 确认。"
+    },
+    {
+      "surveyId": "hsc-ssp",
+      "releaseId": "hsc-pdr3",
+      "product": "HSC-SSP Wide/Deep/UltraDeep",
+      "modality": "imaging",
+      "unitKind": "tract/patch",
+      "snapshotKey": "hscPdr3",
+      "status": "estimated",
+      "notes": "由锁定的官方 PDR3 Wide/Deep/UltraDeep tract/patch 多边形生成运行时查询覆盖并计算候选分块；具体产品文件存在性与账号访问需在 HSC PDR3 DAS Search 确认。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr10",
+      "product": "DR10 color imaging",
+      "unitKind": "brick",
+      "snapshotKey": "legacyDr10",
+      "productPath": "coadd",
+      "status": "estimated",
+      "notes": "由官方 DR10 brick 几何与发布目录规则生成候选 brick 入口；几何表不证明对应滤镜文件实际存在。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr10",
+      "product": "Coadded imaging",
+      "unitKind": "brick",
+      "snapshotKey": "legacyDr10",
+      "productPath": "coadd",
+      "status": "estimated",
+      "notes": "由官方 DR10 brick 几何与发布目录规则生成候选 brick 入口；几何表不证明对应滤镜文件实际存在。"
+    },
+    {
+      "surveyId": "legacy-surveys",
+      "releaseId": "legacy-dr10",
+      "product": "Tractor catalog",
+      "unitKind": "brick",
+      "snapshotKey": "legacyDr10",
+      "productPath": "tractor",
+      "status": "estimated",
+      "notes": "由官方 DR10 brick 几何与发布目录规则生成候选 brick 入口；几何表不证明对应 catalog 文件实际存在。"
+    }
+  ],
+  "hscPdr3": {
+    "releaseId": "hsc-pdr3",
+    "snapshotKey": "hscPdr3",
+    "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr3/tract_patches/info/",
+    "dasSearchUrl": "https://hsc-release.mtk.nao.ac.jp/das_search/pdr3/",
+    "unitKind": "tract/patch",
+    "geometryPrecision": "estimated",
+    "sourceFiles": [
+      {
+        "region": "DUD COSMOS",
+        "path": "source-units/hsc-pdr3-tracts-patches-DUD-COSMOS.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr3/tract_patches/info/tracts_patches_DUD-COSMOS.txt",
+        "sha256": "b31b142f642ef0d76295004c49e1e94945a28e8aaa40664176406f7bb5ae26aa",
+        "sizeBytes": 436239
+      },
+      {
+        "region": "DUD DEEP2-3",
+        "path": "source-units/hsc-pdr3-tracts-patches-DUD-DEEP2-3.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr3/tract_patches/info/tracts_patches_DUD-DEEP2-3.txt",
+        "sha256": "e117ef5e2ea68f4b9fda07418f7ecee2680095c3763a24435f1e0c2bed221ad6",
+        "sizeBytes": 481350
+      },
+      {
+        "region": "DUD ELAIS-N1",
+        "path": "source-units/hsc-pdr3-tracts-patches-DUD-ELAIS-N1.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr3/tract_patches/info/tracts_patches_DUD-ELAIS-N1.txt",
+        "sha256": "f4a92960be0542b7ffa0d3387e949ffbc92fda07e44eec993d67e4f2334734df",
+        "sizeBytes": 436866
+      },
+      {
+        "region": "DUD XMM-LSS",
+        "path": "source-units/hsc-pdr3-tracts-patches-DUD-XMM-LSS.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr3/tract_patches/info/tracts_patches_DUD-XMM-LSS.txt",
+        "sha256": "3c2f1cd328d09db1f85a583909d0b0f13444d081d633b5fed644ede1803e0210",
+        "sizeBytes": 390759
+      },
+      {
+        "region": "Wide AEGIS",
+        "path": "source-units/hsc-pdr3-tracts-patches-W-AEGIS.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr3/tract_patches/info/tracts_patches_W-AEGIS.txt",
+        "sha256": "87548315fd1f5007a55f997f65841ac8d46c9e965207995bab127a74bd06af2c",
+        "sizeBytes": 156887
+      },
+      {
+        "region": "Wide hectomap",
+        "path": "source-units/hsc-pdr3-tracts-patches-W-hectomap.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr3/tract_patches/info/tracts_patches_W-hectomap.txt",
+        "sha256": "52b8905e0543245d4eda653d99108009f918be6d233797edf4c0d48aa18feb87",
+        "sizeBytes": 4762372
+      },
+      {
+        "region": "Wide autumn",
+        "path": "source-units/hsc-pdr3-tracts-patches-W-autumn.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr3/tract_patches/info/tracts_patches_W-autumn.txt",
+        "sha256": "a1a5e36af74bc0b3bc220167d78be6893279afcf0e348751eec4b467731dc78d",
+        "sizeBytes": 26107950
+      },
+      {
+        "region": "Wide spring",
+        "path": "source-units/hsc-pdr3-tracts-patches-W-spring.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr3/tract_patches/info/tracts_patches_W-spring.txt",
+        "sha256": "6ba75ea706ffc8c2caecfd44f007f3132117dff7014d652dba6fae6adb6de504",
+        "sizeBytes": 18198617
+      }
+    ]
+  },
+  "hscPdr2": {
+    "releaseId": "hsc-pdr2",
+    "snapshotKey": "hscPdr2",
+    "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/doc/index.php/data-2/",
+    "patchListBaseUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/",
+    "dasSearchUrl": "https://hsc-release.mtk.nao.ac.jp/das_search/pdr2/",
+    "unitKind": "tract/patch",
+    "geometryPrecision": "estimated",
+    "sourceFiles": [
+      {
+        "region": "DUD COSMOS",
+        "path": "source-units/hsc-pdr2-tracts-patches-DUD-COSMOS.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/tracts_patches_DUD-COSMOS.txt",
+        "sha256": "9052eb78ce1334cebf67ba1973dc6bb7e02b3f65b03fdc039416950057ef2333",
+        "sizeBytes": 390454
+      },
+      {
+        "region": "DUD DEEP2-3",
+        "path": "source-units/hsc-pdr2-tracts-patches-DUD-DEEP2-3.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/tracts_patches_DUD-DEEP2-3.txt",
+        "sha256": "025c80296aa3bf17190f1402e0b43486c4ef598b1c2a7788a2bc6b73e20e780e",
+        "sizeBytes": 432589
+      },
+      {
+        "region": "DUD ELAIS-N1",
+        "path": "source-units/hsc-pdr2-tracts-patches-DUD-ELAIS-N1.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/tracts_patches_DUD-ELAIS-N1.txt",
+        "sha256": "43bcb24804ab196218881ed0d8d6ef236848f1abf624a91b30dafdf6f6cb07cb",
+        "sizeBytes": 392199
+      },
+      {
+        "region": "DUD XMM-LSS",
+        "path": "source-units/hsc-pdr2-tracts-patches-DUD-XMM-LSS.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/tracts_patches_DUD-XMM-LSS.txt",
+        "sha256": "5e0780a86887afefbb494ca2aeb07403b194f8e76d78528d70ed35a0ee7efeec",
+        "sizeBytes": 352994
+      },
+      {
+        "region": "Wide AEGIS",
+        "path": "source-units/hsc-pdr2-tracts-patches-W-AEGIS.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/tracts_patches_W-AEGIS.txt",
+        "sha256": "87548315fd1f5007a55f997f65841ac8d46c9e965207995bab127a74bd06af2c",
+        "sizeBytes": 156887
+      },
+      {
+        "region": "Wide w01",
+        "path": "source-units/hsc-pdr2-tracts-patches-W-w01.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/tracts_patches_W-w01.txt",
+        "sha256": "2702d6afc78db0fed8eb78d39a424cabfc77b522d26008a9cbd8011c708541c3",
+        "sizeBytes": 1367832
+      },
+      {
+        "region": "Wide w02",
+        "path": "source-units/hsc-pdr2-tracts-patches-W-w02.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/tracts_patches_W-w02.txt",
+        "sha256": "e469fc49d13f70ba2dc62a3ea312f3b1ac1706e4dbc16c7eafd0a03776b2a72b",
+        "sizeBytes": 3170354
+      },
+      {
+        "region": "Wide w03",
+        "path": "source-units/hsc-pdr2-tracts-patches-W-w03.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/tracts_patches_W-w03.txt",
+        "sha256": "dac29c25b1a1dfc1ed7e5a8e6723f3a3ab2ebefb8a9de459eb1d8e2acc77f005",
+        "sizeBytes": 5760384
+      },
+      {
+        "region": "Wide w04",
+        "path": "source-units/hsc-pdr2-tracts-patches-W-w04.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/tracts_patches_W-w04.txt",
+        "sha256": "814444b4742338300e9d30093ec121625a1fedef46002341a48c666aec760ca1",
+        "sizeBytes": 11599712
+      },
+      {
+        "region": "Wide w05",
+        "path": "source-units/hsc-pdr2-tracts-patches-W-w05.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/tracts_patches_W-w05.txt",
+        "sha256": "e13769ba71fd9de7e5073b1e332e38756756b4f280d96a7103e57a25b4b0f0d7",
+        "sizeBytes": 10403989
+      },
+      {
+        "region": "Wide w06",
+        "path": "source-units/hsc-pdr2-tracts-patches-W-w06.txt",
+        "sourceUrl": "https://hsc-release.mtk.nao.ac.jp/rsrc/pdr2/koike/survey-area/info/tracts_patches_W-w06.txt",
+        "sha256": "e62e3ca978d76ac2af994e391d39d3b32c124d7fe5a8ab3c74a7daf0ba248088",
+        "sizeBytes": 4273994
+      }
+    ]
+  },
+  "legacyDr10": {
+    "releaseId": "legacy-dr10",
+    "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/survey-bricks.fits.gz",
+    "snapshot": {
+      "path": "source-units/legacy-survey-bricks-dr10.fits.gz",
+      "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/survey-bricks.fits.gz",
+      "sha256": "dc943d702357f93553b9e5d15e87ace38df94eb7095f4100657407b3f9919c5f",
+      "sizeBytes": 13147987
+    },
+    "identityPrecision": "exact",
+    "geometryPrecision": "estimated",
+    "fileAvailability": "unverified-grid-only"
+  },
+  "legacyDr1": {
+    "releaseId": "legacy-dr1",
+    "status": "ready",
+    "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/decals-bricks.fits",
+    "snapshot": {
+      "path": "source-units/legacy-decals-bricks-dr1.fits",
+      "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/decals-bricks.fits",
+      "sha256": "4c8370585000a4189cac3d98e8b620fbde93f8a1e791b23b73865be304e70fb3",
+      "sizeBytes": 49011840
+    },
+    "identityPrecision": "exact",
+    "geometryPrecision": "estimated",
+    "membershipColumns": ["has_image_g", "has_image_r", "has_image_z", "has_catalog"],
+    "fileAvailability": "member-flags-with-unverified-uris"
+  },
+  "legacyDr2": {
+    "releaseId": "legacy-dr2",
+    "status": "ready",
+    "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr2/decals-bricks-dr2.fits",
+    "snapshot": {
+      "path": "source-units/legacy-decals-bricks-dr2-roster.fits",
+      "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr2/decals-bricks-dr2.fits",
+      "sha256": "36df229f93931d05a597a4b560afea1400fb94e0af4df1715bb53b49f0dd2fef",
+      "sizeBytes": 24180480
+    },
+    "observedRows": 318032,
+    "observedColumns": ["brickname", "ra", "dec", "ra1", "ra2", "dec1", "dec2", "nobs_med_g", "nobs_med_r", "nobs_med_z", "nobs_max_g", "nobs_max_r", "nobs_max_z"],
+    "identityPrecision": "exact",
+    "geometryPrecision": "estimated",
+    "fileAvailability": "release-roster-with-sampled-tractor-uri-and-unverified-coadd-uris"
+  },
+  "legacyReleaseRosters": {
+    "geometrySnapshotKey": "legacyDr10",
+    "status": "ready",
+    "scope": "Release member identities and centers come from the per-release brick rosters; polygon boundaries come from the locked all-sky Legacy brick grid. Each joined roster center is checked against its grid brick before indexing.",
+    "releases": {
+      "legacy-dr3": {
+        "status": "ready",
+        "scope": "DR3 release brick roster",
+        "regions": [
+          {
+            "id": "all",
+            "observedRows": 149464,
+            "snapshot": {
+              "path": "source-units/legacy-dr3-brick-roster.fits.gz",
+              "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr3/survey-bricks-dr3.fits.gz",
+              "sha256": "35e191f6cd9365ca17f3de93b66a034d7e11bfb37bb952c1012a56c76785cfa5",
+              "sizeBytes": 11196470
+            }
+          }
+        ],
+        "observedColumns": ["brickname", "ra", "dec", "nexp_g", "nexp_r", "nexp_z"]
+      },
+      "legacy-dr4": {
+        "status": "ready",
+        "scope": "DR4 release brick roster",
+        "regions": [
+          {
+            "id": "all",
+            "observedRows": 65543,
+            "snapshot": {
+              "path": "source-units/legacy-dr4-brick-roster.fits.gz",
+              "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr4/survey-bricks-dr4.fits.gz",
+              "sha256": "0468330bdbe0bee4cf2761d7ea6f986418fdb090d8822100d691902a0cf1ce86",
+              "sizeBytes": 9899089
+            }
+          }
+        ],
+        "observedColumns": ["brickname", "ra", "dec", "nexp_g", "nexp_r", "nexp_z"]
+      },
+      "legacy-dr5": {
+        "status": "ready",
+        "scope": "DR5 release brick roster",
+        "regions": [
+          {
+            "id": "all",
+            "observedRows": 176811,
+            "snapshot": {
+              "path": "source-units/legacy-dr5-brick-roster.fits.gz",
+              "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr5/survey-bricks-dr5.fits.gz",
+              "sha256": "3bddc0adb01612cd4c1003d691a0f5987d5a882ad8353e0efd8e89c8d78a8e44",
+              "sizeBytes": 27041967
+            }
+          }
+        ],
+        "observedColumns": ["brickname", "ra", "dec", "nexp_g", "nexp_r", "nexp_z"]
+      },
+      "legacy-dr6": {
+        "status": "ready",
+        "scope": "DR6 release brick roster",
+        "regions": [
+          {
+            "id": "all",
+            "observedRows": 92292,
+            "snapshot": {
+              "path": "source-units/legacy-dr6-brick-roster.fits.gz",
+              "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr6/survey-bricks-dr6.fits.gz",
+              "sha256": "5b4e87f7d1fd2bcf0d73dd095abd3fc19bffcba7ae2c4041d0ac744bfdfce80b",
+              "sizeBytes": 14969192
+            }
+          }
+        ],
+        "observedColumns": ["brickname", "ra", "dec", "nexp_g", "nexp_r", "nexp_z"]
+      },
+      "legacy-dr7": {
+        "status": "ready",
+        "scope": "DR7 release brick roster",
+        "regions": [
+          {
+            "id": "all",
+            "observedRows": 180117,
+            "snapshot": {
+              "path": "source-units/legacy-dr7-brick-roster.fits.gz",
+              "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr7/survey-bricks-dr7.fits.gz",
+              "sha256": "a008091f25c5407029435467350ce7a63f28457fd2b46b59eec356b8875a2544",
+              "sizeBytes": 29794996
+            }
+          }
+        ],
+        "observedColumns": ["brickname", "ra", "dec", "nexp_g", "nexp_r", "nexp_z"]
+      },
+      "legacy-dr8": {
+        "status": "ready",
+        "scope": "DR8 North and South release brick rosters",
+        "regions": [
+          {
+            "id": "north",
+            "observedRows": 93610,
+            "snapshot": {
+              "path": "source-units/legacy-dr8-north-brick-roster.fits.gz",
+              "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr8/north/survey-bricks-dr8-north.fits.gz",
+              "sha256": "2854a1db7935265ce5c631996f0e2745932bae9725b84cda8020ea6e868bc8b9",
+              "sizeBytes": 16306666
+            }
+          },
+          {
+            "id": "south",
+            "observedRows": 247844,
+            "snapshot": {
+              "path": "source-units/legacy-dr8-south-brick-roster.fits.gz",
+              "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr8/south/survey-bricks-dr8-south.fits.gz",
+              "sha256": "7d980966367f20c4ddc9ce0182b59ec3ed44eccd90c572493454b75cfed2503d",
+              "sizeBytes": 43028887
+            }
+          }
+        ],
+        "observedColumns": ["brickname", "ra", "dec", "nexp_g", "nexp_r", "nexp_z"]
+      },
+      "legacy-dr9": {
+        "status": "ready",
+        "scope": "DR9 North and South release brick rosters",
+        "regions": [
+          {
+            "id": "north",
+            "observedRows": 93548,
+            "snapshot": {
+              "path": "source-units/legacy-dr9-north-brick-roster.fits.gz",
+              "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/north/survey-bricks-dr9-north.fits.gz",
+              "sha256": "2edd5c295fdad26852c6f224a3ff023cff43dd0e03a53acd35b767e726ee72fb",
+              "sizeBytes": 20882100
+            }
+          },
+          {
+            "id": "south",
+            "observedRows": 253658,
+            "snapshot": {
+              "path": "source-units/legacy-dr9-south-brick-roster.fits.gz",
+              "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/south/survey-bricks-dr9-south.fits.gz",
+              "sha256": "7360414f5d53571ca70fa0cb483eb8c80cfcbe80df0856a117246f442a0b9a3f",
+              "sizeBytes": 55399879
+            }
+          }
+        ],
+        "observedColumns": ["brickname", "ra", "dec", "ra1", "ra2", "dec1", "dec2", "nexp_g", "nexp_r", "nexp_z"]
+      }
+    }
+  },
+  "legacyDr10South": {
+    "releaseId": "legacy-dr10",
+    "region": "south",
+    "status": "ready",
+    "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south/survey-bricks-dr10-south.fits.gz",
+    "snapshot": {
+      "path": "source-units/legacy-survey-bricks-dr10-south.fits.gz",
+      "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south/survey-bricks-dr10-south.fits.gz",
+      "sha256": "863e5ded7a4aae7abcb5df76f322f35cf89945483715ff6d1874c88f5a072d9a",
+      "sizeBytes": 104480980
+    },
+    "scope": "The official DR10 south summary lists release-member bricks. It does not provide per-file URIs or prove every band-specific coadd/Tractor file exists."
+  },
+  "euclidQ1": {
+    "status": "ready",
+    "sourceUrl": "https://eas.esac.esa.int/tap-server/tap/sync",
+    "sourceTable": "q1.mosaic_product",
+    "lastAttempt": "2026-09-29",
+    "snapshot": {
+      "path": "source-units/euclid-q1-r1-bgs-mosaics.csv",
+      "sourceUrl": "https://eas.esac.esa.int/tap-server/tap/sync",
+      "sha256": "0e8ac7f3148b0c5d55b71018ff251a162f40038f090bfaff8b87f34c31c6aa62",
+      "sizeBytes": 1133113
+    },
+    "snapshotQuery": "SELECT tile_index,file_name,file_path,datalabs_path,stc_s,data_set_release,published,instrument_name,filter_name,product_type FROM q1.mosaic_product WHERE data_set_release = 'Q1_R1' AND file_name LIKE 'EUC_MER_BGSUB-MOSAIC-%'",
+    "observedColumns": ["tile_index", "file_name", "file_path", "datalabs_path", "stc_s", "data_set_release", "published", "instrument_name", "filter_name", "product_type"],
+    "observedRows": 2908,
+    "observedTileCount": 352,
+    "observedQ1R1ProductGroups": 13,
+    "observedPublishedValue": 0,
+    "accessChecks": ["VIS", "DES-G", "WISHES-Z", "PANSTARRS-I", "CFIS-U"],
+    "note": "ESA TAP returned HTTP 200 with a frozen 2,908-row BGSUB mosaic query covering 352 native Tile IDs and 13 filename product groups. All rows have published=0, but anonymous HEAD requests for the listed SAS-DD filename route returned HTTP 200 and a matching Content-Disposition filename for each access-check family. tile_index is the native Tile identity; stc_s is the per-product spatial footprint; file_path and datalabs_path remain archive paths. This is the declared BGSUB query scope, not the complete Euclid Q1 product inventory or survey coverage. No science file was downloaded."
+  }
+}

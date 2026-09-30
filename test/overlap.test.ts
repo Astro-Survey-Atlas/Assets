@@ -19,6 +19,13 @@ function layer(layerId: string, surveyId: string, orders: Record<number, number[
   return { layerId, productId: layerId, surveyId, releaseId: `${surveyId}-dr`, product: layerId, color: "#ffffff", availableOrders, overviewOrder: availableOrders[0]!, maxOrder: Math.max(...availableOrders), cellCount: cells.get(availableOrders[0]!)!.length, areaDeg2: 1, tileScheme: "ipix-range-4096", cells };
 }
 
+let sourceUnitStorePromise: Promise<SourceUnitStore> | undefined;
+
+function sourceUnitStore(): Promise<SourceUnitStore> {
+  sourceUnitStorePromise ??= SourceUnitStore.load(testDataRoot);
+  return sourceUnitStorePromise;
+}
+
 test("overlap uses the highest order shared by surveys and unions products within each survey", () => {
   const layers = [
     layer("a-one", "a", { 4: [100], 8: [200] }),
@@ -134,8 +141,8 @@ test("exiting overlap rebases the orbit around the celestial sphere", () => {
   assert.deepEqual(pose.cameraPosition.toArray(), [5, 3, 2]);
 });
 
-test("DESI source units are reconstructed from the locked TILE_COMPLETENESS snapshots", async () => {
-  const store = await SourceUnitStore.load(testDataRoot);
+test("locked source-unit snapshots reconstruct DESI Tiles and HSC tract/patch mappings", async () => {
+  const store = await sourceUnitStore();
   assert.equal(store.match("desi-dr1-redrock-bright-file-index", 6, [128]), null);
   const requestedCells = [1087, 1130, 1173, 1216];
   const match = store.match("desi-dr1-spectra-footprint", 4, requestedCells);
@@ -145,10 +152,47 @@ test("DESI source units are reconstructed from the locked TILE_COMPLETENESS snap
   assert.match(match.units[0]!.downloadUrl, new RegExp("data\\.desi\\.lbl\\.gov/public/dr1/spectro/redux/iron/tiles/cumulative"));
   assert.ok(match.units.every((unit) => unit.matchingCells.length > 0 && unit.matchingCells.every((cell) => requestedCells.includes(cell))));
   assert.ok(match.units.some((unit) => unit.matchingCells.length < requestedCells.length));
+
+  const hscLayers = store.coverageLayers().filter((entry) => entry.surveyId === "hsc-ssp");
+  assert.equal(hscLayers.length, 7);
+  assert.ok(hscLayers.some((entry) => entry.releaseId === "hsc-pdr3"));
+  const hsc = hscLayers.find((entry) => entry.releaseId === "hsc-pdr2" && entry.product === "PDR2 g-band imaging")!;
+  const hscCell = hsc.cells.get(8)?.[0];
+  assert.notEqual(hscCell, undefined);
+  const hscMatch = store.match(hsc.layerId, 8, [hscCell!], 20, {
+    surveyId: hsc.surveyId,
+    releaseId: hsc.releaseId,
+    product: hsc.product,
+  });
+  assert.ok(hscMatch?.units.length);
+  assert.equal(hscMatch?.unitKind, "tract/patch");
+  assert.ok(hscMatch?.units.every((unit) => unit.downloadUrl?.includes("/das_search/pdr2/")));
+});
+
+test("Legacy DR10 matches derive Coadd and Tractor URIs from one brick identity", async () => {
+  const store = await sourceUnitStore();
+  const cell = 436132;
+  const coadd = store.match("source-units-legacy-surveys-legacy-dr10-coadded-imaging", 8, [cell], 120, {
+    surveyId: "legacy-surveys",
+    releaseId: "legacy-dr10",
+    product: "Coadded imaging",
+  });
+  const tractor = store.match("source-units-legacy-surveys-legacy-dr10-tractor-catalog", 8, [cell], 120, {
+    surveyId: "legacy-surveys",
+    releaseId: "legacy-dr10",
+    product: "Tractor catalog",
+  });
+  const coaddBrick = coadd?.units.find((unit) => unit.unitId === "1498p020");
+  const tractorBrick = tractor?.units.find((unit) => unit.unitId === "1498p020");
+
+  assert.ok(coaddBrick);
+  assert.ok(tractorBrick);
+  assert.match(coaddBrick.downloadUrl, /\/dr10\/south\/coadd\/149\/1498p020\/$/);
+  assert.match(tractorBrick.downloadUrl, /\/dr10\/south\/tractor\/149\/tractor-1498p020\.fits$/);
 });
 
 test("DESI source-unit matches retain each tile's exact finer-order cell subset", async () => {
-  const store = await SourceUnitStore.load(testDataRoot);
+  const store = await sourceUnitStore();
   const coarseMatch = store.match("desi-dr1-spectra-footprint", 4, [1087], 1);
   assert.ok(coarseMatch?.units[0]);
   const unit = coarseMatch.units[0];

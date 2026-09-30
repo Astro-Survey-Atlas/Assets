@@ -106,6 +106,8 @@ export interface PublicProductReadiness {
     orders: number[];
     precision: "exact" | "estimated" | "entrypoint-only" | "unknown";
     unitKind?: string;
+    sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string };
+    warehouseFileIndex?: { status: "available" | "not-indexed" | "unavailable" };
     basis: "file" | "unit" | "entrypoint" | "none";
   };
   completeness: {

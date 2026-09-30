@@ -135,7 +135,7 @@ function normalizeCoverageEvidence(value: unknown): CoverageSourceEvidence | und
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new AdminHttpError(400, "coverageEvidence must be an object");
   const item = value as Record<string, unknown>;
   const evidenceKind = item.evidenceKind;
-  if (!['observation-footprint', 'tile-footprint', 'wcs-coverage', 'published-moc'].includes(String(evidenceKind))) throw new AdminHttpError(400, "coverageEvidence.evidenceKind is unsupported");
+  if (!['observation-footprint', 'tile-footprint', 'source-unit-footprint', 'wcs-coverage', 'published-moc'].includes(String(evidenceKind))) throw new AdminHttpError(400, "coverageEvidence.evidenceKind is unsupported");
   const precision = item.precision;
   if (precision !== "exact" && precision !== "estimated") throw new AdminHttpError(400, "coverageEvidence.precision is unsupported");
   const completeness = item.completeness;

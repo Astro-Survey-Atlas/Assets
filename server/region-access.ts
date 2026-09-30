@@ -90,13 +90,13 @@ export async function queryRegion(state:PublicState,input:unknown,match:(layerId
     // Region order fixes the requested grid. Coarser input remains coarse;
     // clients request fine cells explicitly for fine-overlap inspection.
     const projection=projectMoc(moc,order,request.region,remainingGeometry);remainingGeometry-=projection.cells.length;
-    let units:SourceUnitMatch|null=null,reason=g.indexRevision?"":"No region-to-science-file index is available for this product.";
+    let units:SourceUnitMatch|null=null,reason=g.indexRevision?"":"No region-to-science-file index is available in Warehouse for this product; public source-unit matching is independent.";
     if(request.purpose==="download-plan"&&g.indexRevision&&projection.cells.length&&!projection.truncated&&remainingUnits>0) {
       try {units=await match(g.layerId,order,projection.cells,remainingUnits,g.indexRevision);if(!units)reason="Published index is unavailable";}
       catch {reason="Published index is unavailable; no download plan was inferred";}
     }
     const hits=units?.units??[];remainingUnits-=hits.length;
-    const downloads=hits.filter(u=>/^https:\/\//.test(u.downloadUrl)).map(u=>({kind:"tile-directory",unitId:u.unitId,url:u.downloadUrl,sourceId:g.layerId,surveyId:source.surveyId,releaseId:source.releaseId,productId:source.productId,geometryPrecision:"estimated",completeness:"candidate",note:"Intersects the requested HEALPix region using the official tile footprint; directory contents are not a verified science-file list."}));
+    const downloads=hits.filter(u=>/^https:\/\//.test(u.downloadUrl)).map(u=>({kind:"spatial-unit",unitKind:u.unitKind,unitId:u.unitId,url:u.downloadUrl,sourceId:g.layerId,surveyId:source.surveyId,releaseId:source.releaseId,productId:source.productId,geometryPrecision:u.geometryPrecision,matchingCells:u.matchingCells,sourceSnapshotSha256:u.sourceSnapshotSha256,completeness:"candidate",note:units?.notes??"Intersects the selected HEALPix region according to this unit index; download-unit contents may extend beyond the selected region."}));
     sources.push({...source,sourceId:g.layerId,order,nside:2**order,coverageRevision:g.coverageRevision,indexRevision:g.indexRevision,cells:projection.cells,geometryPrecision:"estimated",geometryOperation:order>=moc.maxOrder?"exact-native-cell-intersection":"conservative-projection",accessAvailability:units?"tile-resolved":g.indexRevision&&reason?"unavailable":"geometry-only",completeness:projection.truncated||units?.truncated||(!remainingUnits&&g.indexRevision&&!units)?"truncated":reason?"incomplete":"complete",reason:reason||undefined,sourceUnits:hits.map(u=>({unitId:u.unitId,unitKind:u.unitKind,matchingCells:u.matchingCells})),downloads,provenance:{method:product.content.mode??"native-moc",mocSha256:moc.sha256,productRevision:product.revision,publishedRelease:state.snapshot.releaseId}});
   }
   const response={schemaVersion:1,purpose:request.purpose,region:request.region,regionSha256:sha256(JSON.stringify(request.region)),sources,expiresAt:new Date(Date.now()+600000).toISOString()};

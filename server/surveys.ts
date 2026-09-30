@@ -35,6 +35,7 @@ interface CoverageLayerMeta {
   availableOrders: number[];
   overviewOrder: number;
   maxOrder: number;
+  recipe?: { mode?: string };
 }
 
 function orderSummary(layers: CoverageLayerMeta[]): PublicCoverageOrderSummary | undefined {
@@ -68,14 +69,17 @@ export async function loadSurveyIndex(
         return {
           ...release,
           coverageOrders: orderSummary(releaseLayers),
-          products: release.products.map((product) => {
-            const layer = layerByProduct.get(`${release.id}:${product.name}`);
-            return {
-              ...product,
-              productId: productId(survey.id, release.id, product.name),
-              ...(layer ? { coverage: { layerId: layer.layerId, availableOrders: layer.availableOrders, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder } } : {}),
-            };
-          }),
+        products: release.products.map((product) => {
+          const layer = layerByProduct.get(`${release.id}:${product.name}`);
+          return {
+            ...product,
+            productId: productId(survey.id, release.id, product.name),
+            ...(layer ? { coverage: { layerId: layer.layerId, availableOrders: layer.availableOrders, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder } } : {}),
+            sourceUrl: layer && layer.recipe?.mode !== "source-unit-polygons"
+              ? `/api/v1/coverage/layers/${encodeURIComponent(layer.layerId)}/moc.fits`
+              : product.sourceUrl,
+          };
+        }),
         };
       }),
       imageUrl: `/surveys/${encodeURIComponent(survey.id)}.png`,

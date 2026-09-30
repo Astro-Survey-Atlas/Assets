@@ -78,7 +78,7 @@ export interface DownloadPlanCoverageEvidence {
   releaseId: string;
   product: string;
   modality?: string;
-  evidenceKind: "observation-footprint" | "published-moc" | "tile-footprint" | "wcs-coverage";
+  evidenceKind: "observation-footprint" | "published-moc" | "tile-footprint" | "source-unit-footprint" | "wcs-coverage";
   order: number;
   nside: number;
   nativeMaxOrder: number;
@@ -98,8 +98,30 @@ export interface DownloadPlanCoverageEvidence {
   summary: string;
 }
 
+export interface DownloadPlanSpatialUnit {
+  layerId: string;
+  productId: string;
+  surveyId: string;
+  releaseId: string;
+  product: string;
+  modality?: string;
+  unitKind: string;
+  unitId: string;
+  order: number;
+  nside: number;
+  matchingCells: number[];
+  precision: string;
+  accessUri?: string;
+  accessUris?: Array<{ uri: string; fileName?: string }>;
+  accessAvailability?: "public" | "source-policy" | "unverified";
+  sourceSnapshotSha256?: string;
+  note?: string;
+  scannedFiles?: Array<{ fileId: string; fileName?: string; sourceUri?: string; scanRunId?: string; sourceSnapshotSha256?: string }>;
+}
+
 export interface DownloadPlan {
   schemaVersion: 1;
+  spatialUnits?: DownloadPlanSpatialUnit[];
   files: DownloadPlanFile[];
   entrypoints: DownloadPlanEntrypoint[];
   coverageEvidence?: DownloadPlanCoverageEvidence[];
@@ -127,7 +149,7 @@ export const OVERLAP_DOWNLOAD_HEADER = [
   "component_id", "item_kind", "order", "nside", "precision", "layer_id", "survey_id", "release_id", "product", "modality",
   "source_file_id", "file_name", "file_type", "size_bytes", "source_uri", "downloadable", "download_url", "matching_cells", "coverage_methods", "entrypoint_kind", "tile_id", "entrypoint_url", "source_scope", "required", "selection_complete", "selection_rule", "required_tile_ids",
   "ra_min_deg", "ra_max_deg", "dec_min_deg", "dec_max_deg", "area_deg2", "notes", "evidence_kind", "source_label", "source_url", "geometry_source_url", "coverage_url", "available_orders", "native_max_order", "source_identity", "instrument", "filters", "source_snapshot_sha256", "completeness", "science_file_scan",
-  "file_observations", "scan_scopes", "matching_coverage_truncated",
+  "file_observations", "scan_scopes", "matching_coverage_truncated", "access_uris", "access_availability",
 ] as const;
 
 export function csvCell(value: unknown): string {
@@ -146,6 +168,16 @@ export function overlapCsvRows(
   fallbackPrecision = "entrypoint-only",
 ): string[][] {
   const rows: string[][] = [];
+  (plan.spatialUnits ?? []).forEach((unit) => {
+    rows.push([
+      component.id, "spatial-unit", String(unit.order), String(unit.nside), unit.precision,
+      unit.layerId, unit.surveyId, unit.releaseId, unit.product, unit.modality ?? "",
+      "", "", "", "", unit.accessUri ?? "", "", unit.accessUri ?? "", JSON.stringify(unit.matchingCells), "", unit.unitKind,
+      unit.unitId, unit.accessUri ?? "", "", "", "", "", "",
+      String(component.bounds.raMin), String(component.bounds.raMax), String(component.bounds.decMin), String(component.bounds.decMax), String(component.bounds.areaDeg2), unit.note ?? "",
+      "", "", "", "", "", "", "", "", "", "", unit.sourceSnapshotSha256 ?? "", "", unit.scannedFiles?.length ? JSON.stringify(unit.scannedFiles) : "",
+    ]);
+  });
   plan.files.forEach((file) => {
     const layers = file.matchingCoverage.map((match) => match.layerId);
     const firstLayer = resolveLayer(file.matchingCoverage[0]?.layerId);
@@ -198,9 +230,14 @@ export function overlapCsvRows(
   return rows.map((row) => {
     const padded = [...row, ...Array(Math.max(0, OVERLAP_DOWNLOAD_HEADER.length - row.length)).fill("")];
     const file = row[1] === "file" ? plan.files.find(file => file.fileId === row[10]) : undefined;
-    padded[OVERLAP_DOWNLOAD_HEADER.indexOf("file_observations")] = file?.observations?.length ? JSON.stringify(file.observations) : "";
+    const unit = row[1] === "spatial-unit" ? plan.spatialUnits?.find(unit => unit.layerId === row[5] && unit.unitId === row[20]) : undefined;
+    padded[OVERLAP_DOWNLOAD_HEADER.indexOf("file_observations")] = file?.observations?.length
+      ? JSON.stringify(file.observations)
+      : unit?.scannedFiles?.length ? JSON.stringify(unit.scannedFiles) : "";
     padded[OVERLAP_DOWNLOAD_HEADER.indexOf("scan_scopes")] = plan.scanScopes?.length ? JSON.stringify(plan.scanScopes) : "";
     padded[OVERLAP_DOWNLOAD_HEADER.indexOf("matching_coverage_truncated")] = file?.matchingCoverageTruncated === undefined ? "" : String(file.matchingCoverageTruncated);
+    padded[OVERLAP_DOWNLOAD_HEADER.indexOf("access_uris")] = unit?.accessUris?.length ? JSON.stringify(unit.accessUris) : "";
+    padded[OVERLAP_DOWNLOAD_HEADER.indexOf("access_availability")] = unit?.accessAvailability ?? "";
     if (file) padded[OVERLAP_DOWNLOAD_HEADER.indexOf("source_snapshot_sha256")] = joinUnique(file.matchingCoverage.map(match => match.sourceSnapshotSha256));
     return padded;
   });

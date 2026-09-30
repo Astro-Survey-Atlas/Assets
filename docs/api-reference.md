@@ -94,6 +94,22 @@ GET /api/v1/coverage/blocks/{layerId}?order=4&tile=0
 GET /api/v1/coverage/blocks/desi-dr1-spectra-footprint?order=8&tile=3&revision=<layer-revision>
 ```
 
+`sourceUnitIndex.unitKind` names the survey's native retrieval unit, independent
+of the recipe or scan mode. For example, `tile-table` can yield DESI `tile`
+units or Legacy Surveys `brick` units. `entrypoint-only` means the coverage is
+available but no usable local unit mapping is registered; `estimated` means a
+mapping exists but its geometry or association is approximate. Per-result
+`spatialUnits[].precision` remains the authority for a particular lookup.
+
+`warehouseFileIndex` is reported separately. Its `available` status means an
+ACTIVE Warehouse file and coverage index is currently queryable for that
+layer; `not-indexed` means no usable scanned file coverage is registered, and
+`unavailable` means Assets cannot confirm the Warehouse state. Counts describe
+the indexed scan scope, not survey completeness. A file hit does not change
+`sourceUnitIndex.unitKind` or establish the native unit's completeness. The
+site role proxies the coverage catalog to the backend so this runtime status
+matches the reverse-lookup service.
+
 The server returns `409` when the revision is stale, so a client can reload the catalog before using the block. Revisioned blocks use immutable cache headers; requests without a revision are explicitly revalidated. Catalog requests honor `If-None-Match` and return `304 Not Modified`. The browser requests overview blocks first and higher-order blocks only after zooming.
 
 ## Coverage Overlap
@@ -184,6 +200,29 @@ coverage matches, real files and general public entrypoints separate:
 ```json
 {
   "schemaVersion": 1,
+  "spatialUnits": [
+    {
+      "layerId": "euclid-q1-vis",
+      "surveyId": "euclid",
+      "releaseId": "q1",
+      "product": "VIS imaging",
+      "modality": "imaging",
+      "unitKind": "tile",
+      "unitId": "102018211",
+      "order": 8,
+      "nside": 256,
+      "matchingCells": [123],
+      "precision": "estimated",
+      "accessUri": "https://archive.example/product-1.fits",
+      "accessUris": [
+        { "fileName": "product-1.fits", "uri": "https://archive.example/product-1.fits" },
+        { "fileName": "product-2.fits", "uri": "https://archive.example/product-2.fits" }
+      ],
+      "accessAvailability": "source-policy",
+      "sourceSnapshotSha256": "...",
+      "note": "The source lists both product URIs for this Tile."
+    }
+  ],
   "files": [
     {
       "fileId": "file-123",
@@ -227,9 +266,27 @@ edge query ends in the middle of one file's matches,
 `matchingCoverageTruncated=true` marks that file row and `warnings[]` explains
 the omitted edges. The overall `truncated` flag also remains true when a page
 or manifest hit a result limit. Anonymous preview requests return at most six
-manifest items and cannot submit a cursor. When a preview has more results,
-`page.nextCursor` can seed the first API-Key-authorized page; subsequent cursors
-are bound to that authorization identity. `metadataState` is `missing` when Warehouse returned an edge
+manifest items and cannot submit a cursor. `page.omitted` and `page.nextCursor`
+describe the mixed manifest (spatial units, files, entrypoints and coverage
+evidence); `page.omitted` is not a count of remaining Tiles/bricks/observations.
+For UI browsing, the preview also returns independent `spatialPage` and
+`supportingPage` cursors. `spatialPage` counts only native spatial units;
+`supportingPage` pages files not attached to a unit, public entrypoints and
+coverage evidence. Both expose `shown`, `hasMore` and, when continuable,
+`nextCursor`. `hasMore` does not promise an exact remaining count.
+
+Send `pageKind: "spatial-units"` or `pageKind: "supporting-evidence"` with a
+cursor and `pageSize` to continue only that list. These scoped cursors cannot be
+interchanged. The first page may use the anonymous preview cursor; subsequent
+cursors are bound to the API-Key authorization identity. The browser's
+“继续加载空间分块” action asks for a `region:query` API Key and appends only
+native spatial units. The collapsed auxiliary section has a separate
+“继续加载辅助信息” action. Neither action retrieves scientific data. The
+general `page.nextCursor` manifest pagination remains available to API clients.
+The UI renders browser-safe external HTTP(S)
+`spatialUnits[].accessUri`, `spatialUnits[].accessUris[].uri`, and HTTP(S)
+`sourceUri` values as links. Object-store and local-file locators remain text
+because they are not browser download links. `metadataState` is `missing` when Warehouse returned an edge
 without a matching FileAsset, so the response never invents a complete file
 record. `downloadable=true` and
 `downloadUrl` are reserved for a public HTTP(S) file URL. Canonical `s3://`,
@@ -242,6 +299,19 @@ objects, translate local paths or download the scientific files for the user.
 `downloadable` describes a source link, not an Assets transfer capability;
 a missing link does not invalidate known file identity or spatial evidence.
 
+`spatialUnits[]` contains the native brick, Tile, tract/patch, observation or
+other source-defined block matched against the full selected HEALPix region.
+`accessUri` is the primary locator; `accessUris[]` preserves every known
+product URI and filename belonging to that unit. `accessAvailability` is
+`public`, `source-policy` or `unverified`: an official URI can still require an
+account or source-side availability check. Warehouse scan matches appear only
+in `scannedFiles[]` when their native unit identity agrees.
+
+For Euclid Q1, the native unit is a Tile and ESA TAP `tile_index` supplies its
+ID. In `q1.mosaic_product`, `stc_s` describes the product footprint used for
+spatial matching. HST follows a separate flow: its unit is a MAST observation
+ID, and that observation's `s_region` is used to match the region.
+
 `entrypoints[]` contains links that are useful for reaching the official data
 service or checking the coverage itself, not additional file rows. Current
 entrypoint kinds are `official-release`, `official-data`, `official-query`,
@@ -253,11 +323,13 @@ Assets does not crawl or expand the directory into inferred file rows. The
 historical top-level `edges`, `sourceFiles` and `entrypoints` fields remain for
 clients that have not migrated; new exports should consume `downloadPlan`.
 
-`coverageEvidence[]` separately records published MOC, official Tile footprint
-or WCS-derived coverage matches with their actual order, source orders,
-precision and matched cells. It remains present when a component has no
-matching FileAsset or retrieval URL. A coverage hit describes the basis for
-the spatial result, not a verified scientific file or target at every cell.
+`coverageEvidence[]` separately records published MOC, official Tile or other
+native source-unit footprint, observation-footprint, and WCS-derived coverage
+matches with their actual order, source orders, precision and matched cells. It
+remains present when a component has no matching FileAsset or direct retrieval
+URL. A source-unit footprint may link to an archive search page; the returned
+tract/patch or observation identity still needs source-side selection, and a
+coverage hit does not verify a science file at every cell.
 
 #### CSV and JSON exports
 
@@ -277,6 +349,12 @@ row per real item and uses:
   treating it as a science file. The row records its evidence kind, source
   summary, matched NESTED cells, actual/source orders and optional source/MOC
   URLs.
+- `item_kind=spatial-unit` for a native brick, Tile, tract/patch or other
+  source-defined block. `tile_id` carries the unit identity for legacy
+  compatibility; `entrypoint_url` is its primary locator, and `access_uris`
+  is JSON preserving all listed file URIs and filenames for that unit.
+  `access_availability` records whether the source is public, subject to source
+  policy, or still unverified.
 
 When a component has coverage material but no file record or retrieval
 entrypoint, JSON retains its `coverageEvidence[]` and CSV emits a separate

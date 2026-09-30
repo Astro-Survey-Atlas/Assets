@@ -49,6 +49,11 @@ test("public external URL projection rejects internal and credential-bearing URL
   assert.equal(publicExternalUrl("s3://bucket/file.fits"), undefined);
   assert.equal(publicExternalUrl("http://atlas-warehouse-elasticsearch.atlas-warehouse.svc.cluster.local:9200"), undefined);
   assert.equal(publicExternalUrl("https://user:secret@data.example.org/file"), undefined);
+  assert.equal(publicExternalUrl("ftp://archive.noao.edu/public/hlsp/decals/dr1/coadd/149/1498p020/decals-1498p020-image-g.fits"), "ftp://archive.noao.edu/public/hlsp/decals/dr1/coadd/149/1498p020/decals-1498p020-image-g.fits");
+  assert.equal(publicExternalUrl("ftp://archive.noao.edu/public/hlsp/decals/dr2/coadd/149/1498p020/decals-1498p020-image-g.fits"), "ftp://archive.noao.edu/public/hlsp/decals/dr2/coadd/149/1498p020/decals-1498p020-image-g.fits");
+  assert.equal(publicExternalUrl("ftp://archive.noao.edu/public/hlsp/decals/dr1/tractor/149/tractor-1498p020.fits"), undefined);
+  assert.equal(publicExternalUrl("ftp://archive.noao.edu/public/hlsp/decals/dr3/coadd/149/1498p020/file.fits"), undefined);
+  assert.equal(publicExternalUrl("ftp://other.example.org/public/hlsp/decals/dr1/coadd/149/1498p020/file.fits"), undefined);
 });
 
 test("overlap details separate public claims from current Warehouse evidence", () => {

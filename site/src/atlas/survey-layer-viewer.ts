@@ -573,6 +573,7 @@ export class SurveyLayerViewer {
   #overlapMode = false;
   #overlapNside: number | null = null;
   #overlapPixels: number[] | null = null;
+  #overlapPixelSet = new Set<number>();
   #overlapComponents: SurveyLayerOverlapComponent[] = [];
   #activeOverlapComponentId: string | null = null;
   #activeOverlapHighlight: OverlapHighlight | null = null;
@@ -947,6 +948,7 @@ export class SurveyLayerViewer {
     if (!active) {
       this.#overlapNside = null;
       this.#overlapPixels = null;
+      this.#overlapPixelSet.clear();
       this.#overlapComponents = [];
       this.#activeOverlapComponentId = null;
       clearGroup(this.#overlapSelectionGroup);
@@ -960,6 +962,7 @@ export class SurveyLayerViewer {
     if (!Number.isInteger(nside) || nside < 1) return;
     this.#overlapNside = nside;
     this.#overlapPixels = [...new Set(pixels)].sort((left, right) => left - right);
+    this.#overlapPixelSet = new Set(this.#overlapPixels);
     if (this.#overlapMode) this.#rebuildVisible(true);
   }
 
@@ -1671,6 +1674,16 @@ export class SurveyLayerViewer {
     // Angular picking keeps inset gaps selectable, while a rendered shell hit preserves
     // the actual asset or drill cell beneath the pointer.
     const unitPoint = this.#intersectUnitSphere(this.#raycaster.ray);
+    if (this.#overlapMode && this.#overlapNside !== null && this.#overlapPixelSet.size) {
+      if (!unitPoint && !renderedHit) return null;
+      const point = unitPoint ?? renderedHit!.point.clone().normalize();
+      const pixel = healpixPixelFromSceneDirection(this.#overlapNside, point);
+      if (!this.#overlapPixelSet.has(pixel)) return null;
+      const membership = this.#overlapNside === this.#manifest.nside
+        ? visibleCoverageAtPixel(this.#model, pixel, this.#visibleSurveyIds)
+        : null;
+      return { pixel, nside: this.#overlapNside, membership, workspaceAvailable: false, point };
+    }
     if (!unitPoint && !renderedHit) return null;
     const point = unitPoint ?? renderedHit!.point.clone().normalize();
     const nside = renderedPixel == null ? this.#manifest.nside : renderedNside;
@@ -2241,7 +2254,18 @@ export class SurveyLayerViewer {
     };
     if (this.#overlapMode) {
       const component = this.#pickOverlapComponent(click);
-      if (component) this.#onOverlapComponent?.(component);
+      if (component) {
+        this.#onOverlapComponent?.(component);
+        return;
+      }
+      const hit = this.#pickCell(click);
+      if (hit) {
+        this.#presentInspection(hit.nside, hit.pixel, hit.membership ?? {
+          surveyIds: [...this.#visibleSurveyIds],
+          releaseIds: [],
+          artifacts: [],
+        }, hit.workspaceAvailable, hit.point, false);
+      }
       return;
     }
     this.#clickTimer = setTimeout(() => {

@@ -21,18 +21,18 @@ import { ConnectorInventoryStateStore, ConnectorProbeStateStore } from "./connec
 import { createArtifactStoreFromProcess } from "./artifact-store.js";
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
 import { projectRoot } from "./paths.js";
-import { loadSurveyIndex } from "./surveys.js";
-import { coverageBlock, coverageCatalogFromWarehouse, loadCoverageCatalog, withCoverageRevisions, type CoverageCellLayer } from "./coverage.js";
+import { loadSurveyIndex, type PublicSurveyIndex } from "./surveys.js";
+import { coverageBlock, coverageCatalogFromWarehouse, isWarehouseFilePartitionLayer, loadCoverageCatalog, withCoverageRevisions, type CoverageCatalog, type CoverageCellLayer, type WarehouseFileIndexSummary } from "./coverage.js";
 import { layersForOverlapComponent, overlapForLayers } from "./overlap.js";
-import { AccessGate, AccessError, queryRegion } from "./region-access.js";
+import { AccessGate, AccessError, queryRegion, validateRegion } from "./region-access.js";
 import { loadPublicState } from "./public-state.js";
 import { ProductStore, type MocProductRegistrationInput, type ProductExecutionRecord, type ProductRecord } from "./products.js";
 import { currentReview, productGeometry, readApprovedRelease, PUBLICATION_POLICY } from "./approved-release.js";
 import { aggregateReadiness, deriveProductReadiness, type ProductReadiness, type ReadinessAggregate, type ReadinessLayer } from "./admin-readiness.js";
 import { SurveyEditorialStore, type SurveyEditorialContent, type SurveyEditorialRecord } from "./editorial.js";
-import { SourceUnitStore, SourceUnitWorkerStore } from "./source-units.js";
-import { buildDownloadPlan, CoverageEvidenceStore, EvidenceStoreError, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type ReverseLookupResult, type WarehouseLayerSnapshot, type WarehouseLayerStatusSnapshot } from "./evidence-store.js";
-import { decodeReverseCursor, encodeReverseCursor, pageReversePlan, reversePageSize, reversePlanCoverageEvidenceKey, reversePlanEntrypointKey, reversePlanFileKey, reversePlanItems, REVERSE_CURSOR_MAX_KEYS, REVERSE_PAGE_SIZE } from "./reverse-pagination.js";
+import { SourceUnitStore, SourceUnitWorkerStore, type SourceUnitCoverageLayer } from "./source-units.js";
+import { buildDownloadPlan, CoverageEvidenceStore, EvidenceStoreError, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanSpatialUnit, type ReverseLookupResult, type WarehouseLayerSnapshot, type WarehouseLayerStatusSnapshot } from "./evidence-store.js";
+import { decodeReverseCursor, encodeReverseCursor, pageReversePlan, reversePageSize, reversePlanCoverageEvidenceKey, reversePlanEntrypointKey, reversePlanFileKey, reversePlanItems, reversePlanSpatialUnitKey, REVERSE_CURSOR_MAX_KEYS, REVERSE_PAGE_SIZE, type ReverseCursorScope } from "./reverse-pagination.js";
 import { resolveEuclidQ1MerFile } from "./euclid-data-links.js";
 import { buildOverlapDetails, publicExternalUrl, publicLocator } from "./overlap-details.js";
 import { filterByModalities } from "../src/modality-filter.js";
@@ -99,6 +99,8 @@ const evidenceStore = new CoverageEvidenceStore({
 const contentRoot = path.resolve(process.env.ASSETS_CONTENT_ROOT ?? path.join(releaseRoot, ".assets-content"));
 const releaseBackendOwnership = role === "backend" ? await acquireLocalFileLock(path.join(contentRoot, ".backend-owner.lock")) : undefined;
 const evidenceRoot = path.resolve(process.env.ASSETS_EVIDENCE_ROOT ?? "/var/lib/assets-evidence");
+const sourceUnitEvidenceRoot = path.resolve(process.env.ASSETS_SOURCE_UNIT_EVIDENCE_ROOT
+  ?? (process.env.ASSETS_EVIDENCE_ROOT ? evidenceRoot : path.join(releaseRoot, "artifacts/public-survey-footprints/raw")));
 const uploadSpoolRoot = path.resolve(process.env.ASSETS_UPLOAD_SPOOL_ROOT ?? "/var/lib/assets-upload-spool");
 let stateSnapshotSink: StateSnapshotSink | undefined;
 const objectStoreRequired = /^(1|true|yes|on)$/i.test(process.env.ASSETS_OBJECT_STORE_REQUIRED ?? "");
@@ -142,12 +144,257 @@ const dynamicPackageAssetIds = new Set<string>();
 let staticCoverageCatalog = await loadCoverageCatalog(releaseRoot, coverageManifest);
 let coverageCatalog = staticCoverageCatalog;
 let currentPublicState: Awaited<ReturnType<typeof loadPublicState>>;
+let sourceUnitCoverageLayers: CoverageCellLayer[] = [];
+let sourceUnitCoverageLoadPromise: Promise<void> | null = null;
 let runtimeCoverageManifest = coverageManifest;
 let coverageLoadMode: "warehouse" | "static" | "degraded" = "static";
 let coverageLoadedAt = new Date().toISOString();
 let runtimeSurveyIndex!: Awaited<ReturnType<typeof loadSurveyIndex>>;
 let warehouseLayerSnapshots = new Map<string, WarehouseLayerSnapshot | WarehouseLayerStatusSnapshot>();
+let warehouseFileIndexMetadataUnavailable = false;
 let productsForWarehouseStatus: ProductStore | undefined;
+
+function sourceUnitProductIdentity(value: Pick<CoverageCellLayer, "surveyId" | "releaseId" | "product">): string {
+  return `${value.surveyId}\u0000${value.releaseId}\u0000${value.product}`;
+}
+
+function sourceUnitCoverageRecord(source: SourceUnitCoverageLayer): CoverageCellLayer {
+  const cells = new Map(source.cells);
+  const availableOrders = [...cells.keys()].sort((left, right) => left - right);
+  const overviewOrder = Math.min(...availableOrders);
+  const queryOrder = Math.max(...availableOrders);
+  const overviewCells = cells.get(overviewOrder) ?? [];
+  const queryCells = cells.get(queryOrder) ?? [];
+  const coverageNote = source.coverageMethod === "unit-centers"
+    ? `O${queryOrder} overview marks cells containing native ${source.unitKind} centers; it is indicative, not a boundary-complete footprint. Reverse lookup still intersects the selected full HEALPix cell with each locked native unit polygon.`
+    : `HEALPix coverage is rasterized at O${queryOrder} from the locked native-unit polygons at runtime; this is not a generated or published MOC.`;
+  const note = `${source.notes} ${coverageNote}`;
+  return {
+    layerId: source.layerId,
+    productId: createHash("sha256").update(`${source.surveyId}\n${source.releaseId}\n${source.product}`).digest("hex").slice(0, 20),
+    surveyId: source.surveyId,
+    releaseId: source.releaseId,
+    product: source.product,
+    modality: source.modality,
+    coverageRole: "footprint_extent",
+    color: "#14b8a6",
+    availableOrders,
+    overviewOrder,
+    maxOrder: queryOrder,
+    cellCount: overviewCells.length,
+    areaDeg2: queryCells.length * (41252.96124941927 / (12 * (2 ** queryOrder) ** 2)),
+    tileScheme: "ipix-range-4096",
+    cells,
+    recipe: {
+      recipeVersion: 1,
+      mode: "source-unit-polygons",
+      coordinateFrame: "ICRS",
+      ordering: "NESTED",
+      maxOrder: queryOrder,
+      queryOrder,
+      previewOrder: overviewOrder,
+      sourceUrl: source.sourceUrls[0],
+      sourceSnapshotSha256: source.sourceSnapshotSha256,
+      sourceFileReferences: source.sourceUrls,
+      precision: "estimated",
+      steps: [{
+        id: "source-unit-polygons",
+        kind: "native-unit-geometry",
+        title: "Native sky-block geometry",
+        bodyMarkdown: source.coverageMethod === "unit-centers"
+          ? `Mark ICRS/NESTED O${queryOrder} cells containing official ${source.unitKind} centers as an indicative overview; reverse lookup uses the complete native unit boundaries. No MOC file is emitted.`
+          : `Rasterize official ${source.unitKind} footprints in ICRS/NESTED at O${queryOrder}; preserve the native unit identity for reverse lookup. No MOC file is emitted.`,
+        order: 0,
+        implementationRef: "assets.coverage.source-unit-polygons",
+      }],
+    },
+    sourceUnitIndex: { status: "estimated", unitKind: source.unitKind, indexUrl: "/api/v1/coverage/reverse-lookup", notes: note },
+    sourceEvidence: {
+      evidenceKind: "source-unit-footprint",
+      sourceIdentity: source.unitKind,
+      sourceSnapshotSha256: source.sourceSnapshotSha256,
+      precision: "estimated",
+      completeness: "unknown",
+      scienceFileScan: "not-scanned",
+      summary: note,
+    },
+  };
+}
+
+function mergeSourceUnitCoverage(
+  base: CoverageCatalog & { records: Map<string, CoverageCellLayer> },
+  extra: CoverageCellLayer[] = sourceUnitCoverageLayers,
+): CoverageCatalog & { records: Map<string, CoverageCellLayer> } {
+  if (!extra.length) return base;
+  const records = new Map(base.records);
+  const existingByIdentity = new Map([...records.values()].map((record) => [sourceUnitProductIdentity(record), record]));
+  for (const layer of extra) {
+    const identity = sourceUnitProductIdentity(layer);
+    const existing = existingByIdentity.get(identity);
+    const merged = existing ? {
+      ...existing,
+      coverageRole: "footprint_extent" as const,
+      availableOrders: layer.availableOrders,
+      overviewOrder: layer.overviewOrder,
+      maxOrder: layer.maxOrder,
+      cellCount: layer.cellCount,
+      areaDeg2: layer.areaDeg2,
+      cells: layer.cells,
+      recipe: layer.recipe,
+      sourceEvidence: layer.sourceEvidence,
+      sourceUnitIndex: layer.sourceUnitIndex,
+    } : layer;
+    records.set(merged.layerId, merged);
+  }
+  return withCoverageRevisions({ ...base, records, layers: [] });
+}
+
+function mergeSourceUnitFootprints(
+  manifest: typeof runtimeCoverageManifest,
+  records: ReadonlyMap<string, CoverageCellLayer>,
+): typeof runtimeCoverageManifest {
+  const footprints = [...manifest.footprints];
+  for (const source of sourceUnitCoverageLayers) {
+    const identity = sourceUnitProductIdentity(source);
+    const layer = records.get(source.layerId) ?? [...records.values()].find((candidate) => sourceUnitProductIdentity(candidate) === identity);
+    if (!layer) continue;
+    const footprint = {
+      surveyId: layer.surveyId,
+      releaseId: layer.releaseId,
+      product: layer.product,
+      nside: 2 ** layer.overviewOrder,
+      pixels: layer.cells.get(layer.overviewOrder) ?? [],
+      sourceUrl: layer.recipe?.sourceUrl,
+    };
+    const existingIndex = footprints.findIndex((candidate) => sourceUnitProductIdentity(candidate) === identity);
+    if (existingIndex >= 0) footprints[existingIndex] = footprint;
+    else footprints.push(footprint);
+  }
+  return { ...manifest, footprints };
+}
+
+function mergeSourceUnitSurveyIndex(
+  publicIndex: PublicSurveyIndex,
+  sourceIndex: PublicSurveyIndex,
+  layers: readonly CoverageCellLayer[],
+  footprints: readonly (typeof currentPublicState.footprints)[number][],
+): PublicSurveyIndex {
+  const surveys = publicIndex.surveys.map((survey) => ({
+    ...survey,
+    modalities: [...survey.modalities],
+    releases: survey.releases.map((release) => ({ ...release, modalities: [...release.modalities], products: [...release.products] })),
+    assets: [...survey.assets],
+  }));
+
+  for (const layer of layers) {
+    const sourceSurvey = sourceIndex.surveys.find((survey) => survey.id === layer.surveyId);
+    const sourceRelease = sourceSurvey?.releases.find((release) => release.id === layer.releaseId);
+    const sourceProduct = sourceRelease?.products.find((product) => product.name === layer.product);
+    if (!sourceSurvey || !sourceRelease || !sourceProduct) continue;
+
+    let survey = surveys.find((candidate) => candidate.id === layer.surveyId);
+    if (!survey) {
+      survey = {
+        ...sourceSurvey,
+        modalities: [...sourceSurvey.modalities],
+        releases: [],
+        statistics: { publicProducts: 0, acquired: 0, overviewOnly: 0, awaitingGeometry: 0, notApplicable: 0, footprintCells: 0 },
+        assets: [],
+      };
+      surveys.push(survey);
+    }
+    let release = survey.releases.find((candidate) => candidate.id === layer.releaseId);
+    if (!release) {
+      release = { ...sourceRelease, modalities: [...sourceRelease.modalities], products: [] };
+      survey.releases.push(release);
+    }
+    const existing = release.products.find((product) => product.name === layer.product);
+    const product = {
+      ...sourceProduct,
+      ...(existing ?? {}),
+      ...(layer.sourceEvidence?.evidenceKind === "source-unit-footprint" ? { status: "acquired" as const } : {}),
+      sourceUrl: sourceProduct.sourceUrl,
+      coverage: { layerId: layer.layerId, availableOrders: layer.availableOrders, overviewOrder: layer.overviewOrder, maxOrder: layer.maxOrder },
+    };
+    if (existing) release.products[release.products.indexOf(existing)] = product;
+    else release.products.push(product);
+    const modality = product.modality;
+    if (!release.modalities.includes(modality)) release.modalities.push(modality);
+    if (!survey.modalities.includes(modality)) survey.modalities.push(modality);
+  }
+
+  return {
+    ...publicIndex,
+    surveys: surveys.map((survey) => {
+      const products = survey.releases.flatMap((release) => release.products);
+      const coverageLayers = layers.filter((layer) => layer.surveyId === survey.id);
+      const pixels = new Set(footprints.filter((footprint) => footprint.surveyId === survey.id).flatMap((footprint) => footprint.pixels));
+      const surveyOrders = [...new Set([...(survey.coverageOrders?.availableOrders ?? []), ...coverageLayers.flatMap((layer) => layer.availableOrders)])].sort((left, right) => left - right);
+      return {
+        ...survey,
+        ...(surveyOrders.length ? { coverageOrders: {
+          availableOrders: surveyOrders,
+          overviewOrders: [...new Set([...(survey.coverageOrders?.overviewOrders ?? []), ...coverageLayers.map((layer) => layer.overviewOrder)])].sort((a, b) => a - b),
+          maxOrder: Math.max(...surveyOrders),
+        } } : {}),
+        releases: survey.releases.map((release) => {
+          const releaseLayers = coverageLayers.filter((layer) => layer.releaseId === release.id);
+          const orders = [...new Set([...(release.coverageOrders?.availableOrders ?? []), ...releaseLayers.flatMap((layer) => layer.availableOrders)])].sort((left, right) => left - right);
+          return {
+            ...release,
+            ...(orders.length ? { coverageOrders: {
+              availableOrders: orders,
+              overviewOrders: [...new Set([...(release.coverageOrders?.overviewOrders ?? []), ...releaseLayers.map((layer) => layer.overviewOrder)])].sort((a, b) => a - b),
+              maxOrder: Math.max(...orders),
+            } } : {}),
+          };
+        }),
+        statistics: {
+          ...survey.statistics,
+          publicProducts: products.length,
+          acquired: products.filter((product) => product.status === "acquired").length,
+          overviewOnly: products.filter((product) => product.status === "overview_only").length,
+          awaitingGeometry: products.filter((product) => product.status === "awaiting_geometry").length,
+          notApplicable: products.filter((product) => product.status === "not_applicable").length,
+          footprintCells: pixels.size,
+        },
+      };
+    }),
+  };
+}
+
+function mergeSourceUnitPublicState(
+  state: Awaited<ReturnType<typeof loadPublicState>>,
+  sourceIndex: PublicSurveyIndex,
+  layers: readonly CoverageCellLayer[],
+): Awaited<ReturnType<typeof loadPublicState>> {
+  const coverage = mergeSourceUnitCoverage(state.coverage, [...layers]);
+  const footprints = [...state.footprints];
+  const resolvedLayers = layers.map((layer) => coverage.records.get(layer.layerId)
+    ?? [...coverage.records.values()].find((candidate) => sourceUnitProductIdentity(candidate) === sourceUnitProductIdentity(layer))
+    ?? layer);
+  for (const layer of resolvedLayers) {
+    const footprint = {
+      surveyId: layer.surveyId,
+      releaseId: layer.releaseId,
+      product: layer.product,
+      productId: layer.productId,
+      layerId: layer.layerId,
+      nside: 2 ** layer.overviewOrder,
+      pixels: layer.cells.get(layer.overviewOrder) ?? [],
+    };
+    const identity = sourceUnitProductIdentity(layer);
+    const existingIndex = footprints.findIndex((candidate) => sourceUnitProductIdentity(candidate) === identity);
+    if (existingIndex >= 0) footprints[existingIndex] = footprint;
+    else footprints.push(footprint);
+  }
+  return {
+    ...state,
+    coverage,
+    footprints,
+    index: mergeSourceUnitSurveyIndex(state.index, sourceIndex, resolvedLayers, footprints),
+  };
+}
 
 function currentWarehouseCoverageSnapshots(): ReadonlyMap<string, WarehouseLayerSnapshot> {
   const snapshots = new Map<string, WarehouseLayerSnapshot>();
@@ -161,6 +408,28 @@ function currentWarehouseCoverageSnapshots(): ReadonlyMap<string, WarehouseLayer
     }
   }
   return snapshots;
+}
+
+function warehouseFileIndexSummary(layerId: string): WarehouseFileIndexSummary {
+  const candidate = warehouseLayerSnapshots.get(layerId);
+  const snapshot = candidate && "surveyId" in candidate && "releaseId" in candidate && "productId" in candidate
+    ? candidate as WarehouseLayerSnapshot
+    : undefined;
+  if (snapshot && snapshot.state.toUpperCase() === "ACTIVE" && snapshot.fileCount > 0 && snapshot.coverageCount > 0) {
+    return {
+      status: "available",
+      indexUrl: "/api/v1/coverage/reverse-lookup",
+      fileCount: snapshot.fileCount,
+      coverageCount: snapshot.coverageCount,
+      errorCount: snapshot.errorCount,
+      ...(snapshot.updatedAt ? { updatedAt: snapshot.updatedAt } : {}),
+      notes: "Warehouse 当前有可按空间区域查询的已扫描文件索引；计数描述扫描范围，不代表完整巡天。",
+    };
+  }
+  if (!evidenceStore.configured || coverageLoadMode === "degraded" || warehouseFileIndexMetadataUnavailable) {
+    return { status: "unavailable", notes: "当前无法确认 Warehouse 文件反查索引状态。" };
+  }
+  return { status: "not-indexed", notes: "当前没有该产品可用的 Warehouse 文件空间索引；原生分块映射状态单独列出。" };
 }
 
 function clearPublishedAssets(): void {
@@ -339,7 +608,7 @@ async function activatePublishedMocs(): Promise<void> {
 }
 
 if (managesContent) await activatePublishedMocs();
-currentPublicState = await loadPublicState(currentCatalog);
+currentPublicState = await loadPublicState(currentCatalog, productCatalogRoot);
 
 function draftWarehouseLayerIds(publicLayerIds: ReadonlySet<string>): string[] {
   if (!productsForWarehouseStatus) return [];
@@ -364,6 +633,7 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
   runtimeCoverageManifest = coverageManifest;
   coverageLoadMode = "static";
   warehouseLayerSnapshots = new Map();
+  warehouseFileIndexMetadataUnavailable = false;
   if (managesContent && evidenceStore.configured) {
     const publicLayerIds = new Set(currentPublicState.coverage.records.keys());
     try {
@@ -372,9 +642,26 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
       });
       if (warehouseSnapshot?.layers.length) {
         coverageCatalog = coverageCatalogFromWarehouse(staticCoverageCatalog, warehouseSnapshot);
-        warehouseLayerSnapshots = new Map(warehouseSnapshot.layers
+        const directSnapshots = warehouseSnapshot.layers
           .filter((layer) => coverageCatalog.records.has(layer.layerId))
-          .map((layer) => [layer.layerId, layer]));
+          .map((layer) => [layer.layerId, layer] as const);
+        const evidenceSnapshots = await evidenceStore.loadCurrentCoverageEvidenceSnapshots(
+          [...currentPublicState.coverage.records.values()].map((layer) => ({
+            layerId: layer.layerId,
+            surveyId: layer.surveyId,
+            releaseId: layer.releaseId,
+            productId: layer.productId,
+            modality: layer.modality,
+          })),
+        ).catch((error) => {
+          warehouseFileIndexMetadataUnavailable = true;
+          console.warn(`Warehouse file-index metadata unavailable: ${error instanceof Error ? error.message : String(error)}`);
+          return [];
+        });
+        warehouseLayerSnapshots = new Map([
+          ...directSnapshots,
+          ...evidenceSnapshots.map((layer) => [layer.layerId, layer] as const),
+        ]);
         runtimeCoverageManifest = {
           ...coverageManifest,
           generatedAt: new Date().toISOString(),
@@ -420,9 +707,13 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
   } catch (error) {
     console.warn(`Warehouse readiness metadata unavailable: ${error instanceof Error ? error.message : String(error)}`);
   }
+  await sourceUnitCoverageLoadPromise?.catch(() => undefined);
   coverageLoadedAt = new Date().toISOString();
   if (managesContent) await activatePublishedMocs();
+  coverageCatalog = mergeSourceUnitCoverage(coverageCatalog);
+  runtimeCoverageManifest = mergeSourceUnitFootprints(runtimeCoverageManifest, coverageCatalog.records);
   runtimeSurveyIndex = await loadSurveyIndex(releaseRoot, catalog, runtimeCoverageManifest, coverageCatalog.layers, [...publishedPublicAssets.values()].map(({ record }) => record));
+  currentPublicState = mergeSourceUnitPublicState(currentPublicState, runtimeSurveyIndex, sourceUnitCoverageLayers);
   return { mode: coverageLoadMode, loadedAt: coverageLoadedAt, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size };
 }
 
@@ -486,9 +777,9 @@ const publicRefreshTimer=setInterval(()=>{ void (async()=>{
     const root=await realpath(releaseRoot);
     if(root===catalog.root)return;
     const nextCatalog=await loadCatalog(root);
-    const next=await loadPublicState(nextCatalog);
+    const next=await loadPublicState(nextCatalog, productCatalogRoot);
     // No await between these assignments: readers see one consistent snapshot.
-    currentCatalog=nextCatalog;currentPublicState=next;
+    currentCatalog=nextCatalog;currentPublicState=mergeSourceUnitPublicState(next,runtimeSurveyIndex,sourceUnitCoverageLayers);
     if (managesContent) products.projectPublished(next.snapshot.products,next.snapshot.generatedAt);
   } catch(error) { console.error("Public release refresh failed; retaining verified snapshot",error instanceof Error?error.message:String(error)); }
   finally {publicRefreshBusy=false;}
@@ -735,7 +1026,7 @@ let sourceUnitsPromise: Promise<SourceUnitWorkerStore> | null = null;
 let sourceUnitsFallbackPromise: Promise<SourceUnitStore> | null = null;
 function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
   if (!sourceUnitsPromise) {
-    sourceUnitsPromise = SourceUnitWorkerStore.load(releaseRoot).catch((error) => {
+    sourceUnitsPromise = SourceUnitWorkerStore.load(productCatalogRoot, sourceUnitEvidenceRoot).catch((error) => {
       sourceUnitsPromise = null;
       throw error;
     });
@@ -745,7 +1036,7 @@ function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
 
 function sourceUnitsFallbackStore(): Promise<SourceUnitStore> {
   if (!sourceUnitsFallbackPromise) {
-    sourceUnitsFallbackPromise = SourceUnitStore.load(releaseRoot).catch((error) => {
+    sourceUnitsFallbackPromise = SourceUnitStore.load(productCatalogRoot, sourceUnitEvidenceRoot).catch((error) => {
       sourceUnitsFallbackPromise = null;
       throw error;
     });
@@ -762,12 +1053,46 @@ async function sourceUnitsReadyWithin(timeoutMs: number): Promise<SourceUnitWork
   try {
     try {
       const worker = await Promise.race([sourceUnitsStore(), timeout]);
-      if (worker) return worker;
-    } catch { /* fall through to the bounded main-thread index */ }
-    return await sourceUnitsFallbackStore();
+      return worker;
+    } catch {
+      return await sourceUnitsFallbackStore();
+    }
   } catch { return null; }
   finally { if (timer) clearTimeout(timer); }
 }
+
+function sourceUnitCoverageReady(): Promise<void> {
+  const hasApprovedProducts = [...currentPublicState.records.values()].some((record) => record.published && !record.retiredAt);
+  if (!hasApprovedProducts) return Promise.resolve();
+  if (!sourceUnitCoverageLoadPromise) {
+    sourceUnitCoverageLoadPromise = sourceUnitsStore().catch(() => sourceUnitsFallbackStore()).then(async (store) => {
+      const declaredProducts = new Set(runtimeSurveyIndex.surveys.flatMap((survey) => survey.releases.flatMap((release) => (
+        release.products.map((product) => `${survey.id}\u0000${release.id}\u0000${product.name}`)
+      ))));
+      sourceUnitCoverageLayers = store.coverageLayers()
+        .filter((layer) => declaredProducts.has(sourceUnitProductIdentity(layer)))
+        .map(sourceUnitCoverageRecord);
+      coverageCatalog = mergeSourceUnitCoverage(coverageCatalog);
+      runtimeCoverageManifest = mergeSourceUnitFootprints(runtimeCoverageManifest, coverageCatalog.records);
+      runtimeSurveyIndex = await loadSurveyIndex(productCatalogRoot, catalog, runtimeCoverageManifest, coverageCatalog.layers, [...publishedPublicAssets.values()].map(({ record }) => record));
+      runtimeSurveyIndex = applyPublishedProductMetadata(runtimeSurveyIndex);
+      currentPublicState = mergeSourceUnitPublicState(currentPublicState, runtimeSurveyIndex, sourceUnitCoverageLayers);
+      console.info(`Native source-unit indexes are ready; ${sourceUnitCoverageLayers.length} approved source-derived coverage layers are available.`);
+    }).catch((error) => {
+      sourceUnitCoverageLoadPromise = null;
+      throw error;
+    });
+  }
+  return sourceUnitCoverageLoadPromise;
+}
+
+async function awaitNativeSourceUnitCoverageLoad(): Promise<void> {
+  await sourceUnitCoverageLoadPromise?.catch(() => undefined);
+}
+
+void sourceUnitCoverageReady().catch((error) => {
+  console.warn(`Native source-unit indexes could not be loaded: ${error instanceof Error ? error.message : String(error)}`);
+});
 
 function productCoverage(record: ProductRecord): Record<string, unknown> | undefined {
   const layer = productCoverageLayer(record);
@@ -793,6 +1118,8 @@ function productCoverageLayer(record: ProductRecord, build?: ReturnType<MocBuild
 function readinessLayer(layer: CoverageCellLayer | undefined): ReadinessLayer | undefined {
   if (!layer) return undefined;
   const snapshot = warehouseLayerSnapshots.get(layer.layerId);
+  const hasPublicSnapshot = snapshot && "surveyId" in snapshot && "releaseId" in snapshot && "productId" in snapshot;
+  const warehouseFileIndex = hasPublicSnapshot ? warehouseFileIndexSummary(layer.layerId) : undefined;
   return {
     availableOrders: layer.availableOrders,
     overviewOrder: layer.overviewOrder,
@@ -810,6 +1137,7 @@ function readinessLayer(layer: CoverageCellLayer | undefined): ReadinessLayer | 
       unitKind: layer.sourceUnitIndex.unitKind,
       notes: layer.sourceUnitIndex.notes,
     } } : {}),
+    ...(warehouseFileIndex ? { warehouseFileIndex: { status: warehouseFileIndex.status } } : {}),
     ...(snapshot ? {
       fileCount: snapshot.fileCount,
       coverageCount: snapshot.coverageCount,
@@ -2798,6 +3126,7 @@ function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, p
 }
 
 async function sendCoverageOverlap(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  await awaitNativeSourceUnitCoverageLoad();
   const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
   const surveyIds = Array.isArray(body.surveyIds) ? body.surveyIds.filter((value): value is string => typeof value === "string") : [];
   const modalities = Array.isArray(body.modalities) ? body.modalities.filter((value): value is string => typeof value === "string") : [];
@@ -2830,6 +3159,7 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
 }
 
 async function sendCoverageOverlapDetails(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  await awaitNativeSourceUnitCoverageLoad();
   const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
   const surveyIds = Array.isArray(body.surveyIds) ? body.surveyIds.filter((value): value is string => typeof value === "string" && value.length > 0) : [];
   const modalities = Array.isArray(body.modalities) ? body.modalities.filter((value): value is string => typeof value === "string") : [];
@@ -2903,7 +3233,7 @@ function publicReverseEntrypoints(layerIds: readonly string[], order: number, ce
       ...(geometrySourceUrl ? { geometrySourceUrl } : {}),
       ...(geometrySourceLocator ? { sourceUri: geometrySourceLocator, sourceScope: geometrySourceScope, sourcePurpose: layer.sourceUnitIndex?.unitKind === "file" ? "data-access" : "coverage-reference" } : {}),
       ...(mocAsset ? { mocUrl: `/api/v1/coverage/layers/${encodeURIComponent(layerId)}/moc.fits` } : {}),
-      note: layer.sourceUnitIndex?.notes ?? "该图层提供公共覆盖入口，但没有文件级反向索引。",
+      note: layer.sourceUnitIndex?.notes ?? "该图层提供公共覆盖范围，但当前没有本地原生空间分块索引；此入口不是分块清单。",
     }];
   });
 }
@@ -2959,8 +3289,6 @@ function normalizeReverseEntrypoints(entries: Array<Record<string, unknown>>): D
   });
 }
 
-const TILE_SELECTION_RULE = "all official tile footprints intersecting the current component cells";
-const TILE_SELECTION_NOTE = "下载本组件列出的全部 Tile 可获得覆盖当前重合区域的相关数据；Tile 内容可能超出组件边界，未做空间裁剪。";
 const PUBLIC_REVERSE_PREVIEW_LIMIT = 6;
 const REVERSE_LOOKUP_BODY_MAX_BYTES = 1_310_720;
 const reverseCursorSecret = process.env.ASSETS_REVERSE_CURSOR_SECRET?.trim() || randomUUID();
@@ -2977,16 +3305,22 @@ function reverseQueryFingerprint(layerIds: readonly string[], order: number, cel
 }
 
 function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LIMIT, seenKeys: ReadonlySet<string> = new Set()): { plan: DownloadPlan; shown: number; omitted: number; hasMore: boolean } {
+  const remainingUnits = (plan.spatialUnits ?? []).filter((unit) => !seenKeys.has(reversePlanSpatialUnitKey(unit)));
   const remainingFiles = plan.files.filter((file) => !seenKeys.has(reversePlanFileKey(file)));
   const remainingEntrypoints = plan.entrypoints.filter((entry) => !seenKeys.has(reversePlanEntrypointKey(entry)));
   const remainingCoverage = (plan.coverageEvidence ?? []).filter((evidence) => !seenKeys.has(reversePlanCoverageEvidenceKey(evidence)));
+  const spatialUnits: DownloadPlanSpatialUnit[] = [];
   const files: DownloadPlan["files"] = [];
   const entrypoints: DownloadPlanEntrypoint[] = [];
   const coverageEvidence: DownloadPlanCoverageEvidence[] = [];
   const selectedFiles = new Set<string>();
   const selectedEntrypoints = new Set<DownloadPlanEntrypoint>();
   const selectedCoverage = new Set<DownloadPlanCoverageEvidence>();
-  const hasRoom = (): boolean => files.length + entrypoints.length + coverageEvidence.length < limit;
+  const hasRoom = (): boolean => spatialUnits.length + files.length + entrypoints.length + coverageEvidence.length < limit;
+  const addUnit = (unit: DownloadPlanSpatialUnit): void => {
+    if (!hasRoom() || spatialUnits.some((candidate) => reversePlanSpatialUnitKey(candidate) === reversePlanSpatialUnitKey(unit))) return;
+    spatialUnits.push(unit);
+  };
   const fileLayerIds = (file: DownloadPlan["files"][number]): string[] => [...new Set(file.matchingCoverage.flatMap((match) => match.layerId ? [match.layerId] : []))];
   const entryLayerId = (entry: DownloadPlanEntrypoint): string => entry.layerId ?? `${entry.surveyId ?? ""}:${entry.releaseId ?? ""}:${entry.product ?? ""}`;
   const addFile = (file: DownloadPlan["files"][number]): void => {
@@ -3013,6 +3347,7 @@ function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LI
   const referenceEntrypoints = remainingEntrypoints.filter((entry) => entry.purpose !== "data-access");
   const preferredEntrypoints = [...concreteDataEntrypoints, ...releaseEntrypoints, ...referenceEntrypoints];
   const layerIds = [...new Set([
+    ...remainingUnits.map((unit) => unit.layerId),
     ...remainingFiles.flatMap(fileLayerIds),
     ...preferredEntrypoints.map(entryLayerId),
     ...remainingCoverage.map((evidence) => evidence.layerId),
@@ -3020,20 +3355,23 @@ function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LI
   // Keep the preview representative by layer, then include the matching
   // coverage basis before filling remaining space with additional results.
   for (const layerId of layerIds) {
+    const unit = remainingUnits.find((candidate) => candidate.layerId === layerId);
     const file = remainingFiles.find((candidate) => fileLayerIds(candidate).includes(layerId));
     const entry = preferredEntrypoints.find((candidate) => entryLayerId(candidate) === layerId);
-    if (file) addFile(file);
+    if (unit) addUnit(unit);
+    else if (file) addFile(file);
     else if (entry) addEntrypoint(entry);
   }
   for (const layerId of layerIds) {
     const evidence = remainingCoverage.find((candidate) => candidate.layerId === layerId);
     if (evidence) addCoverage(evidence);
   }
+  for (const unit of remainingUnits) addUnit(unit);
   for (const file of remainingFiles) addFile(file);
   for (const entry of preferredEntrypoints) addEntrypoint(entry);
   for (const evidence of remainingCoverage) addCoverage(evidence);
-  const shown = files.length + entrypoints.length + coverageEvidence.length;
-  const total = remainingFiles.length + remainingEntrypoints.length + remainingCoverage.length;
+  const shown = spatialUnits.length + files.length + entrypoints.length + coverageEvidence.length;
+  const total = remainingUnits.length + remainingFiles.length + remainingEntrypoints.length + remainingCoverage.length;
   const omitted = Math.max(0, total - shown);
   const hasMore = plan.truncated || omitted > 0 || Boolean(plan.tileSelections?.some((selection) => selection.tileIds.length > limit));
   const warnings = hasMore
@@ -3045,6 +3383,7 @@ function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LI
     hasMore,
     plan: {
       ...plan,
+      spatialUnits,
       files,
       entrypoints,
       ...(plan.coverageEvidence ? { coverageEvidence } : {}),
@@ -3055,46 +3394,62 @@ function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LI
   };
 }
 
-async function publicTileEntrypoints(layerIds: readonly string[], order: number, cells: readonly number[], limit: number): Promise<{ entries: DownloadPlanEntrypoint[]; selections: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; tileIds: string[]; selectionRule: string; complete: boolean; note: string }>; truncated: boolean }> {
-  const layers = layerIds.map((layerId) => publicCoverageCatalog().records.get(layerId)).filter((layer): layer is CoverageCellLayer => Boolean(layer && layer.sourceUnitIndex?.status === "exact" && layer.sourceUnitIndex.unitKind === "tile"));
-  if (!layers.length) return { entries: [], selections: [], truncated: false };
-  const sourceUnits = await sourceUnitsReadyWithin(3_000);
-  if (!sourceUnits) return { entries: [], selections: [], truncated: false };
-  const entries: DownloadPlanEntrypoint[] = [];
-  const selections: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; tileIds: string[]; selectionRule: string; complete: boolean; note: string }> = [];
+async function publicSpatialUnits(layerIds: readonly string[], order: number, cells: readonly number[], limit: number): Promise<{ units: DownloadPlanSpatialUnit[]; indexedLayerIds: Set<string>; unavailableLayerIds: string[]; truncated: boolean }> {
+  const layers = layerIds.map((layerId) => publicCoverageCatalog().records.get(layerId))
+    .filter((layer): layer is CoverageCellLayer => layer !== undefined && !isWarehouseFilePartitionLayer(layer));
+  if (!layers.length) return { units: [], indexedLayerIds: new Set(), unavailableLayerIds: [], truncated: false };
+  const sourceUnits = await sourceUnitsReadyWithin(120_000);
+  const unavailableLayerIds = new Set<string>();
+  if (!sourceUnits) {
+    layers.filter((layer) => layer.sourceUnitIndex?.status === "exact" || layer.sourceUnitIndex?.status === "estimated")
+      .forEach((layer) => unavailableLayerIds.add(layer.layerId));
+    return { units: [], indexedLayerIds: new Set(), unavailableLayerIds: [...unavailableLayerIds], truncated: false };
+  }
+  const units: DownloadPlanSpatialUnit[] = [];
+  const indexedLayerIds = new Set<string>();
   let truncated = false;
   for (const layer of layers) {
-    const match = await Promise.resolve(sourceUnits.match(layer.layerId, order, [...cells], limit)).catch(() => null);
-    if (!match) continue;
+    const match = await Promise.resolve(sourceUnits.match(layer.layerId, order, [...cells], limit, {
+      surveyId: layer.surveyId,
+      releaseId: layer.releaseId,
+      product: layer.product,
+    })).catch(() => null);
+    if (!match) {
+      if (layer.sourceUnitIndex?.status === "exact" || layer.sourceUnitIndex?.status === "estimated") unavailableLayerIds.add(layer.layerId);
+      continue;
+    }
+    indexedLayerIds.add(layer.layerId);
     truncated ||= match.truncated;
-    const tileIds = match.units.map((unit) => unit.unitId);
-    selections.push({ layerId: layer.layerId, surveyId: layer.surveyId, releaseId: layer.releaseId, product: layer.product, tileIds, selectionRule: TILE_SELECTION_RULE, complete: !match.truncated, note: TILE_SELECTION_NOTE });
     for (const unit of match.units) {
-      entries.push({
-        kind: "tile-directory",
-        purpose: "data-access",
+      const accessUri = publicExternalUrl(unit.downloadUrl);
+      if (!accessUri) continue;
+      const accessUris = unit.accessUris?.flatMap((entry) => {
+        const uri = publicExternalUrl(entry.url);
+        return uri ? [{ uri, ...(entry.fileName ? { fileName: entry.fileName } : {}) }] : [];
+      });
+      units.push({
         layerId: layer.layerId,
+        productId: layer.productId,
         surveyId: layer.surveyId,
         releaseId: layer.releaseId,
         product: layer.product,
+        ...(layer.modality ? { modality: layer.modality } : {}),
+        unitKind: unit.unitKind,
+        unitId: unit.unitId,
         order,
         nside: 2 ** order,
-        cells: unit.matchingCells,
-        precision: "exact",
-        url: unit.downloadUrl,
-        sourceUri: unit.downloadUrl,
-        sourceScope: "tile-directory",
-        required: true,
-        selectionRule: TILE_SELECTION_RULE,
-        selectionComplete: !match.truncated,
-        note: `TILE ${unit.unitId} · NEXP ${unit.exposureCount} · LASTNIGHT ${unit.lastNight} · ${TILE_SELECTION_NOTE}`,
-        tileId: unit.unitId,
-        exposureCount: unit.exposureCount,
-        lastNight: unit.lastNight,
+        matchingCells: unit.matchingCells,
+        precision: unit.geometryPrecision,
+        accessUri,
+        ...(accessUris?.length ? { accessUris } : {}),
+        ...(unit.accessAvailability ? { accessAvailability: unit.accessAvailability } : {}),
+        sourceSnapshotSha256: unit.sourceSnapshotSha256,
+        note: [match.notes, unit.note].filter((part): part is string => Boolean(part)).join(" "),
       });
     }
   }
-  return { entries, selections, truncated };
+  units.sort((left, right) => left.layerId.localeCompare(right.layerId) || left.unitKind.localeCompare(right.unitKind) || left.unitId.localeCompare(right.unitId, undefined, { numeric: true }));
+  return { units, indexedLayerIds, unavailableLayerIds: [...unavailableLayerIds], truncated };
 }
 
 async function withRegionAccess(request:IncomingMessage,response:ServerResponse,action:(identity:string)=>Promise<void>):Promise<void> {
@@ -3126,12 +3481,15 @@ async function sendCoverageReverseLookup(request:IncomingMessage,response:Server
 }
 
 async function buildCoverageReverseLookup(request:IncomingMessage,response:ServerResponse,body:Record<string,unknown>,identity:string,preview:boolean):Promise<void> {
+  await awaitNativeSourceUnitCoverageLoad();
   if(!Array.isArray(body.layerIds)||body.layerIds.some(id=>typeof id!=="string"))throw new AccessError(400,"layerIds required");
   if (!Number.isSafeInteger(body.order) || Number(body.order) < 0 || Number(body.order) > 13 || !Array.isArray(body.cells)) throw new AccessError(400, "order and cells are required");
+  const pageScope: ReverseCursorScope = body.pageKind === "spatial-units" || body.pageKind === "supporting-evidence" ? body.pageKind : "manifest";
+  if (body.pageKind !== undefined && body.pageKind !== "spatial-units" && body.pageKind !== "supporting-evidence") throw new AccessError(400, "pageKind must be spatial-units or supporting-evidence");
   const order = Number(body.order);
-  const cells = body.cells as number[];
-  const fingerprint = reverseQueryFingerprint(body.layerIds as string[], order, cells);
-  const cursor = decodeReverseCursor(body.cursor, identity, fingerprint, reverseCursorSecret);
+  const requestedCellsInput = body.cells as number[];
+  const fingerprint = reverseQueryFingerprint(body.layerIds as string[], order, requestedCellsInput);
+  const cursor = decodeReverseCursor(body.cursor, identity, fingerprint, reverseCursorSecret, pageScope);
   if (preview && cursor) throw new AccessError(400, "Anonymous preview requests cannot continue a reverse lookup cursor");
   if (cursor && cursor.identity !== "preview" && cursor.identity !== identity) {
     throw new AccessError(403, "Reverse lookup cursor belongs to another access mode");
@@ -3145,34 +3503,63 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     : cursor
       ? Math.min(1000, Math.max(pageSize! + seenKeys.size + 1, 1))
       : body.limit;
-  const sources=body.layerIds.map(id=>{
-    const p=publicState.snapshot.products.find(p=>p.geometry?.layerId===id);
-    if(!p?.geometry)throw new AccessError(404,"Published source not found");
-    return {surveyId:p.content.surveyId,releaseId:p.content.releaseId,productId:p.productId,layerId:id,coverageRevision:p.geometry.coverageRevision,indexRevision:p.geometry.indexRevision};
+  const sourceUnitLimit = typeof queryLimit === "number" ? queryLimit : 120;
+  const sourceDescriptors = (body.layerIds as string[]).map((layerId) => {
+    const layer = publicCoverageCatalog().records.get(layerId);
+    if (!layer) throw new AccessError(404, "Coverage layer not found");
+    const productRecord = publicState.snapshot.products.find((product) => product.productId === layer.productId);
+    return { layer, productRecord };
   });
-  const result=await executeRegionQuery(request,{purpose:"download-plan",region:{coordinateFrame:"ICRS",ordering:"NESTED",order,cells},sources,limit:queryLimit},identity,64);
-  const fallbackEntrypoints=result.sources.flatMap(s=>(s.downloads as Array<Record<string,unknown>>).map(d=>({...d,purpose:"data-access",layerId:s.layerId,product:s.product,order:s.order,nside:s.nside,cells:s.cells,precision:"estimated",required:true,selectionComplete:s.completeness==="complete",tileId:d.unitId,url:d.url,sourceUri:d.url,sourceScope:"tile-directory"})));
+  const validatedRegion = validateRegion({
+    purpose: "download-plan",
+    region: { coordinateFrame: "ICRS", ordering: "NESTED", order, cells: requestedCellsInput },
+    sources: sourceDescriptors.map(({ layer, productRecord }) => ({
+      surveyId: layer.surveyId,
+      releaseId: layer.releaseId,
+      productId: layer.productId,
+      layerId: layer.layerId,
+      coverageRevision: productRecord?.geometry?.coverageRevision ?? layer.revision ?? "runtime-source-unit",
+      indexRevision: productRecord?.geometry?.indexRevision ?? null,
+    })),
+    ...(typeof queryLimit === "number" ? { limit: queryLimit } : {}),
+  }, 64);
+  const cells = validatedRegion.region.cells;
+  const regionSources = sourceDescriptors.flatMap(({ layer, productRecord }) => {
+    const geometry = productRecord?.geometry;
+    if (!geometry || geometry.layerId !== layer.layerId) return [];
+    return [{
+      surveyId: layer.surveyId,
+      releaseId: layer.releaseId,
+      productId: productRecord.productId,
+      layerId: geometry.layerId,
+      coverageRevision: geometry.coverageRevision,
+      indexRevision: geometry.indexRevision,
+    }];
+  });
+  const result = regionSources.length
+    ? await executeRegionQuery(request, { purpose: "download-plan", region: validatedRegion.region, sources: regionSources, limit: queryLimit }, identity, 64)
+    : { sources: [] as Array<Record<string, unknown>>, expiresAt: new Date(Date.now() + 600_000).toISOString() };
+  const sourceUnitResult = await publicSpatialUnits(body.layerIds as string[], order, cells, sourceUnitLimit);
   const warehouseResults = new Map<string, ReverseLookupResult>();
+  const warehouseUnavailableLayers = new Set<string>();
   if (evidenceStore.configured) {
-    const lookups = await Promise.all(body.layerIds.map(async (layerId) => {
+    const lookups = await Promise.all(sourceDescriptors.map(async ({ layer }) => {
+      const layerId = layer.layerId;
       try {
         const lookup = await evidenceStore.reverseLookup({
           layerIds: [layerId],
           // Derive only from the server's published product identity, never
           // from a browser-supplied evidence layer or an arbitrary ES match.
-          evidenceLayerBindings: [{ layerId, evidenceLayerId: batchEvidenceLayerId(sources.find(source => source.layerId === layerId)!.productId) }],
+          evidenceLayerBindings: [{ layerId, evidenceLayerId: batchEvidenceLayerId(layer.productId) }],
           ...(excludeFileIds.length ? { excludeFileIds } : {}),
           order,
           cells,
           ...(typeof queryLimit === "number" ? { limit: queryLimit } : {}),
         }, { tolerateUnavailable: true });
         if (!lookup.available) {
-          response.setHeader("Retry-After", "1");
-          throw new AccessError(503, cursor
-            ? "Warehouse evidence is temporarily unavailable; retry the same cursor."
-            : "Warehouse evidence is temporarily unavailable; retry this reverse lookup.");
+          warehouseUnavailableLayers.add(layerId);
         }
-        return lookup.available ? [layerId, lookup] as const : undefined;
+        return [layerId, lookup] as const;
       } catch (error) {
         if (error instanceof AccessError) throw error;
         if (error instanceof EvidenceStoreError && error.statusCode === 409 && error.message.startsWith("Warehouse layer is not ACTIVE:")) {
@@ -3180,27 +3567,115 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
           return undefined;
         }
         console.warn(`Warehouse reverse lookup failed for ${layerId}: ${error instanceof Error ? error.message : String(error)}`);
-        response.setHeader("Retry-After", "1");
-        throw new AccessError(503, cursor
-          ? "Warehouse evidence is temporarily unavailable; retry the same cursor."
-          : "Warehouse evidence is temporarily unavailable; retry this reverse lookup.");
+        warehouseUnavailableLayers.add(layerId);
+        return undefined;
       }
     }));
     for (const lookup of lookups) if (lookup) warehouseResults.set(lookup[0], lookup[1]);
   }
 
   const warehouseEdges = [...warehouseResults.values()].flatMap(lookup => lookup.edges);
-  const warehouseFiles = mergeWarehouseSourceFiles(warehouseResults)
+  const warehouseFiles: Array<Record<string, unknown>> = mergeWarehouseSourceFiles(warehouseResults)
     .map(({ logicalLayerId, source }) => {
       const fileName = typeof source.file_name === "string" ? source.file_name : typeof source.fileName === "string" ? source.fileName : typeof source.name === "string" ? source.name : undefined;
+      const sourceUri = [source.sourceUri, source.source_uri, source.uri, source.urn, source.path, source.key].find((value): value is string => typeof value === "string");
+      const desiTileId = sourceUri?.match(/(?:^|\/)tiles\/cumulative\/(\d+)\/(?:\d{8})(?:\/|$)/)?.[1];
       const matchedEuclidLayer = warehouseLogicalLayersForSource(source, warehouseEdges, logicalLayerId)
         .map((layerId) => publicCoverageCatalog().records.get(layerId))
         .find((layer) => layer?.surveyId === "euclid" && layer.releaseId === "euclid-q1");
       const euclidLink = matchedEuclidLayer ? resolveEuclidQ1MerFile(fileName, matchedEuclidLayer) : undefined;
-      return euclidLink
-        ? { ...source, download_url: euclidLink.downloadUrl, downloadProvider: euclidLink.downloadProvider, unitKind: euclidLink.unitKind, unitId: euclidLink.tileId }
-        : source;
+      return {
+        ...source,
+        __logicalLayerId: logicalLayerId,
+        ...(euclidLink ? { download_url: euclidLink.downloadUrl, downloadProvider: euclidLink.downloadProvider, unitKind: euclidLink.unitKind, unitId: euclidLink.tileId } : {}),
+        ...(!euclidLink && desiTileId ? { unitKind: "tile", unitId: desiTileId } : {}),
+      };
     });
+  const regionSpatialUnits: DownloadPlanSpatialUnit[] = result.sources.flatMap((source): DownloadPlanSpatialUnit[] => {
+    const sourceRecord = source as unknown as Record<string, unknown>;
+    const layerId = typeof sourceRecord.layerId === "string" ? sourceRecord.layerId : "";
+    const layer = publicCoverageCatalog().records.get(layerId);
+    const downloads = Array.isArray(sourceRecord.downloads) ? sourceRecord.downloads as Array<Record<string, unknown>> : [];
+    const sourceUnits = Array.isArray(sourceRecord.sourceUnits) ? sourceRecord.sourceUnits as Array<Record<string, unknown>> : [];
+    if (!layer) return [];
+    return downloads.flatMap((download): DownloadPlanSpatialUnit[] => {
+      const unitId = typeof download.unitId === "string" ? download.unitId : undefined;
+      const unitKind = typeof download.unitKind === "string" ? download.unitKind : undefined;
+      const accessUri = typeof download.url === "string" ? publicLocator(download.url) : undefined;
+      if (!unitId || !unitKind || !accessUri) return [];
+      const unit = sourceUnits.find((candidate) => candidate.unitId === unitId && candidate.unitKind === unitKind);
+      const matchingCells = Array.isArray(unit?.matchingCells) ? unit.matchingCells.filter((cell): cell is number => Number.isSafeInteger(cell)) : [];
+      return [{
+        layerId,
+        productId: layer.productId,
+        surveyId: layer.surveyId,
+        releaseId: layer.releaseId,
+        product: layer.product,
+        ...(layer.modality ? { modality: layer.modality } : {}),
+        unitKind,
+        unitId,
+        order,
+        nside: 2 ** order,
+        matchingCells,
+        precision: download.geometryPrecision === "exact" ? "exact" : "estimated",
+        accessUri,
+        ...(typeof download.sourceSnapshotSha256 === "string" ? { sourceSnapshotSha256: download.sourceSnapshotSha256 } : {}),
+        ...(typeof download.note === "string" ? { note: download.note } : {}),
+      }];
+    });
+  });
+  const retryableWarehouseLayers = [...warehouseUnavailableLayers].filter((layerId) =>
+    !sourceUnitResult.indexedLayerIds.has(layerId) && !regionSpatialUnits.some((unit) => unit.layerId === layerId));
+  if (retryableWarehouseLayers.length) {
+    response.setHeader("Retry-After", "1");
+    throw new AccessError(503, cursor
+      ? "Warehouse evidence is temporarily unavailable; retry the same cursor."
+      : "Warehouse evidence is temporarily unavailable; retry this reverse lookup.");
+  }
+  const spatialUnitsByIdentity = new Map<string, DownloadPlanSpatialUnit>();
+  for (const unit of [...regionSpatialUnits, ...sourceUnitResult.units]) {
+    const identity = `${unit.layerId}:${unit.unitKind}:${unit.unitId}`;
+    const previous = spatialUnitsByIdentity.get(identity);
+    spatialUnitsByIdentity.set(identity, previous ? {
+      ...previous,
+      ...unit,
+      matchingCells: [...new Set([...previous.matchingCells, ...unit.matchingCells])].sort((left, right) => left - right),
+      ...(previous.accessUris?.length || unit.accessUris?.length ? {
+        accessUris: [...new Map([...(previous.accessUris ?? []), ...(unit.accessUris ?? [])].map((entry) => [entry.uri, entry])).values()],
+      } : {}),
+    } : unit);
+  }
+  const nativeSpatialUnits = [...spatialUnitsByIdentity.values()].sort((left, right) => left.surveyId.localeCompare(right.surveyId)
+    || left.releaseId.localeCompare(right.releaseId)
+    || left.product.localeCompare(right.product)
+    || left.unitKind.localeCompare(right.unitKind)
+    || left.unitId.localeCompare(right.unitId, undefined, { numeric: true }));
+  const unitsByIdentity = new Map(nativeSpatialUnits.map((unit) => [`${unit.layerId}:${unit.unitKind}:${unit.unitId}`, unit]));
+  const scannedFilesByUnit = new Map<string, NonNullable<DownloadPlanSpatialUnit["scannedFiles"]>>();
+  for (const source of warehouseFiles) {
+    const layerId = typeof source.__logicalLayerId === "string" ? source.__logicalLayerId : undefined;
+    const unitKind = typeof source.unitKind === "string" ? source.unitKind : undefined;
+    const unitId = typeof source.unitId === "string" ? source.unitId : undefined;
+    if (!layerId || !unitKind || !unitId) continue;
+    const fileId = typeof source.file_id === "string" ? source.file_id : typeof source.fileId === "string" ? source.fileId : typeof source._id === "string" ? source._id : undefined;
+    if (!fileId) continue;
+    const identity = `${layerId}:${unitKind}:${unitId}`;
+    if (!unitsByIdentity.has(identity)) continue;
+    const sourceUri = [source.sourceUri, source.source_uri, source.uri, source.urn].find((value): value is string => typeof value === "string");
+    const fileName = [source.file_name, source.fileName, source.name].find((value): value is string => typeof value === "string");
+    const scanRunId = typeof source.scan_run_id === "string" ? source.scan_run_id : typeof source.scanRunId === "string" ? source.scanRunId : undefined;
+    const sourceSnapshotSha256 = typeof source.sourceSnapshotSha256 === "string" ? source.sourceSnapshotSha256 : typeof source.source_snapshot_sha256 === "string" ? source.source_snapshot_sha256 : undefined;
+    const files = scannedFilesByUnit.get(identity) ?? [];
+    if (!files.some((file) => file.fileId === fileId && file.scanRunId === scanRunId)) {
+      files.push({ fileId, ...(fileName ? { fileName } : {}), ...(sourceUri ? { sourceUri } : {}), ...(scanRunId ? { scanRunId } : {}), ...(sourceSnapshotSha256 ? { sourceSnapshotSha256 } : {}) });
+      scannedFilesByUnit.set(identity, files);
+    }
+  }
+  for (const [identity, files] of scannedFilesByUnit) {
+    const unit = unitsByIdentity.get(identity);
+    if (unit) unit.scannedFiles = files;
+  }
+  const scannedUnitFileIds = new Set(nativeSpatialUnits.flatMap((unit) => unit.scannedFiles?.map((file) => file.fileId) ?? []));
   const warehouseLayerSources = new Map<string, Record<string, unknown>>();
   for (const [layerId, lookup] of warehouseResults) {
     const product = publicState.snapshot.products.find(entry => entry.geometry?.layerId === layerId);
@@ -3240,22 +3715,50 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   }
   const sourcesByLayer = new Map(result.sources.map(source => [String(source.layerId), source]));
   for (const [layerId, source] of warehouseLayerSources) sourcesByLayer.set(layerId, source);
-  const responseSources = body.layerIds.map(layerId => sourcesByLayer.get(layerId)).filter((source): source is Record<string, unknown> => Boolean(source));
+  const responseSources = (body.layerIds as string[]).flatMap((layerId) => {
+    const source = sourcesByLayer.get(layerId);
+    if (source) return [source];
+    const descriptor = sourceDescriptors.find((candidate) => candidate.layer.layerId === layerId);
+    if (!descriptor) return [];
+    const { layer } = descriptor;
+    const units = sourceUnitResult.units.filter((unit) => unit.layerId === layerId);
+    const matchedCells = [...new Set(units.flatMap((unit) => unit.matchingCells))].sort((left, right) => left - right);
+    return [{
+      surveyId: layer.surveyId,
+      releaseId: layer.releaseId,
+      productId: layer.productId,
+      layerId,
+      product: layer.product,
+      modality: layer.modality,
+      order,
+      nside: 2 ** order,
+      coverageRevision: layer.revision,
+      cells: matchedCells,
+      geometryPrecision: "estimated",
+      geometryOperation: "native-source-unit-footprint-intersection",
+      accessAvailability: units.some((unit) => unit.accessAvailability === "source-policy") ? "source-policy" : units.length ? "source-unit-resolved" : "geometry-only",
+      completeness: sourceUnitResult.truncated || sourceUnitResult.unavailableLayerIds.includes(layerId) ? "truncated" : "incomplete",
+      reason: units.length
+        ? "Native source-unit footprints intersect the selected HEALPix area; filter-specific file availability is resolved by the survey archive."
+        : "The local native-unit index returned no unit for this HEALPix area; this is not evidence that the survey has no data.",
+      sourceUnits: units.map((unit) => ({ unitId: unit.unitId, unitKind: unit.unitKind, matchingCells: unit.matchingCells })),
+      downloads: [],
+    }];
+  });
   // Public release and coverage links exist even when a layer has no Warehouse
   // file index yet. Keep those links in the mixed overlap result so a missing
   // scan is visible as a limitation instead of making the product disappear.
-  const indexedLayerIds = new Set(warehouseResults.keys());
   const publicEntrypoints = normalizeReverseEntrypoints(publicReverseEntrypoints(body.layerIds as string[], order, cells))
     .map((entry) => ({
       ...entry,
       note: entry.kind === "official-release"
-        ? indexedLayerIds.has(String(entry.layerId))
-          ? "Official release page; the Warehouse file plan currently covers only the scanned source subset."
-          : "Official release page; no published file-level index is available for this product yet."
+        ? sourceUnitResult.indexedLayerIds.has(String(entry.layerId))
+          ? "官方数据入口；当前命中的原生空间分块 URI 已单独列出。"
+          : isWarehouseFilePartitionLayer(publicCoverageCatalog().records.get(String(entry.layerId)) ?? { sourceUnitIndex: undefined })
+            ? "官方数据入口；该产品按路径 HEALPix 分区反查文件，命中情况见文件清单。"
+            : "官方数据入口；当前产品尚无可用的本地原生空间分块索引，这不是该天区无数据的结论。"
         : entry.kind === "coverage-moc" || entry.kind === "coverage-source"
-          ? indexedLayerIds.has(String(entry.layerId))
-            ? "Coverage reference for the published MOC; file evidence is returned separately when the scanned subset intersects."
-            : "Coverage reference for the published MOC; this product has no file-level index yet."
+          ? "覆盖参考；合并后的 MOC 本身不含每个原生空间分块的身份。"
           : entry.note,
     }));
   const requestedCells = new Set(cells);
@@ -3277,6 +3780,8 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
       ? "An observation footprint intersects these cells; this establishes archive geometry, not science-file availability at every position."
       : evidenceKind === "tile-footprint"
       ? "An official Tile footprint intersects these cells; this does not establish target-level spectra at every position."
+      : evidenceKind === "source-unit-footprint"
+        ? "Official native source-unit geometry intersects these cells; the matching unit identity is listed separately from file-scan evidence."
       : evidenceKind === "wcs-coverage"
         ? "A WCS-derived footprint intersects these cells; file matches and scan scope are reported separately."
         : "The published ICRS/NESTED MOC intersects these cells; this alone does not verify a scientific file at each position.";
@@ -3311,29 +3816,42 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
       ...(product?.sourceLabel ? { sourceLabel: product.sourceLabel } : product?.geometrySourceLabel ? { sourceLabel: product.geometrySourceLabel } : {}),
       ...(sourceUrl ? { sourceUrl } : {}),
       ...(geometrySourceUrl ? { geometrySourceUrl } : {}),
-      coverageUrl: `/api/v1/coverage/layers/${encodeURIComponent(layerId)}/moc.fits`,
+      ...(layer.recipe?.mode !== "source-unit-polygons" ? { coverageUrl: `/api/v1/coverage/layers/${encodeURIComponent(layerId)}/moc.fits` } : {}),
       summary,
     }];
   });
   const downloadPlan = buildDownloadPlan({
-    edges: warehouseEdges,
-    sourceFiles: warehouseFiles,
+    edges: warehouseEdges.filter((edge) => !edge.sourceFileId || !scannedUnitFileIds.has(edge.sourceFileId)),
+    sourceFiles: warehouseFiles.filter((source) => {
+      const fileId = typeof source.file_id === "string" ? source.file_id : typeof source.fileId === "string" ? source.fileId : typeof source._id === "string" ? source._id : undefined;
+      return !fileId || !scannedUnitFileIds.has(fileId);
+    }),
+    spatialUnits: nativeSpatialUnits,
     scanScopes: [...warehouseResults.values()].flatMap((lookup) => lookup.scanScopes ?? []),
     // The legacy tile path already carries its public URL and selection
     // metadata; keep those fields intact while adding normalized Warehouse
     // evidence entrypoints.
-    entrypoints: [...publicEntrypoints, ...(fallbackEntrypoints as unknown as DownloadPlanEntrypoint[])],
+    entrypoints: publicEntrypoints,
     coverageEvidence,
     matchingCoverageTruncatedFileIds: [...warehouseResults.values()].flatMap((lookup) => lookup.downloadPlan.files.filter((file) => file.matchingCoverageTruncated).map((file) => file.fileId)),
-    truncated: warehouseResults.size > 0 && [...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.truncated) || result.sources.some(source => source.completeness === "truncated"),
+    truncated: sourceUnitResult.truncated || sourceUnitResult.unavailableLayerIds.length > 0 || (warehouseResults.size > 0 && [...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.truncated)) || result.sources.some(source => source.completeness === "truncated"),
   });
   const previewPlan = preview ? capReversePreview(downloadPlan, PUBLIC_REVERSE_PREVIEW_LIMIT, seenKeys) : undefined;
-  const pagedPlan = !preview && pageSize !== undefined ? pageReversePlan(downloadPlan, seenKeys, pageSize) : undefined;
-  let responsePlan = previewPlan?.plan ?? pagedPlan?.plan ?? downloadPlan;
+  const scopedPage = !preview && pageSize !== undefined ? pageReversePlan(downloadPlan, seenKeys, pageSize, pageScope) : undefined;
+  let responsePlan = previewPlan?.plan ?? scopedPage?.plan ?? downloadPlan;
   const responseItems = reversePlanItems(responsePlan);
+  const supportingTruncated = [...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.truncated);
+  const regionUnitsTruncated = result.sources.some((source) => {
+    const sourceRecord = source as unknown as Record<string, unknown>;
+    const downloads = Array.isArray(sourceRecord.downloads) ? sourceRecord.downloads as Array<Record<string, unknown>> : [];
+    return source.completeness === "truncated" && downloads.some((download) => typeof download.unitId === "string" && typeof download.unitKind === "string");
+  });
+  const spatialUnitsTruncated = sourceUnitResult.truncated || regionUnitsTruncated;
   const pageHasMore = preview
     ? Boolean(previewPlan?.hasMore)
-    : Boolean(pagedPlan?.hasMore || downloadPlan.truncated);
+    : pageScope === "manifest"
+      ? Boolean(scopedPage?.hasMore || downloadPlan.truncated)
+      : Boolean(scopedPage?.hasMore || (pageScope === "spatial-units" ? spatialUnitsTruncated : supportingTruncated));
   const nextSeenKeys = new Set([...seenKeys, ...responseItems.map((item) => item.key)]);
   const madeProgress = nextSeenKeys.size > seenKeys.size;
   let nextCursor: string | undefined;
@@ -3356,6 +3874,7 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
           version: 1,
           identity: preview ? "preview" : identity,
           fingerprint,
+          ...(pageScope === "manifest" ? {} : { scope: pageScope }),
           seenKeys: [...nextSeenKeys],
         }, reverseCursorSecret);
       } catch {
@@ -3372,18 +3891,45 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     ? ([...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.precision === "truncated") ? "truncated" : [...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.precision !== "exact") ? "estimated" : "exact")
     : "estimated";
   const notes = [
-    ...result.sources.filter(source => !warehouseResults.has(String(source.layerId))).flatMap(source => source.reason ? [String(source.reason)] : []),
+    ...result.sources.filter(source => !warehouseResults.has(String(source.layerId)) && !sourceUnitResult.indexedLayerIds.has(String(source.layerId))).flatMap(source => source.reason ? [String(source.reason)] : []),
     ...[...warehouseResults.values()].flatMap(lookup => lookup.notes),
+    ...[...warehouseUnavailableLayers].map((layerId) => `${layerId}: Warehouse 查询暂不可用；本地原生分块结果仍照常返回。`),
+    ...(sourceUnitResult.unavailableLayerIds.length ? [`本地原生分块索引当前不可用或仍在加载：${sourceUnitResult.unavailableLayerIds.join(", ")}。本次清单不完整，请重试。`] : []),
     ...(warehouseEdges.length ? ["Warehouse file evidence is limited to the scanned source subset; no completeness percentage is inferred."] : []),
   ];
-  const shown = responsePlan.files.length + responsePlan.entrypoints.length + (responsePlan.coverageEvidence?.length ?? 0);
+  const shown = (responsePlan.spatialUnits?.length ?? 0) + responsePlan.files.length + responsePlan.entrypoints.length + (responsePlan.coverageEvidence?.length ?? 0);
   const omitted = preview
     ? previewPlan?.omitted ?? 0
     : pageSize !== undefined ? Math.max(0, reversePlanItems(downloadPlan).filter((item) => !seenKeys.has(item.key)).length - shown) : 0;
   const responsePage = pageSize !== undefined || preview
     ? { pageSize: preview ? PUBLIC_REVERSE_PREVIEW_LIMIT : pageSize!, shown, omitted, hasMore: Boolean(nextCursor), ...(nextCursor ? { nextCursor } : {}) }
     : undefined;
-  compressedJson(request,response,200,{available:responsePlan.files.length>0 || responsePlan.entrypoints.length>0 || Boolean(responsePlan.coverageEvidence?.length),precision,truncated,preview:preview ? { limit:PUBLIC_REVERSE_PREVIEW_LIMIT, shown, omitted, hasMore:Boolean(nextCursor) } : undefined,page:responsePage,requested:{layerIds:body.layerIds,order,cells},sources:responseSources,edges:preview ? warehouseEdges.slice(0, PUBLIC_REVERSE_PREVIEW_LIMIT) : warehouseEdges,sourceFiles:preview ? warehouseFiles.slice(0, PUBLIC_REVERSE_PREVIEW_LIMIT) : warehouseFiles,expiresAt:result.expiresAt,notes:[...new Set(notes)],downloadPlan:responsePlan},"no-store");
+  const shownSpatialUnits = preview ? previewPlan?.plan.spatialUnits ?? [] : pageScope === "spatial-units" ? responsePlan.spatialUnits ?? [] : [];
+  const shownSupportingKeys = preview
+    ? reversePlanItems(previewPlan?.plan ?? downloadPlan).filter((item) => item.kind !== "spatial-unit").map((item) => item.key)
+    : pageScope === "supporting-evidence" ? reversePlanItems(responsePlan).map((item) => item.key) : [];
+  const knownSpatialUnitsRemain = (downloadPlan.spatialUnits ?? []).some((unit) => !shownSpatialUnits.some((shownUnit) => reversePlanSpatialUnitKey(shownUnit) === reversePlanSpatialUnitKey(unit)));
+  const knownSupportingItemsRemain = reversePlanItems(downloadPlan).some((item) => item.kind !== "spatial-unit" && !shownSupportingKeys.includes(item.key));
+  const previewSpatialHasMore = Boolean(knownSpatialUnitsRemain || spatialUnitsTruncated);
+  const previewSupportingHasMore = Boolean(knownSupportingItemsRemain || supportingTruncated);
+  const issueScopedCursor = (scope: ReverseCursorScope, keys: string[], cursorIdentity: string): string | undefined => {
+    if (keys.length > REVERSE_CURSOR_MAX_KEYS) return undefined;
+    try {
+      return encodeReverseCursor({ version: 1, identity: cursorIdentity, fingerprint, ...(scope === "manifest" ? {} : { scope }), seenKeys: keys }, reverseCursorSecret);
+    } catch {
+      return undefined;
+    }
+  };
+  const spatialPage = preview
+    ? { pageSize: PUBLIC_REVERSE_PREVIEW_LIMIT, shown: shownSpatialUnits.length, hasMore: previewSpatialHasMore,
+      ...(previewSpatialHasMore ? { nextCursor: issueScopedCursor("spatial-units", shownSpatialUnits.map(reversePlanSpatialUnitKey), "preview") } : {}) }
+    : pageScope === "spatial-units" ? { pageSize: pageSize!, shown: shownSpatialUnits.length, hasMore: Boolean(nextCursor), ...(nextCursor ? { nextCursor } : {}) } : undefined;
+  const supportingPage = preview
+    ? { pageSize: PUBLIC_REVERSE_PREVIEW_LIMIT, shown: shownSupportingKeys.length, hasMore: previewSupportingHasMore,
+      ...(previewSupportingHasMore ? { nextCursor: issueScopedCursor("supporting-evidence", shownSupportingKeys, "preview") } : {}) }
+    : pageScope === "supporting-evidence" ? { pageSize: pageSize!, shown: shownSupportingKeys.length, hasMore: Boolean(nextCursor), ...(nextCursor ? { nextCursor } : {}) } : undefined;
+  const includeLegacyManifestPage = pageScope === "manifest";
+  compressedJson(request,response,200,{available:Boolean(responsePlan.spatialUnits?.length || responsePlan.files.length || responsePlan.entrypoints.length || responsePlan.coverageEvidence?.length),precision,truncated,preview:preview ? { limit:PUBLIC_REVERSE_PREVIEW_LIMIT, shown, omitted, hasMore:Boolean(nextCursor) } : undefined,page:includeLegacyManifestPage ? responsePage : undefined,spatialPage,supportingPage,requested:{layerIds:body.layerIds,order,cells},sources:responseSources,edges:preview ? warehouseEdges.slice(0, PUBLIC_REVERSE_PREVIEW_LIMIT) : warehouseEdges,sourceFiles:preview ? warehouseFiles.slice(0, PUBLIC_REVERSE_PREVIEW_LIMIT) : warehouseFiles,expiresAt:result.expiresAt,notes:[...new Set(notes)],downloadPlan:responsePlan},"no-store");
 }
 
 async function executeRegionQuery(request:IncomingMessage,body:unknown,managedIdentity?:string,sourceLimit:8|64=8) {
@@ -3394,7 +3940,12 @@ async function executeRegionQuery(request:IncomingMessage,body:unknown,managedId
     const material=await productGeometry(product,{root:state.catalog.root,files:catalog.manifest.files,publications:[],publicationFile:()=>""});
     if(material?.facts.indexRevision!==indexRevision)throw new AccessError(409,"Index revision changed");
     const index=await sourceUnitsReadyWithin(3000);
-    return index?await index.match(layerId,order,cells,limit):null;
+    const layer = state.coverage.records.get(layerId);
+    return index?await index.match(layerId,order,cells,limit,layer ? {
+      surveyId: layer.surveyId,
+      releaseId: layer.releaseId,
+      product: layer.product,
+    } : undefined):null;
   },sourceLimit);
   let timer:ReturnType<typeof setTimeout>|undefined;
   // Keep the concurrency slot while timed-out worker work is still running.
@@ -3423,7 +3974,10 @@ const server = http.createServer((request, response) => {
       return mutation;
     }
     if (pathname === "/api/v1/access/region-query" && request.method === "POST") return sendProtectedRegionQuery(request,response);
-    if (pathname === "/api/v1/coverage/overlap" && request.method === "POST") return sendCoverageOverlap(request, response);
+    if (pathname === "/api/v1/coverage/overlap" && request.method === "POST") {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      return sendCoverageOverlap(request, response);
+    }
     if (pathname === "/api/v1/coverage/hst-images" && request.method === "POST") {
       if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
       const body = await requestJsonBody(request, 32 * 1024);
@@ -3535,15 +4089,33 @@ const server = http.createServer((request, response) => {
       return sendDownload(request, response, catalog, match.record.id);
     }
     if (pathname === "/api/v1/coverage/catalog") {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      await awaitNativeSourceUnitCoverageLoad();
       const { records: _records, ...publicCoverage } = publicCoverageCatalog();
+      publicCoverage.layers = publicCoverage.layers.map((layer) => ({
+        ...layer,
+        warehouseFileIndex: warehouseFileIndexSummary(layer.layerId),
+      }));
       const body = { ...publicCoverage, schemaVersion: 2, generatedAt: coverageLoadedAt, publicationPolicy: PUBLICATION_POLICY, publicReleaseId: approvedRelease.releaseId || null };
       const bodyBytes = Buffer.from(`${JSON.stringify(body)}\n`);
       const etag = `W/"catalog-${createHash("sha256").update(bodyBytes).digest("hex")}"`;
       return compressedJson(request, response, 200, body, "no-cache, must-revalidate", etag);
     }
-    if (pathname.startsWith("/api/v1/coverage/blocks/")) return sendCoverageBlock(request, response, pathname);
-    if (pathname === "/api/v1/coverage") return json(response, 200, { schemaVersion:1, coordinateFrame:"ICRS", ordering:"NESTED", nside:16, generatedAt:approvedRelease.generatedAt, footprints:publicState.footprints });
-    if (pathname === "/api/v1/surveys") return json(response, 200, publicSurveyIndex());
+    if (pathname.startsWith("/api/v1/coverage/blocks/")) {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      await awaitNativeSourceUnitCoverageLoad();
+      return sendCoverageBlock(request, response, pathname);
+    }
+    if (pathname === "/api/v1/coverage") {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      await awaitNativeSourceUnitCoverageLoad();
+      return json(response, 200, { schemaVersion:1, coordinateFrame:"ICRS", ordering:"NESTED", nside:16, generatedAt:approvedRelease.generatedAt, footprints:publicState.footprints });
+    }
+    if (pathname === "/api/v1/surveys") {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      await awaitNativeSourceUnitCoverageLoad();
+      return json(response, 200, publicSurveyIndex());
+    }
     if (pathname === "/api/v1/products") return json(response, 200, { products: [...publicState.records.values()].map(publicProductListView) });
     const productEvidence = /^\/api\/v1\/products\/([^/]+)\/evidence$/.exec(pathname);
     if (productEvidence?.[1]) {

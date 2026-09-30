@@ -24,10 +24,56 @@ async function loadSurveyColors(root: string): Promise<Map<string, string>> {
   }
 }
 
+function productIdentity(surveyId: string, releaseId: string, product: string): string {
+  return `${surveyId}\u0000${releaseId}\u0000${product}`;
+}
+
+async function loadSourceUnitKinds(root: string): Promise<Map<string, { kind: string; mode?: string; recipePath?: string; status?: string; indexStatus?: "exact" | "estimated"; notes?: string }>> {
+  const result = new Map<string, { kind: string; mode?: string; recipePath?: string; status?: string; indexStatus?: "exact" | "estimated"; notes?: string }>();
+  try {
+    const source = JSON.parse(await readFile(path.join(root, "src", "layers", "layer-registry.json"), "utf8")) as {
+      layers?: Array<{ layerId?: unknown; sourceUnitKind?: unknown; mode?: unknown; recipePath?: unknown; status?: unknown }>;
+    };
+    for (const layer of source.layers ?? []) {
+      if (typeof layer.layerId !== "string" || typeof layer.sourceUnitKind !== "string") continue;
+      const recipePath = typeof layer.recipePath === "string" ? layer.recipePath : undefined;
+      let mode = typeof layer.mode === "string" ? layer.mode : undefined;
+      if (!mode && recipePath) {
+        try {
+          const recipe = JSON.parse(await readFile(path.join(root, recipePath), "utf8")) as { mode?: unknown };
+          if (typeof recipe.mode === "string") mode = recipe.mode;
+        } catch { /* A missing recipe keeps the declared unit kind without claiming an index. */ }
+      }
+      result.set(layer.layerId, {
+        kind: layer.sourceUnitKind,
+        ...(mode ? { mode } : {}),
+        ...(recipePath ? { recipePath } : {}),
+        ...(typeof layer.status === "string" ? { status: layer.status } : {}),
+      });
+    }
+  } catch { /* Optional source-unit declarations must not hide public products. */ }
+  try {
+    const lock = JSON.parse(await readFile(path.join(root, "src", "layers", "recipes", "source-unit-indexes.lock.json"), "utf8")) as {
+      layerBindings?: Array<{ surveyId?: unknown; releaseId?: unknown; product?: unknown; unitKind?: unknown; status?: unknown; notes?: unknown }>;
+    };
+    for (const binding of lock.layerBindings ?? []) {
+      if (typeof binding.surveyId !== "string" || typeof binding.releaseId !== "string" || typeof binding.product !== "string"
+        || typeof binding.unitKind !== "string" || (binding.status !== "exact" && binding.status !== "estimated")) continue;
+      result.set(productIdentity(binding.surveyId, binding.releaseId, binding.product), {
+        kind: binding.unitKind,
+        indexStatus: binding.status,
+        ...(typeof binding.notes === "string" ? { notes: binding.notes } : {}),
+      });
+    }
+  } catch { /* Missing optional locks retain the existing release-only behavior. */ }
+  return result;
+}
+
 /** A single immutable projection for every public reader. Missing approval is
  * an empty public release, never a fallback to the working catalog. */
-export async function loadPublicState(catalog: LoadedCatalog) {
+export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot = catalog.root) {
   const surveyColors = await loadSurveyColors(catalog.root);
+  const sourceUnitKinds = await loadSourceUnitKinds(sourceMetadataRoot);
   const snapshot: ApprovedRelease = await readApprovedRelease(catalog.root);
   const products = snapshot.products.filter(p => !isDeniedSurvey(p.content.surveyId));
   const records = new Map<string, ProductRecord>(products.map(p => [p.productId, {
@@ -55,11 +101,30 @@ export async function loadPublicState(catalog: LoadedCatalog) {
     const count=cells.get(orders.at(-1)!)!.length;
     const sourceEvidence=c.coverageEvidence;
     const pathFileIndex=c.mode==="path-healpix"&&sourceEvidence?.precision==="exact";
+    const identityUnit = sourceUnitKinds.get(productIdentity(c.surveyId, c.releaseId, c.name));
+    const registeredUnit = identityUnit?.indexStatus
+      ? identityUnit
+      : sourceUnitKinds.get(g.layerId) ?? identityUnit;
+    const nativeUnitKind = registeredUnit?.kind ?? (c.surveyId === "hst" ? "observation" : undefined);
+    const hasNativeUnitIndex = registeredUnit?.mode === "tile-table"
+      && registeredUnit.status === "acquired"
+      && Boolean(registeredUnit.recipePath);
+    const nativeIndexStatus = registeredUnit?.indexStatus ?? (hasNativeUnitIndex ? "estimated" : undefined);
+    const boundSourceUnitIndex = registeredUnit?.indexStatus && registeredUnit.kind
+      ? { status: registeredUnit.indexStatus, unitKind: registeredUnit.kind, indexUrl: "/api/v1/coverage/reverse-lookup", notes: registeredUnit.notes ?? `本地 ${registeredUnit.kind} 映射已登记；逐项精度与文件存在性由反查结果说明。` }
+      : undefined;
+    const declaredSourceUnitIndex = boundSourceUnitIndex ?? (hasNativeUnitIndex && nativeUnitKind
+      ? { status: nativeIndexStatus ?? "estimated", unitKind: nativeUnitKind, indexUrl: "/api/v1/coverage/reverse-lookup", notes: registeredUnit?.notes ?? `本地 ${nativeUnitKind} 映射已登记；逐项精度与文件存在性由反查结果说明。` }
+      : undefined);
     const sourceUnitIndex=pathFileIndex
       ? {status:"exact" as const,unitKind:`NESTED order-${c.scanDefaults?.pathHealpixOrder??moc.maxOrder} HEALPix file partition`,indexUrl:"/api/v1/coverage/reverse-lookup",notes:"可按精确的路径 HEALPix 分区反查已扫描文件 URI；这是部分文件清单，不是 DESI Tile，也不代表完整 DR1/BGS。"}
-      : c.sourceUnitIndex??(g.indexRevision
-        ? {status:"estimated" as const,unitKind:"tile",notes:"Official tile geometry; scientific file contents have not been verified."}
-        : {status:"entrypoint-only" as const,notes:"No region-to-science-file index is available."});
+      : declaredSourceUnitIndex ?? c.sourceUnitIndex ?? (nativeUnitKind
+        ? {status:nativeIndexStatus ?? "entrypoint-only",unitKind:nativeUnitKind,notes:registeredUnit?.notes ?? (hasNativeUnitIndex
+          ? `本地原生 ${nativeUnitKind} 映射已登记；返回精度由单次反查结果说明，文件存在性仍需来源或 Warehouse 证据。`
+          : c.surveyId === "hst"
+            ? "HST 单位是 MAST observation；s_region 描述观测 footprint，不是 Warehouse 扫描索引。当前此 layer 尚无本地 observation 清单反查。"
+            : `原生空间单位为 ${nativeUnitKind}，但当前没有与此 layer 对应的可用本地分块映射。`)}
+        : {status:"entrypoint-only" as const,notes:"No native source-unit mapping is registered for this product."});
     const recipe=sourceEvidence?{
       recipeVersion:c.recipeVersion??1,
       mode:c.mode??"native-moc",

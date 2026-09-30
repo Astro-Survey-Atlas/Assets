@@ -29,6 +29,7 @@ export interface CoverageLayer {
   tileIdsByOrder?: Record<string, number[]>;
   recipe?: { recipeVersion: number; mode: string; coordinateFrame: string; ordering: string; maxOrder: number; queryOrder: number; previewOrder: number; sourceUrl?: string; steps: Array<{ id: string; kind: string; title: string; bodyMarkdown: string; order: number; implementationRef: string }> };
   sourceUnitIndex?: { status: "exact" | "estimated" | "entrypoint-only"; unitKind?: string; indexUrl?: string; downloadUrlTemplate?: string; notes: string };
+  warehouseFileIndex?: { status: "available" | "not-indexed" | "unavailable"; indexUrl?: string; fileCount?: number; coverageCount?: number; errorCount?: number; updatedAt?: string; notes: string };
   revision?: string;
 }
 

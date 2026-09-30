@@ -1,11 +1,166 @@
 # Assets 项目交接
 
+## 当前核心目标：按原生空间分块指导下载（2026-09-29）
+
+本节是后续覆盖和反查工作的产品方向，优先于下面历史记录中的旧 UI/文件优先描述。
+
+- **普通单巡天模式：**点击一个 HEALPix，只列出该像元覆盖的 DR 和模态；不自动请求文件清单，也不因 HST 而单独实时查询 MAST。
+- **重合模式：**点击单个 HEALPix 时，只对该像元查询当前加载的巡天、DR 和选中模态对应的原生分块 URI，按巡天、DR 归集并去重。连通 component 用于导航和概览；不能把过大的 component 当作一次反查区域。分块名称保留来源语义，例如 DESI Tile、Legacy brick、HSC tract/patch、Euclid Tile、HST observation、原生 HEALPix 分区。
+- 扫描 recipe 的 `tile-table` 只描述输入形式，不定义输出的分块类型；`sourceUnitKind` 保留巡天原生身份，例如 DESI 是 Tile，Legacy Surveys 是 brick。`sourceUnitIndex.status` 表示映射能力/精度，具体反查仍以 `spatialUnits[].precision` 为准。
+- **Warehouse 扫描是补充：**只有巡天、DR、产品和原生分块身份匹配时，才在分块项下显示“已扫描到关联数据”和扫描文件位置。未扫描或 Warehouse 暂不可用，不得移除有来源依据的分块 URI。
+- 单个 DR/产品的整体 MOC 只说明总体覆盖，合并后不保留 Tile/brick/observation 身份。若存在官方边界表、单位 footprint、观测区域或确定性分区规则，可以从区域本地计算或检索分块；不能仅凭整体 MOC 推造任意分块 ID、观测时间或文件存在性。
+- 查询使用整个 HEALPix 像元，不能仅用中心坐标。先以保守的本地 HEALPix 索引筛候选，再对原始分块边界求交；规则网格可直接计算候选。明确区分规则生成的访问地址与扫描确认存在的文件 URI。
+- 首批优先补齐 **Euclid、DESI、HSC-SSP、DESI Legacy Surveys**，共用数据模型、查询和分页，保留各来源自己的分块身份。验收以“没有 Warehouse 文件扫描记录也能列出有依据的下载分块 URI”为核心。
+- 保留已有覆盖、扫描证据和工作树修改。不处理 `cosmos-data-linkage`，不包含 CSST 私有数据，不在本方向任务中发布或修改 MOC；代码 dev rollout 与覆盖/MOC 发布是不同操作。
+- **可供用户验证的 MVP（2026-09-30，Dev Helm revision 287）：**MVP 验收是四个巡天各用一个真实发布范围，把一个 ICRS/NESTED HEALPix 反查为原生分块身份和来源支持的访问入口；不要求完整巡天清单。`http://10.15.51.75:32083/` 当前在线，site/backend 均 Ready。匿名反查样例：DESI DR1 spectra，O8/ipix `436132`，显示 DESI Tile 目录；Euclid Q1 VIS，O4/ipix `637`，显示 `tile_index` 和 ESA SAS-DD 文件 URI（只覆盖锁定的 2,908 行 BGSUB 清单）；HSC PDR2 g band，O8/ipix `435934`，显示 tract/patch 和需登录的 PDR2 DAS Search 入口；Legacy DR10 Tractor，O8/ipix `436128`，显示 brick 与 NERSC 文件 URI，其中 `1498p020` 的 URI 只读 HEAD 返回 200 / 47,047,680 bytes。几何匹配均标为 estimated；匿名预览最多展示 6 项，所以显示数不是完整命中总数。HSC 链接不是 patch 直链；Legacy 单个样例的 HEAD 结果不能外推到所有 brick。当前公开 bundle SHA 仍为 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`，本次未发布或修改 MOC。
+- **反查分页语义修正（2026-09-30，Dev Helm revision 289）：**匿名预览的 `49` 是空间分块、扫描文件、来源入口和覆盖依据的混合 omitted 总数，不是 49 个 Tile/brick/observation。现有 `page.omitted` / `page.nextCursor` 通用清单契约保留，另增独立的 `spatialPage` 与 `supportingPage` cursor；主列表只按原生空间分块续载，来源入口、未归入分块的文件、扫描范围和覆盖依据放在默认折叠的辅助区并独立续载。用户给出的 O8/ipix `124799` 请求线上复验：mixed preview `shown=6, omitted=49`；`spatialPage` `shown=2, hasMore=true`；`supportingPage` `shown=4, hasMore=true`。主列表两项仍为 DESI DR1 Tile `5425`、EDR Tile `80938`。镜像 `0.1.0-20260930-142617-reverse-scope` 已部署，site/backend 均 `1/1 Ready`。API 文档明确这些计数的边界。`npm run build` 通过；`npm test` 341 项（339 通过、2 跳过）；Helm lint 通过。`/healthz` bundle SHA 仍为 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`、603 files，`/api/v1/assets` 返回 136 项；2MASS H-band MOC 字节范围检查为 HTTP 206，SHA 与 ETag 仍为 `e3502bcc21f7ffac2b8493c631936d0a0fc29399b5d4aa00d50a1e0fc7e89164`。只滚动应用镜像，未发布或修改 MOC/覆盖数据，也未扩充分块数据。仓库内技能文档引用的 `deploy/k3s-values.yaml` 当前不存在；本轮使用 Helm release 已存配置并只覆盖 `image.tag`，保留现有 Dev 设置。
+- **反查清单界面 MVP（2026-09-30，Dev Helm revision 288，后由上条修正）：**空间分块的浏览器安全 HTTP(S) URI 显示为外链，移除复制按钮；“继续浏览”按钮直接显示在结果清单中，点击后走 `region:query` API Key 解锁，并用匿名预览 cursor 接续授权分页，每页 30 项。API 文档和解锁说明已同步。对用户给出的 O8/ipix `124799`、相同 layer IDs 的匿名请求实测返回 6 项、49 项未展示及 `page.nextCursor`；没有使用 API Key 请求授权续页。仅更新应用镜像，site/backend 均 Ready；公开 bundle SHA 和 603 个文件未变，未发布或修改 MOC，也未扩展覆盖或分块数据。
+- 当前工作树已经包含比 MVP 更宽的 Legacy DR1–DR10 roster 支持和磁盘 SQLite 索引（Dev 派生索引约 1.66 GB，冷建峰值接近 4 GiB）。它们不是证明上述四个样例可用的前置条件；在用户验证 MVP 前不继续扩展数据范围或提高资源限制。
+- **索引与内存说明（2026-09-30）：**索引不是预先保存的“所有高阶 HEALPix → URI”表。锁定的 release roster 提供原生 unit ID 和成员/波段信息；共享几何表提供 `unit ID → ICRS footprint`；O4 HEALPix 只作保守候选筛选，随后仍与完整查询像元及原始 footprint 求交。Legacy DR3–DR9 的压缩清单合计约 218 MiB、约 135 万条 release/region 行；内容是 brick ID、中心/边界、成员和波段标记，不是星表、光谱或图像。后端在 evidence PVC 的 `derived/source-unit-indexes/native-units.sqlite` 构建归一化派生索引：共享几何只存一份，release/product 成员分开存；DR3–DR9 成员只存区域和 band mask，命中时按已核验规则生成 URI。冷构建结束后短命 builder worker 退出，再启动只读查询 worker。锁文件、layer registry、DESI recipe、索引实现源代码和 schema 版本变化会使缓存失效；未通过锁定快照校验的输入不会生成可复用缓存。首次本地实测 SQLite 为 1,660,219,392 bytes，冷构建峰值 RSS 2,018 MiB，查询 worker 就绪后的进程 RSS 301 MiB。
+- **Dev 内存实测（2026-09-30，revision 287）：**索引就绪日志出现在 backend 开始监听后约 6 分 37 秒；没有单独记录 builder 启动时间，因此这只是端到端观测间隔，不是精确构建耗时。SQLite 为 1,660,219,392 bytes；builder 完成日志记录进程 RSS 峰值 3,537 MiB，builder 退出后 937 MiB，查询 worker 打开索引后 950 MiB。冷建期间 `kubectl top` 最高采样约 3,393 MiB；cgroup 采样为 3,934,007,296 bytes / 4 GiB，`oom`、`oom_kill`、重启均为 0。就绪及四巡天查询后 `kubectl top` 为 1,691–1,797 MiB，cgroup 约 2.37 GB。容器 limit 仍为 4 GiB、Node heap 上限 3 GiB；当前数据规模稳态不支持扩容。冷建峰值和耗时是后续优先优化项，增加来源 roster 前应先评估流式/增量构建；Warehouse ES 仍只承载扫描文件证据，不是官方完整分块清单。
+- **Legacy URI 样例复核（2026-09-30）：**实际查询返回的 DR5 `0411p017` g/r/z、DR6 `0413p010` z、DR7 `0411p017` z coadd URI 原先因错误省略 `.fz` 而 404；对应 `.fits.fz` 文件 HEAD 均为 200。URI 生成器已按 DR5 起切换到 `.fits.fz`，DR3/DR4 仍用 `.fits`。DR8/DR9 North 样例 `0411p017` 的 roster `NEXP_Z=0`，matcher 正确不返回 North z；North g/r 与 South z 样例文件 HEAD 为 200。先前对 North z 的 404 请求是手工构造的非命中 URI，不是 matcher 的返回结果。
+- Dev 续接验收（2026-09-30）：代码镜像 `0.1.0-20260930-100259` 部署到 Helm revision **286**，site/backend 均 `1/1 Ready`、0 restarts。`/healthz` 仍为原 bundle SHA-256 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`、603 files；coverage catalog 有 132 layers，其中新增 Legacy DR3–DR9 共 14 个原生 brick 产品层。单像元匿名反查样例：DESI O4 返回 5 个 Tile，Euclid O4 返回 6 个 Tile，HSC PDR2 O8 返回 4 个 tract/patch，Legacy DR10 O8 返回 6 个 brick；结果均为 estimated，不代表每个文件逐项已验证。首轮完整加载后的 `kubectl top` backend RSS 约 2,655 MiB / 4 GiB，后续采样约 2,326 MiB；未 OOM，但证明磁盘化索引仍有价值。现有 2MASS H-band MOC 的只读 32-byte Range 返回 HTTP 206，长度 37,440 bytes，`X-Content-SHA256` 与 ETag 均为 `e3502bcc21f7ffac2b8493c631936d0a0fc29399b5d4aa00d50a1e0fc7e89164`。只更新代码镜像，没有发布或修改 MOC/公开 bundle。
+- 本轮续接核验（2026-09-30）：Euclid 原生单位明确为 ESA `tile_index` Tile；`stc_s`/ObsCore `s_region` 仅用于产品 footprint 与 HEALPix 求交，不能作为分块身份。Q1 当前可用 Tile matcher 范围仍限于锁定的 2,908 条 BGSUB 清单。ERO 官方页面提供 17 个 target 的 VIS/NISP stack 与 catalog tar 包，未发现 Tile 清单，因此不推造 ERO Tile ID。DESI DR1 示例目录首次检查返回 HTTP 503，不能据此判定 URI 无效；2026-09-30 后续复查结果见下条。Legacy DR1 Coadd 示例 NERSC 文件 URI 返回 HTTP 404；官方 DR1 文档指向 `archive.noao.edu` FTP，但该主机在本轮环境无法解析，候选 URI 保持 `unverified`。完整 `npm test`：340 项，338 通过、2 跳过、0 失败；`git diff --check` 通过。本轮未发布或修改 MOC。
+- 补充核验（2026-09-30）：Euclid 方向再次确认是 Tile：Q1 `tile_index` 是返回单位，`stc_s`/`s_region` 只提供单个产品足迹。对 ESA `q1.mosaic_product` 的 Q1_R1 全表计数为 2,908 行、13 个 instrument/filter 组；这些记录属于当前 BGSUB mosaic 清单范围，不代表完整 Q1 产品全集。DESI DR1 样例 Tile `7941/20211010` 目录现返回 HTTP 200；只读取目录 HTML，可见 10 个 `spectra-<petal>-7941-thru20211010.fits.gz` 文件（每个约 180 MB），以及 `redrock-*`、`zmtl-*`、`coadd-*` 产品。此前 HTTP 503 是暂时访问结果。该目录抽查没有下载 FITS，也没有提交 Warehouse 扫描；DESI `spectroscopy` 文件扫描仍是待办，不能记为已扫描或完整巡天。
+- 最新 Dev 代码 rollout（2026-09-30）：Helm revision **281**，镜像 `0.1.0-20260930-065605`；site/backend 均 `1/1 Ready`。`/healthz` 为 `ok`，bundle SHA-256 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`、603 files；`/api/v1/assets` 返回 136 条资产。backend Ready 后 `/api/v1/coverage/catalog` 返回 revision `be69b0c8da9b5624f5798fbdfd2122e5`、116 层，其中 11 个运行时 HSC/Legacy source-unit 层。在线 O8 cell `436132` 返回 DESI Tile、HSC PDR2 tract/patch 和 Legacy DR1 brick；O4 cell `637` 返回 Euclid `tile_index` Tile 与 VIS 文件 URI。匹配单位均为 `estimated`；HSC URI 是需登录的 DAS Search 入口，Legacy DR1 Coadd FTP URI 仍 `unverified`。DESI 示例 Tile 目录当时返回 HTTP 503。已验证一个公开 MOC FITS 的 `Range: bytes=0-31` 返回 HTTP 206、32 bytes、完整文件长 37,440 bytes，hash header 匹配。只更新应用代码镜像，未发布或修改 MOC/公开 bundle。
+- 最新 Dev 代码 rollout（2026-09-30）：Helm revision **282**，镜像 `0.1.0-20260930-071023`；site/backend 均 `1/1 Ready`。`/healthz` 仍为 bundle SHA-256 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`、603 files；`/api/v1/assets` 为 136 条，coverage catalog revision `be69b0c8da9b5624f5798fbdfd2122e5` 为 116 层，11 个 runtime HSC/Legacy source-unit layer。O8 cell `436132` 返回 DESI Tile、HSC PDR2 tract/patch、Legacy DR1 brick；O4 cell `637` 返回 Euclid `tile_index` Tile。redrock O6 cell `128` 返回 exact Warehouse edge/file identity，匿名 preview 只展示文件名且隐藏 OSS URI；修正后不再错误提示缺少本地原生空间索引，完整 URI 需授权反查。本轮回归为 340 项（338 通过、2 跳过、0 失败），Core wheel、build、Helm lint 与公开 MOC FITS 32-byte range 检查均通过。只更新代码镜像，没有发布或修改 MOC/公开 bundle。
+- 当前能力状态：DESI DR1/EDR 可本地匹配 Tile；Euclid Q1 MER 原生单位是 **Tile**，ESA TAP `tile_index` 给出 Tile 身份、`stc_s` 给出该产品 footprint。已锁定 2,908 条 BGSUB mosaic 元数据（352 个 Tile、13 个文件名产品组），并验证五类文件的 SAS-DD filename URL 返回 200；matcher 只覆盖这份冻结清单，不代表完整 Q1。Euclid ERO 官方归档目前按 17 个 ERO target 提供 VIS/NISP stack 与 catalog tar，当前没有找到 ERO `tile_index` 文件清单；ERO target/整区 MOC 不能冒充 Tile，也不能据此推造 Tile ID。Q1 deep-fields layer 已接入该 BGSUB 清单的 aggregate Tile 反查，候选使用 order-8 HEALPix 求交并标为 estimated，不代表完整 Q1。HSC PDR2/PDR3 已接入锁定 tract/patch 几何的运行时覆盖层，按 ICRS/NESTED O4/O8 提供估算覆盖和候选 `tract/patch` 反查，并链接到对应 DAS Search；不生成或发布 MOC，也不证明波段文件存在。HSC 仍是 tract/patch，不是 Tile。Legacy DR10 全天天空 brick 几何和 DR10 South brick 成员摘要均已锁定并 inner join；Coadded imaging/Tractor 的 O4 overview 标记含 brick 中心的像元，作为估算分布图，不保证边界完整。DR1 coadd 与 Tractor 已分别按 `has_image_g/r/z`、`has_catalog` 建立本地 brick 查询和 URI 候选，现已随 Dev revision 280 接入运行时；文件未逐项核验。实际反查仍对查询 HEALPix 与原始 brick polygon 求交；规则 URI 和具体文件存在性仍分开标示。不得把普通 MOC 覆盖当成分块索引已完成。
+- HSC 接入细节（2026-09-30）：source-unit worker 将六个 PDR2 产品绑定和一个 PDR3 产品绑定转换成 runtime coverage records；合并时保留原产品身份，复用产品已有 layer ID，并以官方 patch polygon 覆盖的 O4/O8 cells 作为运行时查询几何。backend runtime coverage catalog、blocks 和单 cell reverse lookup 使用同一套 layer identity。没有已批准 MOC 的 runtime source-unit layer 会跳过 `queryRegion` 的 published-MOC 验证，仍经 `validateRegion` 校验 ICRS/NESTED region，再按原生 geometry 直接相交。Warehouse 查询仍是补充；只有匹配 native unit identity 才会挂到分块结果。HSC `accessUri` 是需账号的 DAS Search 入口，不是保证存在的单文件下载 URI；未创建、发布或修改 HSC MOC。`coverageEvidence.evidenceKind=source-unit-footprint` 用于表达这类边界，避免误标为 Tile 或 published MOC。site 的 surveys、coverage、blocks、overlap 和 reverse-lookup 查询现已转发到 backend runtime catalog；revision 276 线上已验证选择器与查询使用同一组 HSC 图层。
+- Legacy DR10 URI 核验续接（2026-09-30）：`survey-bricks.fits.gz` 只提供全天天空 brick 几何，不是文件清单。Coadd URI 是 `south/coadd/<prefix>/<brick>/` 目录；Tractor 文件直接位于 `south/tractor/<prefix>/tractor-<brick>.fits`，Tractor 目录中没有 `<brick>/` 子目录。该规则修正已随 revision 274 部署，并由本地锁定 brick geometry 查询 O8 cell `436132` 确认输出正确地址。只对样例 brick `1498p020` 做过只读 HEAD：Tractor 文件返回 200 / 47,047,680 bytes；误生成的含 brick 子目录地址为 404；Coadd 下的样例 image 文件返回 200 / 9,907,200 bytes。其他 brick 的文件仍未逐一验证，均需标为规则推导候选。
+- Legacy DR1–DR10 分代清单复核（2026-09-30）：DR1 官方几何/成员表是 `decals-bricks.fits`（含 `has_image_g/r/z` 与 `has_catalog` 标记）；DR2 将 all-sky `decals-bricks.fits` 与 release roster `decals-bricks-dr2.fits` 分开；DR3–DR7 有 `survey-bricks.fits.gz` 和 `survey-bricks-drN.fits.gz`；DR8–DR10 有 all-sky grid 与 `south/survey-bricks-drN-south.fits.gz`。这些官方 URL 已只读 HEAD 核对。DR1/DR2 catalog 几何链接已改为实际可访问的 `decals-bricks.fits`，待办描述改为原生 brick matcher，不再要求构建 MOC。各代访问前缀与图像文件名不同；只有 DR1–DR4 和 DR10 的部分模板已从 first-party 文件页确认，DR5–DR9 仍需逐版核对。详见 [`docs/research/native-block-access-uris.md`](docs/research/native-block-access-uris.md)。DR1 快照目前已在本地绑定 Coadded imaging 和 Tractor catalog，但两者均未部署；DR2–DR10 运行时索引仍未完成。
+- Legacy DR1 本地 source-unit binding（2026-09-30）：已下载官方 `decals-bricks.fits` 元数据快照到忽略的本地 evidence cache，662,174 行、49,011,840 bytes、SHA-256 `4c8370585000a4189cac3d98e8b620fbde93f8a1e791b23b73865be304e70fb3`。source-unit worker 分开按 `has_image_g/r/z` 与 `has_catalog` 返回 Coadded imaging 和 Tractor brick，并生成对应的规则 URI 候选；成员标记不证明单个文件存在。DR1 Tractor 使用官方 `tractor/<AAA>/tractor-<brick>.fits` 布局。`npm run build:server` 和 `git diff --check` 通过；本轮未运行测试套件。快照仍只在忽略的本地 evidence cache，未同步到 Dev evidence storage；线上仍为 revision 277，Legacy 只有 DR10 索引。没有发布或修改 MOC。
+- HSC 访问链接核验（2026-09-30）：官方 PDR2/PDR3 DAS Search 是需登录的 release-scoped 搜索入口；未找到官方公开的 tract/patch/filter 预填 URL 参数契约或逐 patch 文件 URL 模板。返回的 tract/patch 是用户在登录后的 DAS Search 中继续选择的分块身份，不能把当前入口描述为直链或预填链接。详细官方来源和访问规则见 [`docs/research/native-block-access-uris.md`](docs/research/native-block-access-uris.md)。
+- HSC 小窗访问补充（2026-09-30）：官方 PDR3 `downloadCutout.py` 支持带账号的 RA/Dec、尺寸、filter、图像层 cutout 请求，可选 tract，但没有 patch 参数，响应是 FITS cutout tar。它可以作为减少下载量的官方入口，不能冒充匹配 tract/patch 的原文件 URI。来源、参数和访问策略见 [`docs/research/hsc-tract-patch-access.md`](docs/research/hsc-tract-patch-access.md)。
+- Euclid Q1 深场候选与运行时接入（2026-09-30）：官方 `q1_region_files.zip` 已取回并验证为 lock 记录的 5,272 bytes / SHA-256 `1cf306fab4995179219fbefd32b9648ce0455b65c48cab9246138cc72eff20ef`。按官方三个 DS9 ICRS polygon 与锁定 Q1 BGSUB 产品 footprint 做 order-8 HEALPix 候选相交，Fornax/North/South 分别得到 72/124/148 个 Tile，合计 344 个不同 `tile_index` 和 2,876 个候选产品 URI；结果为 estimated，只代表 2,908 行 BGSUB 清单，不代表完整 Q1。aggregate deep-fields layer 已按 Tile 合并同一清单中的产品 URI；dev O8 cell `574783` 返回 Tile `102041033`、`102041658`、`102041659`，每个 Tile 有 8 个 URI，precision 为 estimated。Euclid 分块身份始终是 `tile_index`；此处使用的 `stc_s` 只是产品行的 footprint，用于与查询天区求交。详见 [`docs/research/euclid-q1-deepfields-native-tiles.md`](docs/research/euclid-q1-deepfields-native-tiles.md)。
+- 启动性能修复（2026-09-30）：旧 O4 宽索引为每个 Tile、tract/patch 和 brick 逐一 rasterize footprint，完整加载约需 114 秒并导致 HTTP 启动测试超时。现在 O4 索引只按分块中心建桶；查询按“分块最大半径 + O4 HEALPix 最大像元半径”扩展候选，再对完整请求像元和原生 polygon/圆形 footprint 求交。候选召回仍保守，运行时单元身份、URI 和 `estimated` 精度语义不变。仅测原有 DESI/Euclid/Legacy 匹配器时 `SourceUnitStore.load` 约 3.8 秒；此前加入 HSC 官方 tract/patch polygon 后本地完整加载约 38 秒，后续内存优化结果见 revision 280 续接记录。不要把 3.8 秒当作含 HSC 的启动耗时。
+- 本轮本地验证（2026-09-30）：`npm run build` 通过；完整 `npm test` 为 337 项、335 通过、2 跳过、0 失败，Core wheel 校验通过；`helm lint` 和 `git diff --check` 通过。
+- Dev 代码 rollout（2026-09-30）：Helm revision **276**，镜像 `0.1.0-20260930-034809`；site/backend rollout 均成功，Pod `1/1 Ready`。`/healthz` 返回 bundle `reviewed-mujxdzwx-a0fcfc8b`、SHA-256 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`、603 files，与 rollout 前一致。只更新代码镜像，没有发布或修改 MOC。
+- 最新 Dev 代码 rollout（2026-09-30）：Helm revision **277**，镜像 `0.1.0-20260930-043611`；site/backend 均 Ready。`/healthz` bundle SHA 仍为 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e` / 603 files，`/api/v1/assets` 返回 136 个文件，coverage catalog revision `083c49e38c0ea144ae726713d2fa0f82` 共 114 layers。Euclid aggregate deep-fields catalog 已显示 `sourceUnitIndex=estimated/tile`；只更新代码镜像，没有发布或修改 MOC。
+- 在线 source-unit catalog：`/api/v1/coverage/catalog` revision `083c49e38c0ea144ae726713d2fa0f82`，114 layers，其中 7 个 HSC runtime tract/patch layers（PDR2 六个、PDR3 一个）和 2 个 Legacy DR10 layers：`Coadded imaging`（imaging/brick）、`Tractor catalog`（catalog/brick）。`/api/v1/surveys` 已能选到这九个 source-unit 产品，修复了运行时映射存在但 selector 隐藏图层的问题。Backend 通过原 evidence PVC 读取锁定的 source snapshots。
+- 在线单像元样例：O8 cell `436132` 返回 DESI Tile、HSC PDR2 tract/patch、Legacy DR10 brick 的本地反查 URI，几何候选均为 `estimated`；DESI spectra layer 的 Warehouse source section 同时报告一个 exact 文件 edge。Euclid Q1 O4 cell `637` 返回原生 Tile `102157301` 和该 Tile 的五个 BGSUB 文件 URI；`stc_s` 是产品 footprint，仅用于与 HEALPix 相交，不是分块身份。DESI redrock O6 cell `128` 仍按 NESTED order-6 文件分区返回真实 URI，modality 为 `redshift`。
+- 仍有范围/元数据缺口：Euclid aggregate deep-fields 已在 dev 接入 Tile 反查，但候选范围仅限 BGSUB snapshot；ERO 暂无官方 Tile inventory。HSC 的 tract/patch 链接是需账号的 DAS Search 入口，尚无公开深链参数契约。Legacy DR10 brick URI 依据官方路径规则生成；除样例 `1498p020` 外，其他候选文件未逐项验证。已发布的 Legacy `DR10 color imaging` MOC 产品目前仍显示 `modality=catalog`，而 runtime `Coadded imaging` 层为 `imaging`；尚未修改其 MOC/公开产品记录。DESI DR1 spectra 文件扫描仍待做，`spectroscopy` 与 `redshift` 保持分离。Warehouse 全量 coverage catalog 仍因超过 200,000 documents 而回退到 checked-in geometry；这不阻断单像元 reverse lookup，但不能据此宣称扫描范围完整。
+- 匿名预览分页行为（2026-09-30）：DESI O8 cell `436132` 返回 `shown=6`、`omitted=6`、`hasMore=true`。layer source summary 包含一条 exact Warehouse 文件 edge，但匿名预览最多返回六个混合 manifest 项，并优先展示原生分块，因此首屏 `downloadPlan.files` 为空。这是服务端预览上限，不是前端丢弃完整响应，也不代表零命中。完整文件清单须使用 API Key 接续 cursor；本轮尚未用授权请求线上验证后续页。不能仅凭匿名首屏判断文件反查为空。
+- Legacy DR10 South 输入（2026-09-30）：官方 `south/survey-bricks-dr10-south.fits.gz` 元数据已放入 evidence store 路径 `source-units/legacy-survey-bricks-dr10-south.fits.gz` 并 SHA-256 锁定（104,480,980 bytes；`863e5ded7a4aae7abcb5df76f322f35cf89945483715ff6d1874c88f5a072d9a`）。source-unit matcher 将它的 `BRICKNAME` 与 all-sky geometry inner join，确认 South release 成员但不证明具体 band/Tractor 文件存在。样例 O8 cell `436132` 命中 `1498p020` 等 brick。Coadd/Tractor overview 用 O4 中心桶，完整 SourceUnitStore 加载约 40 秒；不再逐个预栅格化 36 万个 brick polygon。
+- 后续优先级续接（2026-09-30）：继续准备 DESI DR1 `spectroscopy` 文件扫描（目前待办，redshift 是独立模态）；单独审查已发布 Legacy `DR10 color imaging` 的 modality 元数据修正路径。DESI Tile、Euclid Tile、HSC tract/patch、Legacy brick 均已完成单像元 dev 验收；Euclid deep-fields aggregate Tile lookup 已完成 dev 样例验收。代码 dev rollout 与 MOC 发布分开；本轮仍未发布或修改 MOC。
+
+实施契约见 [`docs/coverage-workflow.md`](docs/coverage-workflow.md#core-interaction-contract)。
+
+## Latest continuation: Legacy DR2 native brick mapping and Coadd access (2026-09-30)
+
+- Euclid is confirmed as a **Tile** survey. Its returned unit identity is ESA
+  TAP `tile_index`; `stc_s`/`s_region` are product footprints used for spatial
+  intersection only. The live revision 282 catalog still reports
+  `unitKind=tile` for all six Euclid Q1 products.
+- Legacy DR2's official `decals-bricks-dr2.fits` roster is now locked at
+  24,180,480 bytes and SHA-256
+  `36df229f93931d05a597a4b560afea1400fb94e0af4df1715bb53b49f0dd2fef`. It
+  contains 318,032 brick rows with boundaries and per-band `nobs` fields. The
+  roster geometry matched every row in the separately captured all-sky DR2
+  brick table.
+- A local source-unit binding returns Legacy DR2 Tractor catalog bricks using
+  the official `tractor/<AAA>/tractor-<brick>.fits` rule. One sample URI
+  returned HTTP 200; other candidates remain unverified. The NERSC Coadd
+  directory returns an explanatory page stating that Coadd files were removed
+  from NERSC and remain available through the linked NOAO FTP root. The FTP
+  host `archive.noao.edu` did not resolve from this environment. The working
+  tree now adds a separate Coadded imaging brick index using the locked roster's
+  `nobs_max_g/r/z > 0` values to select candidate bands and the documented FTP
+  path to construct candidate URIs. There are 97,554 candidate bricks across
+  40,340 g, 41,725 r and 94,277 z band memberships. These exposure statistics
+  are not per-file inventory; all Coadd URIs remain unverified. This local
+  change passes `npm run build:server`, lock/catalog JSON parsing and
+  `git diff --check`. Tests were not run. It is not yet deployed; Dev remains
+  on revision 283 and no MOC was changed.
+- The DR2 roster was copied to the existing dev evidence PVC and remote SHA
+  and size match the lock. Dev is now Helm revision **283**, image
+  `0.1.0-20260930-074221`; site/backend are `1/1 Ready`. `/healthz` remains
+  bundle SHA-256 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`
+  with 603 files. `/api/v1/coverage/catalog` revision
+  `45c2ab2cb25668caf8f42b9c9328d9b8` has 117 layers, including 12 runtime
+  source-unit layers. O8 cell `436132` anonymous preview returns DR2 Tractor
+  bricks with source URIs; preview shows six items and marks the list
+  truncated. The sample `1498p020` Tractor URL returned HTTP 200; returned
+  candidates remain `accessAvailability=unverified`. `npm run build`,
+  `npm run build:server`, Helm lint and `git diff --check` passed; `npm test`
+  was not run. No public MOC or bundle changed.
+- The deployed Dev runtime at revision 283 includes DR2 Tractor only. The local
+  worktree now also has DR2 Coadd and DR3-DR9 Coadd/Tractor brick matchers; DR3-DR9
+  use nine official release roster snapshots joined to the locked all-sky brick
+  geometry. These are local code and ignored evidence-cache changes, not deployed
+  behavior. Coadd `NEXP > 0` selects candidate bands; generated access URIs are
+  unverified until checked at source. Full findings are in
+  [`docs/research/native-block-access-uris.md`](docs/research/native-block-access-uris.md).
+- The DR9 South roster snapshot is 55,399,879 bytes and passed `gzip -t`.
+  Its SHA-256 was corrected from the truncated lock value to the measured
+  `7360414f5d53571ca70fa0cb483eb8c80cfcbe80df0856a117246f442a0b9a3f`.
+  The roster snapshots are brick-level metadata tables, not source-object
+  catalogs, MOCs or science images. No tests, deployment, MOC generation or
+  publication were performed for this continuation.
+
+## 最新续接：原生分块反查 OOM 修复与 Dev 验收（2026-09-30，Asia/Shanghai）
+
+- 用户指出 Euclid 是 Tile 巡天。已核对并在 `docs/coverage-workflow.md` 明确：Euclid 的原生分块身份是 ESA TAP `tile_index`；`stc_s` 只是单个产品记录的 footprint，用来判断 sky cell 与产品是否相交，不是 Tile ID，也不能把 Euclid 说成 `s_region` 索引。HST 才是 observation `s_region`。Euclid Q1 O4 cell `637` 的反查样例返回 Tile `102157301` 等 Tile ID 及各自文件 URI。
+- Source-unit worker 的 OOM/启动内存已处理：HSC 与 Legacy brick 元数据复用共享对象，避免重复复制；DR10 先按官方 South brick roster 过滤；Coadd/Tractor URI 按命中的 brick 生成。Dev backend 配置 `--max-old-space-size=3072` 和 4 GiB 容器内存限额。锁定快照的完整 worker 本地加载约 32 秒，峰值 RSS 约 1.0 GiB；线上近期观测约 1.4 GiB，Pod 无重启。
+- Dev 已部署到 Helm revision **280**，镜像 `0.1.0-20260930-061627`，site/backend 均 `1/1 Ready`。`/healthz` 为 `ok`，bundle `reviewed-mujxdzwx-a0fcfc8b`、SHA-256 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`、603 files。`/api/v1/assets` 有 136 条资产记录；coverage 和 runtime catalog 各有 116 层，catalog revision `be69b0c8da9b5624f5798fbdfd2122e5`。其中有 11 个运行时 source-unit layer：HSC PDR2/PDR3 7 个 tract/patch、Legacy DR1 2 个 brick、Legacy DR10 2 个 brick；DESI 与 Euclid 的 Tile 图层亦可用。
+- O8 cell `436132` 的授权反查 API 返回 HTTP 200、62 个展示结果并标记截断：DESI DR1 Tile；HSC PDR2/PDR3 tract/patch；Legacy DR1 Coadded imaging/Tractor bricks；Legacy DR10 Coadded imaging/Tractor bricks。Euclid Q1 O4 cell `637` 的授权反查也返回 HTTP 200、20 个展示结果并标记截断，保留 Tile 身份及产品 URI。样例 URI 是可供用户访问的候选位置，不表示每个文件均已扫描或逐项验证；这些原生 footprint 几何结果标为 `estimated`。
+- 最近验证：完整 `npm test` 为 338 项，336 通过、2 跳过；DR10 Coadd/Tractor URI 回归通过。Dev rollout 后的只读核验确认 site/backend Ready、健康响应和 116 层目录正确。本轮仅做代码 Dev rollout，没有发布或修改 MOC，也没有更换公开 bundle。
+- 未完成范围：Euclid Q1 反查仍限于冻结的 2,908 条 BGSUB snapshot，ERO 仍缺官方 Tile inventory；HSC DAS Search 需要用户登录且 tract/patch 链接不是逐文件直链；Legacy DR1/DR10 URI 仍需逐项验证，DR2–DR9 matcher 未接入；DESI DR1 spectroscopy 文件扫描待做，独立的 redshift 文件索引不代替 spectra 扫描。Warehouse coverage catalog 超过 200,000 documents 时仍回退到 checked-in geometry，扫描命中范围不能宣称完整。
+
+## 本地实现续接（2026-09-29）
+
+- 核心目标和首批四类适配范围已同步写入 `docs/coverage-workflow.md`。统一 `spatialUnits` 结果现在可携带一个分块下的多个 URI 与文件名，并传递到 JSON、CSV 和 overlap 抽屉；Warehouse 命中文件仍只按身份补充到分块项。
+- 覆盖目录已区分 recipe 输入模式与原生空间单位：DESI `tile-table` 声明 `tile`，Legacy Surveys 声明 `brick`，Euclid Q1 声明 `tile`。有近似几何的 DESI Tile 索引标为 `estimated`；只有身份声明而没有可用清单的图层继续标 `entrypoint-only`。单次反查的 `spatialUnits[].precision` 是该结果的权威精度。
+- DESI Tile 的位置来自锁定的 `TILE_COMPLETENESS` 中心和 `NEXP`，以 focal-plane 半径构成圆形近似 footprint，结果必须保持 `estimated`。这表示可能相关的 Tile，不表示该 Tile 内每个位置都有目标光谱。
+- 通用匹配器以 order-4 NESTED 粗索引筛选候选，并对用户选中的完整 HEALPix cell 列表计算分块 polygon 或 DESI 圆形近似；结果保留实际 `unitKind`。每个源快照按字节数和 SHA-256 校验。
+- 只有 Warehouse 文件的 survey/release/product layer、unit kind 和 unit ID 都与本地空间分块匹配时，文件才嵌入该分块的 `scannedFiles`。已归入分块的文件不再作为重复的独立文件条目展示；没有可匹配分块身份的文件仍保留在独立文件结果中。
+- 已将 catalog/readiness 的能力字段拆为 `sourceUnitIndex`（巡天原生单位映射）与 `warehouseFileIndex`（Warehouse 已扫描文件空间索引）。Warehouse 命中不再把原生 Tile/brick 元数据改成 `file`；无 Warehouse 命中时也保留已有原生分块索引。公开 coverage catalog 返回可用、未建立或暂不可确认三种 Warehouse 状态；site role 将该 catalog 请求代理到后端以读取运行时状态。正常启动也读取 `batchEvidenceLayerId` 别名快照，避免只查公开 layer 而漏报可反查的冻结扫描批次。
+- public-state 现在按原生单位声明返回分块能力，避免用 `indexRevision` 一概猜作 Tile；Euclid ERO/Q1 的原生单位是 `tile`。HST MAST 产品身份标为 `observation`，其 observation footprint 与 Warehouse 扫描状态分开。
+- HSC PDR2 官方 Available Data 页面列出 11 个 DUD/Wide tract/patch 文本 URL，页面说明 tract 约 1.7 度、每 tract 有 9×9 patches；11 个文本请求均匿名 HTTP 200，合计 38,301,388 bytes，内容提供 patch 中心和角点。快照按路径、URL、大小、SHA-256 锁入 manifest；matcher 按 PDR2 release 单独加载，不复用 PDR3 几何。当前实现把官方 patch 边界栅格化为运行时 O4/O8 覆盖，并使 PDR2 产品进入 coverage catalog 和 survey index；其 `source-unit-footprint` 精度为 estimated，不产出 MOC。匹配结果给出 tract/patch 身份和 DAS Search 入口；HSC DAS Search 需要账号，且候选不保证所选 filter 一定有文件。
+- HSC PDR3 原有 8 份官方清单和 Legacy DR10 `survey-bricks.fits.gz` 的实际 SHA-256 与 lock 一致。锁定几何输入已复制到 dev backend 的 `/var/lib/assets-evidence/geometry` 和 `/var/lib/assets-evidence/source-units`，远端文件与本地锁定大小、SHA-256 一致；Legacy lock 按 `(surveyId, releaseId, product)` 绑定 DR10 color imaging、Coadded imaging 和 Tractor catalog。brick 几何只给候选 ID，不证明逐 brick 文件存在。dev API 已可查询 Legacy DR10 brick 候选；逐 brick 文件存在性仍未核实。
+- Euclid TAP `q1.mosaic_product` 于 2026-09-29 返回 HTTP 200。冻结查询 `data_set_release='Q1_R1' AND file_name LIKE 'EUC_MER_BGSUB-MOSAIC-%'` 得到 2,908 行、352 个 Tile ID、13 个文件名产品组，CSV SHA-256 为 `0e8ac7f3148b0c5d55b71018ff251a162f40038f090bfaff8b87f34c31c6aa62`。同一 Tile 的 2,908 行 `stc_s` 一致。VIS、DES-G、WISHES-Z、PANSTARRS-I、CFIS-U 的匿名 SAS-DD `HEAD` 返回 200、预期文件名和 Content-Length；虽然 TAP `published` 均为 0，但不能把该列当作 SAS-DD 文件不可访问的判断。已将 filename resolver 扩到 BGSUB mosaic 产品，并为五个 Euclid Q1 图层补充 Tile 身份绑定。范围只覆盖这份 BGSUB 清单，不代表完整 Euclid Q1；没有下载科学 FITS。
+- Euclid ERO 来源核查（2026-09-29）：ESA 官方 ERO 页面链接到 `https://euclid.esac.esa.int/dr/ero/`，页面列出 17 个 target，并按 target 提供 VIS/NISP stack 和 catalog tar 包；单 target 页面给出包级 URI，但没有可见的 `tile_index` 清单。ESA TAP 的 `q1.mosaic_product`、`sedm.mosaic_product` 观察到的记录为 `Q1_R1`，当前没有锁定的 ERO Tile inventory。ERO 的七个公开 MOC layer 仍只有整体覆盖/发布入口；在取得官方 Tile ID、Tile footprint 和逐 Tile URI 证据前，不能把 ERO target 当成 Tile，也不能从这些合并 MOC 反推 Tile ID。
+- dev backend 从镜像 `/app` 读取 registry、recipe 和 lock，从 `/var/lib/assets-evidence` 读取锁定输入快照；source-unit matcher 已随 revision 269 上线。代码 rollout 没有修改公开 MOC 或产品。
+- 上一轮 matcher、source-unit lock、API/coverage 文档通过本地构建及完整测试（336 项，334 通过、2 跳过、0 失败）。本轮把 HSC 运行时覆盖并入 catalog、survey index 和原生分块反查；本轮构建状态待复核。未发布 MOC 或产品。
+
+## 历史续接：原生分块反查 dev 验收（2026-09-29，Asia/Shanghai）
+
+- Euclid 的来源语义：原生单位是 **Tile**，ESA TAP `tile_index` 提供 Tile ID。`stc_s`（以及 ObsCore 查询中可能出现的 `s_region`）只是具体产品记录的天空 footprint，用于判断像元是否命中该产品；它们都不定义或替代 Tile 身份。
+- revision 269 的 dev coverage catalog 中，DESI DR1/EDR Tile、Euclid Q1 MER Tile、Legacy DR10 brick matcher 均已登记；redrock 独立返回 NESTED order-6 HEALPix 文件分区。该 revision 的 HSC layer 数仍为 0；工作区新增的 runtime HSC PDR2/PDR3 接入尚未部署或在线验收。
+- Euclid Q1 matcher 的冻结范围为 BGSUB 清单：2,908 行、352 个 Tile ID、13 个文件名产品组；五类文件的 SAS-DD filename HEAD 均已核验为 HTTP 200。该范围不代表完整 Q1 inventory。查询返回的 Tile 是分块候选，不意味着完整巡天或逐 band 文件均存在。
+- DESI Tile 使用 `TILE_COMPLETENESS` 的中心和 `NEXP` 构成圆形近似 footprint，精度为 `estimated`。它列出候选 Tile 目录，不表示每个位置都有目标光谱。Legacy DR10 brick geometry 同样只证明空间候选，不证明逐 brick 文件存在。
+- 已核验的 API 样本中，C01 `0 edges / 0 scanned files / TILE 82406`；C02 `1 scanned file`（`exposures-iron.fits`）；C03 `0 scanned files / TILE 80938、5425`；C04 匿名预览含 4 个 Euclid Q1 MER 图像、`exposures-iron.fits` 和 Tile 入口；C05 `0 scanned files / TILE 11201`。这些是所选 order/layer 和冻结扫描范围的命中，不表示未命中的天区没有科学数据。以上是 revision 269 时的样本；revision 270 的浏览器验收见下文。
+- 旧页面曾把 DESI 聚合 `zall-pix-iron.fits` 与 partitioned `exposures-iron.fits` 混在一起，造成“1 个文件”的误导。当前 `evidence-store` 已在存在 partitioned alias 时优先该冻结批次，因此 C01 的真实文件命中为空会如实显示。
+- 反查结果保留 DESI frozen scope `desi-dr1-exposures-iron-20260926-r4`（1/1 partitions）和 Warehouse 证据；匿名预览仍最多显示 6 项，`继续浏览` 需要 API Key。Euclid 的公开入口仍按产品分别列出，缺少文件级索引的说明不会遮挡具体 Tile。
+- dev 已部署到 Helm revision **270**，镜像 `0.1.0-20260929-215700`；site/backend 均 `1/1 Ready`、0 restarts。`/healthz` 返回 bundle `reviewed-mujxdzwx-a0fcfc8b`、SHA-256 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`、603 files。此轮是代码 rollout，公开 MOC/release bundle SHA 未变化。
+- 在线 smoke：`/api/v1/assets` 返回 136 个公开资产记录；`/api/v1/coverage` 返回 105 个公开 footprints；`/api/v1/coverage/catalog` revision 为 `54dd86d2bdfea9883a6ca7591fa712eb`，含 105 layers。DESI DR1/EDR Tile、Euclid Q1 Tile 和 Legacy DR10 brick 可选；HSC layer 为 0。FITS Range 请求返回 HTTP 206，16 bytes，并带 `X-Content-SHA256`。
+- 浏览器验收：`/atlas/` HTTP 200、无 console/page errors。选中 DESI + Euclid 后重合视图为 O8、587 cells、5 components；点击单个 HEALPix 实际请求 `cells:[48697]`，Cell Inspector 只按该 cell 显示 DESI `TILE 82406` URI，并保留 Euclid ERO 数据入口。大 component 不再整体提交反查；超过限制时提示用户缩小区域或点击单个 cell。
+- 在线 API 单 cell 样本：O4 cell 637 命中 DESI Tile `541` 等目录 URI，以及 Euclid Q1 Tile `102157301` 等 SAS-DD URI；Legacy DR10 返回 `2576p605` 等 brick URI。DESI Tile 与 Legacy brick 为候选几何映射，不证明每个科学文件实际存在；Warehouse 扫描命中只作补充。
+- backend 日志显示 Warehouse coverage catalog 超过配置的 200,000 document limit，当前回退到 checked-in public geometry；Warehouse 文件证据状态因此可能 unavailable，但本地 source-unit URI 反查仍可运行。HSC PDR2 的官方 tract/patch 几何和六条产品绑定已锁定，仍因无可选公开 HSC layer 而不能在线反查。
+- 本地 build、Helm lint 通过；完整测试 336 项，334 通过、2 跳过、0 失败。没有发布或修改 MOC/产品，没有下载科学数据，没有处理 `cosmos-data-linkage` 或 CSST 私有数据；保留工作树已有修改。
+
+### 尚未解决的覆盖与反查歧义
+
+- DESI 当前公开 `DR1 spectra and redshifts` O8 图层同时连接两类不同证据：公开 Tile 覆盖/Tile 目录选择，以及扫描 `exposures-iron.fits` 得到的 `catalog-radec` occupancy。后者读的是 9,176 个 `TILERA/TILEDEC` 中心位置；一条 O8 edge 表示某个 Tile 中心落入该 cell，不是该 Tile 的完整足迹，更不是该区域内全部目标光谱。Warehouse 记录的 `exact` 只表示中心坐标到 HEALPix cell 的映射精确。
+- C01/C03/C05 的 `0 files` 是后端真实的零 edge 返回，不是前端漏显示；其含义严格限于本次请求的图层、order 和已扫描文件范围内没有 coverage edge 命中，不表示天区无数据。UI 将文件、Tile 目录和发布页合并展示，结果中的总 precision 也不是逐行 precision，容易把“Tile 有入口”和“文件未命中”误看成矛盾。
+- C01–C05 的 `TILE 82406` 等目录由发布层的 Tile source-unit 索引按 Tile 几何与组件相交产生，不来自 `exposures-iron.fits` 的中心点 edge。当前入口标为 `estimated`，且目录不是已核实的逐科学文件清单；需要继续核对该 Tile 几何来源、精度和 UI 文字是否一致。
+- 2026-09-29 的 O8 overlap 请求实际包含 `desi-dr1-spectra-footprint`，没有包含 `desi-dr1-redrock-bright-file-index`。Redrock 是独立 `redshift` 产品，使用路径中的 NESTED O6 分区；O8 光谱层的零文件结果不能代表 O6 redrock 的结果，也不能把 redrock HEALPix 分区叫作 DESI Tile。分别选择 redshift 图层并在 O6 查询才会反查对应红移文件。
+- Euclid Q1 MER 的 Warehouse WCS 文件 edge 与 Euclid ERO 的公开 MOC/发布入口是不同层级；本次 C04 命中的 4 个 Euclid 文件只代表 Q1 冻结 MER 清单，不会自动展开 ERO 的发布入口为文件列表。
+- 当前匿名预览最多 6 项；C01 的 6 项由 1 个 Tile 目录和 5 个发布页占满，coverage-evidence 行可能被挤出。聚合 notes 还会包含不带 layer 名的 `No region-to-science-file index is available for this product.`，不能据此判断是哪一个产品没有索引。后续应让每行携带 layer/product 身份，并让零文件解释明确限定到 Warehouse 已扫描范围。
+- 普通模式点击 HEALPix cell 打开 inspector（坐标、survey/release、覆盖产品名），不自动请求 Warehouse 文件清单或 MAST。重合模式点击 cell 会对该单个 cell 执行分块反查；component 只用于导航和概览，超限 component 不整块提交。
+- HST 的空间单位是 MAST observation `s_region`，由 observation ID 再关联公开 image products；它不是 Tile，也不是当前的 Warehouse 文件扫描 edge。用户此前报告 MAST 查询全部返回 temporarily unavailable；本轮没有验证 MAST 恢复，零结果/失败仍不能解释为 HST 天区无观测。
+
+## 待办：优化中文 Web 字体加载（2026-09-28）
+
+- Assets 页面经 SSH 隧道访问时，`/fonts/NotoSansSC-Regular.woff2`（11,424,252 bytes）与 `NotoSansSC-Bold.woff2`（12,116,992 bytes）加载耗时约 2 分钟，合计约 23.5 MB。两种字体在 `site/src/styles.css` 中作为全站中文字体声明。
+- 待优化：显著减小首屏字体传输量，可评估按字集拆分 WOFF2 并使用 `unicode-range`，或改用系统中文字体回退；保留字体加载期间可读的回退显示。
+- 验收时用冷缓存通过 SSH 隧道检查字体请求耗时、页面首屏可读性和 Atlas coverage block 请求。`font-display: swap` 已配置，但字体传输与持续数据加载指示器的因果关系尚未确认。
+
 ## 最新续接：DESI redrock 发布与 bright 目录清点（2026-09-27，Asia/Shanghai）
 
 - 用户授权发布 DESI DR1 bright redrock 产品。publication run `mujxdzwx-a0fcfc8b` 已为 `published` / `verified`，只选择 product ID `08f093bcebd4cd3ef4c3` revision 4。公开 bundle `reviewed-mujxdzwx-a0fcfc8b` SHA-256 为 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`，603 files、28 package references、162 coverage documents；站点核验检查 107 个产品。
 - 线上 `/healthz` 返回上述 bundle SHA，`/api/v1/coverage/catalog` 返回 105 layers。`desi-dr1-redrock-bright-file-index` 已公开，`modality=redshift`、`mode=path-healpix`、ICRS/NESTED order 6，904 cells。MOC Range `bytes=0-31` 返回 HTTP 206、32 bytes、总长 8,640 bytes、SHA-256 `a5c9b6978e4156316acee8381260974d4bdec45b3febe9f07f399eedfb1a48aa`。
 - 公开匿名反查样例 order 6 / cell 128 返回 `precision=exact`，真实 URI `oss://si000925lshd/27-Class/DESI/DR1/spectro/redux/iron/healpix/main/bright/1/128/redrock-main-bright-128.fits`，不是聚合大文件。其下载链接状态为 `downloadable=false`，Assets 只返回来源清单，不代用户下载。Warehouse 冻结扫描范围为 228/228 partitions、904 files；这只是用户提供的部分 OSS 副本，不代表完整 DR1/BGS，没有读取 FITS 科学数组或做 BGS 行筛选。
-- catalog 的 `sourceUnitIndex.status` 目前仍显示 `entrypoint-only`，与上述 live Warehouse file reverse lookup 可返回精确文件这一事实不一致；后续应单独核对公开能力元数据/readiness，不要把这个字段当作反查 API 的实测结果。
+- 历史问题：2026-09-27 catalog 曾把 redrock 的 `sourceUnitIndex.status` 显示为 `entrypoint-only`，与 live file reverse lookup 不一致。2026-09-29 dev revision 267 的 `/api/v1/coverage/catalog` 已核实为 `status=exact`、`unitKind=NESTED order-6 HEALPix file partition`；状态元数据已修正。它仍只描述路径分区索引能力，不表示 904 个文件覆盖完整 DR1/BGS。
 - site 曾因 750m CPU limit 下启动探针超时而反复重启。Helm revision **261** 只把 site CPU request/limit 调整为 `500m` / `2`；镜像仍为 `0.1.0-20260927-220441`。滚动后 site 1/1 Ready、0 restarts，公开健康检查和 run 的 site verification 均通过。未改源码或 MOC 文件。
 - publication run 已发布，但 `publication-tasks` 状态快照截至 generation `1549` 仍 pending；本地 upload spool 正在逐个上传（截至 2026-09-27 15:17 UTC，15 个快照 uploaded、generation 1435 uploading、114 个 pending）。这是状态归档同步，不改变已经核实的公开 bundle。保留 spool，不重提 publication，也不手动清理这些快照；之后可再确认同步收敛。
 - 先前对 `bright/` 的目录清点估算约 20,078 files / 5.245 TB，数字仅对应当时看到的用户部分 OSS 副本，不是完整、冻结的 DR1 inventory。`redrock-main-bright-*.fits` 约 904 个已扫描；`spectra-main-bright-*.fits.gz` 约 904 个、约 271.7 GB，**尚未扫描**；`coadd` 约 12,855 个、约 4.79 TB，也未扫描。目录还包含 emission-line、QSO MgII/QN、`rrdetails` HDF5、`hpixexp` CSV 和 checksum 文件。后续若扫描这些产品，先确认各自来源身份与 modality，再走 Assets → Warehouse 标准任务流程。

@@ -7,10 +7,10 @@ export interface EuclidQ1MerDataLink {
   unitKind: "tile";
 }
 
-const EUCLID_Q1_MER_FILE = /^EUC_MER_BGSUB-MOSAIC-(VIS|NIR(?:-[A-Z0-9]+)*)_TILE([0-9]+)(?:[-_][^/]+)?\.fits(?:\.gz)?$/i;
+const EUCLID_Q1_MER_FILE = /^EUC_MER_BGSUB-MOSAIC-([A-Z0-9]+(?:-[A-Z0-9]+)*)_TILE([0-9]+)(?:[-_][^/]+)?\.fits(?:\.gz)?$/i;
 
 /**
- * Resolve only the stable Euclid Q1 MER filename family.  The object-store
+ * Resolve the stable Euclid Q1 background-subtracted MER mosaic filename family. The object-store
  * locator remains the source of record; this URL is an independent official
  * ESA download entrypoint for the same named file.
  */

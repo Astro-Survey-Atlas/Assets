@@ -67,6 +67,40 @@ test("coverage evidence participates in the same cursor pagination as files and 
   assert.equal(new Set([...first.keys, ...second.keys]).size, reversePlanItems(source).length);
 });
 
+test("spatial-unit and supporting-evidence pages do not consume each other's cursor items", () => {
+  const source: DownloadPlan = {
+    ...plan(),
+    spatialUnits: ["tile-1", "tile-2"].map((unitId) => ({
+      layerId: "layer-1",
+      productId: "product-1",
+      surveyId: "desi",
+      releaseId: "dr1",
+      product: "Spectra",
+      unitKind: "tile",
+      unitId,
+      order: 8,
+      nside: 256,
+      matchingCells: [123],
+      precision: "estimated",
+      accessUri: `https://example.test/${unitId}`,
+    })),
+  };
+  const firstUnits = pageReversePlan(source, new Set(), 1, "spatial-units");
+  assert.deepEqual(firstUnits.plan.spatialUnits?.map((unit) => unit.unitId), ["tile-1"]);
+  assert.deepEqual(firstUnits.plan.files, []);
+  assert.deepEqual(firstUnits.plan.entrypoints, []);
+  assert.equal(firstUnits.hasMore, true);
+
+  const firstSupport = pageReversePlan(source, new Set(), 2, "supporting-evidence");
+  assert.equal(firstSupport.plan.spatialUnits?.length, 0);
+  assert.deepEqual(firstSupport.plan.files.map((file) => file.fileId), ["file-a", "file-b"]);
+  assert.equal(firstSupport.hasMore, true);
+
+  const nextUnitPage = pageReversePlan(source, new Set(firstUnits.keys), 2, "spatial-units");
+  assert.deepEqual(nextUnitPage.plan.spatialUnits?.map((unit) => unit.unitId), ["tile-2"]);
+  assert.deepEqual(nextUnitPage.plan.files, []);
+});
+
 test("reverse cursors bind identity and query fingerprint and reject tampering", () => {
   const payload: ReverseCursorPayload = { version: 1, identity: "preview", fingerprint: "query-a", seenKeys: ["file:file-a"] };
   const cursor = encodeReverseCursor(payload, "test-secret");
@@ -76,6 +110,10 @@ test("reverse cursors bind identity and query fingerprint and reject tampering",
 
   const protectedCursor = encodeReverseCursor({ ...payload, identity: "managed-key:1" }, "test-secret");
   assert.throws(() => decodeReverseCursor(protectedCursor, "managed-key:2", "query-a", "test-secret"), (error: unknown) => error instanceof AccessError && error.statusCode === 403);
+
+  const spatialCursor = encodeReverseCursor({ ...payload, scope: "spatial-units" }, "test-secret");
+  assert.deepEqual(decodeReverseCursor(spatialCursor, "managed-key:1", "query-a", "test-secret", "spatial-units")?.seenKeys, payload.seenKeys);
+  assert.throws(() => decodeReverseCursor(spatialCursor, "managed-key:1", "query-a", "test-secret"), (error: unknown) => error instanceof AccessError && error.statusCode === 400);
 });
 
 test("reverse cursor encoder and decoder share bounded large-page limits", () => {

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 import {
-  buildSphericalCellBoundaryEdges,
+  buildSphericalCellEdges,
   buildSphericalCellSheetGeometry,
   type SphericalCellSheetGeometryInput,
 } from "./spherical-cell-geometry.js";
@@ -16,7 +16,7 @@ export interface OverlapHighlight {
   dashMaterial: THREE.LineDashedMaterial;
 }
 
-/** Build one co-registered overlap surface with an animated component outline. */
+/** Build one co-registered overlap surface with an always-readable animated edge. */
 export function buildOverlapHighlight(
   cells: readonly SphericalCellSheetGeometryInput[],
   renderOrder: number,
@@ -36,9 +36,7 @@ export function buildOverlapHighlight(
   const mesh = new THREE.Mesh(buildSphericalCellSheetGeometry(cells), meshMaterial);
   mesh.renderOrder = renderOrder;
 
-  const edgeColor = new THREE.Color("#ffffff");
-  const edgeCells = cells.map((cell) => ({ ...cell, color: cell.color.clone().lerp(edgeColor, 0.64) }));
-  const edgeGeometry = buildSphericalCellBoundaryEdges(edgeCells);
+  const edgeGeometry = buildSphericalCellEdges(cells);
   const glowMaterial = new THREE.LineBasicMaterial({
     vertexColors: true,
     transparent: true,

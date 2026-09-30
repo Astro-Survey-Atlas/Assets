@@ -127,7 +127,7 @@ export interface DownloadPlanCoverageEvidence {
   releaseId: string;
   product: string;
   modality?: string;
-  evidenceKind: "observation-footprint" | "published-moc" | "tile-footprint" | "wcs-coverage";
+  evidenceKind: "observation-footprint" | "published-moc" | "tile-footprint" | "source-unit-footprint" | "wcs-coverage";
   order: number;
   nside: number;
   nativeMaxOrder: number;
@@ -147,8 +147,30 @@ export interface DownloadPlanCoverageEvidence {
   summary: string;
 }
 
+export interface DownloadPlanSpatialUnit {
+  layerId: string;
+  productId: string;
+  surveyId: string;
+  releaseId: string;
+  product: string;
+  modality?: string;
+  unitKind: string;
+  unitId: string;
+  order: number;
+  nside: number;
+  matchingCells: number[];
+  precision: ReversePrecision;
+  accessUri?: string;
+  accessUris?: Array<{ uri: string; fileName?: string }>;
+  accessAvailability?: "public" | "source-policy" | "unverified";
+  sourceSnapshotSha256?: string;
+  note?: string;
+  scannedFiles?: Array<{ fileId: string; fileName?: string; sourceUri?: string; scanRunId?: string; sourceSnapshotSha256?: string }>;
+}
+
 export interface DownloadPlan {
   schemaVersion: 1;
+  spatialUnits?: DownloadPlanSpatialUnit[];
   files: DownloadPlanFile[];
   entrypoints: DownloadPlanEntrypoint[];
   coverageEvidence?: DownloadPlanCoverageEvidence[];
@@ -161,6 +183,7 @@ export interface DownloadPlan {
 export interface DownloadPlanInput {
   edges: CoverageEdge[];
   sourceFiles: Array<Record<string, unknown>>;
+  spatialUnits?: DownloadPlanSpatialUnit[];
   entrypoints?: DownloadPlanEntrypoint[];
   coverageEvidence?: DownloadPlanCoverageEvidence[];
   truncated: boolean;
@@ -470,6 +493,7 @@ export function buildDownloadPlan(input: DownloadPlanInput): DownloadPlan {
   }));
   return {
     schemaVersion: 1,
+    ...(input.spatialUnits?.length ? { spatialUnits: [...new Map(input.spatialUnits.map((unit) => [`${unit.layerId}:${unit.unitKind}:${unit.unitId}`, unit])).values()] } : {}),
     files: sortedFiles,
     entrypoints: [...(input.entrypoints ?? [])],
     ...(input.coverageEvidence?.length ? { coverageEvidence: [...input.coverageEvidence] } : {}),
@@ -889,7 +913,16 @@ export class CoverageEvidenceStore {
     const sources = new Map(hits.map(hit => [text(hit._source?.layer_id) ?? hit._id ?? "", hit._source ?? {}]));
     const bindings: EvidenceLayerBinding[] = [];
     const scanScopes: ScanScopeSummary[] = [];
-    const resolvedTargets = (layerIds.length ? uniqueTargets : [...sources.keys()].map(layerId => ({ layerId, evidenceLayerId: layerId })))
+    // A partitioned batch alias is the current scoped evidence for its public
+    // layer.  Do not merge an older direct layer into that result: the direct
+    // layer may contain a different product scan (for example an aggregate
+    // catalog) and would make the reverse lookup claim contradictory files.
+    const partitionedAliases = new Set([...aliasesByLayer.entries()]
+      .filter(([, evidenceLayerId]) => sources.get(evidenceLayerId)?.layer_mode === "PARTITIONED")
+      .map(([layerId]) => layerId));
+    const effectiveTargets = uniqueTargets.filter((target) =>
+      !(target.layerId === target.evidenceLayerId && partitionedAliases.has(target.layerId)));
+    const resolvedTargets = (layerIds.length ? effectiveTargets : [...sources.keys()].map(layerId => ({ layerId, evidenceLayerId: layerId })))
       .filter(target => {
         const source = sources.get(target.evidenceLayerId);
         return source && source.layer_mode !== "CANDIDATE" && ["ACTIVE", "PARTITIONED"].includes(String(source.state));

@@ -997,9 +997,9 @@
               "description": "DECaLS, BASS and MzLS imaging products.",
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr1/",
-              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/survey-bricks.fits.gz",
-              "reason": "The official DR1 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
-              "manualStep": "Use the DR1 survey-bricks catalog and official DR1 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/decals-bricks.fits",
+              "reason": "The official DR1 decals-bricks snapshot now supplies local brick geometry and has_image_g/r/z membership for runtime lookup. No DR1 MOC is published, and candidate file presence is unverified.",
+              "manualStep": "The runtime matcher intersects the full selected HEALPix cell with official brick bounds and returns per-band URI candidates from has_image_g/r/z. Keep this native-unit lookup separate from MOC publication and file-scan evidence."
             },
             {
               "name": "Tractor catalog",
@@ -1007,9 +1007,9 @@
               "description": "Forced photometry catalog derived from the imaging releases.",
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr1/",
-              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/survey-bricks.fits.gz",
-              "reason": "The official DR1 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
-              "manualStep": "From the DR1 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/decals-bricks.fits",
+              "reason": "The official DR1 decals-bricks snapshot now supplies local brick geometry and the has_catalog Tractor membership flag. No DR1 Tractor MOC is published, and candidate file presence is unverified.",
+              "manualStep": "The runtime matcher intersects the full selected HEALPix cell with official brick bounds, selects has_catalog bricks and returns the documented Tractor URI candidate. Keep this native-unit lookup separate from MOC publication and file-scan evidence."
             }
           ]
         },
@@ -1029,9 +1029,9 @@
               "description": "DECaLS, BASS and MzLS imaging products.",
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr2/",
-              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr2/survey-bricks.fits.gz",
-              "reason": "The official DR2 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
-              "manualStep": "Use the DR2 survey-bricks catalog and official DR2 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr2/decals-bricks.fits",
+              "reason": "A locked DR2 release roster now supplies native brick bounds and per-band NOBS_MAX summaries. Runtime lookup returns candidate coadd brick URIs for bands with positive NOBS_MAX; the official FTP host did not resolve during verification, so file availability remains unverified. No coadd coverage MOC is published.",
+              "manualStep": "Use the local native brick matcher to intersect the full HEALPix area with DR2 roster bricks and return the documented per-band FTP URI candidates. Treat NOBS_MAX as exposure evidence, not a per-file inventory; keep this lookup separate from MOC publication."
             },
             {
               "name": "Tractor catalog",
@@ -1039,9 +1039,9 @@
               "description": "Forced photometry catalog derived from the imaging releases.",
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr2/",
-              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr2/survey-bricks.fits.gz",
-              "reason": "The official DR2 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
-              "manualStep": "From the DR2 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+              "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr2/decals-bricks.fits",
+              "reason": "A locked DR2 release roster now supplies native Tractor brick identities and bounds. The runtime matcher returns candidate Tractor URIs; only one sample file was checked, and no Tractor coverage MOC is published.",
+              "manualStep": "Use the local native brick matcher to intersect the full HEALPix area with DR2 roster bricks and return the documented Tractor URI candidates. Keep this lookup separate from MOC publication and Warehouse scan evidence."
             }
           ]
         },
@@ -1062,8 +1062,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr3/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr3/survey-bricks.fits.gz",
-              "reason": "The official DR3 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
-              "manualStep": "Use the DR3 survey-bricks catalog and official DR3 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+              "reason": "An estimated local DR3 brick matcher is available from the locked official release roster joined to the locked all-sky brick grid. It returns intersecting release bricks and candidate band URIs where NEXP_g/r/z > 0; this does not prove per-file existence. No public coadded-imaging MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher and documented DR3 access rules to list candidate coadd URIs. Keep this native-unit lookup independent of MOC generation and Warehouse scan evidence; treat each generated URI as unverified unless checked at source."
             },
             {
               "name": "Tractor catalog",
@@ -1072,8 +1072,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr3/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr3/survey-bricks.fits.gz",
-              "reason": "The official DR3 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
-              "manualStep": "From the DR3 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+              "reason": "An estimated local DR3 brick matcher uses listed release bricks joined to the locked all-sky grid and returns candidate Tractor URIs. It does not establish per-file existence; no public Tractor-catalog MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher with the official DR3 release roster to return candidate Tractor brick URIs. This reverse lookup does not depend on a survey_primary row filter or generated MOC; verify individual files at the source as needed."
             }
           ]
         },
@@ -1094,8 +1094,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr4/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr4/survey-bricks.fits.gz",
-              "reason": "The official DR4 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
-              "manualStep": "Use the DR4 survey-bricks catalog and official DR4 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+              "reason": "An estimated local DR4 brick matcher is available from the locked official release roster joined to the locked all-sky brick grid. It returns intersecting release bricks and candidate band URIs where NEXP_g/r/z > 0; this does not prove per-file existence. No public coadded-imaging MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher and documented DR4 access rules to list candidate coadd URIs. Keep this native-unit lookup independent of MOC generation and Warehouse scan evidence; treat each generated URI as unverified unless checked at source."
             },
             {
               "name": "Tractor catalog",
@@ -1104,8 +1104,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr4/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr4/survey-bricks.fits.gz",
-              "reason": "The official DR4 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
-              "manualStep": "From the DR4 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+              "reason": "An estimated local DR4 brick matcher uses listed release bricks joined to the locked all-sky grid and returns candidate Tractor URIs. It does not establish per-file existence; no public Tractor-catalog MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher with the official DR4 release roster to return candidate Tractor brick URIs. This reverse lookup does not depend on a survey_primary row filter or generated MOC; verify individual files at the source as needed."
             }
           ]
         },
@@ -1126,8 +1126,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr5/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr5/survey-bricks.fits.gz",
-              "reason": "The official DR5 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
-              "manualStep": "Use the DR5 survey-bricks catalog and official DR5 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+              "reason": "An estimated local DR5 brick matcher is available from the locked official release roster joined to the locked all-sky brick grid. It returns intersecting release bricks and candidate band URIs where NEXP_g/r/z > 0; this does not prove per-file existence. No public coadded-imaging MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher and documented DR5 access rules to list candidate coadd URIs. Keep this native-unit lookup independent of MOC generation and Warehouse scan evidence; treat each generated URI as unverified unless checked at source."
             },
             {
               "name": "Tractor catalog",
@@ -1136,8 +1136,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr5/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr5/survey-bricks.fits.gz",
-              "reason": "The official DR5 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
-              "manualStep": "From the DR5 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+              "reason": "An estimated local DR5 brick matcher uses listed release bricks joined to the locked all-sky grid and returns candidate Tractor URIs. It does not establish per-file existence; no public Tractor-catalog MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher with the official DR5 release roster to return candidate Tractor brick URIs. This reverse lookup does not depend on a survey_primary row filter or generated MOC; verify individual files at the source as needed."
             }
           ]
         },
@@ -1158,8 +1158,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr6/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr6/survey-bricks.fits.gz",
-              "reason": "The official DR6 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
-              "manualStep": "Use the DR6 survey-bricks catalog and official DR6 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+              "reason": "An estimated local DR6 brick matcher is available from the locked official release roster joined to the locked all-sky brick grid. It returns intersecting release bricks and candidate band URIs where NEXP_g/r/z > 0; this does not prove per-file existence. No public coadded-imaging MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher and documented DR6 access rules to list candidate coadd URIs. Keep this native-unit lookup independent of MOC generation and Warehouse scan evidence; treat each generated URI as unverified unless checked at source."
             },
             {
               "name": "Tractor catalog",
@@ -1168,8 +1168,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr6/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr6/survey-bricks.fits.gz",
-              "reason": "The official DR6 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
-              "manualStep": "From the DR6 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+              "reason": "An estimated local DR6 brick matcher uses listed release bricks joined to the locked all-sky grid and returns candidate Tractor URIs. It does not establish per-file existence; no public Tractor-catalog MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher with the official DR6 release roster to return candidate Tractor brick URIs. This reverse lookup does not depend on a survey_primary row filter or generated MOC; verify individual files at the source as needed."
             }
           ]
         },
@@ -1190,8 +1190,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr7/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr7/survey-bricks.fits.gz",
-              "reason": "The official DR7 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
-              "manualStep": "Use the DR7 survey-bricks catalog and official DR7 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+              "reason": "An estimated local DR7 brick matcher is available from the locked official release roster joined to the locked all-sky brick grid. It returns intersecting release bricks and candidate band URIs where NEXP_g/r/z > 0; this does not prove per-file existence. No public coadded-imaging MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher and documented DR7 access rules to list candidate coadd URIs. Keep this native-unit lookup independent of MOC generation and Warehouse scan evidence; treat each generated URI as unverified unless checked at source."
             },
             {
               "name": "Tractor catalog",
@@ -1200,8 +1200,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr7/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr7/survey-bricks.fits.gz",
-              "reason": "The official DR7 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
-              "manualStep": "From the DR7 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+              "reason": "An estimated local DR7 brick matcher uses listed release bricks joined to the locked all-sky grid and returns candidate Tractor URIs. It does not establish per-file existence; no public Tractor-catalog MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher with the official DR7 release roster to return candidate Tractor brick URIs. This reverse lookup does not depend on a survey_primary row filter or generated MOC; verify individual files at the source as needed."
             }
           ]
         },
@@ -1222,8 +1222,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr8/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr8/survey-bricks.fits.gz",
-              "reason": "The official DR8 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
-              "manualStep": "Use the DR8 survey-bricks catalog and official DR8 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+              "reason": "An estimated local DR8 brick matcher is available from the locked official North/South release rosters joined to the locked all-sky brick grid. It returns intersecting release bricks and candidate band URIs where NEXP_g/r/z > 0; this does not prove per-file existence. No public coadded-imaging MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher and documented DR8 North/South access rules to list candidate coadd URIs. Keep this native-unit lookup independent of MOC generation and Warehouse scan evidence; treat each generated URI as unverified unless checked at source."
             },
             {
               "name": "Tractor catalog",
@@ -1232,8 +1232,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr8/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr8/survey-bricks.fits.gz",
-              "reason": "The official DR8 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
-              "manualStep": "From the DR8 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+              "reason": "An estimated local DR8 brick matcher uses listed North/South release bricks joined to the locked all-sky grid and returns candidate Tractor URIs. It does not establish per-file existence; no public Tractor-catalog MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher with the official DR8 North/South release rosters to return candidate Tractor brick URIs. This reverse lookup does not depend on a survey_primary row filter or generated MOC; verify individual files at the source as needed."
             }
           ]
         },
@@ -1254,8 +1254,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr9/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/survey-bricks.fits.gz",
-              "reason": "The official DR9 brick catalog is available, but accepted-CCD imaging geometry has not been converted to an acquired MOC.",
-              "manualStep": "Use the DR9 survey-bricks catalog and official DR9 CCD table to retain bricks intersected by accepted CCDs, convert those brick boundaries to ICRS polygons, and union them into the coadded-imaging MOC."
+              "reason": "An estimated local DR9 brick matcher is available from the locked official North/South release rosters joined to the locked all-sky brick grid. It returns intersecting release bricks and candidate band URIs where NEXP_g/r/z > 0; this does not prove per-file existence. No public coadded-imaging MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher and documented DR9 North/South access rules to list candidate coadd URIs. Keep this native-unit lookup independent of MOC generation and Warehouse scan evidence; treat each generated URI as unverified unless checked at source."
             },
             {
               "name": "Tractor catalog",
@@ -1264,8 +1264,8 @@
               "status": "awaiting_geometry",
               "sourceUrl": "https://www.legacysurvey.org/dr9/",
               "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/survey-bricks.fits.gz",
-              "reason": "The official DR9 brick catalog is available, but survey_primary observed Tractor brick coverage has not been converted to an acquired MOC.",
-              "manualStep": "From the DR9 survey-bricks catalog, retain observed bricks containing survey_primary Tractor rows, convert their boundaries to ICRS polygons, and union them into the Tractor-catalog MOC."
+              "reason": "An estimated local DR9 brick matcher uses listed North/South release bricks joined to the locked all-sky grid and returns candidate Tractor URIs. It does not establish per-file existence; no public Tractor-catalog MOC is available.",
+              "manualStep": "Use the local full-cell brick matcher with the official DR9 North/South release rosters to return candidate Tractor brick URIs. This reverse lookup does not depend on a survey_primary row filter or generated MOC; verify individual files at the source as needed."
             }
           ]
         },
@@ -1301,7 +1301,7 @@
             },
             {
               "name": "DR10 color imaging",
-              "modality": "catalog",
+              "modality": "imaging",
               "description": "Public survey product tracked by the coverage ledger.",
               "status": "acquired",
               "sourceUrl": "https://www.legacysurvey.org/dr10/",

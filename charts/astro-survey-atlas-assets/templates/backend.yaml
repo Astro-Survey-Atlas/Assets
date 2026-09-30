@@ -99,6 +99,10 @@ spec:
           env:
             - name: ASSETS_ROLE
               value: backend
+            {{- if .Values.backendNodeOptions }}
+            - name: NODE_OPTIONS
+              value: {{ .Values.backendNodeOptions | quote }}
+            {{- end }}
             {{- with .Values.apiManagement }}
             {{- if .secretName }}
             - name: ASSETS_API_MASTER_KEY

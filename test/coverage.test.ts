@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { coverageCatalogFromWarehouse, type CoverageCellLayer } from "../server/coverage.js";
+import { coverageCatalogFromWarehouse, isWarehouseFilePartitionLayer, type CoverageCellLayer } from "../server/coverage.js";
 import { batchEvidenceLayerId } from "../server/scan-batch.js";
 import type { WarehouseCoverageCatalogSnapshot } from "../server/evidence-store.js";
 import { footprintManifest, type CoverageCatalog } from "../site/src/atlas-coverage-globe.js";
@@ -42,6 +42,18 @@ function warehouseLayer(layerId: string, surveyId: string, productId = `${layerI
     errorCount: 0,
   };
 }
+
+test("Warehouse-backed HEALPix file partitions are distinct from native spatial-unit indexes", () => {
+  assert.equal(isWarehouseFilePartitionLayer({
+    sourceUnitIndex: { status: "exact", unitKind: "NESTED order-6 HEALPix file partition", notes: "" },
+  }), true);
+  assert.equal(isWarehouseFilePartitionLayer({
+    sourceUnitIndex: { status: "estimated", unitKind: "tile", notes: "" },
+  }), false);
+  assert.equal(isWarehouseFilePartitionLayer({
+    sourceUnitIndex: { status: "estimated", unitKind: "tract/patch", notes: "" },
+  }), false);
+});
 
 test("batch evidence does not add a public layer or replace its reviewed footprint", () => {
   const published = layer("euclid-q1-vis", "euclid", [1, 2]);

@@ -355,6 +355,7 @@
       "product": "DR1 spectra and redshifts",
       "modality": "spectroscopy",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "official_inventory_derived",
       "maxOrder": 10,
@@ -392,6 +393,7 @@
       "product": "Early Data Release spectra",
       "modality": "spectroscopy",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "official_inventory_derived",
       "maxOrder": 10,
@@ -407,6 +409,7 @@
       "product": "Early Release Observations",
       "modality": "imaging",
       "coverageRole": "image_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "official_geometry",
       "maxOrder": 10,
@@ -423,6 +426,7 @@
       "product": "ERO color imaging",
       "modality": "imaging",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "third_party_moc",
       "maxOrder": 10,
@@ -440,6 +444,7 @@
       "product": "ERO First Images",
       "modality": "imaging",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "third_party_moc",
       "maxOrder": 10,
@@ -457,6 +462,7 @@
       "product": "ERO NISP.H",
       "modality": "imaging",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "third_party_moc",
       "maxOrder": 10,
@@ -474,6 +480,7 @@
       "product": "ERO NISP.J",
       "modality": "imaging",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "third_party_moc",
       "maxOrder": 10,
@@ -491,6 +498,7 @@
       "product": "ERO NISP.Y",
       "modality": "imaging",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "third_party_moc",
       "maxOrder": 10,
@@ -508,6 +516,7 @@
       "product": "ERO VIS",
       "modality": "imaging",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "third_party_moc",
       "maxOrder": 10,
@@ -525,6 +534,7 @@
       "product": "Euclid Q1 color imaging",
       "modality": "imaging",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "third_party_moc",
       "maxOrder": 10,
@@ -542,6 +552,7 @@
       "product": "Euclid Q1 NISP.H",
       "modality": "imaging",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "third_party_moc",
       "maxOrder": 10,
@@ -559,6 +570,7 @@
       "product": "Euclid Q1 NISP.J",
       "modality": "imaging",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "third_party_moc",
       "maxOrder": 10,
@@ -576,6 +588,7 @@
       "product": "Euclid Q1 NISP.Y",
       "modality": "imaging",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "third_party_moc",
       "maxOrder": 10,
@@ -593,6 +606,7 @@
       "product": "Euclid Q1 VIS",
       "modality": "imaging",
       "coverageRole": "footprint_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "third_party_moc",
       "maxOrder": 10,
@@ -610,6 +624,7 @@
       "product": "Euclid Q1 deep fields",
       "modality": "imaging",
       "coverageRole": "image_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "official_geometry",
       "maxOrder": 10,
@@ -625,6 +640,7 @@
       "product": "Galactic Bulge Survey",
       "modality": "imaging",
       "coverageRole": "image_extent",
+      "sourceUnitKind": "tile",
       "dataOrigin": "observed",
       "sourceTier": "official_geometry",
       "maxOrder": 10,
@@ -862,14 +878,15 @@
       "product": "Coadded imaging",
       "modality": "imaging",
       "coverageRole": "image_extent",
+      "sourceUnitKind": "brick",
       "dataOrigin": "observed",
       "sourceTier": "official_inventory_derived",
       "maxOrder": 10,
       "status": "awaiting_snapshot",
       "plannedMode": "tile-table",
       "sourceUrl": "https://www.legacysurvey.org/dr1/",
-      "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/survey-bricks.fits.gz",
-      "pendingReason": "DR1 accepted-CCD geometry and its snapshot lock are not yet available in Assets."
+      "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/decals-bricks.fits",
+      "pendingReason": "No DR1 MOC is published. Runtime brick lookup is provided separately from the locked decals-bricks.fits source-unit snapshot."
     },
     {
       "layerId": "legacy-dr1-tractor-object-presence",
@@ -878,14 +895,15 @@
       "product": "Tractor catalog",
       "modality": "catalog",
       "coverageRole": "object_presence",
+      "sourceUnitKind": "brick",
       "dataOrigin": "catalog",
       "sourceTier": "official_inventory_derived",
       "maxOrder": 10,
       "status": "awaiting_snapshot",
-      "plannedMode": "catalog-radec",
+      "plannedMode": "tile-table",
       "sourceUrl": "https://www.legacysurvey.org/dr1/",
-      "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/survey-bricks.fits.gz",
-      "pendingReason": "DR1 survey_primary Tractor selection and its snapshot lock are not yet available in Assets."
+      "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr1/decals-bricks.fits",
+      "pendingReason": "No DR1 Tractor MOC is published. Runtime brick lookup uses the official has_catalog member flag and remains separate from file-scan evidence."
     },
     {
       "layerId": "legacy-dr10-coadd-image-extent",
@@ -894,6 +912,7 @@
       "product": "Coadded imaging",
       "modality": "imaging",
       "coverageRole": "image_extent",
+      "sourceUnitKind": "brick",
       "dataOrigin": "observed",
       "sourceTier": "official_inventory_derived",
       "maxOrder": 10,
@@ -910,6 +929,7 @@
       "product": "Tractor catalog",
       "modality": "catalog",
       "coverageRole": "object_presence",
+      "sourceUnitKind": "brick",
       "dataOrigin": "catalog",
       "sourceTier": "official_inventory_derived",
       "maxOrder": 10,
@@ -965,7 +985,7 @@
       "plannedMode": "tile-table",
       "sourceUrl": "https://www.legacysurvey.org/dr3/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr3/survey-bricks.fits.gz",
-      "pendingReason": "DR3 accepted-CCD geometry and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR3 brick matcher is available from the locked release roster and all-sky brick grid. This registry entry remains pending only because no accepted-CCD coadded-imaging MOC is published; candidate band URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr3-tractor-object-presence",
@@ -981,7 +1001,7 @@
       "plannedMode": "catalog-radec",
       "sourceUrl": "https://www.legacysurvey.org/dr3/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr3/survey-bricks.fits.gz",
-      "pendingReason": "DR3 survey_primary Tractor selection and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR3 Tractor brick matcher is available from the locked release roster and all-sky brick grid. This registry entry remains pending because no Tractor coverage MOC is published; generated candidate URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr4-coadd-image-extent",
@@ -997,7 +1017,7 @@
       "plannedMode": "tile-table",
       "sourceUrl": "https://www.legacysurvey.org/dr4/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr4/survey-bricks.fits.gz",
-      "pendingReason": "DR4 accepted-CCD geometry and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR4 brick matcher is available from the locked release roster and all-sky brick grid. This registry entry remains pending only because no accepted-CCD coadded-imaging MOC is published; candidate band URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr4-tractor-object-presence",
@@ -1013,7 +1033,7 @@
       "plannedMode": "catalog-radec",
       "sourceUrl": "https://www.legacysurvey.org/dr4/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr4/survey-bricks.fits.gz",
-      "pendingReason": "DR4 survey_primary Tractor selection and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR4 Tractor brick matcher is available from the locked release roster and all-sky brick grid. This registry entry remains pending because no Tractor coverage MOC is published; generated candidate URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr5-coadd-image-extent",
@@ -1029,7 +1049,7 @@
       "plannedMode": "tile-table",
       "sourceUrl": "https://www.legacysurvey.org/dr5/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr5/survey-bricks.fits.gz",
-      "pendingReason": "DR5 accepted-CCD geometry and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR5 brick matcher is available from the locked release roster and all-sky brick grid. This registry entry remains pending only because no accepted-CCD coadded-imaging MOC is published; candidate band URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr5-tractor-object-presence",
@@ -1045,7 +1065,7 @@
       "plannedMode": "catalog-radec",
       "sourceUrl": "https://www.legacysurvey.org/dr5/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr5/survey-bricks.fits.gz",
-      "pendingReason": "DR5 survey_primary Tractor selection and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR5 Tractor brick matcher is available from the locked release roster and all-sky brick grid. This registry entry remains pending because no Tractor coverage MOC is published; generated candidate URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr6-coadd-image-extent",
@@ -1061,7 +1081,7 @@
       "plannedMode": "tile-table",
       "sourceUrl": "https://www.legacysurvey.org/dr6/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr6/survey-bricks.fits.gz",
-      "pendingReason": "DR6 accepted-CCD geometry and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR6 brick matcher is available from the locked release roster and all-sky brick grid. This registry entry remains pending only because no accepted-CCD coadded-imaging MOC is published; candidate band URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr6-tractor-object-presence",
@@ -1077,7 +1097,7 @@
       "plannedMode": "catalog-radec",
       "sourceUrl": "https://www.legacysurvey.org/dr6/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr6/survey-bricks.fits.gz",
-      "pendingReason": "DR6 survey_primary Tractor selection and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR6 Tractor brick matcher is available from the locked release roster and all-sky brick grid. This registry entry remains pending because no Tractor coverage MOC is published; generated candidate URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr7-coadd-image-extent",
@@ -1093,7 +1113,7 @@
       "plannedMode": "tile-table",
       "sourceUrl": "https://www.legacysurvey.org/dr7/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr7/survey-bricks.fits.gz",
-      "pendingReason": "DR7 accepted-CCD geometry and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR7 brick matcher is available from the locked release roster and all-sky brick grid. This registry entry remains pending only because no accepted-CCD coadded-imaging MOC is published; candidate band URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr7-tractor-object-presence",
@@ -1109,7 +1129,7 @@
       "plannedMode": "catalog-radec",
       "sourceUrl": "https://www.legacysurvey.org/dr7/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr7/survey-bricks.fits.gz",
-      "pendingReason": "DR7 survey_primary Tractor selection and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR7 Tractor brick matcher is available from the locked release roster and all-sky brick grid. This registry entry remains pending because no Tractor coverage MOC is published; generated candidate URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr8-coadd-image-extent",
@@ -1125,7 +1145,7 @@
       "plannedMode": "tile-table",
       "sourceUrl": "https://www.legacysurvey.org/dr8/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr8/survey-bricks.fits.gz",
-      "pendingReason": "DR8 accepted-CCD geometry and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR8 North/South brick matcher is available from the locked release rosters and all-sky brick grid. This registry entry remains pending only because no accepted-CCD coadded-imaging MOC is published; candidate band URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr8-tractor-object-presence",
@@ -1141,7 +1161,7 @@
       "plannedMode": "catalog-radec",
       "sourceUrl": "https://www.legacysurvey.org/dr8/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr8/survey-bricks.fits.gz",
-      "pendingReason": "DR8 survey_primary Tractor selection and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR8 North/South Tractor brick matcher is available from the locked release rosters and all-sky brick grid. This registry entry remains pending because no Tractor coverage MOC is published; generated candidate URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr9-coadd-image-extent",
@@ -1157,7 +1177,7 @@
       "plannedMode": "tile-table",
       "sourceUrl": "https://www.legacysurvey.org/dr9/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/survey-bricks.fits.gz",
-      "pendingReason": "DR9 accepted-CCD geometry and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR9 North/South brick matcher is available from the locked release rosters and all-sky brick grid. This registry entry remains pending only because no accepted-CCD coadded-imaging MOC is published; candidate band URIs do not prove per-file existence."
     },
     {
       "layerId": "legacy-dr9-tractor-object-presence",
@@ -1173,7 +1193,7 @@
       "plannedMode": "catalog-radec",
       "sourceUrl": "https://www.legacysurvey.org/dr9/",
       "geometrySourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/survey-bricks.fits.gz",
-      "pendingReason": "DR9 survey_primary Tractor selection and its snapshot lock are not yet available in Assets."
+      "pendingReason": "The local estimated DR9 North/South Tractor brick matcher is available from the locked release rosters and all-sky brick grid. This registry entry remains pending because no Tractor coverage MOC is published; generated candidate URIs do not prove per-file existence."
     },
     {
       "layerId": "rubin-rubin-firstlook-rubin-first-look-imaging-moc",

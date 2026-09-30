@@ -25,8 +25,13 @@ export interface CoverageCellLayer {
   recipe?: CoverageRecipeSummary;
   sourceEvidence?: CoverageSourceEvidence;
   sourceUnitIndex?: SourceUnitIndexSummary;
+  warehouseFileIndex?: WarehouseFileIndexSummary;
   /** Stable content revision used to version browser/cache block requests. */
   revision?: string;
+}
+
+export function isWarehouseFilePartitionLayer(layer: Pick<CoverageCellLayer, "sourceUnitIndex">): boolean {
+  return /\bfile partition\b/i.test(layer.sourceUnitIndex?.unitKind ?? "");
 }
 
 export interface CoverageRecipeSummary {
@@ -41,12 +46,14 @@ export interface CoverageRecipeSummary {
   /** Hash/size of the immutable input snapshot; never expose its local path. */
   sourceSnapshotSha256?: string;
   sourceSnapshotSizeBytes?: number;
+  /** Public source URLs for runtime-only geometry adapters. */
+  sourceFileReferences?: string[];
   precision?: "exact" | "estimated";
   steps: Array<{ id: string; kind: string; title: string; bodyMarkdown: string; order: number; implementationRef: string }>;
 }
 
 export interface CoverageSourceEvidence {
-  evidenceKind: "observation-footprint" | "tile-footprint" | "wcs-coverage" | "published-moc";
+  evidenceKind: "observation-footprint" | "tile-footprint" | "source-unit-footprint" | "wcs-coverage" | "published-moc";
   sourceIdentity?: string;
   instrument?: string;
   filters?: string;
@@ -62,6 +69,16 @@ export interface SourceUnitIndexSummary {
   unitKind?: string;
   indexUrl?: string;
   downloadUrlTemplate?: string;
+  notes: string;
+}
+
+export interface WarehouseFileIndexSummary {
+  status: "available" | "not-indexed" | "unavailable";
+  indexUrl?: string;
+  fileCount?: number;
+  coverageCount?: number;
+  errorCount?: number;
+  updatedAt?: string;
   notes: string;
 }
 
@@ -176,7 +193,7 @@ function recipeSteps(mode: string, recipe: Record<string, unknown>): CoverageRec
   };
   const definitions: Record<string, Array<[string, string, string, string]>> = {
     "fits-wcs": [["input", "source-inventory", "输入文件与发布快照", "assets.coverage.input"], ["filter", "file-filter", "文件筛选与可读性校验", "assets.coverage.filter"], ["header", "fits-wcs", "FITS header / WCS 读取", "assets.coverage.fits-wcs"], ["icrs", "coordinate-validation", "ICRS 坐标校验", "assets.coverage.icrs"], ["geometry", "boundary", "几何边界计算", "assets.coverage.geometry"], ["rasterize", "healpix", "HEALPix 栅格化", "assets.coverage.rasterize"], ["union", "union-dedup", "union / dedup", "assets.coverage.union"], ["outputs", "outputs", "MOC、FITS、preview、statistics 输出", "assets.coverage.outputs"], ["evidence", "evidence", "manifest、provenance、hash", "assets.coverage.evidence"]],
-    "tile-table": [["input", "source-inventory", "官方 tile 表输入", "assets.coverage.input"], ["filter", "quality-filter", "质量字段筛选", "assets.coverage.filter"], ["geometry", "tile-geometry", "tile 几何包络计算", "assets.coverage.geometry"], ["rasterize", "healpix", "HEALPix 栅格化", "assets.coverage.rasterize"], ["union", "union-dedup", "union / dedup", "assets.coverage.union"], ["outputs", "outputs", "MOC、FITS、preview、statistics 输出", "assets.coverage.outputs"], ["evidence", "evidence", "manifest、provenance、hash", "assets.coverage.evidence"]],
+    "tile-table": [["input", "source-inventory", "官方分块表输入", "assets.coverage.input"], ["filter", "quality-filter", "质量字段筛选", "assets.coverage.filter"], ["geometry", "native-unit-geometry", "分块几何计算", "assets.coverage.geometry"], ["rasterize", "healpix", "HEALPix 栅格化", "assets.coverage.rasterize"], ["union", "union-dedup", "union / dedup", "assets.coverage.union"], ["outputs", "outputs", "MOC、FITS、preview、statistics 输出", "assets.coverage.outputs"], ["evidence", "evidence", "manifest、provenance、hash", "assets.coverage.evidence"]],
     "catalog-radec": [["input", "source-inventory", "目录表输入", "assets.coverage.input"], ["filter", "quality-filter", "目录行筛选", "assets.coverage.filter"], ["geometry", "catalog-geometry", "RA/DEC 几何计算", "assets.coverage.geometry"], ["rasterize", "healpix", "HEALPix 栅格化", "assets.coverage.rasterize"], ["union", "union-dedup", "union / dedup", "assets.coverage.union"], ["outputs", "outputs", "MOC、FITS、preview、statistics 输出", "assets.coverage.outputs"], ["evidence", "evidence", "manifest、provenance、hash", "assets.coverage.evidence"]],
     "path-healpix": [["input", "source-inventory", "文件清单与输入快照", "assets.coverage.input"], ["filter", "file-filter", "按文件后缀筛选", "assets.coverage.filter"], ["validate", "healpix-validation", "校验路径 HEALPix 与分组目录", "assets.coverage.validate"], ["normalize", "file-partition-association", "保留真实文件 URI 与 order/ipix 关联", "warehouse.path-healpix"], ["outputs", "file-index", "文件反查索引与覆盖证据", "warehouse.file-index"], ["evidence", "evidence", "冻结 scope、source snapshot、扫描 run 与错误记录", "assets.coverage.evidence"]],
     "regions": [["input", "source-inventory", "区域文件输入", "assets.coverage.input"], ["parse", "region-parser", "DS9/区域格式解析", "assets.coverage.parse"], ["icrs", "coordinate-validation", "ICRS 坐标校验", "assets.coverage.icrs"], ["union", "union-dedup", "区域 union / dedup", "assets.coverage.union"], ["rasterize", "healpix", "HEALPix 栅格化", "assets.coverage.rasterize"], ["outputs", "outputs", "MOC、FITS、preview、statistics 输出", "assets.coverage.outputs"], ["evidence", "evidence", "manifest、provenance、hash", "assets.coverage.evidence"]],
@@ -190,8 +207,20 @@ function recipeSteps(mode: string, recipe: Record<string, unknown>): CoverageRec
 
 export async function loadCoverageCatalog(root: string, manifest: { footprints: Array<{ surveyId: string; releaseId: string; product: string; nside: number; pixels: number[]; sourceUrl?: string; sourceId?: string; notes?: string }> }): Promise<CoverageCatalog & { records: Map<string, CoverageCellLayer> }> {
   const registryPath = path.join(root, "src", "layers", "layer-registry.json");
-  const registry = JSON.parse(await readFile(registryPath, "utf8")) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; modality?: string; coverageRole?: CoverageCellLayer["coverageRole"]; maxOrder?: number; mode?: string; plannedMode?: string; recipePath?: string; sourceTier?: string; status?: string }> };
+  const registry = JSON.parse(await readFile(registryPath, "utf8")) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; modality?: string; coverageRole?: CoverageCellLayer["coverageRole"]; sourceUnitKind?: string; maxOrder?: number; mode?: string; plannedMode?: string; recipePath?: string; sourceTier?: string; status?: string }> };
   const registryByIdentity = new Map((registry.layers ?? []).map((entry) => [identity(entry.surveyId, entry.releaseId, entry.product), entry]));
+  let sourceUnitBindings: Array<{ surveyId: string; releaseId: string; product: string; unitKind: string; status: "exact" | "estimated"; notes: string }> = [];
+  try {
+    const lock = JSON.parse(await readFile(path.join(root, "src", "layers", "recipes", "source-unit-indexes.lock.json"), "utf8")) as {
+      layerBindings?: Array<{ surveyId?: unknown; releaseId?: unknown; product?: unknown; unitKind?: unknown; status?: unknown; notes?: unknown }>;
+    };
+    sourceUnitBindings = (lock.layerBindings ?? []).flatMap((binding) => {
+      if (typeof binding.surveyId !== "string" || typeof binding.releaseId !== "string" || typeof binding.product !== "string"
+        || typeof binding.unitKind !== "string" || (binding.status !== "exact" && binding.status !== "estimated") || typeof binding.notes !== "string") return [];
+      return [{ surveyId: binding.surveyId, releaseId: binding.releaseId, product: binding.product, unitKind: binding.unitKind, status: binding.status, notes: binding.notes }];
+    });
+  } catch { /* Source-unit mappings are optional for public coverage. */ }
+  const sourceUnitBindingByIdentity = new Map(sourceUnitBindings.map((binding) => [identity(binding.surveyId, binding.releaseId, binding.product), binding]));
   const colors = new Map<string, string>();
   const surveyCatalog = JSON.parse(await readFile(path.join(root, "src", "surveys", "survey-catalog.json"), "utf8")) as { surveys?: Array<{ id: string; color: string }> };
   for (const survey of surveyCatalog.surveys ?? []) colors.set(survey.id, survey.color);
@@ -200,6 +229,7 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
     if (isDeniedSurvey(footprint.surveyId)) continue;
     const key = identity(footprint.surveyId, footprint.releaseId, footprint.product);
     const registered = registryByIdentity.get(key);
+    const sourceUnitBinding = sourceUnitBindingByIdentity.get(key);
     const layerId = registered?.layerId ?? `${slug(footprint.surveyId)}-${slug(footprint.releaseId)}-${slug(footprint.product)}`;
     const order = Math.round(Math.log2(footprint.nside));
     const cells = new Map<number, number[]>([[order, [...new Set(footprint.pixels)].sort((a, b) => a - b)]]);
@@ -257,11 +287,21 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
       && (typeof registeredRecipe.scannerRunId === "string"
         || (registeredMode === "path-healpix" && registeredRecipe.precision === "exact" && typeof registeredRecipe.scanBatchId === "string")
         || (footprint.sourceId?.startsWith("workspace-coverage-") ?? false));
-    const sourceUnitIndex: SourceUnitIndexSummary = hasWarehouseFileEvidence
-      ? { status: "exact", unitKind: registeredMode === "path-healpix" ? "NESTED HEALPix file partition" : "file", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "由 Warehouse file/coverage evidence 按实际 NESTED order/ipix 反查源文件 URI 与对象元数据；DESI path HEALPix 是文件分区，不是 Tile。" }
-      : mode === "tile-table"
-        ? { status: footprint.surveyId === "desi" ? "exact" : "estimated", unitKind: "tile", indexUrl: registered?.recipePath, downloadUrlTemplate: footprint.surveyId === "desi" ? "https://data.desi.lbl.gov/public/{release}/spectro/redux/{specprod}/tiles/cumulative/{tileId}/{lastNight}/" : undefined, notes: footprint.surveyId === "desi" ? "由官方 TILE_COMPLETENESS 快照与锁定 recipe 构建运行时 tile 反向索引。" : "当前发布保存了 tile 表和几何规则；精确 tile 反向索引尚未提供。" }
-        : { status: "entrypoint-only", notes: "当前 MOC 未保存可复核的原始 source-unit 反向索引，只提供 Release 官方入口。" };
+    const hasNativePathUnitIndex = registeredMode === "path-healpix"
+      && registeredRecipe.precision === "exact"
+      && (typeof registeredRecipe.scannerRunId === "string" || typeof registeredRecipe.scanBatchId === "string");
+    const hasNativeUnitIndex = Boolean(sourceUnitBinding) || (mode === "tile-table"
+      && registered?.status === "acquired"
+      && typeof registeredRecipe.input === "string"
+      && Boolean(registered?.sourceUnitKind));
+    const nativeUnitKind = sourceUnitBinding?.unitKind ?? registered?.sourceUnitKind;
+    const sourceUnitIndex: SourceUnitIndexSummary = hasNativePathUnitIndex
+      ? { status: "exact", unitKind: `NESTED order-${typeof registeredRecipe.sourceOrder === "number" ? registeredRecipe.sourceOrder : order} HEALPix file partition`, indexUrl: "/api/v1/coverage/reverse-lookup", notes: "按真实源 URI 路径精确识别 NESTED HEALPix 文件分区；该分区不是 DESI Tile，Warehouse 文件信息另列。" }
+      : nativeUnitKind
+      ? hasNativeUnitIndex
+        ? { status: sourceUnitBinding?.status ?? registeredPrecision ?? "estimated", unitKind: nativeUnitKind, indexUrl: "/api/v1/coverage/reverse-lookup", downloadUrlTemplate: footprint.surveyId === "desi" ? "https://data.desi.lbl.gov/public/{release}/spectro/redux/{specprod}/tiles/cumulative/{tileId}/{lastNight}/" : undefined, notes: sourceUnitBinding?.notes ?? `基于锁定的官方分块输入构建本地 ${nativeUnitKind} 反查；返回项 precision 描述边界求交精度，文件存在性仍由来源或扫描证据决定。` }
+        : { status: "entrypoint-only", unitKind: nativeUnitKind, notes: `原生分块类型为 ${nativeUnitKind}，但当前没有与此 coverage layer 对应的可用本地分块索引。` }
+      : { status: "entrypoint-only", notes: "当前 MOC 未保存可复核的原生分块反向索引，只提供 Release 官方入口。" };
     const record: CoverageCellLayer = {
       layerId,
       productId: createHash("sha256").update(`${footprint.surveyId}\n${footprint.releaseId}\n${footprint.product}`).digest("hex").slice(0, 20),
@@ -281,6 +321,13 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
       cells,
       recipe,
       sourceUnitIndex,
+      ...(hasWarehouseFileEvidence ? { warehouseFileIndex: {
+        status: "available",
+        indexUrl: "/api/v1/coverage/reverse-lookup",
+        ...(typeof registeredRecipe.fileCount === "number" ? { fileCount: registeredRecipe.fileCount } : {}),
+        ...(typeof registeredRecipe.coverageCount === "number" ? { coverageCount: registeredRecipe.coverageCount } : {}),
+        notes: "Warehouse 文件/coverage 索引可按空间区域返回已扫描文件；此项是扫描证据，不代表原生分块目录完整。",
+      } satisfies WarehouseFileIndexSummary } : {}),
     };
     records.set(layerId, record);
   }
@@ -371,7 +418,16 @@ export function coverageCatalogFromWarehouse(
       tileScheme: "ipix-range-4096",
       cells,
       recipe,
-      sourceUnitIndex: { status: "exact", unitKind: "file", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "由新版 Warehouse ast_coverage_index_v1 反查当前 layer 的 FileAsset。" },
+      sourceUnitIndex: fallback?.sourceUnitIndex ?? { status: "entrypoint-only", notes: "Warehouse 文件记录不定义该产品的原生空间分块。" },
+      warehouseFileIndex: {
+        status: layer.fileCount > 0 && layer.coverageCount > 0 ? "available" : "not-indexed",
+        indexUrl: "/api/v1/coverage/reverse-lookup",
+        fileCount: layer.fileCount,
+        coverageCount: layer.coverageCount,
+        errorCount: layer.errorCount,
+        ...(layer.updatedAt ? { updatedAt: layer.updatedAt } : {}),
+        notes: "Warehouse ast_coverage_index_v1 提供已扫描文件的空间反查；它是补充证据，不会改写产品的原生分块身份。",
+      },
     };
     records.set(record.layerId, record);
   }
