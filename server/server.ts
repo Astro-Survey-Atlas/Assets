@@ -18,7 +18,7 @@ import { brotliCompressSync, gzipSync } from "node:zlib";
 import { AdminHttpError, AssetsAdmin, KubernetesApiError, SUPPORTED_COVERAGE_MODES, adminFromRequest, type ConnectorInput, type CoverageTaskInput, type KubernetesResource, type MocDiscoveryInput, type ScanBatchTaskRecipe } from "./admin.js";
 import { batchEvidenceLayerId, parseScanBatchRequest, resolveScanBatchIncludePattern, resolveScanBatchMode, ScanBatchValidationError } from "./scan-batch.js";
 import { ConnectorInventoryStateStore, ConnectorProbeStateStore } from "./connector-state.js";
-import { createArtifactStoreFromProcess } from "./artifact-store.js";
+import { createArtifactStoreFromProcess, FilesystemArtifactStore } from "./artifact-store.js";
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex, type PublicSurveyIndex } from "./surveys.js";
@@ -32,7 +32,7 @@ import { aggregateReadiness, deriveProductReadiness, type ProductReadiness, type
 import { SurveyEditorialStore, type SurveyEditorialContent, type SurveyEditorialRecord } from "./editorial.js";
 import { SourceUnitStore, SourceUnitWorkerStore, type SourceUnitCoverageLayer } from "./source-units.js";
 import { buildDownloadPlan, CoverageEvidenceStore, EvidenceStoreError, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanSpatialUnit, type ReverseLookupResult, type WarehouseLayerSnapshot, type WarehouseLayerStatusSnapshot } from "./evidence-store.js";
-import { decodeReverseCursor, encodeReverseCursor, pageReversePlan, reversePageSize, reversePlanCoverageEvidenceKey, reversePlanEntrypointKey, reversePlanFileKey, reversePlanItems, reversePlanSpatialUnitKey, REVERSE_CURSOR_MAX_KEYS, REVERSE_PAGE_SIZE, type ReverseCursorScope } from "./reverse-pagination.js";
+import { reversePageSize, reversePlanCoverageEvidenceKey, reversePlanEntrypointKey, reversePlanFileKey, reversePlanItems, reversePlanSpatialUnitKey, type ReverseCursorScope } from "./reverse-pagination.js";
 import { resolveEuclidQ1MerFile } from "./euclid-data-links.js";
 import { buildOverlapDetails, publicExternalUrl, publicLocator } from "./overlap-details.js";
 import { filterByModalities } from "../src/modality-filter.js";
@@ -40,6 +40,8 @@ import { MAST_HST_DISCOVERY_POLICY, resolveMocDiscoveryCandidate } from "./moc-d
 import { decodeScopeMoc, parseMastHstScopeRef, resolveMastHstScope } from "./mast-hst-discovery.js";
 import { importMastHstObservation } from "./mast-hst-import.js";
 import { lookupHstImages } from "./hst-image-lookup.js";
+import { archiveNativeUnits } from "./archive-native-units.js";
+import { decodeSnapshotCursor, readReverseSnapshot, snapshotPage, writeReverseSnapshot, type ReverseSnapshot } from "./reverse-snapshot.js";
 import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
 import { DynamicResourcePackageStore, dynamicResourcePackageAssetId } from "./resource-package-publication.js";
 import { PublicReleasePublisher, PublicationConflictError, type ReleaseHistoryDocument } from "./public-release-publication.js";
@@ -99,6 +101,7 @@ const evidenceStore = new CoverageEvidenceStore({
 const contentRoot = path.resolve(process.env.ASSETS_CONTENT_ROOT ?? path.join(releaseRoot, ".assets-content"));
 const releaseBackendOwnership = role === "backend" ? await acquireLocalFileLock(path.join(contentRoot, ".backend-owner.lock")) : undefined;
 const evidenceRoot = path.resolve(process.env.ASSETS_EVIDENCE_ROOT ?? "/var/lib/assets-evidence");
+const publicLookupStore = authorityStore ?? new FilesystemArtifactStore(path.join(evidenceRoot, "public-lookups"));
 const sourceUnitEvidenceRoot = path.resolve(process.env.ASSETS_SOURCE_UNIT_EVIDENCE_ROOT
   ?? (process.env.ASSETS_EVIDENCE_ROOT ? evidenceRoot : path.join(releaseRoot, "artifacts/public-survey-footprints/raw")));
 const uploadSpoolRoot = path.resolve(process.env.ASSETS_UPLOAD_SPOOL_ROOT ?? "/var/lib/assets-upload-spool");
@@ -3294,7 +3297,7 @@ const REVERSE_LOOKUP_BODY_MAX_BYTES = 1_310_720;
 const reverseCursorSecret = process.env.ASSETS_REVERSE_CURSOR_SECRET?.trim() || randomUUID();
 
 function reverseQueryFingerprint(layerIds: readonly string[], order: number, cells: readonly number[]): string {
-  const revisions = layerIds.map((layerId) => ({ layerId, revision: publicCoverageCatalog().records.get(layerId)?.revision ?? "" }));
+  const revisions = [...new Set(layerIds)].sort().map((layerId) => ({ layerId, revision: publicCoverageCatalog().records.get(layerId)?.revision ?? "" }));
   return nativeSha256(JSON.stringify({
     releaseId: publicState.snapshot.releaseId,
     layerIds: [...new Set(layerIds)].sort(),
@@ -3394,19 +3397,31 @@ function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LI
   };
 }
 
-async function publicSpatialUnits(layerIds: readonly string[], order: number, cells: readonly number[], limit: number): Promise<{ units: DownloadPlanSpatialUnit[]; indexedLayerIds: Set<string>; unavailableLayerIds: string[]; truncated: boolean }> {
+async function publicSpatialUnits(layerIds: readonly string[], order: number, cells: readonly number[], limit: number) {
+  const layers = layerIds.flatMap((id) => { const layer = publicCoverageCatalog().records.get(id); return layer ? [layer] : []; });
+  const archiveLayers = layers.filter((layer) => layer.surveyId === "hst" || (layer.surveyId === "euclid" && layer.releaseId === "euclid-ero"));
+  const [local, archive] = await Promise.all([
+    localSpatialUnits(layers.filter((layer) => !archiveLayers.includes(layer)).map((layer) => layer.layerId), order, cells, limit),
+    archiveNativeUnits(archiveLayers, order, cells, publicLookupStore),
+  ]);
+  return { units: [...local.units, ...archive.units], indexedLayerIds: new Set([...local.indexedLayerIds, ...archive.indexedLayerIds]),
+    unavailableLayerIds: [...local.unavailableLayerIds, ...archive.unavailableLayerIds], truncated: local.truncated || archive.truncated, notes: [...archive.notes, ...local.notes] };
+}
+
+async function localSpatialUnits(layerIds: readonly string[], order: number, cells: readonly number[], limit: number): Promise<{ units: DownloadPlanSpatialUnit[]; indexedLayerIds: Set<string>; unavailableLayerIds: string[]; truncated: boolean; notes: string[] }> {
   const layers = layerIds.map((layerId) => publicCoverageCatalog().records.get(layerId))
     .filter((layer): layer is CoverageCellLayer => layer !== undefined && !isWarehouseFilePartitionLayer(layer));
-  if (!layers.length) return { units: [], indexedLayerIds: new Set(), unavailableLayerIds: [], truncated: false };
+  if (!layers.length) return { units: [], indexedLayerIds: new Set(), unavailableLayerIds: [], truncated: false, notes: [] };
   const sourceUnits = await sourceUnitsReadyWithin(120_000);
   const unavailableLayerIds = new Set<string>();
   if (!sourceUnits) {
     layers.filter((layer) => layer.sourceUnitIndex?.status === "exact" || layer.sourceUnitIndex?.status === "estimated")
       .forEach((layer) => unavailableLayerIds.add(layer.layerId));
-    return { units: [], indexedLayerIds: new Set(), unavailableLayerIds: [...unavailableLayerIds], truncated: false };
+    return { units: [], indexedLayerIds: new Set(), unavailableLayerIds: [...unavailableLayerIds], truncated: false, notes: [] };
   }
   const units: DownloadPlanSpatialUnit[] = [];
   const indexedLayerIds = new Set<string>();
+  const notes: string[] = [];
   let truncated = false;
   for (const layer of layers) {
     const match = await Promise.resolve(sourceUnits.match(layer.layerId, order, [...cells], limit, {
@@ -3420,9 +3435,9 @@ async function publicSpatialUnits(layerIds: readonly string[], order: number, ce
     }
     indexedLayerIds.add(layer.layerId);
     truncated ||= match.truncated;
+    if (!match.units.length) notes.push(`${layer.surveyId} / ${layer.releaseId} / ${layer.product}: the current native-unit inventory returned no match in this region; this does not establish that the survey has no data. ${match.notes}`);
     for (const unit of match.units) {
       const accessUri = publicExternalUrl(unit.downloadUrl);
-      if (!accessUri) continue;
       const accessUris = unit.accessUris?.flatMap((entry) => {
         const uri = publicExternalUrl(entry.url);
         return uri ? [{ uri, ...(entry.fileName ? { fileName: entry.fileName } : {}) }] : [];
@@ -3440,7 +3455,7 @@ async function publicSpatialUnits(layerIds: readonly string[], order: number, ce
         nside: 2 ** order,
         matchingCells: unit.matchingCells,
         precision: unit.geometryPrecision,
-        accessUri,
+        ...(accessUri ? { accessUri } : {}),
         ...(accessUris?.length ? { accessUris } : {}),
         ...(unit.accessAvailability ? { accessAvailability: unit.accessAvailability } : {}),
         sourceSnapshotSha256: unit.sourceSnapshotSha256,
@@ -3449,7 +3464,7 @@ async function publicSpatialUnits(layerIds: readonly string[], order: number, ce
     }
   }
   units.sort((left, right) => left.layerId.localeCompare(right.layerId) || left.unitKind.localeCompare(right.unitKind) || left.unitId.localeCompare(right.unitId, undefined, { numeric: true }));
-  return { units, indexedLayerIds, unavailableLayerIds: [...unavailableLayerIds], truncated };
+  return { units, indexedLayerIds, unavailableLayerIds: [...unavailableLayerIds], truncated, notes };
 }
 
 async function withRegionAccess(request:IncomingMessage,response:ServerResponse,action:(identity:string)=>Promise<void>):Promise<void> {
@@ -3489,21 +3504,25 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   const order = Number(body.order);
   const requestedCellsInput = body.cells as number[];
   const fingerprint = reverseQueryFingerprint(body.layerIds as string[], order, requestedCellsInput);
-  const cursor = decodeReverseCursor(body.cursor, identity, fingerprint, reverseCursorSecret, pageScope);
+  const cursor = decodeSnapshotCursor(body.cursor, identity, fingerprint, pageScope, reverseCursorSecret);
   if (preview && cursor) throw new AccessError(400, "Anonymous preview requests cannot continue a reverse lookup cursor");
   if (cursor && cursor.identity !== "preview" && cursor.identity !== identity) {
     throw new AccessError(403, "Reverse lookup cursor belongs to another access mode");
   }
   const requestedPageSize = reversePageSize(body.pageSize);
-  const pageSize = preview ? PUBLIC_REVERSE_PREVIEW_LIMIT : requestedPageSize ?? (cursor ? REVERSE_PAGE_SIZE : undefined);
-  const seenKeys = new Set(cursor?.seenKeys ?? []);
+  const pageSize = preview ? PUBLIC_REVERSE_PREVIEW_LIMIT : requestedPageSize ?? 100;
+  if (cursor || body.querySnapshotId !== undefined) {
+    if (preview) throw new AccessError(400, "Anonymous preview cannot select a query snapshot");
+    if (cursor && body.querySnapshotId !== undefined && cursor.snapshotId !== body.querySnapshotId) throw new AccessError(400, "Cursor and query snapshot do not match");
+    const id = cursor?.snapshotId ?? body.querySnapshotId;
+    const snapshot = await readReverseSnapshot(publicLookupStore, id, identity, fingerprint);
+    compressedJson(request, response, 200, snapshotPage(snapshot, id as string, identity, reverseCursorSecret, { scope: pageScope, pageSize, cursor }), "no-store");
+    return;
+  }
+  const seenKeys = new Set<string>();
   const excludeFileIds = [...seenKeys].flatMap((key) => key.startsWith("file:") ? [key.slice("file:".length)] : []);
-  const queryLimit = preview
-    ? Math.min(1000, Math.max(PUBLIC_REVERSE_PREVIEW_LIMIT, seenKeys.size + PUBLIC_REVERSE_PREVIEW_LIMIT))
-    : cursor
-      ? Math.min(1000, Math.max(pageSize! + seenKeys.size + 1, 1))
-      : body.limit;
-  const sourceUnitLimit = typeof queryLimit === "number" ? queryLimit : 120;
+  const queryLimit = body.limit ?? 1000;
+  const sourceUnitLimit = 50_000;
   const sourceDescriptors = (body.layerIds as string[]).map((layerId) => {
     const layer = publicCoverageCatalog().records.get(layerId);
     if (!layer) throw new AccessError(404, "Coverage layer not found");
@@ -3546,7 +3565,7 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     const lookups = await Promise.all(sourceDescriptors.map(async ({ layer }) => {
       const layerId = layer.layerId;
       try {
-        const lookup = await evidenceStore.reverseLookup({
+        let lookup = await evidenceStore.reverseLookup({
           layerIds: [layerId],
           // Derive only from the server's published product identity, never
           // from a browser-supplied evidence layer or an arbitrary ES match.
@@ -3554,8 +3573,27 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
           ...(excludeFileIds.length ? { excludeFileIds } : {}),
           order,
           cells,
-          ...(typeof queryLimit === "number" ? { limit: queryLimit } : {}),
+          limit: 1000,
         }, { tolerateUnavailable: true });
+        if (lookup.available && lookup.truncated && lookup.nextSearchAfter) {
+          const edges = [...lookup.edges];
+          const files = [...lookup.sourceFiles];
+          const scopes = JSON.stringify(lookup.scanScopes ?? []);
+          const cursors = new Set<string>();
+          while (lookup.truncated && lookup.nextSearchAfter && edges.length < 50_000) {
+            const after = lookup.nextSearchAfter;
+            const key = JSON.stringify(after);
+            if (cursors.has(key)) break;
+            cursors.add(key);
+            const next = await evidenceStore.reverseLookup({ layerIds: [layerId], evidenceLayerBindings: [{ layerId, evidenceLayerId: batchEvidenceLayerId(layer.productId) }],
+              order, cells, limit: 1000, searchAfter: after }, { tolerateUnavailable: true });
+            if (!next.available || scopes !== JSON.stringify(next.scanScopes ?? [])) break;
+            edges.push(...next.edges); files.push(...next.sourceFiles); lookup = next;
+          }
+          lookup = { ...lookup, edges, sourceFiles: files,
+            notes: lookup.notes.filter((note) => !/^Result limited to/.test(note)),
+            downloadPlan: buildDownloadPlan({ edges, sourceFiles: files, truncated: lookup.truncated, scanScopes: lookup.scanScopes }) };
+        }
         if (!lookup.available) {
           warehouseUnavailableLayers.add(layerId);
         }
@@ -3626,12 +3664,6 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   });
   const retryableWarehouseLayers = [...warehouseUnavailableLayers].filter((layerId) =>
     !sourceUnitResult.indexedLayerIds.has(layerId) && !regionSpatialUnits.some((unit) => unit.layerId === layerId));
-  if (retryableWarehouseLayers.length) {
-    response.setHeader("Retry-After", "1");
-    throw new AccessError(503, cursor
-      ? "Warehouse evidence is temporarily unavailable; retry the same cursor."
-      : "Warehouse evidence is temporarily unavailable; retry this reverse lookup.");
-  }
   const spatialUnitsByIdentity = new Map<string, DownloadPlanSpatialUnit>();
   for (const unit of [...regionSpatialUnits, ...sourceUnitResult.units]) {
     const identity = `${unit.layerId}:${unit.unitKind}:${unit.unitId}`;
@@ -3753,7 +3785,9 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
       ...entry,
       note: entry.kind === "official-release"
         ? sourceUnitResult.indexedLayerIds.has(String(entry.layerId))
-          ? "官方数据入口；当前命中的原生空间分块 URI 已单独列出。"
+          ? nativeSpatialUnits.some((unit) => unit.layerId === entry.layerId)
+            ? "官方数据入口；当前命中的原生空间分块 URI 已单独列出。"
+            : "官方数据入口；当前冻结索引在该区域没有原生分块命中，覆盖依据仍保留；这不是该天区无数据的结论。"
           : isWarehouseFilePartitionLayer(publicCoverageCatalog().records.get(String(entry.layerId)) ?? { sourceUnitIndex: undefined })
             ? "官方数据入口；该产品按路径 HEALPix 分区反查文件，命中情况见文件清单。"
             : "官方数据入口；当前产品尚无可用的本地原生空间分块索引，这不是该天区无数据的结论。"
@@ -3834,102 +3868,23 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     entrypoints: publicEntrypoints,
     coverageEvidence,
     matchingCoverageTruncatedFileIds: [...warehouseResults.values()].flatMap((lookup) => lookup.downloadPlan.files.filter((file) => file.matchingCoverageTruncated).map((file) => file.fileId)),
-    truncated: sourceUnitResult.truncated || sourceUnitResult.unavailableLayerIds.length > 0 || (warehouseResults.size > 0 && [...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.truncated)) || result.sources.some(source => source.completeness === "truncated"),
+    truncated: sourceUnitResult.truncated || sourceUnitResult.unavailableLayerIds.length > 0 || (warehouseResults.size > 0 && [...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.truncated)) || result.sources.some(source => source.completeness === "truncated" && !sourceUnitResult.indexedLayerIds.has(String(source.layerId))),
   });
-  const previewPlan = preview ? capReversePreview(downloadPlan, PUBLIC_REVERSE_PREVIEW_LIMIT, seenKeys) : undefined;
-  const scopedPage = !preview && pageSize !== undefined ? pageReversePlan(downloadPlan, seenKeys, pageSize, pageScope) : undefined;
-  let responsePlan = previewPlan?.plan ?? scopedPage?.plan ?? downloadPlan;
-  const responseItems = reversePlanItems(responsePlan);
-  const supportingTruncated = [...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.truncated);
-  const regionUnitsTruncated = result.sources.some((source) => {
-    const sourceRecord = source as unknown as Record<string, unknown>;
-    const downloads = Array.isArray(sourceRecord.downloads) ? sourceRecord.downloads as Array<Record<string, unknown>> : [];
-    return source.completeness === "truncated" && downloads.some((download) => typeof download.unitId === "string" && typeof download.unitKind === "string");
-  });
-  const spatialUnitsTruncated = sourceUnitResult.truncated || regionUnitsTruncated;
-  const pageHasMore = preview
-    ? Boolean(previewPlan?.hasMore)
-    : pageScope === "manifest"
-      ? Boolean(scopedPage?.hasMore || downloadPlan.truncated)
-      : Boolean(scopedPage?.hasMore || (pageScope === "spatial-units" ? spatialUnitsTruncated : supportingTruncated));
-  const nextSeenKeys = new Set([...seenKeys, ...responseItems.map((item) => item.key)]);
-  const madeProgress = nextSeenKeys.size > seenKeys.size;
-  let nextCursor: string | undefined;
-  if (pageHasMore) {
-    if (!madeProgress) {
-      responsePlan = {
-        ...responsePlan,
-        truncated: true,
-        warnings: [...new Set([...responsePlan.warnings, "Reverse lookup pagination stopped because the bounded query returned no new manifest items."])],
-      };
-    } else if (nextSeenKeys.size > REVERSE_CURSOR_MAX_KEYS) {
-      responsePlan = {
-        ...responsePlan,
-        truncated: true,
-        warnings: [...new Set([...responsePlan.warnings, "Reverse lookup pagination stopped because the cursor reached its key limit."])],
-      };
-    } else {
-      try {
-        nextCursor = encodeReverseCursor({
-          version: 1,
-          identity: preview ? "preview" : identity,
-          fingerprint,
-          ...(pageScope === "manifest" ? {} : { scope: pageScope }),
-          seenKeys: [...nextSeenKeys],
-        }, reverseCursorSecret);
-      } catch {
-        responsePlan = {
-          ...responsePlan,
-          truncated: true,
-          warnings: [...new Set([...responsePlan.warnings, "Reverse lookup pagination stopped because the cursor reached its size limit."])],
-        };
-      }
-    }
-  }
-  const truncated = responsePlan.truncated;
-  const precision = warehouseEdges.length
-    ? ([...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.precision === "truncated") ? "truncated" : [...warehouseResults.values()].some((lookup: ReverseLookupResult) => lookup.precision !== "exact") ? "estimated" : "exact")
-    : "estimated";
-  const notes = [
-    ...result.sources.filter(source => !warehouseResults.has(String(source.layerId)) && !sourceUnitResult.indexedLayerIds.has(String(source.layerId))).flatMap(source => source.reason ? [String(source.reason)] : []),
-    ...[...warehouseResults.values()].flatMap(lookup => lookup.notes),
-    ...[...warehouseUnavailableLayers].map((layerId) => `${layerId}: Warehouse 查询暂不可用；本地原生分块结果仍照常返回。`),
-    ...(sourceUnitResult.unavailableLayerIds.length ? [`本地原生分块索引当前不可用或仍在加载：${sourceUnitResult.unavailableLayerIds.join(", ")}。本次清单不完整，请重试。`] : []),
-    ...(warehouseEdges.length ? ["Warehouse file evidence is limited to the scanned source subset; no completeness percentage is inferred."] : []),
-  ];
-  const shown = (responsePlan.spatialUnits?.length ?? 0) + responsePlan.files.length + responsePlan.entrypoints.length + (responsePlan.coverageEvidence?.length ?? 0);
-  const omitted = preview
-    ? previewPlan?.omitted ?? 0
-    : pageSize !== undefined ? Math.max(0, reversePlanItems(downloadPlan).filter((item) => !seenKeys.has(item.key)).length - shown) : 0;
-  const responsePage = pageSize !== undefined || preview
-    ? { pageSize: preview ? PUBLIC_REVERSE_PREVIEW_LIMIT : pageSize!, shown, omitted, hasMore: Boolean(nextCursor), ...(nextCursor ? { nextCursor } : {}) }
-    : undefined;
-  const shownSpatialUnits = preview ? previewPlan?.plan.spatialUnits ?? [] : pageScope === "spatial-units" ? responsePlan.spatialUnits ?? [] : [];
-  const shownSupportingKeys = preview
-    ? reversePlanItems(previewPlan?.plan ?? downloadPlan).filter((item) => item.kind !== "spatial-unit").map((item) => item.key)
-    : pageScope === "supporting-evidence" ? reversePlanItems(responsePlan).map((item) => item.key) : [];
-  const knownSpatialUnitsRemain = (downloadPlan.spatialUnits ?? []).some((unit) => !shownSpatialUnits.some((shownUnit) => reversePlanSpatialUnitKey(shownUnit) === reversePlanSpatialUnitKey(unit)));
-  const knownSupportingItemsRemain = reversePlanItems(downloadPlan).some((item) => item.kind !== "spatial-unit" && !shownSupportingKeys.includes(item.key));
-  const previewSpatialHasMore = Boolean(knownSpatialUnitsRemain || spatialUnitsTruncated);
-  const previewSupportingHasMore = Boolean(knownSupportingItemsRemain || supportingTruncated);
-  const issueScopedCursor = (scope: ReverseCursorScope, keys: string[], cursorIdentity: string): string | undefined => {
-    if (keys.length > REVERSE_CURSOR_MAX_KEYS) return undefined;
-    try {
-      return encodeReverseCursor({ version: 1, identity: cursorIdentity, fingerprint, ...(scope === "manifest" ? {} : { scope }), seenKeys: keys }, reverseCursorSecret);
-    } catch {
-      return undefined;
-    }
+  downloadPlan.warnings.push(...sourceUnitResult.notes, ...retryableWarehouseLayers.map((layerId) => `${layerId}: Warehouse evidence is unavailable; native results from other surveys are retained.`));
+  downloadPlan.truncated ||= retryableWarehouseLayers.length > 0;
+  const snapshot: ReverseSnapshot = {
+    schemaVersion: 1, identity: preview ? "preview" : identity, fingerprint,
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    response: { available: Boolean(downloadPlan.spatialUnits?.length || downloadPlan.files.length || downloadPlan.entrypoints.length),
+      precision: downloadPlan.truncated ? "truncated" : nativeSpatialUnits.some((unit) => unit.precision !== "exact")
+        || [...warehouseResults.values()].some((lookup) => lookup.precision !== "exact") || (!nativeSpatialUnits.length && !warehouseEdges.length) ? "estimated" : "exact", requested: { layerIds: body.layerIds, order, cells },
+      sources: responseSources, notes: [...new Set([...sourceUnitResult.notes, ...[...warehouseResults.values()].flatMap((lookup) => lookup.notes),
+        ...[...warehouseUnavailableLayers].map((layerId) => `${layerId}: Warehouse evidence is temporarily unavailable.`)])], downloadPlan },
+    previewPlan: capReversePreview(downloadPlan).plan,
   };
-  const spatialPage = preview
-    ? { pageSize: PUBLIC_REVERSE_PREVIEW_LIMIT, shown: shownSpatialUnits.length, hasMore: previewSpatialHasMore,
-      ...(previewSpatialHasMore ? { nextCursor: issueScopedCursor("spatial-units", shownSpatialUnits.map(reversePlanSpatialUnitKey), "preview") } : {}) }
-    : pageScope === "spatial-units" ? { pageSize: pageSize!, shown: shownSpatialUnits.length, hasMore: Boolean(nextCursor), ...(nextCursor ? { nextCursor } : {}) } : undefined;
-  const supportingPage = preview
-    ? { pageSize: PUBLIC_REVERSE_PREVIEW_LIMIT, shown: shownSupportingKeys.length, hasMore: previewSupportingHasMore,
-      ...(previewSupportingHasMore ? { nextCursor: issueScopedCursor("supporting-evidence", shownSupportingKeys, "preview") } : {}) }
-    : pageScope === "supporting-evidence" ? { pageSize: pageSize!, shown: shownSupportingKeys.length, hasMore: Boolean(nextCursor), ...(nextCursor ? { nextCursor } : {}) } : undefined;
-  const includeLegacyManifestPage = pageScope === "manifest";
-  compressedJson(request,response,200,{available:Boolean(responsePlan.spatialUnits?.length || responsePlan.files.length || responsePlan.entrypoints.length || responsePlan.coverageEvidence?.length),precision,truncated,preview:preview ? { limit:PUBLIC_REVERSE_PREVIEW_LIMIT, shown, omitted, hasMore:Boolean(nextCursor) } : undefined,page:includeLegacyManifestPage ? responsePage : undefined,spatialPage,supportingPage,requested:{layerIds:body.layerIds,order,cells},sources:responseSources,edges:preview ? warehouseEdges.slice(0, PUBLIC_REVERSE_PREVIEW_LIMIT) : warehouseEdges,sourceFiles:preview ? warehouseFiles.slice(0, PUBLIC_REVERSE_PREVIEW_LIMIT) : warehouseFiles,expiresAt:result.expiresAt,notes:[...new Set(notes)],downloadPlan:responsePlan},"no-store");
+  const snapshotId = await writeReverseSnapshot(publicLookupStore, snapshot);
+  compressedJson(request, response, 200, snapshotPage(snapshot, snapshotId, identity, reverseCursorSecret, { preview, scope: pageScope, pageSize }), "no-store");
+  return;
 }
 
 async function executeRegionQuery(request:IncomingMessage,body:unknown,managedIdentity?:string,sourceLimit:8|64=8) {

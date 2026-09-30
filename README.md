@@ -82,7 +82,7 @@ configured Warehouse endpoint (`ASSETS_WAREHOUSE_ES_URL`).
 - `POST /api/v1/coverage/overlap` and `/overlap/details` for common-order
   intersections and connected regions.
 - `POST /api/v1/coverage/reverse-lookup` for bounded file, tile and download
-  entrypoint matches.
+  entrypoint matches with immutable Assets-owned snapshot pagination.
 - Resource Package v3 archives containing MOCs, a public footprint projection,
   provenance and a package README.
 
@@ -91,6 +91,8 @@ The [coverage workflow](docs/coverage-workflow.md),
 define the stable contracts. The [MOC Core contract](docs/moc-core-contract.md)
 documents the existing offline `astro-survey-moc-core` implementation; the
 organization does not currently promise a general-purpose online SDK.
+The [four-survey MVP](docs/four-survey-mvp.md) defines the Euclid, DESI, Legacy
+Surveys and HST flow and the API-Key boundary with private CSST in Workspace.
 
 ## Public release and evidence storage
 

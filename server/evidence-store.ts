@@ -13,6 +13,7 @@ export interface ReverseLookupRequest {
   order: number;
   cells: number[];
   limit?: number;
+  searchAfter?: unknown[];
 }
 
 export interface CoverageEdge {
@@ -165,6 +166,10 @@ export interface DownloadPlanSpatialUnit {
   accessAvailability?: "public" | "source-policy" | "unverified";
   sourceSnapshotSha256?: string;
   note?: string;
+  sRegion?: string;
+  instrument?: string;
+  filters?: string;
+  sourceUrl?: string;
   scannedFiles?: Array<{ fileId: string; fileName?: string; sourceUri?: string; scanRunId?: string; sourceSnapshotSha256?: string }>;
 }
 
@@ -203,6 +208,7 @@ export interface ReverseLookupResult {
   notes: string[];
   downloadPlan: DownloadPlan;
   scanScopes?: ScanScopeSummary[];
+  nextSearchAfter?: unknown[];
 }
 
 export interface ScanScopeSummary {
@@ -470,7 +476,7 @@ export function buildDownloadPlan(input: DownloadPlanInput): DownloadPlan {
     file.matchingCoverageTruncated = true;
     warnings.add(`Matching coverage for file ${fileId} is incomplete because the Warehouse edge limit omitted additional matches.`);
   }
-  if (input.truncated) warnings.add("This reverse lookup manifest is incomplete because the bounded result limit was reached.");
+  if (input.truncated) warnings.add("This reverse lookup manifest is incomplete; inspect source notes for query failures, partial evidence or bounded result limits.");
   for (const file of files.values()) {
     if (!file.observations) continue;
     if (file.observations.some(value => value.metadataState === "missing")) {
@@ -618,6 +624,7 @@ export class CoverageEvidenceStore {
           { bool: { should: pixelShould, minimum_should_match: 1 } },
           ...(layerShould.length ? [{ bool: { should: layerShould, minimum_should_match: 1 } }] : []),
         ], ...(excludeFileIds.length ? { must_not: [{ terms: { source_file_id: excludeFileIds } }] } : {}) } },
+        ...(input.searchAfter ? { search_after: input.searchAfter } : {}),
       };
       response = indexedIds.length ? await this.search(this.coverageIndex, query) : { hits: { hits: [] } };
     } catch (error) {
@@ -659,6 +666,7 @@ export class CoverageEvidenceStore {
       schemaVersion: 1, available: true, index: { layer: this.layerIndex, coverage: this.coverageIndex, files: this.fileIndex }, requested,
       precision: truncated ? "truncated" : capped.some((edge) => edge.precision !== "exact") ? "estimated" : "exact",
       edges: capped, sourceFiles, truncated,
+      ...(truncated && response.hits?.hits?.[limit - 1]?.sort ? { nextSearchAfter: response.hits.hits[limit - 1]!.sort } : {}),
       ...(scanScopes.length ? { scanScopes } : {}),
       notes: ["Online reverse lookup is served by warehouse Elasticsearch coverage edges.", ...scanScopes.map(scope => `${scope.layerId}: ${scope.committedPartitions}/${scope.expectedPartitions} partitions committed in frozen scope ${scope.scopeId}; this does not establish complete survey coverage.`), ...(truncated ? [`Result limited to ${limit} edges.`] : [])],
       downloadPlan: buildDownloadPlan({ edges: capped, sourceFiles, truncated, scanScopes, matchingCoverageTruncatedFileIds }),

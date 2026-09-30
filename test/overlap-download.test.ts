@@ -21,6 +21,27 @@ test("empty download plans do not manufacture placeholder rows", () => {
   assert.deepEqual(overlapCsvRows(component, plan, () => layer), []);
 });
 
+test("native-unit CSV preserves all URIs, footprint, source policy and snapshot manifest status", () => {
+  const unit = { layerId: "euclid-ero", productId: "ero", surveyId: "euclid", releaseId: "euclid-ero", product: "ERO", modality: "imaging",
+    unitKind: "target", unitId: "ERO-Abell2390", order: 8, nside: 256, matchingCells: [101, 102], precision: "estimated",
+    accessUri: "https://example.test/vis.tar", accessUris: [{ uri: "https://example.test/vis.tar", fileName: "vis.tar" }, { uri: "https://example.test/nisp.tar", fileName: "nisp.tar" }],
+    accessAvailability: "source-policy" as const, sRegion: "POLYGON ICRS 1 1 2 1 2 2 1 2", sourceUrl: "https://example.test/metadata", instrument: "VIS", filters: "VIS",
+    sourceSnapshotSha256: "a".repeat(64), scannedFiles: [{ fileId: "file-1", scanRunId: "scan-1" }], note: "Outreach target extent" };
+  const plan: DownloadPlan = { schemaVersion: 1, spatialUnits: [unit], files: [], entrypoints: [], truncated: true, warnings: ["Limited preview"] };
+  const rows = overlapCsvRows(component, plan, () => layer, "estimated", { snapshotId: "b".repeat(64), omitted: 5, hasMore: true }).map(record);
+  assert.deepEqual(JSON.parse(rows[0]!.access_uris!), unit.accessUris);
+  assert.equal(rows[0]!.s_region, unit.sRegion);
+  assert.equal(rows[0]!.access_availability, unit.accessAvailability);
+  assert.equal(rows[0]!.source_url, unit.sourceUrl);
+  assert.equal(rows[0]!.science_file_scan, "");
+  assert.deepEqual(JSON.parse(rows[0]!.file_observations!), unit.scannedFiles);
+  assert.equal(rows[1]!.item_kind, "manifest-state");
+  assert.equal(rows[1]!.query_snapshot_id, "b".repeat(64));
+  assert.equal(rows[1]!.omitted, "5");
+  assert.equal(rows[1]!.has_more, "true");
+  assert.equal(rows[1]!.inventory_complete, "false");
+});
+
 test("a completed file list still exports incomplete matching coverage and missing metadata", () => {
   const plan: DownloadPlan = {
     schemaVersion: 1, truncated: false, warnings: [], entrypoints: [],

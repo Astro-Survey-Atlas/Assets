@@ -116,9 +116,14 @@ export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot
     const declaredSourceUnitIndex = boundSourceUnitIndex ?? (hasNativeUnitIndex && nativeUnitKind
       ? { status: nativeIndexStatus ?? "estimated", unitKind: nativeUnitKind, indexUrl: "/api/v1/coverage/reverse-lookup", notes: registeredUnit?.notes ?? `本地 ${nativeUnitKind} 映射已登记；逐项精度与文件存在性由反查结果说明。` }
       : undefined);
+    const archiveUnitIndex = c.surveyId === "hst"
+      ? { status: "estimated" as const, unitKind: "observation", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "MAST public observation metadata is queried only on reverse lookup; s_region and instrument/observation identity constrain matches. Archive limits and failures are retained." }
+      : c.surveyId === "euclid" && c.releaseId === "euclid-ero"
+        ? { status: "estimated" as const, unitKind: "target", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "ERO named target packages with associated ESA Sky outreach footprints; estimated target extent, not Tile inventory or verified per-filter coverage." }
+        : undefined;
     const sourceUnitIndex=pathFileIndex
       ? {status:"exact" as const,unitKind:`NESTED order-${c.scanDefaults?.pathHealpixOrder??moc.maxOrder} HEALPix file partition`,indexUrl:"/api/v1/coverage/reverse-lookup",notes:"可按精确的路径 HEALPix 分区反查已扫描文件 URI；这是部分文件清单，不是 DESI Tile，也不代表完整 DR1/BGS。"}
-      : declaredSourceUnitIndex ?? c.sourceUnitIndex ?? (nativeUnitKind
+      : archiveUnitIndex ?? declaredSourceUnitIndex ?? c.sourceUnitIndex ?? (nativeUnitKind
         ? {status:nativeIndexStatus ?? "entrypoint-only",unitKind:nativeUnitKind,notes:registeredUnit?.notes ?? (hasNativeUnitIndex
           ? `本地原生 ${nativeUnitKind} 映射已登记；返回精度由单次反查结果说明，文件存在性仍需来源或 Warehouse 证据。`
           : c.surveyId === "hst"

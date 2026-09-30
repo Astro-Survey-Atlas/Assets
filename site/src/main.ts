@@ -1,4 +1,4 @@
-import { ensureDownloadAccess, resetDownloadAccess } from "./download-access";
+import { ensureDownloadAccess, hasDownloadAccess, resetDownloadAccess } from "./download-access";
 import { BadgeCheck, BookOpen, Box, ChevronLeft, ChevronRight, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Info, Layers3, ListChecks, ListFilter, LoaderCircle, Lock, Maximize2, Minimize2, Moon, Menu, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X, createIcons } from "lucide";
 import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
@@ -276,6 +276,7 @@ async function fetchPublicJson<T>(url: string, init: RequestInit = {}): Promise<
 }
 
 const overlapEvidenceCache = new Map<string, OverlapEvidenceResult>();
+const overlapEvidenceHosts = new Map<string, HTMLElement>();
 const overlapDetailsCache = new Map<string, OverlapDetailsResponse>();
 let lastEscapeAt = -Infinity;
 const isAtlasPage = window.location.pathname === "/atlas/" || window.location.pathname === "/atlas";
@@ -490,12 +491,12 @@ function updateCoverageInspector(inspection: SurveyLayerInspection | null): void
   const overlapParent = overlapMode
     ? activeOverlapComponents.find((component) => component.order === order && component.cells.includes(inspection.pixel))
     : undefined;
-  const overlapCell = overlapParent ? {
+  const overlapCell = overlapParent && reverseLookupRegionTooLarge(overlapParent) ? {
     ...overlapParent,
     id: `${overlapParent.id}-cell-${inspection.pixel}`,
     cells: [inspection.pixel],
     bounds: overlapBounds([inspection.pixel], order),
-  } : undefined;
+  } : overlapParent;
   if (!overlapMode) {
     panel.classList.remove("is-overlap-panel");
     panel.style.removeProperty("left");
@@ -823,6 +824,7 @@ interface OverlapEvidenceResult {
   available: boolean;
   precision: string;
   truncated: boolean;
+  querySnapshot?: { id: string; expiresAt: string; queryExhausted: boolean; inventoryComplete: false };
   preview?: { limit: number; shown: number; omitted: number; hasMore: boolean };
   page?: { pageSize: number; shown: number; omitted: number; hasMore: boolean; nextCursor?: string };
   spatialPage?: { pageSize: number; shown: number; hasMore: boolean; nextCursor?: string };
@@ -1338,10 +1340,16 @@ function publicFileName(value: unknown): string {
 
 type OverlapEvidenceAccess = "preview" | "page" | "download";
 
-async function fetchOverlapEvidence(component: OverlapComponentView, signal?: AbortSignal, access: OverlapEvidenceAccess = "preview", page?: { cursor?: string; pageSize?: number; pageKind?: "spatial-units" | "supporting-evidence" }): Promise<OverlapEvidenceResult | null> {
+function overlapEvidenceKey(component: OverlapComponentView): string {
+  const layerIds = [...(component.evidenceLookup?.layerIds ?? [])].sort();
+  return JSON.stringify({ order: component.order, cells: component.cells, layerIds,
+    revisions: layerIds.map((id) => coverageCatalog?.layers.find((layer) => layer.layerId === id)?.revision) });
+}
+
+async function fetchOverlapEvidence(component: OverlapComponentView, signal?: AbortSignal, access: OverlapEvidenceAccess = "preview", page?: { cursor?: string; pageSize?: number; pageKind?: "spatial-units" | "supporting-evidence"; querySnapshotId?: string }): Promise<OverlapEvidenceResult | null> {
   const lookup = component.evidenceLookup;
   if (!lookup) return null;
-  const cacheKey = `${component.id}:${access}`;
+  const cacheKey = overlapEvidenceKey(component);
   const cached = access === "preview" ? overlapEvidenceCache.get(cacheKey) : undefined;
   if (cached) return cached;
   const preview = access === "preview";
@@ -1352,10 +1360,11 @@ async function fetchOverlapEvidence(component: OverlapComponentView, signal?: Ab
     limit: preview ? 6 : 1000,
     preview,
   };
-  if (access === "page") {
+  if (access !== "preview") {
     body.pageSize = page?.pageSize ?? 20;
     if (page?.cursor) body.cursor = page.cursor;
     if (page?.pageKind) body.pageKind = page.pageKind;
+    if (page?.querySnapshotId) body.querySnapshotId = page.querySnapshotId;
   }
   const response = await fetch(lookup.endpoint, {
     method: "POST",
@@ -1375,6 +1384,7 @@ function reversePlanEntryKey(entry: DownloadPlanEntrypoint): string {
 }
 
 function mergeOverlapEvidence(current: OverlapEvidenceResult, next: OverlapEvidenceResult): OverlapEvidenceResult {
+  if (current.querySnapshot?.id && next.querySnapshot?.id && current.querySnapshot.id !== next.querySnapshot.id) throw new Error("Reverse lookup snapshot changed");
   const currentPlan = downloadPlanFor(current);
   const nextPlan = downloadPlanFor(next);
   const files = new Map(currentPlan.files.map((file) => [file.fileId, file]));
@@ -1500,20 +1510,43 @@ function downloadPlanFor(result: OverlapEvidenceResult | null): DownloadPlan {
   return result?.downloadPlan ?? legacyDownloadPlan(result);
 }
 
+async function evidenceForExport(component: OverlapComponentView): Promise<OverlapEvidenceResult | null> {
+  const current = await fetchOverlapEvidence(component);
+  if (!current || !hasDownloadAccess()) return current;
+  let result = await fetchOverlapEvidence(component, undefined, "download", { querySnapshotId: current.querySnapshot?.id, pageSize: 100 });
+  if (!result) return null;
+  const cursors = new Set<string>();
+  while (result.page?.hasMore) {
+    const cursor = result.page.nextCursor;
+    if (!cursor || cursors.has(cursor)) throw new Error("Reverse lookup pagination did not advance");
+    cursors.add(cursor);
+    const next = await fetchOverlapEvidence(component, undefined, "download", { cursor, pageSize: 100 });
+    if (!next) throw new Error("Reverse lookup page was unavailable");
+    result = mergeOverlapEvidence(result, next);
+  }
+  const key = overlapEvidenceKey(component);
+  overlapEvidenceCache.set(key, result);
+  const host = overlapEvidenceHosts.get(key);
+  if (host?.isConnected) renderEvidencePlan(host, result, component);
+  return result;
+}
+
 async function downloadOverlapCsv(components: OverlapComponentView[], filename: string, button: HTMLButtonElement): Promise<void> {
   if (components.some(reverseLookupRegionTooLarge)) {
     toast(t("coverage.overlapRegionTooLarge"), 8000);
     return;
   }
-  if(!await ensureDownloadAccess())return;
   const original = button.textContent ?? "Download CSV";
   button.disabled = true;
   button.textContent = t("coverage.downloadLoading");
   try {
     const results: Array<OverlapEvidenceResult | null> = [];
     // One download operation must not exceed the per-identity concurrency limit.
-    for (const component of components) results.push(await fetchOverlapEvidence(component, undefined, "download"));
-    const rows = components.flatMap((component, index) => overlapCsvRows(component, downloadPlanFor(results[index]), publicLayerEntry, results[index]?.precision));
+    for (const component of components) results.push(await evidenceForExport(component));
+    const rows = components.flatMap((component, index) => overlapCsvRows(component, downloadPlanFor(results[index]), publicLayerEntry, results[index]?.precision, {
+      snapshotId: results[index]?.querySnapshot?.id, omitted: results[index]?.page?.omitted ?? results[index]?.preview?.omitted ?? 0,
+      hasMore: results[index]?.page?.hasMore ?? results[index]?.preview?.hasMore ?? false,
+    }));
     if (!rows.length) {
       toast(t("coverage.noDownloadEntries"));
       return;
@@ -1540,14 +1573,13 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
     toast(t("coverage.overlapRegionTooLarge"), 8000);
     return;
   }
-  if(!await ensureDownloadAccess())return;
   const original = button.textContent ?? "Download JSON";
   button.disabled = true;
   button.textContent = t("coverage.downloadLoading");
   try {
     const results: Array<OverlapEvidenceResult | null> = [];
     // One download operation must not exceed the per-identity concurrency limit.
-    for (const component of components) results.push(await fetchOverlapEvidence(component, undefined, "download"));
+    for (const component of components) results.push(await evidenceForExport(component));
     const payload = {
       schemaVersion: 1,
       coordinateFrame: "ICRS",
@@ -1559,6 +1591,10 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
         nside: 2 ** component.order,
         cells: component.cells,
         bounds: component.bounds,
+        querySnapshot: results[index]?.querySnapshot,
+        preview: results[index]?.preview,
+        page: results[index]?.page,
+        notes: results[index]?.notes,
         ...(results[index] ? { downloadPlan: downloadPlanFor(results[index]) } : { downloadPlan: { schemaVersion: 1, files: [], entrypoints: [], truncated: false, warnings: ["reverse lookup was unavailable"] } }),
       })),
     };
@@ -1599,6 +1635,11 @@ function appendSourceLocator(row: HTMLElement, sourceUri: string): void {
 }
 
 function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, component?: OverlapComponentView): void {
+  if (component) {
+    const key = overlapEvidenceKey(component);
+    overlapEvidenceCache.set(key, result);
+    overlapEvidenceHosts.set(key, node);
+  }
   node.replaceChildren();
   const plan = downloadPlanFor(result);
   const coverageEvidence = plan.coverageEvidence ?? [];

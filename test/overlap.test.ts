@@ -19,6 +19,17 @@ function layer(layerId: string, surveyId: string, orders: Record<number, number[
   return { layerId, productId: layerId, surveyId, releaseId: `${surveyId}-dr`, product: layerId, color: "#ffffff", availableOrders, overviewOrder: availableOrders[0]!, maxOrder: Math.max(...availableOrders), cellCount: cells.get(availableOrders[0]!)!.length, areaDeg2: 1, tileScheme: "ipix-range-4096", cells };
 }
 
+test("all 11 MVP survey combinations union products within each survey and intersect across surveys", () => {
+  const ids = ["euclid", "desi", "legacy-surveys", "hst"];
+  const layers = ids.flatMap((id) => [layer(`${id}-one`, id, { 8: [202250] }), layer(`${id}-two`, id, { 8: [202272] })]);
+  let combinations = 0;
+  for (let mask = 1; mask < 16; mask++) {
+    const selected = ids.filter((_, index) => mask & (1 << index)); if (selected.length < 2) continue;
+    assert.deepEqual(overlapForLayers(layers, selected, 8)!.pixels, [202250, 202272]); combinations++;
+  }
+  assert.equal(combinations, 11);
+});
+
 let sourceUnitStorePromise: Promise<SourceUnitStore> | undefined;
 
 function sourceUnitStore(): Promise<SourceUnitStore> {

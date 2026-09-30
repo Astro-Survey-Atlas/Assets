@@ -4,15 +4,16 @@
 
 公开 catalog、block、下载和预览只读取已经构建并通过
 `release-manifest.json` allowlist 校验的静态制品，或已经审核发布并通过
-SHA-256 校验的动态 MOC 制品。覆盖反查是一个明确的
-warehouse Elasticsearch 读路径（`ASSETS_WAREHOUSE_ES_URL`），不会访问 OSS
-或旧 Assets ES，也不处理或暴露原始远程凭据。这里描述的是公开只读服务
+SHA-256 校验的动态 MOC 制品。覆盖反查使用 Assets 的原生分块索引、按需读取的
+官方归档元数据和 warehouse Elasticsearch 的扫描证据（`ASSETS_WAREHOUSE_ES_URL`），
+不会访问科学数据内容、OSS 或旧 Assets ES，也不处理或暴露原始远程凭据。这里描述的是公开只读服务
 边界，不限制 Assets 项目自行管理 ConfigMap、Secret 和 ScanRequest。
 
 ## Conventions
 
 - Base path: `/api/v1`。
-- 公开只读接口只接受 `GET` 和 `HEAD`；其它方法返回 `405`。管理员端点按各自
+- 公开目录和制品接口只接受 `GET` 和 `HEAD`；其它方法返回 `405`。有界区域查询按
+  下文契约接受 `POST`，完整反查需要 API Key。管理员端点按各自
   契约接受 `GET`、`POST` 或 `PUT`，并需要管理员令牌。
 - JSON 响应使用 `application/json; charset=utf-8`，目录接口使用 `Cache-Control: no-cache`。
 - 对单个公开制品的下载和预览，`ETag` 为不可变的 `"sha256-<digest>"`，并返回 `X-Content-SHA256`。
@@ -46,7 +47,7 @@ Infra 已授权的源 PVC 和可选相对 base path，Assets 不创建 PV/PVC �
 
 ```json
 {
-  "previewUrl": "/api/v1/assets/csst-w1-geometry/preview",
+  "previewUrl": "/api/v1/assets/approved-2mass-2mass-6x-2mass-6x-h-band-imaging-moc-moc/preview",
   "previewMode": "text"
 }
 ```
@@ -181,7 +182,38 @@ The response includes the requested `order`/`nside`, `precision`, coverage
 edges, source file IDs, URI/name/ETag/WCS bounds, download entrypoints and a
 `truncated` flag. It never upgrades an order-4-only layer to order 8.
 
-The service unions published products within each selected survey, then intersects the resulting survey coverages. It uses the highest real order shared by every selected survey that does not exceed `requestedOrder`; no layer is upsampled to an order it does not publish. The response reports `commonOrder`, explicit NESTED `pixels`, four-side-connected components with stable `C01` identifiers and RA/DEC bounds, plus source-unit/download matches when a release has a locked reverse index. At least two distinct survey IDs are required.
+Reverse lookup accepts one or more public layer IDs and a bounded explicit
+region; it does not calculate the overlap itself. The overlap endpoint unions
+selected products within each survey and intersects survey coverages at the
+highest shared real order. Component inspection submits the whole component
+when it fits 4,096 cells / 100 square degrees; larger regions require a smaller
+selection. Ordinary HEALPix inspection shows release/modality metadata only.
+
+Each new lookup stores an immutable snapshot in Assets evidence storage. The
+response includes `querySnapshot: {id, expiresAt, queryExhausted,
+inventoryComplete: false}`. Snapshots expire after one hour. `queryExhausted`
+means the bounded source query finished, not that a survey inventory is
+complete. `pageSize` accepts 1-100; `page.nextCursor` is a signed `rs2` cursor
+with fixed size, bound to snapshot, region, layer revisions, authorization
+identity and page kind. A `querySnapshotId` without a cursor starts at the
+first page of that same snapshot. Expiry returns HTTP 410, changed selectors
+or revisions return 409, and an incorrect Key identity returns 403. Snapshot
+pages perform no new archive or Warehouse queries and are served `no-store`.
+
+A published MOC intersection can have no native-unit match in the current
+frozen inventory. Keep its coverage evidence and official entrypoint, explain
+the empty result and retain the inventory scope in `notes`. Do not infer that
+the survey has no data or state that a native URI was returned. Source failures
+such as a MAST timeout remain `truncated` with `queryExhausted=false`; an
+exhausted manifest page does not clear that state or turn it into a result-limit
+failure. Display and JSON/CSV export preserve the same source notes.
+
+Workspace calls this endpoint server-side using `X-Assets-API-Key`. Its request
+contains only public `layerIds`, `order`, `cells`, optional `limit`, `pageSize`,
+`cursor` and `querySnapshotId`. Private CSST identities, paths and scan metadata
+are forbidden. Workspace keeps public responses only in request/browser memory;
+it cannot persist the mappings, snapshots, caches, artifacts or log bodies.
+Missing/invalid Keys do not enable an anonymous or crawler fallback.
 
 #### Download plan file (source manifest)
 
@@ -324,6 +356,12 @@ For Euclid Q1, the native unit is a Tile and ESA TAP `tile_index` supplies its
 ID. In `q1.mosaic_product`, `stc_s` describes the product footprint used for
 spatial matching. HST follows a separate flow: its unit is a MAST observation
 ID, and that observation's `s_region` is used to match the region.
+HST's unified lookup reads observation metadata only, does not expand products,
+and preserves `sRegion`, `instrument`, `filters` and its MAST entrypoint. Euclid
+ERO returns `unitKind=target` and the official named package identity, never an
+invented Tile. Its associated ESA Sky outreach footprint is an estimated target
+extent. Both preserve source snapshots and source access policies; no science
+content, header, range or preview is retrieved by this flow.
 
 `entrypoints[]` contains links that are useful for reaching the official data
 service or checking the coverage itself, not additional file rows. Current
@@ -346,7 +384,9 @@ coverage hit does not verify a science file at every cell.
 
 #### CSV and JSON exports
 
-The browser's overlap export requests the same bounded `downloadPlan`. JSON
+The browser's overlap export uses its current anonymous preview without a Key.
+With a valid Key, it exhausts the same snapshot's manifest pages and replaces
+the displayed list with the exported result. JSON
 preserves it without flattening inside a component envelope with its ID, order,
 cells and bounds. Both formats contain metadata and links only. CSV emits one
 row per real item and uses:
@@ -368,6 +408,9 @@ row per real item and uses:
   is JSON preserving all listed file URIs and filenames for that unit.
   `access_availability` records whether the source is public, subject to source
   policy, or still unverified.
+- `item_kind=manifest-state` for snapshot ID, omitted items, `has_more`,
+  inventory completeness and truncation notes. An exhausted query always
+  retains `inventory_complete=false`; it is not a complete survey claim.
 
 When a component has coverage material but no file record or retrieval
 entrypoint, JSON retains its `coverageEvidence[]` and CSV emits a separate

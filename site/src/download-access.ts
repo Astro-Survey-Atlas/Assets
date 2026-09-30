@@ -25,3 +25,4 @@ export function ensureDownloadAccess():Promise<boolean> {
   });return pending;
 }
 export function resetDownloadAccess():void {unlockedUntil=0;}
+export function hasDownloadAccess():boolean {return Date.now()<unlockedUntil;}

@@ -116,6 +116,10 @@ export interface DownloadPlanSpatialUnit {
   accessAvailability?: "public" | "source-policy" | "unverified";
   sourceSnapshotSha256?: string;
   note?: string;
+  sRegion?: string;
+  instrument?: string;
+  filters?: string;
+  sourceUrl?: string;
   scannedFiles?: Array<{ fileId: string; fileName?: string; sourceUri?: string; scanRunId?: string; sourceSnapshotSha256?: string }>;
 }
 
@@ -150,6 +154,7 @@ export const OVERLAP_DOWNLOAD_HEADER = [
   "source_file_id", "file_name", "file_type", "size_bytes", "source_uri", "downloadable", "download_url", "matching_cells", "coverage_methods", "entrypoint_kind", "tile_id", "entrypoint_url", "source_scope", "required", "selection_complete", "selection_rule", "required_tile_ids",
   "ra_min_deg", "ra_max_deg", "dec_min_deg", "dec_max_deg", "area_deg2", "notes", "evidence_kind", "source_label", "source_url", "geometry_source_url", "coverage_url", "available_orders", "native_max_order", "source_identity", "instrument", "filters", "source_snapshot_sha256", "completeness", "science_file_scan",
   "file_observations", "scan_scopes", "matching_coverage_truncated", "access_uris", "access_availability",
+  "s_region", "query_snapshot_id", "omitted", "has_more", "inventory_complete",
 ] as const;
 
 export function csvCell(value: unknown): string {
@@ -166,6 +171,7 @@ export function overlapCsvRows(
   plan: DownloadPlan,
   resolveLayer: (layerId: string | undefined) => DownloadLayerEntry,
   fallbackPrecision = "entrypoint-only",
+  state?: { snapshotId?: string; omitted: number; hasMore: boolean },
 ): string[][] {
   const rows: string[][] = [];
   (plan.spatialUnits ?? []).forEach((unit) => {
@@ -227,6 +233,17 @@ export function overlapCsvRows(
       String(evidence.nativeMaxOrder), evidence.sourceIdentity ?? "", evidence.instrument ?? "", evidence.filters ?? "", evidence.sourceSnapshotSha256 ?? "", evidence.completeness ?? "", evidence.scienceFileScan ?? "",
     ]);
   });
+  if (state) {
+    const row = Array<string>(OVERLAP_DOWNLOAD_HEADER.length).fill("");
+    row[0] = component.id; row[1] = "manifest-state";
+    row[OVERLAP_DOWNLOAD_HEADER.indexOf("precision")] = plan.truncated ? "truncated" : fallbackPrecision;
+    row[OVERLAP_DOWNLOAD_HEADER.indexOf("notes")] = plan.warnings.join("; ");
+    row[OVERLAP_DOWNLOAD_HEADER.indexOf("query_snapshot_id")] = state.snapshotId ?? "";
+    row[OVERLAP_DOWNLOAD_HEADER.indexOf("omitted")] = String(state.omitted);
+    row[OVERLAP_DOWNLOAD_HEADER.indexOf("has_more")] = String(state.hasMore);
+    row[OVERLAP_DOWNLOAD_HEADER.indexOf("inventory_complete")] = "false";
+    rows.push(row);
+  }
   return rows.map((row) => {
     const padded = [...row, ...Array(Math.max(0, OVERLAP_DOWNLOAD_HEADER.length - row.length)).fill("")];
     const file = row[1] === "file" ? plan.files.find(file => file.fileId === row[10]) : undefined;
@@ -238,6 +255,13 @@ export function overlapCsvRows(
     padded[OVERLAP_DOWNLOAD_HEADER.indexOf("matching_coverage_truncated")] = file?.matchingCoverageTruncated === undefined ? "" : String(file.matchingCoverageTruncated);
     padded[OVERLAP_DOWNLOAD_HEADER.indexOf("access_uris")] = unit?.accessUris?.length ? JSON.stringify(unit.accessUris) : "";
     padded[OVERLAP_DOWNLOAD_HEADER.indexOf("access_availability")] = unit?.accessAvailability ?? "";
+    if (unit) {
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("s_region")] = unit.sRegion ?? "";
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("instrument")] = unit.instrument ?? "";
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("filters")] = unit.filters ?? "";
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("source_url")] = unit.sourceUrl ?? "";
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("science_file_scan")] = "";
+    }
     if (file) padded[OVERLAP_DOWNLOAD_HEADER.indexOf("source_snapshot_sha256")] = joinUnique(file.matchingCoverage.map(match => match.sourceSnapshotSha256));
     return padded;
   });

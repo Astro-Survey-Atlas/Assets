@@ -1,5 +1,5 @@
 model = "gpt-6-luna"
-review_model = "gpt-6-astra"
+review_model = "gpt-6.1-sol"
 model_reasoning_effort = "max"
 sandbox_mode = "danger-full-access"
 approval_policy = "never"

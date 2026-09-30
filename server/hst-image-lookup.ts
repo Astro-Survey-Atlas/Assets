@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Healpix, Pointing, type RangeSet } from "healpixjs";
 import { AdminHttpError } from "./admin-error.js";
 import type { ArtifactStore } from "./artifact-store.js";
+import { metadataFetch } from "./metadata-fetch.js";
 
 const MAST_URL = "https://mast.stsci.edu/api/v0/invoke";
 const MAX_CELLS = 256;
@@ -11,6 +12,7 @@ const MAX_POSITION_PAGES = 8;
 const MAX_PRODUCT_PAGES = 2;
 const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 const MAST_REQUEST_TIMEOUT_MS = 60_000;
+const METADATA_QUERY_TIMEOUT_MS = 45_000;
 const INTERSECTION_OVERSAMPLING = 4;
 const CACHE_MS = 24 * 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 256;
@@ -34,6 +36,8 @@ export interface HstImageLookupResult {
     startTime?: number;
     endTime?: number;
     productUrl: string;
+    sRegion: string;
+    matchingCells: number[];
     files: Array<{
       fileName: string;
       dataUri?: string;
@@ -87,20 +91,22 @@ function filteredPageCount(value: unknown): number | undefined {
   return Number.isSafeInteger(pages) && pages! >= 0 ? pages : undefined;
 }
 
-async function mast(service: string, params: Record<string, unknown>, page = 1): Promise<{ body: unknown; raw: string }> {
+async function mast(service: string, params: Record<string, unknown>, page = 1, metadataOnly = false, querySignal?: AbortSignal): Promise<{ body: unknown; raw: string }> {
   let response: Response;
   let raw: string;
   try {
-    response = await fetch(MAST_URL, {
-      method: "POST",
+    const encoded = new URLSearchParams({ request: JSON.stringify({ service, params, format: "json", pagesize: 100, page }) });
+    response = await metadataFetch(metadataOnly ? `${MAST_URL}?${encoded}` : MAST_URL, {
+      method: metadataOnly ? "GET" : "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
-      body: new URLSearchParams({ request: JSON.stringify({ service, params, format: "json", pagesize: 100, page }) }),
-      signal: AbortSignal.timeout(MAST_REQUEST_TIMEOUT_MS),
+      ...(metadataOnly ? {} : { body: encoded }),
+      signal: querySignal ? AbortSignal.any([querySignal, AbortSignal.timeout(MAST_REQUEST_TIMEOUT_MS)]) : AbortSignal.timeout(MAST_REQUEST_TIMEOUT_MS),
     });
     raw = await response.text();
   } catch (error) {
     if (error instanceof Error && error.name === "TimeoutError") {
-      throw new AdminHttpError(504, `MAST metadata request timed out after ${MAST_REQUEST_TIMEOUT_MS / 1000} seconds`);
+      throw new AdminHttpError(504, metadataOnly ? "MAST metadata query exceeded its time limit"
+        : `MAST metadata request timed out after ${MAST_REQUEST_TIMEOUT_MS / 1000} seconds`);
     }
     throw new AdminHttpError(503, "MAST metadata service could not be reached");
   }
@@ -113,13 +119,13 @@ async function mast(service: string, params: Record<string, unknown>, page = 1):
   return { body, raw };
 }
 
-function normalizedCells(value: unknown): { order: number; cells: number[] } {
+function normalizedCells(value: unknown, maximumCells = MAX_CELLS): { order: number; cells: number[] } {
   const body = record(value);
   const order = body?.order;
   const cells = body?.cells;
   if (!Number.isSafeInteger(order) || Number(order) < 4 || Number(order) > 12 || !Array.isArray(cells)
-    || cells.length < 1 || cells.length > MAX_CELLS) {
-    throw new AdminHttpError(400, `order must be 4 through 12 and cells must contain 1 through ${MAX_CELLS} pixels`);
+    || cells.length < 1 || cells.length > maximumCells) {
+    throw new AdminHttpError(400, `order must be 4 through 12 and cells must contain 1 through ${maximumCells} pixels`);
   }
   const maximum = 12 * 4 ** Number(order);
   if (cells.some((cell) => !Number.isSafeInteger(cell) || Number(cell) < 0 || Number(cell) >= maximum)) {
@@ -224,6 +230,16 @@ function intersects(order: number, cells: Set<number>, shapes: MastRegion[]): bo
   });
 }
 
+export function cellsForStcs(order: number, cells: readonly number[], stcs: unknown): number[] {
+  const shapes = regions(stcs);
+  if (!shapes) return [];
+  const healpix = new Healpix(2 ** order);
+  const covered = shapes.map((shape) => shape.kind === "circle"
+    ? healpix.queryDiscInclusive(shape.center, shape.radius, INTERSECTION_OVERSAMPLING)
+    : healpix.queryPolygonInclusive(shape.vertices, INTERSECTION_OVERSAMPLING));
+  return cells.filter((pixel) => covered.some((range) => contains(range, pixel)));
+}
+
 function productKind(product: MastRow): "combined-image" | "exposure" | "other" {
   const group = String(product.productSubGroupDescription ?? "").toUpperCase();
   const fileName = String(product.productFilename ?? "").toLowerCase();
@@ -261,9 +277,10 @@ function portalUrl(obsid: string): string {
   return url.toString();
 }
 
-export async function lookupHstImages(input: unknown, store?: ArtifactStore): Promise<HstImageLookupResult> {
-  const { order, cells } = normalizedCells(input);
-  const cacheKey = `${order}:${cells.join(",")}`;
+export async function lookupHstImages(input: unknown, store?: ArtifactStore, options: { metadataOnly?: boolean; signal?: AbortSignal } = {}): Promise<HstImageLookupResult> {
+  const metadataOnly = options.metadataOnly === true;
+  const { order, cells } = normalizedCells(input, metadataOnly ? 4096 : MAX_CELLS);
+  const cacheKey = `${metadataOnly}:${order}:${cells.join(",")}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.result;
   if (cached) cache.delete(cacheKey);
@@ -276,10 +293,14 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore): Pr
   let truncated = false;
   let excludedWithoutRegion = 0;
   const errors: HstImageLookupResult["errors"] = [];
-  for (let page = 1; page <= MAX_POSITION_PAGES; page++) {
+  const maximumPages = metadataOnly ? 64 : MAX_POSITION_PAGES;
+  const maximumObservations = metadataOnly ? 6400 : MAX_OBSERVATIONS;
+  const querySignal = metadataOnly ? options.signal ?? AbortSignal.timeout(METADATA_QUERY_TIMEOUT_MS) : undefined;
+  for (let page = 1; page <= maximumPages; page++) {
     let body: unknown;
     let pageRows: MastRow[];
     try {
+      if (querySignal?.aborted) throw new AdminHttpError(504, "MAST metadata query exceeded its time limit");
       const result = await mast("Mast.Caom.Filtered.Position", {
         position: `${cone.ra}, ${cone.dec}, ${cone.radius}`,
         columns: "obsid,obs_collection,dataproduct_type,proposal_id,target_name,instrument_name,filters,t_min,t_max,s_region,dataRights",
@@ -288,7 +309,7 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore): Pr
           { paramName: "dataproduct_type", values: ["image"] },
           { paramName: "dataRights", values: ["PUBLIC"] },
         ],
-      }, page);
+      }, page, metadataOnly, querySignal);
       rawResponses.push(result.raw);
       body = result.body;
       pageRows = rows(body);
@@ -304,25 +325,27 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore): Pr
         || String(observation.dataRights ?? "").toUpperCase() !== "PUBLIC") continue;
       const shape = regions(observation.s_region);
       if (!shape) { excludedWithoutRegion++; continue; }
-      if (intersects(order, cellSet, shape)) matched.set(obsid, observation);
+      try {
+        if (intersects(order, cellSet, shape)) matched.set(obsid, observation);
+      } catch { excludedWithoutRegion++; }
     }
     const pageCount = filteredPageCount(body);
     queryExhausted = pageCount !== undefined ? page >= pageCount : pageRows.length < 100;
-    if (!queryExhausted && matched.size >= MAX_OBSERVATIONS) {
+    if (!queryExhausted && matched.size >= maximumObservations) {
       truncated = true;
       break;
     }
     if (queryExhausted) break;
-    if (page === MAX_POSITION_PAGES) truncated = true;
+    if (page === maximumPages) truncated = true;
   }
   if (!queryExhausted) truncated = true;
   if (excludedWithoutRegion > 0) truncated = true;
   const ordered = [...matched.values()].sort((left, right) => Number(left.obsid) - Number(right.obsid));
-  if (ordered.length > MAX_OBSERVATIONS) { ordered.length = MAX_OBSERVATIONS; truncated = true; }
+  if (ordered.length > maximumObservations) { ordered.length = maximumObservations; truncated = true; }
 
   const productsByObservation = new Map<string, MastRow[]>();
   const productResponses: Array<{ obsid: string; page: number; body: unknown }> = [];
-  for (let start = 0; start < ordered.length; start += 4) {
+  for (let start = 0; !metadataOnly && start < ordered.length; start += 4) {
     const batch = ordered.slice(start, start + 4);
     const result = await Promise.all(batch.map(async (observation) => {
       const obsid = String(observation.obsid);
@@ -382,6 +405,8 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore): Pr
       ...(finiteNumber(observation.t_min) !== undefined ? { startTime: finiteNumber(observation.t_min)! } : {}),
       ...(finiteNumber(observation.t_max) !== undefined ? { endTime: finiteNumber(observation.t_max)! } : {}),
       productUrl: portalUrl(obsid),
+      sRegion: String(observation.s_region),
+      matchingCells: cellsForStcs(order, cells, observation.s_region),
       files,
     });
   }

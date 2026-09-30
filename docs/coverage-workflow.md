@@ -20,12 +20,14 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   brick, Tile, tract/patch, skycell, observation, exposure, block or a native
   HEALPix partition. Keep each survey's actual identity; do not rename all
   units as files or Tiles.
-- Clicking one HEALPix cell in overlap mode looks up only that cell. Connected
-  components organize the shared coverage for navigation; a broad component
-  must not be submitted as if it were a small download region. The current
-  reverse-lookup API caps one region at 4,096 cells and 100 square degrees.
-  For a larger component, prompt the user to click a cell or choose a smaller
-  region rather than displaying a raw request validation error.
+- Clicking a connected component in overlap mode queries its entire region,
+  including when a cell selects that component. The reverse-lookup API caps
+  one region at 4,096 cells and 100 square degrees. For larger components,
+  require a smaller region; the Assets cell inspector may use only the clicked
+  cell and must label that scope explicitly. Never silently truncate cells.
+- Within a survey, union the selected release/product layers; intersect those
+  survey unions at their highest shared real order. An empty selected survey
+  stays in the intersection. No preview is promoted to finer coverage.
 - A recipe mode such as `tile-table` describes how an input is read, not the
   native unit type. `sourceUnitKind` declares the identity returned by lookup:
   DESI returns Tiles, while Legacy Surveys returns bricks even if both read a
@@ -78,6 +80,11 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   a rule-derived access location from a scanned, verified file URI. A catalog
   of point positions is not an image footprint unless the source defines a
   valid mapping from those positions to spatial units.
+- An intersecting public MOC may have no match in a frozen native inventory.
+  Retain its source identity, coverage evidence and official entrypoint with an
+  explicit empty-result note and inventory scope. Source-query failures remain
+  incomplete after paging/export; never describe every incomplete result as a
+  page limit or manufacture units to fill a missing survey.
 
 The common data flow is:
 
@@ -115,8 +122,10 @@ native unit. Describe the two capabilities independently, including whether the
 native geometry is estimated and whether each generated access URI has been
 verified.
 
-The first implementation priority is DESI, Euclid, HSC-SSP and DESI Legacy
-Surveys. Their adapters share the query and response model while retaining
+The first MVP covers Euclid, DESI, Legacy Surveys and HST. All eleven
+combinations of two or more surveys use the same overlap contract. HSC retains
+its existing adapter but is outside this acceptance scope. The adapters share
+the query and response model while retaining
 survey-specific unit identities and access rules. Adapter readiness is based on
 an executable local unit lookup, not a `sourceUnitIndex` label or the presence
 of a survey-wide MOC alone. Source-unit input snapshots are locked by path,
@@ -146,6 +155,18 @@ Current evidence limits are:
   The aggregate Q1 deep-fields layer uses the same locked BGSUB snapshot and
   groups matching product URIs by the native `tile_index` for the clicked
   HEALPix. Those results remain estimated and limited to this inventory scope.
+- Euclid ERO has no verified Tile inventory. Lookup returns named `target`
+  packages only when official ERO XML and ESA Sky outreach `stc_s` agree on
+  target identity. The outreach footprint is an estimated target extent,
+  not a verified instrument/filter footprint. Preserve every official matching
+  Stack/Catalog package URI and the source snapshot hash; do not inspect the
+  package's scientific contents or infer an ERO Tile ID.
+- HST lookup uses public MAST observation metadata and `s_region`, bound to
+  each selected observation/instrument/filter layer. It returns observation
+  IDs and MAST access links, retains unsupported footprints as excluded partial
+  evidence, and does not expand science products. ERO/HST metadata queries have
+  a 45-second overall deadline; timeouts remain incomplete results. Hashed raw
+  metadata evidence is stored only in Assets.
 - HSC-SSP PDR2's official Available Data page publishes 11 machine-readable
   tract/patch geometry lists for its DUD and Wide fields. They are captured
   and SHA-256 locked separately from the PDR3 lists. Six PDR2 product
@@ -417,6 +438,36 @@ the normal publication queue and site verification; retained package bytes stay
 unchanged.
 
 ## Reverse lookup and overlap
+
+### Public/private ownership and manifest snapshots
+
+Assets owns public native-unit indexes, region mappings, caches and immutable
+reverse-lookup snapshots. An authenticated lookup freezes one bounded query in
+the Assets evidence store for one hour. Continuation uses that same snapshot,
+region, layer revisions, page kind and API-Key identity; it never reruns an
+archive or Warehouse query. Query exhaustion is not survey inventory completeness.
+
+Without a Key, Assets exports its current six-item anonymous preview and
+preserves omitted/truncated status. With a valid `region:query` Key, export
+drains the same snapshot and updates the displayed result to the exported list.
+JSON and CSV preserve native identities, all URIs, modalities, footprints,
+actual orders, precision, source evidence and availability.
+
+Workspace installs only public layer metadata and MOC/preview geometry. It
+intersects those layers with the user's CSST coverage locally, then calls
+Assets server-side with an API Key and only public layer IDs, order/cells and
+cursor/snapshot selectors. Public native indexes and responses must never be
+persisted as Workspace files, caches, artifacts, production recipes or log
+bodies. Responses may exist in request/browser memory and transient browser
+manifest exports only. No Key or an invalid Key leaves public native lookup
+unavailable; geometry and private results remain available, with no anonymous
+or crawler fallback.
+
+CSST files, scans, MOCs, cell mappings and directory indexes stay in Workspace.
+They never enter an Assets request, evidence object, package or release. Private
+reverse lookup returns deduplicated immediate parent directories of matched
+indexed files, preserving their actual order and precision. A scan root is not
+a substitute for a missing file mapping. See the [four-survey MVP scenario](four-survey-mvp.md).
 
 ```mermaid
 flowchart LR

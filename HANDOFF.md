@@ -1,13 +1,42 @@
 # Assets 项目交接
 
-## 新 Session 接续摘要（2026-09-30）
+## 最新接续：四巡天 MVP（2026-09-30）
+
+本节优先于下面 revision 292 及更早的方向和验证记录。第一阶段巡天是
+**Euclid、DESI、Legacy Surveys、HST**；桌面为验收目标，HSC 保留既有实现。
+
+- Assets 分支 `main`，HEAD `5260710`；Workspace HEAD `fe8b041df6288553b75b8cf0d93e3378f7ae075c`。两个仓库均有未提交修改，全部保留。本轮未 commit、push、新增扫描、修改或发布 MOC。
+- Assets Dev：Helm revision **294**，镜像 `0.1.0-20260930-232630-lookup-status`，site/backend 均 `1/1 Ready`、0 restarts；入口 `http://10.15.51.75:32083/atlas/`。公开 bundle SHA 仍为 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`，603 files。原 1.66 GB Legacy SQLite 派生索引继续复用，日志确认 cache hit，没有冷构建或提高内存上限。
+- Workspace Dev：Helm release `asa` / namespace `asa-workspace`，revision **53**，镜像 `0.10.38-dev-20260930-232630-lookup-status`；入口 `http://astro.workspace.dev.72602.space:32080/`，`1/1 Ready`、0 restarts。DESI `3.5.0`、Euclid `3.17.0`、HST `3.4.0`、Legacy `3.1.0` 已安装并启用；原有 Gaia、2MASS 等包及 release 选择保留。
+- 普通 HEALPix 点击只列出 DR/模态，不自动请求原生分块或 MAST。重合先合并同一巡天选中的产品，再对巡天求交；选中的空巡天不能被移除。点击 component 查询整个 component，单次上限为 4,096 cells / 100 deg²，超限须缩小区域并明确查询范围。
+- Assets 新增 `server/archive-native-units.ts`、`server/metadata-fetch.ts`、`server/reverse-snapshot.ts`。Euclid ERO 返回官方 target/package 身份与多个 URI，不推造 Tile；HST 返回匹配所选仪器/滤镜的 observation ID、`s_region` 与 MAST 入口，只读取 metadata。两类上游查询总期限为 45 秒，失败/截断保留为不完整结果；原 metadata 的哈希证据只存 Assets。
+- 反查完整结果保存在 Assets evidence 的不可变快照中，一小时过期；签名 `rs2` 游标绑定区域、图层 revision、访问身份和分页种类，续页不重复上游或 Warehouse 查询。`queryExhausted` 不代表巡天完整，始终保留 `inventoryComplete=false`。大于 1,000 项的分页已纳入自动化验证。
+- Assets 匿名导出使用当前最多 6 项的 preview，并保留 omitted/truncated 状态；有效 Key 导出穷尽同一快照，同时更新展示列表。JSON/CSV 保留原生 ID、全部 URI、模态、footprint、order、precision 和来源访问策略，导出的是来源清单。
+- **数据边界：**Assets 持有公开原生索引、天空分块映射、证据、缓存和反查快照。Workspace 只同步公开 MOC/图层 metadata；服务端持有 API Key，只发送公开 layer IDs、order/cells 和分页选择器。公开响应只存在请求/浏览器内存与临时浏览器导出，不写入 Workspace 存储、缓存、制品、配方或日志正文；无 Key 不发匿名请求，无爬虫回退。CSST 扫描、覆盖和文件映射只在 Workspace，目录反查使用命中文件的直接父目录，保留原生 order/precision，不用扫描根目录替代缺失映射。私有分块、路径和扫描身份不记录在本仓库。
+- Workspace 另修复已发布 HST layer ID 中 `--` 的解析、激活新包时保留已启用旧包的可信选择，以及复合公开 source ID 的独立 8,192 字符输入上限。反查只读取选中的 Workspace 来源，公开续页不再读取未选中的私有图层。
+- **公开实测场景：Abell 2390，O8 cells `[202250,202272]` / C04。**最小四图层返回 ERO target 1、DESI DR1 Tile `20876` 1、Legacy DR10 brick 11、HST ACS observation 46，共 59 个原生单位 / 79 个 manifest 项，4 页 × 25 的上限内读完且无重复。全选产品在 Assets/Workspace 返回 78 个原生单位；Workspace `pageSize=25` 实测 5 页，四巡天齐全。示例 URI：ESA `Euclid-VIS-Stack-ERO-Abell2390.DR3.tar`、DESI `tiles/cumulative/20876/20211030/`、Legacy South Coadd brick 目录及 MAST observation 入口。
+- Assets 桌面 Playwright 已验证普通点击无原生查询、C04 全区域反查、匿名导出、Key 解锁、展示与授权导出相同、四巡天结果齐全；canvas 非空且可拖动，无 page errors 或页面横向溢出。Workspace revision 53 桌面 C04 实测 79 个原生分块：Euclid 5、DESI 1、Legacy 11、HST 62，JSON/CSV 与展示及全部 URI 一致。HST 实时元数据结果会变动，旧 revision 52 的 78 个结果仍是历史实测，不是固定库存数量。
+- Workspace 的五方整块点击、公开来源依据、可用分块、私有直接父目录和 JSON/CSV 展示一致性已通过桌面验收；165 个 canvas 采样色桶、拖动前后像素变化，0 page errors、0 横向溢出、0 浏览器直连 Assets/MAST。**不能称现有五方区域四巡天原生分块齐全：**Legacy 锁定 DR10 South 清单在该区域无 brick 命中；HST 在部分接口探测中返回观测，但最终浏览器请求达到 45 秒 deadline，结果保留 `truncated=true`、`queryExhausted=false`。具体私有场景数量和精度只记录在 Workspace 文档，本仓库不记录私有路径、扫描身份和像元。
+- 最后修正：已注册原生索引但当前区域空命中时，官方入口不再声称“URI 已单独列出”，并保留 source index notes；不完整清单说明不再把所有上游失败写成 result limit。Workspace 分页结束后显示未返回原生分块的巡天，保留可点击官方入口及来源说明。完整公开 C04 场景与私有混合场景的库存/上游限制分开验收，不能仅放宽断言就宣称四巡天全部命中。
+- 验证基线：上轮 Assets 完整测试与 Core wheel 校验为 349 项（347 通过、2 跳过），Workspace 完整测试为 298 项（296 通过、2 跳过）。最后 source ID/读取范围及空结果提示修复之后，两端完整 build、容器 build、Assets site type check、Helm lint 和 `git diff --check` 通过，并完成 Dev 实际接口/桌面验收；没有重跑最后修改后的单元测试。不要把这个单个实测区域或查询穷尽写成完整巡天 inventory。
+- 新文档 `docs/four-survey-mvp.md` 记录 MVP 契约、公开场景和库存限制；Assets `README.md`、`docs/api-reference.md`、`docs/coverage-workflow.md` 与 Workspace `docs/public-coverage-boundary.md`、`docs/csst-simulation-coverage-plan.md` 已同步。
+- 项目 `.codex/config.toml` 的 review model 已为 `gpt-6.1-sol`；当前项目 agent/subagent 配置没有 `gpt-6-sol`。主模型/默认 subagent 仍是既有 `gpt-6-luna`，planner 为 `gpt-6-astra`。本轮未启用 subagent。
+- `.tmp-screens/Astro-Survey-Atlas-intro-edits.zip` 已审阅：只包含 Assets README / 独立组织 `.github` profile README 草案及 outreach 草稿。其 HSC 优先描述须按当前 HST MVP 调整；补丁未套用、组织仓库未改、未发送 outreach。当前先完成主流程。
+- 保留库存限制：Q1 仅锁定 BGSUB 2,908 行 / 352 Tiles；ERO 无已核实 Tile roster；DESI Tile 为 estimated 候选而非目标级光谱覆盖，用户 OSS 中仅 904 个 redrock 已扫描，约 904 个 spectra 和 12,855 个 coadd 未扫描，也不代表完整 BGS/DR1。HSC DAS 文件存在性/直链和 Legacy DR5–DR9 规则及全部 brick 文件未逐项核验。Legacy DR10 color imaging 的既有发布模态仍为 `catalog`，不能静默修改发布数据；后续须单独核实并走发布流程。扩充 Legacy 输入前先评估流式/增量构建，不因旧冷建峰值直接扩容。
+
+最终接口续验：Workspace revision 53 的公开 C04 使用 `pageSize=25` 读完同一快照
+的 5 页，返回 79 个原生分块；无 Key 的客户端为 0 次 outbound fetch，错误 Key
+被拒绝且无回退。私有单独查询及混合查询结果只记录在 Workspace 文档；五方区域
+的 Legacy 清单缺口和 HST 实时查询稳定性仍是后续公开来源核实事项。
+
+## 历史交接基线：revision 292（2026-09-30）
 
 - 当前分支 `main`，HEAD `c239dd0`。本次开始时已有未提交修改 `site/src/main.ts`、`site/src/styles.css` 和 revision 291 的 `HANDOFF.md` 记录；本次另更新了 `HANDOFF.md`、`docs/coverage-workflow.md`、`docs/api-reference.md` 及反查 UI。所有修改均须保留，不要 reset、checkout 或清理。
 - Dev 当前为 Helm revision **292**，镜像 `0.1.0-20260930-154333-spatial-ui`；site/backend 均 `1/1 Ready`。入口 `http://10.15.51.75:32083/`。`/healthz` bundle SHA `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`，603 files；`/api/v1/assets` 返回 136 项，coverage catalog revision `e44080a4a7360f62b674ea739c89fa99` 有 132 layers。
 - 本次验证：`npm run build`、`npm run build:site`、`npx tsc -p tsconfig.site.json` 通过；`npm test` 341 项（339 通过、2 跳过）；Core wheel 校验、Helm lint、`git diff --check` 通过。2MASS H-band MOC Range 返回 HTTP 206，SHA/ETag 仍为 `e3502bcc21f7ffac2b8493c631936d0a0fc29399b5d4aa00d50a1e0fc7e89164`。只部署应用代码，未发布或修改 MOC/覆盖数据。
 - 用户给出的 O8/ipix `124799` 线上反查仍返回 DESI DR1 Tile `5425` 与 EDR Tile `80938`。匿名 mixed preview 的 `shown=6, omitted=49` 统计多种 manifest 项；空间分块游标实际 `shown=2, hasMore=true`，不能把 49 说成剩余 Tile 数。空间分块列表应突出来源巡天/release/product、原生单位 ID、模态、命中 order/cell 数/精度和可点击 URI；近似/访问策略说明放在信息提示中，扫描证据和一般入口放在独立辅助区。
 - 续接边界：保留现有数据和修改；不处理 `cosmos-data-linkage`、CSST 私有扫描；不发布或修改 MOC。Dev 代码 rollout 与公开覆盖/MOC 发布是不同操作，未经明确新任务不要发布。
-- 下一步请先在 Dev revision 292 验证空间分块 URI 宽度、模态图标/中文名称、精度 `i` 说明和按巡天折叠的“公开来源”；未得到用户反馈前，不扩充扫描/分块数据范围，也不提高容器资源限制。
+- **尚未完成（供下一 Session 接续）：**Dev revision 292 的重合详情已由 Playwright 实际打开并检查桌面/手机布局；仍待用户验收。浏览器只验证了 Euclid + DESI 重合模式，普通单巡天点击是否严格只显示 DR/模态、是否完全不发起 HST/MAST 查询，尚未单独验收。匿名反查续页已测，真实 API Key 解锁后的空间分块 cursor 续页尚未验证。四巡天索引都是有限范围 MVP，不代表完整巡天：Euclid Q1 仅锁定的 2,908 行 BGSUB 清单（352 个 Tile），ERO 尚无已核实 Tile roster；DESI DR1/EDR Tile 几何为 estimated 候选，不是目标级光谱覆盖；HSC PDR2/PDR3 返回 tract/patch 和需登录 DAS Search 入口，未证明每个波段文件存在，也不是 patch 直链；Legacy 多代 roster/matcher 已有实现，但 DR5–DR9 的官方 URI 模板和全部 brick 文件尚未逐项核验。DESI 用户部分 OSS 副本中 904 个 redrock 文件已扫描；约 904 个 `spectra-*.fits.gz`（约 271.7 GB）及约 12,855 个 coadd 文件（约 4.79 TB）仍未扫描，均不能代表完整 BGS/DR1。当前约 1.66 GB 的 Legacy 派生 SQLite 冷构建曾接近 4 GiB cgroup 上限但未 OOM；扩充 roster 前应先评估流式/增量构建，不因峰值直接扩容。用户验收前不扩展扫描/分块范围；不处理 `cosmos-data-linkage` 或 CSST 私有扫描，不发布或修改 MOC。
 - 本轮 UI 已构建并部署：分块项使用与巡天图层列表相同的模态图标映射，显示中文模态名；四种精度状态显示可读标签并提供焦点/悬停说明；反查抽屉最大宽度增至 1120px，空间分块列表使用抽屉主滚动区；“公开来源”默认按巡天折叠，再展开 release/product。`docs/coverage-workflow.md` 与 `docs/api-reference.md` 已同步 UI 契约。Playwright Chromium 实际选择 Euclid + DESI、按 `G` 进入重合并打开 C01 抽屉：1440px 视口抽屉宽 1008px，主项显示 DESI DR1 `TILE 82406`、spectroscopy 图标/中文、O8/21 像元、Estimated 信息提示和可点击 URI；公开来源按 Euclid/DESI 巡天折叠。390px 视口抽屉宽 382px，URI 换行，文档无横向溢出；连通区域导航可在自身区域横向滚动。两种视口均无页面级 JS 异常。截图 `/tmp/assets-atlas-drawer.png`、`/tmp/assets-atlas-drawer-390.png`（临时目录，非仓库文件）。
 
 ## 当前核心目标：按原生空间分块指导下载（2026-09-29）
