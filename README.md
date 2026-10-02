@@ -14,8 +14,9 @@ provides its existing tract/patch adapter.
 1. Open the survey layers and choose releases and products. An ordinary
    HEALPix click lists the covering releases and modalities.
 2. Press **G** to compare survey overlap, then click a connected component.
-   Lookup uses the whole component within 4,096 cells / 100 square degrees;
-   a larger component needs an explicitly smaller region.
+   Lookup submits the whole component up to 4,096 cells. Larger regions are
+   queried as bounded pages of at most 64 cells / 100 square degrees per
+   subquery, with up to 32 subqueries advanced by each page request.
 3. Inspect the native unit IDs, modality, actual order, precision and source
    links. Export the displayed results as JSON or CSV. Anonymous preview is
    limited; full lookup, continued browsing and complete export require a

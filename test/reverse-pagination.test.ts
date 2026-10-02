@@ -5,12 +5,15 @@ import { AccessError } from "../server/region-access.js";
 import {
   decodeReverseCursor,
   encodeReverseCursor,
+  partitionReverseCells,
   pageReversePlan,
   reversePageSize,
   reversePlanItems,
   REVERSE_CURSOR_MAX_BYTES,
   REVERSE_CURSOR_MAX_KEY_LENGTH,
   REVERSE_CURSOR_MAX_KEYS,
+  REVERSE_QUERY_BATCH_MAX_AREA_DEG2,
+  REVERSE_QUERY_BATCH_MAX_CELLS,
   type ReverseCursorPayload,
 } from "../server/reverse-pagination.js";
 import type { DownloadPlan } from "../server/evidence-store.js";
@@ -147,4 +150,18 @@ test("reverse page size stays within the public bound", () => {
   assert.equal(reversePageSize(20), 20);
   assert.throws(() => reversePageSize(0), (error: unknown) => error instanceof AccessError && error.statusCode === 400);
   assert.throws(() => reversePageSize(101), (error: unknown) => error instanceof AccessError && error.statusCode === 400);
+});
+
+test("large reverse regions retain their native order and split below cell and area bounds", () => {
+  const orderEightCells = Array.from({ length: 4_096 }, (_, index) => 100_000 + index);
+  const batches = partitionReverseCells(8, orderEightCells);
+  const cellArea = 41252.96124941927 / (12 * 4 ** 8);
+  assert.ok(batches.length > 1);
+  assert.ok(batches.every((batch) => batch.length <= REVERSE_QUERY_BATCH_MAX_CELLS));
+  assert.ok(batches.every((batch) => batch.length * cellArea <= REVERSE_QUERY_BATCH_MAX_AREA_DEG2));
+  assert.deepEqual(batches.flat(), orderEightCells);
+
+  const orderFourBatches = partitionReverseCells(4, [190, 191, 192, 193, 194, 195, 196, 197]);
+  assert.deepEqual(orderFourBatches, [[190, 191, 192, 193, 194, 195, 196], [197]], "eight O4 cells exceed the per-query area budget");
+  assert.throws(() => partitionReverseCells(0, [0]), (error: unknown) => error instanceof AccessError && error.statusCode === 413);
 });

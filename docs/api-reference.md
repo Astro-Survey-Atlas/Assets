@@ -239,24 +239,44 @@ edges, source file IDs, URI/name/ETag/WCS bounds, download entrypoints and a
 Reverse lookup accepts one or more public layer IDs and a bounded explicit
 region; it does not calculate the overlap itself. The overlap endpoint unions
 selected products within each survey and intersects survey coverages at the
-highest real order supported by every selected product. Component inspection submits the whole component
-when it fits 4,096 cells / 100 square degrees; larger regions require a smaller
-selection. Ordinary HEALPix inspection shows release/modality metadata only.
+highest real order supported by every selected product. Component inspection
+submits the whole component up to 4,096 cells. Regions over 100 square degrees
+are queried as bounded batches of at most 64 requested real NESTED cells and
+100 square degrees; a single cell over 100 square degrees is still rejected. Ordinary HEALPix inspection
+shows release/modality metadata only.
 
 Each new lookup stores an immutable snapshot in Assets evidence storage. The
 response includes `querySnapshot: {id, expiresAt, queryExhausted,
-inventoryComplete: false}`. Snapshots expire after one hour. `queryExhausted`
-means the bounded source query finished, not that a survey inventory is
-complete. `pageSize` accepts 1-100; `page.nextCursor` is a signed `rs2` cursor
+inventoryComplete: false}`. Batched queries also include `batch: {completed,
+total, batchComplete, complete, queryComplete, remaining}` and
+`resultTruncated`. `batchComplete` means the current batch result is frozen;
+`complete` means every requested cell batch has run; `queryComplete` is false
+when any batch has a reported result limit or gap. `queryExhausted` is true only
+when all batches have run and no batch reported truncation. None of these fields
+asserts complete survey inventory; `inventoryComplete` remains false. Snapshots
+expire after one hour. Each request advances at most 32 cell batches, stopping
+sooner when it fills the requested page. The same native/file identity found in
+multiple cells appears once. A batch that exceeds its 64 MiB snapshot or
+100,000-identity bound is returned as truncated and stops further cell
+scanning; `queryExhausted` stays false when cells remain. `pageSize` accepts
+1-100; `page.nextCursor` is a signed `rs2` cursor
 with fixed size, bound to snapshot, region, layer revisions, authorization
-identity and page kind. A `querySnapshotId` without a cursor starts at the
-first page of that same snapshot. Expiry returns HTTP 410, changed region or
-layer selectors return 409, and an incorrect Key identity returns 403. A new
-snapshot fixes its coverage and native-index versions; matching continuations
-keep those versions when a newer public release or native index is activated.
-Older snapshots without a selector fingerprint retain their original revision
+identity and page kind. Pages within a cell batch read the same immutable
+snapshot; advancing past its final page queries the next bounded cell batches
+and keeps the root `querySnapshot.id`. A `querySnapshotId` without a cursor
+replays from the first frozen batch and advances as needed to fill that page.
+Existing single-region `rs2` cursors remain readable. Each materialized batch
+records the active public/native revisions; if a revision changes before a
+later batch is materialized, continuation returns HTTP 409 rather than mixing
+versions. Expiry returns HTTP 410, changed region or layer selectors return
+409, and an incorrect Key identity returns 403. Pages already frozen retain
+their captured coverage and native-index versions. Older snapshots without a selector fingerprint retain their original revision
 checks. Snapshot
 pages perform no new archive or Warehouse queries and are served `no-store`.
+This cursor and snapshot model is the reverse-lookup continuation interface;
+there is no separate query-session resource with create/status/stop/resume
+operations. Clients request another page with `page.nextCursor`. Browser JSON
+and CSV export drains pages from the same snapshot when authorized.
 New snapshot objects use gzip; their IDs remain the SHA-256 of the uncompressed
 JSON. Existing uncompressed snapshots remain readable. Assets retains decoded
 snapshots only in memory, with at most 16 entries and a 64 MiB serialized budget
@@ -285,10 +305,11 @@ the empty result and retain the inventory scope in `notes`. Do not infer that
 the survey has no data or state that a native URI was returned. An unavailable
 locked source index never triggers an implicit MAST request. Ordinary HST image
 lookup and overlap reverse lookup read the SHA-locked local CAOM snapshot and
-SQLite footprint index; they return observation identities and MAST entry links,
-not request-time MAST results or file-level product lists. Unsupported HST
-footprints keep results incomplete. An exhausted manifest page does not clear
-source incompleteness or turn it into a result-limit failure. Display and
+SQLite footprint index; they return observation identities and MAST Products
+API links without querying MAST during lookup. Opening a link fetches the
+current product rows and access-policy metadata directly from MAST. Unsupported
+HST footprints keep results incomplete. An exhausted manifest page does not
+clear source incompleteness or turn it into a result-limit failure. Display and
 JSON/CSV export preserve the same source notes.
 
 Workspace calls this endpoint server-side using `X-Assets-API-Key`. Its request
@@ -384,15 +405,22 @@ or manifest hit a result limit. Anonymous preview requests return at most six
 manifest items and cannot submit a cursor. `page.omitted` and `page.nextCursor`
 describe the mixed manifest (spatial units, files, entrypoints and coverage
 evidence); `page.omitted` is not a count of remaining Tiles/bricks/observations.
-For UI browsing, the preview also returns independent `spatialPage` and
-`supportingPage` cursors. `spatialPage` counts only native spatial units;
+Native spatial units in new query snapshots are interleaved by survey, retaining
+the release/product/unit order within each survey. The anonymous preview and
+authorized first page therefore show each survey with native matches before
+additional units fill the page, subject to the page size. This order is frozen
+with the snapshot, so existing continuation cursors keep their original order.
+For UI browsing, both previews and authorized manifest pages return independent
+`spatialPage` and `supportingPage` cursors. `spatialPage` counts only native spatial units;
 `supportingPage` pages files not attached to a unit, public entrypoints and
 coverage evidence. Both expose `shown`, `hasMore` and, when continuable,
 `nextCursor`. `hasMore` does not promise an exact remaining count.
 
 Send `pageKind: "spatial-units"` or `pageKind: "supporting-evidence"` with a
 cursor and `pageSize` to continue only that list. These scoped cursors cannot be
-interchanged. The first page may use the anonymous preview cursor; subsequent
+interchanged. A manifest page's scoped cursors continue after the items already
+consumed in that scope, including skipped preview records. The first page may
+use the anonymous preview cursor; subsequent
 cursors are bound to the API-Key authorization identity. The browser's
 “继续加载空间分块” action asks for a `region:query` API Key and appends only
 native spatial units. The collapsed auxiliary section has a separate

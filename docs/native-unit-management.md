@@ -167,10 +167,31 @@ Workspace 的存储、缓存、日志正文、制品或配方。CSST 私有覆�
 活动 native authority 依赖去重后为 989,530,856 bytes / 943.69 MiB；迁移口径及
 压缩恢复后的磁盘大小见 [存储盘点](storage-inventory-20261001.md)。
 
-Assets 当前为 revision 312，镜像 `0.1.0-20261002-054741-snapshot-batches`，
-修复了控制快照整批串行上传阻塞镜像指针的问题。原生控制镜像 generation 370、
+以下是 revision 312 的控制状态修复记录，镜像为
+`0.1.0-20261002-054741-snapshot-batches`；当前部署见 [HANDOFF](../HANDOFF.md)。
+该版本修复了控制快照整批串行上传阻塞镜像指针的问题。原生控制镜像 generation 370、
 发布任务镜像 generation 2623 和 API 管理镜像 generation 238 均为 `synced`；
 原生完整控制快照隔离恢复后与本地状态一致。窄验证时 565 个旧快照仍继续归档，
 最新状态未确认数和失败数为 0。活动原生 group、generation 1 和 authority manifest
 SHA 均保持原值，网站反查服务为 available。证据 `/tmp/assets-snapshot-batch-verify.log`。
 312 的 build、Helm lint 和 site/backend rollout 通过；未重复完整桌面场景或仓库测试。
+
+## ERO target alias update on Assets Dev 315 (2026-10-02)
+
+The exact `Messier78` to `M78` identity alias was added through the managed
+native-index workflow. The candidate was verified, reviewed, archived and
+activated as generation 2. The active index is
+`8a7745f69bd2d87156933fe5c39d5407c79e333e533c76900fa68f193ea67e5f`; status
+reports 18 sources, 49 product bindings and 52/52 checks passed.
+
+The locked ERO snapshot is
+`0a6b254384f5082dab056b81f98751805f68ca890c5cfb51da01f1f0941e32e3`, SHA-256
+`7f8b99523c7b3a07a9a3c6b5c1dcd9f40d80ed6b4ce2c8970a5c97467af3e323`, with
+10 linked target records. The Messier78 outreach polygon is estimated and
+matches cell `[1429]`; it does not repair DESI + Euclid O4 C01 `[190]`. Seven
+targets still have no verified footprint association in the inspected outreach
+table. ERO remains a target-level mapping with no verified Tile inventory.
+Assets 315 C01 desktop JSON/CSV retain the one DESI Tile, the Euclid source
+entrypoint, the seven-target mapping gap and incomplete inventory state. See
+the [ERO footprint audit](research/euclid-ero-target-footprint-audit-20261002.md)
+and [HANDOFF](../HANDOFF.md) for the bounded evidence and acceptance ranges.

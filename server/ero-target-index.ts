@@ -32,6 +32,15 @@ function targetIds(landing: string): string[] {
   return ids;
 }
 const targetKey = (value: string): string => value.replace(/^ERO-/i, "").replace(/_HighRes$/i, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+const geometryAliases: Readonly<Record<string, readonly string[]>> = {
+  // ESA Sky publishes both the default and high-resolution rows as M78.
+  messier78: ["m78"],
+};
+
+function targetAssociationKeys(value: string): Set<string> {
+  const key = targetKey(value);
+  return new Set([key, ...(geometryAliases[key] ?? [])]);
+}
 
 /** Parse saved official metadata only. A target package is never relabelled as a Tile. */
 export function parseEroTargetSnapshot(bytes: string, sha256: string): EroTargetIndex {
@@ -57,7 +66,9 @@ export function parseEroTargetSnapshot(bytes: string, sha256: string): EroTarget
       return url.origin === "https://cdn.euclid.esac.esa.int" && /^\/(Stack|Catalog)\//.test(url.pathname)
         && url.pathname.includes(`-${id}.`) && /\.tar(?:\.gz)?$/.test(url.pathname);
     }))];
-    const matches = rows.filter(row => typeof row.id === "string" && targetKey(row.id) === targetKey(id)
+    const aliases = targetAssociationKeys(id);
+    const matches = rows.filter(row => typeof row.id === "string"
+      && [...targetAssociationKeys(row.id)].some(key => aliases.has(key))
       && typeof row.stc_s === "string");
     if (!matches.length) continue;
     const regions = [...new Set(matches.map(row => String(row.stc_s)))];

@@ -1,13 +1,39 @@
 # Four-survey MVP
 
+## Current follow-up (2026-10-02)
+
+The current deployment and remaining work are recorded in [HANDOFF](../HANDOFF.md).
+Assets Dev is Helm revision 316; the active managed native index is generation 2.
+The four-survey MVP has complete page/JSON/CSV desktop acceptance for O4 C02,
+cells `[637,639,725,958,959,1002,1003]`. O4 C01 `[190]` is separately verified
+for DESI + Euclid and correctly reports the unresolved ERO footprint mapping.
+These checks do not establish native matches for every overlap component.
+
+The C01 spatial page is exhausted and contains DESI DR1 Tile `82406` only.
+Euclid ERO coverage/source identity remains visible, but seven target footprints
+have no verified association in the inspected official outreach table. The
+Messier78/M78 alias is now mapped and lies at O4 cell `[1429]`, outside C01.
+The 875 records from the earlier DESI + Euclid Q1 C04 selection do not establish
+C01 completeness.
+
+Ordinary browsing uses the existing immutable query snapshot and signed cursor.
+JSON/CSV export drains pages from that same snapshot. No independent query-session
+create/status/stop/continue API was added. The gap notice was accepted on Assets
+315 and remains in 316; it matches the C01 page, JSON and CSV. Revision 316 also
+contains the desktop-checked native management UI update. An unauthenticated
+first-page check of other O4 components is only a preview; until their cursors
+are exhausted, missing surveys must not be interpreted as no match.
+
 ## Scope
 
 Euclid, DESI, Legacy Surveys and HST share one region inspection and manifest
 flow. Desktop is the acceptance target. Ordinary cell inspection lists releases
 and modalities only. Overlap unions selected products within a survey and
 intersects survey unions, including all eleven combinations of two or more
-surveys. A component click queries all of its cells within 4,096 cells / 100
-square degrees; larger regions require a smaller selection.
+surveys. A component click submits all of its cells up to 4,096. Regions over
+100 square degrees are split into bounded subqueries of at most 64 cells and
+100 square degrees; the existing cursor advances up to 32 subqueries per
+request until a page is full. Each cell retains its actual requested order.
 
 | Owner | Persistent data | Region response |
 | --- | --- | --- |
@@ -19,6 +45,29 @@ Private identities and paths never cross into Assets. Public reverse responses
 are not persisted in Workspace. Geometry remains usable without a Key; public
 native lookup has no anonymous/crawler fallback. Browser JSON/CSV export is
 a source manifest, never a scientific data download.
+
+## Assets 315 Reverse-Lookup Checkpoint
+
+- **DESI + Euclid O4 C01 `[190]`:** the exhausted spatial page contains one
+  estimated DESI DR1 Tile (`82406`). The Euclid ERO coverage match, source
+  entrypoint and seven-target footprint gap remain visible. Page, JSON and CSV
+  agree; the query is still incomplete and is not an inventory-completeness
+  claim. Evidence is in `/tmp/assets-c01-desktop-315/`.
+- **Euclid + DESI + Legacy Surveys + HST O4 C02
+  `[637,639,725,958,959,1002,1003]`:** 22,772 native records were drained and
+  matched one by one across the page, JSON and CSV. Every survey is represented.
+  The cursor ended, but `resultTruncated=true`, `queryExhausted=false` and
+  `inventoryComplete=false` remain because source/query bounds still apply.
+  Evidence is in `/tmp/assets-four-survey-315/`.
+- **O4 C01 `[483,486,487,498]`, C03 `[787,790]`, and C04 `[1944]`:** anonymous
+  first-page previews returned continuations. They are not exhaustive component
+  checks, and an absent survey on those pages is not a confirmed no-match.
+
+These are the minimum public reverse-lookup checks for user review. The native
+management UI was separately checked on Assets 316. Broader component validation
+follows after the user accepts the MVP. Workspace remains at revision 62; its
+earlier complete seven-cell result is a separate product-layer selection and does
+not replace these Assets checks.
 
 ## One Real Region: Abell 2390
 
@@ -274,8 +323,8 @@ HTTP verification completed through the management workflow. A real DR10
 acquire/build returned `noChange=true`, keeping both original SQLite hashes and
 the active version. Application images and native MOC hashes were preserved.
 
-The complete Assets desktop flow passed after activation: all eleven survey
-combinations, O4 seven-cell component, six-item anonymous preview and 22,772
+The selected-region Assets desktop flow passed after activation: all eleven survey
+combinations, the fixed O4 seven-cell component, six-item anonymous preview and 22,772
 authorized native records. Display, JSON and CSV preserve the same current
 native version, URI/footprint/precision and native identities. CSV added zero
 pages after JSON; total cursor requests remained 236. Ordinary-click native
@@ -303,7 +352,8 @@ Frozen pagination also passed across activation: the old snapshot retains
 `imported-baseline`, its 56 native records and all four source identities;
 fresh queries use the managed group. That old selector had no Euclid native
 match; source preservation and version continuity do not manufacture a missing
-unit. Complete four-survey results are checked by the component flow above.
+unit. Four-survey results for the fixed region are checked by the component flow above.
+Native inventory gaps in other components require their own lookup and acceptance.
 
 Published O4 HEALPix pagination was revalidated after activation: Euclid 44,
 DESI 1,385, Legacy 2,247 and HST 2,262 sorted unique cells. Unsupported O13

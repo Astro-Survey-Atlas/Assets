@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { OVERLAP_DOWNLOAD_HEADER, overlapCsvRows, type DownloadPlan } from "../site/src/overlap-download.js";
+import { mergeDownloadPlans, OVERLAP_DOWNLOAD_HEADER, overlapCsvRows, type DownloadPlan } from "../site/src/overlap-download.js";
 
 const component = {
   id: "C09",
@@ -251,4 +251,58 @@ test('file manifest CSV retains committed observations and frozen-scope limits',
   assert.deepEqual(JSON.parse(row.file_observations!), observations);
   assert.deepEqual(JSON.parse(row.scan_scopes!), scanScopes);
   assert.deepEqual(JSON.parse(row.matching_cells!), [match]);
+});
+
+test("paged download plans merge repeated identities consistently for JSON and CSV", () => {
+  const unit = {
+    layerId: "euclid-ero", productId: "ero", surveyId: "euclid", releaseId: "euclid-ero", product: "ERO", modality: "imaging",
+    unitKind: "target", unitId: "Abell2390", order: 8, nside: 256, matchingCells: [101], precision: "estimated",
+    accessUri: "https://example.test/vis.tar", accessUris: [{ uri: "https://example.test/vis.tar", fileName: "vis.tar" }],
+    scannedFiles: [{ fileId: "scan-a", scanRunId: "run-a" }], note: "ESA Sky extent",
+  };
+  const repeatedUnit = { ...unit, matchingCells: [102], precision: "exact", accessUri: "https://example.test/nisp.tar",
+    accessUris: [{ uri: "https://example.test/nisp.tar", fileName: "nisp.tar" }],
+    scannedFiles: [{ fileId: "scan-b", scanRunId: "run-b" }], note: "Package metadata" };
+  const file = { fileId: "file-1", metadataState: "complete" as const, downloadable: true, sourceUri: "s3://survey/file-1",
+    matchingCoverage: [{ layerId: "euclid-ero", order: 8, ipix: 101, precision: "estimated" }] };
+  const repeatedFile = { ...file, matchingCoverage: [{ layerId: "euclid-ero", order: 8, ipix: 102, precision: "estimated" }] };
+  const entrypoint = { kind: "tile-directory", purpose: "data-access" as const, layerId: "euclid-ero", surveyId: "euclid", releaseId: "euclid-ero",
+    product: "ERO", order: 8, nside: 256, cells: [101], precision: "entrypoint-only", tileId: "Abell2390", url: "https://example.test/Abell2390/" };
+  const evidence = { layerId: "euclid-ero", productId: "ero", surveyId: "euclid", releaseId: "euclid-ero", product: "ERO",
+    evidenceKind: "observation-footprint" as const, order: 8, nside: 256, nativeMaxOrder: 10, availableOrders: [4, 8], matchedCells: [101],
+    precision: "estimated" as const, completeness: "incomplete" as const, scienceFileScan: "not-scanned" as const, summary: "First batch evidence." };
+  const first: DownloadPlan = { schemaVersion: 1, spatialUnits: [unit], files: [file], entrypoints: [entrypoint], coverageEvidence: [evidence],
+    tileSelections: [{ layerId: "euclid-ero", tileIds: ["Abell2390"], selectionRule: "official target match", complete: true, note: "First batch." }],
+    truncated: true, warnings: ["More pages remain"], scanScopes: [{ layerId: "layer", scopeId: "scope-a", scopeSnapshotSha256: "a".repeat(64), expectedPartitions: 1, committedPartitions: 1, completeness: "complete" }] };
+  const second: DownloadPlan = { ...first, spatialUnits: [repeatedUnit], files: [repeatedFile],
+    entrypoints: [{ ...entrypoint, cells: [102], precision: "exact" }], coverageEvidence: [{ ...evidence, matchedCells: [102], summary: "Second batch evidence." }],
+    tileSelections: [{ ...first.tileSelections![0]!, tileIds: ["Abell2390", "Abell2391"], note: "Second batch." }],
+    truncated: false, warnings: ["Query completed"], scanScopes: [{ layerId: "layer", scopeId: "scope-b", scopeSnapshotSha256: "b".repeat(64), expectedPartitions: 1, committedPartitions: 1, completeness: "complete" }] };
+
+  const merged = mergeDownloadPlans(first, second);
+  const jsonPlan = JSON.parse(JSON.stringify(merged)) as DownloadPlan;
+  assert.equal(jsonPlan.truncated, false, "the final page state wins after the client drains all pages");
+  assert.deepEqual(jsonPlan.spatialUnits?.[0]?.matchingCells, [101, 102]);
+  assert.equal(jsonPlan.spatialUnits?.[0]?.precision, "estimated", "a later exact page cannot improve an earlier estimate");
+  assert.deepEqual(jsonPlan.spatialUnits?.[0]?.accessUris?.map((entry) => entry.uri), ["https://example.test/vis.tar", "https://example.test/nisp.tar"]);
+  assert.deepEqual(jsonPlan.spatialUnits?.[0]?.scannedFiles?.map((entry) => entry.fileId), ["scan-a", "scan-b"]);
+  assert.deepEqual(jsonPlan.files[0]?.matchingCoverage.map((match) => match.ipix), [101, 102]);
+  assert.deepEqual(jsonPlan.entrypoints[0]?.cells, [101, 102]);
+  assert.equal(jsonPlan.entrypoints[0]?.precision, "entrypoint-only", "entrypoint precision cannot be upgraded by a later page");
+  assert.deepEqual(jsonPlan.coverageEvidence?.[0]?.matchedCells, [101, 102]);
+  assert.deepEqual(jsonPlan.tileSelections?.[0]?.tileIds, ["Abell2390", "Abell2391"]);
+  assert.equal(jsonPlan.scanScopes?.length, 2);
+  assert.deepEqual(jsonPlan.warnings, ["More pages remain", "Query completed"]);
+
+  const rows = overlapCsvRows(component, jsonPlan, () => ({ ...layer, surveyId: "euclid", releaseId: "euclid-ero", product: "ERO" }), "estimated").map(record);
+  assert.equal(rows.length, 4, "JSON and CSV each contain one row per merged identity");
+  const spatialRow = rows.find((row) => row.item_kind === "spatial-unit")!;
+  assert.deepEqual(JSON.parse(spatialRow.matching_cells!), [101, 102]);
+  assert.deepEqual(JSON.parse(spatialRow.access_uris!), [
+    { uri: "https://example.test/vis.tar", fileName: "vis.tar" },
+    { uri: "https://example.test/nisp.tar", fileName: "nisp.tar" },
+  ]);
+  assert.deepEqual(JSON.parse(rows.find((row) => row.item_kind === "file")!.matching_cells!).map((match: { ipix: number }) => match.ipix), [101, 102]);
+  assert.deepEqual(JSON.parse(rows.find((row) => row.item_kind === "entrypoint")!.matching_cells!), [101, 102]);
+  assert.deepEqual(JSON.parse(rows.find((row) => row.item_kind === "coverage-evidence")!.matching_cells!), [101, 102]);
 });

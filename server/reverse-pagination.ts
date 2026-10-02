@@ -50,6 +50,27 @@ export function reversePlanCoverageEvidenceKey(evidence: DownloadPlanCoverageEvi
   return `coverage:${createHash("sha256").update(identity).digest("hex")}`;
 }
 
+/** Keep every matched survey visible before filling a page with its next units. */
+export function interleaveSpatialUnitsBySurvey(units: readonly DownloadPlanSpatialUnit[]): DownloadPlanSpatialUnit[] {
+  const groups = new Map<string, DownloadPlanSpatialUnit[]>();
+  for (const unit of units) {
+    const group = groups.get(unit.surveyId);
+    if (group) group.push(unit);
+    else groups.set(unit.surveyId, [unit]);
+  }
+  let active = [...groups.values()];
+  const result: DownloadPlanSpatialUnit[] = [];
+  for (let index = 0; active.length; index++) {
+    const next: DownloadPlanSpatialUnit[][] = [];
+    for (const group of active) {
+      result.push(group[index]!);
+      if (index + 1 < group.length) next.push(group);
+    }
+    active = next;
+  }
+  return result;
+}
+
 export function reversePlanItems(plan: DownloadPlan): ReversePlanItem[] {
   return [
     ...(plan.spatialUnits ?? []).map((value) => ({ key: reversePlanSpatialUnitKey(value), kind: "spatial-unit" as const, value })),
@@ -104,6 +125,26 @@ export function reversePageSize(value: unknown): number | undefined {
   if (value === undefined) return undefined;
   if (!Number.isSafeInteger(value) || Number(value) < 1 || Number(value) > REVERSE_PAGE_SIZE_MAX) throw new AccessError(400, `pageSize must be 1-${REVERSE_PAGE_SIZE_MAX}`);
   return Number(value);
+}
+
+export const REVERSE_QUERY_BATCH_MAX_AREA_DEG2 = 100;
+export const REVERSE_QUERY_BATCH_MAX_CELLS = 64;
+
+/** Split real NESTED cells into deterministic query regions within the public area limit. */
+export function partitionReverseCells(order: number, cells: readonly number[]): number[][] {
+  if (!Number.isSafeInteger(order) || order < 0 || order > 13 || !cells.length
+    || cells.some((cell) => !Number.isSafeInteger(cell) || cell < 0 || cell >= 12 * 4 ** order)) {
+    throw new AccessError(400, "Invalid reverse lookup order or cells");
+  }
+  const unique = [...new Set(cells)].sort((left, right) => left - right);
+  const cellArea = 41252.96124941927 / (12 * 4 ** order);
+  if (cellArea > REVERSE_QUERY_BATCH_MAX_AREA_DEG2) {
+    throw new AccessError(413, "A single requested HEALPix cell exceeds the 100 square degree query limit");
+  }
+  const cellsPerBatch = Math.max(1, Math.min(REVERSE_QUERY_BATCH_MAX_CELLS, Math.floor(REVERSE_QUERY_BATCH_MAX_AREA_DEG2 / cellArea + 1e-12)));
+  const batches: number[][] = [];
+  for (let offset = 0; offset < unique.length; offset += cellsPerBatch) batches.push(unique.slice(offset, offset + cellsPerBatch));
+  return batches;
 }
 
 export function pageReversePlan(plan: DownloadPlan, seenKeys: ReadonlySet<string>, pageSize: number, scope: ReverseCursorScope = "manifest"): { plan: DownloadPlan; keys: string[]; hasMore: boolean } {

@@ -21,10 +21,17 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   HEALPix partition. Keep each survey's actual identity; do not rename all
   units as files or Tiles.
 - Clicking a connected component in overlap mode queries its entire region,
-  including when a cell selects that component. The reverse-lookup API caps
-  one region at 4,096 cells and 100 square degrees. For larger components,
-  require a smaller region; the Assets cell inspector may use only the clicked
-  cell and must label that scope explicitly. Never silently truncate cells.
+  including when a cell selects that component. The reverse-lookup API accepts
+  up to 4,096 requested cells and splits regions over 100 square degrees into
+  subqueries of at most 64 cells and 100 square degrees. Each existing-cursor
+  request advances at most 32 subqueries, stopping when its page is full. A
+  single cell over 100 square degrees is rejected. The Assets cell inspector
+  may use only the clicked cell and must label that scope explicitly. Never
+  silently truncate cells. Pagination continues the immutable query snapshot
+  with its signed cursor; it is not a separately managed long-running query
+  session. API clients pass the next cursor to read another page. Browser JSON/
+  CSV export can drain the same snapshot. Assets has no reverse-lookup session
+  creation, status, stop or resume resources.
 - Within a survey, union the selected release/product layers; intersect those
   survey unions at the highest real order supported by every selected product.
   An O4-only product limits the union to O4 even alongside an O8 product; it
@@ -48,6 +55,11 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   unit that the official partition definition identifies.
 - Keep result browsing aligned with this boundary: the primary spatial-unit
   list and its cursor contain only native unit identities and access URIs.
+  Within a new frozen query snapshot, interleave matched units by survey so
+  previews and authorized first pages expose every matched survey before
+  filling the page with more units from one survey, subject to the page size.
+  Authorized manifest pages also expose independent spatial-unit and supporting
+  cursors that account for the records already consumed in each list.
   Files not attached to a unit, general data/coverage entrypoints and coverage
   evidence belong in separately paged supporting information. A mixed manifest
   omitted count must never be presented as a count of remaining spatial units.
@@ -84,7 +96,18 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   valid mapping from those positions to spatial units.
 - An intersecting public MOC may have no match in a frozen native inventory.
   Retain its source identity, coverage evidence and official entrypoint with an
-  explicit empty-result note and inventory scope. Source-query failures remain
+  explicit empty-result note and inventory scope. Once spatial-unit pagination
+  is exhausted, show any survey/release without native matches directly beside
+  the result count, including its official source link and known mapping gaps.
+  This source-status card does not count as a matched spatial unit. For example,
+  DESI + Euclid O4 C01 is an ERO coverage component whose current target mapping
+  has no match in the selected region; seven targets have no verified footprint
+  association in the inspected outreach table. The Messier78/M78 alias maps to
+  an estimated outreach footprint at cell `[1429]`, outside C01. C04's Q1 Tile
+  results do not establish readiness for C01. The deployed source-gap notice
+  appears only after spatial pagination is exhausted and keeps the page, JSON
+  and CSV source state aligned; see [HANDOFF](../HANDOFF.md).
+  Source-query failures remain
   incomplete after paging/export; never describe every incomplete result as a
   page limit or manufacture units to fill a missing survey.
 
@@ -166,8 +189,10 @@ Current evidence limits are:
 - HST overlap reverse lookup uses the SHA-locked public MAST CAOM metadata
   snapshot and its local SQLite footprint index. The index stores order-4
   candidate buckets, then intersects saved `s_region` values against the
-  selected cells; it returns observation IDs and MAST links without making a
-  request-time MAST query or expanding science products. To keep complex CAOM
+  selected cells; it returns observation IDs and MAST Products API links
+  without making a request-time MAST query or expanding science products. A
+  browser opening that link asks MAST for the current products and their
+  access-policy metadata. To keep complex CAOM
   footprints buildable, regions with more than 4 total polygon vertices use
   a spherical cap enclosing each polygon for candidate and query-cell
   matching. The saved original `s_region` remains attached, but this estimated
@@ -175,9 +200,9 @@ Current evidence limits are:
   the derived index are evidence on the Assets evidence PVC. Unsupported
   spatial rows keep results marked incomplete. Both ordinary HST cell lookup
   and overlap reverse lookup use this snapshot. The HST image-lookup API returns
-  observation identities and MAST entry links; it does not make a request-time
-  query for file-level products. Users follow the MAST link for the current
-  product list and access policy.
+  observation identities and MAST Products API links; Assets itself does not
+  make a request-time query for file-level products. Users follow the link for
+  the current product list and access policy.
 - HSC-SSP PDR2's official Available Data page publishes 11 machine-readable
   tract/patch geometry lists for its DUD and Wide fields. They are captured
   and SHA-256 locked separately from the PDR3 lists. Six PDR2 product

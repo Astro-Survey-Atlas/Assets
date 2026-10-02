@@ -38,7 +38,8 @@ test("API management HTTP authorization and managed region requests preserve ano
     if(warehouseCoverageFailureStatus){res.writeHead(warehouseCoverageFailureStatus,{"Content-Type":"application/json"});res.end(JSON.stringify({error:"fixture Warehouse outage"}));return;}
     if(warehouseCoverageMalformedJson){res.writeHead(200,{"Content-Type":"application/json"});res.end("{");return;}
     const excluded=(body.query?.bool?.must_not??[]).flatMap((clause:any)=>clause.terms?.source_file_id??[]);
-    const matched=warehouseEdges.filter(edge=>!excluded.includes(edge.source_file_id)).sort((a,b)=>String(a.source_file_id).localeCompare(String(b.source_file_id)));
+    const requestedCells=(body.query?.bool?.must??[]).flatMap((clause:any)=>clause.bool?.should??[]).flatMap((clause:any)=>clause.terms?.healpix_cell??[]);
+    const matched=warehouseEdges.filter(edge=>requestedCells.includes(Number(edge.healpix_cell))&&!excluded.includes(edge.source_file_id)).sort((a,b)=>String(a.source_file_id).localeCompare(String(b.source_file_id)));
     return respond(matched.slice(0,Number(body.size??1000)),warehouseCoverageReportedTotal??matched.length);
    }
    if(index==="ast_file_index_v1"){
@@ -154,6 +155,39 @@ test("API management HTTP authorization and managed region requests preserve ano
   pageCursor=pageData.page.nextCursor;
  }
  assert.deepEqual([...seenFileIds].sort(),Array.from({length:8},(_,fileIndex)=>`file-${String(fileIndex).padStart(2,"0")}`));
+ const savedWarehouseEdges=warehouseEdges,savedWarehouseFiles=warehouseFiles;
+ const batchCells=Array.from({length:3813},(_,index)=>163327+index);
+ const batchBody={layerIds:[f.layerId],order:8,cells:batchCells,preview:false,pageSize:5};
+ warehouseEdges=[
+  {edge_id:"batch-file-0-cell-0",layer_id:f.layerId,source_file_id:"batch-file-0",healpix_order:8,healpix_cell:163327,precision:"exact"},
+  {edge_id:"batch-file-0-cell-1",layer_id:f.layerId,source_file_id:"batch-file-0",healpix_order:8,healpix_cell:163391,precision:"exact"},
+  {edge_id:"batch-file-1-cell-2",layer_id:f.layerId,source_file_id:"batch-file-1",healpix_order:8,healpix_cell:163455,precision:"exact"},
+ ];
+ warehouseFiles=["batch-file-0","batch-file-1"].map(file_id=>({file_id,file_name:`${file_id}.fits`,source_uri:`s3://survey/${file_id}.fits`}));
+ const batchQueriesBefore=warehouseCoverageQueries.length;
+ const sendBatchRequest=(body:Record<string,unknown>)=>fetch(publicBase+"/api/v1/coverage/reverse-lookup",{method:"POST",headers:{Origin:publicBase,Cookie:cookie.split(";")[0]!,"Content-Type":"application/json"},body:JSON.stringify(body)});
+ const firstBatchResponse=await sendBatchRequest(batchBody);assert.equal(firstBatchResponse.status,200,await firstBatchResponse.clone().text());const firstBatch=await firstBatchResponse.json();
+ assert.deepEqual(firstBatch.querySnapshot.batch,{completed:3,total:60,batchComplete:true,complete:false,queryComplete:true,remaining:57},JSON.stringify({batch:firstBatch.querySnapshot.batch,plan:firstBatch.downloadPlan,page:firstBatch.page}));
+ assert.deepEqual(firstBatch.downloadPlan.files.map((file:any)=>file.fileId).sort(),["batch-file-0","batch-file-1"],"cross-batch results deduplicate the same source file identity");
+ assert.equal(firstBatch.page.shown,5,"the response accumulates items across bounded subqueries until the page is full");
+ assert.equal(firstBatch.page.hasMore,true);assert.ok(firstBatch.page.nextCursor);
+ assert.equal(warehouseCoverageQueries.length,batchQueriesBefore+3,"the page stops querying once it reaches pageSize");
+ const replayResponse=await sendBatchRequest({...batchBody,querySnapshotId:firstBatch.querySnapshot.id});assert.equal(replayResponse.status,200);const replayedFirstPage=await replayResponse.json();
+ assert.deepEqual(replayedFirstPage.downloadPlan.files.map((file:any)=>file.fileId),["batch-file-0","batch-file-1"],"querySnapshotId replays the same first-page identities");
+ assert.equal(replayedFirstPage.querySnapshot.batch.completed,3);
+ const secondBatchQueriesBefore=warehouseCoverageQueries.length;
+ const secondBatchResponse=await sendBatchRequest({...batchBody,cursor:firstBatch.page.nextCursor});assert.equal(secondBatchResponse.status,200,await secondBatchResponse.clone().text());const secondBatch=await secondBatchResponse.json();
+ assert.equal(secondBatch.querySnapshot.id,firstBatch.querySnapshot.id,"all cell batches retain one query snapshot ID");
+ assert.deepEqual(secondBatch.querySnapshot.batch,{completed:35,total:60,batchComplete:true,complete:false,queryComplete:true,remaining:25});
+ assert.equal(secondBatch.page.shown,0,"duplicate metadata from later cells is not re-emitted");
+ assert.equal(secondBatch.page.hasMore,true);
+ assert.ok(warehouseCoverageQueries.length-secondBatchQueriesBefore<=32,"one cursor request is capped at 32 additional Warehouse subqueries");
+ const finalBatchQueriesBefore=warehouseCoverageQueries.length;
+ const finalBatchResponse=await sendBatchRequest({...batchBody,cursor:secondBatch.page.nextCursor});assert.equal(finalBatchResponse.status,200);const finalBatch=await finalBatchResponse.json();
+ assert.deepEqual(finalBatch.querySnapshot.batch,{completed:60,total:60,batchComplete:true,complete:true,queryComplete:true,remaining:0});
+ assert.equal(finalBatch.page.hasMore,false);assert.equal(finalBatch.querySnapshot.queryExhausted,true);
+ assert.ok(warehouseCoverageQueries.length-finalBatchQueriesBefore<=25,"the final cursor processes only the remaining cell batches");
+ warehouseEdges=savedWarehouseEdges;warehouseFiles=savedWarehouseFiles;
  assert.equal((await browserQuery("/api/v1/coverage/reverse-lookup","https://other.example")).status,403);
  await fetch(base+route+`/keys/${issued.id}/revoke`,{method:"POST",headers:auth});
  assert.equal((await browserQuery("/api/v1/access/region-query")).status,401,"revoke invalidates already unlocked sessions");

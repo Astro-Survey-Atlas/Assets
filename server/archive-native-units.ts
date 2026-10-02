@@ -40,7 +40,7 @@ export async function archiveNativeUnits(layers: readonly CoverageCellLayer[], o
         const result = options.hstIndex.lookup(order, cells);
         truncated ||= result.truncated;
         if (result.excludedRows) notes.push(`HST local snapshot excludes ${result.excludedRows} public image rows without supported spatial geometry.`);
-        if (result.truncated && !result.excludedRows) notes.push("HST local lookup reached its observation limit; the result is truncated.");
+        if (!result.queryExhausted) notes.push(`HST local lookup matched at least ${result.matchedObservationCount} observations and reached its configured ${result.observations.length}-observation result limit.`);
         for (const layer of hst) {
           indexedLayerIds.add(layer.layerId);
           for (const observation of result.observations.filter((obs) => hstObservationMatchesLayer(layer, obs))) {

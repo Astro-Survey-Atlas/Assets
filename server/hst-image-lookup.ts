@@ -372,9 +372,18 @@ function failureDetails(error: unknown): { kind: "timeout" | "unavailable" | "up
   return { kind: "upstream", message };
 }
 
-function portalUrl(obsid: string): string {
-  const url = new URL("https://mast.stsci.edu/portal/Mashup/Clients/Mast/Portal.html");
-  url.searchParams.set("searchQuery", `obsid:${obsid}`);
+function mastProductsUrl(obsid: string): string {
+  const url = new URL("https://mast.stsci.edu/api/v0/invoke");
+  url.searchParams.set("request", JSON.stringify({
+    service: "Mast.Caom.Products",
+    params: {
+      obsid,
+      columns: "obsID,obs_collection,dataproduct_type,obs_id,description,type,dataURI,productType,productGroupDescription,productSubGroupDescription,project,proposal_id,productFilename,size,parent_obsid,dataRights,calib_level,filters",
+    },
+    format: "json",
+    pagesize: 5000,
+    page: 1,
+  }));
   return url.toString();
 }
 
@@ -505,7 +514,7 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore, opt
       ...(typeof observation.target_name === "string" ? { target: observation.target_name.slice(0, 256) } : {}),
       ...(finiteNumber(observation.t_min) !== undefined ? { startTime: finiteNumber(observation.t_min)! } : {}),
       ...(finiteNumber(observation.t_max) !== undefined ? { endTime: finiteNumber(observation.t_max)! } : {}),
-      productUrl: portalUrl(obsid),
+      productUrl: mastProductsUrl(obsid),
       sRegion: String(observation.s_region),
       matchingCells: cellsForStcs(order, cells, observation.s_region),
       files,

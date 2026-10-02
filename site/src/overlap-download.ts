@@ -135,6 +135,97 @@ export interface DownloadPlan {
   scanScopes?: Array<{ layerId: string; publishedLayerId?: string; scopeId: string; scopeSnapshotSha256: string; expectedPartitions: number; committedPartitions: number; completeness: "complete" | "incomplete" }>;
 }
 
+function unionNumbers(left: readonly number[] = [], right: readonly number[] = []): number[] {
+  return [...new Set([...left, ...right])].sort((a, b) => a - b);
+}
+
+function conservativePrecision(left: string, right: string): string {
+  const rank: Record<string, number> = { exact: 0, estimated: 1, "entrypoint-only": 2, truncated: 3 };
+  if (rank[left] === undefined) return left || right;
+  if (rank[right] === undefined) return left;
+  return rank[left]! >= rank[right]! ? left : right;
+}
+
+export function mergeDownloadPlans(previous: DownloadPlan, next: DownloadPlan): DownloadPlan {
+  const files = new Map(previous.files.map((file) => [file.fileId, file]));
+  for (const file of next.files) {
+    const old = files.get(file.fileId);
+    if (!old) { files.set(file.fileId, file); continue; }
+    const matchKey = (match: DownloadPlanMatch) => [match.layerId, match.order, match.ipix, match.precision, match.scanRunId,
+      match.sourceSnapshotSha256, match.evidenceLayerId, match.observationLayerId, match.scopeId, match.partitionId].join(":");
+    const matches = new Map(old.matchingCoverage.map((match) => [matchKey(match), match]));
+    file.matchingCoverage.forEach((match) => matches.set(matchKey(match), match));
+    const observations = new Map([...(old.observations ?? []), ...(file.observations ?? [])]
+      .map((observation) => [`${observation.layerId ?? ""}:${observation.scanRunId ?? ""}:${observation.sourceSnapshotSha256 ?? ""}:${observation.sourceUri ?? ""}`, observation]));
+    files.set(file.fileId, { ...old, ...file, matchingCoverage: [...matches.values()],
+      ...(old.matchingCoverageTruncated || file.matchingCoverageTruncated ? { matchingCoverageTruncated: true } : {}),
+      warnings: [...new Set([...(old.warnings ?? []), ...(file.warnings ?? [])])],
+      ...(observations.size ? { observations: [...observations.values()] } : {}) });
+  }
+  const entryKey = (entry: DownloadPlanEntrypoint) => [entry.kind, entry.layerId ?? "", entry.tileId ?? "",
+    entry.url ?? entry.sourceUri ?? entry.sourceUrl ?? entry.mocUrl ?? "", entry.product ?? entry.productId ?? ""].join(":");
+  const entrypoints = new Map(previous.entrypoints.map((entry) => [entryKey(entry), entry]));
+  next.entrypoints.forEach((entry) => {
+    const key = entryKey(entry), old = entrypoints.get(key);
+    entrypoints.set(key, old ? { ...old, ...entry, precision: conservativePrecision(old.precision, entry.precision), cells: unionNumbers(old.cells, entry.cells),
+      note: joinUnique([old.note, entry.note]) || undefined } : entry);
+  });
+  const spatialUnits = new Map((previous.spatialUnits ?? []).map((unit) => [`${unit.layerId}:${unit.unitKind}:${unit.unitId}`, unit]));
+  (next.spatialUnits ?? []).forEach((unit) => {
+    const key = `${unit.layerId}:${unit.unitKind}:${unit.unitId}`, old = spatialUnits.get(key);
+    if (!old) { spatialUnits.set(key, unit); return; }
+    const scannedFiles = new Map([...(old.scannedFiles ?? []), ...(unit.scannedFiles ?? [])]
+      .map((file) => [`${file.fileId}:${file.scanRunId ?? ""}`, file]));
+    const accessUris = new Map<string, { uri: string; fileName?: string }>();
+    for (const entry of [...(old.accessUris ?? []), ...(old.accessUri ? [{ uri: old.accessUri }] : []),
+      ...(unit.accessUris ?? []), ...(unit.accessUri ? [{ uri: unit.accessUri }] : [])]) {
+      accessUris.set(entry.uri, { ...accessUris.get(entry.uri), ...entry });
+    }
+    spatialUnits.set(key, { ...old, ...unit, precision: conservativePrecision(old.precision, unit.precision), matchingCells: unionNumbers(old.matchingCells, unit.matchingCells),
+      note: joinUnique([old.note, unit.note]) || undefined,
+      ...(scannedFiles.size ? { scannedFiles: [...scannedFiles.values()] } : {}),
+      ...(accessUris.size ? { accessUri: old.accessUri ?? unit.accessUri ?? accessUris.keys().next().value, accessUris: [...accessUris.values()] } : {}) });
+  });
+  const coverage = new Map((previous.coverageEvidence ?? []).map((evidence) => [`${evidence.layerId}:${evidence.order}`, evidence]));
+  (next.coverageEvidence ?? []).forEach((evidence) => {
+    const key = `${evidence.layerId}:${evidence.order}`, old = coverage.get(key);
+    if (!old) { coverage.set(key, evidence); return; }
+    const completeness = old.completeness === "incomplete" || evidence.completeness === "incomplete" ? "incomplete"
+      : old.completeness === "unknown" || evidence.completeness === "unknown" ? "unknown"
+        : old.completeness ?? evidence.completeness;
+    const scienceFileScan = old.scienceFileScan === "not-scanned" || evidence.scienceFileScan === "not-scanned" ? "not-scanned"
+      : old.scienceFileScan === "partial" || evidence.scienceFileScan === "partial" ? "partial"
+        : old.scienceFileScan ?? evidence.scienceFileScan;
+    coverage.set(key, { ...old, ...evidence, matchedCells: unionNumbers(old.matchedCells, evidence.matchedCells),
+      availableOrders: unionNumbers(old.availableOrders, evidence.availableOrders),
+      precision: old.precision === "estimated" || evidence.precision === "estimated" ? "estimated" : "exact",
+      ...(completeness ? { completeness } : {}), ...(scienceFileScan ? { scienceFileScan } : {}),
+      summary: joinUnique([old.summary, evidence.summary]) });
+  });
+  const tileSelections = new Map((previous.tileSelections ?? []).map((selection) => [selection.layerId, selection]));
+  (next.tileSelections ?? []).forEach((selection) => {
+    const old = tileSelections.get(selection.layerId);
+    tileSelections.set(selection.layerId, old ? { ...old, ...selection,
+      tileIds: [...new Set([...old.tileIds, ...selection.tileIds])].sort(),
+      complete: old.complete && selection.complete,
+      note: joinUnique([old.note, selection.note]) } : selection);
+  });
+  const scanScopes = new Map([...(previous.scanScopes ?? []), ...(next.scanScopes ?? [])].map((scope) =>
+    [`${scope.layerId}:${scope.scopeId}:${scope.scopeSnapshotSha256}`, scope]));
+  return {
+    ...previous,
+    ...next,
+    spatialUnits: [...spatialUnits.values()],
+    files: [...files.values()],
+    entrypoints: [...entrypoints.values()],
+    ...(previous.coverageEvidence || next.coverageEvidence ? { coverageEvidence: [...coverage.values()] } : {}),
+    ...(previous.tileSelections || next.tileSelections ? { tileSelections: [...tileSelections.values()] } : {}),
+    ...(previous.scanScopes || next.scanScopes ? { scanScopes: [...scanScopes.values()] } : {}),
+    truncated: next.truncated,
+    warnings: [...new Set([...previous.warnings, ...next.warnings])],
+  };
+}
+
 export interface DownloadComponent {
   id: string;
   order: number;

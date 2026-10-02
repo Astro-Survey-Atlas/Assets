@@ -109,9 +109,18 @@ function finite(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function portalUrl(obsid: string): string {
-  const url = new URL("https://mast.stsci.edu/portal/Mashup/Clients/Mast/Portal.html");
-  url.searchParams.set("searchQuery", `obsid:${obsid}`);
+function mastProductsUrl(obsid: string): string {
+  const url = new URL("https://mast.stsci.edu/api/v0/invoke");
+  url.searchParams.set("request", JSON.stringify({
+    service: "Mast.Caom.Products",
+    params: {
+      obsid,
+      columns: "obsID,obs_collection,dataproduct_type,obs_id,description,type,dataURI,productType,productGroupDescription,productSubGroupDescription,project,proposal_id,productFilename,size,parent_obsid,dataRights,calib_level,filters",
+    },
+    format: "json",
+    pagesize: 5000,
+    page: 1,
+  }));
   return url.toString();
 }
 
@@ -398,7 +407,7 @@ export class HstObservationIndex {
       ...(row.targets.size ? { target: [...row.targets].sort().join(", ") } : {}),
       ...(row.startTime !== undefined ? { startTime: row.startTime } : {}),
       ...(row.endTime !== undefined ? { endTime: row.endTime } : {}),
-      productUrl: portalUrl(obsid),
+      productUrl: mastProductsUrl(obsid),
       sRegion: [...row.sRegions].join(" "),
       matchingCells: [...row.matchingCells].sort((left, right) => left - right),
     }));

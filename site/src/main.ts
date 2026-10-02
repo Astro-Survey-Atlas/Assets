@@ -8,7 +8,7 @@ import { highestCommonCoverageOrder } from "./atlas/coverage-orders.js";
 import { coverageEscapeIntent } from "./atlas/coverage-interaction.js";
 import { coverageLayerTooltipPosition } from "./atlas/layer-panel-layout.js";
 import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-layout.js";
-import { joinUnique, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch } from "./overlap-download.js";
+import { joinUnique, mergeDownloadPlans, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch } from "./overlap-download.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { createRevisionHydrationQueue } from "./revision-hydration-queue.js";
 import { mountSiteChrome } from "./site-chrome.js";
@@ -826,7 +826,7 @@ interface OverlapEvidenceResult {
   nativeUnitIndexRevision?: string;
   precision: string;
   truncated: boolean;
-  querySnapshot?: { id: string; expiresAt: string; queryExhausted: boolean; inventoryComplete: false };
+  querySnapshot?: { id: string; expiresAt: string; queryExhausted: boolean; inventoryComplete: false; resultTruncated?: boolean; batch?: { completed: number; total: number; batchComplete: boolean; complete: boolean; queryComplete: boolean; remaining: number } };
   preview?: { limit: number; shown: number; omitted: number; hasMore: boolean };
   page?: { pageSize: number; shown: number; omitted: number; hasMore: boolean; nextCursor?: string };
   spatialPage?: { pageSize: number; shown: number; hasMore: boolean; nextCursor?: string };
@@ -855,6 +855,7 @@ interface OverlapEvidenceResult {
     precision: string;
   }>;
   sourceFiles: Array<Record<string, unknown>>;
+  sources?: Array<Record<string, unknown> & { layerId?: string }>;
   entrypoints?: Array<{ layerId: string; productId?: string; surveyId?: string; releaseId?: string; product?: string; order: number; nside: number; cells: number[]; precision: string; sourceUrl?: string; mocUrl?: string; note?: string }>;
   downloadPlan?: DownloadPlan;
   notes?: string[];
@@ -1300,10 +1301,9 @@ function sourceValue(source: Record<string, unknown>, keys: string[]): string | 
 const PRIVATE_HOST = /^(?:localhost|127(?:\.|$)|0(?:\.|$)|10(?:\.|$)|192\.168(?:\.|$)|169\.254(?:\.|$)|172\.(?:1[6-9]|2\d|3[0-1])(?:\.|$)|\[?::1\]?$)/i;
 const INTERNAL_HOST = /(?:\.local$|\.internal$|\.svc(?:\.|$)|\.cluster\.local$|(?:^|[-.])(minio|elasticsearch|kubernetes)(?:[-.]|$))/i;
 const REVERSE_LOOKUP_MAX_CELLS = 4096;
-const REVERSE_LOOKUP_MAX_AREA_DEG2 = 100;
 
 function reverseLookupRegionTooLarge(component: OverlapComponentView): boolean {
-  return component.cells.length > REVERSE_LOOKUP_MAX_CELLS || component.bounds.areaDeg2 > REVERSE_LOOKUP_MAX_AREA_DEG2;
+  return component.cells.length > REVERSE_LOOKUP_MAX_CELLS;
 }
 
 /** Keep downloadable links in the public UI limited to browser-safe external URLs. */
@@ -1393,65 +1393,80 @@ async function fetchOverlapEvidence(component: OverlapComponentView, signal?: Ab
   return result;
 }
 
-function reversePlanEntryKey(entry: DownloadPlanEntrypoint): string {
-  return [entry.kind, entry.layerId ?? "", entry.tileId ?? "", entry.url ?? entry.sourceUri ?? entry.sourceUrl ?? entry.mocUrl ?? "", entry.product ?? entry.productId ?? ""].join(":");
+function conservativePrecision(previous: unknown, next: unknown): string | undefined {
+  if (typeof previous !== "string") return typeof next === "string" ? next : undefined;
+  if (typeof next !== "string") return previous;
+  const rank: Record<string, number> = { exact: 0, estimated: 1, "entrypoint-only": 2, truncated: 3 };
+  if (rank[previous] === undefined) return previous;
+  if (rank[next] === undefined) return previous;
+  return rank[previous]! >= rank[next]! ? previous : next;
+}
+
+function mergeReverseSource(previous: Record<string, unknown> & { layerId?: string }, next: Record<string, unknown> & { layerId?: string }): Record<string, unknown> & { layerId?: string } {
+  const merged: Record<string, unknown> & { layerId?: string } = { ...previous, ...next };
+  for (const key of ["precision", "geometryPrecision"]) {
+    const precision = conservativePrecision(previous[key], next[key]);
+    if (precision) merged[key] = precision;
+  }
+  const unionNumbers = (left: unknown, right: unknown): number[] => [...new Set([
+    ...(Array.isArray(left) ? left.filter((value): value is number => Number.isSafeInteger(value)) : []),
+    ...(Array.isArray(right) ? right.filter((value): value is number => Number.isSafeInteger(value)) : []),
+  ])].sort((a, b) => a - b);
+  const cells = unionNumbers(previous.cells, next.cells);
+  if (cells.length || Array.isArray(previous.cells) || Array.isArray(next.cells)) merged.cells = cells;
+  const mergeItems = (key: "sourceUnits" | "downloads", identity: (item: Record<string, unknown>) => string): Record<string, unknown>[] => {
+    const items = [...(Array.isArray(previous[key]) ? previous[key] as Record<string, unknown>[] : []), ...(Array.isArray(next[key]) ? next[key] as Record<string, unknown>[] : [])];
+    const unique = new Map(items.map((item) => [identity(item), item]));
+    if (unique.size || Array.isArray(previous[key]) || Array.isArray(next[key])) merged[key] = [...unique.values()];
+    return [...unique.values()];
+  };
+  const units = mergeItems("sourceUnits", (item) => `${item.unitKind ?? ""}:${item.unitId ?? ""}`);
+  mergeItems("downloads", (item) => `${item.kind ?? ""}:${item.unitKind ?? ""}:${item.unitId ?? ""}:${item.url ?? ""}`);
+  const oldSummary = previous.sourceUnitSummary && typeof previous.sourceUnitSummary === "object" ? previous.sourceUnitSummary as Record<string, unknown> : undefined;
+  const newSummary = next.sourceUnitSummary && typeof next.sourceUnitSummary === "object" ? next.sourceUnitSummary as Record<string, unknown> : undefined;
+  if (oldSummary || newSummary) {
+    const summary = { ...oldSummary, ...newSummary };
+    if (oldSummary?.matchedUnitCount !== undefined || newSummary?.matchedUnitCount !== undefined) {
+      // Counts without returned identities are retained as a lower bound; overlapping batches may repeat units.
+      summary.matchedUnitCount = Math.max(Number(oldSummary?.matchedUnitCount ?? 0), Number(newSummary?.matchedUnitCount ?? 0), units.length);
+    }
+    summary.truncated = oldSummary?.truncated === true || newSummary?.truncated === true;
+    merged.sourceUnitSummary = summary;
+  }
+  const completeness = [previous.completeness, next.completeness];
+  if (completeness.includes("truncated")) merged.completeness = "truncated";
+  else if (completeness.includes("incomplete")) merged.completeness = "incomplete";
+  else if (completeness.includes("complete") && !completeness.includes("unknown")) merged.completeness = "complete";
+  const reasons = [...new Set([previous.reason, next.reason].filter((value): value is string => typeof value === "string" && value.length > 0))];
+  if (reasons.length) merged.reason = reasons.join(" ");
+  return merged;
 }
 
 function mergeOverlapEvidence(current: OverlapEvidenceResult, next: OverlapEvidenceResult): OverlapEvidenceResult {
   if (current.querySnapshot?.id && next.querySnapshot?.id && current.querySnapshot.id !== next.querySnapshot.id) throw new Error("Reverse lookup snapshot changed");
   const currentPlan = downloadPlanFor(current);
   const nextPlan = downloadPlanFor(next);
-  const files = new Map(currentPlan.files.map((file) => [file.fileId, file]));
-  for (const file of nextPlan.files) {
-    const previous = files.get(file.fileId);
-    if (!previous) {
-      files.set(file.fileId, file);
-      continue;
-    }
-    const matches = new Map(previous.matchingCoverage.map((match) => [`${match.layerId ?? ""}:${match.order}:${match.ipix}:${match.precision}:${match.scanRunId ?? ""}:${match.sourceSnapshotSha256 ?? ""}:${match.evidenceLayerId ?? ""}:${match.observationLayerId ?? ""}:${match.scopeId ?? ""}:${match.partitionId ?? ""}`, match]));
-    file.matchingCoverage.forEach((match) => matches.set(`${match.layerId ?? ""}:${match.order}:${match.ipix}:${match.precision}:${match.scanRunId ?? ""}:${match.sourceSnapshotSha256 ?? ""}:${match.evidenceLayerId ?? ""}:${match.observationLayerId ?? ""}:${match.scopeId ?? ""}:${match.partitionId ?? ""}`, match));
-    const observations = new Map([...(previous.observations ?? []), ...(file.observations ?? [])].map(observation => [`${observation.layerId}:${observation.scanRunId}`, observation]));
-    files.set(file.fileId, { ...previous, ...file, matchingCoverage: [...matches.values()],
-      ...(previous.matchingCoverageTruncated || file.matchingCoverageTruncated ? { matchingCoverageTruncated: true } : {}),
-      warnings: [...new Set([...(previous.warnings ?? []), ...(file.warnings ?? [])])],
-      ...(observations.size ? { observations: [...observations.values()] } : {}) });
-  }
-  const entrypoints = new Map(currentPlan.entrypoints.map((entry) => [reversePlanEntryKey(entry), entry]));
-  nextPlan.entrypoints.forEach((entry) => entrypoints.set(reversePlanEntryKey(entry), entry));
-  const spatialUnits = new Map((currentPlan.spatialUnits ?? []).map((unit) => [`${unit.layerId}:${unit.unitKind}:${unit.unitId}`, unit]));
-  (nextPlan.spatialUnits ?? []).forEach((unit) => {
-    const key = `${unit.layerId}:${unit.unitKind}:${unit.unitId}`;
-    const previous = spatialUnits.get(key);
-    const scannedFiles = new Map([...(previous?.scannedFiles ?? []), ...(unit.scannedFiles ?? [])].map((file) => [`${file.fileId}:${file.scanRunId ?? ""}`, file]));
-    const accessUris = new Map([...(previous?.accessUris ?? []), ...(unit.accessUris ?? [])].map((entry) => [entry.uri, entry]));
-    spatialUnits.set(key, {
-      ...previous,
-      ...unit,
-      ...(scannedFiles.size ? { scannedFiles: [...scannedFiles.values()] } : {}),
-      ...(accessUris.size ? { accessUris: [...accessUris.values()] } : {}),
-    });
+  const sources = new Map((current.sources ?? []).filter((source) => source.layerId).map((source) => [source.layerId!, source]));
+  (next.sources ?? []).forEach((source) => {
+    if (!source.layerId) return;
+    const previous = sources.get(source.layerId);
+    sources.set(source.layerId, previous ? mergeReverseSource(previous, source) : source);
   });
-  const coverageEvidence = new Map((currentPlan.coverageEvidence ?? []).map((evidence) => [`${evidence.layerId}:${evidence.order}`, evidence]));
-  (nextPlan.coverageEvidence ?? []).forEach((evidence) => coverageEvidence.set(`${evidence.layerId}:${evidence.order}`, evidence));
   return {
     ...current,
     ...next,
+    available: current.available || next.available,
+    precision: conservativePrecision(current.precision, next.precision) ?? next.precision,
+    truncated: next.truncated,
     preview: undefined,
     page: next.page,
     spatialPage: next.spatialPage ?? current.spatialPage,
     supportingPage: next.supportingPage ?? current.supportingPage,
+    notes: [...new Set([...(current.notes ?? []), ...(next.notes ?? [])])],
+    sources: [...sources.values()],
     sourceFiles: [...current.sourceFiles, ...next.sourceFiles].filter((source, index, values) => values.findIndex((candidate) => `${sourceValue(candidate, ["layer_id"])}:${sourceValue(candidate, ["fileId", "file_id", "_id"])}` === `${sourceValue(source, ["layer_id"])}:${sourceValue(source, ["fileId", "file_id", "_id"])}`) === index),
     edges: [...current.edges, ...next.edges].filter((edge, index, values) => values.findIndex((candidate) => `${candidate.edgeId ?? ""}:${candidate.layerId ?? ""}:${candidate.order}:${candidate.ipix}` === `${edge.edgeId ?? ""}:${edge.layerId ?? ""}:${edge.order}:${edge.ipix}`) === index),
-    downloadPlan: {
-      ...currentPlan,
-      ...nextPlan,
-      spatialUnits: [...spatialUnits.values()],
-      files: [...files.values()],
-      entrypoints: [...entrypoints.values()],
-      coverageEvidence: [...coverageEvidence.values()],
-      truncated: nextPlan.truncated,
-      warnings: [...new Set([...currentPlan.warnings, ...nextPlan.warnings])],
-    },
+    downloadPlan: mergeDownloadPlans(currentPlan, nextPlan),
   };
 }
 
@@ -1651,6 +1666,50 @@ function appendSourceLocator(row: HTMLElement, sourceUri: string): void {
   row.append(locator);
 }
 
+function appendMissingNativeSources(node: HTMLElement, result: OverlapEvidenceResult, plan: DownloadPlan, component?: OverlapComponentView): void {
+  const unitsExhausted = result.spatialPage?.hasMore === false || (!result.preview && result.page?.hasMore === false);
+  if (!unitsExhausted || !component?.evidenceLookup || !coverageCatalog) return;
+  const groups = new Map<string, CoverageCatalog["layers"]>();
+  for (const layerId of component.evidenceLookup.layerIds) {
+    const layer = coverageCatalog.layers.find(entry => entry.layerId === layerId);
+    if (!layer) continue;
+    const key = JSON.stringify([layer.surveyId, layer.releaseId]);
+    groups.set(key, [...(groups.get(key) ?? []), layer]);
+  }
+  for (const layers of groups.values()) {
+    const first = layers[0]!;
+    if (plan.spatialUnits?.some(unit => unit.surveyId === first.surveyId && unit.releaseId === first.releaseId)) continue;
+    const survey = surveyIndex?.surveys.find(entry => entry.id === first.surveyId);
+    const release = survey?.releases.find(entry => entry.id === first.releaseId);
+    const card = document.createElement("div");
+    card.className = "overlap-native-source-gap";
+    card.dataset.surveyId = first.surveyId;
+    card.dataset.releaseId = first.releaseId;
+    const title = document.createElement("strong");
+    title.textContent = `${survey?.name ?? first.surveyId} · ${release?.label ?? first.releaseId} · 未返回原生分块`;
+    card.append(title);
+    const modalities = [...new Set(layers.flatMap(layer => layer.modality ? [layer.modality] : []))];
+    const facts = document.createElement("div");
+    facts.className = "overlap-spatial-unit-facts";
+    for (const modality of modalities) facts.append(modalityBadge(modality, "overlap-spatial-unit-modality"));
+    facts.append(document.createTextNode(`O${component.order} · 覆盖图命中`));
+    card.append(facts);
+    const note = document.createElement("small");
+    const ero = first.surveyId === "euclid" && first.releaseId === "euclid-ero";
+    const excluded = ero ? result.notes?.join("\n").match(/ERO snapshot excludes (\d+) targets/)?.[1] : undefined;
+    note.textContent = ero
+      ? `${excluded ? `当前 ERO 反查缺少 ${excluded} 个 target 的空间映射。` : "当前 ERO 反查依赖已核实的 target 空间映射。"}此区域未匹配到可列出的 target；ERO 尚无核实过的 Tile 清单。下方链接是公开发布入口。`
+      : "覆盖图与此区域相交，当前冻结分块索引未返回可列出的原生分块。请从公开来源核对数据范围；该结果不表示此天区没有数据。";
+    card.append(note);
+    const entry = plan.entrypoints.find(candidate => candidate.kind === "official-release"
+      && layers.some(layer => layer.layerId === candidate.layerId));
+    const url = entry?.url ?? entry?.sourceUri ?? entry?.sourceUrl ?? publicLayerEntry(first.layerId).sourceUrl;
+    const link = url ? drawerDocLink(url, "查看公开数据来源") : undefined;
+    if (link) card.append(link);
+    node.append(card);
+  }
+}
+
 function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, component?: OverlapComponentView): void {
   if (component) {
     const key = overlapEvidenceKey(component);
@@ -1676,6 +1735,7 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
   const heading = document.createElement("strong");
   heading.textContent = `匹配的空间分块 · ${result.preview ? "已展示" : "已加载"} ${displaySpatialUnits.length}${spatialHasMore ? " · 还有更多分块" : ""}`;
   node.append(heading);
+  appendMissingNativeSources(node, result, plan, component);
   const supporting = document.createElement("details");
   supporting.className = "overlap-supporting-evidence";
   const supportingSummary = document.createElement("summary");
