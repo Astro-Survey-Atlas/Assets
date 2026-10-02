@@ -26,6 +26,7 @@ export default defineConfig({
         releases: "releases/index.html",
         sdk: "sdk/index.html",
         terms: "terms/index.html",
+        apiDocs: "api-docs/index.html",
       },
     },
   },

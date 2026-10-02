@@ -1004,3 +1004,10 @@ button[aria-busy="true"] { cursor: wait; opacity: .8; }
 .scan-batch-rule label { display: grid; gap: 6px; margin-bottom: 10px; }
 .scan-batch-row { display: block; min-width: 0; overflow-wrap: anywhere; }
 .scan-batch-row pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+
+.native-row { display:flex; justify-content:space-between; gap:1.2rem; align-items:flex-start; padding:1rem 0; border-bottom:1px solid var(--border, #29444d); }
+.native-row p { margin:.4rem 0; overflow-wrap:anywhere; }
+.native-row .panel-actions { flex-wrap:wrap; max-width:26rem; }
+.native-dialog { width:min(64rem, 90vw); }
+.native-gap { display:flex; gap:.6rem; align-items:flex-start; }
+.native-gap input { width:auto; flex:0 0 auto; }

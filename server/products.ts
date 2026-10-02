@@ -334,6 +334,7 @@ function validateContent(value: unknown, existing: ProductRecord): ProductConten
   const optionalField = <K extends keyof ProductContent>(key: K, value: ProductContent[K] | undefined): Pick<ProductContent, K> => value === undefined && input[key] === undefined ? { [key]: existing.draft[key] } as Pick<ProductContent, K> : { [key]: value } as Pick<ProductContent, K>;
   return {
     ...existing.draft,
+    ...optionalField("modality", enumField("modality", ["imaging", "spectroscopy", "catalog", "redshift", "infrared", "radio", "ultraviolet", "cube", "timeseries", "visibility", "event", "other", existing.draft.modality ?? "other"])),
     ...optionalField("dataOrigin", enumField("dataOrigin", ["observed", "simulated", "catalog"] as const)),
     ...optionalField("sourceTier", enumField("sourceTier", ["official_geometry", "official_inventory_derived", "third_party_moc", "best_effort_derived", "user_file_derived"] as const)),
     ...optionalField("originNote", optionalText("originNote", 2000)),

@@ -143,6 +143,14 @@ export class PublicationTaskStore {
       this.#db.prepare("UPDATE attempts SET finished_at=?,outcome='activated' WHERE id=?").run(this.#now(), attempt);
     });
   }
+  /** A metadata task finishes without moving a public release pointer. */
+  complete(id: string, attempt: string, result: unknown): void {
+    this.assertAttempt(id, attempt);
+    this.#transaction(() => {
+      this.#db.prepare("UPDATE tasks SET phase='published',result=?,lease_until=NULL WHERE id=? AND attempt_id=?").run(JSON.stringify(result), id, attempt);
+      this.#db.prepare("UPDATE attempts SET finished_at=?,outcome='completed' WHERE id=?").run(this.#now(), attempt);
+    });
+  }
   verified(id: string): void {
     this.#db.prepare("UPDATE tasks SET phase='published',error=NULL WHERE id=? AND phase='site-pending'").run(id);
   }

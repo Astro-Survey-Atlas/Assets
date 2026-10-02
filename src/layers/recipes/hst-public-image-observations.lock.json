@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "kind": "mast-hst-public-image-observations",
+  "status": "ready",
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "deliveryClass": "evidence",
+  "sourceUrl": "https://mast.stsci.edu/api/v0/invoke",
+  "service": "Mast.Caom.Filtered",
+  "capturedAt": "2026-10-01T00:17:55.681Z",
+  "query": {
+    "columns": "obsid,obs_collection,dataproduct_type,proposal_id,target_name,instrument_name,filters,t_min,t_max,s_region,dataRights",
+    "filters": [
+      { "paramName": "obs_collection", "values": ["HST"] },
+      { "paramName": "dataproduct_type", "values": ["image"] },
+      { "paramName": "dataRights", "values": ["PUBLIC"] }
+    ],
+    "spatialColumn": "s_region"
+  },
+  "pageSize": 2000,
+  "pageCount": 601,
+  "rowCount": 1201094,
+  "rowsTotal": 1201094,
+  "manifest": {
+    "path": "source-units/hst-public-image-pages/manifest.json",
+    "sha256": "d09e1a1d9863b3328f227040a5fb44043519402e8903747cf0dd6ab436d04ee8"
+  },
+  "localIndex": {
+    "path": "derived/hst-observation-indexes/d09e1a1d9863b3328f227040a5fb44043519402e8903747cf0dd6ab436d04ee8.v4.sqlite",
+    "schemaVersion": 4,
+    "coarseOrder": 4,
+    "spatialPrecision": "estimated"
+  },
+  "scope": "Public HST image observation metadata captured from MAST CAOM. The snapshot contains s_region footprints and archive identity fields, not science data or a per-observation product inventory. Reverse lookup matches locally and links to the MAST observation page."
+}

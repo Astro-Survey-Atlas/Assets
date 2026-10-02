@@ -28,6 +28,7 @@ export interface CoverageCellLayer {
   warehouseFileIndex?: WarehouseFileIndexSummary;
   /** Stable content revision used to version browser/cache block requests. */
   revision?: string;
+  nativeUnitIndexRevision?: string;
 }
 
 export function isWarehouseFilePartitionLayer(layer: Pick<CoverageCellLayer, "sourceUnitIndex">): boolean {

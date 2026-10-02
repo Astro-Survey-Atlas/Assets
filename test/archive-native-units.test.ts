@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Healpix } from "healpixjs";
 import { archiveNativeUnits, hstObservationMatchesLayer } from "../server/archive-native-units.js";
+import { acquireEroTargetSnapshot, parseEroTargetSnapshot } from "../server/ero-target-index.js";
+import { createHash } from "node:crypto";
 import { lookupHstImages } from "../server/hst-image-lookup.js";
 import type { CoverageCellLayer } from "../server/coverage.js";
 import type { ArtifactStore } from "../server/artifact-store.js";
@@ -9,7 +11,7 @@ import type { ArtifactStore } from "../server/artifact-store.js";
 const layer = (surveyId: string, product: string, releaseId: string): CoverageCellLayer => ({ layerId: product, productId: product, surveyId, product, releaseId,
   modality: "imaging", color: "#ffffff", availableOrders: [8], overviewOrder: 8, maxOrder: 8, cellCount: 1, areaDeg2: 1, tileScheme: "ipix-range-4096", cells: new Map() });
 
-test("HST metadata reverse lookup uses GET and preserves observation footprint without product or science requests", async (t) => {
+test("Explicit HST product lookup uses public observation metadata without retrieving science files", async (t) => {
   const pixel = 200001; const pointing = new Healpix(256).pix2ang(pixel);
   const ra = pointing.phi * 180 / Math.PI, dec = 90 - pointing.theta * 180 / Math.PI;
   const sRegion = `POLYGON ${ra - .01} ${dec - .01} ${ra + .01} ${dec - .01} ${ra + .01} ${dec + .01} ${ra - .01} ${dec + .01}`;
@@ -43,11 +45,14 @@ test("ERO target URLs come from official XML and associated ESA Sky footprint, n
     assert.equal(url.pathname, "/dr/ero/ERO-Abell2390");
     return new Response(`<data><dataitem><name>ERO-Abell2390</name><a href="${uri}">VIS</a></dataitem></data>`);
   };
-  const result = await archiveNativeUnits([layer("euclid", "ERO VIS", "euclid-ero")], 8, [202250, 202272], store);
+  const snapshot = await acquireEroTargetSnapshot();
+  const eroIndex = parseEroTargetSnapshot(snapshot, createHash("sha256").update(snapshot).digest("hex"));
+  globalThis.fetch = async () => { throw new Error("Runtime lookup must not acquire metadata"); };
+  const result = await archiveNativeUnits([layer("euclid", "ERO VIS", "euclid-ero")], 8, [202250, 202272], store, { eroIndex });
   assert.equal(result.units[0]!.unitKind, "target"); assert.equal(result.units[0]!.unitId, "ERO-Abell2390");
   assert.equal(result.units[0]!.accessUri, uri); assert.equal(result.units[0]!.precision, "estimated");
-  assert.equal(stored.length, 1); assert.match(stored[0]!, /footprint/);
-  const miss = await archiveNativeUnits([layer("euclid", "ERO VIS", "euclid-ero")], 8, [0], store);
+  assert.equal(stored.length, 0, "Read-only runtime lookup writes no evidence objects");
+  const miss = await archiveNativeUnits([layer("euclid", "ERO VIS", "euclid-ero")], 8, [0], store, { eroIndex });
   assert.deepEqual(miss.units, []);
 });
 

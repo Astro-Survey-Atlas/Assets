@@ -7,6 +7,14 @@ import { acquireLocalFileLock } from "./local-file-lock.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { ReleaseSynchronizer } from "./release-synchronizer.js";
 import { PublicationScheduler } from "./publication-scheduler.js";
+import { NativeUnitController } from "./native-unit-controller.js";
+import { nativeDatabaseKey } from "./native-unit-worker.js";
+import { sourceIdsForBinding } from "./native-unit-sources.js";
+import { nativeEvidencePath, type NativeBinding, type NativeGroup } from "./native-unit-model.js";
+import type { SourceUnitLoadOptions } from "./source-units.js";
+import { healpixList, type HealpixLayer } from "./healpix-list.js";
+import { publicOpenApi } from "./public-openapi.js";
+import { ReverseStream } from "./reverse-stream.js";
 import { proxyAdmin } from "./admin-proxy.js";
 import { createReadStream } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
@@ -39,8 +47,10 @@ import { filterByModalities } from "../src/modality-filter.js";
 import { MAST_HST_DISCOVERY_POLICY, resolveMocDiscoveryCandidate } from "./moc-discovery.js";
 import { decodeScopeMoc, parseMastHstScopeRef, resolveMastHstScope } from "./mast-hst-discovery.js";
 import { importMastHstObservation } from "./mast-hst-import.js";
-import { lookupHstImages } from "./hst-image-lookup.js";
+import { normalizedHstLookupCells } from "./hst-image-lookup.js";
+import { HstObservationIndex } from "./hst-observation-index.js";
 import { archiveNativeUnits } from "./archive-native-units.js";
+import { parseEroTargetSnapshot, type EroTargetIndex } from "./ero-target-index.js";
 import { decodeSnapshotCursor, readReverseSnapshot, snapshotPage, writeReverseSnapshot, type ReverseSnapshot } from "./reverse-snapshot.js";
 import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
 import { DynamicResourcePackageStore, dynamicResourcePackageAssetId } from "./resource-package-publication.js";
@@ -58,7 +68,7 @@ import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, Public
 const role = process.env.ASSETS_ROLE ?? "legacy";
 if (!["legacy", "site", "backend"].includes(role)) throw new Error("Invalid ASSETS_ROLE");
 const managesContent = role !== "site";
-const requestRelease = new AsyncLocalStorage<{ catalog: LoadedCatalog; state: Awaited<ReturnType<typeof loadPublicState>> }>();
+const requestRelease = new AsyncLocalStorage<{ catalog: LoadedCatalog; state: Awaited<ReturnType<typeof loadPublicState>>; nativeGroup?: NativeGroup; nativeVersion: string }>();
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
 const accessGate=new AccessGate();
@@ -156,6 +166,14 @@ let runtimeSurveyIndex!: Awaited<ReturnType<typeof loadSurveyIndex>>;
 let warehouseLayerSnapshots = new Map<string, WarehouseLayerSnapshot | WarehouseLayerStatusSnapshot>();
 let warehouseFileIndexMetadataUnavailable = false;
 let productsForWarehouseStatus: ProductStore | undefined;
+interface NativeRuntime {
+  version: string; group?: NativeGroup; references: number;
+  worker?: Promise<SourceUnitWorkerStore>; fallback?: Promise<SourceUnitStore>;
+  hst?: Promise<HstObservationIndex | undefined>; ero?: Promise<EroTargetIndex | undefined>;
+  state: "initializing" | "available" | "unavailable";
+  capturedAt?: string; retire?: ReturnType<typeof setTimeout>;
+}
+const nativeRuntimes = new Map<string, NativeRuntime>();
 
 function sourceUnitProductIdentity(value: Pick<CoverageCellLayer, "surveyId" | "releaseId" | "product">): string {
   return `${value.surveyId}\u0000${value.releaseId}\u0000${value.product}`;
@@ -742,12 +760,19 @@ try {
 } catch (error) {
   console.warn(`Warehouse readiness metadata unavailable: ${error instanceof Error ? error.message : String(error)}`);
 }
+const nativeUnits = managesContent ? new NativeUnitController({
+  contentRoot, catalogRoot: productCatalogRoot, evidenceRoot: sourceUnitEvidenceRoot,
+  store: authorityStore ?? new FilesystemArtifactStore(path.join(productCatalogRoot, "var/object-store")), snapshotSink: stateSnapshotSink,
+  bindings: nativeProductBindings, changed: reloadNativeRuntime, verifyRuntime: verifyNativeRuntime,
+  ...((process.env.ASSETS_PUBLIC_VERIFY_INTERNAL_URL || process.env.ASSETS_PUBLIC_VERIFY_URL) ? { verifySite: verifyNativeSite } : {}),
+}) : undefined;
+await nativeUnits?.initialize();
 const publicationScheduler = role === "backend" && authorityStore && releaseSynchronizer ? new PublicationScheduler({
   contentRoot, baselineRoot: releaseRoot, store: authorityStore, snapshotSink: stateSnapshotSink,
   freeze: async () => ({ products: products.list(), publications: mocPublicationStore.list() }),
   synchronize: () => releaseSynchronizer.sync(),
+  nativeUnits,
 }) : undefined;
-await publicationScheduler?.initialize();
 const publisher = new PublicReleasePublisher({
   runRepository: publicationScheduler,
   contentRoot,
@@ -762,6 +787,7 @@ const publisher = new PublicReleasePublisher({
 });
 const publicState = new Proxy({} as typeof currentPublicState, { get: (_target, key) => Reflect.get(requestRelease.getStore()?.state ?? currentPublicState, key) });
 const approvedRelease = new Proxy({} as typeof currentPublicState.snapshot, { get: (_target, key) => Reflect.get(publicState.snapshot, key) });
+await publicationScheduler?.initialize();
 if (managesContent) products.projectPublished(approvedRelease.products, approvedRelease.generatedAt);
 async function prepareProductGeometry(record:ProductRecord):Promise<void> {
   const staged=mocBuildStore.list().find(b=>b.productId===record.productId && b.phase==="STAGED");
@@ -778,9 +804,9 @@ const publicRefreshTimer=setInterval(()=>{ void (async()=>{
   try {
     await releaseSynchronizer?.sync();
     const root=await realpath(releaseRoot);
-    if(root===catalog.root)return;
+    if(root===currentCatalog.root)return;
     const nextCatalog=await loadCatalog(root);
-    const next=await loadPublicState(nextCatalog, productCatalogRoot);
+    const next=await loadPublicState(nextCatalog, productCatalogRoot, currentPublicState);
     // No await between these assignments: readers see one consistent snapshot.
     currentCatalog=nextCatalog;currentPublicState=mergeSourceUnitPublicState(next,runtimeSurveyIndex,sourceUnitCoverageLayers);
     if (managesContent) products.projectPublished(next.snapshot.products,next.snapshot.generatedAt);
@@ -1015,36 +1041,147 @@ if (publicationScheduler) {
   independentLoop("publication", 1000, () => publicationScheduler.tick());
   independentLoop("publication-checkpoint", 5000, () => publicationScheduler.snapshot());
   independentLoop("site-verification", 5000, async () => {
-    for (const task of publicationScheduler.tasks.list().filter(task => task.phase === "site-pending")) await publisher.verifySite(task.id, await publicationScheduler.siteExpectation(task.id));
+    for (const task of publicationScheduler.tasks.list().filter(task => task.phase === "site-pending")) {
+      if (nativeUnits?.matches(task.payload)) await nativeUnits.verifyPending(task);
+      else await publisher.verifySite(task.id, await publicationScheduler.siteExpectation(task.id));
+    }
   });
   if (snapshotWorker) independentLoop("state-snapshots", 5000, async () => {
     const { spool, snapshots } = snapshotWorker!;
-    const uploaded = await spool.processPending();
+    const uploaded = await spool.processPending({ maxUploads: 1 });
     await snapshots.reconcileUploaded(uploaded.uploadedManifests);
     await spool.markReconciled(uploaded.uploadedManifests.map(manifest => manifest.uploadId));
     await spool.cleanupUploaded();
   });
 }
-let sourceUnitsPromise: Promise<SourceUnitWorkerStore> | null = null;
-let sourceUnitsFallbackPromise: Promise<SourceUnitStore> | null = null;
-function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
-  if (!sourceUnitsPromise) {
-    sourceUnitsPromise = SourceUnitWorkerStore.load(productCatalogRoot, sourceUnitEvidenceRoot).catch((error) => {
-      sourceUnitsPromise = null;
-      throw error;
-    });
-  }
-  return sourceUnitsPromise;
+function requestNativeGroup(): NativeGroup | undefined { const context = requestRelease.getStore(); return context ? context.nativeGroup : nativeUnits?.active; }
+function requestNativeVersion(): string { return requestRelease.getStore()?.nativeVersion ?? nativeUnits?.version ?? "imported-baseline"; }
+function nativeRuntime(): NativeRuntime {
+  const version = requestNativeVersion();
+  let runtime = nativeRuntimes.get(version);
+  if (!runtime) { runtime = { version, group: requestNativeGroup(), references: 0, state: "initializing" }; nativeRuntimes.set(version, runtime); }
+  return runtime;
+}
+async function closeNativeRuntime(runtime: NativeRuntime): Promise<void> {
+  if (runtime.retire) clearTimeout(runtime.retire);
+  await Promise.allSettled([runtime.worker?.then(store => store.terminate()), runtime.fallback?.then(store => store.close()), runtime.hst?.then(index => index?.close())]);
+}
+function retireNativeRuntime(runtime: NativeRuntime): void {
+  if (runtime.version === (nativeUnits?.version ?? "imported-baseline") || runtime.references || runtime.retire) return;
+  runtime.retire = setTimeout(() => {
+    runtime.retire = undefined;
+    if (runtime.references || runtime.version === (nativeUnits?.version ?? "imported-baseline")) return;
+    nativeRuntimes.delete(runtime.version); void closeNativeRuntime(runtime);
+  }, 60_000);
+  runtime.retire.unref();
+}
+const HST_IMAGE_LOOKUP_MAX_OBSERVATIONS = 256;
+function hstObservationIndex(): Promise<HstObservationIndex | undefined> {
+  const runtime = nativeRuntime();
+  if (!runtime.hst) runtime.hst = (async () => {
+    const group = runtime.group;
+    if (group) {
+      if (!group.hst) return undefined;
+      runtime.capturedAt = group.snapshots["hst-public-images"]?.capturedAt;
+      return HstObservationIndex.open(group.hst.root ? nativeEvidencePath(sourceUnitEvidenceRoot, group.hst.root) : sourceUnitEvidenceRoot, group.hst.sourceSha256);
+    }
+    const lock = JSON.parse(await readFile(path.join(productCatalogRoot, "src/layers/recipes/hst-public-image-observations.lock.json"), "utf8")) as { status?: string; capturedAt?: string; manifest?: { sha256?: string } };
+    if (lock.status !== "ready" || !lock.manifest?.sha256) return undefined;
+    runtime.capturedAt = lock.capturedAt;
+    return HstObservationIndex.open(sourceUnitEvidenceRoot, lock.manifest.sha256);
+  })().catch(error => { console.warn(`Locked local HST observation index is unavailable: ${error instanceof Error ? error.message : String(error)}`); return undefined; });
+  return runtime.hst;
+}
+function eroTargetIndex(): Promise<EroTargetIndex | undefined> {
+  const runtime = nativeRuntime();
+  if (!runtime.ero) runtime.ero = (async () => {
+    const snapshot = runtime.group?.snapshots["euclid-ero-targets"];
+    const file = snapshot?.files[0];
+    if (!file) return undefined;
+    return parseEroTargetSnapshot(await readFile(nativeEvidencePath(sourceUnitEvidenceRoot, file.ref), "utf8"), file.sha256);
+  })().catch(error => { console.warn(`Locked ERO target metadata is unavailable: ${error instanceof Error ? error.message : String(error)}`); return undefined; });
+  return runtime.ero;
+}
+function nativeBindingEnabled(layerId: string): boolean {
+  const group = requestNativeGroup();
+  return !group || group.bindings.some(binding => binding.layerId === layerId) && !group.report.unavailableBindings?.includes(layerId);
 }
 
-function sourceUnitsFallbackStore(): Promise<SourceUnitStore> {
-  if (!sourceUnitsFallbackPromise) {
-    sourceUnitsFallbackPromise = SourceUnitStore.load(productCatalogRoot, sourceUnitEvidenceRoot).catch((error) => {
-      sourceUnitsFallbackPromise = null;
-      throw error;
-    });
+function nativeReadOptions(group: NativeGroup | null = nativeUnits?.active ?? null): SourceUnitLoadOptions {
+  if (group) {
+    if (!group.generic) throw new Error("Active native index has no generic database");
+    return { readOnly: true, indexPath: nativeEvidencePath(sourceUnitEvidenceRoot, group.generic.file.ref), buildKey: group.generic.buildKey, lockText: group.lockText, recipes: group.recipes };
   }
-  return sourceUnitsFallbackPromise;
+  // Preserve the installed historical baseline while it passes managed adoption.
+  // Module-byte changes never trigger a query-time cold build.
+  const indexPath = path.join(sourceUnitEvidenceRoot, "derived/source-unit-indexes/native-units.sqlite");
+  return { readOnly: true, indexPath, buildKey: nativeDatabaseKey(indexPath) };
+}
+
+async function verifyNativeRuntime(group: NativeGroup): Promise<void> {
+  const store = await SourceUnitStore.load(productCatalogRoot, sourceUnitEvidenceRoot, nativeReadOptions(group));
+  store.close();
+  if (group.hst) {
+    const index = await HstObservationIndex.open(group.hst.root ? nativeEvidencePath(sourceUnitEvidenceRoot, group.hst.root) : sourceUnitEvidenceRoot, group.hst.sourceSha256);
+    index.close();
+  }
+}
+
+async function verifyNativeSite(group: NativeGroup): Promise<void> {
+  const internal = process.env.ASSETS_PUBLIC_VERIFY_INTERNAL_URL?.trim();
+  const base = new URL(internal || process.env.ASSETS_PUBLIC_VERIFY_URL!.trim());
+  if (base.username || base.password || !["http:", "https:"].includes(base.protocol) || !internal && base.protocol !== "https:") throw new Error("Invalid native-index site verification URL");
+  const status = await fetch(new URL("/api/v1/status", base), { redirect: "error", signal: AbortSignal.timeout(10_000) });
+  if (!status.ok) throw new Error(`Native index site status returned HTTP ${status.status}`);
+  const body = await status.json() as { nativeIndex?: { version?: string }; services?: Array<{ id: string; status: string }> };
+  if (body.nativeIndex?.version !== group.id || !body.services?.some(service => service.id === "reverse-lookup" && service.status === "available")) throw new Error("Site has not confirmed the active native-index query runtime");
+  const sample = group.report.samples.find(sample => sample.cells.length > 0);
+  if (!sample) throw new Error("Native site verification requires a real saved lookup sample");
+  const lookup = await fetch(new URL("/api/v1/coverage/reverse-lookup", base), { method: "POST", redirect: "error", headers: { "Content-Type": "application/json", Accept: "application/json" }, signal: AbortSignal.timeout(60_000), body: JSON.stringify({ layerIds: [sample.layerId], order: sample.order, cells: sample.cells.slice(0, 4), preview: true }) });
+  if (!lookup.ok) throw new Error(`Native site lookup returned HTTP ${lookup.status}`);
+  const result = await lookup.json() as { downloadPlan?: { spatialUnits?: Array<{ layerId: string; unitKind: string; unitId: string }> } };
+  if (!result.downloadPlan?.spatialUnits?.some(unit => unit.layerId === sample.layerId && unit.unitKind === sample.unitKind && unit.unitId)) throw new Error("Site lookup did not return native identities from the reviewed product binding");
+}
+
+async function nativeProductBindings(): Promise<NativeBinding[]> {
+  await sourceUnitCoverageReady();
+  const store = await sourceUnitsStore();
+  const bindings: NativeBinding[] = [];
+  for (const layer of currentPublicState.coverage.records.values()) {
+    if (!["legacy-surveys", "desi", "euclid", "hst", "hsc-ssp"].includes(layer.surveyId) || isWarehouseFilePartitionLayer(layer)) continue;
+    const match = layer.surveyId === "hst" || layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" ? undefined : await store.match(layer.layerId, 4, [], 1, layer);
+    if (!match && layer.surveyId !== "hst" && !(layer.surveyId === "euclid" && layer.releaseId === "euclid-ero")) continue;
+    const record = products.list().find(record => record.productId === layer.productId || record.draft.surveyId === layer.surveyId && record.draft.releaseId === layer.releaseId && record.draft.name === layer.product);
+    const binding: NativeBinding = { productId: record?.productId ?? layer.productId ?? layer.layerId, layerId: layer.layerId, surveyId: layer.surveyId, releaseId: layer.releaseId, product: layer.product, modality: layer.modality, unitKind: match?.unitKind ?? (layer.surveyId === "hst" ? "observation" : "target"), sourceIds: sourceIdsForBinding(layer), revision: "", visibility: record?.published ? "published" : "imported-overview", ...(layer.surveyId === "hst" ? { instrument: layer.sourceEvidence?.instrument, filters: layer.sourceEvidence?.filters, observationId: layer.sourceEvidence?.sourceIdentity?.match(/\bobsid\s+(\d+)/i)?.[1] } : {}) };
+    bindings.push(binding);
+  }
+  return bindings;
+}
+
+async function reloadNativeRuntime(): Promise<void> {
+  await requestRelease.exit(async () => {
+    sourceUnitCoverageLoadPromise = null; sourceUnitCoverageLayers = [];
+    // Rebuild from the approved public release so removed bindings cannot survive.
+    currentPublicState = await loadPublicState(currentCatalog, productCatalogRoot, currentPublicState);
+    await reloadRuntimeCoverage();
+    await sourceUnitCoverageReady();
+    await Promise.all([hstObservationIndex(), eroTargetIndex()]);
+  });
+  for (const runtime of nativeRuntimes.values()) retireNativeRuntime(runtime);
+}
+function sourceUnitsStore(): Promise<SourceUnitWorkerStore> {
+  const runtime = nativeRuntime();
+  if (!runtime.worker) runtime.worker = Promise.resolve().then(() => SourceUnitWorkerStore.load(productCatalogRoot, sourceUnitEvidenceRoot, nativeReadOptions(runtime.group ?? null))).then(store => {
+    runtime.state = "available"; return store;
+  }).catch(error => { runtime.state = "unavailable"; throw error; });
+  return runtime.worker;
+}
+function sourceUnitsFallbackStore(): Promise<SourceUnitStore> {
+  const runtime = nativeRuntime();
+  if (!runtime.fallback) runtime.fallback = Promise.resolve().then(() => SourceUnitStore.load(productCatalogRoot, sourceUnitEvidenceRoot, nativeReadOptions(runtime.group ?? null))).then(store => {
+    runtime.state = "available"; return store;
+  }).catch(error => { runtime.state = "unavailable"; throw error; });
+  return runtime.fallback;
 }
 
 async function sourceUnitsReadyWithin(timeoutMs: number): Promise<SourceUnitWorkerStore | SourceUnitStore | null> {
@@ -1068,23 +1205,45 @@ function sourceUnitCoverageReady(): Promise<void> {
   const hasApprovedProducts = [...currentPublicState.records.values()].some((record) => record.published && !record.retiredAt);
   if (!hasApprovedProducts) return Promise.resolve();
   if (!sourceUnitCoverageLoadPromise) {
-    sourceUnitCoverageLoadPromise = sourceUnitsStore().catch(() => sourceUnitsFallbackStore()).then(async (store) => {
+    const version = nativeUnits?.version ?? "imported-baseline";
+    sourceUnitCoverageLoadPromise = requestRelease.exit(() => sourceUnitsStore().catch(() => sourceUnitsFallbackStore()).then(async (store) => {
+      if (version !== (nativeUnits?.version ?? "imported-baseline")) return;
       const declaredProducts = new Set(runtimeSurveyIndex.surveys.flatMap((survey) => survey.releases.flatMap((release) => (
         release.products.map((product) => `${survey.id}\u0000${release.id}\u0000${product.name}`)
       ))));
       sourceUnitCoverageLayers = store.coverageLayers()
         .filter((layer) => declaredProducts.has(sourceUnitProductIdentity(layer)))
+        .filter(layer => !nativeUnits?.active || nativeUnits.active.bindings.some(binding => sourceUnitProductIdentity(binding) === sourceUnitProductIdentity(layer) && (binding.visibility === "imported-overview" || [...currentPublicState.records.values()].some(record => record.published && !record.retiredAt && record.published.surveyId === binding.surveyId && record.published.releaseId === binding.releaseId && record.published.name === binding.product))))
         .map(sourceUnitCoverageRecord);
       coverageCatalog = mergeSourceUnitCoverage(coverageCatalog);
       runtimeCoverageManifest = mergeSourceUnitFootprints(runtimeCoverageManifest, coverageCatalog.records);
       runtimeSurveyIndex = await loadSurveyIndex(productCatalogRoot, catalog, runtimeCoverageManifest, coverageCatalog.layers, [...publishedPublicAssets.values()].map(({ record }) => record));
       runtimeSurveyIndex = applyPublishedProductMetadata(runtimeSurveyIndex);
       currentPublicState = mergeSourceUnitPublicState(currentPublicState, runtimeSurveyIndex, sourceUnitCoverageLayers);
+      if (nativeUnits?.active) for (const binding of nativeUnits.active.bindings) {
+        const layer = currentPublicState.coverage.records.get(binding.layerId);
+        if (layer) layer.nativeUnitIndexRevision = binding.revision;
+      }
+      const [hst, ero] = await Promise.all([hstObservationIndex(), eroTargetIndex()]);
+      if (version !== (nativeUnits?.version ?? "imported-baseline")) return;
+      for (const layer of currentPublicState.coverage.records.values()) {
+        if (isWarehouseFilePartitionLayer(layer) || !["legacy-surveys", "desi", "euclid", "hst", "hsc-ssp"].includes(layer.surveyId)) continue;
+        const binding = nativeUnits?.active?.bindings.find(binding => binding.layerId === layer.layerId);
+        const unavailableBinding = nativeUnits?.active?.report.unavailableBindings?.includes(layer.layerId);
+        const enabled = (!nativeUnits?.active || Boolean(binding)) && !unavailableBinding;
+        const available = enabled && (layer.surveyId === "hst" ? Boolean(hst)
+          : layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" ? Boolean(ero)
+          : Boolean(await store.match(layer.layerId, 4, [], 1, layer)));
+        layer.sourceUnitIndex = available
+          ? { ...layer.sourceUnitIndex, status: "estimated", unitKind: binding?.unitKind ?? (layer.surveyId === "hst" ? "observation" : layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" ? "target" : layer.sourceUnitIndex?.unitKind), indexUrl: "/api/v1/coverage/reverse-lookup", notes: layer.sourceUnitIndex?.notes ?? "The installed local native-unit mapping is available; candidate precision and inventory scope apply." }
+          : { ...layer.sourceUnitIndex, status: "entrypoint-only", notes: unavailableBinding ? "This published source identity has no matching observation in the active locked metadata snapshot; its coverage and official entrypoint remain visible." : enabled ? "The local native-unit mapping is unavailable for this product; coverage and official source identities remain visible." : "This product is absent from the active reviewed native-index binding set." };
+        if (binding) layer.nativeUnitIndexRevision = binding.revision;
+      }
       console.info(`Native source-unit indexes are ready; ${sourceUnitCoverageLayers.length} approved source-derived coverage layers are available.`);
     }).catch((error) => {
-      sourceUnitCoverageLoadPromise = null;
+      if (version === (nativeUnits?.version ?? "imported-baseline")) sourceUnitCoverageLoadPromise = null;
       throw error;
-    });
+    }));
   }
   return sourceUnitCoverageLoadPromise;
 }
@@ -2600,6 +2759,24 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
   if (!admin.config.enabled) return json(response, 404, { error: "Assets administration is disabled" });
   try {
     admin.authorize(adminFromRequest(request));
+    if (pathname.startsWith("/api/v1/admin/native-units")) {
+      if (!nativeUnits) throw new AdminHttpError(503, "Native-unit management backend unavailable");
+      response.setHeader("Cache-Control", "no-store");
+      const base = "/api/v1/admin/native-units";
+      const actor = "administrator";
+      if (pathname === base && request.method === "GET") return json(response, 200, { ...nativeUnits.view() as object, syncStatus: await apiSyncStatus("native-units") });
+      if (pathname === base + "/bindings" && request.method === "GET") return json(response, 200, { bindings: await nativeUnits.availableBindings() });
+      if (pathname === base + "/tasks" && request.method === "POST") return json(response, 202, { task: await nativeUnits.submit(await requestJsonBody(request, 65536) as Record<string, unknown>, actor) });
+      const source = /^\/api\/v1\/admin\/native-units\/sources\/([^/]+)$/.exec(pathname);
+      if (source && request.method === "PUT") return json(response, 200, { source: await nativeUnits.updateSource(source[1]!, await requestJsonBody(request, 32768) as Record<string, unknown>, actor) });
+      const group = /^\/api\/v1\/admin\/native-units\/groups\/([^/]+)(?:\/(review|bindings))?$/.exec(pathname);
+      if (group && !group[2] && request.method === "GET") return json(response, 200, nativeUnits.detail(group[1]!));
+      if (group && group[2] === "review" && request.method === "POST") return json(response, 200, await nativeUnits.review(group[1]!, await requestJsonBody(request, 32768) as Record<string, unknown>, actor));
+      if (group && group[2] === "bindings" && request.method === "PUT") return json(response, 200, await nativeUnits.changeBindings(group[1]!, await requestJsonBody(request, 32768) as Record<string, unknown>, actor));
+      const cancel = /^\/api\/v1\/admin\/native-units\/tasks\/([^/]+)\/cancel$/.exec(pathname);
+      if (cancel && request.method === "POST") { await publicationScheduler?.cancel(cancel[1]!); return json(response, 200, { cancelled: true }); }
+      throw new AdminHttpError(404, "Native-unit management route not found");
+    }
     if (pathname.startsWith("/api/v1/admin/api-management")) {
       if (!apiManagement) throw new AdminHttpError(503, "API management backend unavailable");
       response.setHeader("Cache-Control", "no-store");
@@ -3128,6 +3305,50 @@ function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, p
   compressedJson(request, response, 200, { ...block, revision: record.revision }, cacheControl, `"sha256-${block.sha256}"`);
 }
 
+async function sendProtectedCoverageBlock(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+  return withRegionAccess(request, response, async () => {
+    const body = await requestJsonBody(request, 16 * 1024);
+    const layerId = typeof body.layerId === "string" ? body.layerId.trim() : "";
+    const order = body.order;
+    const tile = body.tile;
+    const revision = typeof body.revision === "string" ? body.revision : undefined;
+    const allowedLayers = new Set([
+      "source-units-legacy-surveys-legacy-dr9-coadded-imaging",
+      "source-units-legacy-surveys-legacy-dr9-tractor-catalog",
+    ]);
+    if (!allowedLayers.has(layerId) || order !== 4 || tile !== 0) {
+      throw new AccessError(400, "A supported Legacy DR9 order-4 overview block is required");
+    }
+    const record = publicCoverageCatalog().records.get(layerId);
+    if (!record || record.surveyId !== "legacy-surveys" || record.releaseId !== "legacy-dr9"
+      || record.maxOrder !== 4 || record.overviewOrder !== 4 || record.availableOrders.length !== 1
+      || record.availableOrders[0] !== 4 || record.sourceUnitIndex?.status !== "estimated") {
+      throw new AccessError(503, "The locked Legacy DR9 overview is unavailable");
+    }
+    if (revision && revision !== record.revision) throw new AccessError(409, "Coverage catalog revision changed");
+    const block = coverageBlock(record, 4, 0);
+    if (!block) throw new AccessError(404, "Legacy DR9 overview block is unavailable");
+    response.setHeader("Cache-Control", "no-store");
+    const generatedAt = publicCoverageCatalog().generatedAt;
+    return compressedJson(request, response, 200, {
+      ...block,
+      generatedAt: generatedAt && Number.isFinite(Date.parse(generatedAt)) ? generatedAt : new Date().toISOString(),
+      layerId: record.layerId,
+      surveyId: record.surveyId,
+      releaseId: record.releaseId,
+      product: record.product,
+      modality: record.modality,
+      availableOrders: record.availableOrders,
+      overviewOrder: record.overviewOrder,
+      maxOrder: record.maxOrder,
+      cellCount: record.cellCount,
+      revision: record.revision,
+      sourceUnitIndex: record.sourceUnitIndex,
+    }, "no-store", `"sha256-${block.sha256}"`);
+  });
+}
+
 async function sendCoverageOverlap(request: IncomingMessage, response: ServerResponse): Promise<void> {
   await awaitNativeSourceUnitCoverageLoad();
   const body = await requestJsonBody(request).catch(() => ({})) as Record<string, unknown>;
@@ -3304,7 +3525,11 @@ function reverseQueryFingerprint(layerIds: readonly string[], order: number, cel
     order,
     cells: [...new Set(cells)].sort((left, right) => left - right),
     revisions,
+    nativeUnitIndexRevision: requestNativeVersion(),
   }));
+}
+function reverseSelectorFingerprint(layerIds: readonly string[], order: number, cells: readonly number[]): string {
+  return nativeSha256(JSON.stringify({ layerIds: [...new Set(layerIds)].sort(), order, cells: [...new Set(cells)].sort((a, b) => a - b) }));
 }
 
 function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LIMIT, seenKeys: ReadonlySet<string> = new Set()): { plan: DownloadPlan; shown: number; omitted: number; hasMore: boolean } {
@@ -3397,18 +3622,24 @@ function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LI
   };
 }
 
-async function publicSpatialUnits(layerIds: readonly string[], order: number, cells: readonly number[], limit: number) {
+async function publicSpatialUnits(layerIds: readonly string[], order: number, cells: readonly number[], limit: number, batch?: (layerId: string, units: DownloadPlanSpatialUnit[]) => void) {
   const layers = layerIds.flatMap((id) => { const layer = publicCoverageCatalog().records.get(id); return layer ? [layer] : []; });
-  const archiveLayers = layers.filter((layer) => layer.surveyId === "hst" || (layer.surveyId === "euclid" && layer.releaseId === "euclid-ero"));
+  const archiveCandidates = layers.filter((layer) => layer.surveyId === "hst" || (layer.surveyId === "euclid" && layer.releaseId === "euclid-ero"));
+  const archiveLayers = archiveCandidates.filter(layer => nativeBindingEnabled(layer.layerId));
+  const disabled = archiveCandidates.filter(layer => !nativeBindingEnabled(layer.layerId));
+  const [hstIndex, eroIndex] = await Promise.all([
+    archiveLayers.some(layer => layer.surveyId === "hst") ? hstObservationIndex() : undefined,
+    archiveLayers.some(layer => layer.surveyId === "euclid") ? eroTargetIndex() : undefined,
+  ]);
   const [local, archive] = await Promise.all([
-    localSpatialUnits(layers.filter((layer) => !archiveLayers.includes(layer)).map((layer) => layer.layerId), order, cells, limit),
-    archiveNativeUnits(archiveLayers, order, cells, publicLookupStore),
+    localSpatialUnits(layers.filter((layer) => !archiveCandidates.includes(layer)).map((layer) => layer.layerId), order, cells, limit, batch),
+    archiveNativeUnits(archiveLayers, order, cells, publicLookupStore, { hstIndex, eroIndex }).then(result => { for (const layer of archiveLayers) batch?.(layer.layerId, result.units.filter(unit => unit.layerId === layer.layerId)); return result; }),
   ]);
   return { units: [...local.units, ...archive.units], indexedLayerIds: new Set([...local.indexedLayerIds, ...archive.indexedLayerIds]),
-    unavailableLayerIds: [...local.unavailableLayerIds, ...archive.unavailableLayerIds], truncated: local.truncated || archive.truncated, notes: [...archive.notes, ...local.notes] };
+    unavailableLayerIds: [...local.unavailableLayerIds, ...archive.unavailableLayerIds, ...disabled.map(layer => layer.layerId)], truncated: local.truncated || archive.truncated || disabled.length > 0, notes: [...archive.notes, ...local.notes, ...(disabled.length ? ["Native lookup is unavailable for products absent from the active binding set or without a mapping in its locked inventory; source identities and entrypoints remain visible."] : [])] };
 }
 
-async function localSpatialUnits(layerIds: readonly string[], order: number, cells: readonly number[], limit: number): Promise<{ units: DownloadPlanSpatialUnit[]; indexedLayerIds: Set<string>; unavailableLayerIds: string[]; truncated: boolean; notes: string[] }> {
+async function localSpatialUnits(layerIds: readonly string[], order: number, cells: readonly number[], limit: number, batch?: (layerId: string, units: DownloadPlanSpatialUnit[]) => void): Promise<{ units: DownloadPlanSpatialUnit[]; indexedLayerIds: Set<string>; unavailableLayerIds: string[]; truncated: boolean; notes: string[] }> {
   const layers = layerIds.map((layerId) => publicCoverageCatalog().records.get(layerId))
     .filter((layer): layer is CoverageCellLayer => layer !== undefined && !isWarehouseFilePartitionLayer(layer));
   if (!layers.length) return { units: [], indexedLayerIds: new Set(), unavailableLayerIds: [], truncated: false, notes: [] };
@@ -3424,6 +3655,9 @@ async function localSpatialUnits(layerIds: readonly string[], order: number, cel
   const notes: string[] = [];
   let truncated = false;
   for (const layer of layers) {
+    const active = requestNativeGroup();
+    if (active && !active.bindings.some(binding => binding.layerId === layer.layerId)) { unavailableLayerIds.add(layer.layerId); continue; }
+    const batchStart = units.length;
     const match = await Promise.resolve(sourceUnits.match(layer.layerId, order, [...cells], limit, {
       surveyId: layer.surveyId,
       releaseId: layer.releaseId,
@@ -3462,6 +3696,7 @@ async function localSpatialUnits(layerIds: readonly string[], order: number, cel
         note: [match.notes, unit.note].filter((part): part is string => Boolean(part)).join(" "),
       });
     }
+    batch?.(layer.layerId, units.slice(batchStart));
   }
   units.sort((left, right) => left.layerId.localeCompare(right.layerId) || left.unitKind.localeCompare(right.unitKind) || left.unitId.localeCompare(right.unitId, undefined, { numeric: true }));
   return { units, indexedLayerIds, unavailableLayerIds: [...unavailableLayerIds], truncated, notes };
@@ -3490,12 +3725,19 @@ async function sendCoverageReverseLookup(request:IncomingMessage,response:Server
   if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
   const body=await requestJsonBody(request,REVERSE_LOOKUP_BODY_MAX_BYTES);
   const preview=body.preview===true;
-  const action=(identity:string)=>buildCoverageReverseLookup(request,response,body,identity,preview);
+  const stream = new ReverseStream(request, response);
+  const action=async (identity:string) => {
+    try { await buildCoverageReverseLookup(request,response,body,identity,preview,stream); }
+    catch (error) {
+      if (stream.enabled && response.headersSent) { stream.emit("error", { status: error instanceof AccessError || error instanceof AdminHttpError ? error.statusCode : 500, error: error instanceof Error ? error.message : "Reverse lookup failed" }); }
+      throw error;
+    }
+  };
   if (preview) return action(`preview:${request.socket.remoteAddress ?? "unknown"}`);
   return withRegionAccess(request,response,action);
 }
 
-async function buildCoverageReverseLookup(request:IncomingMessage,response:ServerResponse,body:Record<string,unknown>,identity:string,preview:boolean):Promise<void> {
+async function buildCoverageReverseLookup(request:IncomingMessage,response:ServerResponse,body:Record<string,unknown>,identity:string,preview:boolean,stream:ReverseStream):Promise<void> {
   await awaitNativeSourceUnitCoverageLoad();
   if(!Array.isArray(body.layerIds)||body.layerIds.some(id=>typeof id!=="string"))throw new AccessError(400,"layerIds required");
   if (!Number.isSafeInteger(body.order) || Number(body.order) < 0 || Number(body.order) > 13 || !Array.isArray(body.cells)) throw new AccessError(400, "order and cells are required");
@@ -3504,7 +3746,8 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   const order = Number(body.order);
   const requestedCellsInput = body.cells as number[];
   const fingerprint = reverseQueryFingerprint(body.layerIds as string[], order, requestedCellsInput);
-  const cursor = decodeSnapshotCursor(body.cursor, identity, fingerprint, pageScope, reverseCursorSecret);
+  const selectorFingerprint = reverseSelectorFingerprint(body.layerIds as string[], order, requestedCellsInput);
+  const cursor = decodeSnapshotCursor(body.cursor, identity, undefined, pageScope, reverseCursorSecret);
   if (preview && cursor) throw new AccessError(400, "Anonymous preview requests cannot continue a reverse lookup cursor");
   if (cursor && cursor.identity !== "preview" && cursor.identity !== identity) {
     throw new AccessError(403, "Reverse lookup cursor belongs to another access mode");
@@ -3515,8 +3758,10 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     if (preview) throw new AccessError(400, "Anonymous preview cannot select a query snapshot");
     if (cursor && body.querySnapshotId !== undefined && cursor.snapshotId !== body.querySnapshotId) throw new AccessError(400, "Cursor and query snapshot do not match");
     const id = cursor?.snapshotId ?? body.querySnapshotId;
-    const snapshot = await readReverseSnapshot(publicLookupStore, id, identity, fingerprint);
-    compressedJson(request, response, 200, snapshotPage(snapshot, id as string, identity, reverseCursorSecret, { scope: pageScope, pageSize, cursor }), "no-store");
+    const snapshot = await readReverseSnapshot(publicLookupStore, id, identity, fingerprint, selectorFingerprint);
+    if (cursor && cursor.fingerprint !== snapshot.fingerprint) throw new AccessError(409, "Cursor does not match its frozen snapshot");
+    const page = snapshotPage(snapshot, id as string, identity, reverseCursorSecret, { scope: pageScope, pageSize, cursor });
+    if (stream.enabled) stream.emit("complete", page); else compressedJson(request, response, 200, page, "no-store");
     return;
   }
   const seenKeys = new Set<string>();
@@ -3555,13 +3800,17 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
       indexRevision: geometry.indexRevision,
     }];
   });
-  const result = regionSources.length
-    ? await executeRegionQuery(request, { purpose: "download-plan", region: validatedRegion.region, sources: regionSources, limit: queryLimit }, identity, 64)
-    : { sources: [] as Array<Record<string, unknown>>, expiresAt: new Date(Date.now() + 600_000).toISOString() };
-  const sourceUnitResult = await publicSpatialUnits(body.layerIds as string[], order, cells, sourceUnitLimit);
+  stream.emit("progress", { stage: "query", state: "running", nativeUnitIndexRevision: requestNativeVersion() });
+  const regionPromise = (regionSources.length
+    ? executeRegionQuery(request, { purpose: "download-plan", region: validatedRegion.region, sources: regionSources, limit: queryLimit }, identity, 64)
+    : Promise.resolve({ sources: [] as Array<Record<string, unknown>>, expiresAt: new Date(Date.now() + 600_000).toISOString() })).then(result => { stream.emit("progress", { stage: "coverage", state: "completed" }); return result; });
+  const nativePromise = publicSpatialUnits(body.layerIds as string[], order, cells, sourceUnitLimit, (layerId, units) => {
+    stream.emit("progress", { stage: "native", layerId, state: "completed", total: units.length });
+    if (!preview && units.length) stream.emit("batch", { stage: "native", layerId, units: units.slice(0, 100), total: units.length, provisional: true });
+  });
   const warehouseResults = new Map<string, ReverseLookupResult>();
   const warehouseUnavailableLayers = new Set<string>();
-  if (evidenceStore.configured) {
+  const warehousePromise = (async () => { if (evidenceStore.configured) {
     const lookups = await Promise.all(sourceDescriptors.map(async ({ layer }) => {
       const layerId = layer.layerId;
       try {
@@ -3610,7 +3859,8 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
       }
     }));
     for (const lookup of lookups) if (lookup) warehouseResults.set(lookup[0], lookup[1]);
-  }
+  } stream.emit("progress", { stage: "warehouse", state: "completed", layerCount: warehouseResults.size }); })();
+  const [result, sourceUnitResult] = await Promise.all([regionPromise, nativePromise, warehousePromise]);
 
   const warehouseEdges = [...warehouseResults.values()].flatMap(lookup => lookup.edges);
   const warehouseFiles: Array<Record<string, unknown>> = mergeWarehouseSourceFiles(warehouseResults)
@@ -3734,11 +3984,10 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
       reason: edges.length
         ? `Warehouse file evidence currently covers ${fileIds.length} scanned file${fileIds.length === 1 ? "" : "s"}; the published MOC scope is broader.`
         : "No Warehouse coverage edge intersects the requested cells.",
-      sourceUnits: {
+      sourceUnitSummary: {
         status: edges.length ? "exact" : "unavailable",
         unitKind: "file",
-        units: fileIds.map(fileId => ({ unitId: fileId, unitKind: "file", matchingCells: edges.filter(edge => edge.sourceFileId === fileId).map(edge => edge.ipix) })),
-        totalUnits: fileIds.length,
+        matchedUnitCount: fileIds.length,
         truncated: lookup.truncated,
         notes: "File metadata and coverage edges come from the configured Warehouse evidence indices; this is not a public file download proxy.",
       },
@@ -3773,7 +4022,11 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
       reason: units.length
         ? "Native source-unit footprints intersect the selected HEALPix area; filter-specific file availability is resolved by the survey archive."
         : "The local native-unit index returned no unit for this HEALPix area; this is not evidence that the survey has no data.",
-      sourceUnits: units.map((unit) => ({ unitId: unit.unitId, unitKind: unit.unitKind, matchingCells: unit.matchingCells })),
+      sourceUnitSummary: {
+        unitKind: units[0]?.unitKind ?? layer.sourceUnitIndex?.unitKind ?? "source unit",
+        matchedUnitCount: units.length,
+        truncated: sourceUnitResult.truncated || sourceUnitResult.unavailableLayerIds.includes(layerId),
+      },
       downloads: [],
     }];
   });
@@ -3873,17 +4126,18 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   downloadPlan.warnings.push(...sourceUnitResult.notes, ...retryableWarehouseLayers.map((layerId) => `${layerId}: Warehouse evidence is unavailable; native results from other surveys are retained.`));
   downloadPlan.truncated ||= retryableWarehouseLayers.length > 0;
   const snapshot: ReverseSnapshot = {
-    schemaVersion: 1, identity: preview ? "preview" : identity, fingerprint,
+    schemaVersion: 1, identity: preview ? "preview" : identity, fingerprint, selectorFingerprint,
     expiresAt: new Date(Date.now() + 3600_000).toISOString(),
     response: { available: Boolean(downloadPlan.spatialUnits?.length || downloadPlan.files.length || downloadPlan.entrypoints.length),
       precision: downloadPlan.truncated ? "truncated" : nativeSpatialUnits.some((unit) => unit.precision !== "exact")
         || [...warehouseResults.values()].some((lookup) => lookup.precision !== "exact") || (!nativeSpatialUnits.length && !warehouseEdges.length) ? "estimated" : "exact", requested: { layerIds: body.layerIds, order, cells },
-      sources: responseSources, notes: [...new Set([...sourceUnitResult.notes, ...[...warehouseResults.values()].flatMap((lookup) => lookup.notes),
+      nativeUnitIndexRevision: requestNativeVersion(), sources: responseSources, notes: [...new Set([...sourceUnitResult.notes, ...[...warehouseResults.values()].flatMap((lookup) => lookup.notes),
         ...[...warehouseUnavailableLayers].map((layerId) => `${layerId}: Warehouse evidence is temporarily unavailable.`)])], downloadPlan },
     previewPlan: capReversePreview(downloadPlan).plan,
   };
   const snapshotId = await writeReverseSnapshot(publicLookupStore, snapshot);
-  compressedJson(request, response, 200, snapshotPage(snapshot, snapshotId, identity, reverseCursorSecret, { preview, scope: pageScope, pageSize }), "no-store");
+  const page = snapshotPage(snapshot, snapshotId, identity, reverseCursorSecret, { preview, scope: pageScope, pageSize });
+  if (stream.enabled) stream.emit("complete", page); else compressedJson(request, response, 200, page, "no-store");
   return;
 }
 
@@ -3892,8 +4146,10 @@ async function executeRegionQuery(request:IncomingMessage,body:unknown,managedId
   const state=publicState;
   const task=queryRegion(state,body,async(layerId,order,cells,limit,indexRevision)=>{
     const product=state.records.get(state.coverage.records.get(layerId)!.productId)!;
-    const material=await productGeometry(product,{root:state.catalog.root,files:catalog.manifest.files,publications:[],publicationFile:()=>""});
-    if(material?.facts.indexRevision!==indexRevision)throw new AccessError(409,"Index revision changed");
+    // The approved release has already decoded and verified this immutable MOC.
+    const published = state.snapshot.products.find(record => record.productId === product.productId);
+    if(published?.geometry?.indexRevision!==indexRevision)throw new AccessError(409,"Index revision changed");
+    if (!nativeBindingEnabled(layerId)) return null;
     const index=await sourceUnitsReadyWithin(3000);
     const layer = state.coverage.records.get(layerId);
     return index?await index.match(layerId,order,cells,limit,layer ? {
@@ -3917,9 +4173,42 @@ async function sendProtectedRegionQuery(request:IncomingMessage,response:ServerR
 
 let adminMutationTail: Promise<void> = Promise.resolve();
 const server = http.createServer((request, response) => {
-  void requestRelease.run({ catalog: currentCatalog, state: currentPublicState }, async () => {
+  const context = { catalog: currentCatalog, state: currentPublicState, nativeGroup: nativeUnits?.active, nativeVersion: nativeUnits?.version ?? "imported-baseline" };
+  const runtime = nativeRuntimes.get(context.nativeVersion) ?? { version: context.nativeVersion, group: context.nativeGroup, references: 0, state: "initializing" as const };
+  nativeRuntimes.set(context.nativeVersion, runtime); runtime.references++;
+  if (runtime.retire) { clearTimeout(runtime.retire); runtime.retire = undefined; }
+  void requestRelease.run(context, async () => {
     securityHeaders(response);
     const pathname = requestPath(request);
+    if (pathname === "/api/v1/openapi.json" && request.method === "GET") return json(response, 200, publicOpenApi());
+    if (pathname === "/api/v1/status" && request.method === "GET") {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      const active = nativeUnits?.active;
+      return json(response, 200, { schemaVersion: 1, generatedAt: new Date().toISOString(), status: "available", publicRelease: { id: publicState.snapshot.releaseId, generatedAt: publicState.snapshot.generatedAt, coverageRevision: publicCoverageCatalog().revision, publishedMocLayers: publicState.geometry.size }, nativeIndex: { version: nativeUnits?.version ?? "unavailable", generation: nativeUnits?.generation ?? 0, managed: Boolean(active), verified: Boolean(active?.report.checks.length && active.report.checks.every(check => check.passed)) }, services: [{ id: "survey-healpix", status: publicState.geometry.size ? "available" : "empty", authentication: "public" }, { id: "reverse-lookup", status: nativeRuntime().state, authentication: "region:query", anonymousPreviewLimit: PUBLIC_REVERSE_PREVIEW_LIMIT }, { id: "warehouse-evidence", status: evidenceStore.configured ? "configured" : "unconfigured", authentication: "region:query" }], access: { keyIssuance: "administrator", scopes: ["region:query"], maximumRequestsPerMinute: 30, onlineBilling: false }, documentation: "/api-docs/" });
+    }
+    const surveyHealpix = /^\/api\/v1\/coverage\/surveys\/([a-z0-9-]+)\/healpix$/.exec(pathname);
+    if (surveyHealpix && request.method === "GET") {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      const surveyId = surveyHealpix[1]!;
+      if (isDeniedSurvey(surveyId) || !publicState.index.surveys.some(survey => survey.id === surveyId)) throw new AccessError(404, "Public survey not found");
+      const query = requestQuery(request);
+      if (!query.has("order") || !/^\d+$/.test(query.get("order")!)) throw new AccessError(400, "An integer order is required");
+      const filters = (key: string) => new Set(query.getAll(key).flatMap(value => value.split(",")).filter(Boolean));
+      const releases = filters("releaseId"), products = filters("productId");
+      const layers: HealpixLayer[] = publicState.snapshot.products.flatMap(product => {
+        if (product.content.surveyId !== surveyId || !product.geometry || releases.size && !releases.has(product.content.releaseId) || products.size && !products.has(product.productId)) return [];
+        const moc = publicState.geometry.get(product.geometry.layerId);
+        return moc ? [{ layerId: product.geometry.layerId, productId: product.productId, releaseId: product.content.releaseId, modality: product.content.modality, moc }] : [];
+      });
+      if ([...releases].some(id => !layers.some(layer => layer.releaseId === id)) || [...products].some(id => !layers.some(layer => layer.productId === id))) throw new AccessError(404, "A selected release or product has no published MOC");
+      const reservation = accessGate.begin(`healpix-list:${request.socket.remoteAddress ?? "unknown"}`);
+      try {
+        const result = healpixList({ surveyId, layers, order: Number(query.get("order")), pageSize: query.has("pageSize") ? Number(query.get("pageSize")) : undefined, cursor: query.get("cursor") ?? undefined, revision: query.get("revision") ?? undefined, secret: reverseCursorSecret });
+        compressedJson(request, response, result.status, result, "no-store");
+        reservation.finish(result.status === 200 ? result.pixels.length : 1);
+      } catch (error) { reservation.finish(1); throw error; }
+      return;
+    }
     if (pathname === "/api/v1/access/unlock" && request.method==="POST") return handleDownloadUnlock(request,response);
     if (pathname.startsWith("/api/v1/admin/")) {
       if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181");
@@ -3929,6 +4218,7 @@ const server = http.createServer((request, response) => {
       return mutation;
     }
     if (pathname === "/api/v1/access/region-query" && request.method === "POST") return sendProtectedRegionQuery(request,response);
+    if (pathname === "/api/v1/access/coverage-block" && request.method === "POST") return sendProtectedCoverageBlock(request, response);
     if (pathname === "/api/v1/coverage/overlap" && request.method === "POST") {
       if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
       return sendCoverageOverlap(request, response);
@@ -3939,8 +4229,29 @@ const server = http.createServer((request, response) => {
       const quota = accessGate.begin(`hst-images:${request.socket.remoteAddress ?? "unknown"}`);
       let cost = 1;
       try {
-        const result = await lookupHstImages(body, authorityStore);
-        cost += result.observations.length + result.observations.reduce((sum, observation) => sum + observation.files.length, 0);
+        const { order, cells } = normalizedHstLookupCells(body);
+        const index = await hstObservationIndex();
+        if (!index) throw new AdminHttpError(503, "The locked local HST observation index is unavailable");
+        const local = index.lookup(order, cells, HST_IMAGE_LOOKUP_MAX_OBSERVATIONS);
+        const result = {
+          coordinateFrame: "ICRS" as const,
+          ordering: "NESTED" as const,
+          order,
+          nside: 2 ** order,
+          cells,
+          precision: local.truncated ? "truncated" as const : "estimated" as const,
+          spatialPrecision: "estimated" as const,
+          observations: local.observations.map((observation) => ({ ...observation, files: [] })),
+          errors: [],
+          truncated: local.truncated,
+          queryExhausted: local.queryExhausted,
+          matchedObservationCount: local.matchedObservationCount,
+          excludedWithoutRegion: index.summary.excludedRows,
+          generatedAt: new Date().toISOString(),
+          sourceSnapshotSha256: local.sourceSnapshotSha256,
+          sourceSnapshotCapturedAt: nativeRuntime().capturedAt,
+        };
+        cost += result.observations.length;
         response.setHeader("Cache-Control", "no-store");
         return json(response, 200, result);
       } finally {
@@ -3957,6 +4268,7 @@ const server = http.createServer((request, response) => {
     if (pathname === "/api/v1/coverage/reverse-lookup" && request.method === "POST") return sendCoverageReverseLookup(request, response);
     if (request.method !== "GET" && request.method !== "HEAD") return json(response, 405, { error: "Method not allowed" });
     if (pathname === "/healthz") return json(response, 200, {
+      nativeUnitIndex: { version: nativeUnits?.version ?? "backend-proxy", generation: nativeUnits?.generation ?? null },
       status: "ok",
       service: "astro-survey-atlas-assets",
       version: "1.0.0",
@@ -4146,7 +4458,8 @@ const server = http.createServer((request, response) => {
     if (pathname.startsWith("/api/")) return json(response, 404, { error: "API endpoint not found" });
     return sendStatic(response, pathname);
   }).catch((error) => {
-    if(error instanceof AccessError || error instanceof AdminHttpError){ if(error.statusCode===429)response.setHeader("Retry-After","60");return json(response,error.statusCode,{error:error.message});}
+    if (response.writableEnded || response.destroyed) return;
+    if (!response.headersSent && (error instanceof AccessError || error instanceof AdminHttpError)){ if(error.statusCode===429)response.setHeader("Retry-After",String(Math.ceil((60_000-Date.now()%60_000)/1000)));return json(response,error.statusCode,{error:error.message});}
     console.error(error);
     if (!response.headersSent) {
       const statusCode = error instanceof EvidenceStoreError ? error.statusCode : 500;
@@ -4154,7 +4467,7 @@ const server = http.createServer((request, response) => {
       json(response, statusCode, { error: message });
     }
     else response.destroy();
-  });
+  }).finally(() => { runtime.references--; retireNativeRuntime(runtime); });
 });
 
 server.listen(port, host, () => {
@@ -4171,8 +4484,8 @@ function shutdown(): void {
   const closed = new Promise<void>(resolve => server.close(() => resolve()));
   void (async () => {
     await publicationScheduler?.stop();
-    await sourceUnitsPromise?.then(store => store.terminate()).catch(() => undefined);
     await closed;
+    await Promise.allSettled([...nativeRuntimes.values()].map(closeNativeRuntime));
     await apiManagement?.flush();
     apiManagement?.close();
     await releaseBackendOwnership?.();

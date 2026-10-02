@@ -1,10 +1,29 @@
 # Astro Survey Atlas
 
-Astro Survey Atlas is an open infrastructure project for discovering where
-public astronomical surveys cover the sky and how to reach the official data.
-The `Assets` repository is the public front door: it publishes reviewed survey
-metadata, ICRS/NESTED HEALPix coverage, overlap results, provenance and
-versioned Resource Package v3 releases.
+## Find survey data for your patch of sky
+
+Load Euclid, DESI, Legacy Surveys and HST on one sky. Compare releases and
+modalities, inspect overlap, find the native Tile, brick, target or observation
+links, and export the same results as a JSON/CSV source manifest. HSC-SSP also
+provides its existing tract/patch adapter.
+
+**[Open Sky Atlas](https://astro.assets.72602.space/atlas/)** ·
+[Browse surveys](https://astro.assets.72602.space/surveys/) ·
+[Explore the API](https://astro.assets.72602.space/api-docs/)
+
+1. Open the survey layers and choose releases and products. An ordinary
+   HEALPix click lists the covering releases and modalities.
+2. Press **G** to compare survey overlap, then click a connected component.
+   Lookup uses the whole component within 4,096 cells / 100 square degrees;
+   a larger component needs an explicitly smaller region.
+3. Inspect the native unit IDs, modality, actual order, precision and source
+   links. Export the displayed results as JSON or CSV. Anonymous preview is
+   limited; full lookup, continued browsing and complete export require a
+   `region:query` API Key. Source archives apply their own access policies.
+
+Assets publishes reviewed survey metadata, ICRS/NESTED HEALPix coverage,
+overlap, provenance and versioned Resource Package v3 releases. The public
+HEALPix API provides another way to obtain published cells at supported orders.
 
 Assets never downloads scientific data on users’ behalf. Its downloadable
 JSON/CSV **download plan** lists the surveys, Tile/block/file identities,
@@ -13,11 +32,27 @@ contains no scientific data. Users obtain that data from the source. Known
 source evidence remains useful without a download link. See the
 [coverage workflow](docs/coverage-workflow.md) for the scope and precision rules.
 
+The current native mappings have explicit source limits:
+
+| Survey | Native units and access | Captured scope |
+| --- | --- | --- |
+| Euclid | Q1 Tile IDs and ESA product URIs; ERO target/package links | Q1 contains 2,908 BGSUB metadata rows / 352 Tiles. ERO target extents are estimated and have no verified Tile roster. |
+| DESI DR1/EDR | Estimated Tile candidates and official directories | Circular focal-plane matches do not establish target-level spectral coverage or a complete science-file inventory. |
+| Legacy Surveys | Release-specific bricks and candidate product URIs | DR10 South covers the official 366,912-member roster; northern imaging retains DR9 North identity. Candidate URIs still require per-file verification. |
+| HST | Observation IDs, original `s_region` and MAST entrypoints | A locked local CAOM snapshot supplies the mapping. Eighteen unresolved-frame rows remain excluded; MAST provides current products and source access policy. |
+
+HSC-SSP's existing PDR2/PDR3 tract/patch adapter links to the corresponding
+DAS Search, which requires an account; a match does not prove a file exists.
+Coverage, native units and scanned file evidence retain separate precision
+and completeness. If a real query is missing or unclear,
+[open an Assets issue](https://github.com/Astro-Survey-Atlas/Assets/issues)
+with the survey, release, product and a region you can share publicly.
+
 This repository is one part of the [Astro Survey Atlas organization](https://github.com/Astro-Survey-Atlas):
 
 | Project | Role | Start here |
 | --- | --- | --- |
-| [Assets](https://github.com/Astro-Survey-Atlas/Assets) | Public survey directory, coverage maps, MOCs, overlap and release artifacts | [Live directory](https://astro.assets.dev.72602.space:32443/surveys/) |
+| [Assets](https://github.com/Astro-Survey-Atlas/Assets) | Public survey directory, coverage maps, MOCs, overlap and release artifacts | [Live directory](https://astro.assets.72602.space/surveys/) |
 | [Warehouse](https://github.com/Astro-Survey-Atlas/Warehouse) | Scanner, ScanPlan/ScanRequest execution, current file/coverage indices and evidence | [Warehouse README](https://github.com/Astro-Survey-Atlas/Warehouse) |
 | [Workspace](https://github.com/Astro-Survey-Atlas/Workspace) | User assets, connectors, local workflows, user MOCs and private exploration | [Workspace README](https://github.com/Astro-Survey-Atlas/Workspace) |
 
@@ -28,6 +63,11 @@ site and a single write-owning backend with independent release caches and a
 durable publication queue. Reviewed product versions are published incrementally;
 website verification completes publication. Full release archives are for export
 or restore. Warehouse execution status alone never grants public visibility.
+
+The control room also manages official native-unit metadata sources, locked
+snapshots, independent index review, archive, activation and recovery. Queries
+read the approved local Tile/brick/observation mappings. See
+[native unit management](docs/native-unit-management.md).
 
 MOC discovery queries CDS. Assets also implements an optional, explicitly enabled
 LLM enhancement after a complete zero-result CDS response; availability depends
@@ -79,6 +119,10 @@ configured Warehouse endpoint (`ASSETS_WAREHOUSE_ES_URL`).
 - `GET /api/v1/surveys` and `GET /api/v1/products` for reviewed metadata and
   product dossiers.
 - `GET /api/v1/coverage/catalog` and immutable coverage blocks for the sky UI.
+- `GET /api/v1/coverage/surveys/{surveyId}/healpix?order=4` for paginated public
+  lists derived from published native MOCs.
+- `/api-docs/`, `GET /api/v1/openapi.json` and `GET /api/v1/status` for the
+  interactive reference, service availability and authentication scope.
 - `POST /api/v1/coverage/overlap` and `/overlap/details` for common-order
   intersections and connected regions.
 - `POST /api/v1/coverage/reverse-lookup` for bounded file, tile and download
@@ -153,8 +197,8 @@ The service listens on `http://127.0.0.1:4180`. Set
 `ASSETS_WAREHOUSE_ES_URL` when testing Warehouse-backed reverse lookup; the
 static public geometry catalog remains usable without it.
 
-The site has separate entry points for the [project overview](/github/),
-[survey directory](/surveys/) and [integration/SDK status](/sdk/).
+The site has separate entry points for the [project overview](https://astro.assets.72602.space/github/),
+[survey directory](https://astro.assets.72602.space/surveys/) and [integration/SDK status](https://astro.assets.72602.space/sdk/).
 
 中文说明见 [README.cn.md](README.cn.md)。
 

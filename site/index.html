@@ -23,6 +23,7 @@
         <a class="site-nav-link" href="/surveys/" data-i18n="nav.surveys">Survey Directory</a>
         <a class="site-nav-link" href="/releases/" data-i18n="nav.releases">Releases</a>
         <a class="site-nav-link" href="/terms/" data-i18n="nav.terms">Terms</a>
+        <a class="site-nav-link" href="/api-docs/" data-i18n="nav.api">API</a>
         <a class="site-nav-link" href="/sdk/" data-i18n="nav.sdk">SDK</a>
         <a class="site-nav-link" href="/github/" data-i18n="nav.github">GitHub</a>
         <button class="theme-toggle" type="button" data-theme-toggle aria-label="Use light theme" title="Light theme"><i data-lucide="sun"></i></button>
@@ -36,7 +37,7 @@
         <div class="public-hero-copy">
           <p class="public-kicker" data-i18n="home.eyebrow">PUBLIC SKY DATA / OPEN INFRASTRUCTURE</p>
           <h1 id="home-title"><span data-i18n="home.titleLine1">Map the sky.</span><br /><em data-i18n="home.titleLine2">Find the data.</em></h1>
-          <p class="public-hero-lead" data-i18n="home.lead">Astro Survey Atlas turns public survey footprints, HEALPix coverage, source paths and evidence into a dependable starting point for astronomical data work.</p>
+          <p class="public-hero-lead" data-i18n="home.lead">Load Euclid, DESI, Legacy Surveys and HST on one sky. Compare releases and modalities, inspect their overlap, find native Tile, brick and observation links, then export the same results as a JSON or CSV download plan.</p>
           <div class="public-actions">
             <a class="public-button" href="/atlas/"><span data-i18n="home.openAtlas">Open Sky Atlas</span><i data-lucide="arrow-up-right"></i></a>
             <a class="public-button-secondary" href="/surveys/"><span data-i18n="home.directory">Browse surveys</span><i data-lucide="arrow-right"></i></a>
@@ -58,43 +59,43 @@
         <div class="public-section-heading">
           <p class="public-kicker" data-i18n="home.capabilitiesKicker">A SPATIAL INDEX FOR REAL ARCHIVES</p>
           <h2 id="capabilities-title" data-i18n="home.capabilitiesTitle">The public front door to survey data.</h2>
-          <p data-i18n="home.capabilitiesLead">Use the same spatial language to compare releases, trace coverage, and move from a sky cell to the official archive.</p>
+          <p data-i18n="home.capabilitiesLead">From a selected sky region to releases, modalities and source-supported access links. Each result keeps its actual order, precision and inventory limits.</p>
         </div>
         <div class="public-feature-grid">
           <article class="public-feature">
             <div class="public-feature-icon"><i data-lucide="telescope"></i></div>
             <h3 data-i18n="home.coverageTitle">Survey coverage</h3>
-            <p data-i18n="home.coverageBody">Browse mission releases and see which products have verified, publishable HEALPix footprints.</p>
+            <p data-i18n="home.coverageBody">Select a HEALPix cell to see covering releases and modalities; combine surveys to explore connected overlap regions.</p>
             <a href="/surveys/"><span data-i18n="home.coverageLink">Explore the directory</span> <i data-lucide="arrow-up-right"></i></a>
           </article>
           <article class="public-feature">
             <div class="public-feature-icon"><i data-lucide="grid-2x2"></i></div>
             <h3 data-i18n="home.mocTitle">MOC and HEALPix</h3>
-            <p data-i18n="home.mocBody">Read actual orders, coordinate frames, coverage roles and precision without guessing from a preview.</p>
+            <p data-i18n="home.mocBody">Intersect selected products at their highest shared supported order, then inspect each connected component and its precision.</p>
             <a href="/atlas/"><span data-i18n="home.mocLink">Inspect the sky</span> <i data-lucide="arrow-up-right"></i></a>
           </article>
           <article class="public-feature">
             <div class="public-feature-icon"><i data-lucide="locate-fixed"></i></div>
             <h3 data-i18n="home.reverseTitle">Reverse lookup</h3>
-            <p data-i18n="home.reverseBody">Start from a selected cell or region and find matching files, tiles and official data entry points.</p>
+            <p data-i18n="home.reverseBody">Find native Tile, brick and HST observation identities, footprints and clickable official archive links for the full selected component.</p>
             <a href="/atlas/"><span data-i18n="home.reverseLink">Find source paths</span> <i data-lucide="arrow-up-right"></i></a>
           </article>
           <article class="public-feature">
             <div class="public-feature-icon"><i data-lucide="file-check-2"></i></div>
             <h3 data-i18n="home.evidenceTitle">Evidence attached</h3>
-            <p data-i18n="home.evidenceBody">Keep source snapshots, derivation notes, output hashes and release provenance next to each result.</p>
-            <a href="/terms/"><span data-i18n="home.evidenceLink">Read the terms</span> <i data-lucide="arrow-up-right"></i></a>
+            <p data-i18n="home.evidenceBody">Export the displayed source manifest as JSON or CSV, keeping every URI, identity and precision note. Obtain scientific data directly from its source.</p>
+            <a href="/terms/"><span data-i18n="home.evidenceLink">Understand manifests</span> <i data-lucide="arrow-up-right"></i></a>
           </article>
           <article class="public-feature">
             <div class="public-feature-icon"><i data-lucide="database"></i></div>
             <h3 data-i18n="home.warehouseTitle">Warehouse ready</h3>
-            <p data-i18n="home.warehouseBody">Connect public coverage to bounded scan tasks while execution and evidence remain in Warehouse.</p>
-            <a href="/sdk/"><span data-i18n="home.warehouseLink">View the contracts</span> <i data-lucide="arrow-up-right"></i></a>
+            <p data-i18n="home.warehouseBody">Request a survey’s published HEALPix list at a supported order. Use an API Key for full region lookup and manifest pagination.</p>
+            <a href="/api-docs/"><span data-i18n="home.warehouseLink">Explore the API</span> <i data-lucide="arrow-up-right"></i></a>
           </article>
           <article class="public-feature">
             <div class="public-feature-icon"><i data-lucide="panels-top-left"></i></div>
             <h3 data-i18n="home.workspaceTitle">Workspace handoff</h3>
-            <p data-i18n="home.workspaceBody">Install verified packages, combine public and private assets, and keep user data in its own plane.</p>
+            <p data-i18n="home.workspaceBody">Sync public layers into Workspace and intersect them with locally scanned CSST coverage. Public links come from Assets via an API Key; private file directories stay in Workspace.</p>
             <a href="https://github.com/Astro-Survey-Atlas/Workspace" target="_blank" rel="noreferrer"><span data-i18n="home.workspaceLink">Open Workspace</span> <i data-lucide="external-link"></i></a>
           </article>
         </div>
@@ -149,21 +150,21 @@
                 <div class="workflow-stage-route workflow-stage-route-three"><b>03</b><span>SOURCE</span></div>
               </div>
               <div class="workflow-media-footer">
-                <span data-i18n="home.workflowMediaPlaceholder">Operation demo slot — add a video or GIF</span>
-                <code>MEDIA SLOT</code>
+                <span data-i18n="home.workflowMediaPlaceholder">Select coverage, inspect overlap, follow source links</span>
+                <code>ICRS · NESTED</code>
               </div>
             </div>
-            <figcaption id="workflow-media-caption" data-i18n="home.workflowMediaCaption">A reserved 16:9 frame for a short Atlas walkthrough.</figcaption>
+            <figcaption id="workflow-media-caption" data-i18n="home.workflowMediaCaption">Workflow illustration. Open the Atlas to query actual survey coverage.</figcaption>
           </figure>
 
           <div class="workflow-intro">
             <p class="public-kicker" data-i18n="home.workflowKicker">OPERATE THE ATLAS</p>
             <h2 id="workflow-title" data-i18n="home.workflowTitle">From a sky cell to a source you can use.</h2>
-            <p class="workflow-lead" data-i18n="home.workflowLead">The public flow stays short: inspect a real footprint, compare the overlap, then follow the evidence to its source file or official archive.</p>
+            <p class="workflow-lead" data-i18n="home.workflowLead">Select releases and modalities, click an overlap component, then inspect native source links and export the matching JSON/CSV plan.</p>
             <ol class="workflow-steps">
               <li class="workflow-step"><span class="workflow-step-index">01</span><div><strong data-i18n="home.workflowStep1Title">Select coverage</strong><p data-i18n="home.workflowStep1Body">Choose a survey and focus the cells that matter.</p></div></li>
               <li class="workflow-step"><span class="workflow-step-index">02</span><div><strong data-i18n="home.workflowStep2Title">Compare the sky</strong><p data-i18n="home.workflowStep2Body">Inspect shared order, connected regions and precision.</p></div></li>
-              <li class="workflow-step"><span class="workflow-step-index">03</span><div><strong data-i18n="home.workflowStep3Title">Trace the evidence</strong><p data-i18n="home.workflowStep3Body">Open the verified file, package or official entry point.</p></div></li>
+              <li class="workflow-step"><span class="workflow-step-index">03</span><div><strong data-i18n="home.workflowStep3Title">Trace the evidence</strong><p data-i18n="home.workflowStep3Body">Inspect native identities and source links, then export the displayed manifest.</p></div></li>
             </ol>
             <div class="workflow-actions public-actions">
               <a class="public-button github-star-button" href="https://github.com/Astro-Survey-Atlas/Assets" target="_blank" rel="noreferrer"><i data-lucide="star"></i><span data-i18n="home.githubStar">Star Assets on GitHub</span><i data-lucide="external-link"></i></a>

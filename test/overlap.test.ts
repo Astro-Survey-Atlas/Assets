@@ -37,16 +37,17 @@ function sourceUnitStore(): Promise<SourceUnitStore> {
   return sourceUnitStorePromise;
 }
 
-test("overlap uses the highest order shared by surveys and unions products within each survey", () => {
+test("overlap preserves an O4 product when unioning it with O8 products in the same survey", () => {
   const layers = [
     layer("a-one", "a", { 4: [100], 8: [200] }),
     layer("a-two", "a", { 4: [101] }),
     layer("b-one", "b", { 4: [100, 101], 8: [200] }),
   ];
-  assert.equal(highestCommonOrder(layers), 8);
+  assert.equal(highestCommonOrder(layers), 4);
   assert.deepEqual(overlapForLayers(layers, ["a", "b"], 4)?.pixels, [100, 101]);
   assert.deepEqual(overlapForLayers(layers, ["a", "b"], 7)?.pixels, [100, 101]);
-  assert.deepEqual(overlapForLayers(layers, ["a", "b"], 8)?.pixels, [200]);
+  assert.deepEqual(overlapForLayers(layers, ["a", "b"], 8)?.pixels, [100, 101]);
+  assert.equal(overlapForLayers(layers, ["a", "b"], 8)?.commonOrder, 4);
 });
 
 test("overlap respects selected product modalities within each survey", () => {
@@ -64,9 +65,9 @@ test("overlap respects selected product modalities within each survey", () => {
 test("overlap falls back to a lower real common order when the highest order has no shared cells", () => {
   const layers = [
     layer("euclid-o4", "euclid", { 4: [637], 8: [548_923] }),
-    layer("euclid-o8", "euclid", { 8: [548_923] }),
+    layer("euclid-o8", "euclid", { 4: [], 8: [548_923] }),
     layer("sdss-o4", "sdss", { 4: [637], 8: [283_791] }),
-    layer("sdss-o8", "sdss", { 8: [283_791] }),
+    layer("sdss-o8", "sdss", { 4: [], 8: [283_791] }),
   ];
   const result = overlapForLayers(layers, ["euclid", "sdss"]);
   assert.equal(result?.commonOrder, 4);
@@ -198,7 +199,11 @@ test("Legacy DR10 matches derive Coadd and Tractor URIs from one brick identity"
 
   assert.ok(coaddBrick);
   assert.ok(tractorBrick);
-  assert.match(coaddBrick.downloadUrl, /\/dr10\/south\/coadd\/149\/1498p020\/$/);
+  assert.match(coaddBrick.downloadUrl, /\/dr10\/south\/coadd\/149\/1498p020\/legacysurvey-1498p020-image-[griz]\.fits\.fz$/);
+  assert.ok(coaddBrick.accessUris?.length);
+  assert.equal(coaddBrick.downloadUrl, coaddBrick.accessUris?.[0]?.url);
+  assert.ok(coaddBrick.accessUris?.every(({ fileName, url }) => typeof fileName === "string"
+    && /image-[griz]\.fits\.fz$/.test(fileName) && url.endsWith(`/${fileName}`)));
   assert.match(tractorBrick.downloadUrl, /\/dr10\/south\/tractor\/149\/tractor-1498p020\.fits$/);
 });
 

@@ -67,6 +67,11 @@ export interface UploadProcessResult {
   quarantined: string[];
 }
 
+export interface UploadProcessOptions {
+  /** Bound uploads so the caller can acknowledge completed snapshots promptly. */
+  maxUploads?: number;
+}
+
 const MANIFEST_FILE = "manifest.json";
 const READY_FILE = ".ready";
 const LEASE_FILE = ".lease";
@@ -166,6 +171,7 @@ export class UploadSpool {
   readonly #leaseMs: number;
   readonly #retryBaseMs: number;
   readonly #retryMaxMs: number;
+  #lastSnapshotNamespace = "";
   readonly #now: () => Date;
 
   constructor(options: UploadSpoolOptions) {
@@ -283,10 +289,14 @@ export class UploadSpool {
     }
   }
 
-  async processPending(): Promise<UploadProcessResult> {
+  async processPending(options: UploadProcessOptions = {}): Promise<UploadProcessResult> {
+    if (options.maxUploads !== undefined && (!Number.isSafeInteger(options.maxUploads) || options.maxUploads < 1)) {
+      throw new Error("Upload batch size must be a positive safe integer");
+    }
     await this.initialize();
     const result: UploadProcessResult = { scanned: 0, uploaded: [], uploadedManifests: [], retryable: [], conflicts: [], skipped: [], quarantined: [] };
     const entries = await readdir(this.jobsRoot, { withFileTypes: true });
+    let pending: UploadJobManifest[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
       const uploadId = entry.name;
@@ -305,6 +315,37 @@ export class UploadSpool {
         result.skipped.push(uploadId);
         continue;
       }
+      pending.push(manifest);
+    }
+    if (options.maxUploads !== undefined) {
+      // A snapshot contains the complete namespace state, including its audit
+      // history. Sync its newest generation before replaying older snapshots;
+      // every older job remains durable and is still uploaded in later batches.
+      const latest = new Map<string, UploadJobManifest>();
+      for (const manifest of pending) {
+        const namespace = manifest.metadata?.stateNamespace;
+        const generation = Number(manifest.metadata?.stateGeneration);
+        if (manifest.kind !== "state-snapshot" || !namespace || !Number.isSafeInteger(generation) || generation < 1) continue;
+        if (manifest.status === "conflict" || (manifest.nextAttemptAt && Date.parse(manifest.nextAttemptAt) > this.#now().getTime())) continue;
+        const previous = latest.get(namespace);
+        if (!previous || generation > Number(previous.metadata?.stateGeneration)) latest.set(namespace, manifest);
+      }
+      const newest = [...latest.entries()].sort(([left], [right]) => left.localeCompare(right));
+      const nextNamespace = newest.findIndex(([namespace]) => namespace > this.#lastSnapshotNamespace);
+      const start = Math.max(0, nextNamespace);
+      const preferred = new Set(newest.map(([, manifest]) => manifest.uploadId));
+      pending = [
+        ...[...newest.slice(start), ...newest.slice(0, start)].map(([, manifest]) => manifest),
+        ...pending.filter(manifest => !preferred.has(manifest.uploadId)),
+      ];
+    }
+    let attempted = 0;
+    for (const manifest of pending) {
+      const uploadId = manifest.uploadId;
+      if (attempted >= (options.maxUploads ?? Infinity)) {
+        result.skipped.push(uploadId);
+        continue;
+      }
       let outcome: UploadProcessOutcome;
       try {
         outcome = await this.processJob(uploadId);
@@ -312,6 +353,10 @@ export class UploadSpool {
         if (await this.quarantineJob(uploadId)) result.quarantined.push(uploadId);
         else result.skipped.push(uploadId);
         continue;
+      }
+      if (outcome !== "skipped") {
+        attempted += 1;
+        if (manifest.kind === "state-snapshot" && manifest.metadata?.stateNamespace) this.#lastSnapshotNamespace = manifest.metadata.stateNamespace;
       }
       if (outcome === "uploaded") {
         result.uploaded.push(uploadId);

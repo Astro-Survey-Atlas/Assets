@@ -86,7 +86,8 @@ The release pages and metadata endpoints were checked with unauthenticated `HEAD
 | DR1 | `dr1/decals-bricks.fits` (HTTP 200) | The same table has `has_image_g/r/z` and `has_catalog` flags | Catalog source link corrected to this table; it previously named a `survey-bricks.fits.gz` URL that returns 404. |
 | DR2 | `dr2/decals-bricks.fits` (HTTP 200) | `dr2/decals-bricks-dr2.fits` (HTTP 200) | Catalog geometry link corrected to the all-sky table; the release page says the DR2-suffixed table describes release content. |
 | DR3-DR7 | `drN/survey-bricks.fits.gz` (HTTP 200) | `drN/survey-bricks-drN.fits.gz` (HTTP 200) | Keep the all-sky grid separate from the release-specific brick roster. |
-| DR8-DR10 | `drN/survey-bricks.fits.gz` (HTTP 200) | `drN/north|south/survey-bricks-drN-north|south.fits.gz` (HTTP 200) | North and South are separate region rosters, not per-file inventories. This local matcher has both regions for DR8/DR9 and South only for DR10. |
+| DR8-DR9 | `drN/survey-bricks.fits.gz` (HTTP 200) | `drN/north|south/survey-bricks-drN-north|south.fits.gz` (HTTP 200) | North and South are separate region rosters, not per-file inventories. The local matcher has both regions for these releases. |
+| DR10 | `dr10/survey-bricks.fits.gz` (HTTP 200) | `dr10/south/survey-bricks-dr10-south.fits.gz` (HTTP 200) | The official files page lists DR10 Coadd and Tractor trees under `south/` only. The checked North roster and `north/coadd/` paths return 404; no DR10 North member roster was found. |
 
 The DR1 files page says its brick table includes the image-band and catalog membership flags. The DR2 page distinguishes the geometric grid from its release summary. DR3-DR9 roster schemas were inspected; their rows provide release-member brick candidates and exposure summaries, not exact per-file existence. The DR10 roster remains a separate South-only membership summary.
 
@@ -168,9 +169,13 @@ geometry; the boundaries present in DR9 South match as well. Runtime lookup
 intersects the selected full HEALPix cell with the brick polygon. DR8/DR9
 results preserve north/ and south/ in their generated URI paths, including
 both region paths when one native brick ID is listed in both rosters. All
-matches remain estimated and rule-derived URIs unverified. The snapshots have
-not been added to Git or the browser bundle, synced to Dev evidence storage,
-or used to generate or publish a MOC.
+matches remain estimated. A representative DR9 North brick, `1500p292`, was
+cross-checked against the official `ls_dr9.bricks_n` table (NEXP_g/r > 0,
+NEXP_z = 0); its North Tractor URI and g/r Coadd URIs returned HTTP 200, while
+the z Coadd URI returned HTTP 404. This validates the path rule and band
+filter for that brick only; all other generated URIs remain unverified. The
+snapshots have not been added to Git or the browser bundle, synced to Dev
+evidence storage, or used to generate or publish a MOC.
 
 ## Source pages
 
@@ -237,7 +242,7 @@ The [DR10 files page](https://www.legacysurvey.org/dr10/files/) defines `survey-
 - [`survey-bricks.fits.gz`](https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/survey-bricks.fits.gz)
 - [`south/survey-bricks-dr10-south.fits.gz`](https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south/survey-bricks-dr10-south.fits.gz)
 
-Both URLs returned HTTP 200 to `HEAD` on 2026-09-30; the observed compressed lengths were 13,147,987 and 104,480,980 bytes respectively. No file content was downloaded. The distinct `south/` release summary is the source-side brick membership table for DR10 South, rather than a duplicate of the all-sky geometry.
+Both URLs returned HTTP 200 to `HEAD` on 2026-09-30; the observed compressed lengths were 13,147,987 and 104,480,980 bytes respectively. The South summary was then captured as source evidence at `source-units/legacy-survey-bricks-dr10-south.fits.gz`, SHA-256 `863e5ded7a4aae7abcb5df76f322f35cf89945483715ff6d1874c88f5a072d9a`. It has 366,912 rows and includes the complete brick bounds and `NEXP_g/r/i/z` columns. On 2026-10-01, the official DR10 files page still listed Coadd and Tractor products only under `south/`; both `north/survey-bricks-dr10-north.fits.gz` and `north/coadd/` returned 404. No North release roster or North file tree was found. The all-sky `survey-bricks.fits.gz` remains geometry only and must not be treated as DR10 North membership.
 
 The summary schema documented by the same page is:
 
@@ -252,10 +257,12 @@ The summary schema documented by the same page is:
 
 The release documentation describes `nexp_*` and `nexphist_*` in the **unique primary area**, not over every pixel in the full brick image. The table has no coadd/Tractor per-file URI column and no per-product file-presence flag.
 
+The captured summary reports positive `NEXP` values for 349,806 g-, 325,134 r-, 289,484 i- and 336,611 z-band rows; 3,584 rows have zero exposure in all four optical bands. Runtime coadd matching uses only positive values in the requested roster row to select band-specific candidate URIs. A positive value is not evidence that the individual coadd or Tractor file exists.
+
 ### Filtering the geometric grid to DR10 South
 
 For a query HEALPix cell, first find candidate `BRICKNAME`s by intersecting the full cell geometry with the all-sky brick boundaries (`RA1`, `RA2`, `DEC1`, `DEC2` in `survey-bricks.fits.gz`). Then inner-join those candidates by brick name to the `brickname` values present in `south/survey-bricks-dr10-south.fits.gz`. This filters geometric candidates to bricks represented in the DR10 South release summary without deriving any new brick IDs.
 
 For an optical band-specific *exposure-evidence* refinement, use that band's `nexp_*` and `nexphist_*`; in particular, positive bins in `nexphist_<band>` show that pixels in the unique `BRICK_PRIMARY` region have that band exposure. Because these are summary statistics rather than exact file inventory, they must not be represented as proof that a particular image/weight/mask/Tractor file exists. Use the official path rule plus a source-side file check or file inventory for exact product presence. A zero-exposure statistic also says nothing about pixels in the brick's overlap area outside `BRICK_PRIMARY`.
 
-The official source therefore supports a useful two-level local computation: geometric HEALPix-to-brick intersection followed by a release-specific join against DR10 South brick membership. The geometry table alone is insufficient for DR10 product availability; the south summary fixes that gap at brick level but does not replace per-file verification.
+The official source therefore supports a two-level local computation: geometric HEALPix-to-brick intersection followed by a release-specific join against DR10 South membership, including band-specific exposure evidence. In the Abell 2390 O8 cells `[202250,202272]`, the local matcher returns 11 South bricks each for Coadd and Tractor. It emits direct per-band candidate URLs, for example all four g/r/i/z URI rules for `3281p177`. Only sampled source checks establish file presence; other candidates remain unverified. The geometry table alone is insufficient for DR10 availability, and the South summary does not replace per-file verification.

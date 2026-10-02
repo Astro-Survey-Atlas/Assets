@@ -143,14 +143,7 @@ function connectedComponents(pixels: number[], order: number): number[][] {
 }
 
 export function highestCommonOrder(layers: CoverageCellLayer[]): number | null {
-  if (!layers.length) return null;
-  const bySurvey = new Map<string, Set<number>>();
-  layers.forEach((layer) => {
-    const orders = bySurvey.get(layer.surveyId) ?? new Set<number>();
-    layer.availableOrders.forEach((order) => orders.add(order));
-    bySurvey.set(layer.surveyId, orders);
-  });
-  const common = [...bySurvey.values()].reduce<number[]>((orders, available, index) => index === 0 ? [...available] : orders.filter((order) => available.has(order)), []);
+  const common = commonOrders(layers);
   return common.length ? Math.max(...common) : null;
 }
 
@@ -158,8 +151,10 @@ function commonOrders(layers: CoverageCellLayer[]): number[] {
   if (!layers.length) return [];
   const bySurvey = new Map<string, Set<number>>();
   layers.forEach((layer) => {
-    const orders = bySurvey.get(layer.surveyId) ?? new Set<number>();
-    layer.availableOrders.forEach((order) => orders.add(order));
+    const previous = bySurvey.get(layer.surveyId);
+    // Taking the union of orders would drop a selected O4-only product when
+    // another product supports O8. Union geometry only where both are supplied.
+    const orders = new Set(previous ? layer.availableOrders.filter((order) => previous.has(order)) : layer.availableOrders);
     bySurvey.set(layer.surveyId, orders);
   });
   return [...bySurvey.values()]

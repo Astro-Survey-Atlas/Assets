@@ -5,7 +5,7 @@ import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import path from "node:path";
 
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { AbortMultipartUploadCommand, CompleteMultipartUploadCommand, CreateMultipartUploadCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client, UploadPartCommand, type CompletedPart } from "@aws-sdk/client-s3";
 
 export interface ArtifactObject {
   key: string;
@@ -27,6 +27,9 @@ export interface ArtifactPutOptions {
   ifMatch?: string;
   /** Use `*` to create the object only when it does not already exist. */
   ifNoneMatch?: string;
+  /** Bound each large evidence upload request to one 5 MiB part. */
+  multipart?: boolean;
+  onProgress?: (uploadedBytes: number, totalBytes: number) => void;
 }
 
 export interface ByteRange {
@@ -415,7 +418,9 @@ export class S3ArtifactStore implements ArtifactStore {
     const existing = await this.head(logical);
     if (existing) return this.reconcileExisting(logical, existing, Buffer.alloc(0), details.sha256, details.sizeBytes);
     try {
-      const result = await this.#client.send(new PutObjectCommand({
+      const result = options.multipart && details.sizeBytes >= 5 * 1024 * 1024
+        ? await this.#uploadFileMultipart(logical, filePath, details, options)
+        : await this.#client.send(new PutObjectCommand({
         Bucket: this.bucket,
         Key: this.physicalKey(logical),
         Body: createReadStream(filePath),
@@ -432,6 +437,53 @@ export class S3ArtifactStore implements ArtifactStore {
       const raced = await this.head(logical);
       if (!raced) throw new ArtifactStoreError(`S3 rejected immutable file PUT but the object is not readable: ${logical}`);
       return this.reconcileExisting(logical, raced, Buffer.alloc(0), details.sha256, details.sizeBytes);
+    }
+  }
+
+  async #uploadFileMultipart(logical: string, filePath: string, details: { sha256: string; sizeBytes: number }, options: ArtifactPutOptions): Promise<{ ETag?: string }> {
+    const key = this.physicalKey(logical);
+    const created = await this.#client.send(new CreateMultipartUploadCommand({
+      Bucket: this.bucket, Key: key,
+      ...(options.contentType ? { ContentType: options.contentType } : {}),
+      ...(options.cacheControl ? { CacheControl: options.cacheControl } : {}),
+      Metadata: { ...(options.metadata ?? {}), sha256: details.sha256 },
+    }));
+    const uploadId = created.UploadId;
+    if (!uploadId) throw new ArtifactStoreError("S3 did not return a multipart upload identity");
+    let completed = false;
+    const parts: CompletedPart[] = [];
+    let handle: Awaited<ReturnType<typeof open>> | undefined;
+    try {
+      handle = await open(filePath, "r");
+      const partSize = 5 * 1024 * 1024;
+      for (let start = 0; start < details.sizeBytes; start += partSize) {
+        const bytes = Buffer.alloc(Math.min(partSize, details.sizeBytes - start));
+        let offset = 0;
+        while (offset < bytes.length) {
+          const read = await handle.read(bytes, offset, bytes.length - offset, start + offset);
+          if (!read.bytesRead) throw new ArtifactStoreError("Native evidence changed during multipart upload", 409);
+          offset += read.bytesRead;
+        }
+        const partNumber = parts.length + 1;
+        const part = await this.#client.send(new UploadPartCommand({ Bucket: this.bucket, Key: key, UploadId: uploadId,
+          PartNumber: partNumber, Body: bytes, ContentLength: bytes.length }));
+        if (!part.ETag) throw new ArtifactStoreError("S3 did not confirm the uploaded part");
+        parts.push({ ETag: part.ETag, PartNumber: partNumber,
+          ...(part.ChecksumCRC32 ? { ChecksumCRC32: part.ChecksumCRC32 } : {}),
+          ...(part.ChecksumCRC32C ? { ChecksumCRC32C: part.ChecksumCRC32C } : {}),
+          ...(part.ChecksumCRC64NVME ? { ChecksumCRC64NVME: part.ChecksumCRC64NVME } : {}),
+          ...(part.ChecksumSHA1 ? { ChecksumSHA1: part.ChecksumSHA1 } : {}),
+          ...(part.ChecksumSHA256 ? { ChecksumSHA256: part.ChecksumSHA256 } : {}),
+        });
+        options.onProgress?.(start + bytes.length, details.sizeBytes);
+      }
+      const result = await this.#client.send(new CompleteMultipartUploadCommand({ Bucket: this.bucket, Key: key, UploadId: uploadId,
+        MultipartUpload: { Parts: parts }, IfNoneMatch: "*" }));
+      completed = true;
+      return result;
+    } finally {
+      try { await handle?.close(); }
+      finally { if (!completed) await this.#client.send(new AbortMultipartUploadCommand({ Bucket: this.bucket, Key: key, UploadId: uploadId })).catch(() => undefined); }
     }
   }
 

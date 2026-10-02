@@ -26,7 +26,9 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   require a smaller region; the Assets cell inspector may use only the clicked
   cell and must label that scope explicitly. Never silently truncate cells.
 - Within a survey, union the selected release/product layers; intersect those
-  survey unions at their highest shared real order. An empty selected survey
+  survey unions at the highest real order supported by every selected product.
+  An O4-only product limits the union to O4 even alongside an O8 product; it
+  must not disappear from the selected survey. An empty selected survey
   stays in the intersection. No preview is promoted to finer coverage.
 - A recipe mode such as `tile-table` describes how an input is read, not the
   native unit type. `sourceUnitKind` declares the identity returned by lookup:
@@ -161,12 +163,21 @@ Current evidence limits are:
   not a verified instrument/filter footprint. Preserve every official matching
   Stack/Catalog package URI and the source snapshot hash; do not inspect the
   package's scientific contents or infer an ERO Tile ID.
-- HST lookup uses public MAST observation metadata and `s_region`, bound to
-  each selected observation/instrument/filter layer. It returns observation
-  IDs and MAST access links, retains unsupported footprints as excluded partial
-  evidence, and does not expand science products. ERO/HST metadata queries have
-  a 45-second overall deadline; timeouts remain incomplete results. Hashed raw
-  metadata evidence is stored only in Assets.
+- HST overlap reverse lookup uses the SHA-locked public MAST CAOM metadata
+  snapshot and its local SQLite footprint index. The index stores order-4
+  candidate buckets, then intersects saved `s_region` values against the
+  selected cells; it returns observation IDs and MAST links without making a
+  request-time MAST query or expanding science products. To keep complex CAOM
+  footprints buildable, regions with more than 4 total polygon vertices use
+  a spherical cap enclosing each polygon for candidate and query-cell
+  matching. The saved original `s_region` remains attached, but this estimated
+  cap match can include nearby false-positive candidates. Snapshot pages and
+  the derived index are evidence on the Assets evidence PVC. Unsupported
+  spatial rows keep results marked incomplete. Both ordinary HST cell lookup
+  and overlap reverse lookup use this snapshot. The HST image-lookup API returns
+  observation identities and MAST entry links; it does not make a request-time
+  query for file-level products. Users follow the MAST link for the current
+  product list and access policy.
 - HSC-SSP PDR2's official Available Data page publishes 11 machine-readable
   tract/patch geometry lists for its DUD and Wide fields. They are captured
   and SHA-256 locked separately from the PDR3 lists. Six PDR2 product
@@ -227,26 +238,25 @@ Current evidence limits are:
   region-specific paths under the native brick identity. All returned matches
   remain `estimated`; the compressed FITS rosters are evidence metadata, not
   object catalogs, science products, MOCs or Warehouse scans.
-- DESI Legacy DR10 `survey-bricks.fits.gz` is captured and SHA-256 locked. A
-  source-unit binding now connects the DR10 color-imaging footprint and the
-  coadd/Tractor product identities to the local brick matcher. Coadd links use
-  the `south/coadd/<prefix>/<brick>/` directory; Tractor links use the flat
-  `south/tractor/<prefix>/tractor-<brick>.fits` file layout. Both remain
-  unverified per brick because `survey-bricks.fits.gz` is a geometric grid,
-  not a file inventory. The official `south/survey-bricks-dr10-south.fits.gz`
-  summary is now SHA-256 locked and joined by `BRICKNAME` to that all-sky
-  geometry. This narrows candidates to bricks listed in DR10 South, but does
-  not prove that every band-specific Coadd or Tractor file exists. Runtime
-  estimated O4 coverage layers expose Coadded imaging and Tractor catalog as
-  selectable source-unit products without generating or replacing a MOC. Their
-  O4 overview marks cells containing brick centers, so it is indicative and
-  not boundary-complete. Reverse lookup still intersects the selected full
-  HEALPix cell against each native brick polygon. The existing color-imaging
-  MOC remains independent.
-  Coadd links point to the
-  documented `south/coadd/<prefix>/<brick>/` directory; Tractor links follow
-  the documented flat `south/tractor/<prefix>/tractor-<brick>.fits` file
-  layout. See the [source access research
+- DESI Legacy DR10 uses the locked all-sky brick grid and the official South
+  release summary, which has 366,912 rows and `NEXP_g/r/i/z` columns. Every
+  South roster member is checked against its all-sky center and bounds; no
+  North roster or North product tree is published on the official DR10 files
+  page; the checked North roster and Coadd paths return 404. A missing DR10
+  brick outside the South roster is therefore an unsupported release region,
+  not evidence that the all-sky grid lookup failed. Northern Legacy coverage
+  must retain its actual release identity, such as DR9 North. Coadd reverse lookup returns only the
+  band-specific files whose corresponding `NEXP` value is positive, under
+  `south/coadd/<AAA>/<brick>/legacysurvey-<brick>-image-<band>.fits.fz`.
+  Tractor candidates use the documented flat
+  `south/tractor/<AAA>/tractor-<brick>.fits` layout. Positive exposure
+  summaries are membership evidence, not per-file existence proof; returned
+  candidates remain estimated. The O4 overview marks cells containing brick
+  centers and is indicative rather than boundary-complete. Full-cell reverse
+  lookup intersects each native brick polygon. The existing color-imaging MOC
+  remains independent. In the Abell 2390 O8 sample `[202250,202272]`, local
+  lookup returned 11 South bricks for both Coadded imaging and Tractor; brick
+  `3281p177` has candidate coadd links for g/r/i/z. See the [source access research
   note](research/native-block-access-uris.md). The live acquired DR10
   color-imaging ProductStore record still declares `modality: catalog` even
   though its MOC provenance identifies image coverage; that public metadata
@@ -293,13 +303,16 @@ joins three pieces of metadata when a region is queried:
    each candidate against the complete selected HEALPix footprint, then
    generates its source-documented URI from the matched native unit ID.
 
-The compressed, hash-locked source rosters live on the evidence PVC. The
-backend builds a normalized SQLite index at
+The compressed, hash-locked source rosters live on the evidence PVC and are
+archived with managed index versions. The installed baseline generic SQLite is
 `derived/source-unit-indexes/native-units.sqlite` beneath the configured source
-unit evidence root. Its build key includes the source lock, layer registry,
-DESI recipes, index implementation sources and schema version. A cache miss
-parses and verifies the locked inputs, writes a staging database and atomically
-renames it; a cache hit reads the derived index without loading those snapshots.
+unit evidence root. The management workflow acquires or imports official
+metadata, builds an isolated candidate, verifies product bindings and real
+lookups, reviews explicit gaps, archives every input/index and activates a
+separate native-index authority pointer. Changed releases use incremental
+SQLite construction; query requests open existing approved databases read-only
+and never cold-build a missing or incompatible index. Build identity records
+the source lock, layer registry, DESI recipes, implementation and schema.
 Shared unit geometry is stored once, while release/product membership is stored
 separately. Legacy DR3-DR9 membership stores region and band masks and recreates
 the documented URI from the native brick ID at query time, rather than
@@ -307,6 +320,15 @@ duplicating full URI strings for every release row. The short-lived builder
 worker exits before the read-only query worker starts. The query loads only
 coarse-cell candidates and then intersects the full requested HEALPix footprint
 with their native geometry.
+
+See [native unit management](native-unit-management.md) for source revisions,
+frozen snapshots, independent review, archive keys, CAS activation and recovery.
+HST observation and ERO target metadata are also acquired and locked through
+this workflow; ordinary lookups do not fetch MAST or ERO metadata. A known HST
+product whose observation is absent from the selected snapshot retains its
+published coverage and official source identity, with an explicit accepted gap
+and entrypoint-only native lookup. A coarse candidate bucket cannot substitute
+for an intersection with the original footprint in verification samples.
 
 The Legacy DR3-DR9 inputs total about 218 MiB compressed across about 1.35
 million release/region rows; they contain IDs, membership flags, centers and
@@ -407,8 +429,8 @@ filename and ESA repository or Data Labs paths supply product access metadata.
 Those paths are not assumed to be anonymous direct-download URLs. DESI tile
 products use the source Tile identity and footprint; redrock products use their
 native order-6 HEALPix partition, which is not a Tile. HST uses a MAST
-observation ID as its unit identity, intersects the observation's `s_region`,
-and joins products to that observation. A Tile ID, product footprint, HEALPix
+observation ID as its unit identity, looks up the saved observation `s_region`
+in the local snapshot index, and links to the MAST observation page. A Tile ID, product footprint, HEALPix
 file partition and observation region are not interchangeable identities. A
 survey-wide MOC can filter candidate space, but it cannot replace the
 native-unit identity and footprint source.
@@ -467,7 +489,11 @@ CSST files, scans, MOCs, cell mappings and directory indexes stay in Workspace.
 They never enter an Assets request, evidence object, package or release. Private
 reverse lookup returns deduplicated immediate parent directories of matched
 indexed files, preserving their actual order and precision. A scan root is not
-a substitute for a missing file mapping. See the [four-survey MVP scenario](four-survey-mvp.md).
+a substitute for a missing file mapping. Workspace may aggregate matching file
+identities in its private index before resolving parents; any representative
+native cells must be marked `matchingCellsTruncated`, independently from omitted
+parents (`directoriesTruncated`), and retained in JSON/CSV exports. See the
+[four-survey MVP scenario](four-survey-mvp.md).
 
 ```mermaid
 flowchart LR

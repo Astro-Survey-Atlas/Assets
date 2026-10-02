@@ -19,3 +19,12 @@ test("coverage order selection reports no common order instead of inventing O4",
   ];
   assert.equal(highestCommonCoverageOrder(layers, ["o4-only", "o8-only"]), null);
 });
+
+test("a selected O4 release remains in the survey union alongside O8 products", () => {
+  const layers = [
+    { surveyId: "legacy-surveys", availableOrders: [4, 8] },
+    { surveyId: "legacy-surveys", availableOrders: [4] },
+    { surveyId: "euclid", availableOrders: [4, 8] },
+  ];
+  assert.equal(highestCommonCoverageOrder(layers, ["legacy-surveys", "euclid"]), 4);
+});

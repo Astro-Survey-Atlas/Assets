@@ -10,6 +10,8 @@ import type { ArtifactStore } from "./artifact-store.js";
 import type { ProductRecord } from "./products.js";
 import type { MocPublication } from "./moc-build.js";
 import { PublicationConflictError, type PublicationRun, type PublicationRunRepository, type PublicationVerificationExpectation } from "./public-release-publication.js";
+import type { NativeUnitController } from "./native-unit-controller.js";
+import type { NativeWorkerRequest, NativeWorkerResult } from "./native-unit-model.js";
 
 export interface FrozenPublication { products: ProductRecord[]; publications: MocPublication[] }
 export interface ExecutorRequest { run: PublicationRun; frozen: FrozenPublication; contentRoot: string; baselineRoot: string }
@@ -18,6 +20,7 @@ export interface PublicationSchedulerOptions {
   freeze: () => Promise<FrozenPublication>;
   synchronize: () => Promise<void>;
   snapshotSink?: StateSnapshotSink;
+  nativeUnits?: NativeUnitController;
 }
 
 /** The backend is the sole queue owner and authority pointer writer. Executors only
@@ -35,9 +38,10 @@ export class PublicationScheduler implements PublicationRunRepository {
   constructor(options: PublicationSchedulerOptions) {
     this.#options = options;
     this.tasks = new PublicationTaskStore(path.join(options.contentRoot, "publication", "tasks.sqlite"));
+    options.nativeUnits?.attachQueue(this.tasks);
   }
   async initialize(): Promise<void> {
-    if (!this.tasks.readRuns().length) {
+    if (!this.tasks.list().length && !this.tasks.readRuns().length) {
       const restored = await this.#options.snapshotSink?.restore?.("publication-tasks");
       if (restored) this.tasks.restore(restored.state as PublicationTaskSnapshot);
     }
@@ -70,6 +74,10 @@ export class PublicationScheduler implements PublicationRunRepository {
     for (const task of this.tasks.list()) {
       if (!["running", "activating"].includes(task.phase)) continue;
       if (this.#child && this.#active?.id === task.id) continue;
+      if (this.#options.nativeUnits?.matches(task.payload)) {
+        this.tasks.recoverStopped(task.id, await this.#options.nativeUnits.reconcile(task));
+        continue;
+      }
       const candidate = task.result as ObjectReleasePointer | null;
       let committed = false;
       if (task.phase === "activating" && candidate) {
@@ -189,6 +197,10 @@ export class PublicationScheduler implements PublicationRunRepository {
       const task = this.tasks.claim<FrozenPublication>();
       if (!task) return;
       this.#active = task;
+      if (this.#options.nativeUnits?.matches(task.payload)) {
+        await this.#startNativeTask(task as unknown as PublicationTask<NativeWorkerRequest>);
+        return;
+      }
       const baselineRoot = await realpath(this.#options.baselineRoot);
       const manifest = JSON.parse(await readFile(path.join(baselineRoot, "artifacts/public-survey-footprints/release-manifest.json"), "utf8"));
       const run = { ...(await this.get(task.id))!, status: "queued" as const, baselineBundle: manifest.bundle };
@@ -248,6 +260,46 @@ export class PublicationScheduler implements PublicationRunRepository {
       });
       child.send({ operation: "start", value: { run, frozen: task.payload, contentRoot: this.#options.contentRoot, baselineRoot } satisfies ExecutorRequest });
     } finally { this.#busy = false; }
+  }
+  async #startNativeTask(task: PublicationTask<NativeWorkerRequest>): Promise<void> {
+    const controller = this.#options.nativeUnits!;
+    if (task.payload.operation.operation === "activate") {
+      const heartbeat = setInterval(() => {
+        if (this.tasks.get(task.id)?.phase === "running") this.tasks.heartbeat(task.id, task.attemptId!);
+      }, 15_000);
+      heartbeat.unref();
+      try { await controller.activate(task, this.tasks); }
+      catch (error) {
+        if (this.tasks.get(task.id)?.phase === "running") this.tasks.fail(task.id, task.attemptId!, error instanceof Error ? error.message : "Native activation failed", false);
+      } finally { clearInterval(heartbeat); this.#active = undefined; }
+      return;
+    }
+    const child = fork(new URL(import.meta.url.endsWith(".ts") ? "./native-unit-executor.ts" : "./native-unit-executor.js", import.meta.url), [], { stdio: ["ignore", "inherit", "inherit", "ipc"] });
+    this.#child = child;
+    let tail = Promise.resolve();
+    child.on("message", (message: { operation: string; message?: string; result?: NativeWorkerResult }) => {
+      tail = tail.then(async () => {
+        if (this.#child !== child || this.#active?.attemptId !== task.attemptId || this.#cancelling.has(task.id)) return;
+        this.tasks.assertAttempt(task.id, task.attemptId!);
+        this.tasks.heartbeat(task.id, task.attemptId!);
+        if (message.operation === "progress") await controller.progress(task, message.message ?? "Processing metadata");
+        else if (message.operation === "result") await controller.complete(task, message.result!, this.tasks);
+        else if (message.operation === "error") this.tasks.fail(task.id, task.attemptId!, message.message ?? "Native metadata task failed", /timeout|ECONNRESET|fetch failed|HTTP 50[234]/i.test(message.message ?? ""));
+        else if (message.operation !== "heartbeat") throw new Error("Unknown native executor operation");
+      }).catch(error => {
+        if (this.tasks.get(task.id)?.phase === "running") this.tasks.fail(task.id, task.attemptId!, error instanceof Error ? error.message : "Native result failed", false);
+        child.kill("SIGKILL");
+      });
+    });
+    this.#childDone = new Promise<void>(resolve => {
+      child.once("exit", () => { void tail.finally(async () => {
+        if (this.#child !== child) return;
+        if (this.#cancelling.has(task.id)) this.tasks.cancelStopped(task.id);
+        this.#child = undefined; this.#active = undefined;
+        await this.#reconcileStopped();
+      }).catch(error => console.error("Native task recovery deferred", error instanceof Error ? error.message : "unknown error")).finally(resolve); });
+    });
+    child.send(controller.normalizeRequest(task.payload));
   }
   async #stopChild(): Promise<void> {
     const child = this.#child;

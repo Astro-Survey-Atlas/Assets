@@ -333,30 +333,30 @@
       "releaseId": "legacy-dr10",
       "product": "DR10 color imaging",
       "unitKind": "brick",
-      "snapshotKey": "legacyDr10",
+      "snapshotKey": "legacyReleaseRosters",
       "productPath": "coadd",
       "status": "estimated",
-      "notes": "由官方 DR10 brick 几何与发布目录规则生成候选 brick 入口；几何表不证明对应滤镜文件实际存在。"
+      "notes": "只使用锁定的 DR10 South roster 成员，并与全天天空 brick 边界表核对；Coadd 仅返回 NEXP_g/r/i/z 为正的波段文件候选。该 roster 不含 North 清单，路径规则不证明单个文件存在。"
     },
     {
       "surveyId": "legacy-surveys",
       "releaseId": "legacy-dr10",
       "product": "Coadded imaging",
       "unitKind": "brick",
-      "snapshotKey": "legacyDr10",
+      "snapshotKey": "legacyReleaseRosters",
       "productPath": "coadd",
       "status": "estimated",
-      "notes": "由官方 DR10 brick 几何与发布目录规则生成候选 brick 入口；几何表不证明对应滤镜文件实际存在。"
+      "notes": "只使用锁定的 DR10 South roster 成员，并与全天天空 brick 边界表核对；Coadd 仅返回 NEXP_g/r/i/z 为正的波段文件候选。该 roster 不含 North 清单，路径规则不证明单个文件存在。"
     },
     {
       "surveyId": "legacy-surveys",
       "releaseId": "legacy-dr10",
       "product": "Tractor catalog",
       "unitKind": "brick",
-      "snapshotKey": "legacyDr10",
+      "snapshotKey": "legacyReleaseRosters",
       "productPath": "tractor",
       "status": "estimated",
-      "notes": "由官方 DR10 brick 几何与发布目录规则生成候选 brick 入口；几何表不证明对应 catalog 文件实际存在。"
+      "notes": "只使用锁定的 DR10 South roster 成员，并与全天天空 brick 边界表核对以返回 Tractor brick 候选；该 roster 不含 North 清单，路径规则不证明单个文件存在。"
     }
   ],
   "hscPdr3": {
@@ -700,21 +700,25 @@
           }
         ],
         "observedColumns": ["brickname", "ra", "dec", "ra1", "ra2", "dec1", "dec2", "nexp_g", "nexp_r", "nexp_z"]
+      },
+      "legacy-dr10": {
+        "status": "ready",
+        "scope": "Official DR10 South release brick roster only; no North roster was found on the official file page or NERSC tree.",
+        "regions": [
+          {
+            "id": "south",
+            "observedRows": 366912,
+            "snapshot": {
+              "path": "source-units/legacy-survey-bricks-dr10-south.fits.gz",
+              "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south/survey-bricks-dr10-south.fits.gz",
+              "sha256": "863e5ded7a4aae7abcb5df76f322f35cf89945483715ff6d1874c88f5a072d9a",
+              "sizeBytes": 104480980
+            }
+          }
+        ],
+        "observedColumns": ["brickname", "ra", "dec", "ra1", "ra2", "dec1", "dec2", "nexp_g", "nexp_r", "nexp_i", "nexp_z"]
       }
     }
-  },
-  "legacyDr10South": {
-    "releaseId": "legacy-dr10",
-    "region": "south",
-    "status": "ready",
-    "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south/survey-bricks-dr10-south.fits.gz",
-    "snapshot": {
-      "path": "source-units/legacy-survey-bricks-dr10-south.fits.gz",
-      "sourceUrl": "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south/survey-bricks-dr10-south.fits.gz",
-      "sha256": "863e5ded7a4aae7abcb5df76f322f35cf89945483715ff6d1874c88f5a072d9a",
-      "sizeBytes": 104480980
-    },
-    "scope": "The official DR10 south summary lists release-member bricks. It does not provide per-file URIs or prove every band-specific coadd/Tractor file exists."
   },
   "euclidQ1": {
     "status": "ready",

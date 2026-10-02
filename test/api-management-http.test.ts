@@ -64,7 +64,8 @@ test("API management HTTP authorization and managed region requests preserve ano
  const query=(token:string)=>fetch(base+"/api/v1/access/region-query",{method:"POST",headers:{"X-Assets-API-Key":token,"Content-Type":"application/json"},body:"{}"});
  assert.equal((await query("asa_live_unknown")).status,401);
  assert.equal((await query(key.key)).status,400,"authorized key reaches region validation");
- assert.equal((await query(key.key)).status,400);assert.equal((await query(key.key)).status,429);
+ assert.equal((await query(key.key)).status,400);const rateLimitedQuery=await query(key.key);assert.equal(rateLimitedQuery.status,429);
+ assert.ok(Number(rateLimitedQuery.headers.get("Retry-After"))>=1&&Number(rateLimitedQuery.headers.get("Retry-After"))<=60);
  assert.equal((await query("legacy-workspace")).status,400,"legacy access unchanged");
  for(let i=0;i<31;i++)assert.equal((await query("legacy-workspace")).status,400,"the configured Workspace key is not blocked by the hard query quota");
  assert.equal((await fetch(base+route,{headers:{Authorization:`Bearer ${key.key}`}})).status,401,"managed key cannot administer");
@@ -76,6 +77,11 @@ test("API management HTTP authorization and managed region requests preserve ano
  assert.equal((await fetch(base+route+`/keys/${key.id}`,{method:"DELETE",headers:auth})).status,404,"deleted keys are no longer present");
  // Browser enters a Key once, then uses an HttpOnly session through the site proxy.
  const issued=await (await fetch(base+route+"/keys",{method:"POST",headers:auth,body:JSON.stringify({name:"globe",scopes:["region:query"],perMinute:30})})).json();
+ const dr9BlockBody={layerId:"source-units-legacy-surveys-legacy-dr9-coadded-imaging",order:4,tile:0};
+ const anonymousDr9Block=await fetch(base+"/api/v1/access/coverage-block",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(dr9BlockBody)});
+ assert.equal(anonymousDr9Block.status,401,"Legacy DR9 overview access requires a Workspace API Key");
+ const unsupportedDr9Block=await fetch(base+"/api/v1/access/coverage-block",{method:"POST",headers:{"Content-Type":"application/json","X-Assets-API-Key":issued.key},body:JSON.stringify({...dr9BlockBody,layerId:f.layerId})});
+ assert.equal(unsupportedDr9Block.status,400,"the protected endpoint accepts only the two declared Legacy DR9 layers");
  const proxy=http.createServer((req,res)=>proxyAdmin(req,res,base,true));await new Promise<void>(r=>proxy.listen(0,"127.0.0.1",r));
  t.after(()=>new Promise<void>(r=>proxy.close(()=>r())));
  const publicBase=`http://127.0.0.1:${(proxy.address() as net.AddressInfo).port}`;

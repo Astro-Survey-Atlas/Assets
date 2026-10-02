@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { FilesystemArtifactStore } from "../server/artifact-store.js";
+import { FilesystemArtifactStore, type ArtifactPutOptions } from "../server/artifact-store.js";
 import { decodeSnapshotCursor, readReverseSnapshot, snapshotPage, writeReverseSnapshot, type ReverseSnapshot } from "../server/reverse-snapshot.js";
 import type { DownloadPlan } from "../server/evidence-store.js";
 
@@ -15,6 +16,45 @@ function snapshot(identity = "preview"): ReverseSnapshot {
   return { schemaVersion: 1, identity, fingerprint: "region-revision", expiresAt: new Date(Date.now() + 60_000).toISOString(),
     response: { downloadPlan: plan }, previewPlan: { ...plan, spatialUnits: plan.spatialUnits!.slice(0, 6), truncated: true } };
 }
+
+test("large footprint snapshots fit a bounded transfer and continuations reuse the immutable result", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "assets-reverse-transfer-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  class MeteredStore extends FilesystemArtifactStore {
+    reads = 0;
+    override async putImmutable(key: string, body: Uint8Array | string, options: ArtifactPutOptions = {}) {
+      const size = typeof body === "string" ? Buffer.byteLength(body) : body.byteLength;
+      assert.ok(size < 256 * 1024, "Snapshot transport exceeded the metadata transfer budget");
+      return super.putImmutable(key, body, options);
+    }
+    override async get(key: string) { this.reads += 1; return super.get(key); }
+  }
+  const source = snapshot("key-1");
+  for (const unit of source.response.downloadPlan.spatialUnits!) {
+    unit.sRegion = `POLYGON ICRS ${"328.5 17.7 328.6 17.8 ".repeat(256)}`;
+    unit.accessUris = [{ uri: unit.accessUri!, fileName: `${unit.unitId}.fits` }];
+  }
+  assert.ok(Buffer.byteLength(JSON.stringify(source)) > 2 * 1024 * 1024);
+  const id = await writeReverseSnapshot(new MeteredStore(directory), source);
+  const reader = new MeteredStore(directory);
+  for (let page = 0; page < 5; page += 1) {
+    const retained = await readReverseSnapshot(reader, id, "key-1", "region-revision");
+    assert.deepEqual(retained, source);
+  }
+  await assert.rejects(readReverseSnapshot(reader, id, "key-2", "region-revision"), /another access/);
+  assert.equal(reader.reads, 1);
+});
+
+test("existing uncompressed query snapshots remain readable", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "assets-reverse-legacy-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = new FilesystemArtifactStore(directory);
+  const source = snapshot("key-1");
+  const bytes = Buffer.from(JSON.stringify(source));
+  const id = createHash("sha256").update(bytes).digest("hex");
+  await store.putImmutable(`reverse-lookups/${id}.json`, bytes);
+  assert.deepEqual(await readReverseSnapshot(store, id, "key-1", "region-revision"), source);
+});
 
 test("snapshot pagination drains more than 1000 native units with fixed bounded cursors", async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "assets-reverse-snapshot-"));

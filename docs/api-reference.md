@@ -4,9 +4,11 @@
 
 公开 catalog、block、下载和预览只读取已经构建并通过
 `release-manifest.json` allowlist 校验的静态制品，或已经审核发布并通过
-SHA-256 校验的动态 MOC 制品。覆盖反查使用 Assets 的原生分块索引、按需读取的
-官方归档元数据和 warehouse Elasticsearch 的扫描证据（`ASSETS_WAREHOUSE_ES_URL`），
-不会访问科学数据内容、OSS 或旧 Assets ES，也不处理或暴露原始远程凭据。这里描述的是公开只读服务
+SHA-256 校验的动态 MOC 制品。覆盖反查使用 Assets 的原生分块索引、锁定的 HST
+本地 observation metadata index 和 warehouse Elasticsearch 的扫描证据
+（`ASSETS_WAREHOUSE_ES_URL`），不会访问科学数据内容、OSS 或旧 Assets ES，也不处理
+或暴露原始远程凭据。MAST CAOM 是 HST 公开 metadata 快照来源，不是普通 HST 反查的
+request-time 依赖。这里描述的是公开只读服务
 边界，不限制 Assets 项目自行管理 ConfigMap、Secret 和 ScanRequest。
 
 ## Conventions
@@ -26,6 +28,33 @@ GET /healthz
 ```
 
 返回运行状态、发布 bundle SHA-256 和当前 allowlist 文件数量。它只用于部署健康检查，不应据此推断某个巡天或产品已经有有效覆盖。
+
+`GET /api/v1/status` 返回公开发布、MOC 图层数、原生索引 version/generation、受管及
+验证状态，以及 HEALPix、反查和 Warehouse 证据服务的实际状态。反查运行时可能为
+`initializing`、`available` 或 `unavailable`；Warehouse `configured` 只表示已配置。
+同时返回 Key 发放方式、scope 和每分钟上限；当前没有在线计费。
+
+本站 `/api-docs/` 提供服务状态和 Swagger，OpenAPI 定义为 `/api/v1/openapi.json`。
+Swagger 的脚本和样式由本站提供，不使用外部 validator；鉴权凭据不持久化。
+
+## Public Survey HEALPix Lists
+
+```http
+GET /api/v1/coverage/surveys/{surveyId}/healpix?order=4&pageSize=1000
+```
+
+该公开接口返回所选已发布原生 MOC 在请求阶数上的排序、去重像元并集，声明
+`ICRS`/`NESTED`、实际 `order`/`nside`、`precision`、各层 native revision/maxOrder 和
+`total`。默认选择该巡天全部已发布 MOC；`releaseId`、`productId` 可用逗号分隔来
+限定范围。运行时 overview、原生分块清单和 private layers 不进入这一列表。
+
+`order` 取 0–13，`pageSize` 取 1–10,000，默认 1,000。将 `page.nextCursor` 传入
+`cursor` 读取下一页；可用 `revision` 限定版本。返回 `page.hasMore=false` 表示列表
+已耗尽。投影和合并使用像元区间分页，高阶请求不会在内存展开整个巡天。
+
+任何选中 MOC 的原生最高阶数不足以支持请求阶数时返回 `422`，不能丢掉该层或从低阶
+overview 补造高阶像元；可通过产品/发布选择器缩小范围。版本或选择器与游标不一致
+返回 `409`；无相应已发布 MOC 返回 `404`。这些是覆盖像元，不是 Tile/brick 身份。
 
 ## Asset Catalog
 
@@ -113,6 +142,30 @@ matches the reverse-lookup service.
 
 The server returns `409` when the revision is stale, so a client can reload the catalog before using the block. Revisioned blocks use immutable cache headers; requests without a revision are explicitly revalidated. Catalog requests honor `If-None-Match` and return `304 Not Modified`. The browser requests overview blocks first and higher-order blocks only after zooming.
 
+### Workspace Legacy DR9 overview
+
+```http
+POST /api/v1/access/coverage-block
+X-Assets-API-Key: <workspace-key>
+Content-Type: application/json
+
+{"layerId":"source-units-legacy-surveys-legacy-dr9-coadded-imaging","order":4,"tile":0}
+```
+
+This Workspace-only route returns a `no-store` overview block for one of the
+two registered Legacy DR9 products: Coadded imaging or Tractor catalog. It
+accepts only order 4 and tile 0, and requires the `region:query` API Key scope.
+The response includes the layer's release/product identity, actual available
+orders, revision, precision notes, cells and block SHA-256. It does not create
+an Assets reverse-lookup snapshot. Workspace may hold this public response in
+request memory to calculate an overlap; it must not persist the returned cells
+or send the private CSST coverage, paths, scan identities or file metadata to
+Assets. The clicked component's order/cells are the public lookup bounds.
+
+This overview does not upgrade the DR9 matcher beyond its real O4 precision.
+The two returned layers are estimated candidates and do not prove per-brick
+file existence. The route does not synthesize a DR10 North roster.
+
 ## Coverage Overlap
 
 ```http
@@ -120,7 +173,8 @@ POST /api/v1/coverage/overlap
 POST /api/v1/coverage/overlap/details
 ```
 
-`overlap` first tries the highest HEALPix order shared by all selected surveys
+`overlap` first tries the highest HEALPix order supported by every selected
+product, unions those products within each survey,
 and returns explicit cells plus connected components (`C01`, `C02`, ...). If
 that order has no actual shared cells, it falls back to the next lower
 explicitly published common order; it never manufactures finer cells from a
@@ -185,7 +239,7 @@ edges, source file IDs, URI/name/ETag/WCS bounds, download entrypoints and a
 Reverse lookup accepts one or more public layer IDs and a bounded explicit
 region; it does not calculate the overlap itself. The overlap endpoint unions
 selected products within each survey and intersects survey coverages at the
-highest shared real order. Component inspection submits the whole component
+highest real order supported by every selected product. Component inspection submits the whole component
 when it fits 4,096 cells / 100 square degrees; larger regions require a smaller
 selection. Ordinary HEALPix inspection shows release/modality metadata only.
 
@@ -196,17 +250,46 @@ means the bounded source query finished, not that a survey inventory is
 complete. `pageSize` accepts 1-100; `page.nextCursor` is a signed `rs2` cursor
 with fixed size, bound to snapshot, region, layer revisions, authorization
 identity and page kind. A `querySnapshotId` without a cursor starts at the
-first page of that same snapshot. Expiry returns HTTP 410, changed selectors
-or revisions return 409, and an incorrect Key identity returns 403. Snapshot
+first page of that same snapshot. Expiry returns HTTP 410, changed region or
+layer selectors return 409, and an incorrect Key identity returns 403. A new
+snapshot fixes its coverage and native-index versions; matching continuations
+keep those versions when a newer public release or native index is activated.
+Older snapshots without a selector fingerprint retain their original revision
+checks. Snapshot
 pages perform no new archive or Warehouse queries and are served `no-store`.
+New snapshot objects use gzip; their IDs remain the SHA-256 of the uncompressed
+JSON. Existing uncompressed snapshots remain readable. Assets retains decoded
+snapshots only in memory, with at most 16 entries and a 64 MiB serialized budget
+per store; expiry, identity, region and revision checks still apply on every
+read. HTTP 429 reports a `Retry-After` delay up to 60 seconds. Assets manifest
+export waits and retries a limited snapshot page once, preserving the API Key
+quota and the same cursor/snapshot.
+The top-level `sources[]` records carry per-layer coverage and
+`sourceUnitSummary` metadata only; they do not repeat native IDs or file IDs.
+The paged `downloadPlan.spatialUnits[]` and `downloadPlan.files[]` are the
+authoritative lists of matched identities and URIs. `matchedUnitCount` counts
+units returned by the local query and is a lower bound when its `truncated`
+field is true.
+
+Send `Accept: text/event-stream` to receive `progress` and provisional `batch`
+events while the query runs. Batches let the page display useful native results
+early; they are not the frozen export manifest. The `complete` event contains
+the same paged response as JSON, including `querySnapshot`,
+`nativeUnitIndexRevision` and `downloadPlan`. An `error` event ends a stream
+that has already started. Responses use `Cache-Control: no-store` in either
+transport; continuation reads the frozen snapshot without repeating queries.
 
 A published MOC intersection can have no native-unit match in the current
 frozen inventory. Keep its coverage evidence and official entrypoint, explain
 the empty result and retain the inventory scope in `notes`. Do not infer that
-the survey has no data or state that a native URI was returned. Source failures
-such as a MAST timeout remain `truncated` with `queryExhausted=false`; an
-exhausted manifest page does not clear that state or turn it into a result-limit
-failure. Display and JSON/CSV export preserve the same source notes.
+the survey has no data or state that a native URI was returned. An unavailable
+locked source index never triggers an implicit MAST request. Ordinary HST image
+lookup and overlap reverse lookup read the SHA-locked local CAOM snapshot and
+SQLite footprint index; they return observation identities and MAST entry links,
+not request-time MAST results or file-level product lists. Unsupported HST
+footprints keep results incomplete. An exhausted manifest page does not clear
+source incompleteness or turn it into a result-limit failure. Display and
+JSON/CSV export preserve the same source notes.
 
 Workspace calls this endpoint server-side using `X-Assets-API-Key`. Its request
 contains only public `layerIds`, `order`, `cells`, optional `limit`, `pageSize`,
@@ -355,10 +438,14 @@ grouped by survey and expanded to show their release/product entries.
 For Euclid Q1, the native unit is a Tile and ESA TAP `tile_index` supplies its
 ID. In `q1.mosaic_product`, `stc_s` describes the product footprint used for
 spatial matching. HST follows a separate flow: its unit is a MAST observation
-ID, and that observation's `s_region` is used to match the region.
-HST's unified lookup reads observation metadata only, does not expand products,
-and preserves `sRegion`, `instrument`, `filters` and its MAST entrypoint. Euclid
-ERO returns `unitKind=target` and the official named package identity, never an
+ID, and the SHA-locked local CAOM snapshot provides its `s_region` for overlap
+matching. The local order-4 index narrows candidates before selected-cell
+intersection. Both ordinary HST cell lookup and overlap reverse lookup use this
+snapshot without a request-time MAST query. `POST /api/v1/coverage/hst-images`
+returns observation matches and MAST observation links, not a live file-level
+product listing; users follow the MAST link for current products and access
+policy. Results preserve `sRegion`, `instrument`, `filters`, the snapshot hash
+and its capture time. Euclid ERO returns `unitKind=target` and the official named package identity, never an
 invented Tile. Its associated ESA Sky outreach footprint is an estimated target
 extent. Both preserve source snapshots and source access policies; no science
 content, header, range or preview is retrieved by this flow.
@@ -386,9 +473,12 @@ coverage hit does not verify a science file at every cell.
 
 The browser's overlap export uses its current anonymous preview without a Key.
 With a valid Key, it exhausts the same snapshot's manifest pages and replaces
-the displayed list with the exported result. JSON
+the displayed list with the exported result. A subsequent export reuses that
+complete authorized result instead of reading the snapshot pages again. JSON
 preserves it without flattening inside a component envelope with its ID, order,
-cells and bounds. Both formats contain metadata and links only. CSV emits one
+cells, bounds and `nativeUnitIndexRevision`. CSV preserves the same version in
+`native_unit_index_revision`, including its manifest-state row. Both formats
+contain metadata and links only. CSV emits one
 row per real item and uses:
 
 - `item_kind=file` for a Warehouse FileAsset. `source_file_id`, `source_uri`,
@@ -409,7 +499,7 @@ row per real item and uses:
   `access_availability` records whether the source is public, subject to source
   policy, or still unverified.
 - `item_kind=manifest-state` for snapshot ID, omitted items, `has_more`,
-  inventory completeness and truncation notes. An exhausted query always
+  native index revision, inventory completeness and truncation notes. An exhausted query always
   retains `inventory_complete=false`; it is not a complete survey claim.
 
 When a component has coverage material but no file record or retrieval
@@ -462,9 +552,9 @@ recipe 固定，管理员只能修改解释文本和证据链接。产品记录�
 | revision 冲突 | `409` | `{ "error": "Product revision conflict" }` |
 | 未预期的 admin 异常 | `500` | `{ "error": "Internal server error" }` |
 
-例如 `bb743658cd44269d7675` 是当前 CSST W2 草稿产品：带有效令牌的
-`GET /api/v1/admin/products/bb743658cd44269d7675` 返回 `200`；不带令牌返回
-`401`，不能把认证失败当成产品不存在。
+例如查询已登记的 Legacy 产品需要有效管理员令牌；不带令牌返回 `401`，不能把
+认证失败当成产品不存在。产品详情可编辑 `modality`，保存生成新的草稿 revision 并
+撤销审核；原生 MOC 和提取方式不因此被重新解释。重新审核并发布后公开模态才生效。
 
 `GET /api/v1/admin/products?view=surveys` 是管理页审核入口。它按公共 `survey -> release -> product` 返回与 `/api/v1/surveys` 同源的名称、mission、描述、图片、modalities、统计、coverage orders 和产品状态；每个产品只附加 `review.state`、草稿/发布 revision、时间戳和当前 coverage 投影。产品还会返回 `lifecycle`：`publication.state` 是 `DRAFT` 或 `PUBLISHED`，`runtime.state` 是 `CATALOG_BASELINE`、`ACTIVE`、`INVALID` 或 `INACTIVE`，并携带 native build orders、公开 layer orders、catalog revision 和产品/天球/Catalog/FITS MOC 链接。它不会返回 input manifest、normalized scan、task snapshot、evidence 内容或内部路径。存在于 Assets 编辑存储但不再匹配公共 catalog 的产品会放在 `unmatchedProducts` 中，不会静默丢失。
 
@@ -527,6 +617,34 @@ edited draft remains private until its current revision passes the Assets
 review/publication gate. Draft text is never returned verbatim; the server
 builds a structured projection from the published catalog, current layer
 registry and allowlisted release assets.
+
+## Admin Native Sky Units
+
+这些接口需要 `Authorization: Bearer <admin-token>`，响应使用 `Cache-Control: no-store`。
+它们复用现有管理任务和发布队列，原生索引的审核及 authority 独立于 MOC 发布。
+
+| 方法/路径 | 内容 |
+| --- | --- |
+| `GET /api/v1/admin/native-units` | 来源、快照汇总、候选/历史版本、活动 generation、任务、审计和状态归档进度 |
+| `GET /api/v1/admin/native-units/bindings` | 当前系统可关联的公开产品绑定 |
+| `PUT /api/v1/admin/native-units/sources/{id}` | 使用当前 `revision` 编辑官方 URL、`fileUrls`、范围、名称或元数据 query |
+| `POST /api/v1/admin/native-units/tasks` | `baseline/discover/acquire/import/build/verify/archive/activate/restore`，返回 `202` 和任务 |
+| `GET /api/v1/admin/native-units/groups/{id}` | 锁定输入引用、产品绑定、检查、真实查询样例、缺口及审核 digest |
+| `PUT /api/v1/admin/native-units/groups/{id}/bindings` | `digest` + `productIds`，生成待验证和审核的候选 |
+| `POST /api/v1/admin/native-units/groups/{id}/review` | 当前 `digest` + 全部 `acceptedGaps`，拒绝漏选或过期报告 |
+| `POST /api/v1/admin/native-units/tasks/{id}/cancel` | 取消排队或执行中的任务，保留历史及原活动版本 |
+
+任务请求包含 `operation`。`discover/acquire/import` 带 `sourceId/sourceRevision`，
+`import` 另带已暂存的 `files:[{ref,sha256,sizeBytes}]`；HST 只提交 manifest 引用。
+`build` 带 `snapshotIds`，每个来源只能选一个当前 revision 的快照。
+`verify/archive/activate/restore` 带 `groupId`。
+`baseline/build/activate` 必须带当前 `expectedActive`（首次为 `null`）；`activate`
+另带当前 `reviewDigest`，并要求全部输入与索引已归档。
+
+版本/revision/审核摘要冲突返回 `409`；未通过验证或未逐项接受缺口返回 `422`。
+报告 `unavailableBindings` 保留已发布但未出现在锁定快照中的来源身份，这些绑定
+在公开目录中为 `entrypoint-only`，不会返回捏造的原生单位。
+流程与存储约束见 [原生分块管理](native-unit-management.md)。
 
 ## Admin Scan Requests
 

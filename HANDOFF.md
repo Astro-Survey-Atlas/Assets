@@ -1,6 +1,114 @@
 # Assets 项目交接
 
-## 最新接续：四巡天 MVP（2026-09-30）
+## 当前实施状态（Assets Dev revision 312 / Workspace revision 62）
+
+- 2026-10-02 原生天空分块纳管已完成归档、恢复、审核、CAS 激活和网站验证。Assets 当前为 revision 312，镜像 `0.1.0-20261002-054741-snapshot-batches`；Workspace 为 revision 62，镜像 `0.10.38-dev-20261002-022932-native-version`。312 收尾修复控制状态镜像的队列阻塞，现有存储和资源限额保留；下文完整桌面/性能验收在 311/62 完成。
+- 控制状态镜像 pending 的原因已定位：778 个完整快照、1,746,419,887 bytes 在 spool 中，无上传失败；最新 native 控制快照已上传，但 worker 等整批串行上传结束才推进指针。现已每轮最多上传一个对象，namespace 轮流优先处理最新完整快照，并只推进各 namespace 最新已上传 generation。旧快照继续归档，审核和任务历史保留；没有重新归档或激活原生索引。
+- 最新原生控制镜像已从 generation 180 推进至 370，`syncStatus=synced`，SHA `dede18457e84fc5b5038dd93163c3a135ab4d929de31f8703b6b195b433f1b08`；隔离恢复与本地完整控制状态一致。发布任务镜像 generation 2623、API 管理镜像 generation 238 也为 synced；窄验证时还有 565 个旧快照排队，但新状态未确认数和失败数均为 0，旧指针不会回退。证据 `/tmp/assets-snapshot-batch-verify.log`。活动索引 authority 仍为 generation 1，其 manifest SHA 保持原值。312 的 build、镜像构建/推送、Helm lint、site/backend rollout 和网站 health/status 已通过；本轮未运行仓库测试套件。
+- Legacy `DR10 color imaging` 已经通过管理产品审核/公开发布纠正为 `imaging`，published revision 6；新 bundle `reviewed-mupsxe2v-c91be91f`，SHA-256 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，603 files。目录 132 layers / 105 published MOCs。下文旧 bundle 状态是历史验证。
+- 当前受管活动 group 为 `7934212d371634751fc1119c3a9a5ccccb10e8061dce5d930988c50bf8b7d7b6`，generation 1，18 来源、49 绑定、52/52 checks、36 真实查询样例。六项缺口已在真实管理页面重新逐项接受并审核；`/api/v1/status` 返回 `managed=true`、`verified=true` 和此活动版本。
+- 本轮代码包括公开 HEALPix API/Swagger、首页文案、原生来源/快照/增量索引/审核/归档/CAS 激活/恢复、SSE 进度及 native version 固定。刷新比较当前 release root，并复用未变 MOC 几何和投影，避免元数据发布后重复重建造成 JS heap 耗尽。压缩归档保留原始和对象两组哈希，最多四条并行流。
+- Workspace 修复 SSE 先 flush 再设置响应头的错误；私有几何使用自身有界缓存和在途请求合并，聚合查询允许至少 15 秒；私有覆盖查询失败明确报告错误。公开原生反查仍只在请求及浏览器内存中使用。
+- 前两次原生归档保留为 cancelled；`native-mupu176w-87bbcc44` 明确因大型单次 PUT 超过对象存储 300,000 ms requestTimeout 失败。当前修复只为原生归档启用 5 MiB multipart 和条件完成，仍完整读取远端对象验 SHA。快速合成复现与真实配置存储的两段上传（5 MiB + 1 byte）均通过；没有更换对象存储 authority、放宽校验或增加资源。
+- 归档任务 `native-mupvp914-33d3866c` 已在 attempt 1 完成 640/640 依赖，全部远端字节校验通过，receipt 已写回。首个本地 watcher 因等待额度退出时服务端没有失败；续接 watcher `/tmp/assets-managed-multipart-archive-resumed.log` 最终退出 0，没有取消或重启该任务。
+- 通用索引原始 1,821,573,120 bytes / archive 131,578,710 bytes；HST 原始 599,207,936 bytes / archive 285,932,134 bytes。真实 Euclid gzip 清单在全新临时目录恢复并核对压缩/原始两组 SHA 后清理临时目录。整组 `restore` 任务 `native-muq0vy0w-c1d3e07f` 已完成重验并撤销旧审核，随后通过管理页面重新审核。
+- 激活任务 `native-muq0zbfr-9dcb6278` 已从 `site-pending` 进入 `completed`，运行时及网站 HTTP 验证通过；活动 native manifest SHA 为 `2c183daeedd2bdf28a0769f7ab1fbf5a2f153e83a62c2abb9713423087cfd775`。不要再接管或重新归档此基线。
+- `acquire → build` 真实无变化复用已通过：构建任务 `native-muq141z5-18e90874` 使用 DR10 快照 `9961e81be5f0cfad654d8d7beeb7fb40ed4b42e262aff3a53f27efc64ef4a307`，返回 `noChange=true` 和同一活动 group；两份原始 SQLite SHA/大小保持不变，审核仍有效。
+- 跨激活 continuation 验证通过：旧快照保留 `imported-baseline`、56 个 native records 和四个来源身份，新请求固定当前活动 group。该旧选择本来没有 Euclid 原生命中，不能用它证明四方原生条目齐全；完整四巡天桌面场景另行验收。证据 `/tmp/assets-managed-snapshot-after-final.log`。
+- 真实 MinIO 的条件完成验证通过：仅对自建合成对象执行冲突 multipart Complete，返回 412，已有字节保持不变，未影响原生依赖。只读路由探针显示 Warehouse MinIO 不匹配当前 public/current authority，未更换配置；live endpoint 为 `https://api.minio.72602.space`。生产/Dev 数据 authority 继续使用当前配置。
+- JSON/CSV 都保留 `nativeUnitIndexRevision`（Assets CSV 为 `native_unit_index_revision`）；已完成授权导出后复用同一结果，避免第二次导出重复分页。最新两端完整 build 与 Helm lint 通过；最新改动未重跑旧完整测试套件。370 项 Assets / 308 项 Workspace 测试属于此前代码基线，不能称为此次镜像的完整测试结果。
+- 激活后 Workspace 62 桌面验收已通过：完整 O4 / 7-cell 组件保留 9,056 条公开原生记录和 3,893 个直接父目录，版本固定当前活动 group；JSON/CSV/列表逐条相符、CSV 二次导出额外分页为 0、两次实际限流等待后成功续接，共 93 个 cursor requests，`directoriesTruncated=false`，page errors / ordinary native requests / direct MAST 均为 0。证据 `/tmp/assets-managed-active-workspace-desktop.log`。私有响应、导出和偏好仅在请求/浏览器内存中使用，没有保存私有截图或内容。
+- Assets 311 的首页/Swagger 实际操作通过：7 operations，Euclid O4 Try it out 返回 44 cells，无 page errors 或外站请求；公开 MOC byte range 为 206、32 bytes、SHA 正确。缺失/无效 API Key 的反查均为 401。当前公开 release authority 去重依赖 131 个对象、162,978,439 bytes / 155.43 MiB，不能累加两个本地缓存。
+- 激活后 Assets 311 完整桌面验收已通过：11 个组合、完整 O4 七-cell 组件、匿名六项 preview、授权 22,772 个 native records，版本固定当前活动 group；JSON/CSV/列表一致、CSV 二次导出额外分页为 0、总 cursor requests 236（修复前 472），page errors / ordinary native requests / direct MAST 均为 0。证据 `/tmp/assets-managed-active-assets-desktop.log`。单独查询 Abell 2390 的已发布 DR10 color imaging 返回 5 个 preview bricks，modality 均为 imaging。
+- 已阅读 `.tmp-screens/Astro-Survey-Atlas-intro-edits.zip` 的说明/补丁并核对两份修订 README 的 SHA。Assets README 以当前四巡天及完整 component 契约语义合并，补充来源范围与正确的网站链接；未套用旧单-cell 文案或修改组织独立仓库。当前应用构建不会因这些文档编辑重跑。
+- 当前活动 native authority 去重后 639 个依赖对象，加指针/manifest 共 989,530,856 bytes / 943.69 MiB；加当前 public authority 实测合计 1,152,509,295 bytes / 1.073 GiB。业务状态及其他证据仍采用旧估算 194.23 MiB，生产首次迁移约 1.26 GiB，可按 1.3 GiB 理解；不是重新冻结业务状态后的精确清单。原始输入与索引恢复后仍 2.904 GiB。旧索引 2.10 GiB 和两端发布缓存均不计迁移，详见存储盘点。
+- `AGENTS.md` 已加入原生分块管理规则，要求支持的操作走管理台或认证管理 API，外部采集结果先导入系统。操作说明、版本验证和存储口径见 `docs/native-unit-management.md`。
+- 激活后的公开 HEALPix API 已重验：O4 Euclid 44、DESI 1,385、Legacy 2,247、HST 2,262 cells，分页无遗漏/重复；不支持的 O13 为 422、revision/order 冲突为 409、无效 cursor 为 400，实际公开配额等待后继续成功。证据 `/tmp/assets-managed-active-healpix.log`。
+- 激活后的 SSE 性能检查通过：Assets 首批 4.437 s / 完整查询 20.189 s；Workspace 首批 4.692 s / 完整查询 33.495 s，52 batches、3,893 个完整父目录。完整七-cell 组件未缩小，Key 额度未增加；Workspace 几何首次 12.376 s、缓存复用 0.560 s。证据 `/tmp/assets-managed-active-stream-perf.log`。
+
+## 历史实现基线（Assets 305 / Workspace 58）
+
+- Assets Dev 已部署 Helm revision **305**，镜像 `0.1.0-20261001-185000-mvp-manifest`；site/backend 均 `1/1 Ready`。入口 `http://10.15.51.75:32083/atlas/`，`/healthz` 与 coverage catalog 均返回 200，catalog 有 132 layers。公开 bundle 未变化，SHA-256 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`、603 files。没有发布或修改 MOC。
+- HST 普通 cell lookup 与 overlap reverse lookup 使用 evidence PVC 上按 SHA 锁定的本地 SQLite v4 observation index；请求期间不查询 MAST。MAST 是公开 CAOM metadata snapshot 的来源，用户可打开 MAST observation 页面查看当前产品和访问策略；Assets 返回 observation、原始 `s_region`，不声称含文件级产品清单。
+- HST v4 索引已在 PVC 构建：快照 601 页、1,201,094 行，manifest SHA-256 `d09e1a1d9863b3328f227040a5fb44043519402e8903747cf0dd6ab436d04ee8`；索引 599,207,936 bytes，SHA-256 `2e61e368e86dd93398d6a666c863f30ebc9d8ea9f389770ec5dce7f1e446983b`。共索引 916,116 个 observation、重复记录 284,960 行、排除 18 行；旧 schema v3 文件仍保留，没有覆盖。
+- Legacy DR10 的官方 South brick roster 索引覆盖其 366,912 个成员；官方 North roster 和 North Coadd/Tractor 产品树未找到。all-sky brick 表只有几何，不是 DR10 North 成员证明；`ls_dr10.tractor` 合并 DR10 South 与 DR9 North，不能冒充 DR10 North。
+- `.codex/config.toml` 的主模型、默认 subagent 和 review model 均为 `gpt-6.1-sol`；未保留 `gpt-6-sol` 配置。
+
+## 本轮续接：数据存储统计（2026-10-01 20:13–20:19）
+
+- 用户要求统计 Assets 清单、索引和存储体量；只读盘点见 [storage inventory](docs/storage-inventory-20261001.md)。当前原始清单 665.64 MiB、两份 active SQLite 2.25 GiB，合计 2.90 GiB；旧索引备份另占 2.10 GiB，evidence PVC 总文件大小 5.10 GiB。
+- Site/backend 各有 40 个 release 缓存目录，分别占 4.68 / 4.66 GiB，当前 bundle 每端只有 216.00 MiB。已挂载 Assets PVC 合计 14.53 GiB；配置的 Assets 对象存储前缀有 4,627 个对象 / 3.11 GiB，所用五个 Warehouse ES 索引合计 1.28 GiB。含历史和重复缓存的统计范围总条目大小约 18.92 GiB；不含开发机副本、镜像、科学数据、未挂载旧 PVC 或对象旧版本。
+- 现有 evidence authority manifests 没有新增 Legacy/HSC/Euclid 清单、HST 全量分页快照及派生 SQLite，只确认两份 DESI Tile 表归档引用。新增原生输入与索引当前持久化位置仍是 evidence PVC，不能把公开 bundle 或旧归档视为它们的备份。反查 snapshot 实际写入对象存储 `reverse-lookups/`；1 小时是游标访问期限，代码没有对象清理，当前 bucket 无 lifecycle，98 个已存反查对象约 173.26 MiB。
+- 本轮只增加统计文档，没有修改应用代码、部署、数据或归档；原有暂存/未暂存修改保留。没有读取 Workspace 或 CSST 私有记录。
+- 用户明确统计目的为生产首次迁移。21:30 续查当前公开指针依赖：604 个逻辑成员展开 216.00 MiB，对 key 去重后的 131 个权威对象/基础归档只有 154.54 MiB。排除旧索引、历史发布缓存和旧查询/state generations，保留当前原始清单、active SQLite、业务状态与关联证据，Assets 迁移估算 **3.25 GiB**；两个发布缓存从权威数据同步重建，无须搬迁。省去两份 SQLite 并在目标预构建可降到约 0.99 GiB。现有 Warehouse 可复用；独立迁其五个 ES 索引另有约 1.28 GiB store，合计约 4.52 GiB（不是实测 ES snapshot 传输量）。详见统计文档的生产首次迁移口径；本轮未迁数据、发布或清理。
+
+## 本轮续接：完整组件、快照分页与私有目录聚合（2026-10-01）
+
+- Workspace Dev 已部署 revision **58**，镜像 `0.10.38-dev-20261001-191625-directory-aggregation`，Pod Ready、0 restarts；入口 `http://astro.workspace.dev.72602.space:32080/`。容器仍为 1 CPU / 1 GiB；没有提高资源上限。Assets 305 的应用代码未再改变。
+- Assets reverse snapshot 改为 gzip 写入，ID 仍是未压缩 JSON 的 SHA-256；兼容旧 JSON，读取仍校验 hash。每个 store 的内存缓存限 16 个 snapshot / 64 MiB 序列化预算。原公开 O4 多层请求曾 87 秒，其中约 80 秒用于 snapshot 写入；同一区域新匿名预览约 10.195 秒。
+- 两端 common-order 选择取每个所选产品真正支持的阶数交集，所选 O4 DR9 不再被同巡天的 O8 产品遮掉。Workspace 的纯公共 snapshot continuation 直接使用第一页返回的具体 public source IDs，不重新获取 DR9 geometry，也不重复读取私有目录；`pixels=[]` 的 continuation source 只是身份回显。
+- Key 限额保持最多 30 requests/min。Assets 的 429 `Retry-After` 表示到下一分钟的真实等待秒数；Assets 和 Workspace 页面续页/导出按该值等待，再重试同一页一次。Workspace 响应用 `publicRetryAfterSeconds` 传递等待时间，未提高 Key 配额。
+- 公开 O4 replay 的 14 层结果读完 **92 页 / 9,124 manifest items / 9,056 spatial-unit records**，按 `[layerId, unitKind, unitId]` 去重无重复：Euclid 744、DESI 131、Legacy 5,682、HST 2,499。保留全部 URI、模态、原始 HST `s_region`、实际阶数和精度；最终 `hasMore=false`、`omitted=0`。这些是产品/图层身份记录数，不是唯一 observation 数。无 Key 返回 401，改变 snapshot region 返回 409。
+- 完整混合组件为 **O4、7 cells、约 94 deg²**，未缩为单 cell。线上 geometry 约 26.557 秒，reverse 首页约 50.048 秒，有 Assets 公开结果及 **3,893 个直接父目录记录**，`directoriesTruncated=false`，私有证据保留原生 O10。公开分页同样读完 92 页并得到上述四巡天 native records。API 聚合来源中一个额外私有身份未分配独立的父目录记录，仍明确显示 unavailable；页面将关联扫描层合并进 CSST asset card，未以扫描根目录替代缺失映射。
+- 私有目录瓶颈已定位并修复：原流程匹配约 2,179,557 条 edges，读取 931 页 / 931,000 rows 后撞上 50,000 files 上限，约 98.719 秒且截断。Workspace 现在用 Elasticsearch composite aggregation 按 candidate layer / file / native order 分组，保留实际匹配 native cell 与最保守 precision，按批只 join locator，再流式归并父目录。只读探针约 33.868 秒、25 页完成同一区域，未传输 raw coverage hits；预算限制保留的父目录（默认 200,000），不因同文件的重复 edges 提前结束。
+- 私有目录的 `matchingCellsTruncated` 单独标识代表性 native-cell 样本（每目录至多 4,096）；它不表示父目录遗漏。JSON/CSV 都保留该字段、实际阶数、精度；完整目录状态由 `directoriesTruncated` 表示。旧 `reverseFiles` 保留原有逐文件/全 edges 契约与上限。
+- Private-only API 重放返回同样 3,893 个父目录，未包含 Assets 结果；无 Key client 发起公开请求数为 0。日志只输出汇总，不记录私有路径、cells、source/scan identity，不扫描或读取科学文件；公共反查结果仅在请求和浏览器内存中使用。
+- 本轮 Workspace build、类型与 Helm lint/template 通过；306 tests：304 pass、2 skip、0 fail。Assets 上一应用基线 build、site types、Core wheel、365 tests（363 pass、2 skip、0 fail）通过。两个仓库的暂存/未暂存修改全部保留，没有 commit、push、包安装/激活或 MOC/bundle 发布。
+- Workspace 桌面实际选中 CSST 资产并点击整个 7-cell component 已通过：所选 14 个公开产品层的 JSON 与 CSV 分别包含 9,056 条公开 native records、3,893 个父目录，URI / HST `s_region` / precision / 目录 sampling 标记逐条一致，导出后显示列表与 manifest 相同。普通点击无 native lookup，page errors=0、direct MAST requests=0；两次 Key 限流等待后在同一 snapshot 恢复。浏览器将相关 Warehouse 图层合并为一个 CSST asset card，API 中多出的同层 Warehouse identity 不作为第二个独立 CSST 图层来选择。
+- Assets 桌面验收已完成，浏览器脚本退出 0：11 种两方及以上巡天组合通过；点击完整公开 O4 C02 `[637,639,725,958,959,1002,1003]`，匿名 JSON 等于当前 6 项 preview，API Key 解锁后授权 JSON/CSV 穷尽同一 snapshot，包含 **22,772 条 native records**。逐条保留 ID、模态、实际阶数、precision、matching cells、全部 URI、HST 原始 `s_region` 和 snapshot state，显示条目数与导出相同。Assets 此次选择 20 个产品层，Workspace 场景选择 14 个，因此两端记录总数不同。普通点击无 native lookup，page errors=0、direct MAST requests=0。证据为 `/tmp/assets-native-authorized-browser.log`，只有公共页面截图 `/tmp/assets-native-mvp-final-desktop.png`。
+- 当前 305/58 的纯公开 Abell 2390 O8 重放仍为 2 页、74 条 native records、104 个 URI：Euclid ERO 5、DESI DR1 1、Legacy DR10 11、HST 57；没有私有目录。完整公开及混合场景分页均已耗尽，HST 的 18 条未知 frame 记录仍保留 `queryExhausted=false`、`truncated=true`、`inventoryComplete=false`，不把分页完成表述为完整来源库存。
+
+## 本轮续接：缓存查询加速与请求复核（2026-10-01）
+
+- Helm revision 302 使用镜像 `0.1.0-20261001-170824-spatial-cache`。`npm run build`、`npm test`（362 项：360 通过、2 跳过、0 失败）、Helm lint 均通过。新镜像上线后发布 init container 激活原 bundle；没有改动或发布公开资源、MOC。
+- 更新的公开 Legacy roster lock 触发一次完整 SQLite 派生索引冷构建：schema v5，1,821,573,120 bytes，27 个 coverage layers；构建峰值 RSS 3,921 MiB（容器限额 4 GiB），未 OOM 或扩容；query worker 打开后约 993 MiB。新索引已原子替换到 `derived/source-unit-indexes/native-units.sqlite`，旧 v4 备份保留。lock 不变时后续启动应可命中该索引。
+- Dev HST `POST /api/v1/coverage/hst-images` 对 O8 `[202250,202272]` 返回 158 条 observation，约 0.56 秒；`queryExhausted=true`、`truncated=true`、`excludedWithoutRegion=18`，snapshot SHA 仍为 `d09e1a1d9863b3328f227040a5fb44043519402e8903747cf0dd6ab436d04ee8`。这证实该反查走本地 SQLite，不是 MAST 超时；截断只表示 18 条无可靠 frame 的记录仍未映射。
+- Assets 本地 DR9 Coadd matcher 对 O4 cells `[637,639,725,958,959,1002,1003]` 返回 2,841 个候选 brick，耗时约 1.32 秒。完整单层 `/api/v1/coverage/reverse-lookup` 用同一区域耗时 25.66 秒，匿名预览省略其余结果但查询 snapshot 已耗尽。20-layer 同区域请求在 120 秒内无响应体，被客户端超时取消；这不是零命中，也不能归因于 HST/MAST。空间匹配缓存已部署，但尚未解决完整多层反查的长耗时；需要继续拆分 Warehouse evidence 查询、游标分页和 reverse snapshot 写入的耗时。
+- `.codex/config.toml` 和 builder agent 配置仍使用 `gpt-6.1-sol`。本轮保留未提交工作树，没有读取或记录 Workspace/CSST 私有数据，也没有提交修改。
+
+## 前一轮续接：HST 本地索引与 Legacy DR10 分块（2026-10-01）
+
+- Dev 当前 Helm revision **300**，镜像 `0.1.0-20261001-152556-dr9-time-fix`；site/backend 均 `1/1 Ready`。`/healthz` 返回 200，公开 bundle SHA-256 仍为 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`、603 files；coverage catalog revision `765846f162373443d6e0eee260ac32ee` 有 132 layers。只部署应用代码和本地索引查询路径，没有发布或修改 MOC/公开 bundle。
+- **HST metadata 可下载后本地建映射。** 官方 MAST CAOM query 提供公开 observation 的 `obsid`、`s_region`、instrument、filter 和权限状态；Assets 把 601 页快照按 SHA 锁定到 evidence PVC，再用原始 footprint 建本地索引。MAST 没有查到可替代该 API 的官方全量几何 dump；因此 MAST 是受控快照来源，不是每次反查的依赖。普通和重合反查共用 SQLite v4。
+- v4 索引大小 599,207,936 bytes，SHA-256 `2e61e368e86dd93398d6a666c863f30ebc9d8ea9f389770ec5dce7f1e446983b`；快照 1,201,094 行中 916,116 行形成 916,116 个 observation，284,960 行为重复 CAOM 记录，18 行无可用 footprint。先前 v3 中 103 行未建索引；增大有资源上限的 STC-S 解析范围并允许复合 geometry 跳过退化子 polygon 后，原有 85 行现在可索引。剩余 16 个 `CIRCLE GSC1` 和 2 个 `CIRCLE OTHER` 未按 ICRS 猜测，必须继续让结果标为不完整。对 16 个不同 obsid 的 MAST 补查显示，GSC1 圆心与 `s_ra/s_dec` 数值相差约 332.5 arcsec，原圆半径只有 2.5 arcsec；CAOM 查询不提供 `s_fov`，两条 OTHER 的 frame 也未定义，因此不能用这些字段补造 footprint。详见 [HST geometry audit](docs/research/hst-unindexed-footprints-20261001.md)。
+- Dev 线上 `POST /api/v1/coverage/hst-images` 对 order 8 cells `[202250,202272]` 返回 HTTP 200、158 条 observation，`queryExhausted=true`、`truncated=true`、`excludedWithoutRegion=18`；首条包含 observation ID、instrument/filter 和原始 `s_region`，`files=[]`。查询结果全部来自锁定的本地 snapshot/index；MAST 页面只作为访问入口。页面耗尽不代表完整 HST inventory，`inventoryComplete` 仍为 false。
+- v4 本地 C04 lookup 与 Dev API 都返回 158 条 observation。HST 匹配仍为 estimated；复合 footprint 的保守 spherical-cap 候选可能包含邻近候选，无法解析的 18 行仍影响 inventory completeness。
+- 使用旧 v3 索引的 revision 296 Workspace 公开 Abell 2390 C04 历史结果是 74 个唯一原生单位：DESI 1、Euclid 5、Legacy DR10 11、HST 57。结果与当前 snapshot 相符，但 103 条不支持解析的记录是 v3 parser 的历史状态；当前已降为 18 条。Workspace 五方私有结果仍只记在 Workspace 文档，本仓库不记录 CSST 私有目录、像元或扫描身份。
+- **Legacy DR10 South 分块索引已完整覆盖官方 South roster。** 锁定的 `south/survey-bricks-dr10-south.fits.gz` 含 366,912 个 brick，并与 all-sky brick geometry 按 `BRICKNAME` join；South Tractor 映射 366,912 项，Coadd 正曝光候选 363,328 项。Legacy South 边界按发布定义约为 Dec <= 32.375 度，不是赤道；Abell 2390 的 Dec 约 +17 度，属于 DR10 South，O8 `[202250,202272]` 命中 11 个 South bricks；`3281p177` 返回 g/r/i/z 官方 URI 候选。roster membership 与 `NEXP` 不是逐文件存在证明，未逐项核验的 URI 仍是 estimated candidate。区域在该边界之外时，不得用 all-sky brick grid、合并 `ls_dr10.tractor` 或 DR10 color MOC 造出 DR10 North 成员；北区 BASS/MzLS 应保留 DR9 North 身份。审计见 [DR10 North product audit](docs/research/legacy-dr10-north-product-audit-20261001.md)。
+- 没有核实过的 DR10 North brick roster 或 North Coadd/Tractor tree。该区域落在 South roster 外时，正确结果是“无 DR10 South brick”；要查北区影像应显式选 Legacy DR9 North 并保留 DR9 身份，或等待官方发布/核实 DR10 North roster 与产品路径。不能将 all-sky 几何、North PSC 或合并 `ls_dr10.tractor` 当作 DR10 North 成员清单。来源证据见 [DR10 scope audit](docs/research/legacy-dr10-source-scope-20261001.md)。
+- Legacy 全量本地 SQLite 派生索引 schema v5 为 1,821,573,120 bytes，线上启动 cache hit、加载 27 个覆盖图层，查询 worker RSS 约 2.1 GiB；没有因此前冷构建峰值扩容。HST v4 在 Pod 本地临时盘构建后校验 SHA，再原子发布到 PVC；原 schema v3 文件保留。
+- Revision 298 代码构建与测试：完整测试 362 项（360 通过、2 跳过、0 失败），HST 定向测试 10/10 通过；server/site build、Helm lint、`git diff --check` 均通过。当前轮另实测 health 200、HST API 200。修改尚未提交，保留工作树和原始快照；没有复制/读取 CSST 或 Workspace 私有数据，也没有发布/修改 MOC。
+- Revision 300 修复 Key 保护的 DR9 O4 block 在 coverage catalog 缺少 `generatedAt` 时的响应契约；Workspace revision **54**（镜像 `0.10.38-dev-20261001-145752-dr9-keyed`）现可加载 DR9 Coadded imaging 1,707 个 O4 cells、Tractor catalog 1,716 个 O4 cells，均为 estimated overview。
+- Workspace revision 54 对公开 O8 C04 cells `[202250,202272]` 单独选择 Legacy DR10 反查，返回 11 个带 URI 的 `DR10 color imaging` brick 候选，`hasMore=false`、`truncated=false`。因此这一 C04 的 DR10 零结果不是分块索引缺失；此前五方 overlap 的 North-of-boundary component 无 DR10 South brick 才是预期结果。
+- 公开-only 四巡天 overlap（Euclid ERO、DESI DR1、Legacy DR9、HST archive coverage）已在线返回共同 O4 的 7 cells / 3 components。对 C01 的一页反查返回 31 个 DESI Tile 和 69 个 HST observation；HST 使用本地 snapshot，没有 MAST 超时。仅选 DR9 Coadded imaging 的同一 component 时，第一页返回 100 个带 URI 的 estimated brick 候选，另有 3,972 项待续页；结果不是已验证文件库存。本次未读取 Workspace sources/CSST，也未完成该 O4 component 的全量分页和 JSON/CSV 一致性验收。
+
+## 本轮续接：来源核查与完整组件验收（2026-10-01）
+
+- Legacy 北区来源补查没有发现官方 DR10 North Coadd/Tractor 产品树或 brick roster。`ls_dr10.psc_n` 是独立点源目录，没有 brick/file identity；合并 `ls_dr10.tractor` 不证明 DR10 North 成员关系。北区影像应使用已锁定的 DR9 North roster（93,548 bricks）并保留 DR9 身份。详见 [Legacy North source supplement](docs/research/legacy-north-source-supplement-20261001.md)。
+- HST 的 `Mast.Caom.Products` 对 16 个不同 obsid 返回 142 个产品记录，但没有 footprint/WCS 字段。仅读取每个 obsid 一段 2,880-byte FITS primary header；GSC1 target 坐标无效，OTHER 只有未证明为 ICRS 的 J2000 target center，均不能构造 observation footprint。18 条 `GSC1`/`OTHER` rows 继续排除，inventory 继续标为 incomplete；保留本地 SHA 锁定 CAOM snapshot/SQLite v4，不在反查时调用 MAST。详见 [HST footprint source supplement](docs/research/hst-footprint-supplement-20261001.md)。
+- Assets revision 300 / Workspace revision 54 的纯公开 Abell 2390 C04 已从 Workspace server-side Key 路径读完两页：首尾页分别 100、19 项，snapshot 稳定，`hasMore=false`。合并后 74 个 spatial-unit identity：DESI DR1 1、Euclid ERO 5、Legacy DR10 11、HST 57，保留 104 个 URI 项。Workspace 的 JSON 与 `workspaceManifestCsv` 生成器逐条保持 74 项及全部 URI payload 一致。虽然分页已耗尽，结果仍 `queryExhausted=false`、`truncated=true`、`precision=truncated`，因为 HST inventory 排除 18 条无可靠 frame 的记录；这不是请求超时。
+- 同版本五方 O8 overlap 返回 3 cells / 2 components。选择单 cell component 后，Assets 首页已耗尽（75 manifest items、无续页），返回 30 个 public spatial units：DESI DR1 1、Euclid Q1 24、HST 5；该区域没有 DR10 South brick 候选，但四个 survey 的 coverage evidence 均保留。Workspace 返回 54 个去重直接父目录，没有目录截断。JSON/CSV 生成器对公开单位及 URI 负载、私有父目录分别逐条相等；HST 未解析的 18 条仍令公开状态 `queryExhausted=false`、`truncated=true`。本次只查询 Workspace 索引和 Assets metadata，不扫描或读取科学文件，也不落盘私有结果。
+- O4 DR9 混合 component 的一次只读试查覆盖 7 cells（约 94 deg²）。14 个可执行公开来源的 Assets 请求达到配置的 60 秒 deadline，Workspace 本地目录查询也报告 limit/scope truncation（1,875 个 parent candidates）；该 HTTP 200 响应没有 `assetsResult`，不能解释为零公开命中。宽 O4 component 应先缩小范围或优化分页/查询成本，再做完整验收。
+- Workspace 请求 Assets 时只构造公开 `layerIds`、被点击 component 的 `order/cells` 与分页游标；不发送 CSST asset/layer identity、文件路径、scan identity 或逐文件元数据。CSST coverage/native-order mapping 与直接父目录仍只由 Workspace 使用。此处只保留汇总，不记录私有像元、目录值或 asset identity。
+- 本轮没有改代码、重建或发布 MOC、提交工作树或读取私有科学内容；Assets 与 Workspace 原有 dirty changes 均保留。
+
+## 本轮续接：DR9 North 与 HST 本地查询复核（2026-10-01）
+
+- Dev UI 使用 `/atlas/` 前缀；健康与 API 路由在 host 根路径。根路径 `/healthz` 返回 `status=ok`，`/api/v1/coverage/catalog` revision 为 `765846f162373443d6e0eee260ac32ee`，含 132 layers。
+- HST `POST /api/v1/coverage/hst-images` 对 O8 cells `[202250,202272]` 返回 158 条 observation，`queryExhausted=true`、`truncated=true`、`excludedWithoutRegion=18`，source snapshot SHA-256 为 `d09e1a1d9863b3328f227040a5fb44043519402e8903747cf0dd6ab436d04ee8`。代码路径打开锁定的 SQLite v4 索引；MAST 只提供可控刷新用 CAOM snapshot 和 observation 页面入口，不参与请求时查询。`truncated` 来自 18 条 frame 未知记录造成的库存不完整，不是请求超时。
+- 四巡天公开 overlap 的北区 O4 C01 cells `[483,486,487,498]` 单独查询 DR10 Coadd 时返回零 brick，响应说明当前 DR10 South 清单在该区域无命中；同一组件内 DR9 North 清单有命中。只查询 O4 cell `483` 的 DR9 Coadd 在约 6 秒内返回 estimated brick `1062p632`，带 `dr9/north/coadd/` 下 g/r/z URI 候选；文件未逐项验证。匿名预览显示 5 个单位并提供空间分块续页，底层本地查询已耗尽。该样本证明北区可由 DR9 North 索引查询，不支持把它改记为 DR10 North。
+- 因此 DR10 分块索引可完整覆盖的官方范围仍是 South roster：Tractor 366,912 bricks、Coadd 363,328 正曝光候选。当前没有官方 DR10 North brick roster 或 North Coadd/Tractor tree；扩大 DR10 North 索引需要新的权威成员清单与 URI 规则，不能从 all-sky brick 几何或合并 Tractor 表推导。
+- 本轮为只读 Dev API 复核；没有改代码、MOC、公开 bundle 或 Workspace/CSST 数据，也没有提交工作树。
+
+## 下一步
+
+- 把完整 O4 / 7-cell / 约 94 deg² 的四巡天 + CSST 场景作为桌面回归入口，保留同一 Assets snapshot 的分页、反查和 JSON/CSV 一致性；不缩成单 cell 来规避性能问题。
+- 继续在这个场景处理桌面细节和首次加载等待。当前 geometry 约 26.6 秒、混合 reverse 首页约 50.0 秒；源索引和目录页均已耗尽，进一步加速应测量 geometry/索引阶段，而不是提高 Key 配额、粗化证据或扩充容器内存。
+- Legacy DR10 South 官方 roster 已完整索引。北区保留 DR9 North 身份；只有新增权威 DR10 North 成员清单/产品路径才能建立对应索引，不能用 all-sky grid 或合并 Tractor 表补造。
+- HST 普通和重合反查继续使用本地 SHA 锁定 CAOM snapshot/SQLite v4。18 条 frame 未知记录保持 inventory incomplete；只在上游修正或取得可验证 geometry 来源后受控刷新快照。
+- Euclid、DESI 和 Legacy 的冻结范围、estimated 候选与未核实文件 URI 保持明确。新增输入之前先评估流式/增量构建；Legacy 冷构建接近 4 GiB 的历史峰值不足以单独支持扩容。
+
+## 历史基线：四巡天 MVP（2026-09-30，Assets revision 294）
 
 本节优先于下面 revision 292 及更早的方向和验证记录。第一阶段巡天是
 **Euclid、DESI、Legacy Surveys、HST**；桌面为验收目标，HSC 保留既有实现。
@@ -9,25 +117,26 @@
 - Assets Dev：Helm revision **294**，镜像 `0.1.0-20260930-232630-lookup-status`，site/backend 均 `1/1 Ready`、0 restarts；入口 `http://10.15.51.75:32083/atlas/`。公开 bundle SHA 仍为 `0e23aca242d542d3b7ae8d96a846d2eed1ef1eabcb4f573fadeaa493c3905d6e`，603 files。原 1.66 GB Legacy SQLite 派生索引继续复用，日志确认 cache hit，没有冷构建或提高内存上限。
 - Workspace Dev：Helm release `asa` / namespace `asa-workspace`，revision **53**，镜像 `0.10.38-dev-20260930-232630-lookup-status`；入口 `http://astro.workspace.dev.72602.space:32080/`，`1/1 Ready`、0 restarts。DESI `3.5.0`、Euclid `3.17.0`、HST `3.4.0`、Legacy `3.1.0` 已安装并启用；原有 Gaia、2MASS 等包及 release 选择保留。
 - 普通 HEALPix 点击只列出 DR/模态，不自动请求原生分块或 MAST。重合先合并同一巡天选中的产品，再对巡天求交；选中的空巡天不能被移除。点击 component 查询整个 component，单次上限为 4,096 cells / 100 deg²，超限须缩小区域并明确查询范围。
-- Assets 新增 `server/archive-native-units.ts`、`server/metadata-fetch.ts`、`server/reverse-snapshot.ts`。Euclid ERO 返回官方 target/package 身份与多个 URI，不推造 Tile；HST 返回匹配所选仪器/滤镜的 observation ID、`s_region` 与 MAST 入口，只读取 metadata。两类上游查询总期限为 45 秒，失败/截断保留为不完整结果；原 metadata 的哈希证据只存 Assets。
+- Assets 新增 `server/archive-native-units.ts`、`server/metadata-fetch.ts`、`server/reverse-snapshot.ts`。revision 294 时 Euclid ERO 与 HST 空间查询都访问上游 metadata，期限为 45 秒，失败/截断保留为不完整结果；原 metadata 的哈希证据只存 Assets。HST 空间查询在 revision 296 改为 SHA 锁定快照，本次 revision 298 使用 v4 本地索引；`/api/v1/coverage/hst-images` 返回本地 observation metadata 和 MAST 页面入口，不实时展开文件产品。
 - 反查完整结果保存在 Assets evidence 的不可变快照中，一小时过期；签名 `rs2` 游标绑定区域、图层 revision、访问身份和分页种类，续页不重复上游或 Warehouse 查询。`queryExhausted` 不代表巡天完整，始终保留 `inventoryComplete=false`。大于 1,000 项的分页已纳入自动化验证。
 - Assets 匿名导出使用当前最多 6 项的 preview，并保留 omitted/truncated 状态；有效 Key 导出穷尽同一快照，同时更新展示列表。JSON/CSV 保留原生 ID、全部 URI、模态、footprint、order、precision 和来源访问策略，导出的是来源清单。
 - **数据边界：**Assets 持有公开原生索引、天空分块映射、证据、缓存和反查快照。Workspace 只同步公开 MOC/图层 metadata；服务端持有 API Key，只发送公开 layer IDs、order/cells 和分页选择器。公开响应只存在请求/浏览器内存与临时浏览器导出，不写入 Workspace 存储、缓存、制品、配方或日志正文；无 Key 不发匿名请求，无爬虫回退。CSST 扫描、覆盖和文件映射只在 Workspace，目录反查使用命中文件的直接父目录，保留原生 order/precision，不用扫描根目录替代缺失映射。私有分块、路径和扫描身份不记录在本仓库。
 - Workspace 另修复已发布 HST layer ID 中 `--` 的解析、激活新包时保留已启用旧包的可信选择，以及复合公开 source ID 的独立 8,192 字符输入上限。反查只读取选中的 Workspace 来源，公开续页不再读取未选中的私有图层。
-- **公开实测场景：Abell 2390，O8 cells `[202250,202272]` / C04。**最小四图层返回 ERO target 1、DESI DR1 Tile `20876` 1、Legacy DR10 brick 11、HST ACS observation 46，共 59 个原生单位 / 79 个 manifest 项，4 页 × 25 的上限内读完且无重复。全选产品在 Assets/Workspace 返回 78 个原生单位；Workspace `pageSize=25` 实测 5 页，四巡天齐全。示例 URI：ESA `Euclid-VIS-Stack-ERO-Abell2390.DR3.tar`、DESI `tiles/cumulative/20876/20211030/`、Legacy South Coadd brick 目录及 MAST observation 入口。
+- **公开实测场景：Abell 2390，O8 cells `[202250,202272]` / C04。**revision 294 最小四图层历史结果为 ERO target 1、DESI DR1 Tile `20876` 1、Legacy DR10 brick 11、HST ACS observation 46，共 59 个原生单位 / 79 个 manifest 项。revision 296 使用本地 HST 快照后返回 74 个唯一公开原生单位（DESI 1、Euclid 5、Legacy 11、HST 57）；MAST 快照结果可随刷新而变化。示例 URI：ESA `Euclid-VIS-Stack-ERO-Abell2390.DR3.tar`、DESI `tiles/cumulative/20876/20211030/`、Legacy South Coadd brick 目录及 MAST observation 入口。
 - Assets 桌面 Playwright 已验证普通点击无原生查询、C04 全区域反查、匿名导出、Key 解锁、展示与授权导出相同、四巡天结果齐全；canvas 非空且可拖动，无 page errors 或页面横向溢出。Workspace revision 53 桌面 C04 实测 79 个原生分块：Euclid 5、DESI 1、Legacy 11、HST 62，JSON/CSV 与展示及全部 URI 一致。HST 实时元数据结果会变动，旧 revision 52 的 78 个结果仍是历史实测，不是固定库存数量。
-- Workspace 的五方整块点击、公开来源依据、可用分块、私有直接父目录和 JSON/CSV 展示一致性已通过桌面验收；165 个 canvas 采样色桶、拖动前后像素变化，0 page errors、0 横向溢出、0 浏览器直连 Assets/MAST。**不能称现有五方区域四巡天原生分块齐全：**Legacy 锁定 DR10 South 清单在该区域无 brick 命中；HST 在部分接口探测中返回观测，但最终浏览器请求达到 45 秒 deadline，结果保留 `truncated=true`、`queryExhausted=false`。具体私有场景数量和精度只记录在 Workspace 文档，本仓库不记录私有路径、扫描身份和像元。
+- Workspace 的五方整块点击、公开来源依据、可用分块、私有直接父目录和 JSON/CSV 展示一致性已通过桌面验收；165 个 canvas 采样色桶、拖动前后像素变化，0 page errors、0 横向溢出、0 浏览器直连 Assets/MAST。revision 294 当时 Legacy DR10 South 清单在该区域无 brick 命中，HST 实时 MAST 请求达到 45 秒 deadline。HST 空间反查已在 revision 296 改为本地索引；最新五方服务端复验不再因 MAST 请求超时，但该区域仍没有 DR10 South brick。具体私有场景信息只记录在 Workspace 文档，本仓库不记录私有路径、扫描身份和像元。
 - 最后修正：已注册原生索引但当前区域空命中时，官方入口不再声称“URI 已单独列出”，并保留 source index notes；不完整清单说明不再把所有上游失败写成 result limit。Workspace 分页结束后显示未返回原生分块的巡天，保留可点击官方入口及来源说明。完整公开 C04 场景与私有混合场景的库存/上游限制分开验收，不能仅放宽断言就宣称四巡天全部命中。
 - 验证基线：上轮 Assets 完整测试与 Core wheel 校验为 349 项（347 通过、2 跳过），Workspace 完整测试为 298 项（296 通过、2 跳过）。最后 source ID/读取范围及空结果提示修复之后，两端完整 build、容器 build、Assets site type check、Helm lint 和 `git diff --check` 通过，并完成 Dev 实际接口/桌面验收；没有重跑最后修改后的单元测试。不要把这个单个实测区域或查询穷尽写成完整巡天 inventory。
 - 新文档 `docs/four-survey-mvp.md` 记录 MVP 契约、公开场景和库存限制；Assets `README.md`、`docs/api-reference.md`、`docs/coverage-workflow.md` 与 Workspace `docs/public-coverage-boundary.md`、`docs/csst-simulation-coverage-plan.md` 已同步。
-- 项目 `.codex/config.toml` 的 review model 已为 `gpt-6.1-sol`；当前项目 agent/subagent 配置没有 `gpt-6-sol`。主模型/默认 subagent 仍是既有 `gpt-6-luna`，planner 为 `gpt-6-astra`。本轮未启用 subagent。
+- 项目 `.codex/config.toml` 的主模型、默认 subagent 和 review model 已统一为 `gpt-6.1-sol`；未保留 `gpt-6-sol` 配置。
 - `.tmp-screens/Astro-Survey-Atlas-intro-edits.zip` 已审阅：只包含 Assets README / 独立组织 `.github` profile README 草案及 outreach 草稿。其 HSC 优先描述须按当前 HST MVP 调整；补丁未套用、组织仓库未改、未发送 outreach。当前先完成主流程。
 - 保留库存限制：Q1 仅锁定 BGSUB 2,908 行 / 352 Tiles；ERO 无已核实 Tile roster；DESI Tile 为 estimated 候选而非目标级光谱覆盖，用户 OSS 中仅 904 个 redrock 已扫描，约 904 个 spectra 和 12,855 个 coadd 未扫描，也不代表完整 BGS/DR1。HSC DAS 文件存在性/直链和 Legacy DR5–DR9 规则及全部 brick 文件未逐项核验。Legacy DR10 color imaging 的既有发布模态仍为 `catalog`，不能静默修改发布数据；后续须单独核实并走发布流程。扩充 Legacy 输入前先评估流式/增量构建，不因旧冷建峰值直接扩容。
 
 最终接口续验：Workspace revision 53 的公开 C04 使用 `pageSize=25` 读完同一快照
-的 5 页，返回 79 个原生分块；无 Key 的客户端为 0 次 outbound fetch，错误 Key
-被拒绝且无回退。私有单独查询及混合查询结果只记录在 Workspace 文档；五方区域
-的 Legacy 清单缺口和 HST 实时查询稳定性仍是后续公开来源核实事项。
+的 5 页，revision 294 返回 79 个原生分块；Assets revision 296 本地 HST 索引下
+C04 为 74 个公开单位。无 Key 的客户端为 0 次 outbound fetch，错误 Key 被拒绝且
+无回退。五方区域仍无 DR10 South brick；HST 实时查询超时已由本地索引路径消除。
+私有单独查询及混合查询结果只记录在 Workspace 文档。
 
 ## 历史交接基线：revision 292（2026-09-30）
 

@@ -1,0 +1,6 @@
+.api-intro h1 { font-size:clamp(2.5rem,4vw,4rem); margin-bottom:1.5rem; }
+.api-intro > p { max-width:65rem; }
+.api-docs-page code { overflow-wrap:anywhere; }
+#swagger-ui { background:#fff; border-radius:1rem; padding:1rem; color:#25333d; }
+#swagger-ui .swagger-ui .wrapper { padding:0 1rem; }
+#swagger-ui input, #swagger-ui textarea { color:#25333d; background:#fff; }

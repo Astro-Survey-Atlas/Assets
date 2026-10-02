@@ -1,4 +1,4 @@
-export type TaskTab = "outputs" | "discovery" | "scans";
+export type TaskTab = "outputs" | "discovery" | "scans" | "native";
 
 /** Switch visibility only: live list nodes and dialog form state stay intact. */
 export function mountRecordTabs<T extends string>(root: HTMLElement, prefix: string, values: readonly T[], storageKey: string) {
@@ -36,5 +36,5 @@ export function mountRecordTabs<T extends string>(root: HTMLElement, prefix: str
 }
 
 export function mountTaskTabs(root: HTMLElement) {
-  return mountRecordTabs<TaskTab>(root, "task", ["outputs", "discovery", "scans"], "assets-admin-task-tab");
+  return mountRecordTabs<TaskTab>(root, "task", ["outputs", "discovery", "scans", "native"], "assets-admin-task-tab");
 }

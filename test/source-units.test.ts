@@ -1,12 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { legacyDr1ImageUrl, parseHscPatchFile } from "../server/source-units.js";
+import { legacyAvailableBands, legacyDr1ImageUrl, legacyReleaseBrickAccessUris, parseHscPatchFile } from "../server/source-units.js";
 
 test("Legacy DR1 image URI uses the release-published NOAO archive location", () => {
   assert.equal(
     legacyDr1ImageUrl("1498p020", "g"),
     "ftp://archive.noao.edu/public/hlsp/decals/dr1/coadd/149/1498p020/decals-1498p020-image-g.fits",
   );
+});
+
+test("Legacy DR10 South roster preserves its g/r/i/z exposure membership", () => {
+  assert.deepEqual(legacyAvailableBands({ g: 1, r: 0, i: 2, z: 1 }), ["g", "i", "z"]);
+  assert.deepEqual(legacyAvailableBands({ g: 0, r: 0, i: 0, z: 0 }), []);
+});
+
+test("Legacy DR10 coadd links include only source-listed South bands, including i", () => {
+  assert.deepEqual(legacyReleaseBrickAccessUris("legacy-dr10", "south", "3281p177", "coadd", ["g", "i", "z"]), [
+    { fileName: "legacysurvey-3281p177-image-g.fits.fz", url: "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south/coadd/328/3281p177/legacysurvey-3281p177-image-g.fits.fz" },
+    { fileName: "legacysurvey-3281p177-image-i.fits.fz", url: "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south/coadd/328/3281p177/legacysurvey-3281p177-image-i.fits.fz" },
+    { fileName: "legacysurvey-3281p177-image-z.fits.fz", url: "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south/coadd/328/3281p177/legacysurvey-3281p177-image-z.fits.fz" },
+  ]);
 });
 
 test("HSC tract/patch parser accepts official coordinates with whitespace before commas", () => {

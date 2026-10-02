@@ -48,6 +48,7 @@ interface HstImageLookup {
   excludedWithoutRegion: number;
   generatedAt: string;
   sourceSnapshotSha256: string;
+  sourceSnapshotCapturedAt?: string;
 }
 
 interface AssetRecord {
@@ -641,7 +642,7 @@ function renderHstImageLookup(result: HstImageLookup, host: HTMLElement): void {
   summary.className = "hst-image-lookup-summary";
   const fileCount = result.observations.reduce((sum, observation) => sum + observation.files.length, 0);
   const errors = result.errors ?? [];
-  summary.textContent = `O${result.order} · ${t("coverage.hstEstimated")} · ${result.observations.length} ${t("coverage.hstObservations")} · ${fileCount} ${t("coverage.hstFiles")}${result.truncated || !result.queryExhausted || errors.length ? ` · ${t("coverage.hstResultsPartial")}` : ""}`;
+  summary.textContent = `O${result.order} · ${t("coverage.hstEstimated")} · ${result.observations.length} ${t("coverage.hstObservations")}${result.truncated || !result.queryExhausted || errors.length ? ` · ${t("coverage.hstResultsPartial")}` : ""}`;
   const groups = document.createElement("div");
   groups.className = "hst-image-observations";
   if (!result.observations.length && !errors.length) groups.append(Object.assign(document.createElement("p"), { className: "hst-image-lookup-summary", textContent: t("coverage.hstNoMatches") }));
@@ -710,7 +711,7 @@ function renderHstImageLookup(result: HstImageLookup, host: HTMLElement): void {
   }
   const provenance = document.createElement("small");
   provenance.className = "hst-image-lookup-provenance";
-  provenance.textContent = `${t("coverage.hstSnapshot")} ${result.sourceSnapshotSha256.slice(0, 12)} · ${result.generatedAt}${result.excludedWithoutRegion ? ` · ${result.excludedWithoutRegion} ${t("coverage.hstMissingRegion")}` : ""}`;
+  provenance.textContent = `${t("coverage.hstSnapshot")} ${result.sourceSnapshotSha256.slice(0, 12)}${result.sourceSnapshotCapturedAt ? ` · ${result.sourceSnapshotCapturedAt}` : ""}${result.excludedWithoutRegion ? ` · ${result.excludedWithoutRegion} ${t("coverage.hstMissingRegion")}` : ""}`;
   host.replaceChildren(summary, ...(failures ? [failures] : []), groups, ...limits, provenance);
 }
 
@@ -822,6 +823,7 @@ function overlapBounds(pixels: number[], order: number): { areaDeg2: number; raM
 interface OverlapEvidenceLookup { endpoint: string; layerIds: string[]; order: number; precision: "exact" | "estimated" | "entrypoint-only" | "truncated"; deferred: boolean }
 interface OverlapEvidenceResult {
   available: boolean;
+  nativeUnitIndexRevision?: string;
   precision: string;
   truncated: boolean;
   querySnapshot?: { id: string; expiresAt: string; queryExhausted: boolean; inventoryComplete: false };
@@ -1346,7 +1348,7 @@ function overlapEvidenceKey(component: OverlapComponentView): string {
     revisions: layerIds.map((id) => coverageCatalog?.layers.find((layer) => layer.layerId === id)?.revision) });
 }
 
-async function fetchOverlapEvidence(component: OverlapComponentView, signal?: AbortSignal, access: OverlapEvidenceAccess = "preview", page?: { cursor?: string; pageSize?: number; pageKind?: "spatial-units" | "supporting-evidence"; querySnapshotId?: string }): Promise<OverlapEvidenceResult | null> {
+async function fetchOverlapEvidence(component: OverlapComponentView, signal?: AbortSignal, access: OverlapEvidenceAccess = "preview", page?: { cursor?: string; pageSize?: number; pageKind?: "spatial-units" | "supporting-evidence"; querySnapshotId?: string }, update?: (event: JsonStreamEvent) => void): Promise<OverlapEvidenceResult | null> {
   const lookup = component.evidenceLookup;
   if (!lookup) return null;
   const cacheKey = overlapEvidenceKey(component);
@@ -1366,15 +1368,27 @@ async function fetchOverlapEvidence(component: OverlapComponentView, signal?: Ab
     if (page?.pageKind) body.pageKind = page.pageKind;
     if (page?.querySnapshotId) body.querySnapshotId = page.querySnapshotId;
   }
-  const response = await fetch(lookup.endpoint, {
+  const init: RequestInit = {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: { "Content-Type": "application/json", Accept: update ? "text/event-stream" : "application/json" },
     signal,
     body: JSON.stringify(body),
-  });
+  };
+  let response = await fetch(lookup.endpoint, init);
+  if (response.status === 429 && access !== "preview" && (page?.cursor || page?.querySnapshotId)) {
+    const seconds = Math.min(60, Math.max(1, Number(response.headers.get("Retry-After")) || 60));
+    await response.body?.cancel();
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); reject(signal?.reason); };
+      const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, seconds * 1000);
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) abort();
+    });
+    response = await fetch(lookup.endpoint, init);
+  }
   if(response.status===401 && access !== "preview")resetDownloadAccess();
   if (!response.ok) { const failure=await response.json().catch(()=>({})); throw new Error(failure.error??`reverse lookup HTTP ${response.status}`); }
-  const result = await response.json() as OverlapEvidenceResult;
+  const result = await readJsonResponse<OverlapEvidenceResult>(response, update);
   if (access === "preview") overlapEvidenceCache.set(cacheKey, result);
   return result;
 }
@@ -1513,6 +1527,7 @@ function downloadPlanFor(result: OverlapEvidenceResult | null): DownloadPlan {
 async function evidenceForExport(component: OverlapComponentView): Promise<OverlapEvidenceResult | null> {
   const current = await fetchOverlapEvidence(component);
   if (!current || !hasDownloadAccess()) return current;
+  if (current.querySnapshot && current.page?.hasMore === false && !current.preview) return current;
   let result = await fetchOverlapEvidence(component, undefined, "download", { querySnapshotId: current.querySnapshot?.id, pageSize: 100 });
   if (!result) return null;
   const cursors = new Set<string>();
@@ -1544,7 +1559,8 @@ async function downloadOverlapCsv(components: OverlapComponentView[], filename: 
     // One download operation must not exceed the per-identity concurrency limit.
     for (const component of components) results.push(await evidenceForExport(component));
     const rows = components.flatMap((component, index) => overlapCsvRows(component, downloadPlanFor(results[index]), publicLayerEntry, results[index]?.precision, {
-      snapshotId: results[index]?.querySnapshot?.id, omitted: results[index]?.page?.omitted ?? results[index]?.preview?.omitted ?? 0,
+      snapshotId: results[index]?.querySnapshot?.id, nativeUnitIndexRevision: results[index]?.nativeUnitIndexRevision,
+      omitted: results[index]?.page?.omitted ?? results[index]?.preview?.omitted ?? 0,
       hasMore: results[index]?.page?.hasMore ?? results[index]?.preview?.hasMore ?? false,
     }));
     if (!rows.length) {
@@ -1592,6 +1608,7 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
         cells: component.cells,
         bounds: component.bounds,
         querySnapshot: results[index]?.querySnapshot,
+        nativeUnitIndexRevision: results[index]?.nativeUnitIndexRevision,
         preview: results[index]?.preview,
         page: results[index]?.page,
         notes: results[index]?.notes,
@@ -1985,7 +2002,35 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
   const request = ++overlapEvidenceSequence;
   node.replaceChildren(Object.assign(document.createElement("small"), { textContent: t("coverage.queryingPlan") }));
   try {
-    const result = await fetchOverlapEvidence(component, controller.signal);
+    const stages = new Map<string, string>();
+    const status = document.createElement("small"); status.setAttribute("role", "status");
+    const batches = document.createElement("div"); batches.className = "overlap-evidence-files overlap-spatial-units";
+    const shown = new Set<string>();
+    node.replaceChildren(status, batches); status.textContent = t("coverage.queryingPlan");
+    const access = hasDownloadAccess() ? "page" : "preview";
+    const result = await fetchOverlapEvidence(component, controller.signal, access, undefined, event => {
+      if (request !== overlapEvidenceSequence || controller.signal.aborted) return;
+      const value = event.value;
+      if (event.event === "progress") {
+        const stage = String(value.stage); const label = t(stage === "native" ? "coverage.progressNative" : stage === "warehouse" ? "coverage.progressWarehouse" : stage === "coverage" ? "coverage.progressCoverage" : "coverage.progressQuery");
+        stages.set(String(value.layerId ?? stage), `${label}: ${value.state === "completed" ? t("coverage.progressDone") : t("coverage.progressRunning")}${value.total === undefined ? "" : ` ${value.total}`}`);
+        status.textContent = [...stages.values()].join(" · ");
+      } else if (event.event === "batch" && Array.isArray(value.units)) {
+        for (const unit of value.units as NonNullable<DownloadPlan["spatialUnits"]>) {
+          const key = JSON.stringify([unit.layerId, unit.unitKind, unit.unitId]);
+          if (shown.has(key) || shown.size >= 200) continue;
+          shown.add(key);
+          const row = document.createElement("div"); row.className = "overlap-evidence-file overlap-spatial-unit";
+          row.append(Object.assign(document.createElement("small"), { className: "overlap-spatial-unit-source", textContent: `${unit.surveyId} · ${unit.releaseId} · ${unit.product}` }),
+            Object.assign(document.createElement("strong"), { className: "overlap-spatial-unit-title", textContent: `${unit.unitKind.toUpperCase()} ${unit.unitId}` }));
+          const facts = document.createElement("div"); facts.className = "overlap-spatial-unit-facts";
+          facts.append(modalityBadge(unit.modality, "overlap-spatial-unit-modality"), document.createTextNode(` O${unit.order} · ${unit.matchingCells.length} cells `), precisionIndicator(unit.precision)); row.append(facts);
+          for (const entry of unit.accessUris?.length ? unit.accessUris : unit.accessUri ? [{ uri: unit.accessUri }] : []) appendSourceLocator(row, entry.uri);
+          batches.append(row);
+        }
+        status.title = t("coverage.progressFrozenPending"); renderIcons();
+      }
+    });
     if (!result) return;
     if (request === overlapEvidenceSequence && !controller.signal.aborted) renderEvidencePlan(node, result, component);
   } catch (error) {
@@ -3662,3 +3707,4 @@ void initialize().catch((error) => {
   byId("coverage-state").textContent = t("coverage.releaseUnavailable");
   if (!surveyIndex) byId("survey-list").replaceChildren(Object.assign(document.createElement("div"), { className: "error-row", textContent: t("coverage.catalogLoadFailed") }));
 });
+import { readJsonResponse, type JsonStreamEvent } from "./json-stream.js";

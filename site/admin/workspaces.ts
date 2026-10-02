@@ -6,14 +6,15 @@ export const resources = {
   reviewSurveys: "/api/v1/admin/products?view=surveys",
   catalogStatus: "/api/v1/admin/catalog/status",
   mocDiscovery: "/api/v1/admin/moc-discovery", mocBuilds: "/api/v1/admin/moc-builds",
+  nativeUnits: "/api/v1/admin/native-units",
 };
 export type Resource = keyof typeof resources;
 export const workspaceResources: Record<AdminStep, Resource[]> = {
-  overview: ["overview", "products", "reviewSurveys"],
-  sources: ["connectors"],
-  tasks: ["tasks", "mocDiscovery", "mocBuilds", "products", "reviewSurveys", "connectors"],
-  review: ["products", "reviewSurveys", "mocBuilds", "catalogStatus"],
-  releases: [],
+  overview: ["overview", "products", "reviewSurveys", "nativeUnits"],
+  sources: ["connectors", "nativeUnits"],
+  tasks: ["tasks", "mocDiscovery", "mocBuilds", "products", "reviewSurveys", "connectors", "nativeUnits"],
+  review: ["products", "reviewSurveys", "mocBuilds", "catalogStatus", "nativeUnits"],
+  releases: ["nativeUnits"],
   api: [],
 };
 

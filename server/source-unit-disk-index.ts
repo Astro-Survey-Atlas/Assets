@@ -44,7 +44,7 @@ export interface SourceUnitDiskUnit {
   membershipPayload?: unknown;
 }
 
-export const SOURCE_UNIT_DISK_INDEX_VERSION = "4";
+export const SOURCE_UNIT_DISK_INDEX_VERSION = "5";
 
 function payload<T>(value: unknown): T {
   if (typeof value !== "string") throw new Error("Source-unit disk index contains an invalid JSON payload");

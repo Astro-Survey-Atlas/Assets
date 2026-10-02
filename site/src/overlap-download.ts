@@ -154,7 +154,7 @@ export const OVERLAP_DOWNLOAD_HEADER = [
   "source_file_id", "file_name", "file_type", "size_bytes", "source_uri", "downloadable", "download_url", "matching_cells", "coverage_methods", "entrypoint_kind", "tile_id", "entrypoint_url", "source_scope", "required", "selection_complete", "selection_rule", "required_tile_ids",
   "ra_min_deg", "ra_max_deg", "dec_min_deg", "dec_max_deg", "area_deg2", "notes", "evidence_kind", "source_label", "source_url", "geometry_source_url", "coverage_url", "available_orders", "native_max_order", "source_identity", "instrument", "filters", "source_snapshot_sha256", "completeness", "science_file_scan",
   "file_observations", "scan_scopes", "matching_coverage_truncated", "access_uris", "access_availability",
-  "s_region", "query_snapshot_id", "omitted", "has_more", "inventory_complete",
+  "s_region", "query_snapshot_id", "omitted", "has_more", "inventory_complete", "native_unit_index_revision",
 ] as const;
 
 export function csvCell(value: unknown): string {
@@ -171,7 +171,7 @@ export function overlapCsvRows(
   plan: DownloadPlan,
   resolveLayer: (layerId: string | undefined) => DownloadLayerEntry,
   fallbackPrecision = "entrypoint-only",
-  state?: { snapshotId?: string; omitted: number; hasMore: boolean },
+  state?: { snapshotId?: string; nativeUnitIndexRevision?: string; omitted: number; hasMore: boolean },
 ): string[][] {
   const rows: string[][] = [];
   (plan.spatialUnits ?? []).forEach((unit) => {
@@ -244,10 +244,13 @@ export function overlapCsvRows(
     row[OVERLAP_DOWNLOAD_HEADER.indexOf("inventory_complete")] = "false";
     rows.push(row);
   }
+  const filesById = new Map(plan.files.map(file => [file.fileId, file]));
+  const unitsById = new Map((plan.spatialUnits ?? []).map(unit => [JSON.stringify([unit.layerId, unit.unitKind, unit.unitId]), unit]));
   return rows.map((row) => {
     const padded = [...row, ...Array(Math.max(0, OVERLAP_DOWNLOAD_HEADER.length - row.length)).fill("")];
-    const file = row[1] === "file" ? plan.files.find(file => file.fileId === row[10]) : undefined;
-    const unit = row[1] === "spatial-unit" ? plan.spatialUnits?.find(unit => unit.layerId === row[5] && unit.unitId === row[20]) : undefined;
+    const file = row[1] === "file" ? filesById.get(row[10] ?? "") : undefined;
+    const unit = row[1] === "spatial-unit" ? unitsById.get(JSON.stringify([row[5], row[19], row[20]])) : undefined;
+    padded[OVERLAP_DOWNLOAD_HEADER.indexOf("native_unit_index_revision")] = state?.nativeUnitIndexRevision ?? "";
     padded[OVERLAP_DOWNLOAD_HEADER.indexOf("file_observations")] = file?.observations?.length
       ? JSON.stringify(file.observations)
       : unit?.scannedFiles?.length ? JSON.stringify(unit.scannedFiles) : "";

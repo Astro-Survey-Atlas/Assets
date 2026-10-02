@@ -14,12 +14,21 @@ const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 const MAST_REQUEST_TIMEOUT_MS = 60_000;
 const METADATA_QUERY_TIMEOUT_MS = 45_000;
 const INTERSECTION_OVERSAMPLING = 4;
+const COMPLEX_FOOTPRINT_VERTEX_LIMIT = 4;
 const CACHE_MS = 24 * 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 256;
+const MAX_STCS_REGION_LENGTH = 131_072;
+const MAX_STCS_REGION_TOKENS = 131_072;
+const MAX_STCS_REGION_PARTS = 512;
+const MAX_STCS_POLYGON_VERTICES = 32_768;
 const cache = new Map<string, { expiresAt: number; result: HstImageLookupResult }>();
 
 type MastRow = Record<string, unknown>;
 type MastRegion = { kind: "polygon"; vertices: Pointing[] } | { kind: "circle"; center: Pointing; radius: number };
+
+function hasComplexPolygon(shapes: readonly MastRegion[]): boolean {
+  return shapes.reduce((sum, shape) => sum + (shape.kind === "polygon" ? shape.vertices.length : 0), 0) > COMPLEX_FOOTPRINT_VERTEX_LIMIT;
+}
 export interface HstImageLookupResult {
   coordinateFrame: "ICRS";
   ordering: "NESTED";
@@ -119,7 +128,7 @@ async function mast(service: string, params: Record<string, unknown>, page = 1, 
   return { body, raw };
 }
 
-function normalizedCells(value: unknown, maximumCells = MAX_CELLS): { order: number; cells: number[] } {
+export function normalizedHstLookupCells(value: unknown, maximumCells = MAX_CELLS): { order: number; cells: number[] } {
   const body = record(value);
   const order = body?.order;
   const cells = body?.cells;
@@ -157,14 +166,46 @@ function coneForCells(order: number, cells: number[]): { ra: number; dec: number
   };
 }
 
+function sameVertex(left: Pointing, right: Pointing): boolean {
+  const phiDifference = Math.atan2(Math.sin(left.phi - right.phi), Math.cos(left.phi - right.phi));
+  return Math.abs(left.theta - right.theta) < 1e-12 && Math.abs(phiDifference) < 1e-12;
+}
+
+function polygonHasArea(vertices: readonly Pointing[]): boolean {
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  for (let index = 0; index < vertices.length; index += 1) {
+    const left = vertices[index]!;
+    const right = vertices[(index + 1) % vertices.length]!;
+    const leftSinTheta = Math.sin(left.theta);
+    const rightSinTheta = Math.sin(right.theta);
+    const leftX = leftSinTheta * Math.cos(left.phi);
+    const leftY = leftSinTheta * Math.sin(left.phi);
+    const leftZ = Math.cos(left.theta);
+    const rightX = rightSinTheta * Math.cos(right.phi);
+    const rightY = rightSinTheta * Math.sin(right.phi);
+    const rightZ = Math.cos(right.theta);
+    x += leftY * rightZ - leftZ * rightY;
+    y += leftZ * rightX - leftX * rightZ;
+    z += leftX * rightY - leftY * rightX;
+  }
+  return Math.hypot(x, y, z) > 1e-14;
+}
+
 function regions(region: unknown): MastRegion[] | undefined {
-  if (typeof region !== "string" || region.length > 32_768) return undefined;
-  const tokens = region.trim().split(/\s+/);
+  if (typeof region !== "string" || region.length > MAX_STCS_REGION_LENGTH) return undefined;
+  const normalized = region.replace(/([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(?=(?:POLYGON|CIRCLE)\b)/gi, "$1 ");
+  const tokens = normalized.trim().split(/\s+/);
+  if (tokens.length > MAX_STCS_REGION_TOKENS) return undefined;
   const output: MastRegion[] = [];
+  let partCount = 0;
   for (let index = 0; index < tokens.length;) {
     const kind = tokens[index++]!.toUpperCase();
     if (kind !== "POLYGON" && kind !== "CIRCLE") return undefined;
-    if (index < tokens.length && /^[A-Z]+$/.test(tokens[index]!)) {
+    partCount += 1;
+    if (partCount > MAX_STCS_REGION_PARTS) return undefined;
+    if (index < tokens.length && /^[A-Z][A-Z0-9_-]*$/i.test(tokens[index]!)) {
       if (tokens[index]!.toUpperCase() !== "ICRS") return undefined;
       index++;
     }
@@ -187,21 +228,20 @@ function regions(region: unknown): MastRegion[] | undefined {
       const coordinate = Number(tokens[index++]);
       if (!Number.isFinite(coordinate)) return undefined;
       coordinates.push(coordinate);
+      if (coordinates.length > MAX_STCS_POLYGON_VERTICES * 2) return undefined;
     }
-    if (coordinates.length < 6 || coordinates.length % 2) return undefined;
+    if (coordinates.length % 2) return undefined;
+    if (coordinates.length < 6) continue;
     const vertices: Pointing[] = [];
     for (let i = 0; i < coordinates.length; i += 2) {
       const ra = coordinates[i]!, dec = coordinates[i + 1]!;
       if (Math.abs(ra) > 1_000_000 || dec < -90 || dec > 90) return undefined;
       vertices.push(new Pointing(null, false, (90 - dec) * Math.PI / 180, ((ra % 360 + 360) % 360) * Math.PI / 180));
     }
-    if (vertices.length > 3) {
-      const first = vertices[0]!;
-      const last = vertices.at(-1)!;
-      const phiDifference = Math.atan2(Math.sin(first.phi - last.phi), Math.cos(first.phi - last.phi));
-      if (Math.abs(first.theta - last.theta) < 1e-12 && Math.abs(phiDifference) < 1e-12) vertices.pop();
-    }
-    if (vertices.length < 3) return undefined;
+    if (vertices.length > 1 && sameVertex(vertices[0]!, vertices.at(-1)!)) vertices.pop();
+    if (vertices.length < 3) continue;
+    const uniqueVertices = new Set(vertices.map((vertex) => `${Math.round(vertex.theta * 1e12)}:${Math.round(vertex.phi * 1e12)}`));
+    if (uniqueVertices.size < 3 || !polygonHasArea(vertices)) continue;
     output.push({ kind: "polygon", vertices });
   }
   return output.length ? output : undefined;
@@ -234,10 +274,71 @@ export function cellsForStcs(order: number, cells: readonly number[], stcs: unkn
   const shapes = regions(stcs);
   if (!shapes) return [];
   const healpix = new Healpix(2 ** order);
-  const covered = shapes.map((shape) => shape.kind === "circle"
-    ? healpix.queryDiscInclusive(shape.center, shape.radius, INTERSECTION_OVERSAMPLING)
-    : healpix.queryPolygonInclusive(shape.vertices, INTERSECTION_OVERSAMPLING));
-  return cells.filter((pixel) => covered.some((range) => contains(range, pixel)));
+  const simplifyPolygons = hasComplexPolygon(shapes);
+  const covered = shapes.map((shape) => {
+    if (shape.kind === "polygon" && simplifyPolygons) {
+      const cap = circumscribedCap(shape.vertices);
+      if (!cap || cap.radius >= Math.PI / 2) return undefined;
+      return healpix.queryDiscInclusive(cap.center, cap.radius, INTERSECTION_OVERSAMPLING);
+    }
+    return shape.kind === "circle"
+      ? healpix.queryDiscInclusive(shape.center, shape.radius, INTERSECTION_OVERSAMPLING)
+      : healpix.queryPolygonInclusive(shape.vertices, INTERSECTION_OVERSAMPLING);
+  });
+  if (covered.some((range) => range === undefined)) return [...cells];
+  return cells.filter((pixel) => covered.some((range) => contains(range!, pixel)));
+}
+
+function circumscribedCap(vertices: readonly Pointing[]): { center: Pointing; radius: number } | undefined {
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  for (const vertex of vertices) {
+    const sinTheta = Math.sin(vertex.theta);
+    x += sinTheta * Math.cos(vertex.phi);
+    y += sinTheta * Math.sin(vertex.phi);
+    z += Math.cos(vertex.theta);
+  }
+  const length = Math.hypot(x, y, z);
+  if (length < 1e-12) return undefined;
+  x /= length;
+  y /= length;
+  z /= length;
+  const center = new Pointing(null, false, Math.acos(Math.max(-1, Math.min(1, z))), (Math.atan2(y, x) + 2 * Math.PI) % (2 * Math.PI));
+  let radius = 0;
+  for (const vertex of vertices) {
+    const sinTheta = Math.sin(vertex.theta);
+    const dot = x * sinTheta * Math.cos(vertex.phi) + y * sinTheta * Math.sin(vertex.phi) + z * Math.cos(vertex.theta);
+    radius = Math.max(radius, Math.acos(Math.max(-1, Math.min(1, dot))));
+  }
+  return { center, radius: Math.min(Math.PI, radius + 1e-12) };
+}
+
+export function candidateCellsForStcs(order: number, stcs: unknown, healpix = new Healpix(2 ** order)): number[] {
+  const shapes = regions(stcs);
+  if (!shapes) return [];
+  const candidates = new Set<number>();
+  const simplifyPolygons = hasComplexPolygon(shapes);
+  for (const shape of shapes) {
+    let covered;
+    if (shape.kind === "polygon" && simplifyPolygons) {
+      const cap = circumscribedCap(shape.vertices);
+      if (!cap || cap.radius >= Math.PI / 2) {
+        const allSkyCells = 12 * 4 ** order;
+        for (let cell = 0; cell < allSkyCells; cell += 1) candidates.add(cell);
+        continue;
+      }
+      covered = healpix.queryDiscInclusive(cap.center, Math.min(Math.PI, cap.radius + healpix.maxPixrad()), INTERSECTION_OVERSAMPLING);
+    } else {
+      covered = shape.kind === "circle"
+        ? healpix.queryDiscInclusive(shape.center, Math.min(Math.PI, shape.radius + healpix.maxPixrad()), INTERSECTION_OVERSAMPLING)
+        : healpix.queryPolygonInclusive(shape.vertices, INTERSECTION_OVERSAMPLING);
+    }
+    for (let range = 0; range < covered.sz; range += 2) {
+      for (let pixel = covered.r[range]!; pixel < covered.r[range + 1]!; pixel += 1) candidates.add(pixel);
+    }
+  }
+  return [...candidates].sort((left, right) => left - right);
 }
 
 function productKind(product: MastRow): "combined-image" | "exposure" | "other" {
@@ -279,7 +380,7 @@ function portalUrl(obsid: string): string {
 
 export async function lookupHstImages(input: unknown, store?: ArtifactStore, options: { metadataOnly?: boolean; signal?: AbortSignal } = {}): Promise<HstImageLookupResult> {
   const metadataOnly = options.metadataOnly === true;
-  const { order, cells } = normalizedCells(input, metadataOnly ? 4096 : MAX_CELLS);
+  const { order, cells } = normalizedHstLookupCells(input, metadataOnly ? 4096 : MAX_CELLS);
   const cacheKey = `${metadataOnly}:${order}:${cells.join(",")}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.result;

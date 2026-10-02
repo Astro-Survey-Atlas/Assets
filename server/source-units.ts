@@ -61,6 +61,17 @@ export interface SourceUnitCoverageLayer {
   cells: Map<number, number[]>;
 }
 
+/** Managed builds write a candidate; query workers only open its frozen artifact. */
+export interface SourceUnitLoadOptions {
+  indexPath?: string;
+  buildKey?: string;
+  readOnly?: boolean;
+  lockText?: string;
+  recipes?: Record<string, string>;
+  /** A managed delta build parses one release; its database is merged into a copy. */
+  sourceScope?: { surveyId: string; releaseId: string };
+}
+
 function sourceUnitIdentity(surveyId: string, releaseId: string, product: string): string {
   return `${surveyId}\u0000${releaseId}\u0000${product}`;
 }
@@ -70,7 +81,7 @@ function sourceUnitDiskAlias(alias: string): string {
   return parts.length === 1 ? alias : `identity:${parts.map(encodeURIComponent).join("/")}`;
 }
 
-async function sourceUnitDiskCacheKey(root: string, registryText: string, lockText: string, registry: { layers?: Array<{ surveyId: string; recipePath?: string }> }): Promise<string> {
+async function sourceUnitDiskCacheKey(root: string, registryText: string, lockText: string, registry: { layers?: Array<{ surveyId: string; recipePath?: string }> }, recipes: Record<string, string> = {}): Promise<string> {
   const modulePath = fileURLToPath(import.meta.url);
   const extension = path.extname(modulePath);
   const moduleDirectory = path.dirname(modulePath);
@@ -80,12 +91,12 @@ async function sourceUnitDiskCacheKey(root: string, registryText: string, lockTe
     const bytes = await readFile(path.join(moduleDirectory, `${moduleName}${extension}`));
     key.update(moduleName).update("\n").update(bytes).update("\n");
   }
-  const recipes = (registry.layers ?? [])
+  const recipePaths = (registry.layers ?? [])
     .filter((layer) => layer.surveyId === "desi" && layer.recipePath)
     .map((layer) => layer.recipePath!)
     .sort();
-  for (const recipePath of recipes) {
-    key.update(recipePath).update("\n").update(await readFile(path.join(root, recipePath))).update("\n");
+  for (const recipePath of recipePaths) {
+    key.update(recipePath).update("\n").update(recipes[recipePath] ?? await readFile(path.join(root, recipePath))).update("\n");
   }
   return key.digest("hex");
 }
@@ -102,6 +113,28 @@ export interface SourceUnitMatch {
   totalUnits: number;
   truncated: boolean;
   notes: string;
+}
+
+export function inspectSourceUnitInput(bytes: Buffer, kind: "legacy" | "desi" | "euclid" | "hsc"): { rows: number; columns: string[] } {
+  if (kind === "hsc") {
+    const decoded = bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes, { maxOutputLength: 64 * 1024 * 1024 }) : bytes;
+    const patches = parseHscPatchFile(decoded.toString("utf8"), "metadata", "metadata", "", "https://hsc-release.mtk.nao.ac.jp/");
+    if (!patches.length) throw new Error("HSC metadata contains no valid tract/patch polygons");
+    return { rows: patches.length, columns: ["tract", "patch", "center", "corners"] };
+  }
+  if (kind === "euclid") {
+    const rows = parseCsv(bytes.toString("utf8"));
+    const columns = rows[0]?.map(value => value.trim().toLowerCase()) ?? [];
+    for (const column of ["tile_index", "file_name", "data_set_release", "stc_s"]) if (!columns.includes(column)) throw new Error(`Euclid metadata is missing ${column}`);
+    return { rows: Math.max(0, rows.length - 1), columns };
+  }
+  const decoded = bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes, { maxOutputLength: 512 * 1024 * 1024 }) : bytes;
+  const table = binaryTable(decoded);
+  const columns = table.columns.map(column => column.name.toUpperCase());
+  if (!Number.isSafeInteger(table.rowCount) || table.rowCount < 1 || table.dataOffset + table.rowCount * table.rowLength > decoded.length) throw new Error("Native metadata table is empty or incomplete");
+  if (columns.some(column => /^(?:FLUX|WAVELENGTH|IVAR|FIBERFLUX|PSFFLUX)(?:_|$)/.test(column))) throw new Error("A science catalog or spectrum cannot be imported as native-unit metadata");
+  for (const column of kind === "legacy" ? ["BRICKNAME", "RA", "DEC"] : ["TILEID", "TILERA", "TILEDEC", "NEXP"]) if (!columns.includes(column)) throw new Error(`Native metadata is missing ${column}`);
+  return { rows: table.rowCount, columns };
 }
 
 interface SourceUnitLayerIndex {
@@ -263,6 +296,15 @@ function unitPixels(instance: Healpix, unit: SourceUnit): number[] {
   return rangePixels(instance, new Pointing(null, false, (90 - unit.decDeg) * Math.PI / 180, unit.raDeg * Math.PI / 180), unit.radiusDeg);
 }
 
+function unitGeometryKey(unit: SourceUnit): string {
+  return unit.footprint?.length
+    ? `polygon:${unit.footprint.map(([ra, dec]) => `${ra},${dec}`).join(";")}`
+    : `circle:${unit.raDeg},${unit.decDeg},${unit.radiusDeg}`;
+}
+
+const MAX_MATCH_CACHE_REGIONS = 2;
+const MAX_MATCH_CACHE_GEOMETRIES = 20_000;
+
 function coveragePixels(units: SourceUnit[], order: number): number[] {
   const healpix = new Healpix(2 ** order);
   const pixels = new Set<number>();
@@ -297,8 +339,8 @@ async function readLockedSnapshot(root: string, lock: SourceSnapshotLock): Promi
   return { bytes, sha256 };
 }
 
-async function buildDesiLayer(root: string, evidenceRoot: string, input: { layerId: string; releaseId: string; recipePath: string }): Promise<SourceUnitLayerIndex> {
-  const recipe = JSON.parse(await readFile(path.join(root, input.recipePath), "utf8")) as { input: string; snapshot: { sha256: string; sizeBytes?: number }; recipe: { hdu: string; raColumn: string; decColumn: string; nexpColumn: string; nexpMin: number; radiusDeg: number } };
+async function buildDesiLayer(root: string, evidenceRoot: string, input: { layerId: string; releaseId: string; recipePath: string }, recipeText?: string): Promise<SourceUnitLayerIndex> {
+  const recipe = JSON.parse(recipeText ?? await readFile(path.join(root, input.recipePath), "utf8")) as { input: string; snapshot: { sha256: string; sizeBytes?: number }; recipe: { hdu: string; raColumn: string; decColumn: string; nexpColumn: string; nexpMin: number; radiusDeg: number } };
   const evidencePath = recipe.input.split("/raw/").at(-1);
   if (!evidencePath) throw new Error(`${input.layerId} recipe input is not evidence-backed`);
   let buffer: Buffer | undefined;
@@ -505,14 +547,6 @@ function parseEuclidRows(content: string, sourceSnapshotSha256: string): Map<str
   return indexes;
 }
 
-function legacyDr10BrickAccessUrl(unitId: string, productPath: "coadd" | "tractor"): string {
-  const root = "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south";
-  const prefix = unitId.slice(0, 3);
-  return productPath === "tractor"
-    ? `${root}/tractor/${prefix}/tractor-${unitId}.fits`
-    : `${root}/coadd/${prefix}/${unitId}/`;
-}
-
 export function legacyDr1ImageUrl(unitId: string, band: string): string {
   const prefix = unitId.slice(0, 3);
   return `ftp://archive.noao.edu/public/hlsp/decals/dr1/coadd/${prefix}/${unitId}/decals-${unitId}-image-${band}.fits`;
@@ -679,7 +713,7 @@ function parseLegacyBricks(bytes: Buffer, sourceSnapshotSha256: string, included
       decDeg: dec,
       radiusDeg,
       footprint,
-      downloadUrl: legacyDr10BrickAccessUrl(unitId, "coadd"),
+      downloadUrl: "https://www.legacysurvey.org/dr10/files/",
       accessAvailability: "unverified",
       geometryPrecision: "estimated",
       sourceSnapshotSha256,
@@ -689,25 +723,10 @@ function parseLegacyBricks(bytes: Buffer, sourceSnapshotSha256: string, included
   return units;
 }
 
-function parseLegacySouthBrickIds(bytes: Buffer): Set<string> {
-  const buffer = gunzipSync(bytes);
-  const table = binaryTable(buffer);
-  const columns = new Map(table.columns.map((column) => [column.name.toUpperCase(), column]));
-  const brickname = columns.get("BRICKNAME");
-  if (!brickname) throw new Error("Legacy DR10 south summary is missing BRICKNAME");
-  const brickIds = new Set<string>();
-  for (let row = 0; row < table.rowCount; row += 1) {
-    const rowOffset = table.dataOffset + row * table.rowLength;
-    const unitId = stringValue(buffer, rowOffset, brickname);
-    if (/^\d{4}[pm]\d{3}$/.test(unitId)) brickIds.add(unitId);
-  }
-  return brickIds;
-}
-
 interface LegacyRosterMember {
   raDeg: number;
   decDeg: number;
-  availableBandMask: number;
+  availableBands: string[];
   bounds?: [number, number, number, number];
 }
 
@@ -722,6 +741,7 @@ function parseLegacyReleaseRoster(bytes: Buffer, sourceName: string): LegacyRele
   const columns = new Map(table.columns.map((column) => [column.name.toUpperCase(), column]));
   const required = ["BRICKNAME", "RA", "DEC", "NEXP_G", "NEXP_R", "NEXP_Z"];
   required.forEach((name) => { if (!columns.has(name)) throw new Error(`${sourceName} brick roster is missing ${name}`); });
+  if (sourceName.startsWith("legacy-dr10") && !columns.has("NEXP_I")) throw new Error(`${sourceName} brick roster is missing NEXP_I`);
   const boundNames = ["RA1", "RA2", "DEC1", "DEC2"];
   const hasAnyBounds = boundNames.some((name) => columns.has(name));
   if (hasAnyBounds && boundNames.some((name) => !columns.has(name))) throw new Error(`${sourceName} brick roster has an incomplete bounds set`);
@@ -736,23 +756,25 @@ function parseLegacyReleaseRoster(bytes: Buffer, sourceName: string): LegacyRele
     if (!Number.isFinite(raDeg) || !Number.isFinite(decDeg) || raDeg < 0 || raDeg >= 360 || decDeg < -90 || decDeg > 90) {
       throw new Error(`${sourceName} brick roster has invalid coordinates for ${unitId}`);
     }
-    let availableBandMask = 0;
-    ( ["g", "r", "z"] as const).forEach((band, index) => {
-      if (numericValue(buffer, rowOffset, columns.get(`NEXP_${band.toUpperCase()}`)!) > 0) availableBandMask |= 1 << index;
-    });
+    const exposures: Partial<Record<"g" | "r" | "i" | "z", number>> = {};
+    for (const band of ["g", "r", "i", "z"] as const) {
+      const column = columns.get(`NEXP_${band.toUpperCase()}`);
+      if (column) exposures[band] = numericValue(buffer, rowOffset, column);
+    }
+    const availableBands = legacyAvailableBands(exposures);
     const bounds = hasAnyBounds
       ? boundNames.map((name) => numericValue(buffer, rowOffset, columns.get(name)!)) as [number, number, number, number]
       : undefined;
-    members.set(unitId, { raDeg, decDeg, availableBandMask, ...(bounds ? { bounds } : {}) });
+    members.set(unitId, { raDeg, decDeg, availableBands, ...(bounds ? { bounds } : {}) });
   }
   return { rowCount: table.rowCount, members };
 }
 
-function legacyBandsFromMask(mask: number): string[] {
-  return (["g", "r", "z"] as const).filter((_, index) => (mask & (1 << index)) !== 0);
+export function legacyAvailableBands(exposures: Partial<Record<"g" | "r" | "i" | "z", number>>): string[] {
+  return (["g", "r", "i", "z"] as const).filter((band) => Number(exposures[band]) > 0);
 }
 
-function legacyReleaseBrickAccessUris(
+export function legacyReleaseBrickAccessUris(
   releaseId: string,
   region: string,
   unitId: string,
@@ -779,17 +801,18 @@ export class SourceUnitStore {
   readonly #layers = new Map<string, SourceUnitLayerIndex>();
   readonly #identityLayers = new Map<string, SourceUnitLayerIndex>();
   readonly #coverageLayers: SourceUnitCoverageLayer[] = [];
+  readonly #spatialMatchCache = new Map<string, Map<string, number[] | null>>();
   #diskIndex?: SourceUnitDiskIndex;
   #cacheState: "hit" | "built" | "memory-only" = "memory-only";
   #cacheable = true;
 
-  static async load(root: string, evidenceRoot = path.join(root, "artifacts/public-survey-footprints/raw")): Promise<SourceUnitStore> {
+  static async load(root: string, evidenceRoot = path.join(root, "artifacts/public-survey-footprints/raw"), options: SourceUnitLoadOptions = {}): Promise<SourceUnitStore> {
     const store = new SourceUnitStore();
     const registryPath = path.join(root, "src/layers/layer-registry.json");
     const lockPath = path.join(root, "src/layers/recipes/source-unit-indexes.lock.json");
     const [registryBytes, lockBytes] = await Promise.all([readFile(registryPath), readFile(lockPath)]);
     const registryText = registryBytes.toString("utf8");
-    const lockText = lockBytes.toString("utf8");
+    const lockText = options.lockText ?? lockBytes.toString("utf8");
     const registry = JSON.parse(registryText) as { layers?: Array<{ layerId: string; surveyId: string; releaseId: string; product?: string; status?: string; recipePath?: string }> };
     const lock = JSON.parse(lockText) as {
       euclidQ1?: { status?: string; snapshot?: SourceSnapshotLock };
@@ -798,7 +821,6 @@ export class SourceUnitStore {
       legacyDr1?: { status?: string; snapshot: SourceSnapshotLock };
       legacyDr2?: { status?: string; snapshot: SourceSnapshotLock };
       legacyDr10?: { snapshot: SourceSnapshotLock };
-      legacyDr10South?: { status?: string; snapshot?: SourceSnapshotLock };
       legacyReleaseRosters?: {
         status?: string;
         scope?: string;
@@ -810,8 +832,21 @@ export class SourceUnitStore {
       };
       layerBindings?: SourceUnitLayerBinding[];
       };
-    const buildKey = await sourceUnitDiskCacheKey(root, registryText, lockText, registry);
-    const diskPath = path.join(evidenceRoot, "derived", "source-unit-indexes", "native-units.sqlite");
+    if (options.sourceScope) {
+      const scope = options.sourceScope;
+      registry.layers = registry.layers?.filter(layer => layer.surveyId === scope.surveyId && layer.releaseId === scope.releaseId);
+      const keep = (surveyId: string, releaseId: string) => scope.surveyId === surveyId && scope.releaseId === releaseId;
+      if (!keep("euclid", "euclid-q1")) delete lock.euclidQ1;
+      if (!keep("hsc-ssp", "hsc-pdr2")) delete lock.hscPdr2;
+      if (!keep("hsc-ssp", "hsc-pdr3")) delete lock.hscPdr3;
+      if (!keep("legacy-surveys", "legacy-dr1")) delete lock.legacyDr1;
+      if (!keep("legacy-surveys", "legacy-dr2")) delete lock.legacyDr2;
+      if (scope.surveyId !== "legacy-surveys" || ["legacy-dr1", "legacy-dr2"].includes(scope.releaseId)) delete lock.legacyDr10;
+      if (lock.legacyReleaseRosters?.releases) lock.legacyReleaseRosters.releases = Object.fromEntries(Object.entries(lock.legacyReleaseRosters.releases).filter(([releaseId]) => keep("legacy-surveys", releaseId)));
+      lock.layerBindings = lock.layerBindings?.filter(binding => keep(binding.surveyId, binding.releaseId));
+    }
+    const buildKey = options.buildKey ?? await sourceUnitDiskCacheKey(root, registryText, options.sourceScope ? JSON.stringify(lock) : lockText, registry, options.recipes);
+    const diskPath = options.indexPath ?? path.join(evidenceRoot, "derived", "source-unit-indexes", "native-units.sqlite");
     const cachedIndex = await SourceUnitDiskIndex.open(diskPath, buildKey);
     if (cachedIndex) {
       store.#diskIndex = cachedIndex;
@@ -819,12 +854,14 @@ export class SourceUnitStore {
       return store;
     }
 
+    if (options.readOnly) throw new Error("The approved source-unit index is unavailable or incompatible; create a managed build before activation");
+
     const desiRecipes = (registry.layers ?? []).filter((layer): layer is typeof layer & { recipePath: string } => layer.surveyId === "desi" && Boolean(layer.recipePath));
     for (const layer of desiRecipes) {
       try {
-        const recipe = JSON.parse(await readFile(path.join(root, layer.recipePath), "utf8")) as { input?: unknown; mode?: unknown };
+        const recipe = JSON.parse(options.recipes?.[layer.recipePath] ?? await readFile(path.join(root, layer.recipePath), "utf8")) as { input?: unknown; mode?: unknown };
         if (recipe.mode !== "tile-table" || typeof recipe.input !== "string") continue;
-        store.#layers.set(layer.layerId, await buildDesiLayer(root, evidenceRoot, layer));
+        store.#layers.set(layer.layerId, await buildDesiLayer(root, evidenceRoot, layer, options.recipes?.[layer.recipePath]));
       } catch {
         store.#cacheable = false;
         continue;
@@ -1109,7 +1146,7 @@ export class SourceUnitStore {
               const productMembership = new Uint8Array(sharedUnits.length);
               for (const { roster } of release.regions.values()) {
                 for (const [unitId, member] of roster.members) {
-                  if (productPath === "coadd" && member.availableBandMask === 0) continue;
+                  if (productPath === "coadd" && member.availableBands.length === 0) continue;
                   const unitIndex = geometryIndexById.get(unitId);
                   if (unitIndex !== undefined) productMembership[unitIndex] = 1;
                 }
@@ -1118,7 +1155,7 @@ export class SourceUnitStore {
                 const accessUris: SourceUnitAccessUri[] = [];
                 for (const [region, { roster }] of release.regions) {
                   const member = roster.members.get(unitId);
-                  if (member) accessUris.push(...legacyReleaseBrickAccessUris(releaseId, region, unitId, productPath, legacyBandsFromMask(member.availableBandMask)));
+                  if (member) accessUris.push(...legacyReleaseBrickAccessUris(releaseId, region, unitId, productPath, member.availableBands));
                 }
                 return accessUris;
               };
@@ -1132,7 +1169,7 @@ export class SourceUnitStore {
               index.diskMembershipForUnit = (unitId) => ({
                 regions: [...release.regions].flatMap(([id, { roster }]) => {
                   const member = roster.members.get(unitId);
-                  return member ? [{ id, availableBandMask: member.availableBandMask }] : [];
+                  return member ? [{ id, availableBands: member.availableBands }] : [];
                 }),
               });
               store.#identityLayers.set(identity, index);
@@ -1144,8 +1181,8 @@ export class SourceUnitStore {
                 cells.add(coarseHealpix.ang2pix(new Pointing(null, false, (90 - unit.decDeg) * Math.PI / 180, unit.raDeg * Math.PI / 180)));
               }
               const unitCount = productMembership.reduce((count, member) => count + member, 0);
-              const productNotes = `${releaseId.toUpperCase()} ${release.scope}: ${unitCount} ${productPath === "tractor" ? "Tractor" : "Coadd"} brick candidates. Coadd membership is selected from positive NEXP_g/r/z roster summaries; Tractor candidates use listed release bricks. Geometry comes from the locked all-sky brick grid and was checked against roster centers${release.regions.size && [...release.regions.keys()].some((region) => region !== "all") ? "; North/South memberships retain their region-specific URI prefixes" : ""}. URI rules are documented by the release; individual candidate files remain unverified.`;
-              store.#coverageLayers.push({
+              const productNotes = `${releaseId.toUpperCase()} ${release.scope}: ${unitCount} ${productPath === "tractor" ? "Tractor" : "Coadd"} brick candidates. Coadd membership is selected from positive per-band NEXP roster summaries${releaseId === "legacy-dr10" ? " for g/r/i/z" : " for g/r/z"}; Tractor candidates use listed release bricks. Geometry comes from the locked all-sky brick grid and was checked against roster centers${release.regions.size && [...release.regions.keys()].some((region) => region !== "all") ? "; North/South memberships retain their region-specific URI prefixes" : ""}. URI rules are documented by the release; individual candidate files remain unverified.`;
+              if (binding.product !== "DR10 color imaging") store.#coverageLayers.push({
                 layerId: sourceUnitCoverageLayerId(binding),
                 surveyId: binding.surveyId,
                 releaseId: binding.releaseId,
@@ -1166,76 +1203,6 @@ export class SourceUnitStore {
       } catch (error) {
         store.#cacheable = false;
         console.warn(`Skipping Legacy DR3-DR9 source-unit indexes: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-
-    const legacyBindings = (lock.layerBindings ?? []).filter((binding) => binding.snapshotKey === "legacyDr10" && binding.surveyId === "legacy-surveys" && binding.releaseId === "legacy-dr10");
-    const legacyLayers = (registry.layers ?? []).filter((layer) => layer.surveyId === "legacy-surveys" && layer.releaseId === "legacy-dr10" && layer.status === "acquired");
-    if ((legacyBindings.length || legacyLayers.length) && lock.legacyDr10) {
-      try {
-        const snapshot = await readLockedSnapshot(evidenceRoot, lock.legacyDr10.snapshot);
-        const southSnapshotLock = lock.legacyDr10South?.snapshot;
-        const southSnapshot = lock.legacyDr10South?.status === "ready" && southSnapshotLock
-          ? await readLockedSnapshot(evidenceRoot, southSnapshotLock)
-          : undefined;
-        const southBrickIds = southSnapshot ? parseLegacySouthBrickIds(southSnapshot.bytes) : undefined;
-        const eligibleUnits = parseLegacyBricks(snapshot.bytes, snapshot.sha256, southBrickIds);
-        if (!eligibleUnits.length) throw new Error("Legacy DR10 south summary did not match any locked brick geometry");
-        const snapshotReferences = [
-          `${lock.legacyDr10.snapshot.path}:${snapshot.sha256}`,
-          ...(southSnapshotLock && southSnapshot ? [`${southSnapshotLock.path}:${southSnapshot.sha256}`] : []),
-        ].sort();
-        const combinedSha = createHash("sha256").update(snapshotReferences.join("\n")).digest("hex");
-        const scopedUnits = eligibleUnits;
-        for (const unit of scopedUnits) {
-          unit.sourceSnapshotSha256 = combinedSha;
-          unit.note = southBrickIds
-            ? "DR10 South brick membership comes from the official release summary; brick geometry comes from the official all-sky grid. This confirms release-level brick membership, not the presence of each band-specific coadd or Tractor file."
-            : "Official DR10 all-sky brick geometry only; without the South release summary, this is not a release-specific inventory.";
-        }
-        const scopeNote = southBrickIds
-          ? `Official DR10 South release summary (${southBrickIds.size} listed brick IDs; ${eligibleUnits.length} matched to locked geometry) joined to the all-sky brick geometry. The result is a release-member brick candidate, not proof that each band-specific coadd or Tractor file exists.`
-          : "Official DR10 survey-bricks geometry only. These are candidate brick identities, not a release-specific inventory proving file existence.";
-        const shared = buildLayerIndex("legacy-surveys:dr10", scopedUnits, scopeNote);
-        for (const binding of legacyBindings) {
-          const productPath = binding.productPath === "tractor" ? "tractor" : "coadd";
-          const identity = sourceUnitIdentity(binding.surveyId, binding.releaseId, binding.product);
-          const index = buildLayerIndex(identity, scopedUnits, binding.notes, shared);
-          index.downloadUrlForUnit = (unitId) => legacyDr10BrickAccessUrl(unitId, productPath);
-          store.#identityLayers.set(identity, index);
-        }
-        for (const layer of legacyLayers) {
-          const isTractor = layer.product?.toLowerCase().includes("tractor");
-          const index = buildLayerIndex(layer.layerId, scopedUnits, shared.notes, shared);
-          index.downloadUrlForUnit = (unitId) => legacyDr10BrickAccessUrl(unitId, isTractor ? "tractor" : "coadd");
-          store.#layers.set(layer.layerId, index);
-        }
-        if (southSnapshot && southBrickIds) {
-          const coaddBindings = legacyBindings.filter((binding) => binding.product !== "DR10 color imaging");
-          if (coaddBindings.length) {
-            const cells = new Map([[4, [...shared.coarseByPixel.keys()].sort((left, right) => left - right)]]);
-            const sourceUrls = [lock.legacyDr10.snapshot.sourceUrl, southSnapshotLock!.sourceUrl];
-            for (const binding of coaddBindings) {
-              store.#coverageLayers.push({
-                layerId: sourceUnitCoverageLayerId(binding),
-                surveyId: binding.surveyId,
-                releaseId: binding.releaseId,
-                product: binding.product,
-                modality: binding.modality ?? (binding.productPath === "tractor" ? "catalog" : "imaging"),
-                unitKind: binding.unitKind,
-                sourceSnapshotSha256: combinedSha,
-                sourceUrls,
-                accessUrl: "https://www.legacysurvey.org/dr10/files/",
-                notes: `${binding.notes} ${scopeNote}`,
-                coverageMethod: "unit-centers",
-                cells,
-              });
-            }
-          }
-        }
-      } catch (error) {
-        store.#cacheable = false;
-        console.warn(`Skipping incomplete Legacy DR10 source-unit index: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
@@ -1298,7 +1265,7 @@ export class SourceUnitStore {
           const sourceUnit = layer.units[unitIndex]!;
           const membershipPayload = layer.diskMembershipForUnit?.(sourceUnit.unitId);
           const accessUris = layer.diskMembershipForUnit ? undefined : layer.accessUrisForUnit?.(sourceUnit.unitId);
-          if (layer.accessUrisForUnit && !accessUris?.length) continue;
+          if (layer.accessUrisForUnit && !layer.diskMembershipForUnit && !accessUris?.length) continue;
             const downloadUrl = accessUris?.[0]?.url ?? layer.downloadUrlForUnit?.(sourceUnit.unitId) ?? sourceUnit.downloadUrl;
             const unit: SourceUnit = {
               ...sourceUnit,
@@ -1352,6 +1319,18 @@ export class SourceUnitStore {
     }
     const selected = new Set(requestedCells);
     const exactHealpix = new Healpix(2 ** order);
+    const queryKey = `${order}:${requestedCells.join(",")}`;
+    let geometryMatches = this.#spatialMatchCache.get(queryKey);
+    if (geometryMatches) {
+      this.#spatialMatchCache.delete(queryKey);
+      this.#spatialMatchCache.set(queryKey, geometryMatches);
+    } else {
+      geometryMatches = new Map();
+      this.#spatialMatchCache.set(queryKey, geometryMatches);
+      if (this.#spatialMatchCache.size > MAX_MATCH_CACHE_REGIONS) {
+        this.#spatialMatchCache.delete(this.#spatialMatchCache.keys().next().value!);
+      }
+    }
     const candidates: Iterable<{ unit: SourceUnit; index?: number; membershipPayload?: unknown }> = diskLayer
       ? this.#diskIndex!.units(diskLayer.key, candidatePixels)
       : [...unitIndexes].map((index) => ({ unit: memoryLayer!.units[index]!, index }));
@@ -1361,17 +1340,24 @@ export class SourceUnitStore {
       if (memoryLayer?.unitFilter) {
         if (candidate.index === undefined || !memoryLayer.unitFilter(candidate.index)) continue;
       }
-      const matchingCells = unitPixels(exactHealpix, sourceUnit).filter((pixel) => selected.has(pixel));
-      if (!matchingCells.length) continue;
+      const geometryKey = unitGeometryKey(sourceUnit);
+      let matchedPixels = geometryMatches.get(geometryKey);
+      if (matchedPixels === undefined) {
+        const matches = unitPixels(exactHealpix, sourceUnit).filter((pixel) => selected.has(pixel));
+        matchedPixels = matches.length ? matches : null;
+        if (geometryMatches.size < MAX_MATCH_CACHE_GEOMETRIES) geometryMatches.set(geometryKey, matchedPixels);
+      }
+      if (!matchedPixels?.length) continue;
+      const matchingCells = [...matchedPixels];
       let diskAccessUris: SourceUnitAccessUri[] | undefined;
       if (diskLayer?.payloadKind === "legacy-release-roster") {
         const context = diskLayer.payloadContext;
         const releaseId = typeof context?.releaseId === "string" ? context.releaseId : undefined;
         const productPath = context?.productPath === "tractor" ? "tractor" : context?.productPath === "coadd" ? "coadd" : undefined;
-        const membership = candidate.membershipPayload as { regions?: Array<{ id: string; availableBandMask: number }> } | undefined;
+        const membership = candidate.membershipPayload as { regions?: Array<{ id: string; availableBands: string[] }> } | undefined;
         if (releaseId && productPath && membership?.regions) {
-          diskAccessUris = membership.regions.flatMap(({ id, availableBandMask }) =>
-            legacyReleaseBrickAccessUris(releaseId, id, sourceUnit.unitId, productPath, legacyBandsFromMask(availableBandMask)));
+          diskAccessUris = membership.regions.flatMap(({ id, availableBands }) =>
+            legacyReleaseBrickAccessUris(releaseId, id, sourceUnit.unitId, productPath, availableBands));
         }
       }
       const accessUris = memoryLayer?.accessUrisForUnit?.(sourceUnit.unitId) ?? diskAccessUris ?? sourceUnit.accessUris;
@@ -1418,9 +1404,10 @@ export class SourceUnitWorkerStore {
     worker.on("exit", (code) => { if (code !== 0) this.#rejectAll(new Error(`Source-unit worker exited with code ${code}`)); });
   }
 
-  static async load(root: string, evidenceRoot = path.join(root, "artifacts/public-survey-footprints/raw")): Promise<SourceUnitWorkerStore> {
+  static async load(root: string, evidenceRoot = path.join(root, "artifacts/public-survey-footprints/raw"), options: SourceUnitLoadOptions = {}): Promise<SourceUnitWorkerStore> {
     const source = new URL(import.meta.url);
-    const cacheWorker = new Worker(source, { workerData: { kind: "source-unit-cache-builder", root, evidenceRoot } });
+    if (options.readOnly) return this.#openWorker(source, root, evidenceRoot, options);
+    const cacheWorker = new Worker(source, { workerData: { kind: "source-unit-cache-builder", root, evidenceRoot, options } });
     const beforeBuildRss = process.memoryUsage().rss;
     let peakBuildRss = beforeBuildRss;
     const sampler = setInterval(() => { peakBuildRss = Math.max(peakBuildRss, process.memoryUsage().rss); }, 100);
@@ -1459,13 +1446,17 @@ export class SourceUnitWorkerStore {
       await cacheWorker.terminate().catch(() => undefined);
     }
 
-    const diskPath = path.join(evidenceRoot, "derived", "source-unit-indexes", "native-units.sqlite");
+    const diskPath = options.indexPath ?? path.join(evidenceRoot, "derived", "source-unit-indexes", "native-units.sqlite");
     const diskBytes = await stat(diskPath).then((value) => value.size).catch(() => 0);
     const builderPeakMiB = Math.round(peakBuildRss / (1024 * 1024));
     const readyMiB = Math.round(process.memoryUsage().rss / (1024 * 1024));
     console.info(`Source-unit SQLite cache ${cacheState}; ${diskBytes} bytes; RSS ${builderPeakMiB} MiB peak while building, ${readyMiB} MiB before query worker startup.`);
 
-    const worker = new Worker(source, { workerData: { kind: "source-unit-store", root, evidenceRoot } });
+    return this.#openWorker(source, root, evidenceRoot, options);
+  }
+
+  static #openWorker(source: URL, root: string, evidenceRoot: string, options: SourceUnitLoadOptions): Promise<SourceUnitWorkerStore> {
+    const worker = new Worker(source, { workerData: { kind: "source-unit-store", root, evidenceRoot, options } });
     const store = new SourceUnitWorkerStore(worker);
     return new Promise((resolve, reject) => {
       const onMessage = (message: WorkerResponse): void => {
@@ -1507,7 +1498,7 @@ export class SourceUnitWorkerStore {
 
 if (!isMainThread && workerData?.kind === "source-unit-cache-builder" && parentPort) {
   const workerPort = parentPort;
-  void SourceUnitStore.load(String(workerData.root), String(workerData.evidenceRoot)).then((store) => {
+  void SourceUnitStore.load(String(workerData.root), String(workerData.evidenceRoot), workerData.options).then((store) => {
     const result = { type: "prepared", diskBacked: store.diskBacked, cacheState: store.cacheState };
     store.close();
     workerPort.postMessage(result);
@@ -1520,7 +1511,7 @@ if (!isMainThread && workerData?.kind === "source-unit-cache-builder" && parentP
 
 if (!isMainThread && workerData?.kind === "source-unit-store" && parentPort) {
   const workerPort = parentPort;
-  void SourceUnitStore.load(String(workerData.root), String(workerData.evidenceRoot)).then((store) => {
+  void SourceUnitStore.load(String(workerData.root), String(workerData.evidenceRoot), workerData.options).then((store) => {
     workerPort.postMessage({ type: "ready", coverageLayers: store.coverageLayers() } satisfies WorkerResponse);
     workerPort.on("message", (request: WorkerRequest) => {
       try {

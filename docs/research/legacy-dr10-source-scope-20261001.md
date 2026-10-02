@@ -1,0 +1,21 @@
+# Legacy Surveys DR10 North Source Scope
+
+Checked 2026-10-01 against the current first-party Legacy Surveys DR10 documentation, its NERSC public tree, and NOIRLab Astro Data Lab TAP metadata. No data or science files were downloaded.
+
+## Findings
+
+- No public DR10 North brick roster or North Coadd/Tractor file tree is listed in the inspected official release sources. The [DR10 files page](https://www.legacysurvey.org/dr10/files/) distinguishes the all-sky `survey-bricks.fits.gz` geometric grid from `south/survey-bricks-dr10-south.fits.gz`, the release-specific brick summary. Its documented Coadd and Tractor paths are under `south/`. The live [NERSC DR10 root listing](https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/) exposes `south/` as its only region directory; the [South listing](https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south/) contains `coadd/`, `tractor/`, `tractor-i/`, `sweep/`, and other South products. On the check date, `dr10/north/`, `dr10/north/survey-bricks-dr10-north.fits.gz`, `dr10/north/survey-bricks.fits.gz`, and the alternate NERSC `/project/cosmo/.../dr10/north/` path returned HTTP 404. This is evidence about the current public release tree and tested paths, not a claim about unpublished or private storage.
+- “DR10 is South-only” needs a scope qualifier. The brick-indexed Coadd and Tractor release products are published under `south/`, but the public DR10 tree also has release-wide files and support directories at its root, including all-sky brick geometry, CCD metadata, calibration, masking, and random catalogs. Thus South is the current DR10 **brick-product region**, not the literal location of every public DR10 artifact.
+- NOIRLab Astro Data Lab does host North-related catalog tables under its `ls_dr10` schema, but its TAP metadata does not expose a DR10 North brick file inventory. The public [`TAP tables` endpoint](https://datalab.noirlab.edu/tap/tables) query `SELECT table_name, description FROM TAP_SCHEMA.tables WHERE schema_name = 'ls_dr10' ORDER BY table_name` reports `ls_dr10.bricks` as the all-sky geometric grid (662,174 rows), `ls_dr10.bricks_s` as the DR10 South brick table (366,912 rows), and `ls_dr10.tractor_s` as DR10 South. It describes `ls_dr10.tractor` as **combined DR10 South and DR9 North**, not DR10 North. It also lists `ls_dr10.psc_n`, described as an “LS DR10 North Point Source Catalog” (339,015,213 rows). The North PSC is a catalog, not a brick roster or per-file inventory; a sample query exposes source positions/IDs and HEALPix indexes, not native brick membership or file-presence evidence. A table called `bricks` is explicitly geometric and must not be treated as DR10 North membership.
+
+## Consequence for the Assets index
+
+The existing DR10 South lock remains the supported release-member roster: 366,912 rows, snapshot SHA-256 `863e5ded7a4aae7abcb5df76f322f35cf89945483715ff6d1874c88f5a072d9a`. A five-way region outside that roster has no DR10 South brick match; adding all-sky geometry cannot make it a DR10 North match. If North-region Legacy coverage is needed, use an explicitly identified DR9 North layer or investigate a separately defined catalog-derived product from the NOIRLab tables. Neither should be labeled as DR10 North Coadd/Tractor inventory without an official release roster and product URI evidence.
+
+The earlier source-page and sample-file checks are recorded in [native-block-access-uris.md](native-block-access-uris.md), and the live runtime roster binding is recorded in [source-unit-indexes.lock.json](../../src/layers/recipes/source-unit-indexes.lock.json).
+
+## Primary Sources
+
+- [Legacy Surveys DR10 files and layouts](https://www.legacysurvey.org/dr10/files/), including the all-sky grid, South release summary, directory structures, Coadd, Tractor, and ancillary products.
+- [NERSC public DR10 directory](https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/) and its [South subdirectory](https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr10/south/).
+- [NOIRLab Astro Data Lab TAP metadata](https://datalab.noirlab.edu/tap/tables) and [TAP query service](https://datalab.noirlab.edu/tap/sync), queried for `TAP_SCHEMA.tables` in schema `ls_dr10` on 2026-10-01.

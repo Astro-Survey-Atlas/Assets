@@ -115,6 +115,7 @@ export const STATE_SNAPSHOT_NAMESPACES = [
   "resource-packages",
   "publication-runs",
   "publication-tasks",
+  "native-units",
 ] as const;
 
 /** Queue a local state snapshot and surface failures to the caller. */
@@ -547,8 +548,17 @@ export class StateSnapshotCoordinator implements StateSnapshotSink {
   }
 
   async reconcileUploaded(manifests: readonly UploadJobManifest[]): Promise<StateSnapshotPointer[]> {
-    const jobs = manifests.map(snapshotJobFromManifest).filter((job): job is StateSnapshotJob => Boolean(job));
-    jobs.sort((left, right) => left.namespace.localeCompare(right.namespace) || left.generation - right.generation);
+    // Each immutable snapshot is a full state document. Acknowledge the newest
+    // verified generation once per namespace instead of advancing through all
+    // queued historical generations before the latest state becomes restorable.
+    const latest = new Map<string, StateSnapshotJob>();
+    for (const manifest of manifests) {
+      const job = snapshotJobFromManifest(manifest);
+      if (!job) continue;
+      const previous = latest.get(job.namespace);
+      if (!previous || previous.generation < job.generation) latest.set(job.namespace, job);
+    }
+    const jobs = [...latest.values()].sort((left, right) => left.namespace.localeCompare(right.namespace));
     const advanced: StateSnapshotPointer[] = [];
     for (const job of jobs) {
       const pointerPath = pointerKey(job.namespace);

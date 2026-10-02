@@ -1,4 +1,5 @@
 import { mountScanBatches } from "./scan-batches.js";
+import { mountNativeUnits, type NativeView } from "./native-units.js";
 import { loadApiSettings, mountApiSettings } from "./api-settings.js";
 import { discoveryResultMarkup, onlyLeads } from "./moc-result.js";
 import type { DiscoveryFailure } from "../../server/discovery-failure.js";
@@ -1951,7 +1952,7 @@ function openProduct(productId: string): void {
   (form.elements.namedItem("methodologyMarkdown") as HTMLTextAreaElement).value = product.draft.presentation.methodologyMarkdown;
   (form.elements.namedItem("limitationsMarkdown") as HTMLTextAreaElement).value = product.draft.presentation.limitationsMarkdown;
   (form.elements.namedItem("flowNodes") as HTMLTextAreaElement).value = JSON.stringify(product.draft.presentation.flow.nodes, null, 2);
-  for (const [name, value] of Object.entries({ dataOrigin: product.draft.dataOrigin, sourceTier: product.draft.sourceTier, originNote: product.draft.originNote, sourceLabel: product.draft.sourceLabel, sourceUrl: product.draft.sourceUrl, geometrySourceLabel: product.draft.geometrySourceLabel, geometrySourceUrl: product.draft.geometrySourceUrl })) {
+  for (const [name, value] of Object.entries({ modality: product.draft.modality, dataOrigin: product.draft.dataOrigin, sourceTier: product.draft.sourceTier, originNote: product.draft.originNote, sourceLabel: product.draft.sourceLabel, sourceUrl: product.draft.sourceUrl, geometrySourceLabel: product.draft.geometrySourceLabel, geometrySourceUrl: product.draft.geometrySourceUrl })) {
     const field = form.elements.namedItem(name);
     if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) field.value = value ?? "";
   }
@@ -2100,7 +2101,7 @@ async function saveProduct(event: SubmitEvent): Promise<void> {
   const product = productRecords.find((entry) => entry.productId === formValue(form, "productId"));
   if (!product) return;
   const nodes = product.draft.presentation.flow.nodes;
-  const content = { ...product.draft, dataOrigin: formValue(form, "dataOrigin") || undefined, sourceTier: formValue(form, "sourceTier") || undefined, originNote: formValue(form, "originNote") || undefined, sourceLabel: formValue(form, "sourceLabel") || undefined, sourceUrl: formValue(form, "sourceUrl") || undefined, geometrySourceLabel: formValue(form, "geometrySourceLabel") || undefined, geometrySourceUrl: formValue(form, "geometrySourceUrl") || undefined, presentation: { summaryMarkdown: formValue(form, "summaryMarkdown"), methodologyMarkdown: formValue(form, "methodologyMarkdown"), limitationsMarkdown: formValue(form, "limitationsMarkdown"), flow: { nodes, edges: product.draft.presentation.flow.edges } } };
+  const content = { ...product.draft, modality: formValue(form, "modality") || product.draft.modality, dataOrigin: formValue(form, "dataOrigin") || undefined, sourceTier: formValue(form, "sourceTier") || undefined, originNote: formValue(form, "originNote") || undefined, sourceLabel: formValue(form, "sourceLabel") || undefined, sourceUrl: formValue(form, "sourceUrl") || undefined, geometrySourceLabel: formValue(form, "geometrySourceLabel") || undefined, geometrySourceUrl: formValue(form, "geometrySourceUrl") || undefined, presentation: { summaryMarkdown: formValue(form, "summaryMarkdown"), methodologyMarkdown: formValue(form, "methodologyMarkdown"), limitationsMarkdown: formValue(form, "limitationsMarkdown"), flow: { nodes, edges: product.draft.presentation.flow.edges } } };
   try { await api(`/api/v1/admin/products/${encodeURIComponent(product.productId)}/draft`, { method: "PUT", body: JSON.stringify({ revision: product.revision, content }) }); byId<HTMLDialogElement>("product-dialog").close(); toast("产品草稿已保存"); await refresh(); } catch (error) { setMessage("product", error instanceof Error ? error.message : "保存失败", true); }
 }
 
@@ -2209,6 +2210,7 @@ async function reloadCatalogRuntime(button?: HTMLButtonElement): Promise<void> {
 }
 
 const scanBatches = mountScanBatches(byId("scan-batches"), { api, products: () => productRecords, connectors: () => connectorRecords });
+const nativeManagement = mountNativeUnits({ api, refresh, toast, icons: renderIcons });
 
 async function refresh(background = false): Promise<void> {
   if (activeStep === "api") { if (!background) await loadApiSettings(api, renderIcons); return; }
@@ -2251,6 +2253,7 @@ async function refresh(background = false): Promise<void> {
       render(value as T); renderedSignatures.set(key, signature);
     };
     apply<AdminOverview>("overview", renderOverview);
+    apply<NativeView>("nativeUnits", value => nativeManagement.render(value));
     apply<{ products: Product[] }>("products", data => renderProducts(data.products));
     apply<{ surveys: ReviewSurvey[] }>("reviewSurveys", data => renderReviewSurveys(data.surveys));
     if (step === "sources" || step === "tasks") apply<{ connectors: Connector[] }>("connectors", data => renderConnectors(data.connectors));

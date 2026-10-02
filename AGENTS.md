@@ -44,3 +44,14 @@ and whether the result is exact, estimated, entrypoint-only or truncated.
 
 Read the `astro-survey-atlas-coverage-workflow` skill before changing scan,
 MOC, overlap, evidence or reverse-lookup code.
+
+## Native sky-unit management
+
+Read `docs/native-unit-management.md` before updating native sources, snapshots,
+index versions, product bindings, review, archives, activation or recovery.
+Use the admin UI or authenticated management API for supported operations.
+External code may acquire an unsupported source format; import its staged
+metadata into this workflow before constructing a managed version.
+Preserve installed indexes and use reviewed candidate versions for activation.
+Report a version as active and complete only after all dependencies are archived
+and its activation task passes runtime and site HTTP verification.

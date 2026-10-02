@@ -21,6 +21,8 @@
     "moc:validate": "tsx scripts/validate-moc-source-registry.ts",
     "moc:probe": "tsx scripts/validate-moc-source-registry.ts --probe --output=artifacts/moc-source-probe.json",
     "coverage:export-healpix": "tsx scripts/export-live-coverage-healpix.ts",
+    "hst:acquire-metadata": "tsx scripts/acquire-hst-public-image-observations.ts",
+    "hst:build-local-index": "tsx scripts/build-hst-observation-index.ts",
     "packages:rebuild": "PYTHONPATH=${MOC_CORE_ROOT:-../MOC-Core-SDK} SOURCE_DATE_EPOCH=1787184000 python3 scripts/rebuild_resource_packages.py && python3 scripts/update_provenance_hashes.py && npm run catalog:build",
     "core:wheel": "SOURCE_DATE_EPOCH=1787184000 python3 -m pip wheel --no-deps --no-build-isolation ${MOC_CORE_ROOT:-../MOC-Core-SDK} --wheel-dir artifacts/public-survey-footprints/moc-core",
     "core:rebuild-public": "PYTHONPATH=${MOC_CORE_ROOT:-../MOC-Core-SDK} SOURCE_DATE_EPOCH=1787184000 python3 -m astro_survey_moc_core.cli rebuild-public --base-dir .",
@@ -41,6 +43,7 @@
     "@aws-sdk/client-s3": "^3.1120.0",
     "fast-xml-parser": "^5.11.2",
     "healpixjs": "^2.0.0",
+    "swagger-ui-dist": "^5.32.0",
     "undici": "^8.11.2",
     "yauzl": "^3.4.0",
     "yazl": "^3.3.1"

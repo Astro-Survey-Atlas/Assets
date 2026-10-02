@@ -71,7 +71,10 @@ async function loadSourceUnitKinds(root: string): Promise<Map<string, { kind: st
 
 /** A single immutable projection for every public reader. Missing approval is
  * an empty public release, never a fallback to the working catalog. */
-export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot = catalog.root) {
+export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot = catalog.root, previous?: {
+  geometry: ReadonlyMap<string, NativeMoc>;
+  mocProjections: ReadonlyMap<string, ReadonlyMap<number, number[]>>;
+}) {
   const surveyColors = await loadSurveyColors(catalog.root);
   const sourceUnitKinds = await loadSourceUnitKinds(sourceMetadataRoot);
   const snapshot: ApprovedRelease = await readApprovedRelease(catalog.root);
@@ -84,12 +87,14 @@ export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot
   const allowed = new Set(snapshot.assetIds);
   const publicCatalog: LoadedCatalog = {...catalog, files:new Map([...catalog.files].filter(([id])=>allowed.has(id))),manifest:{...catalog.manifest,files:catalog.manifest.files.filter(f=>allowed.has(f.id))}};
   const geometry = new Map<string, NativeMoc>(), layers = new Map<string,CoverageCellLayer>();
+  const mocProjections = new Map<string, Map<number, number[]>>();
   for (const product of products) {
     if (!product.geometry) continue;
     const g = product.geometry, c=product.content;
     const entry=publicCatalog.files.get(`approved-${g.layerId}-moc`);
     if(!entry || entry.record.sha256!==g.mocSha256) throw new Error(`Approved MOC missing: ${g.layerId}`);
-    const moc=decodeNativeMoc(await readFile(entry.absolutePath));
+    const cachedMoc = previous?.geometry.get(g.layerId);
+    const moc = cachedMoc?.sha256 === g.mocSha256 ? cachedMoc : decodeNativeMoc(await readFile(entry.absolutePath));
     if(moc.sha256!==g.mocSha256 || moc.revision!==g.coverageRevision)throw new Error(`Approved MOC mismatch: ${g.layerId}`);
     if(layers.has(g.layerId))throw new Error(`Duplicate approved layer: ${g.layerId}`);
     geometry.set(g.layerId,moc);
@@ -97,7 +102,9 @@ export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot
     // O4/O8 for existing viewer blocks; finest geometry stays in native MOC and
     // bounded queries instead of materializing whole-sky fine rasters in JS.
     const orders=[...new Set([overviewOrder,Math.min(8,moc.maxOrder)])];
-    const cells=new Map(orders.map(order=>[order,projectMoc(moc,order).cells]));
+    const cachedCells = cachedMoc === moc ? previous?.mocProjections.get(g.layerId) : undefined;
+    const cells=new Map(orders.map(order=>[order,cachedCells?.get(order) ?? projectMoc(moc,order).cells]));
+    mocProjections.set(g.layerId, cells);
     const count=cells.get(orders.at(-1)!)!.length;
     const sourceEvidence=c.coverageEvidence;
     const pathFileIndex=c.mode==="path-healpix"&&sourceEvidence?.precision==="exact";
@@ -117,7 +124,7 @@ export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot
       ? { status: nativeIndexStatus ?? "estimated", unitKind: nativeUnitKind, indexUrl: "/api/v1/coverage/reverse-lookup", notes: registeredUnit?.notes ?? `本地 ${nativeUnitKind} 映射已登记；逐项精度与文件存在性由反查结果说明。` }
       : undefined);
     const archiveUnitIndex = c.surveyId === "hst"
-      ? { status: "estimated" as const, unitKind: "observation", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "MAST public observation metadata is queried only on reverse lookup; s_region and instrument/observation identity constrain matches. Archive limits and failures are retained." }
+      ? { status: "estimated" as const, unitKind: "observation", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "MAST 的公开 HST image observation 元数据使用 Assets 锁定快照和本地 SQLite s_region 索引；反查在本地将所选区域与保存的 footprint 求交并返回 observation 身份和 MAST 链接，不在请求时查询 MAST 或展开科学产品。快照中不支持的几何会继续使结果标记为不完整；显式 HST 产品查询仍可向 MAST 获取产品元数据。" }
       : c.surveyId === "euclid" && c.releaseId === "euclid-ero"
         ? { status: "estimated" as const, unitKind: "target", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "ERO named target packages with associated ESA Sky outreach footprints; estimated target extent, not Tile inventory or verified per-filter coverage." }
         : undefined;
@@ -127,7 +134,7 @@ export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot
         ? {status:nativeIndexStatus ?? "entrypoint-only",unitKind:nativeUnitKind,notes:registeredUnit?.notes ?? (hasNativeUnitIndex
           ? `本地原生 ${nativeUnitKind} 映射已登记；返回精度由单次反查结果说明，文件存在性仍需来源或 Warehouse 证据。`
           : c.surveyId === "hst"
-            ? "HST 单位是 MAST observation；s_region 描述观测 footprint，不是 Warehouse 扫描索引。当前此 layer 尚无本地 observation 清单反查。"
+            ? "HST 单位是 MAST observation；运行时使用 Assets 本地锁定的公开 s_region observation 索引，不可用时会报告反查缺失，不回退到实时 MAST 查询。"
             : `原生空间单位为 ${nativeUnitKind}，但当前没有与此 layer 对应的可用本地分块映射。`)}
         : {status:"entrypoint-only" as const,notes:"No native source-unit mapping is registered for this product."});
     const recipe=sourceEvidence?{
@@ -174,6 +181,6 @@ export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot
     surveys.push({id:surveyId,name:meta?.name??surveyId,mission:meta?.mission??surveyId,description:meta?.description??"",color:surveyColors.get(surveyId)??meta?.color??"#376b9b",modalities:surveyModalities,releases,imageUrl:`/surveys/${surveyId}.png`,statistics:{publicProducts:selected.length,acquired:selected.filter(p=>p.geometry).length,overviewOnly:0,awaitingGeometry:selected.filter(p=>p.geometry).length,notApplicable:0,footprintCells:footprints.filter(f=>f.surveyId===surveyId).reduce((s,f)=>s+f.pixels.length,0)},assets:assets.filter(a=>a.surveyId===surveyId)});
   }
   const index:PublicSurveyIndex={schemaVersion:1,generatedAt:snapshot.generatedAt,surveys,sharedAssets:assets.filter(a=>!a.surveyId)};
-  return {snapshot,records,geometry,coverage,footprints,index,catalog:publicCatalog};
+  return {snapshot,records,geometry,mocProjections,coverage,footprints,index,catalog:publicCatalog};
 }
 export type PublicState=Awaited<ReturnType<typeof loadPublicState>>;

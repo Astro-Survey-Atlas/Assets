@@ -101,6 +101,35 @@ test("approved path-HEALPix coverage advertises exact file reverse lookup withou
   assert.equal(layer.revision, f.moc.revision);
 });
 
+test("HST coverage advertises the local MAST snapshot index for reverse lookup", async t => {
+  const f = await reviewedFixture({
+    surveyId: "hst",
+    releaseId: "hst-archive-coverage",
+    productName: "HST ACS archive coverage",
+    layerId: "hst-archive-coverage",
+  });
+  t.after(() => rm(f.base, { recursive: true, force: true }));
+  const publisher = new PublicReleasePublisher(f.options);
+  const plan = await publisher.plan();
+  const run = await publisher.submit({
+    planId: plan.planId,
+    expectedBaselineSha256: plan.baselineBundle.sha256,
+    surveyIds: ["hst"],
+    productIds: ["product-1"],
+  });
+  const finished = await publisher.execute(run.runId);
+  assert.equal(finished.status, "published", finished.error);
+  await syncReleaseFromObjectStore(f.store, path.join(f.base, "installed"));
+  const catalog = await loadCatalog(path.join(f.base, "installed/current"));
+  const state = await loadPublicState(catalog, f.root);
+  const layer = state.coverage.records.get("hst-archive-coverage")!;
+  assert.equal(layer.sourceUnitIndex?.status, "estimated");
+  assert.equal(layer.sourceUnitIndex?.unitKind, "observation");
+  assert.match(layer.sourceUnitIndex?.notes ?? "", /锁定快照和本地 SQLite.*不在请求时查询 MAST/);
+  assert.match(layer.sourceUnitIndex?.notes ?? "", /显式 HST 产品查询.*MAST/);
+  assert.doesNotMatch(layer.sourceUnitIndex?.notes ?? "", /queried only on reverse lookup/i);
+});
+
 test("public survey modalities include a product modality when the survey declaration is empty", async t => {
   const f = await reviewedFixture(); t.after(() => rm(f.base, { recursive: true, force: true }));
   const product = f.products[0]!;
