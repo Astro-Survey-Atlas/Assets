@@ -2686,6 +2686,7 @@ function closeOverlapDrawer(): void {
   overlapDetailsController = null;
   abortHstLookupsWithin(byId("overlap-drawer-content"));
   overlapDrawerOpen = false;
+  coverageDots?.setActiveOverlapComponent(null);
   document.body.removeAttribute("data-overlap-drawer");
   document.body.removeAttribute("data-overlap-panels");
   const drawer = byId("overlap-drawer");

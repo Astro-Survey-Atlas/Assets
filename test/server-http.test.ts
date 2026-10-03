@@ -50,6 +50,25 @@ test("hard cutover exposes no legacy products, geometry, packages or direct down
   for(const [route,key] of [["assets","files"],["surveys","surveys"],["products","products"],["coverage/catalog","layers"],["resource-packages/catalog.json","packages"],["releases","releases"]]) {
     const response=await fetch(`${base}/api/v1/${route}`);assert.equal(response.status,200);assert.deepEqual((await response.json() as Record<string,unknown>)[key!],[]);
   }
+  const legacyCoverage = await fetch(`${base}/api/v1/coverage`);
+  assert.equal(legacyCoverage.status, 200);
+  const legacyCoverageBody = await legacyCoverage.json() as { nside: number; footprints: unknown[]; page?: unknown };
+  assert.equal(legacyCoverageBody.nside, 16);
+  assert.deepEqual(legacyCoverageBody.footprints, []);
+  assert.equal(legacyCoverageBody.page, undefined, "no-parameter clients keep the complete legacy response shape");
+  const coveragePageResponse = await fetch(`${base}/api/v1/coverage?pageSize=1`);
+  assert.equal(coveragePageResponse.status, 200);
+  const coveragePage = await coveragePageResponse.json() as { revision: string; total: number; page: { pageSize: number; shown: number; hasMore: boolean } };
+  assert.equal(coveragePage.revision.length, 64);
+  assert.equal(coveragePage.total, 0);
+  assert.deepEqual(coveragePage.page, { pageSize: 1, shown: 0, hasMore: false });
+  assert.equal((await fetch(`${base}/api/v1/coverage?pageSize=0`)).status, 400);
+  const openapiResponse = await fetch(`${base}/api/v1/openapi.json`);
+  assert.equal(openapiResponse.status, 200);
+  const openapi = await openapiResponse.json() as { paths: Record<string, any>; components: { schemas: Record<string, any> } };
+  assert.equal(openapi.paths["/api/v1/coverage"].get.parameters[0].schema.default, 10);
+  assert.ok(openapi.components.schemas.SurveyHealpixResponse.properties.pixels.description.includes("NESTED"));
+  assert.ok(openapi.components.schemas.SurveyHealpixResponse.properties.total.description.includes("complete selected union"));
   const coverageResponse = await fetch(`${base}/api/v1/coverage/catalog`);
   const coverageBody = await coverageResponse.text();
   const coverageEtag = coverageResponse.headers.get("etag");

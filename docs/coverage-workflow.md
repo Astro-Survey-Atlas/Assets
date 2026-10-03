@@ -393,6 +393,30 @@ known unit and limits without fabricating a file or URL. See [the API
 reference](api-reference.md#csv-and-json-exports) for the current export format
 and its known limitations.
 
+Public reverse lookup has two access levels. Anonymous Assets requests return a
+small preview; a valid `region:query` API Key authorizes the full scoped,
+paginated lookup. Workspace must use its server-side API Key and must not fall
+back to the anonymous preview. Each new lookup resolves against the current
+Assets index and freezes that query snapshot. A cursor continues the same
+snapshot. `page.hasMore=false` means no further page remains in that cursor
+chain. `querySnapshot.queryExhausted` tracks whether the underlying bounded
+query/search completed and can remain false under query limits or gaps.
+`truncated` reports source/query limits or omitted evidence and can remain true
+after the page chain ends. `inventoryComplete` independently states whether the
+declared source inventory is complete. A fully drained export may therefore
+have `page.hasMore=false`, `querySnapshot.queryExhausted=false`,
+`inventoryComplete=false` and `truncated=true`.
+
+Raw public lookup results, footprints, native-index data and snapshot responses
+remain in the serving request or the Workspace browser's memory. Of Assets
+response metadata, Workspace may persist only the minimal chosen file inventory
+and progress for a user-confirmed download task: source identity, source URI,
+reported size and checksum, and relative destination. That task record freezes
+the user's chosen set even if a later Assets query returns additional files. It
+does not include the raw lookup response or a shared public index. Workspace
+retrieves the scientific files from their source under its access policy and
+writes them as task output; Assets does not download them.
+
 Coverage from a collected MOC or footprint and matches from scanned files are
 different evidence. An overlap is an intersection at the declared spatial
 precision within the indexed scope, not proof of complete data, valid pixels
@@ -403,7 +427,9 @@ scientific data units.
 The `region:query` API Key authorizes full lookup and manifest export, not
 access to external data. Serving MOCs, Resource Packages and manifest files,
 and reading necessary scan/build inputs, remain separate from downloading
-scientific data on users’ behalf.
+scientific data on users’ behalf. Workspace sends only public layer IDs,
+HEALPix order/cells and public cursor/snapshot selectors to Assets. CSST scans,
+IDs, MOCs, paths and parent directories remain in Workspace.
 
 Every coverage recipe must retain provenance and its coordinate/order contract.
 Warehouse scanning and Assets MOC/package construction are separate workflows;

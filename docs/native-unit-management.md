@@ -132,10 +132,26 @@ authority 已激活而网站尚未核验时保持 `site-pending`；缺少网站�
 
 ## 数据边界
 
-Assets 持有公开原生索引、证据、活动指针及反查快照。Workspace 仅同步公开图层/MOC
-信息，以 API Key 发送公开选择器及被点击区域，临时使用返回结果。公开反查结果不落入
-Workspace 的存储、缓存、日志正文、制品或配方。CSST 私有覆盖、映射、扫描和父目录
-仅属于 Workspace，不进入本流程或 Assets 的归档。
+Assets 持有公开原生索引、证据、活动指针及反查快照。匿名反查只返回小型预览；有效的
+`region:query` API Key 可读取限定范围的完整分页结果。Workspace 必须使用服务端 Key，
+不得回退为匿名预览。每个新查询读取当前 Assets 索引并冻结一个查询快照；cursor 只续读
+该快照。`page.hasMore=false` 仅表示该 cursor 页链已没有后续页。
+`querySnapshot.queryExhausted` 表示底层有界查询/搜索是否完成，查询限制或缺口可使其仍为
+false。`truncated` 表示来源/查询限制或省略证据，页链耗尽后仍可为 true。`inventoryComplete`
+独立表示声明的来源库存是否完整。因此完整续页导出也可能同时为
+`page.hasMore=false`、`querySnapshot.queryExhausted=false`、`inventoryComplete=false` 和
+`truncated=true`。
+
+Workspace 只同步公开图层/MOC 信息，并向 Assets 发送公开 layer IDs、HEALPix
+order/cells 和公开 cursor/snapshot 选择器。CSST 私有扫描、ID、MOC、文件路径和父目录
+留在 Workspace，不进入 Assets 请求或本流程的归档。公开反查、footprint、原生索引和
+快照响应仅在请求或浏览器内存中使用，不写入 Workspace 持久缓存、制品或配方。
+
+就 Assets 响应元数据而言，唯一的 Workspace 持久化例外是用户确认后的下载任务：该任务
+可保存用户选定的最小文件清单（来源身份、URI、大小、checksum、相对目标路径）及进度。
+清单固定该任务当时确认的文件集合；后续公开查询发现更多文件也不会追加。原始响应、未选
+候选或共享公开索引不得写入任务记录。Workspace 按来源访问策略获取完整科学文件，并将其
+写入任务目标；Assets 不代用户下载。
 
 完整接口见 [API reference](api-reference.md)，空间精度与来源语义见
 [coverage workflow](coverage-workflow.md)。

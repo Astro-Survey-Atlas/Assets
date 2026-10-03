@@ -1,6 +1,9 @@
-.api-intro h1 { font-size:clamp(2.5rem,4vw,4rem); margin-bottom:1.5rem; }
-.api-intro > p { max-width:65rem; }
+.api-docs-main { padding-bottom: 112px; }
+.api-intro { max-width: none !important; }
+.api-intro h1 { max-width: 850px; }
+.api-intro > p:not(.eyebrow) { max-width: 65rem; }
+.api-docs-page .api-reference-section h2 { color: var(--public-text); }
 .api-docs-page code { overflow-wrap:anywhere; }
-#swagger-ui { background:#fff; border-radius:1rem; padding:1rem; color:#25333d; }
+#swagger-ui { border: 1px solid var(--public-line); border-radius: 6px; background:#fff; padding:1rem; color:#25333d; }
 #swagger-ui .swagger-ui .wrapper { padding:0 1rem; }
 #swagger-ui input, #swagger-ui textarea { color:#25333d; background:#fff; }

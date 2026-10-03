@@ -13,6 +13,7 @@ import { sourceIdsForBinding } from "./native-unit-sources.js";
 import { nativeEvidencePath, type NativeBinding, type NativeGroup } from "./native-unit-model.js";
 import type { SourceUnitLoadOptions } from "./source-units.js";
 import { healpixList, type HealpixLayer } from "./healpix-list.js";
+import { pageCoverageFootprints } from "./coverage-footprint-pages.js";
 import { publicOpenApi } from "./public-openapi.js";
 import { ReverseStream } from "./reverse-stream.js";
 import { proxyAdmin } from "./admin-proxy.js";
@@ -4820,6 +4821,18 @@ const server = http.createServer((request, response) => {
     if (pathname === "/api/v1/coverage") {
       if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
       await awaitNativeSourceUnitCoverageLoad();
+      const query = requestQuery(request);
+      if (query.has("pageSize") || query.has("cursor")) {
+        const result = pageCoverageFootprints({
+          footprints: publicState.footprints,
+          generatedAt: approvedRelease.generatedAt,
+          nside: 16,
+          pageSize: query.has("pageSize") ? Number(query.get("pageSize")) : undefined,
+          cursor: query.get("cursor") ?? undefined,
+          secret: reverseCursorSecret,
+        });
+        return compressedJson(request, response, 200, result, "no-store");
+      }
       return json(response, 200, { schemaVersion:1, coordinateFrame:"ICRS", ordering:"NESTED", nside:16, generatedAt:approvedRelease.generatedAt, footprints:publicState.footprints });
     }
     if (pathname === "/api/v1/surveys") {

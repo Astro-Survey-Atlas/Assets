@@ -1,6 +1,74 @@
 <!doctype html>
-<html lang="en" data-theme="dark"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Astro Survey Atlas · API</title><meta name="description" content="Survey HEALPix lists, public API status and authenticated native unit lookup"><link rel="icon" href="/icon_without_name_lon_web.svg"></head><body class="public-page api-docs-page">
-    <header class="site-header resources-header"><a class="brand" href="/" aria-label="Astro Survey Atlas home"><img class="brand-logo" src="/icon_without_name_lon_web.svg" alt="Astro Survey Atlas" width="72" height="28" /><span class="brand-wordmark"><strong>Astro Survey Atlas</strong><small data-i18n="page.sdk.brandSubtitle">MOC-CORE DOCUMENTATION</small></span></a><button class="mobile-menu-toggle" type="button" data-mobile-menu-toggle aria-label="Open navigation" aria-expanded="false"><i data-lucide="menu"></i></button><nav class="site-nav" data-site-nav aria-label="Site navigation"><a class="site-nav-link" href="/" data-i18n="nav.home">Home</a><a class="site-nav-link" href="/atlas/" data-i18n="nav.sky">Sky Atlas</a><a class="site-nav-link" href="/surveys/" data-i18n="nav.surveys">Survey Directory</a><a class="site-nav-link" href="/releases/" data-i18n="nav.releases">Releases</a><a class="site-nav-link" href="/terms/" data-i18n="nav.terms">Terms</a><a class="site-nav-link" href="/api-docs/" aria-current="page" data-i18n="nav.api">API</a>
-        <a class="site-nav-link" href="/sdk/" data-i18n="nav.sdk">SDK</a><a class="site-nav-link" href="/github/" data-i18n="nav.github">GitHub</a><button class="theme-toggle" type="button" data-theme-toggle aria-label="Use light theme" title="Light theme"><i data-lucide="sun"></i></button><button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button><a class="admin-entry" href="/admin/" data-i18n-title="nav.admin"><span data-i18n="nav.admin">Control Room</span></a></nav></header>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#eef0f2" />
+    <meta name="description" content="Survey HEALPix lists, public API status and authenticated native unit lookup" />
+    <link rel="icon" type="image/svg+xml" href="/icon_without_name_lon_web.svg" />
+    <link rel="stylesheet" href="../src/public.css" />
+    <script src="/theme-bootstrap.js"></script>
+    <title>Astro Survey Atlas · API</title>
+  </head>
+  <body class="resources-page api-docs-page">
+    <header class="site-header resources-header">
+      <a class="brand" href="/" data-i18n-aria-label="nav.home">
+        <img class="brand-logo" src="/icon_without_name_lon_web.svg" alt="Astro Survey Atlas" width="72" height="28" />
+        <span class="brand-wordmark"><strong>Astro Survey Atlas</strong><small data-i18n="page.api.brandSubtitle">PUBLIC API REFERENCE</small></span>
+      </a>
+      <button class="mobile-menu-toggle" type="button" data-mobile-menu-toggle data-i18n-aria-label="nav.open" aria-expanded="false"><i data-lucide="menu"></i></button>
+      <nav class="site-nav" data-site-nav aria-label="Site navigation">
+        <a class="site-nav-link" href="/" data-i18n="nav.home">Home</a>
+        <a class="site-nav-link" href="/atlas/" data-i18n="nav.sky">Sky Atlas</a>
+        <a class="site-nav-link" href="/surveys/" data-i18n="nav.surveys">Survey Directory</a>
+        <a class="site-nav-link" href="/releases/" data-i18n="nav.releases">Releases</a>
+        <a class="site-nav-link" href="/terms/" data-i18n="nav.terms">Terms</a>
+        <a class="site-nav-link" href="/api-docs/" aria-current="page" data-i18n="nav.api">API</a>
+        <a class="site-nav-link" href="/sdk/" data-i18n="nav.sdk">SDK</a>
+        <a class="site-nav-link" href="/github/" data-i18n="nav.github">GitHub</a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Use light theme" title="Light theme"><i data-lucide="sun"></i></button>
+        <button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button>
+        <a class="admin-entry" href="/admin/" data-i18n-title="nav.admin"><span data-i18n="nav.admin">Control Room</span></a>
+      </nav>
+    </header>
 
-<main class="public-main"><section class="public-section api-intro"><p class="public-kicker">COVERAGE / NATIVE UNITS / SOURCE MANIFESTS</p><h1 data-i18n="api.title">Query the sky through the API.</h1><p data-i18n="api.lead">Get a survey's published HEALPix list at an order, inspect service status, and use a Key for full native unit lookup and download plans.</p><div id="api-status" role="status" aria-live="polite"></div><button id="api-status-refresh" class="public-button-secondary" type="button" data-i18n="api.refresh">Refresh status</button></section><section class="public-section"><div class="public-feature-grid"><article class="public-feature"><h3 data-i18n="api.publicTitle">Public coverage</h3><p data-i18n="api.publicBody">No Key is required for the published survey catalog or HEALPix lists. Default selection is the union of all published survey MOCs. Use releaseId or productId to narrow it.</p><code>/api/v1/coverage/surveys/euclid/healpix?order=4</code></article><article class="public-feature"><h3 data-i18n="api.keyTitle">Full lookup with a Key</h3><p data-i18n="api.keyBody">An administrator issues a Key with region:query and a quota of up to 30 requests per minute. It enables full reverse lookup and frozen manifest pagination. Accounts and online payment are not currently available.</p><p data-i18n="api.keyPrivacy">Authorize below for this page session. Credentials are not saved to browser storage.</p></article><article class="public-feature"><h3 data-i18n="api.sourceTitle">Preserve the evidence</h3><p data-i18n="api.sourceBody">Results retain actual orders, native unit identities, precision and inventory limits. JSON/CSV plans contain metadata and links; users retrieve scientific data from each source.</p><a href="/api/v1/openapi.json">OpenAPI JSON</a></article></div></section><section class="public-section"><h2 data-i18n="api.reference">Interactive API reference</h2><p data-i18n="api.instructions">Open an operation and choose Try it out. For lists, continue with page.nextCursor; restart if the server returns 409.</p><div id="swagger-ui"></div></section></main><script type="module" src="/api-docs/main.ts"></script></body></html>
+    <main class="resources-main api-docs-main">
+      <section class="resources-hero api-intro">
+        <p class="eyebrow">COVERAGE / NATIVE UNITS / SOURCE MANIFESTS</p>
+        <h1 data-i18n="api.title">Query the sky through the API.</h1>
+        <p data-i18n="api.lead">Get a survey's published HEALPix list at an order, inspect service status, and use a Key for full native unit lookup and download plans.</p>
+        <div id="api-status" role="status" aria-live="polite"></div>
+        <button id="api-status-refresh" class="public-button-secondary" type="button" data-i18n="api.refresh">Refresh status</button>
+      </section>
+
+      <section class="public-section">
+        <div class="public-feature-grid">
+          <article class="public-feature">
+            <h3 data-i18n="api.publicTitle">Public coverage</h3>
+            <p data-i18n="api.publicBody">No Key is required for the published survey catalog or HEALPix lists. Default selection is the union of all published survey MOCs. Use releaseId or productId to narrow it.</p>
+            <code>/api/v1/coverage/surveys/euclid/healpix?order=4</code>
+          </article>
+          <article class="public-feature">
+            <h3 data-i18n="api.keyTitle">Full lookup with a Key</h3>
+            <p data-i18n="api.keyBody">An administrator issues a Key with region:query and a quota of up to 30 requests per minute. It enables full reverse lookup and frozen manifest pagination. Accounts and online payment are not currently available.</p>
+            <p data-i18n="api.keyPrivacy">Authorize below for this page session. Credentials are not saved to browser storage.</p>
+          </article>
+          <article class="public-feature">
+            <h3 data-i18n="api.sourceTitle">Preserve the evidence</h3>
+            <p data-i18n="api.sourceBody">Results retain actual orders, native unit identities, precision and inventory limits. JSON/CSV plans contain metadata and links; users retrieve scientific data from each source.</p>
+            <a href="/api/v1/openapi.json">OpenAPI JSON</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="public-section api-reference-section">
+        <h2 data-i18n="api.reference">Interactive API reference</h2>
+        <p data-i18n="api.instructions">Open an operation and choose Try it out. For lists, continue with page.nextCursor; restart if the server returns 409.</p>
+        <div id="swagger-ui"></div>
+      </section>
+    </main>
+
+    <footer><span>ICRS / NESTED HEALPIX / CURSOR PAGINATION</span><span>ASTRO SURVEY ATLAS API</span></footer>
+    <script type="module" src="/api-docs/main.ts"></script>
+  </body>
+</html>

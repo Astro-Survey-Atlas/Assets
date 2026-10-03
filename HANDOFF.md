@@ -1,6 +1,6 @@
 # Assets 项目交接
 
-交接日期：2026-10-02（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-03（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
@@ -23,12 +23,12 @@ C04 的 875 条属于 DESI + Euclid Q1，不能证明 C01 的 ERO 映射已完�
 
 ## 当前部署与权威数据
 
-本次只读确认 Helm、Deployment、网站 health/status：
+本次发布后确认 Helm、Deployment、网站 health/status：
 
 | 服务 | Helm revision | 镜像 tag | 状态及入口 |
 | --- | --- | --- | --- |
-| Assets | 316 | 0.1.0-20261002-155507-native-admin-ui | site/backend 各 1/1 Ready；http://10.15.51.75:32083/atlas/ |
-| Workspace | 62 | 0.10.38-dev-20261002-022932-native-version | 1/1 Ready；http://astro.workspace.dev.72602.space:32080/ |
+| Assets | 319 | 0.1.0-20261003-124841 | site/backend 各 1/1 Ready；http://10.15.51.75:32083/atlas/ |
+| Workspace | 67 | 0.10.38-dev-20261003-0206-native-selection | 1/1 Ready；http://astro.workspace.dev.72602.space:32080/ |
 
 - Assets release/namespace：astro-survey-atlas-assets；Workspace release：asa，
   namespace：asa-workspace。Assets 的 API 和 health 在 host 根路径。
@@ -39,8 +39,44 @@ C04 的 875 条属于 DESI + Euclid Q1，不能证明 C01 的 ERO 映射已完�
   8a7745f69bd2d87156933fe5c39d5407c79e333e533c76900fa68f193ea67e5f，
   generation 2，managed=true、verified=true，reverse 服务 available。
 - 当前审核接受已知范围缺口；verified 不等于巡天库存完整。
-- 这次 ERO alias 更新没有改变公开 bundle、MOC 或 Workspace revision 62。
+- 此前 ERO alias 更新没有改变公开 bundle、MOC 或当时的 Workspace revision 62。
   /healthz 的 backend-proxy 字段不是实际活动 group；以 /api/v1/status 为准。
+- Assets 319 发布 UI/API 代码；公开 bundle、MOC 与 native generation 未变。
+  /healthz 和 /api/v1/status 均 HTTP 200，活动 bundle SHA 仍为
+  `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，603 files；
+  `api/v1/status` 为 105 published MOCs，native generation 2、managed/verified=true。
+
+## Workspace 第二阶段 MVP（2026-10-03）
+
+用户已授权实施第二阶段、部署 Workspace Dev 和真实下载验收。公开原生数据仍由
+Assets 持有；Workspace 使用服务端 Key 临时查询，沿用冻结快照/cursor，不新增查询
+会话资源。第二阶段没有更新 Assets 的 bundle、MOC 或活动原生索引。
+
+Workspace 已实现无状态文件预览、显式勾选/确认、任务下载及 Connector 注册。
+桌面先选择已返回的原生分块，默认每巡天一个，可从前 128 个中增加；改变分块选择
+清空旧文件预览和勾选，完整区域及反查/导出分页不受限制。
+同一快照重新校验后才能创建任务；持久化例外仅限用户选定的最小文件清单与进度，
+重试复用审批集合，不追加新发现文件。CSST 私有覆盖、身份、映射和父目录留在
+Workspace，不进入 Assets 请求、日志、仓库或归档。
+
+真实 DESI、Legacy 和 HST FITS 下载完成，大小、磁盘 SHA、FITS 可读性与 Connector
+已独立核验。HST 下载后登记资产并独立扫描生成真实 O10、estimated 用户 MOC，
+父目录反查已通过。Euclid 当前候选约 1.47 GB，超过默认 512 MiB 单文件上限，
+未开始该文件的科学传输。第二阶段成功不替代本文件下面的 ERO C01 映射缺口。
+
+1440px 四巡天与用户覆盖的完整页面/JSON/CSV 核对保留 9,056 个公开记录和
+3,893 个直接父目录，三者一致；分页配额等待后继续同一快照。Workspace revision 67
+线上 synthetic 桌面检查 4/4；revision 66 完整基线 338 项中 336 通过、2 跳过、0 失败。
+67 的 1024px 真实文件预览用 25 个公共产品层，从首屏 100 个原生分块中默认选四巡天
+各一个，约 15.3 秒返回 92 个文件候选；全部未选，没有创建下载任务，快照/完整区域
+一致，无页面错误或横向溢出，仍保留 selectionTruncated/inventory.truncated。
+此前一次解析全部 100 分块在 450 秒内未返回；没有据此宣称大批量解析性能通过。
+这次 25 层预览与上述 14 层导出是不同选择。28 个资源包（6 个已安装）
+的版本/活动选择与原有用户资产身份均保持；新增的真实验收产物保留在 Workspace。
+
+完整实现契约和实际验收记录位于相邻 Workspace 仓库的
+`docs/download-plan-workflow.md`、`docs/api-reference.md` 和
+`docs/phase2-mvp-verification-20261003.md`。后续先收集用户桌面反馈，再扩大组件范围。
 
 ## 尚未解决的 ERO 映射缺口：DESI + Euclid C01
 
@@ -94,7 +130,7 @@ C01 应命中哪个 target，也没有据此增加空间单元。
 | Legacy DR10 South | 官方 366,912 个 roster 成员已全部索引；北区保留 DR9 North 身份，尚无权威 DR10 North roster/Coadd/Tractor tree。 |
 | 数据模态 | Legacy DR10 color imaging 已经产品 revision 6 审核发布纠正为 imaging；其他产品尚需系统性复核。 |
 | 首页与介绍材料 | 首页文案已更新；intro-edits.zip 已审阅并按四巡天及完整组件契约合并 Assets README。独立组织仓库未修改，outreach 未发送。 |
-| 公开 API 页面 | /api-docs/、Swagger/OpenAPI、/api/v1/status 与指定 survey/order 的 HEALPix 分页 API 已实现。管理员发 Key、region:query 鉴权及每分钟 30 次配额已实现；onlineBilling=false。 |
+| 公开 API 页面 | /api-docs/、Swagger/OpenAPI、/api/v1/status 与指定 survey/order 的 HEALPix 分页 API 已实现。Assets 318 为兼容旧客户端保留无参数 `/api/v1/coverage` 全量响应，并支持按完整产品 footprint 分页；Swagger 默认 `pageSize=10`。管理员发 Key、region:query 鉴权及每分钟 30 次配额已实现；onlineBilling=false。 |
 | 控制状态归档队列 | 312 已修复最新指针被旧快照整批上传阻塞的问题；最后检查原生控制 generation 370、发布任务 2623、API 管理 238 均 synced。565 个旧快照排队是该次历史检查数，本次未重测队列。 |
 | Agent 设置 | .codex 主模型、默认 subagent、review model 和 builder 均已改为 gpt-6.1-sol。 |
 
@@ -112,20 +148,29 @@ Assets 315 已完成 C01/C02 反查桌面验收；Assets 316 保留这些主流�
 映射的 survey/release、模态、官方入口及已核实的 ERO 关联缺口；提示不计入空间分块数。
 页面、JSON、CSV 三者保留同一条 DESI Tile、Euclid ERO 来源和不完整状态。
 
+Assets 319 将桌面 overlap drawer 固定在导航栏下方并延伸至视口底边；内容 viewport
+max-height 为 405px，超出部分在 drawer 内滚动。线上 O4 C01 `[190]` 检查于 2430×1151：
+drawer top=68、bottom=1151，content clientHeight=405、scrollHeight=1532；DESI Tile 82406、
+Euclid 缺少 7 个 target 映射提示均显示，browser errors=0。截图：
+`.tmp-screens/deployed-overlap-drawer-c01.png`。本次没有补造 ERO footprint 或修改缺口状态。
+
 原生来源管理 UI 按巡天分组、逐来源折叠，并把索引状态显示为摘要指标。316 桌面检查
 覆盖总览、来源筛选和详情、任务、审核、激活视图；1440px 与 1024px 均无横向溢出，
 浏览器错误为 0。桌面截图保存在 `/tmp/assets-native-admin-316/`。
 
-Assets 分支 main，HEAD 77f2112206252b5357809660463f3e6d505f45f8
-（feat: enhance download access management and evidence fetching）。
+Assets 分支 main，HEAD 3bd59e0f409f7162e07727ebe42e9e0f3b9751f1
+（feat: enhance overlap evidence handling and download plan merging）。
 当前工作树有既存实现和文档修改，完整清单以 git status --short 为准。新增的实施历史与
 ERO 审计文件保留在原位置。本轮不会整体暂存、回滚或清理，也不会提交这些改动。
-Workspace 仅确认线上部署，本轮未重新盘点或改动其工作树。
+Workspace 第二阶段实现与文档修改均保持未暂存，实际清单以该仓库 git status 为准；
+本轮没有提交、整体暂存、重置或清理任何仓库修改。
 
 ## 验证范围：不能扩写为全局完成
 
 | 版本与场景 | 已验证内容 | 实际范围 |
 | --- | --- | --- |
+| Assets 319，Dev rollout 与 DESI + Euclid O4 C01 `[190]` | Helm revision 319；site/backend 均 1/1 Ready。全屏抽屉从 y=68 到 viewport bottom，405px 内容区可滚动；Tile 82406 和 Euclid 缺少 7 个 target 映射提示均可见，无页面错误。`/healthz`、`/api/v1/status`、`/api/v1/assets`、`/api/v1/coverage` HTTP 200；coverage 响应 639,433 bytes。2MASS H-band MOC FITS `Range: bytes=0-15` 返回 206、16 bytes，SHA 与 manifest 一致。 | bundle 未变：reviewed-mupsxe2v-c91be91f，SHA `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，603 files。C01 的 ERO 缺口仍存在；本次仅部署代码。截图 `.tmp-screens/deployed-overlap-drawer-c01.png`。 |
+| Assets 318，Swagger `/api/v1/coverage` | 无参数旧响应保持 132 footprints / 639,433 bytes；`pageSize=10` 返回 10 条完整 footprint，cursor 可续页且 revision 相同。Swagger 实际发送 `?pageSize=10`，响应 JSON 正常显示，桌面 Chromium browser errors=0。 | 服务端旧响应约 17 ms；故障在 Swagger 渲染大响应。O4 overview footprints 不是原生 Tile/brick/observation 清单。 |
 | Assets 315，DESI + Euclid O4 C01 [190] | 桌面页面、JSON、CSV 一致：DESI DR1 Tile 82406 一条空间单元；Euclid ERO 官方来源/覆盖依据保留，缺少 7 个 target footprint 映射提示可见；page errors=0。 | 空间页 hasMore=false，但 queryExhausted=false、inventoryComplete=false、resultTruncated=true；C01 原生映射仍不完整。 |
 | Assets 315，四巡天 O4 C02 [637,639,725,958,959,1002,1003] | 桌面完整导出 22,772 条空间单元，页面 DOM、JSON、CSV 逐条一致，四巡天均有结果；7 次 Key 限流等待后在原快照续接成功，page errors=0。 | hasMore=false 只表示本次分页已耗尽；快照仍 resultTruncated=true、queryExhausted=false、inventoryComplete=false，并保留 HST/DESI/Legacy 来源范围与缺口。 |
 | Assets 315，四巡天 O4 C01 [483,486,487,498]、C03 [787,790]、C04 [1944] | 匿名首屏预览，各区域均有下一页。 | 未耗尽分页，不据此推断未显示的巡天没有命中；C04 的 875 条是先前 DESI + Euclid Q1 选择。 |
@@ -135,8 +180,9 @@ Workspace 仅确认线上部署，本轮未重新盘点或改动其工作树。
 | Assets 311 / Workspace 62，固定完整 O4 七-cell 场景 | Assets 的 11 组合与授权流程记录 22,772 native records；Workspace 的 14 个公开产品层返回 9,056 native records，附 3,893 个直接父目录且 directoriesTruncated=false。页面/JSON/CSV 相符，版本固定，CSV 二次导出额外分页 0。 | 历史固定区域基线，不能证明全部 component 或全巡天 inventory 完整；Assets/Workspace 所选产品分别为 20/14 层。 |
 | 311/62，公开 HEALPix API | O4 Euclid 44、DESI 1,385、Legacy 2,247、HST 2,262 个唯一 cells；分页、422/409/400 和配额等待续接通过。 | 已发布 MOC 的像元列表，与原生单位库存完整性独立。 |
 
-Assets 316 的 `npm run build`、`npm test`（373 项：371 通过、2 跳过、0 失败）、
-Helm lint、部署 rollout、`/healthz` 与 `/api/v1/status` 检查均通过。`/healthz` 为 HTTP 200，
+Assets 319 的 `npm run build`、`npm test`（375 项：373 通过、2 跳过、0 失败）、
+Helm lint（1 chart、0 failed）、revision 319 site/backend rollout、`/healthz` 与 `/api/v1/status`
+检查均通过。`/healthz` 为 HTTP 200，
 `/api/v1/status` 报告活动 native generation 2、managed/verified=true，public bundle 为
 603 files / 105 published MOCs。此前 Assets 370 项/Workspace 308 项属于较早代码测试基线，
 不是当前镜像的完整测试结果。辅助 `admin-browser-smoke.py --workflow` 曾因定位隐藏的
@@ -156,7 +202,7 @@ assets-euclid-pagination-desktop.log 末尾有一次追加三巡天驱动失败�
 | 优先级 | 待做 | 接续与完成标准 |
 | --- | --- | --- |
 | P0 | 完成 ERO C01 证据核查 | Messier78 别名已修复，其他 7 个 target 在已核查 outreach 表中没有可验证 footprint。继续寻找权威 target geometry 和对应产品范围；支持的获取、导入、候选、审核、归档、激活仍走管理流程。没有可验证几何时保留缺口，不造 Tile 或位置。 |
-| P0 | 用户桌面验证最小 MVP | 由用户验证 Assets 315 已验收、并由 316 保留的四巡天 C02 完整页面/JSON/CSV，以及 C01 的 ERO 缺口表达；再确认 316 管理页布局。收到反馈前不扩大到其余 component。 |
+| P0 | 用户桌面验证最小 MVP | 由用户验证 Assets 保留的四巡天 C02 页面/JSON/CSV、C01 ERO 缺口及原生管理页布局，并在 Workspace 67 验证公共图层+用户覆盖求交、原生分块/直接父目录、所选文件预览确认、下载 Connector 和资产扫描流程。Euclid 超限文件与 ERO 缺口仍明确保留；收到反馈前不扩大到其余 component。 |
 | P1 | 其余 component 检查 | 用户确认最小 MVP 后，再逐一检查当前 DESI + Euclid C01–C06 与四巡天 component。记录产品/order/cells/活动版本，区分原生命中、缺口、查询失败，验证首屏/续页/JSON/CSV。 |
 | P1 | 查询与首次等待性能 | 保持完整七-cell 区域、真实精度和 Key 配额，测冷/热 geometry、native 查询、快照、分页/导出阶段。现已做 SSE、snapshot gzip/有界缓存和 Workspace 私有父目录聚合；下一步针对剩余阶段测量优化。 |
 | P1 | 四巡天数据模态复核 | 逐产品核对 imaging/catalog/spectroscopy/redshift 等身份与实际输出；纠错走产品草稿、审核和发布，再核对公开图层/API/Workspace。DR10 color imaging 已完成，不再重复列为未修正。 |
@@ -222,9 +268,11 @@ public 为 155.43 MiB，合计 1,152,509,295 bytes / 1.073 GiB。
    每个结论写清实际 region、版本、分页/库存状态，不以单一成功场景外推全部天空。
 
 Assets 拥有公开 MOC、原生索引、证据及反查快照。
-Workspace 只保留公开图层/几何包，API Key 只发送公开 layer IDs、order/cells 和游标；
+Workspace 只同步公开图层/几何包，API Key 只发送公开 layer IDs、order/cells、
+公开单元身份及游标/快照选择器；
 公开原生反查响应只在请求/浏览器内存使用，不存入 Workspace 的后端、缓存、
-制品、配方或日志正文。CSST 私有扫描、覆盖、分块映射和直接父目录只在 Workspace；
+制品、配方或日志正文。用户确认后的下载任务可持久化所选文件的最小来源清单及进度，
+不保存原始响应或未选候选，重试不追加文件。CSST 私有扫描、覆盖、分块映射和直接父目录只在 Workspace；
 本仓库不记录其身份、路径或像元，不将其送入 Assets。
 Runtime ES 只连接配置的 Warehouse；input manifests、normalized scans 和 task
 snapshots 属于 evidence，浏览器初始请求只取汇总/引用。

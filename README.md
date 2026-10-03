@@ -119,6 +119,9 @@ configured Warehouse endpoint (`ASSETS_WAREHOUSE_ES_URL`).
 
 - `GET /api/v1/surveys` and `GET /api/v1/products` for reviewed metadata and
   product dossiers.
+- `GET /api/v1/coverage` for the legacy all-product O4 footprint overview;
+  optional `pageSize`/`cursor` pages whole product footprints while no-parameter
+  calls retain the full legacy response.
 - `GET /api/v1/coverage/catalog` and immutable coverage blocks for the sky UI.
 - `GET /api/v1/coverage/surveys/{surveyId}/healpix?order=4` for paginated public
   lists derived from published native MOCs.

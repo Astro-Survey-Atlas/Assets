@@ -20,7 +20,7 @@ import type { SurveyFootprint, SurveyFootprintManifest } from "./survey-footprin
 import type { SurveyCard } from "./survey-registry.js";
 import { cartesianToRaDec, raDecToCartesian } from "./coordinates.js";
 import { normalizeLayerOrder, visibleLayerDepths, type LayerDepth } from "./layer-order.js";
-import { buildOverlapHighlight } from "./overlap-highlight.js";
+import { buildOverlapHighlight, setOverlapHighlightFlowOffset } from "./overlap-highlight.js";
 import { surveyColorFor } from "./survey-colors.js";
 import type { OverlapHighlight } from "./overlap-highlight.js";
 import {
@@ -990,6 +990,8 @@ export class SurveyLayerViewer {
           color: SELECTION_COLOR,
           inset: nside === this.#manifest.nside ? 0.016 : 0.006,
         })), SELECTION_RENDER_ORDER + 2, 0.42);
+        highlight.dashMaterial.dashSize = 0.065;
+        highlight.dashMaterial.gapSize = 0.03;
         this.#activeOverlapHighlight = highlight;
         this.#overlapSelectionGroup.add(highlight.root);
       }
@@ -2179,9 +2181,15 @@ export class SurveyLayerViewer {
   #advanceSelectionAnimation(now: number): void {
     const overlapPulse = 0.5 + 0.5 * Math.sin(now * 0.003);
     this.#overlapDashMaterials.forEach((material) => {
-      (material as THREE.LineDashedMaterial & { dashOffset: number }).dashOffset = -now * 0.00008;
+      setOverlapHighlightFlowOffset(material, now * 0.000045);
       material.opacity = 0.88 + overlapPulse * 0.12;
     });
+    if (this.#activeOverlapHighlight) {
+      const dash = this.#activeOverlapHighlight.dashMaterial;
+      setOverlapHighlightFlowOffset(dash, now * 0.000045);
+      dash.opacity = 0.9 + overlapPulse * 0.1;
+      this.#activeOverlapHighlight.glowMaterial.opacity = 0.52 + overlapPulse * 0.36;
+    }
     if (!this.#selectionCoreMaterial || !this.#selectionEdgeMaterial || !this.#selectionGlowMaterial) return;
     const pulse = 0.5 + 0.5 * Math.sin(now * 0.004);
     this.#selectionEdgeMaterial.dashSize = 0.052 + pulse * 0.034;
@@ -2410,7 +2418,7 @@ export class SurveyLayerViewer {
       const moving = this.#controls.enabled && this.#controls.update();
       this.#keepCameraOutside();
       this.#composer.render();
-      if (moving || this.#cameraTransition || this.#fragmentTransitions.length || this.#explosionTransition || this.#selectionEdgeMaterial || this.#overlapDashMaterials.length) this.#requestRender();
+      if (moving || this.#cameraTransition || this.#fragmentTransitions.length || this.#explosionTransition || this.#selectionEdgeMaterial || this.#overlapDashMaterials.length || this.#activeOverlapHighlight) this.#requestRender();
     });
   }
 }

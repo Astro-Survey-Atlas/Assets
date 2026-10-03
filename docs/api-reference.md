@@ -37,6 +37,27 @@ GET /healthz
 本站 `/api-docs/` 提供服务状态和 Swagger，OpenAPI 定义为 `/api/v1/openapi.json`。
 Swagger 的脚本和样式由本站提供，不使用外部 validator；鉴权凭据不持久化。
 
+## Legacy O4 Footprint Overview
+
+```http
+GET /api/v1/coverage?pageSize=10
+```
+
+`/api/v1/coverage` 是兼容旧客户端的全产品 O4 概览。无参数时继续返回全部产品图层，
+响应顶层声明 `ICRS`/`NESTED`、`nside=16`（O4）和 `generatedAt`；`footprints[]` 每项
+对应一个公开产品图层，并带该层在 O4 的 `pixels[]`。这些像元是概览覆盖，不是
+Tile、brick、target、observation 或逐文件清单。
+
+Swagger 默认发送 `pageSize=10`，按完整 footprint 记录分页；每个 footprint 的 `pixels[]`
+不会被拆开。响应额外包含 `revision`、`total` 和 `page`。使用 `page.nextCursor` 与相同
+`pageSize` 继续。`page.hasMore=false` 表示产品 footprint 页已耗尽，不代表每个产品的
+原生分块或文件库存完整。无效 pageSize/cursor 返回 `400`；覆盖快照变化后续旧 cursor
+返回 `409`。不带 `pageSize` 和 `cursor` 的旧调用仍获得原有完整响应。
+
+要取得某个巡天在指定 order 上去重后的 HEALPix 并集，使用下面的
+`/api/v1/coverage/surveys/{surveyId}/healpix`；该接口的分页单位是像元，而不是产品 footprint。
+`/api/v1/coverage/catalog` 则提供每层的 order、精度和版本等目录元数据，不包含像元数组。
+
 ## Public Survey HEALPix Lists
 
 ```http
@@ -55,6 +76,15 @@ GET /api/v1/coverage/surveys/{surveyId}/healpix?order=4&pageSize=1000
 任何选中 MOC 的原生最高阶数不足以支持请求阶数时返回 `422`，不能丢掉该层或从低阶
 overview 补造高阶像元；可通过产品/发布选择器缩小范围。版本或选择器与游标不一致
 返回 `409`；无相应已发布 MOC 返回 `404`。这些是覆盖像元，不是 Tile/brick 身份。
+
+响应字段语义：`nside=2^order`；`layers[]` 说明哪些已发布 MOC 参与并集，并保留每层
+`nativeRevision` 与原生 `maxOrder`；`availableOrders[]` 是所有所选图层共同支持的阶数，
+不是实际存储的原生阶数列表。`projection=inclusive-native-moc` 表示返回像元与至少一个
+所选 MOC 的请求阶投影相交。`precision=estimated` 表示请求阶低于参与图层的原生最高阶；
+全部图层都在请求阶提供原生 MOC 时才是 `native-moc`。`pixels[]` 是本页排序、去重后的
+NESTED 像元 ID；`total` 是完整并集的唯一像元数，`page.shown` 是本页数量。`page.hasMore=false`
+只表示当前像元结果没有下一页，不表示来源库存完整。`revision` 绑定所选巡天、order 和
+MOC 版本；续页传回该 revision 与 `page.nextCursor`，避免跨版本拼接。
 
 ## Asset Catalog
 

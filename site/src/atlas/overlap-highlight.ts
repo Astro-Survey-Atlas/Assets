@@ -16,6 +16,15 @@ export interface OverlapHighlight {
   dashMaterial: THREE.LineDashedMaterial;
 }
 
+const dashOffsetUniforms = new WeakMap<THREE.LineDashedMaterial, { value: number }>();
+
+export function setOverlapHighlightFlowOffset(material: THREE.LineDashedMaterial, offset: number): void {
+  const uniform = dashOffsetUniforms.get(material);
+  if (!uniform) return;
+  const period = material.dashSize + material.gapSize;
+  uniform.value = period > 0 ? ((offset % period) + period) % period : 0;
+}
+
 /** Build one co-registered overlap surface with an always-readable animated edge. */
 export function buildOverlapHighlight(
   cells: readonly SphericalCellSheetGeometryInput[],
@@ -59,6 +68,23 @@ export function buildOverlapHighlight(
     depthWrite: false,
     toneMapped: false,
   });
+  const dashOffset = { value: 0 };
+  dashOffsetUniforms.set(dashMaterial, dashOffset);
+  dashMaterial.onBeforeCompile = (shader) => {
+    shader.uniforms.overlapDashOffset = dashOffset;
+    shader.uniforms.overlapFlowColor = { value: new THREE.Color("#fff1b8") };
+    shader.fragmentShader = shader.fragmentShader
+      .replace("uniform float totalSize;", "uniform float totalSize;\nuniform float overlapDashOffset;\nuniform vec3 overlapFlowColor;")
+      .replace(
+        "if ( mod( vLineDistance, totalSize ) > dashSize ) {",
+        "float overlapDashDistance = mod(vLineDistance + overlapDashOffset, totalSize);\n\tif ( overlapDashDistance > dashSize ) {",
+      )
+      .replace(
+        "#include <color_fragment>",
+        "#include <color_fragment>\n\tfloat overlapFlow = 0.5 + 0.5 * cos((vLineDistance + overlapDashOffset) * 10.0);\n\tdiffuseColor.rgb = mix(diffuseColor.rgb, overlapFlowColor, overlapFlow * 0.78);",
+      );
+  };
+  dashMaterial.customProgramCacheKey = () => "overlap-highlight-flow-v1";
   const dashEdges = new THREE.LineSegments(edgeGeometry.clone(), dashMaterial);
   // computeLineDistances belongs to LineSegments, not BufferGeometry.
   dashEdges.computeLineDistances();
