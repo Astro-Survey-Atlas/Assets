@@ -1,4 +1,5 @@
 import { MIN_PUBLIC_COVERAGE_ORDER } from "../../server/coverage-policy.js";
+import type { WarehouseGeometryLoadStatus } from "../../server/coverage.js";
 import {
   SurveyLayerViewer,
   type SurveyLayerHover,
@@ -41,6 +42,7 @@ export interface CoverageCatalog {
   layers: CoverageLayer[];
   revision?: string;
   generatedAt?: string;
+  warehouseGeometry?: WarehouseGeometryLoadStatus;
 }
 
 export interface CoverageSurvey {

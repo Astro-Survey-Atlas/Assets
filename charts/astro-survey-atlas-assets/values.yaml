@@ -7,6 +7,7 @@ image:
   pullPolicy: IfNotPresent
 
 backendNodeOptions: ""
+startupProbeFailureThreshold: 20
 
 imagePullSecrets: []
 nameOverride: ""
@@ -28,6 +29,7 @@ admin:
     key: token
 
 warehouse:
+  # Set to "" for a standalone Assets deployment without Warehouse evidence.
   elasticsearchUrl: http://atlas-warehouse-elasticsearch.atlas-warehouse.svc.cluster.local:9200
   layerIndex: ast_layer_index_v1
   coverageIndex: ast_coverage_index_v1

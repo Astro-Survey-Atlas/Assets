@@ -5,6 +5,13 @@ import test from "node:test";
 import { buildDownloadPlan, CoverageEvidenceStore } from "../server/evidence-store.js";
 import { BATCH_EVIDENCE_LAYER_PREFIX, batchEvidenceLayerId } from "../server/scan-batch.js";
 
+function geometryResponse(sources: Record<string, unknown>[], after?: Record<string, unknown>): Response {
+  return new Response(JSON.stringify({ aggregations: { cells: {
+    buckets: sources.map(source => ({ key: { layerId: source.layer_id, order: source.healpix_order, ipix: source.healpix_cell }, doc_count: 1 })),
+    ...(after ? { after_key: after } : {}),
+  } } }));
+}
+
 test("download plans deduplicate files while retaining every matching cell", () => {
   const plan = buildDownloadPlan({
     edges: [
@@ -277,54 +284,33 @@ test("overlap enrichment can preserve geometry when warehouse evidence is unavai
   assert.match(result.notes[0] ?? "", /temporarily unavailable/);
 });
 
-test("warehouse coverage catalog paginates an ACTIVE layer beyond the Elasticsearch 10,000-hit window", async () => {
+test("warehouse coverage catalog paginates distinct cells beyond 10,000 buckets", async () => {
   const layerId = "large-layer";
-  const page = Array.from({ length: 10_000 }, (_, index) => {
-    const sourceFileId = `file-${String(index).padStart(5, "0")}`;
-    return {
-      _id: `edge-${index}`,
-      sort: [layerId, sourceFileId, 8, index, "footprint_extent"],
-      _source: {
-        layer_id: layerId,
-        source_file_id: sourceFileId,
-        source_uri: `s3://coverage/${sourceFileId}.fits`,
-        healpix_order: 8,
-        healpix_cell: index,
-        coverage_role: "footprint_extent",
-        precision: "exact",
-      },
-    };
-  });
-  const last = page.at(-1)!;
   const requests: Array<{ url: string; body: any }> = [];
+  const after = { layerId, order: 8, ipix: 9_999 };
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
     const body = JSON.parse(String(init?.body));
     requests.push({ url, body });
-    if (url.includes("ast_layer_index_v1")) {
-      return new Response(JSON.stringify({ hits: { total: { value: 1 }, hits: [{ _id: layerId, _source: {
-        layer_id: layerId, survey_id: "large-survey", release_id: "r1", product_id: "p1", state: "ACTIVE",
-        available_orders: [8], coverage_count: 10_001,
-      } }] } }), { status: 200 });
-    }
-    if (!body.search_after) {
-      return new Response(JSON.stringify({ hits: { total: { value: 10_001 }, hits: page } }), { status: 200 });
-    }
-    return new Response(JSON.stringify({ hits: { total: { value: 10_001 }, hits: [{
-      _id: "edge-10000",
-      sort: [layerId, "file-10000", 8, 10_000, "footprint_extent"],
-      _source: { layer_id: layerId, source_file_id: "file-10000", source_uri: "s3://coverage/file-10000.fits", healpix_order: 8, healpix_cell: 10_000, coverage_role: "footprint_extent", precision: "exact" },
-    }] } }), { status: 200 });
+    if (url.includes("ast_layer_index_v1")) return new Response(JSON.stringify({ hits: { hits: [{ _source: {
+      layer_id: layerId, survey_id: "large-survey", release_id: "r1", product_id: "p1", state: "ACTIVE",
+      available_orders: [8], coverage_count: 300_000,
+    } }] } }));
+    if (!body.aggs.cells.composite.after) return geometryResponse(Array.from({ length: 10_000 }, (_, healpix_cell) => ({
+      layer_id: layerId, healpix_order: 8, healpix_cell,
+    })), after);
+    return geometryResponse([{ layer_id: layerId, healpix_order: 8, healpix_cell: 10_000 }]);
   };
-
-  const result = await new CoverageEvidenceStore({ url: "http://warehouse:9200", fetchImpl }).loadCurrentCoverageCatalog({ allowedLayerIds: [layerId], maxDocuments: 10_001 });
-  const coverageRequests = requests.filter(({ url, body }) => url.includes("ast_coverage_index_v1") && body.query?.bool?.filter?.some((clause: any) => clause.terms?.layer_id?.includes(layerId)));
+  const result = await new CoverageEvidenceStore({ url: "http://warehouse:9200", fetchImpl }).loadCurrentCoverageCatalog({ allowedLayerIds: [layerId] });
+  const coverageRequests = requests.filter(({ url }) => url.includes("ast_coverage_index_v1"));
   assert.equal(coverageRequests.length, 2);
-  assert.equal(coverageRequests[0]?.body.size, 10_000);
-  assert.deepEqual(coverageRequests[1]?.body.search_after, last.sort);
+  assert.equal(coverageRequests[0]?.body.size, 0);
+  assert.equal(coverageRequests[0]?.body.aggs.cells.composite.size, 10_000);
+  assert.deepEqual(coverageRequests[1]?.body.aggs.cells.composite.after, after);
   assert.equal(result?.truncated, false);
   assert.equal(result?.coverages.length, 10_001);
   assert.equal(result?.coverages.at(-1)?.ipix, 10_000);
+  assert.equal(result?.coverages[0]?.sourceFileId, undefined);
 });
 
 test("public coverage catalog excludes batch evidence layers in its query and returned hits", async () => {
@@ -344,6 +330,7 @@ test("public coverage catalog excludes batch evidence layers in its query and re
         { layer_id: publicLayerId, healpix_order: 8, healpix_cell: 101, precision: "exact" },
         { layer_id: evidenceLayerId, healpix_order: 8, healpix_cell: 102, precision: "estimated" },
       ];
+    if (body.aggs) return geometryResponse(sources);
     return new Response(JSON.stringify({ hits: { total: { value: sources.length }, hits: sources.map((source, index) => ({ _id: String(index), sort: [publicLayerId, String(index), 8, index, "footprint_extent"], _source: source })) } }));
   };
 
@@ -354,6 +341,35 @@ test("public coverage catalog excludes batch evidence layers in its query and re
   assert.deepEqual(result?.layers.map(layer => layer.layerId), [publicLayerId]);
   assert.deepEqual(coverageRequest.body.query.bool.filter[0]?.terms?.layer_id, [publicLayerId]);
   assert.deepEqual(result?.coverages.map(coverage => [coverage.layerId, coverage.ipix]), [[publicLayerId, 101]]);
+});
+
+test("active direct Warehouse layer snapshots preserve their scan run identity", async () => {
+  const productId = "vis-product";
+  const evidenceLayerId = batchEvidenceLayerId(productId);
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    const layers = url.includes("ast_layer_index_v1") ? [{
+      _id: evidenceLayerId,
+      _source: {
+        layer_id: evidenceLayerId,
+        survey_id: "euclid",
+        release_id: "euclid-q1",
+        product_id: productId,
+        state: "ACTIVE",
+        scan_run_id: "run-current",
+        available_orders: [8],
+      },
+    }] : [];
+    return new Response(JSON.stringify({ hits: { total: { value: layers.length }, hits: layers } }));
+  };
+  const snapshots = await new CoverageEvidenceStore({ url: "http://warehouse:9200", fetchImpl }).loadCurrentCoverageEvidenceSnapshots([{
+    layerId: "euclid-q1-vis",
+    surveyId: "euclid",
+    releaseId: "euclid-q1",
+    productId,
+  }]);
+  assert.equal(snapshots[0]?.scanRunId, "run-current");
+  assert.deepEqual(snapshots[0]?.scanRunIds, ["run-current"]);
 });
 
 test("empty public coverage allowlists do not query Warehouse for geometry", async () => {
@@ -406,6 +422,7 @@ test("catalog coverage reads stay inside the public allowlist and deny private o
         { layer_id: "staged-moc-publication", healpix_order: 8, healpix_cell: 102, precision: "estimated" },
         { layer_id: "csst-protected", healpix_order: 8, healpix_cell: 103, precision: "estimated" },
       ];
+    if (body.aggs) return geometryResponse(sources);
     return new Response(JSON.stringify({ hits: { total: { value: sources.length }, hits: sources.map((source, index) => ({ _id: String(index), sort: [publicLayerId, String(index), 8, index, "footprint_extent"], _source: source })) } }));
   };
 
@@ -440,9 +457,7 @@ test("known draft readiness counts load from layer metadata without querying dra
     if (url.includes("ast_layer_index_v1")) return new Response(JSON.stringify({ hits: { total: { value: 1 }, hits: [{ _source: {
       layer_id: publicLayerId, survey_id: "euclid", release_id: "q1", product_id: "vis", state: "ACTIVE",
     } }] } }));
-    if (url.includes("ast_coverage_index_v1")) return new Response(JSON.stringify({ hits: { total: { value: 1 }, hits: [{
-      _source: { layer_id: publicLayerId, healpix_order: 8, healpix_cell: 101, precision: "exact" },
-    }] } }));
+    if (body.aggs) return geometryResponse([{ layer_id: publicLayerId, healpix_order: 8, healpix_cell: 101 }]);
     throw new Error(`Unexpected Warehouse search: ${url}`);
   };
 
@@ -640,6 +655,7 @@ test('partitioned catalog reads only committed candidates and keeps logical iden
       { layer_id: 'vis', scope_id: 'q1', scope_snapshot_sha256: hash, expected_partition_count: 2, partition_version: 1, partition_id: 'tile', state: 'ACTIVE', active_layer_id: 'candidate', active_scan_run_id: 'run', source_snapshot_sha256: hash, available_orders: [8], file_count: 1, coverage_count: 1 },
     ];
     else sources = [{ layer_id: 'candidate', source_file_id: 'file', healpix_order: 8, healpix_cell: 101, precision: 'estimated' }];
+    if (body.aggs) return geometryResponse(sources);
     return new Response(JSON.stringify({ hits: { total: { value: sources.length }, hits: sources.map(source => ({ _source: source })) } }));
   };
   const result = await new CoverageEvidenceStore({ url: 'http://warehouse:9200', fetchImpl }).loadCurrentCoverageCatalog({ allowedLayerIds: ['vis'] });

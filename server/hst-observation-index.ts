@@ -1,37 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import { mkdir, readFile, rename, rm } from "node:fs/promises";
+import { copyFile, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
-import { gunzipSync } from "node:zlib";
 import { Healpix } from "healpixjs";
 
 import { candidateCellsForStcs, cellsForStcs } from "./hst-image-lookup.js";
+import { hstSnapshotRows, loadHstSnapshot } from "./hst-snapshot.js";
 
 const INDEX_SCHEMA_VERSION = "4";
 const COARSE_ORDER = 4;
 const MAX_LOOKUP_OBSERVATIONS = 6400;
-const SOURCE_URL = "https://mast.stsci.edu/api/v0/invoke";
-
-interface SnapshotPage {
-  page: number;
-  path: string;
-  sha256: string;
-  sizeBytes: number;
-  rows: number;
-}
-
-interface SnapshotManifest {
-  schemaVersion: number;
-  kind: "mast-hst-public-image-observations";
-  sourceUrl: string;
-  service: "Mast.Caom.Filtered";
-  capturedAt: string;
-  pageSize: number;
-  pageCount: number;
-  rowCount: number;
-  rowsTotal?: number;
-  pages: SnapshotPage[];
-}
 
 export interface IndexedHstObservation {
   obsid: string;
@@ -53,6 +31,10 @@ export interface HstObservationIndexSummary {
   excludedRows: number;
   duplicateRows: number;
   duplicateRecords: number;
+  partialRefresh: boolean;
+  baselineSnapshotSha256?: string;
+  baselineCapturedAt?: string;
+  supplementRows: number;
 }
 
 export interface HstObservationLookup {
@@ -62,6 +44,10 @@ export interface HstObservationLookup {
   queryExhausted: boolean;
   sourceSnapshotSha256: string;
   excludedRows: number;
+  partialRefresh?: boolean;
+  baselineSnapshotSha256?: string;
+  baselineCapturedAt?: string;
+  supplementRows?: number;
 }
 
 interface RawObservation extends Record<string, unknown> {
@@ -71,31 +57,6 @@ interface RawObservation extends Record<string, unknown> {
 
 function digest(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
-}
-
-function safeEvidencePath(root: string, relativePath: string): string {
-  if (!relativePath || path.isAbsolute(relativePath) || relativePath.includes("\0")) throw new Error("HST snapshot has an unsafe evidence path");
-  const resolved = path.resolve(root, relativePath);
-  const relative = path.relative(path.resolve(root), resolved);
-  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("HST snapshot evidence path escapes its root");
-  return resolved;
-}
-
-function object(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-}
-
-function rows(value: unknown): Record<string, unknown>[] {
-  const root = object(value);
-  if (Array.isArray(root?.data)) return root.data.flatMap((row) => object(row) ? [object(row)!] : []);
-  const tables = root?.Tables;
-  const table = Array.isArray(tables) ? object(tables[0]) : undefined;
-  if (!Array.isArray(table?.Columns) || !Array.isArray(table.Rows)) return [];
-  const columns = table.Columns.map((column) => object(column)?.dataIndex);
-  if (!columns.length || columns.some((name) => typeof name !== "string")) throw new Error("HST snapshot page has invalid table columns");
-  return table.Rows.flatMap((row) => Array.isArray(row) && row.length === columns.length
-    ? [Object.fromEntries(columns.map((name, index) => [name as string, row[index]]))]
-    : []);
 }
 
 function text(value: unknown, maximumLength: number): string | undefined {
@@ -131,19 +92,6 @@ function isPublicHstImage(row: Record<string, unknown>): row is RawObservation {
     && String(row.dataproduct_type ?? "").toLowerCase() === "image"
     && String(row.dataRights ?? "").toUpperCase() === "PUBLIC"
     && typeof row.s_region === "string";
-}
-
-function manifestRows(value: unknown): SnapshotManifest {
-  const root = object(value);
-  if (root?.schemaVersion !== 1 || root.kind !== "mast-hst-public-image-observations"
-    || root.sourceUrl !== SOURCE_URL || root.service !== "Mast.Caom.Filtered"
-    || !Number.isSafeInteger(root.pageSize) || Number(root.pageSize) < 1
-    || !Number.isSafeInteger(root.pageCount) || Number(root.pageCount) < 1
-    || !Number.isSafeInteger(root.rowCount) || Number(root.rowCount) < 1
-    || !Array.isArray(root.pages) || root.pages.length !== root.pageCount) {
-    throw new Error("HST snapshot manifest is incomplete or has an unsupported schema");
-  }
-  return root as unknown as SnapshotManifest;
 }
 
 export class HstObservationIndex {
@@ -190,6 +138,10 @@ export class HstObservationIndex {
         excludedRows: Number(meta.get("excluded_rows")),
         duplicateRows: Number(meta.get("duplicate_rows")),
         duplicateRecords: Number(meta.get("duplicate_records")),
+        partialRefresh: meta.get("partial_refresh") === "true",
+        ...(meta.get("baseline_snapshot_sha256") ? { baselineSnapshotSha256: meta.get("baseline_snapshot_sha256") } : {}),
+        ...(meta.get("baseline_captured_at") ? { baselineCapturedAt: meta.get("baseline_captured_at") } : {}),
+        supplementRows: Number(meta.get("supplement_rows") ?? 0),
       };
       if (Object.values(summary).some((value) => typeof value === "number" && (!Number.isSafeInteger(value) || value < 0))) {
         throw new Error("HST observation index has invalid summary counts");
@@ -201,11 +153,9 @@ export class HstObservationIndex {
     }
   }
 
-  static async build(evidenceRoot: string, manifestRelativePath: string, sourceSnapshotSha256: string): Promise<HstObservationIndex> {
-    const manifestPath = safeEvidencePath(evidenceRoot, manifestRelativePath);
-    const manifestBytes = await readFile(manifestPath);
-    if (digest(manifestBytes) !== sourceSnapshotSha256) throw new Error("HST snapshot manifest SHA-256 does not match its lock");
-    const manifest = manifestRows(JSON.parse(manifestBytes.toString("utf8")));
+  static async build(evidenceRoot: string, manifestRelativePath: string, sourceSnapshotSha256: string,
+    baseline?: { evidenceRoot: string; sourceSnapshotSha256: string }): Promise<HstObservationIndex> {
+    const manifest = await loadHstSnapshot(evidenceRoot, manifestRelativePath, sourceSnapshotSha256);
     const filePath = this.indexPath(evidenceRoot, sourceSnapshotSha256);
     const existing = await this.open(evidenceRoot, sourceSnapshotSha256).catch(() => undefined);
     if (existing) return existing;
@@ -220,15 +170,26 @@ export class HstObservationIndex {
     let duplicateRecords = 0;
     let observedRows = 0;
     let processedPages = 0;
-    let expectedPages: number | undefined;
-      let expectedFilteredRows: number | undefined;
-    let expectedTotalRows: number | undefined;
     try {
+      let copiedBaseline = false;
+      if (baseline && manifest.partialRefresh && manifest.baselineSnapshotSha256 === baseline.sourceSnapshotSha256) {
+        const original = await this.open(baseline.evidenceRoot, baseline.sourceSnapshotSha256);
+        const summary = original.summary;
+        original.close();
+        if (summary.rowCount !== manifest.batches[0]!.rowCount || summary.partialRefresh) throw new Error("HST installed baseline does not match the composite's original input");
+        await copyFile(this.indexPath(baseline.evidenceRoot, baseline.sourceSnapshotSha256), stagingPath);
+        indexedRows = summary.indexedRows; observationCount = summary.observationCount;
+        excludedRows = summary.excludedRows; duplicateRows = summary.duplicateRows; duplicateRecords = summary.duplicateRecords;
+        observedRows = summary.rowCount;
+        copiedBaseline = true;
+      }
       db = new DatabaseSync(stagingPath);
       db.exec(`
         PRAGMA journal_mode=DELETE;
         PRAGMA synchronous=FULL;
         PRAGMA cache_size=-16384;
+      `);
+      if (!copiedBaseline) db.exec(`
         CREATE TABLE hst_index_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
         CREATE TABLE hst_observations (
           row_id INTEGER PRIMARY KEY,
@@ -248,16 +209,15 @@ export class HstObservationIndex {
         ) WITHOUT ROWID;
         CREATE INDEX hst_observation_cells_by_row ON hst_observation_cells(row_id, coarse_cell);
         CREATE TABLE hst_observation_ids (obsid TEXT PRIMARY KEY) WITHOUT ROWID;
-        CREATE TEMP TABLE request_cells (cell INTEGER PRIMARY KEY) WITHOUT ROWID;
-        BEGIN IMMEDIATE;
       `);
+      db.exec("CREATE TEMP TABLE request_cells (cell INTEGER PRIMARY KEY) WITHOUT ROWID; BEGIN IMMEDIATE;");
       const insertObservation = db.prepare(`
         INSERT OR IGNORE INTO hst_observations(row_hash, obsid, instrument, filters, target, start_time, end_time, s_region)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const insertObservationId = db.prepare("INSERT OR IGNORE INTO hst_observation_ids(obsid) VALUES (?)");
       const insertCell = db.prepare("INSERT OR IGNORE INTO hst_observation_cells(coarse_cell, row_id) VALUES (?, ?)");
-      const insertMeta = db.prepare("INSERT INTO hst_index_meta(key, value) VALUES (?, ?)");
+      const insertMeta = db.prepare("INSERT OR REPLACE INTO hst_index_meta(key, value) VALUES (?, ?)");
       const writePage = (pageRows: Record<string, unknown>[]): void => {
         for (const row of pageRows) {
           observedRows += 1;
@@ -284,49 +244,16 @@ export class HstObservationIndex {
         }
       };
 
-      const orderedPages = [...manifest.pages].sort((left, right) => left.page - right.page);
-      if (orderedPages.some((page, index) => page.page !== index + 1 || !/^[a-f0-9]{64}$/.test(page.sha256)
-        || !Number.isSafeInteger(page.rows) || page.rows < 0 || !Number.isSafeInteger(page.sizeBytes) || page.sizeBytes < 1)) {
-        throw new Error("HST snapshot page manifest has invalid or missing pagination entries");
-      }
-      for (const expected of orderedPages) {
-        const pageBytes = await readFile(safeEvidencePath(evidenceRoot, expected.path));
-        if (pageBytes.length !== expected.sizeBytes || digest(pageBytes) !== expected.sha256) {
-          throw new Error(`HST snapshot page ${expected.page} failed its locked size or SHA-256`);
-        }
-        const response = JSON.parse(gunzipSync(pageBytes).toString("utf8")) as unknown;
-        const root = object(response);
-        const paging = object(root?.paging);
-        if (typeof root?.status !== "string" || root.status.toUpperCase() !== "COMPLETE" || !paging) {
-          throw new Error(`HST snapshot page ${expected.page} is not a complete MAST response`);
-        }
-        const pageNumber = Number(paging.page);
-        const pagesFiltered = Number(paging.pagesFiltered);
-        const rowsFiltered = Number(paging.rowsFiltered);
-        const rowsTotal = Number(paging.rowsTotal);
-        const pageSize = Number(paging.pageSize);
-        const pageData = rows(response);
-        if (pageNumber !== expected.page || pagesFiltered !== manifest.pageCount || pageData.length !== expected.rows
-          || Number(paging.rows) !== expected.rows || (Number.isFinite(pageSize) && pageSize !== manifest.pageSize)) {
-          throw new Error(`HST snapshot page ${expected.page} pagination or row count is inconsistent`);
-        }
-        expectedPages ??= pagesFiltered;
-        expectedFilteredRows ??= rowsFiltered;
-        expectedTotalRows ??= rowsTotal;
-        if (expectedPages !== pagesFiltered || expectedFilteredRows !== rowsFiltered || expectedTotalRows !== rowsTotal) {
-          throw new Error("HST snapshot totals changed between MAST pages");
-        }
+      const inputs = copiedBaseline ? { ...manifest, batches: manifest.batches.slice(1) } : manifest;
+      const pageCount = inputs.batches.reduce((sum, batch) => sum + batch.pages.length, 0);
+      for await (const pageData of hstSnapshotRows(evidenceRoot, inputs)) {
         writePage(pageData);
         processedPages += 1;
-        if (manifest.pageCount > 20 && processedPages % 50 === 0) {
-          console.info(`HST SQLite build verified ${processedPages}/${manifest.pageCount} metadata pages (${observedRows}/${manifest.rowCount} rows).`);
+        if (pageCount > 20 && processedPages % 50 === 0) {
+          console.info(`HST SQLite build verified ${processedPages}/${pageCount} metadata pages (${observedRows}/${manifest.rowCount} rows).`);
         }
       }
-      if (orderedPages.length !== manifest.pageCount || observedRows !== manifest.rowCount
-        || expectedFilteredRows !== undefined && expectedFilteredRows !== manifest.rowCount
-        || manifest.rowsTotal !== undefined && expectedTotalRows !== manifest.rowsTotal) {
-        throw new Error("HST snapshot page count or total rows differ from its manifest");
-      }
+      if (observedRows !== manifest.rowCount) throw new Error("HST snapshot page count or total rows differ from its manifest");
       const metadata: Record<string, string> = {
         schema_version: INDEX_SCHEMA_VERSION,
         source_snapshot_sha256: sourceSnapshotSha256,
@@ -336,6 +263,10 @@ export class HstObservationIndex {
         excluded_rows: String(excludedRows),
         duplicate_rows: String(duplicateRows),
         duplicate_records: String(duplicateRecords),
+        partial_refresh: String(manifest.partialRefresh),
+        supplement_rows: String(manifest.supplementRows),
+        ...(manifest.baselineSnapshotSha256 ? { baseline_snapshot_sha256: manifest.baselineSnapshotSha256 } : {}),
+        ...(manifest.baselineCapturedAt ? { baseline_captured_at: manifest.baselineCapturedAt } : {}),
       };
       for (const [key, value] of Object.entries(metadata)) insertMeta.run(key, value);
       db.exec("COMMIT;");
@@ -399,7 +330,7 @@ export class HstObservationIndex {
     }
     const matchedObservationCount = matched.size;
     const limitTruncated = matchedObservationCount > clippedLimit;
-    const truncated = limitTruncated || this.#summary.excludedRows > 0;
+    const truncated = limitTruncated || this.#summary.excludedRows > 0 || this.#summary.partialRefresh;
     const observations: IndexedHstObservation[] = [...matched.entries()].slice(0, clippedLimit).map(([obsid, row]) => ({
       obsid,
       ...(row.instruments.size ? { instrument: [...row.instruments].sort().join(", ") } : {}),
@@ -418,6 +349,10 @@ export class HstObservationIndex {
       queryExhausted: !limitTruncated,
       sourceSnapshotSha256: this.#summary.sourceSnapshotSha256,
       excludedRows: this.#summary.excludedRows,
+      partialRefresh: this.#summary.partialRefresh,
+      baselineSnapshotSha256: this.#summary.baselineSnapshotSha256,
+      baselineCapturedAt: this.#summary.baselineCapturedAt,
+      supplementRows: this.#summary.supplementRows,
     };
   }
 

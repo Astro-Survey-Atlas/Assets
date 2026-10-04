@@ -1,5 +1,5 @@
 import { ensureDownloadAccess, hasDownloadAccess, resetDownloadAccess } from "./download-access";
-import { BadgeCheck, BookOpen, Box, ChevronLeft, ChevronRight, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Info, Layers3, ListChecks, ListFilter, LoaderCircle, Lock, Maximize2, Minimize2, Moon, Menu, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X, createIcons } from "lucide";
+import { BadgeCheck, BookOpen, Box, ChevronLeft, ChevronRight, CircleHelp, Cloud, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, HardDrive, Home, Image, Info, Layers3, ListChecks, ListFilter, LoaderCircle, Lock, Maximize2, Minimize2, Moon, Menu, Plug, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X, createIcons } from "lucide";
 import { Healpix } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 import { surveyColorFor } from "./atlas/survey-colors.js";
@@ -8,11 +8,14 @@ import { highestCommonCoverageOrder } from "./atlas/coverage-orders.js";
 import { coverageEscapeIntent } from "./atlas/coverage-interaction.js";
 import { coverageLayerTooltipPosition } from "./atlas/layer-panel-layout.js";
 import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-layout.js";
-import { joinUnique, mergeDownloadPlans, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch } from "./overlap-download.js";
+import { joinUnique, mergeDownloadPlans, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch, type DownloadPlanScannedFile, type DownloadPlanSpatialUnit } from "./overlap-download.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { createRevisionHydrationQueue } from "./revision-hydration-queue.js";
 import { mountSiteChrome } from "./site-chrome.js";
 import { canonicalModality, filterByModalities } from "../../src/modality-filter.js";
+import type { WarehouseGeometryLoadStatus } from "../../server/coverage.js";
+import type { WarehouseOverlapEvidence } from "../../server/overlap-details.js";
+import { connectorDefaultIcon, type ScanConnectorIdentity } from "../../src/connector-icon.js";
 
 import "./styles.css";
 
@@ -865,10 +868,11 @@ interface OverlapComponentView { id: string; order: number; cells: number[]; bou
 type OverlapSourceEvidence = Pick<DownloadPlanCoverageEvidence, "evidenceKind" | "sourceIdentity" | "instrument" | "filters" | "sourceSnapshotSha256" | "precision" | "completeness" | "scienceFileScan" | "summary">;
 interface OverlapDetailsResponse {
   schemaVersion: 1;
+  warehouseGeometry?: WarehouseGeometryLoadStatus;
   component: OverlapComponentView;
   publicSources: Array<{ layerId: string; surveyId: string; surveyName: string; surveyColor?: string; releaseId: string; releaseLabel?: string; product: string; modality?: string; description?: string; sourceUrl?: string; geometrySourceUrl?: string; coverageClaim?: { kind: string; url?: string; status?: string }; dataOrigin?: string; sourceTier?: string; sourceLabel?: string; geometrySourceLabel?: string; coverageEvidence?: OverlapSourceEvidence; sourceUnits?: { status?: string; unitKind?: string; units?: Array<{ unitId: string; exposureCount?: number; lastNight?: number; downloadUrl?: string }>; totalUnits?: number; truncated?: boolean; notes?: string } }>;
   assetsEvidence: Array<{ layerId: string; surveyId: string; releaseId: string; product: string; artifacts: Array<{ id: string; kind: string; label: string; downloadUrl: string; previewUrl?: string; sha256: string; sizeBytes: number }> }>;
-  warehouseEvidence: Array<{ layerId: string; surveyId: string; releaseId: string; productId: string; product?: string; modality?: string; state: string; scanRunId?: string; scanRunCount?: number; availableOrders: number[]; commonOrder: number; coverageCells: number; fileCount: number; coverageCount: number; precision: string; sourceSnapshotSha256?: string; sourceSnapshotCount?: number; scanScope?: { layerId: string; publishedLayerId?: string; scopeId: string; scopeSnapshotSha256: string; expectedPartitions: number; committedPartitions: number; completeness: string }; connector: { status: string; name?: string; type?: string }; method: { summary: string; docsUrl?: string } }>;
+  warehouseEvidence: WarehouseOverlapEvidence[];
   method: { summary: string; docsUrl?: string };
   reverseLookup: OverlapEvidenceLookup;
 }
@@ -1666,6 +1670,171 @@ function appendSourceLocator(row: HTMLElement, sourceUri: string): void {
   row.append(locator);
 }
 
+function countryFlagUrl(code?: string): string {
+  const iconNames: Record<string, string> = { US: "usa-circular", CN: "china-circular", ES: "spain-circular", JP: "japan-circular" };
+  return `https://img.icons8.com/color/48/${iconNames[code?.toUpperCase() ?? ""] ?? "globe"}.png`;
+}
+
+function appendConnectorIcon(parent: HTMLElement, connector: ScanConnectorIdentity): void {
+  const brand = document.createElement("span");
+  brand.className = "overlap-access-flag";
+  if (connector.iconUrl) {
+    const image = Object.assign(document.createElement("img"), {
+      src: connector.iconUrl, alt: `${connector.name} icon`, width: 18, height: 18, referrerPolicy: "no-referrer",
+    });
+    image.addEventListener("error", () => { brand.replaceChildren(icon(connectorDefaultIcon(connector.type))); renderIcons(); }, { once: true });
+    brand.append(image);
+  } else brand.append(icon(connectorDefaultIcon(connector.type)));
+  parent.append(brand);
+}
+
+function appendScannedFileSource(parent: HTMLElement, file: DownloadPlanScannedFile, options: { fileName?: boolean; provenance?: boolean } = {}): void {
+  const row = document.createElement("div");
+  row.className = "overlap-scanned-source";
+  if (options.fileName !== false) row.append(Object.assign(document.createElement("small"), {
+    className: "overlap-spatial-unit-file-name", textContent: file.fileName ?? file.fileId,
+  }));
+  const metadata = document.createElement("div");
+  metadata.className = "overlap-spatial-unit-access-meta";
+  const heading = document.createElement("span");
+  heading.className = "overlap-access-meta-heading";
+  const brand = document.createElement("span");
+  brand.className = "overlap-access-flag";
+  const connectors = file.connectors ?? [];
+  if (connectors.length) {
+    connectors.forEach((connector, index) => {
+      const source = document.createElement("span");
+      source.className = "overlap-scan-connector";
+      appendConnectorIcon(source, connector);
+      source.append(document.createTextNode(`${connector.name}${connector.type === "unknown" ? "" : ` · ${connector.type.toUpperCase()}`}`));
+      if (index) heading.append(document.createTextNode(" · "));
+      heading.append(source);
+    });
+  } else {
+    brand.append(icon("database"));
+    heading.append(brand, document.createTextNode(locale() === "zh" ? "Warehouse · Connector 未关联" : "Warehouse · Connector unknown"));
+  }
+  const scanned = document.createElement("span");
+  scanned.className = "overlap-access-status";
+  scanned.dataset.status = "scanned";
+  scanned.append(icon("file-check-2"), document.createTextNode(locale() === "zh" ? "已扫描" : "Seen in scan"));
+  heading.append(scanned);
+  const internal = /^(?:oss|s3|file):/i.test(file.sourceUri ?? "");
+  if (internal) {
+    const access = document.createElement("span");
+    access.className = "overlap-access-status";
+    access.dataset.status = "internal";
+    access.append(icon("lock"), document.createTextNode(locale() === "zh" ? "内部来源，需授权" : "Internal · authorization required"));
+    heading.append(access);
+  }
+  metadata.append(heading);
+  row.append(metadata);
+  if (file.sourceUri) appendSourceLocator(row, file.sourceUri);
+  const matches = file.matchingCoverage ?? [];
+  const runs = [...new Set([file.scanRunId, ...matches.map(match => match.scanRunId)].filter((value): value is string => Boolean(value)))];
+  const hashes = [...new Set([file.sourceSnapshotSha256, ...matches.map(match => match.sourceSnapshotSha256)].filter((value): value is string => Boolean(value)))];
+  if (options.provenance !== false && (runs.length || hashes.length)) {
+    const provenance = document.createElement("details");
+    provenance.className = "overlap-scanned-provenance";
+    provenance.append(Object.assign(document.createElement("summary"), { textContent: locale() === "zh" ? "扫描依据与文件记录" : "Scan evidence and file records" }));
+    connectors.forEach(connector => provenance.append(Object.assign(document.createElement("small"), {
+      textContent: `${connector.name} · ${locale() === "zh" ? connector.identityBasis === "scan-run" ? "扫描运行关联" : "锁定扫描 scope 关联" : connector.identityBasis}`,
+    })));
+    runs.forEach(run => provenance.append(Object.assign(document.createElement("code"), { textContent: `SCAN RUN ${run}` })));
+    hashes.forEach(hash => provenance.append(Object.assign(document.createElement("code"), { textContent: `SNAPSHOT SHA-256 ${hash}` })));
+    row.append(provenance);
+  }
+  parent.append(row);
+}
+
+function countryName(code?: string): string {
+  const value = code?.toUpperCase();
+  if (!value || !/^[A-Z]{2}$/.test(value)) return locale() === "zh" ? "地域未知" : "Region unknown";
+  try {
+    return new Intl.DisplayNames([locale() === "zh" ? "zh-CN" : "en"], { type: "region" }).of(value) ?? value;
+  } catch {
+    return value;
+  }
+}
+
+function accessStatusLabel(status: string, accessType: string): string {
+  const zh = locale() === "zh";
+  if (status === "verified") return zh ? accessType === "directory" ? "目录已核验" : "入口已核验" : accessType === "directory" ? "Verified directory" : "Verified entrypoint";
+  if (status === "source-listed") return zh ? "来源清单已列出" : "Listed by source";
+  if (status === "rule-derived") return zh ? "规则推导，未逐项核验" : "Rule-derived, not individually checked";
+  if (status === "unavailable") return zh ? "当前不可用" : "Currently unavailable";
+  return zh ? "仅来源入口" : "Entrypoint only";
+}
+
+function accessStatusIcon(status: string): string {
+  if (status === "verified") return "badge-check";
+  if (status === "source-listed") return "file-check-2";
+  if (status === "rule-derived") return "circle-help";
+  if (status === "unavailable") return "x";
+  return "external-link";
+}
+
+function appendAccessAlternative(row: HTMLElement, entry: {
+  uri: string; accessType?: string; provider?: string; providerCountryCode?: string;
+  providerLocation?: string; servingRegion?: string; relationship?: string; status?: string; checkedAt?: string;
+  httpStatus?: number; note?: string;
+}): void {
+  const type = entry.accessType ?? "file";
+  const metadata = document.createElement("div");
+  metadata.className = "overlap-spatial-unit-access-meta";
+  const region = [countryName(entry.providerCountryCode), entry.providerLocation, entry.servingRegion].filter(Boolean).join(" · ");
+  const relationship = entry.relationship === "mirror" ? (locale() === "zh" ? "镜像" : "Mirror")
+    : entry.relationship === "regional-repository" ? (locale() === "zh" ? "区域仓库" : "Regional repository") : "";
+  const heading = document.createElement("span");
+  heading.className = "overlap-access-meta-heading";
+  const flag = document.createElement("span");
+  flag.className = "overlap-access-flag";
+  flag.setAttribute("role", "img");
+  flag.setAttribute("aria-label", `${countryName(entry.providerCountryCode)}${locale() === "zh" ? "国旗" : " flag"}`);
+  const flagImage = document.createElement("img");
+  flagImage.src = countryFlagUrl(entry.providerCountryCode);
+  flagImage.alt = "";
+  flagImage.width = 18;
+  flagImage.height = 18;
+  flagImage.loading = "lazy";
+  flagImage.decoding = "async";
+  flagImage.referrerPolicy = "no-referrer";
+  flagImage.addEventListener("error", () => {
+    flag.textContent = "◉";
+    flag.setAttribute("aria-label", countryName(entry.providerCountryCode));
+  }, { once: true });
+  flag.append(flagImage);
+  heading.append(flag, document.createTextNode(entry.provider ?? "Survey source"));
+  if (relationship) heading.append(document.createTextNode(` · ${relationship}`));
+  const statusValue = entry.status ?? "source-listed";
+  const status = document.createElement("span");
+  status.className = "overlap-access-status";
+  status.dataset.status = statusValue;
+  status.append(icon(accessStatusIcon(statusValue)), document.createTextNode(accessStatusLabel(statusValue, type)));
+  heading.append(status);
+  metadata.append(heading);
+  const details = [`${entry.httpStatus ? `HTTP ${entry.httpStatus}` : ""}`, entry.checkedAt?.slice(0, 10) ?? "", region].filter(Boolean).join(" · ");
+  if (details) metadata.append(Object.assign(document.createElement("small"), { className: "overlap-access-meta-details", textContent: details }));
+  if (entry.note) metadata.title = entry.note;
+  row.append(metadata);
+  appendSourceLocator(row, entry.uri);
+}
+
+function appendSpatialUnitAccess(row: HTMLElement, unit: DownloadPlanSpatialUnit): void {
+  const entries: NonNullable<DownloadPlanSpatialUnit["accessUris"]> = unit.accessUris?.length ? unit.accessUris
+    : unit.accessUri ? [{ uri: unit.accessUri, accessType: unit.unitKind === "tile" ? "directory" as const : "file" as const }] : [];
+  for (const entry of entries) {
+    if (entry.fileName) row.append(Object.assign(document.createElement("small"), { className: "overlap-spatial-unit-file-name", textContent: entry.fileName }));
+    const alternatives = entry.alternatives?.length ? entry.alternatives : [{ uri: entry.uri, accessType: entry.accessType ?? "file", provider: "Survey source", status: "source-listed" }];
+    alternatives.forEach(alternative => appendAccessAlternative(row, alternative));
+  }
+  const metadata = unit.sourceMetadata;
+  const entrypoints = Array.isArray(metadata?.entrypoints) ? metadata.entrypoints as Array<Parameters<typeof appendAccessAlternative>[1]> : [];
+  const providerStatuses = Array.isArray(metadata?.providerStatuses) ? metadata.providerStatuses as Array<Parameters<typeof appendAccessAlternative>[1]> : [];
+  entrypoints.forEach(entry => appendAccessAlternative(row, entry));
+  providerStatuses.forEach(entry => appendAccessAlternative(row, entry));
+}
+
 function appendMissingNativeSources(node: HTMLElement, result: OverlapEvidenceResult, plan: DownloadPlan, component?: OverlapComponentView): void {
   const unitsExhausted = result.spatialPage?.hasMore === false || (!result.preview && result.page?.hasMore === false);
   if (!unitsExhausted || !component?.evidenceLookup || !coverageCatalog) return;
@@ -1732,9 +1901,14 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
   const displayCoverageEvidence = coverageEvidence;
   const spatialHasMore = Boolean(result.spatialPage?.hasMore && result.spatialPage.nextCursor);
   const supportingHasMore = Boolean(result.supportingPage?.hasMore && result.supportingPage.nextCursor);
-  const heading = document.createElement("strong");
-  heading.textContent = `匹配的空间分块 · ${result.preview ? "已展示" : "已加载"} ${displaySpatialUnits.length}${spatialHasMore ? " · 还有更多分块" : ""}`;
-  node.append(heading);
+  const drawerResultsSection = node.parentElement?.classList.contains("overlap-drawer-results") ? node.parentElement : null;
+  const resultHeading = `匹配的空间分块 · ${result.preview ? "已展示" : "已加载"} ${displaySpatialUnits.length}${spatialHasMore ? " · 还有更多分块" : ""}`;
+  if (drawerResultsSection) {
+    const heading = drawerResultsSection.querySelector("h3");
+    if (heading) heading.textContent = resultHeading;
+  } else {
+    node.append(Object.assign(document.createElement("strong"), { textContent: resultHeading }));
+  }
   appendMissingNativeSources(node, result, plan, component);
   const supporting = document.createElement("details");
   supporting.className = "overlap-supporting-evidence";
@@ -1761,9 +1935,9 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
     supporting.append(summary);
   }
   if (displaySpatialUnits.length || result.spatialPage) {
-    const unitsHeading = document.createElement("strong");
-    unitsHeading.textContent = `空间分块 URI · ${displaySpatialUnits.length}`;
-    node.append(unitsHeading);
+    if (!drawerResultsSection) {
+      node.append(Object.assign(document.createElement("strong"), { textContent: `空间分块 URI · ${displaySpatialUnits.length}` }));
+    }
     const units = document.createElement("div");
     units.className = "overlap-evidence-files overlap-spatial-units";
     for (const unit of displaySpatialUnits) {
@@ -1798,22 +1972,11 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
       }));
       facts.append(precisionIndicator(unit.precision));
       row.append(facts);
-      if (unit.accessUris?.length) {
-        unit.accessUris.forEach((entry) => {
-          if (entry.fileName) row.append(Object.assign(document.createElement("small"), { className: "overlap-spatial-unit-file-name", textContent: entry.fileName }));
-          appendSourceLocator(row, entry.uri);
-        });
-      } else if (unit.accessUri) appendSourceLocator(row, unit.accessUri);
+      appendSpatialUnitAccess(row, unit);
       if (unit.scannedFiles?.length) {
-        row.append(Object.assign(document.createElement("small"), { textContent: `已扫描到 ${unit.scannedFiles.length} 个关联文件` }));
-        const scans = document.createElement("ul");
-        unit.scannedFiles.forEach((file) => {
-          const item = document.createElement("li");
-          item.append(Object.assign(document.createElement("span"), { textContent: file.fileName ?? file.fileId }));
-          if (file.sourceUri) item.append(Object.assign(document.createElement("code"), { textContent: ` · ${file.sourceUri}` }));
-          if (file.scanRunId) item.append(Object.assign(document.createElement("small"), { textContent: ` · ${file.scanRunId}` }));
-          scans.append(item);
-        });
+        const scans = document.createElement("div");
+        scans.className = "overlap-scanned-sources";
+        unit.scannedFiles.forEach(file => appendScannedFileSource(scans, file));
         row.append(scans);
       }
       units.append(row);
@@ -1916,6 +2079,19 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
       const size = file.sizeBytes === undefined ? "size unknown" : bytes(file.sizeBytes);
       matchSummary.textContent = `${file.matchingCoverage.length} coverage match${file.matchingCoverage.length === 1 ? "" : "es"} · ${joinUnique(file.matchingCoverage.map((match) => match.layerId)) || "layer unknown"} · ${joinUnique(file.matchingCoverage.map((match) => `O${match.order}:${match.ipix}`))} · ${size}${file.downloadProvider ? ` · ${file.downloadProvider}` : ""}`;
       row.append(matchSummary);
+      const storedOrders = [...new Set(file.matchingCoverage.flatMap(match => match.sourceOrder !== undefined && match.sourceOrder !== match.order ? [match.sourceOrder] : []))];
+      if (storedOrders.length) row.append(Object.assign(document.createElement("small"), {
+        textContent: `${locale() === "zh" ? "原始扫描像元" : "Original scanned cells"}: ${storedOrders.map(order => `O${order}`).join(", ")}`,
+      }));
+      const runs = [...new Set(file.matchingCoverage.flatMap(match => match.scanRunId ? [match.scanRunId] : []))];
+      if (runs.length && !file.observations?.length) {
+        const scans = document.createElement("details");
+        scans.append(Object.assign(document.createElement("summary"), { textContent: locale() === "zh" ? "扫描依据与文件记录" : "Scan evidence and file records" }));
+        scans.append(Object.assign(document.createElement("small"), { textContent: `SCAN RUN ${runs.join(" · ")}` }));
+        const hashes = [...new Set(file.matchingCoverage.flatMap(match => match.sourceSnapshotSha256 ? [match.sourceSnapshotSha256] : []))];
+        for (const hash of hashes) scans.append(Object.assign(document.createElement("code"), { textContent: `SNAPSHOT SHA-256 ${hash}` }));
+        row.append(scans);
+      }
       if (file.matchingCoverageTruncated) row.append(Object.assign(document.createElement("small"), {
         textContent: "此文件仅展示部分覆盖匹配；文件清单加载完毕不代表已列出全部匹配区块。",
       }));
@@ -1944,7 +2120,7 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
         }
       }
       if (file.sourceUri) {
-        appendSourceLocator(row, file.sourceUri);
+        appendScannedFileSource(row, file, { fileName: false, provenance: false });
         hasLocation = true;
       }
       if (!hasLocation) {
@@ -2085,7 +2261,7 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
             Object.assign(document.createElement("strong"), { className: "overlap-spatial-unit-title", textContent: `${unit.unitKind.toUpperCase()} ${unit.unitId}` }));
           const facts = document.createElement("div"); facts.className = "overlap-spatial-unit-facts";
           facts.append(modalityBadge(unit.modality, "overlap-spatial-unit-modality"), document.createTextNode(` O${unit.order} · ${unit.matchingCells.length} cells `), precisionIndicator(unit.precision)); row.append(facts);
-          for (const entry of unit.accessUris?.length ? unit.accessUris : unit.accessUri ? [{ uri: unit.accessUri }] : []) appendSourceLocator(row, entry.uri);
+          appendSpatialUnitAccess(row, unit);
           batches.append(row);
         }
         status.title = t("coverage.progressFrozenPending"); renderIcons();
@@ -2305,6 +2481,42 @@ function reverseEntrypointLabel(entry: DownloadPlanEntrypoint): string {
   }
 }
 
+function modalitiesForComponent(component: OverlapComponentView): string[] {
+  const modalities = new Set((component.surveys ?? [])
+    .map((survey) => canonicalModality(survey.modality))
+    .filter((modality) => Boolean(modality) && modality !== "coverage"));
+  if (!modalities.size && component.evidenceLookup?.layerIds.length && coverageCatalog) {
+    const layerIds = new Set(component.evidenceLookup.layerIds);
+    coverageCatalog.layers.forEach((layer) => {
+      if (!layerIds.has(layer.layerId)) return;
+      const modality = canonicalModality(layer.modality);
+      if (modality && modality !== "coverage") modalities.add(modality);
+    });
+  }
+  const modalityOrder = Object.keys(modalityLabels);
+  return [...modalities].sort((left, right) => {
+    const leftOrder = modalityOrder.indexOf(left);
+    const rightOrder = modalityOrder.indexOf(right);
+    return (leftOrder < 0 ? modalityOrder.length : leftOrder) - (rightOrder < 0 ? modalityOrder.length : rightOrder)
+      || left.localeCompare(right);
+  });
+}
+
+function componentModalityIcon(modality?: string): HTMLSpanElement {
+  const normalized = canonicalModality(modality);
+  const label = normalized && normalized !== "coverage"
+    ? modalityLabel(normalized)
+    : locale() === "zh" ? "模态未指定" : "Modality unspecified";
+  const item = document.createElement("span");
+  item.className = "overlap-drawer-component-modality";
+  item.dataset.modality = normalized && normalized !== "coverage" ? normalized : "unknown";
+  item.title = label;
+  item.setAttribute("role", "img");
+  item.setAttribute("aria-label", label);
+  item.append(icon(modalityIconName(normalized || "unknown")));
+  return item;
+}
+
 function renderOverlapDrawerComponents(): void {
   const host = byId("overlap-drawer-components");
   host.replaceChildren();
@@ -2325,7 +2537,18 @@ function renderOverlapDrawerComponents(): void {
     id.textContent = component.id;
     const summary = document.createElement("small");
     summary.textContent = `O${component.order} · ${component.cells.length.toLocaleString("en-US")} cells`;
-    button.append(id, summary);
+    const modalities = modalitiesForComponent(component);
+    const modalityIcons = document.createElement("span");
+    modalityIcons.className = "overlap-drawer-component-modalities";
+    if (modalities.length) modalities.forEach((modality) => modalityIcons.append(componentModalityIcon(modality)));
+    else modalityIcons.append(componentModalityIcon());
+    const modalityNames = modalities.length
+      ? modalities.map(modalityLabel).join(locale() === "zh" ? "、" : ", ")
+      : locale() === "zh" ? "模态未指定" : "Modality unspecified";
+    button.setAttribute("aria-label", locale() === "zh"
+      ? `${component.id}，O${component.order}，${component.cells.length} 个像元，模态：${modalityNames}`
+      : `${component.id}, order ${component.order}, ${component.cells.length} cells, modalities: ${modalityNames}`);
+    button.append(id, summary, modalityIcons);
     button.addEventListener("click", () => selectOverlapDrawerComponent(component));
     list.append(button);
   });
@@ -2396,6 +2619,7 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
   content.append(geometry);
 
   const resultsSection = drawerSection("匹配的空间分块");
+  resultsSection.classList.add("overlap-drawer-results");
   const evidence = document.createElement("div");
   evidence.className = "overlap-evidence-plan";
   resultsSection.append(evidence);
@@ -2541,18 +2765,26 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
   publicSection.append(publicList);
   content.append(publicSection);
 
-  const assetsSection = drawerSection("ATLAS 覆盖索引 · MOC / 查询制品");
+  const assetsSection = document.createElement("details");
+  assetsSection.className = "overlap-drawer-section overlap-assets-evidence";
+  const artifactCount = details.assetsEvidence.reduce((count, entry) => count + entry.artifacts.length, 0);
+  const assetsSummary = document.createElement("summary");
+  assetsSummary.textContent = `覆盖计算依据 · ${details.assetsEvidence.length} 个产品 · ${artifactCount} 个索引制品`;
+  assetsSection.append(assetsSummary);
   const assetsIntro = document.createElement("p");
   assetsIntro.className = "overlap-drawer-copy";
-  assetsIntro.textContent = "这些是 Atlas 发布的覆盖索引，用于天球绘制、重合计算和版本核对；链接只提供 MOC、查询投影或预览制品，不是科学数据文件，也不代表 Tile / 文件清单。";
+  assetsIntro.textContent = "这些是所列产品整层的 Atlas 覆盖制品，用于天球绘制、重合计算和版本核对；不会列出当前区域的 Tile 或科学文件。";
   assetsSection.append(assetsIntro);
   const assetsList = document.createElement("div"); assetsList.className = "overlap-drawer-list";
   details.assetsEvidence.forEach((entry) => {
     const card = document.createElement("article"); card.className = "overlap-drawer-card is-assets";
-    const title = document.createElement("strong"); title.textContent = `${entry.product} · ${entry.artifacts.length} artifacts`; card.append(title);
+    const source = details.publicSources.find((candidate) => candidate.layerId === entry.layerId);
+    const title = document.createElement("strong");
+    title.textContent = `${source?.surveyName ?? entry.surveyId} · ${source?.releaseLabel ?? entry.releaseId} · ${entry.product} · ${entry.artifacts.length} 个制品`;
+    card.append(title);
     entry.artifacts.forEach((artifact) => {
       const row = document.createElement("div"); row.className = "overlap-unit-links";
-      const kindLabel = artifact.kind === "moc" ? "MOC 覆盖文件" : artifact.kind === "query" ? "查询投影" : artifact.kind === "preview" ? "预览制品" : `发布制品 · ${artifact.kind.toUpperCase()}`;
+      const kindLabel = artifact.kind === "moc" ? "MOC 覆盖文件" : artifact.kind === "query" ? "查询索引" : artifact.kind === "preview" ? "覆盖预览" : `发布制品 · ${artifact.kind.toUpperCase()}`;
       const link = drawerDocLink(artifact.downloadUrl, `${kindLabel} · ${artifact.label}`); if (link) row.append(link);
       row.append(Object.assign(document.createElement("small"), { textContent: `${bytes(artifact.sizeBytes)} · SHA-256 ${artifact.sha256.slice(0, 12)}…` }));
       card.append(row);
@@ -2565,6 +2797,8 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
   }
 
   const warehouseSection = drawerSection(t("coverage.warehouseEvidence"));
+  const geometryStatus = warehouseGeometryNotice(details.warehouseGeometry);
+  if (geometryStatus) warehouseSection.append(geometryStatus);
   const warehouseList = document.createElement("div");
   warehouseList.className = "overlap-drawer-list";
   if (!details.warehouseEvidence.length) {
@@ -2580,6 +2814,19 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
       precisionIndicator(evidence.precision),
     );
     card.append(counts);
+    const scanNote = document.createElement("small");
+    scanNote.className = "overlap-warehouse-scan-note";
+    scanNote.append(icon("database"), document.createTextNode(t("coverage.warehouseScanRecorded")));
+    card.append(scanNote);
+    for (const connector of evidence.connectors ?? []) {
+      const source = document.createElement("div");
+      source.className = "overlap-warehouse-internal-source overlap-scan-connector";
+      appendConnectorIcon(source, connector);
+      source.append(Object.assign(document.createElement("strong"), { textContent: `${connector.name} · ${connector.type.toUpperCase()}` }));
+      const runs = connector.matchingScanRuns;
+      source.append(Object.assign(document.createElement("small"), { textContent: locale() === "zh" ? `关联 ${runs} 条活动扫描记录` : `${runs} active scan run${runs === 1 ? "" : "s"} associated` }));
+      card.append(source);
+    }
     if (evidence.scanRunId) card.append(Object.assign(document.createElement("small"), { textContent: `SCAN RUN ${evidence.scanRunId}` }));
     else if (evidence.scanRunCount !== undefined) card.append(Object.assign(document.createElement("small"), { textContent: `SCAN RUNS ${evidence.scanRunCount}` }));
     if (evidence.sourceSnapshotSha256) card.append(Object.assign(document.createElement("code"), { textContent: `SNAPSHOT SHA-256 ${evidence.sourceSnapshotSha256}` }));
@@ -2588,7 +2835,11 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
       card.append(Object.assign(document.createElement("small"), { textContent: `SCOPE ${evidence.scanScope.scopeId} · ${evidence.scanScope.committedPartitions}/${evidence.scanScope.expectedPartitions} partitions · ${evidence.scanScope.completeness}` }));
       card.append(Object.assign(document.createElement("code"), { textContent: `SCOPE SNAPSHOT SHA-256 ${evidence.scanScope.scopeSnapshotSha256}` }));
     }
-    const connector = document.createElement("small"); connector.textContent = `${t("coverage.connector")}: ${evidence.connector.status}${evidence.connector.name ? ` · ${evidence.connector.name}` : ""}${evidence.connector.type ? ` · ${evidence.connector.type}` : ""}`; card.append(connector);
+    const connector = document.createElement("small");
+    connector.textContent = evidence.connector.status === "known"
+      ? `${t("coverage.connector")}: ${evidence.connector.name ?? ""}${evidence.connector.type ? ` · ${evidence.connector.type.toUpperCase()}` : ""}`
+      : t("coverage.connectorUnknown");
+    if (!evidence.connectors?.length) card.append(connector);
     warehouseList.append(card);
   });
   warehouseSection.append(warehouseList);
@@ -2853,6 +3104,7 @@ function modalityDescription(modality: string | undefined): string {
 function modalityBadge(modality: string | undefined, className: string): HTMLSpanElement {
   const badge = document.createElement("span");
   badge.className = className;
+  badge.dataset.modality = canonicalModality(modality) || "unknown";
   const label = modality ? modalityLabel(modality) : locale() === "zh" ? "模态未指定" : "Modality unspecified";
   badge.title = modalityDescription(modality);
   badge.setAttribute("aria-label", `${locale() === "zh" ? "模态" : "Modality"}: ${label}. ${modalityDescription(modality)}`);
@@ -3049,7 +3301,7 @@ async function copy(value: string, message = "SHA-256 已复制"): Promise<void>
 
 function renderIcons(): void {
     createIcons({
-    icons: { BadgeCheck, BookOpen, Box, ChevronLeft, ChevronRight, CircleHelp, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, Home, Image, Info, Layers3, ListChecks, ListFilter, LoaderCircle, Lock, Maximize2, Minimize2, Moon, Menu, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X },
+    icons: { BadgeCheck, BookOpen, Box, ChevronLeft, ChevronRight, CircleHelp, Cloud, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, HardDrive, Home, Image, Info, Layers3, ListChecks, ListFilter, LoaderCircle, Lock, Maximize2, Minimize2, Moon, Menu, Plug, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X },
     attrs: { "aria-hidden": "true" },
   });
 }
@@ -3390,7 +3642,32 @@ async function hydrateCoverageCatalogInternal(nextCatalog: CoverageCatalog): Pro
 const coverageHydration = createRevisionHydrationQueue(coverageCatalogRevisionKey, hydrateCoverageCatalogInternal);
 
 function hydrateCoverageCatalog(nextCatalog: CoverageCatalog, force = false): Promise<void> {
+  const statusNode = document.getElementById("warehouse-geometry-status");
+  if (statusNode) {
+    const notice = warehouseGeometryNotice(nextCatalog.warehouseGeometry);
+    statusNode.hidden = !notice;
+    statusNode.replaceChildren(...(notice ? [notice] : []));
+  }
   return coverageHydration.enqueue(nextCatalog, force);
+}
+
+function warehouseGeometryNotice(status?: WarehouseGeometryLoadStatus): HTMLDetailsElement | undefined {
+  if (status?.status !== "degraded" || (!status.failures.length && !status.error)) return undefined;
+  const notice = document.createElement("details");
+  notice.className = "warehouse-geometry-notice";
+  notice.append(Object.assign(document.createElement("summary"), { textContent: t("coverage.warehouseGeometryIncomplete") }));
+  notice.append(Object.assign(document.createElement("p"), { textContent: t("coverage.warehouseGeometryRetained") }));
+  if (status.error) notice.append(Object.assign(document.createElement("p"), { textContent: status.error }));
+  if (status.failures.length) {
+    const list = document.createElement("ul");
+    for (const failure of status.failures) {
+      const item = document.createElement("li");
+      item.textContent = `${[failure.surveyId, failure.releaseId, failure.product ?? failure.layerId].filter(Boolean).join(" · ")}: ${failure.reason}`;
+      list.append(item);
+    }
+    notice.append(list);
+  }
+  return notice;
 }
 
 function retryCoverageSurvey(surveyId: string): void {
@@ -3741,6 +4018,7 @@ document.addEventListener("pointerdown", (event) => {
 });
 
 window.addEventListener("atlas:locale-change", () => {
+  if (coverageCatalog) void hydrateCoverageCatalog(coverageCatalog);
   updateCoverageReadout(activeSurveyId);
   if (surveyIndex) renderSurveys();
   if (overlapMode && activeOverlapComponents.length) {

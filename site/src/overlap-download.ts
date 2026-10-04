@@ -1,3 +1,5 @@
+import type { ScanConnectorIdentity } from "../../src/connector-icon.js";
+
 export interface DownloadPlanMatch {
   layerId?: string;
   evidenceLayerId?: string;
@@ -10,6 +12,7 @@ export interface DownloadPlanMatch {
   coverageMethod?: string;
   coverageRole?: string;
   sourceOrder?: number;
+  sourceIpix?: number;
   scanRunId?: string;
   sourceSnapshotSha256?: string;
 }
@@ -26,6 +29,7 @@ export interface DownloadPlanFile {
   lastModified?: string;
   etag?: string;
   sourceUri?: string;
+  connectors?: ScanConnectorIdentity[];
   downloadable: boolean;
   downloadUrl?: string;
   matchingCoverage: DownloadPlanMatch[];
@@ -98,6 +102,16 @@ export interface DownloadPlanCoverageEvidence {
   summary: string;
 }
 
+export interface DownloadPlanScannedFile {
+  fileId: string;
+  fileName?: string;
+  sourceUri?: string;
+  scanRunId?: string;
+  sourceSnapshotSha256?: string;
+  matchingCoverage?: DownloadPlanMatch[];
+  connectors?: ScanConnectorIdentity[];
+}
+
 export interface DownloadPlanSpatialUnit {
   layerId: string;
   productId: string;
@@ -112,15 +126,32 @@ export interface DownloadPlanSpatialUnit {
   matchingCells: number[];
   precision: string;
   accessUri?: string;
-  accessUris?: Array<{ uri: string; fileName?: string }>;
+  accessUris?: Array<{ uri: string; fileName?: string; band?: string; accessType?: "file" | "directory" | "entrypoint"; alternatives?: DownloadPlanSourceAccessAlternative[] }>;
   accessAvailability?: "public" | "source-policy" | "unverified";
   sourceSnapshotSha256?: string;
   note?: string;
   sRegion?: string;
+  geometryEvidence?: Array<{ kind: "fits-wcs-frame"; sRegion: string; sourceUrl: string; memberName: string; sha256: string; instrument: string; filter: string }>;
   instrument?: string;
   filters?: string;
   sourceUrl?: string;
-  scannedFiles?: Array<{ fileId: string; fileName?: string; sourceUri?: string; scanRunId?: string; sourceSnapshotSha256?: string }>;
+  nativePartition?: { coordinateFrame: "ICRS"; ordering: "NESTED"; order: number; firstIpix: number; lastIpix: number; precision: "exact" };
+  sourceMetadata?: Record<string, unknown>;
+  scannedFiles?: DownloadPlanScannedFile[];
+}
+
+export interface DownloadPlanSourceAccessAlternative {
+  uri: string;
+  accessType: "file" | "directory" | "entrypoint";
+  provider: string;
+  providerCountryCode?: string;
+  providerLocation?: string;
+  servingRegion?: string;
+  relationship?: string;
+  status: "verified" | "source-listed" | "rule-derived" | "entrypoint-only" | "unavailable";
+  checkedAt?: string;
+  httpStatus?: number;
+  note?: string;
 }
 
 export interface DownloadPlan {
@@ -146,18 +177,51 @@ function conservativePrecision(left: string, right: string): string {
   return rank[left]! >= rank[right]! ? left : right;
 }
 
+function mergeAccessUris(...lists: Array<Array<NonNullable<DownloadPlanSpatialUnit["accessUris"]>[number]> | undefined>) {
+  const entries = new Map<string, NonNullable<DownloadPlanSpatialUnit["accessUris"]>[number]>();
+  for (const entry of lists.flatMap(list => list ?? [])) {
+    const key = `${entry.fileName ?? entry.uri}:${entry.band ?? ""}:${entry.accessType ?? ""}`;
+    const old = entries.get(key);
+    if (!old) { entries.set(key, entry); continue; }
+    const alternatives = new Map([...(old.alternatives ?? []), ...(entry.alternatives ?? [])]
+      .map(item => [`${item.provider}:${item.uri}`, item]));
+    entries.set(key, { ...old, ...entry, uri: old.uri, ...(alternatives.size ? { alternatives: [...alternatives.values()] } : {}) });
+  }
+  return [...entries.values()];
+}
+
+function mergeSpatialSourceMetadata(previous?: Record<string, unknown>, next?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!previous && !next) return undefined;
+  const result = { ...previous, ...next };
+  for (const key of ["entrypoints", "providerStatuses", "records", "archivePackageUris"]) {
+    const items = [...(Array.isArray(previous?.[key]) ? previous[key] as unknown[] : []), ...(Array.isArray(next?.[key]) ? next[key] as unknown[] : [])];
+    if (items.length) result[key] = [...new Map(items.map(item => [typeof item === "string" ? item : JSON.stringify(item), item])).values()];
+  }
+  return result;
+}
+
+function mergeScanConnectors(previous?: ScanConnectorIdentity[], next?: ScanConnectorIdentity[]): ScanConnectorIdentity[] {
+  const identities = new Map<string, ScanConnectorIdentity>();
+  for (const connector of [...(previous ?? []), ...(next ?? [])]) {
+    const key = `${connector.name}:${connector.type}:${connector.identityBasis}`;
+    identities.set(key, { ...identities.get(key), ...connector });
+  }
+  return [...identities.values()];
+}
+
 export function mergeDownloadPlans(previous: DownloadPlan, next: DownloadPlan): DownloadPlan {
+  const matchKey = (match: DownloadPlanMatch) => [match.layerId, match.order, match.ipix, match.sourceOrder, match.sourceIpix, match.precision, match.scanRunId,
+    match.sourceSnapshotSha256, match.evidenceLayerId, match.observationLayerId, match.scopeId, match.partitionId].join(":");
   const files = new Map(previous.files.map((file) => [file.fileId, file]));
   for (const file of next.files) {
     const old = files.get(file.fileId);
     if (!old) { files.set(file.fileId, file); continue; }
-    const matchKey = (match: DownloadPlanMatch) => [match.layerId, match.order, match.ipix, match.precision, match.scanRunId,
-      match.sourceSnapshotSha256, match.evidenceLayerId, match.observationLayerId, match.scopeId, match.partitionId].join(":");
     const matches = new Map(old.matchingCoverage.map((match) => [matchKey(match), match]));
     file.matchingCoverage.forEach((match) => matches.set(matchKey(match), match));
     const observations = new Map([...(old.observations ?? []), ...(file.observations ?? [])]
       .map((observation) => [`${observation.layerId ?? ""}:${observation.scanRunId ?? ""}:${observation.sourceSnapshotSha256 ?? ""}:${observation.sourceUri ?? ""}`, observation]));
     files.set(file.fileId, { ...old, ...file, matchingCoverage: [...matches.values()],
+      ...(old.connectors?.length || file.connectors?.length ? { connectors: mergeScanConnectors(old.connectors, file.connectors) } : {}),
       ...(old.matchingCoverageTruncated || file.matchingCoverageTruncated ? { matchingCoverageTruncated: true } : {}),
       warnings: [...new Set([...(old.warnings ?? []), ...(file.warnings ?? [])])],
       ...(observations.size ? { observations: [...observations.values()] } : {}) });
@@ -174,17 +238,20 @@ export function mergeDownloadPlans(previous: DownloadPlan, next: DownloadPlan): 
   (next.spatialUnits ?? []).forEach((unit) => {
     const key = `${unit.layerId}:${unit.unitKind}:${unit.unitId}`, old = spatialUnits.get(key);
     if (!old) { spatialUnits.set(key, unit); return; }
-    const scannedFiles = new Map([...(old.scannedFiles ?? []), ...(unit.scannedFiles ?? [])]
-      .map((file) => [`${file.fileId}:${file.scanRunId ?? ""}`, file]));
-    const accessUris = new Map<string, { uri: string; fileName?: string }>();
-    for (const entry of [...(old.accessUris ?? []), ...(old.accessUri ? [{ uri: old.accessUri }] : []),
-      ...(unit.accessUris ?? []), ...(unit.accessUri ? [{ uri: unit.accessUri }] : [])]) {
-      accessUris.set(entry.uri, { ...accessUris.get(entry.uri), ...entry });
+    const scannedFiles = new Map<string, NonNullable<DownloadPlanSpatialUnit["scannedFiles"]>[number]>();
+    for (const file of [...(old.scannedFiles ?? []), ...(unit.scannedFiles ?? [])]) {
+      const key = `${file.fileId}:${file.scanRunId ?? ""}`, existing = scannedFiles.get(key);
+      const matches = new Map([...(existing?.matchingCoverage ?? []), ...(file.matchingCoverage ?? [])].map(match => [matchKey(match), match]));
+      scannedFiles.set(key, { ...existing, ...file, ...(matches.size ? { matchingCoverage: [...matches.values()] } : {}),
+        ...(existing?.connectors?.length || file.connectors?.length ? { connectors: mergeScanConnectors(existing?.connectors, file.connectors) } : {}) });
     }
+    const accessUris = mergeAccessUris(old.accessUris, old.accessUri && !old.accessUris?.some(entry => entry.uri === old.accessUri) ? [{ uri: old.accessUri }] : undefined,
+      unit.accessUris, unit.accessUri && !unit.accessUris?.some(entry => entry.uri === unit.accessUri) ? [{ uri: unit.accessUri }] : undefined);
     spatialUnits.set(key, { ...old, ...unit, precision: conservativePrecision(old.precision, unit.precision), matchingCells: unionNumbers(old.matchingCells, unit.matchingCells),
       note: joinUnique([old.note, unit.note]) || undefined,
       ...(scannedFiles.size ? { scannedFiles: [...scannedFiles.values()] } : {}),
-      ...(accessUris.size ? { accessUri: old.accessUri ?? unit.accessUri ?? accessUris.keys().next().value, accessUris: [...accessUris.values()] } : {}) });
+      ...(accessUris.length ? { accessUri: old.accessUri ?? unit.accessUri ?? accessUris[0]?.uri, accessUris } : {}),
+      ...(old.sourceMetadata || unit.sourceMetadata ? { sourceMetadata: mergeSpatialSourceMetadata(old.sourceMetadata, unit.sourceMetadata) } : {}) });
   });
   const coverage = new Map((previous.coverageEvidence ?? []).map((evidence) => [`${evidence.layerId}:${evidence.order}`, evidence]));
   (next.coverageEvidence ?? []).forEach((evidence) => {
@@ -246,6 +313,8 @@ export const OVERLAP_DOWNLOAD_HEADER = [
   "ra_min_deg", "ra_max_deg", "dec_min_deg", "dec_max_deg", "area_deg2", "notes", "evidence_kind", "source_label", "source_url", "geometry_source_url", "coverage_url", "available_orders", "native_max_order", "source_identity", "instrument", "filters", "source_snapshot_sha256", "completeness", "science_file_scan",
   "file_observations", "scan_scopes", "matching_coverage_truncated", "access_uris", "access_availability",
   "s_region", "query_snapshot_id", "omitted", "has_more", "inventory_complete", "native_unit_index_revision",
+  "geometry_evidence",
+  "native_partition", "source_metadata",
 ] as const;
 
 export function csvCell(value: unknown): string {
@@ -354,9 +423,16 @@ export function overlapCsvRows(
       padded[OVERLAP_DOWNLOAD_HEADER.indexOf("instrument")] = unit.instrument ?? "";
       padded[OVERLAP_DOWNLOAD_HEADER.indexOf("filters")] = unit.filters ?? "";
       padded[OVERLAP_DOWNLOAD_HEADER.indexOf("source_url")] = unit.sourceUrl ?? "";
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("geometry_source_url")] = joinUnique(unit.geometryEvidence?.map(evidence => evidence.sourceUrl) ?? []);
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("geometry_evidence")] = unit.geometryEvidence?.length ? JSON.stringify(unit.geometryEvidence) : "";
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("native_partition")] = unit.nativePartition ? JSON.stringify(unit.nativePartition) : "";
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("source_metadata")] = unit.sourceMetadata ? JSON.stringify(unit.sourceMetadata) : "";
       padded[OVERLAP_DOWNLOAD_HEADER.indexOf("science_file_scan")] = "";
     }
-    if (file) padded[OVERLAP_DOWNLOAD_HEADER.indexOf("source_snapshot_sha256")] = joinUnique(file.matchingCoverage.map(match => match.sourceSnapshotSha256));
+    if (file) {
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("source_snapshot_sha256")] = joinUnique(file.matchingCoverage.map(match => match.sourceSnapshotSha256));
+      if (file.connectors?.length) padded[OVERLAP_DOWNLOAD_HEADER.indexOf("source_metadata")] = JSON.stringify({ connectors: file.connectors });
+    }
     return padded;
   });
 }

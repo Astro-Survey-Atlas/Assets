@@ -91,6 +91,23 @@ export interface CoverageCatalog {
   layers: Array<Omit<CoverageCellLayer, "cells"> & { tileIdsByOrder: Record<string, number[]> }>;
   revision?: string;
   generatedAt?: string;
+  warehouseGeometry?: WarehouseGeometryLoadStatus;
+}
+
+export interface WarehouseGeometryLoadStatus {
+  status: "unconfigured" | "loaded" | "degraded";
+  loadedAt: string;
+  loadedLayers: number;
+  uniqueCells: number;
+  error?: string;
+  failures: Array<{
+    layerId: string;
+    surveyId?: string;
+    releaseId?: string;
+    product?: string;
+    reason: string;
+    retainedGeometry: "previous-scan" | "published";
+  }>;
 }
 
 const identity = (surveyId: string, releaseId: string, product: string): string => `${surveyId}:${releaseId}:${product}`;
@@ -172,6 +189,25 @@ export function withCoverageRevisions(
     .digest("hex")
     .slice(0, 32);
   return { ...catalog, schemaVersion: 2, revision, layers, records };
+}
+
+export function updateCoverageNativeUnitState(
+  catalog: CoverageCatalog & { records: Map<string, CoverageCellLayer> },
+  layerId: string,
+  sourceUnitIndex: SourceUnitIndexSummary,
+  nativeUnitIndexRevision?: string,
+): void {
+  const record = catalog.records.get(layerId);
+  if (!record) return;
+  record.sourceUnitIndex = sourceUnitIndex;
+  if (nativeUnitIndexRevision) record.nativeUnitIndexRevision = nativeUnitIndexRevision;
+  else delete record.nativeUnitIndexRevision;
+
+  const layer = catalog.layers.find(candidate => candidate.layerId === layerId);
+  if (!layer) return;
+  layer.sourceUnitIndex = sourceUnitIndex;
+  if (nativeUnitIndexRevision) layer.nativeUnitIndexRevision = nativeUnitIndexRevision;
+  else delete layer.nativeUnitIndexRevision;
 }
 
 function recipeSteps(mode: string, recipe: Record<string, unknown>): CoverageRecipeSummary["steps"] {
@@ -360,12 +396,14 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
 export function coverageCatalogFromWarehouse(
   base: CoverageCatalog & { records: Map<string, CoverageCellLayer> },
   snapshot: WarehouseCoverageCatalogSnapshot,
+  previous: ReadonlyMap<string, CoverageCellLayer> = new Map(),
 ): CoverageCatalog & { records: Map<string, CoverageCellLayer> } {
   const fallbackById = base.records;
   const excluded = excludedWarehouseLayerIds();
   const isExcluded = (id: string): boolean => excluded.has(id)
     || id.startsWith("warehouse-selftest-") || id.startsWith("warehouse-caller-");
   const records = new Map([...base.records].filter(([id]) => !isExcluded(id)));
+  const failedLayers = new Set(snapshot.failures?.map(failure => failure.layerId));
   for (const layer of snapshot.layers) {
     // Batch scans add file evidence to a product, not another public footprint.
     // Their geometry must never replace the reviewed MOC or create a duplicate.
@@ -374,6 +412,11 @@ export function coverageCatalogFromWarehouse(
     // Warehouse index briefly reports them as ACTIVE.
     if (isExcluded(layer.layerId)) continue;
     if (isDeniedSurvey(layer.surveyId) || isDeniedLayerId(layer.layerId)) continue;
+    if (failedLayers.has(layer.layerId)) {
+      const retained = previous.get(layer.layerId);
+      if (retained && retained.surveyId === layer.surveyId && retained.releaseId === layer.releaseId && retained.productId === layer.productId) records.set(layer.layerId, retained);
+      continue;
+    }
     const fallback = fallbackById.get(layer.layerId);
     const cells = new Map<number, number[]>();
     snapshot.coverages

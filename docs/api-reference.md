@@ -170,6 +170,20 @@ the indexed scan scope, not survey completeness. A file hit does not change
 site role proxies the coverage catalog to the backend so this runtime status
 matches the reverse-lookup service.
 
+`warehouseGeometry` reports startup/reload of the scanned geometry separately:
+`status` is `unconfigured`, `loaded` or `degraded`; `loadedAt`, `loadedLayers`
+and `uniqueCells` describe that load. `failures[]` identifies each failed layer,
+its reason and whether `previous-scan` or `published` geometry was retained.
+An optional `error` reports failure to read layer metadata. A successful load
+does not assert complete survey inventory or change the reviewed public MOC.
+The browser displays degraded loading status and lets users expand the reasons.
+
+The backend reads distinct `(layer, real order, ipix)` buckets using Elasticsearch
+composite aggregation pages of 10,000. It does not materialize file documents at
+startup, and `ASSETS_WAREHOUSE_COVERAGE_MAX_DOCS` no longer limits this load.
+Every page of a layer must succeed before its new geometry replaces the retained
+version; a failed layer does not discard successfully loaded layers.
+
 The server returns `409` when the revision is stale, so a client can reload the catalog before using the block. Revisioned blocks use immutable cache headers; requests without a revision are explicitly revalidated. Catalog requests honor `If-None-Match` and return `304 Not Modified`. The browser requests overview blocks first and higher-order blocks only after zooming.
 
 ### Workspace Legacy DR9 overview
@@ -266,6 +280,15 @@ The response includes the requested `order`/`nside`, `precision`, coverage
 edges, source file IDs, URI/name/ETag/WCS bounds, download entrypoints and a
 `truncated` flag. It never upgrades an order-4-only layer to order 8.
 
+For a coarse requested region, Warehouse lookup can query its actual finer
+descendants. For example, O4 cell 190 queries O8 cells in `[48640, 48896)` when
+O8 is the scan's available order. The matching record keeps requested
+`order: 4, ipix: 190` and original `sourceOrder: 8, sourceIpix: ...`, with scan
+run and input snapshot identity. An O4-only scan cannot answer an O8 request by
+inventing finer cells. File evidence is read only for the selected region, in
+bounded `search_after` pages; the extra hit determines continuation because
+Elasticsearch's `hits.total` still counts the full query on the last page.
+
 Reverse lookup accepts one or more public layer IDs and a bounded explicit
 region; it does not calculate the overlap itself. The overlap endpoint unions
 selected products within each survey and intersects survey coverages at the
@@ -342,6 +365,13 @@ HST footprints keep results incomplete. An exhausted manifest page does not
 clear source incompleteness or turn it into a result-limit failure. Display and
 JSON/CSV export preserve the same source notes.
 
+HST may use a reviewed bounded supplement: the historical input and its date/SHA
+remain locked, and selected fresh MAST pages add observations or metadata variants.
+The response notes retain both the baseline provenance and supplemental row count.
+Selected pages do not establish a complete current inventory, remove old observations,
+or turn the net upstream row-count difference into an added-observation count.
+`inventoryComplete` remains false; `hst-partial-refresh` is a required managed review gap.
+
 Workspace calls this endpoint server-side using `X-Assets-API-Key`. Its request
 contains only public `layerIds`, `order`, `cells`, optional `limit`, `pageSize`,
 `cursor` and `querySnapshotId`. Private CSST identities, paths and scan metadata
@@ -362,6 +392,23 @@ used to render/query the globe. Existing fields remain unchanged; the optional
 
 `downloadPlan` is the authoritative export for this lookup. It deliberately keeps
 coverage matches, real files and general public entrypoints separate:
+
+Scanned files, including `spatialUnits[].scannedFiles[]`, may have optional
+`connectors: [{name, type, iconUrl?, identityBasis}]`. `scan-run` joins an actual
+run and matching survey/release/product to its retained task; `scan-scope` joins
+a retained batch rule by scope ID, evidence layer, frozen scope SHA and partition
+count. Each file uses its own coverage observations. A layer summary or URI
+prefix cannot establish this association. A removed Connector keeps its proven
+name with `type=unknown`; missing or conflicting provenance stays unassociated.
+
+The site uses the Connector's current custom icon, falling back to the shared
+type icon when unset or the image fails. JSON retains the original scanned URI,
+run, snapshot and Connector identity. Attached CSV `file_observations` retains
+`connectors`; supporting CSV `source_metadata.connectors` carries the same
+records. OSS/S3/file locators remain internal scan evidence requiring source
+authorization. Icon customization does not establish public download access.
+Existing frozen query snapshots keep the icon URL captured at query time;
+new queries reflect subsequent edits.
 
 ```json
 {
@@ -504,8 +551,12 @@ returns observation matches and MAST observation links, not a live file-level
 product listing; users follow the MAST link for current products and access
 policy. Results preserve `sRegion`, `instrument`, `filters`, the snapshot hash
 and its capture time. Euclid ERO returns `unitKind=target` and the official named package identity, never an
-invented Tile. Its associated ESA Sky outreach footprint is an estimated target
-extent. Both preserve source snapshots and source access policies; no science
+invented Tile. Locked official FITS-header snapshots use each selected band's
+own ICRS TAN image-frame bounds, with `geometryEvidence[]` preserving its
+polygon, package URL, member name and header SHA-256. Older snapshots use the
+associated ESA Sky outreach polygon. Both remain estimated coverage: image
+frames do not establish valid-pixel masks, exposure holes or catalogue extent.
+Both preserve source snapshots and source access policies; no science
 content, header, range or preview is retrieved by this flow.
 
 `entrypoints[]` contains links that are useful for reaching the official data
@@ -556,6 +607,23 @@ row per real item and uses:
   is JSON preserving all listed file URIs and filenames for that unit.
   `access_availability` records whether the source is public, subject to source
   policy, or still unverified.
+  `geometry_evidence` preserves ERO FITS-header provenance as JSON, and
+  `geometry_source_url` retains the corresponding package locator; `s_region`,
+  `instrument` and `filters` match the spatial result.
+  `native_partition` preserves Gaia's actual ICRS/NESTED order and inclusive
+  pixel range as JSON, separately from the requested query order.
+  `source_metadata` retains the reported file size/upstream checksum status,
+  native field flags or MAST release/band/observation records. JSON uses
+  `nativePartition` and `sourceMetadata` with the same content. An upstream
+  declared checksum is not a checksum computed from scientific file bytes.
+  Each `access_uris[]` entry may contain nested `alternatives[]`: one logical
+  file or directory remains one access record, while regional mirrors keep
+  their provider country, location, relationship and verification status on
+  the alternatives. `sourceMetadata.entrypoints[]` contains metadata/API
+  links separately from direct science-file links; `providerStatuses[]` can
+  retain a known mirror that is currently unavailable. These fields are
+  discovery links, not a server-side download operation. Current endpoint
+  checks and their scope are recorded in [the source-access research note](research/survey-download-sources-20261004.md).
 - `item_kind=manifest-state` for snapshot ID, omitted items, `has_more`,
   native index revision, inventory completeness and truncation notes. An exhausted query always
   retains `inventory_complete=false`; it is not a complete survey claim.
@@ -841,13 +909,14 @@ publication 文件已存在但当前 Catalog 没有有效 layer；管理员可�
 ```http
 GET  /api/v1/admin/connectors
 POST /api/v1/admin/connectors
+PUT  /api/v1/admin/connectors/{name}/icon
 POST /api/v1/admin/connectors/{name}/probe
 POST /api/v1/admin/connectors/{name}/inventory
 GET  /api/v1/admin/overview
 ```
 
 Connector 是 Assets 管理的配置对象，不是 Warehouse `ScanRequest`。列表同时读取
-Assets 管理的 Connector ConfigMap 和 Warehouse 原生 `AstroDataSource`（后者只读）；
+Assets 管理的 Connector ConfigMap 和 Warehouse 原生 `AstroDataSource`（后者连接配置只读）；
 两者按名称去重，保留协议、授权范围和 `phase`，并附带 `scope`、`usage` 和 `inventory` 摘要。
 `configurationPhase` 只表示 Warehouse 对连接配置的校验结果，不能替代实际探测。
 Assets Connector 默认使用引用 Secret 的 `accessKey`/`secretKey`；Warehouse
@@ -864,6 +933,19 @@ Assets Connector 默认使用引用 Secret 的 `accessKey`/`secretKey`；Warehou
 `phase` 为 `READY`、`PENDING` 或 `ERROR`，并带有脱敏 `message` 和 `checkedAt`。
 结果写入内容卷的 `connector-probes-v1.json`，并通过 `connector-probes` 状态快照
 同步；刷新页面或重启后仍可见。错误响应不会返回凭据、签名或 Authorization header。
+
+Connector 管理支持自定义图标。创建时可提供可选 `iconUrl`；在数据源详情点击
+“修改图标”可填写 HTTP(S)/站内绝对路径，或上传 ICO、PNG、JPEG、WebP（最大 64 KiB）。
+`PUT /api/v1/admin/connectors/{name}/icon` 只接受 `{ "iconUrl": "…" }`；上传使用 raster
+base64 data URL，`null` 恢复按类型显示的默认图标。远程图片由浏览器加载，Assets 不抓取 URL。
+
+上传图标使用 SHA-256 地址 `GET /api/v1/connector-icons/{sha256}`，支持 HEAD、ETag
+和 immutable 缓存。图片单独按需读取，不在文件列表重复传输图片字节。配置保存在
+Assets 内容卷的 `connector-presentation-v1.json`，通过 `connector-presentation` 状态快照
+归档和恢复，并按 namespace/name/resource UID 绑定连接；同名重建不会继承旧图标。
+替换/重置后保留旧图片，以保证冻结 manifest 的图标地址可用。Warehouse 原生
+`AstroDataSource` 也可配置 Assets 展示图标；连接 spec、凭据、探测和盘点状态保持原值。
+图标 PUT 响应包含 `connector` 和 `syncStatus`。
 
 `POST /api/v1/admin/connectors/{name}/inventory` 每次推进一个对象存储分页，并将进度
 写入 `connector-inventory-v1.json` 与 `connector-inventory` 状态快照。`complete` 才表示

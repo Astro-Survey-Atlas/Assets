@@ -56,6 +56,17 @@ test("public external URL projection rejects internal and credential-bearing URL
   assert.equal(publicExternalUrl("ftp://other.example.org/public/hlsp/decals/dr1/coadd/149/1498p020/file.fits"), undefined);
 });
 
+test("overlap details retain loading failures only for participating layers", () => {
+  const details = buildOverlapDetails({ result, component: result.components[0]!, layers: [layer()],
+    surveyIndex: { schemaVersion: 1, generatedAt: "2026-10-04", sharedAssets: [], surveys: [] },
+    warehouseGeometry: { status: "degraded", loadedAt: "2026-10-04", loadedLayers: 1, uniqueCells: 100,
+      failures: [{ layerId: "euclid-layer", reason: "HTTP 503", retainedGeometry: "published" },
+        { layerId: "unrelated-layer", reason: "HTTP 503", retainedGeometry: "previous-scan" }] },
+  });
+  assert.equal(details.warehouseGeometry?.status, "degraded");
+  assert.deepEqual(details.warehouseGeometry?.failures.map(value => value.layerId), ["euclid-layer"]);
+});
+
 test("overlap details separate public claims from current Warehouse evidence", () => {
   const surveyIndex = {
     schemaVersion: 1,
@@ -89,6 +100,31 @@ test("overlap details separate public claims from current Warehouse evidence", (
   assert.equal(details.warehouseEvidence[0]?.connector.status, "unavailable");
   assert.deepEqual(details.reverseLookup.layerIds, ["euclid-layer"]);
   assert.equal(details.reverseLookup.precision, "exact");
+});
+
+test("overlap details preserve the actual Connector's configured icon and scan provenance", () => {
+  const surveyIndex = {
+    schemaVersion: 1,
+    generatedAt: "2026-08-26",
+    sharedAssets: [],
+    surveys: [{
+      id: "euclid", name: "Euclid", mission: "ESA Euclid", color: "#a7d9ff", description: "Euclid survey", modalities: ["imaging"],
+      imageUrl: "/surveys/euclid.png", statistics: { publicProducts: 1, acquired: 1, overviewOnly: 0, awaitingGeometry: 0, notApplicable: 0, footprintCells: 1 },
+      releases: [{ id: "euclid-q1", label: "Q1", kind: "quick_release", modalities: ["imaging"], products: [{ name: "Euclid VIS", modality: "imaging", status: "acquired" }] }],
+    }],
+  } as any;
+  const details = buildOverlapDetails({
+    result,
+    component: result.components[0]!,
+    layers: [layer()],
+    surveyIndex,
+    warehouseSnapshots: new Map([[
+      "euclid-layer",
+      { layerId: "euclid-layer", surveyId: "euclid", releaseId: "euclid-q1", productId: "euclid-product", state: "ACTIVE", scanRunId: "run-1", availableOrders: [4], fileCount: 2, coverageCount: 4, errorCount: 0, connectorEvidence: [{ name: "euclid-mirror", type: "oss", iconUrl: "/api/v1/connector-icons/example", identityBasis: "scan-run", matchingScanRuns: 1 }] },
+    ]]),
+  });
+  assert.deepEqual(details.warehouseEvidence[0]?.connectors, [{ name: "euclid-mirror", type: "oss", iconUrl: "/api/v1/connector-icons/example", identityBasis: "scan-run", matchingScanRuns: 1 }]);
+  assert.deepEqual(details.warehouseEvidence[0]?.connector, { status: "known", name: "euclid-mirror", type: "oss", iconUrl: "/api/v1/connector-icons/example" });
 });
 
 test("overlap details expose only approved product provenance for dynamic MOC layers", () => {

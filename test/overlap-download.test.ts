@@ -16,9 +16,51 @@ function record(row: string[]): Record<string, string> {
   return Object.fromEntries(OVERLAP_DOWNLOAD_HEADER.map((key, index) => [key, row[index] ?? ""]));
 }
 
+test("manifest pagination keeps distinct native scan cells inside one requested coarse cell", () => {
+  const match = { layerId: "desi", order: 4, ipix: 190, sourceOrder: 8, sourceIpix: 48640, precision: "exact", scanRunId: "run" };
+  const file = { fileId: "file", metadataState: "complete" as const, sourceUri: "oss://survey/file.fits", downloadable: false, matchingCoverage: [match] };
+  const unit = { layerId: "desi", productId: "p", surveyId: "desi", releaseId: "dr1", product: "spectra", unitKind: "tile", unitId: "82406", order: 4, nside: 16,
+    matchingCells: [190], precision: "estimated", scannedFiles: [{ fileId: "file", scanRunId: "run", matchingCoverage: [match] }] };
+  const first: DownloadPlan = { schemaVersion: 1, files: [file], spatialUnits: [unit], entrypoints: [], truncated: true, warnings: [] };
+  const nextMatch = { ...match, sourceIpix: 48641 };
+  const merged = mergeDownloadPlans(first, { ...first, files: [{ ...file, matchingCoverage: [nextMatch] }],
+    spatialUnits: [{ ...unit, scannedFiles: [{ ...unit.scannedFiles[0]!, matchingCoverage: [nextMatch] }] }], truncated: false });
+  assert.deepEqual(merged.files[0]?.matchingCoverage.map(value => value.sourceIpix), [48640, 48641]);
+  assert.deepEqual(merged.spatialUnits?.[0]?.scannedFiles?.[0]?.matchingCoverage?.map(value => value.sourceIpix), [48640, 48641]);
+  const rows = overlapCsvRows({ ...component, order: 4, cells: [190] }, merged, () => layer).map(record);
+  assert.deepEqual(JSON.parse(rows.find(row => row.item_kind === "file")!.matching_cells!).map((value: { sourceIpix: number }) => value.sourceIpix), [48640, 48641]);
+});
+
 test("empty download plans do not manufacture placeholder rows", () => {
   const plan: DownloadPlan = { schemaVersion: 1, files: [], entrypoints: [], truncated: false, warnings: [] };
   assert.deepEqual(overlapCsvRows(component, plan, () => layer), []);
+});
+
+test("Connector identity and icon survive pagination and both attached and supporting CSV records", () => {
+  const connectors = [{ name: "euclid-mirror", type: "oss", iconUrl: "/api/v1/connector-icons/custom", identityBasis: "scan-scope" as const }];
+  const match = { layerId: "euclid-q1-h", order: 8, ipix: 101, precision: "estimated", scanRunId: "scan-h" };
+  const file = { fileId: "file", metadataState: "complete" as const, sourceUri: "oss://repository/q1/h.fits", downloadable: false, matchingCoverage: [match], connectors };
+  const scannedFile = { fileId: "attached", sourceUri: "oss://repository/q1/attached.fits", scanRunId: "scan-h", matchingCoverage: [match], connectors };
+  const unit = { layerId: "euclid-q1-h", productId: "q1-h", surveyId: "euclid", releaseId: "euclid-q1", product: "NISP.H", unitKind: "tile", unitId: "102157301",
+    order: 8, nside: 256, matchingCells: [101], precision: "estimated", scannedFiles: [scannedFile] };
+  const first: DownloadPlan = { schemaVersion: 1, spatialUnits: [unit], files: [file], entrypoints: [], warnings: [], truncated: true };
+  const { connectors: _fileProvider, ...continuedFile } = file;
+  const { connectors: _scanProvider, ...continuedScan } = scannedFile;
+  const merged = mergeDownloadPlans(first, { ...first, truncated: false, files: [continuedFile], spatialUnits: [{ ...unit, scannedFiles: [continuedScan] }] });
+  assert.deepEqual(merged.files[0]?.connectors, connectors);
+  assert.deepEqual(merged.spatialUnits?.[0]?.scannedFiles?.[0]?.connectors, connectors);
+  const rows = overlapCsvRows(component, merged, () => layer).map(record);
+  const attached = JSON.parse(rows.find(row => row.item_kind === "spatial-unit")!.file_observations!)[0];
+  const supporting = rows.find(row => row.item_kind === "file")!;
+  assert.deepEqual(attached.connectors, connectors);
+  assert.equal(attached.sourceUri, scannedFile.sourceUri);
+  assert.deepEqual(JSON.parse(supporting.source_metadata!).connectors, connectors);
+  assert.equal(supporting.source_uri, file.sourceUri);
+  assert.equal(supporting.downloadable, "false");
+  assert.equal(supporting.download_url, "");
+  const secondConnector = { name: "second-mirror", type: "s3", identityBasis: "scan-run" as const };
+  const otherObservation = { ...file, connectors: [secondConnector], matchingCoverage: [{ ...match, scanRunId: "other-scan" }] };
+  assert.deepEqual(mergeDownloadPlans(first, { ...first, files: [otherObservation] }).files[0]?.connectors, [...connectors, secondConnector]);
 });
 
 test("native-unit CSV preserves all URIs, footprint, source policy and snapshot manifest status", () => {
@@ -257,11 +299,18 @@ test("paged download plans merge repeated identities consistently for JSON and C
   const unit = {
     layerId: "euclid-ero", productId: "ero", surveyId: "euclid", releaseId: "euclid-ero", product: "ERO", modality: "imaging",
     unitKind: "target", unitId: "Abell2390", order: 8, nside: 256, matchingCells: [101], precision: "estimated",
-    accessUri: "https://example.test/vis.tar", accessUris: [{ uri: "https://example.test/vis.tar", fileName: "vis.tar" }],
+    accessUri: "https://example.test/vis.fits", accessUris: [{ uri: "https://example.test/vis.fits", fileName: "vis.fits", alternatives: [
+      { uri: "https://example.test/vis.fits", accessType: "file" as const, provider: "Archive US", providerCountryCode: "US", status: "source-listed" as const },
+    ] }],
     scannedFiles: [{ fileId: "scan-a", scanRunId: "run-a" }], note: "ESA Sky extent",
   };
-  const repeatedUnit = { ...unit, matchingCells: [102], precision: "exact", accessUri: "https://example.test/nisp.tar",
-    accessUris: [{ uri: "https://example.test/nisp.tar", fileName: "nisp.tar" }],
+  const repeatedUnit = { ...unit, matchingCells: [102], precision: "exact", accessUri: "https://example.test/nisp.fits",
+    accessUris: [
+      { uri: "https://example.test/vis.fits", fileName: "vis.fits", alternatives: [
+        { uri: "https://mirror.example.test/vis.fits", accessType: "file" as const, provider: "Mirror CN", providerCountryCode: "CN", relationship: "mirror", status: "verified" as const },
+      ] },
+      { uri: "https://example.test/nisp.fits", fileName: "nisp.fits" },
+    ],
     scannedFiles: [{ fileId: "scan-b", scanRunId: "run-b" }], note: "Package metadata" };
   const file = { fileId: "file-1", metadataState: "complete" as const, downloadable: true, sourceUri: "s3://survey/file-1",
     matchingCoverage: [{ layerId: "euclid-ero", order: 8, ipix: 101, precision: "estimated" }] };
@@ -284,7 +333,10 @@ test("paged download plans merge repeated identities consistently for JSON and C
   assert.equal(jsonPlan.truncated, false, "the final page state wins after the client drains all pages");
   assert.deepEqual(jsonPlan.spatialUnits?.[0]?.matchingCells, [101, 102]);
   assert.equal(jsonPlan.spatialUnits?.[0]?.precision, "estimated", "a later exact page cannot improve an earlier estimate");
-  assert.deepEqual(jsonPlan.spatialUnits?.[0]?.accessUris?.map((entry) => entry.uri), ["https://example.test/vis.tar", "https://example.test/nisp.tar"]);
+  assert.deepEqual(jsonPlan.spatialUnits?.[0]?.accessUris?.map((entry) => entry.uri), ["https://example.test/vis.fits", "https://example.test/nisp.fits"]);
+  assert.deepEqual(jsonPlan.spatialUnits?.[0]?.accessUris?.[0]?.alternatives?.map((entry) => entry.uri), [
+    "https://example.test/vis.fits", "https://mirror.example.test/vis.fits",
+  ]);
   assert.deepEqual(jsonPlan.spatialUnits?.[0]?.scannedFiles?.map((entry) => entry.fileId), ["scan-a", "scan-b"]);
   assert.deepEqual(jsonPlan.files[0]?.matchingCoverage.map((match) => match.ipix), [101, 102]);
   assert.deepEqual(jsonPlan.entrypoints[0]?.cells, [101, 102]);
@@ -299,8 +351,11 @@ test("paged download plans merge repeated identities consistently for JSON and C
   const spatialRow = rows.find((row) => row.item_kind === "spatial-unit")!;
   assert.deepEqual(JSON.parse(spatialRow.matching_cells!), [101, 102]);
   assert.deepEqual(JSON.parse(spatialRow.access_uris!), [
-    { uri: "https://example.test/vis.tar", fileName: "vis.tar" },
-    { uri: "https://example.test/nisp.tar", fileName: "nisp.tar" },
+    { uri: "https://example.test/vis.fits", fileName: "vis.fits", alternatives: [
+      { uri: "https://example.test/vis.fits", accessType: "file", provider: "Archive US", providerCountryCode: "US", status: "source-listed" },
+      { uri: "https://mirror.example.test/vis.fits", accessType: "file", provider: "Mirror CN", providerCountryCode: "CN", relationship: "mirror", status: "verified" },
+    ] },
+    { uri: "https://example.test/nisp.fits", fileName: "nisp.fits" },
   ]);
   assert.deepEqual(JSON.parse(rows.find((row) => row.item_kind === "file")!.matching_cells!).map((match: { ipix: number }) => match.ipix), [101, 102]);
   assert.deepEqual(JSON.parse(rows.find((row) => row.item_kind === "entrypoint")!.matching_cells!), [101, 102]);

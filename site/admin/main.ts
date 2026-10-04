@@ -14,6 +14,7 @@ import { WorkspaceRequests, workspaceResources, businessSignature, type Resource
 import { capabilityNames, gapGuidance, discoveryProgress, discoveryObservationLabel, type DiscoveryObservation } from "./readiness-copy.js";
 import { surveyPresentationImage, surveyPresentationAttribution } from "./presentation.js";
 import { mountRecordTabs, mountTaskTabs } from "./task-tabs.js";
+import { connectorIconMarkup, mountConnectorIconEditor } from "./connector-icons.js";
 
 mountLocaleControls();
 mountApiSettings();
@@ -31,7 +32,7 @@ document.addEventListener("error", event => {
 
 type ConnectorType = "s3" | "oss" | "local";
 interface AdminConfig { mocDiscovery?: { cdsUrl: string; llmAvailable: boolean }; enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; modalities?: string[]; connectorTypes: ConnectorType[]; backends: string[]; scanRequestApiVersion?: string } }
-interface Connector { name: string; type: ConnectorType | string; endpoint?: string; region?: string; bucket?: string; prefix?: string; accessKeyConfigured?: boolean; pvcName?: string; basePath?: string; localPath?: string; phase?: string; message?: string; checkedAt?: string; createdAt?: string; resourceKind?: "ConfigMap" | "AstroDataSource"; configurationPhase?: string; scope?: { kind?: string; pvcName?: string; basePath?: string; legacyPath?: string; endpoint?: string; region?: string; bucket?: string; prefix?: string }; inventory?: { state?: "unknown" | "running" | "complete" | "partial" | "failed"; denominatorKnown?: boolean; observedObjectCount?: number; totalObjectCount?: number; totalBytes?: number; processedObjects?: number; observedAt?: string; updatedAt?: string; source?: string; note?: string }; usage?: { scanTaskCount?: number; productCount?: number; latestTask?: { name?: string; phase?: string; createdAt?: string } } }
+interface Connector { name: string; type: ConnectorType | string; endpoint?: string; region?: string; bucket?: string; prefix?: string; iconUrl?: string; accessKeyConfigured?: boolean; pvcName?: string; basePath?: string; localPath?: string; phase?: string; message?: string; checkedAt?: string; createdAt?: string; resourceKind?: "ConfigMap" | "AstroDataSource"; configurationPhase?: string; scope?: { kind?: string; pvcName?: string; basePath?: string; legacyPath?: string; endpoint?: string; region?: string; bucket?: string; prefix?: string }; inventory?: { state?: "unknown" | "running" | "complete" | "partial" | "failed"; denominatorKnown?: boolean; observedObjectCount?: number; totalObjectCount?: number; totalBytes?: number; processedObjects?: number; observedAt?: string; updatedAt?: string; source?: string; note?: string }; usage?: { scanTaskCount?: number; productCount?: number; latestTask?: { name?: string; phase?: string; createdAt?: string } } }
 interface TaskStatus { phase: string; reason?: string; backend?: string; runId?: string; discoveredFiles?: number; processedHdus?: number; coverageDocuments?: number; objectDocuments?: number; errorCount?: number; availableOrders?: number[]; evidencePath?: string; sourceSnapshot?: { uri?: string; sha256: string; sizeBytes?: number }; startedAt?: string; completedAt?: string; message?: string }
 interface Task { name: string; createdAt?: string; layerId?: string; surveyId?: string; releaseId?: string; product?: string; productId?: string; modality?: string; mode?: string; backend?: string; sourceConnector?: string; sourcePaths: string[]; tags: string[]; batchId?: string; workKey?: string; workTitle?: string; recipe?: { mode?: string; outputOrder?: number; catalog?: Record<string, unknown> }; status: TaskStatus }
 interface ProductLifecycle {
@@ -678,13 +679,6 @@ function connectorLabel(connector: Connector): string {
   return `${connector.name} · ${connector.type.toUpperCase()} · ${connector.phase ?? "NOT_CHECKED"}${configuration}`;
 }
 
-function connectorIcon(type?: string): string {
-  const normalized = String(type ?? "").toLowerCase();
-  if (normalized === "s3" || normalized === "oss") return "cloud";
-  if (normalized === "local" || normalized === "pvc" || normalized === "filesystem" || normalized === "file-system") return "hard-drive";
-  if (normalized === "jdbc" || normalized === "database" || normalized === "postgres" || normalized === "mysql") return "database";
-  return "plug";
-}
 
 function connectorTypeLabel(type?: string): string {
   const normalized = String(type ?? "").toLowerCase();
@@ -730,6 +724,16 @@ function connectorInventoryMarkup(connector: Connector, compact = false): string
 let connectorRecords: Connector[] = [];
 let selectedConnectorName = "";
 const connectorProbeResults = new Map<string, Connector>();
+const connectorIconEditor = mountConnectorIconEditor<Connector>({
+  api, renderIcons,
+  onSaved(connector) {
+    connectorProbeResults.delete(connector.name);
+    renderConnectors(connectorRecords.map(value => value.name === connector.name ? connector : value));
+    renderedSignatures.delete("connectors");
+    toast("Connector 图标已保存");
+    void refresh();
+  },
+});
 let overviewRecord: AdminOverview | null = null;
 let overviewQuery = "";
 let overviewSurveyId = "";
@@ -923,7 +927,8 @@ function renderConnectorDetails(connector?: Connector): void {
   const usage = connector.usage;
   const inventoryState = inventory?.state ?? "unknown";
   const inventoryAction = inventoryState === "complete" ? "重新盘点" : inventoryState === "running" ? "继续盘点" : "开始盘点";
-  detail.innerHTML = `<div class="connector-detail-watermark" aria-hidden="true"><i data-lucide="${connectorIcon(connector.type)}"></i></div><div class="connector-detail-heading"><div class="connector-detail-title"><span class="connector-type-icon connector-type-${escapeText(String(connector.type).toLowerCase())}"><i data-lucide="${connectorIcon(connector.type)}"></i></span><div><span class="section-note">SELECTED CONNECTOR · ${escapeText(connectorTypeLabel(connector.type))}</span><h4>${escapeText(connector.name)}</h4></div></div><div class="connector-detail-actions"><button type="button" class="admin-quiet" data-delete-connector="${escapeText(connector.name)}"${connector.resourceKind === "AstroDataSource" ? ' disabled title="由 Warehouse 管理，请在来源系统删除"' : ''}><i data-lucide="trash-2"></i><span>删除连接</span></button><button type="button" class="admin-quiet" data-probe-connector="${escapeText(connector.name)}" title="探测 Connector 连接"${phase === "PROBING" ? " disabled" : ""}><i data-lucide="plug-zap"></i><span>${phase === "PROBING" ? "探测中…" : "探测连接"}</span></button><button type="button" class="admin-quiet" data-inventory-connector="${escapeText(connector.name)}" title="按授权范围分页盘点对象或文件"><i data-lucide="list-checks"></i><span>${escapeText(inventoryAction)}</span></button><button type="button" class="admin-quiet" data-use-connector="${escapeText(connector.name)}" title="用此 Connector 创建扫描"><i data-lucide="send"></i><span>用于新扫描</span></button></div></div>${connectorInventoryMarkup(connector)}<dl class="connector-detail-grid">${detailValue("type", connectorTypeLabel(connector.type))}${detailValue("resource", connector.resourceKind)}${detailValue("probe phase", phase)}${detailValue("configuration phase", connector.configurationPhase)}${detailValue("location", location)}${detailValue("PVC", connector.pvcName)}${detailValue("base path", connector.basePath)}${detailValue("legacy path", connector.localPath)}${detailValue("credentials", connector.accessKeyConfigured ? "configured" : "not configured")}${detailValue("checked", connector.checkedAt ? formatDate(connector.checkedAt) : "NOT_CHECKED")}${detailValue("created", formatDate(connector.createdAt))}${detailValue("scan tasks", usage?.scanTaskCount === undefined ? "0" : String(usage.scanTaskCount))}${detailValue("linked products", usage?.productCount === undefined ? "0" : String(usage.productCount))}${detailValue("message", connector.message || inventory?.note)}</dl>`;
+  detail.innerHTML = `<div class="connector-detail-watermark" aria-hidden="true">${connectorIconMarkup(connector)}</div><div class="connector-detail-heading"><div class="connector-detail-title"><span class="connector-type-icon connector-type-${escapeText(String(connector.type).toLowerCase())}">${connectorIconMarkup(connector)}</span><div><span class="section-note">SELECTED CONNECTOR · ${escapeText(connectorTypeLabel(connector.type))}</span><h4>${escapeText(connector.name)}</h4></div></div><div class="connector-detail-actions"><button type="button" class="admin-quiet" data-edit-connector-icon="${escapeText(connector.name)}" title="修改 Connector 图标"><i data-lucide="image"></i><span>修改图标</span></button><button type="button" class="admin-quiet" data-delete-connector="${escapeText(connector.name)}"${connector.resourceKind === "AstroDataSource" ? ' disabled title="由 Warehouse 管理，请在来源系统删除"' : ''}><i data-lucide="trash-2"></i><span>删除连接</span></button><button type="button" class="admin-quiet" data-probe-connector="${escapeText(connector.name)}" title="探测 Connector 连接"${phase === "PROBING" ? " disabled" : ""}><i data-lucide="plug-zap"></i><span>${phase === "PROBING" ? "探测中…" : "探测连接"}</span></button><button type="button" class="admin-quiet" data-inventory-connector="${escapeText(connector.name)}" title="按授权范围分页盘点对象或文件"><i data-lucide="list-checks"></i><span>${escapeText(inventoryAction)}</span></button><button type="button" class="admin-quiet" data-use-connector="${escapeText(connector.name)}" title="用此 Connector 创建扫描"><i data-lucide="send"></i><span>用于新扫描</span></button></div></div>${connectorInventoryMarkup(connector)}<dl class="connector-detail-grid">${detailValue("type", connectorTypeLabel(connector.type))}${detailValue("resource", connector.resourceKind)}${detailValue("probe phase", phase)}${detailValue("configuration phase", connector.configurationPhase)}${detailValue("location", location)}${detailValue("PVC", connector.pvcName)}${detailValue("base path", connector.basePath)}${detailValue("legacy path", connector.localPath)}${detailValue("credentials", connector.accessKeyConfigured ? "configured" : "not configured")}${detailValue("checked", connector.checkedAt ? formatDate(connector.checkedAt) : "NOT_CHECKED")}${detailValue("created", formatDate(connector.createdAt))}${detailValue("scan tasks", usage?.scanTaskCount === undefined ? "0" : String(usage.scanTaskCount))}${detailValue("linked products", usage?.productCount === undefined ? "0" : String(usage.productCount))}${detailValue("message", connector.message || inventory?.note)}</dl>`;
+  detail.querySelector<HTMLButtonElement>("[data-edit-connector-icon]")?.addEventListener("click", () => connectorIconEditor.open(connector));
   detail.querySelector<HTMLButtonElement>("[data-delete-connector]")?.addEventListener("click", async (event) => {
     if (!window.confirm(`删除连接“${connector.name}”？只移除连接配置；存储中的文件、已有扫描记录、覆盖和发布产品均保留。历史任务使用的凭证也会保留。后续新扫描或重试需重新配置连接。`)) return;
     const button = event.currentTarget as HTMLButtonElement;
@@ -971,7 +976,7 @@ function renderConnectors(connectors: Connector[]): void {
     const tone = connectorTone(phase);
     const stale = connector.checkedAt && Date.now() - Date.parse(connector.checkedAt) > 86_400_000;
     const label = { ready: "最近检查通过", error: "连接失败", pending: "检查中", unknown: "未检查" }[tone];
-    return `<button type="button" class="resource-row connector-row connector-status-${tone}${selected ? " is-selected" : ""}" aria-pressed="${selected}" data-connector-name="${escapeText(connector.name)}"><span class="connector-type-icon connector-type-${escapeText(String(connector.type).toLowerCase())}" aria-hidden="true"><i data-lucide="${connectorIcon(connector.type)}"></i></span><span class="connector-row-copy"><strong>${escapeText(connector.name)}</strong><span>${escapeText(type)} · ${label}${stale ? " · 结果已过期" : ""}</span><p>${escapeText(location)}</p></span>${connectorInventoryMarkup(connector, true)}</button>`;
+    return `<button type="button" class="resource-row connector-row connector-status-${tone}${selected ? " is-selected" : ""}" aria-pressed="${selected}" data-connector-name="${escapeText(connector.name)}"><span class="connector-type-icon connector-type-${escapeText(String(connector.type).toLowerCase())}" aria-hidden="true">${connectorIconMarkup(connector)}</span><span class="connector-row-copy"><strong>${escapeText(connector.name)}</strong><span>${escapeText(type)} · ${label}${stale ? " · 结果已过期" : ""}</span><p>${escapeText(location)}</p></span>${connectorInventoryMarkup(connector, true)}</button>`;
   }).join("");
   list.querySelectorAll<HTMLButtonElement>("[data-connector-name]").forEach((button) => button.addEventListener("click", () => {
     selectedConnectorName = button.dataset.connectorName ?? "";
@@ -2623,7 +2628,7 @@ function updateConnectorFields(): void {
 async function submitConnector(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   const form = event.currentTarget as HTMLFormElement;
-  const input = { name: formValue(form, "name"), type: formValue(form, "type"), endpoint: formValue(form, "endpoint") || undefined, region: formValue(form, "region") || undefined, bucket: formValue(form, "bucket") || undefined, prefix: formValue(form, "prefix") || undefined, accessKey: formValue(form, "accessKey") || undefined, secretKey: formValue(form, "secretKey") || undefined, pvcName: formValue(form, "pvcName") || undefined, basePath: formValue(form, "basePath") || undefined };
+  const input = { name: formValue(form, "name"), type: formValue(form, "type"), iconUrl: formValue(form, "iconUrl") || undefined, endpoint: formValue(form, "endpoint") || undefined, region: formValue(form, "region") || undefined, bucket: formValue(form, "bucket") || undefined, prefix: formValue(form, "prefix") || undefined, accessKey: formValue(form, "accessKey") || undefined, secretKey: formValue(form, "secretKey") || undefined, pvcName: formValue(form, "pvcName") || undefined, basePath: formValue(form, "basePath") || undefined };
   setMessage("connector", "正在创建…");
   try {
     await api("/api/v1/admin/connectors", { method: "POST", body: JSON.stringify(input) });

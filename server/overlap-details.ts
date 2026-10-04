@@ -1,8 +1,9 @@
-import type { CoverageCellLayer, CoverageSourceEvidence } from "./coverage.js";
+import type { CoverageCellLayer, CoverageSourceEvidence, WarehouseGeometryLoadStatus } from "./coverage.js";
 import type { ScanScopeSummary, WarehouseLayerSnapshot } from "./evidence-store.js";
 import { layersForOverlapComponent, type OverlapComponent, type OverlapResult } from "./overlap.js";
 import type { PublicSurveyIndex } from "./surveys.js";
 import type { LoadedCatalog } from "./catalog.js";
+import type { ScanConnectorIdentity } from "../src/connector-icon.js";
 
 export type CoverageClaimKind = "moc" | "tile" | "raw-file" | "overview";
 export type DetailPrecision = "exact" | "estimated" | "entrypoint-only" | "truncated";
@@ -68,7 +69,8 @@ export interface WarehouseOverlapEvidence {
   sourceSnapshotSha256?: string;
   sourceSnapshotCount?: number;
   scanScope?: ScanScopeSummary;
-  connector: { status: "known" | "unavailable"; name?: string; type?: string };
+  connector: { status: "known" | "unavailable"; name?: string; type?: string; iconUrl?: string };
+  connectors?: Array<ScanConnectorIdentity & { matchingScanRuns: number }>;
   method: { summary: string; docsUrl?: string };
 }
 
@@ -78,6 +80,7 @@ export interface OverlapDetails {
   publicSources: PublicOverlapSource[];
   assetsEvidence: AssetsOverlapEvidence[];
   warehouseEvidence: WarehouseOverlapEvidence[];
+  warehouseGeometry?: WarehouseGeometryLoadStatus;
   method: { summary: string; docsUrl?: string };
   reverseLookup: {
     endpoint: string;
@@ -239,7 +242,10 @@ function warehouseEvidenceFor(
         ...(snapshot.sourceSnapshotSha256 ? { sourceSnapshotSha256: snapshot.sourceSnapshotSha256 } : {}),
         ...(snapshot.sourceSnapshotCount !== undefined ? { sourceSnapshotCount: snapshot.sourceSnapshotCount } : {}),
         ...(snapshot.scanScope ? { scanScope: snapshot.scanScope } : {}),
-        connector: { status: "unavailable" },
+        connector: snapshot.connectorEvidence?.length === 1
+          ? { status: "known", name: snapshot.connectorEvidence[0]!.name, type: snapshot.connectorEvidence[0]!.type, ...(snapshot.connectorEvidence[0]!.iconUrl ? { iconUrl: snapshot.connectorEvidence[0]!.iconUrl } : {}) }
+          : { status: "unavailable" },
+        ...(snapshot.connectorEvidence?.length ? { connectors: snapshot.connectorEvidence } : {}),
         method: {
           summary: layer.recipe?.steps.map((step) => step.title).join(" -> ") || "Warehouse ACTIVE layer with explicit ICRS/NESTED coverage edges.",
           docsUrl: "/api/v1/coverage/catalog",
@@ -260,6 +266,7 @@ export function buildOverlapDetails(input: {
   sourceIndex?: PublicSurveyIndex;
   publishedSourcesByLayer?: ReadonlyMap<string, PublishedOverlapSourceMetadata>;
   warehouseSnapshots?: ReadonlyMap<string, WarehouseLayerSnapshot>;
+  warehouseGeometry?: WarehouseGeometryLoadStatus;
 }): OverlapDetails {
   const componentLayers = layersForOverlapComponent(input.layers, input.result, input.component);
   const warehouseEvidence = warehouseEvidenceFor(input.layers, input.result, input.component, input.warehouseSnapshots ?? new Map());
@@ -287,6 +294,10 @@ export function buildOverlapDetails(input: {
     publicSources: publicSourcesFor(input.layers, input.surveyIndex, input.result, input.component, input.sourceUnitsByLayer, input.sourceIndex, input.publishedSourcesByLayer),
     assetsEvidence: assetsEvidenceFor(input.layers, input.surveyIndex, input.result, input.component, input.catalog),
     warehouseEvidence,
+    ...(input.warehouseGeometry ? { warehouseGeometry: {
+      ...input.warehouseGeometry,
+      failures: input.warehouseGeometry.failures.filter(failure => layerIds.includes(failure.layerId)),
+    } } : {}),
     method,
     reverseLookup: { endpoint: "/api/v1/coverage/reverse-lookup", layerIds, order: input.component.order, precision, deferred: false },
   };

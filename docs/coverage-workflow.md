@@ -53,6 +53,22 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   state and the scanned file URI only when survey, release, product and native
   unit identity agree. A scan miss or unavailable Warehouse must not remove a
   unit that the official partition definition identifies.
+- Scanned-source icons belong to their Connector presentation configuration.
+  Resolve each file from its own retained scan run or locked batch scope
+  (scope ID, evidence layer, hash, partition count and product identity), not a
+  URI prefix or aggregate layer label. Keep association basis and icon URL in
+  JSON/CSV; an icon does not change the source's retrieval authorization.
+- Warehouse runtime geometry loads only distinct `(layer, actual order, ipix)`
+  composite aggregation buckets, paging through every bucket without the old
+  file-edge document cap. Commit a layer only after all its pages succeed;
+  retain its last verified or published geometry on failure, report its reason,
+  and keep other successfully loaded layers. Reviewed public MOCs remain the
+  public coverage authority. File metadata is queried only for a selected region.
+- A coarse region can match real finer Warehouse descendants. Preserve the
+  requested order/cell and original `sourceOrder/sourceIpix`, run and snapshot
+  in matching evidence. Never expand a coarse-only scan to pretend it has
+  finer coverage. Layer-level scan summaries do not establish a regional file
+  hit; use the separately paged reverse lookup for that evidence.
 - Keep result browsing aligned with this boundary: the primary spatial-unit
   list and its cursor contain only native unit identities and access URIs.
   Within a new frozen query snapshot, interleave matched units by survey so
@@ -100,13 +116,16 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   is exhausted, show any survey/release without native matches directly beside
   the result count, including its official source link and known mapping gaps.
   This source-status card does not count as a matched spatial unit. For example,
-  DESI + Euclid O4 C01 is an ERO coverage component whose current target mapping
+  the historical Dev generation 2 DESI + Euclid O4 C01 target mapping
   has no match in the selected region; seven targets have no verified footprint
   association in the inspected outreach table. The Messier78/M78 alias maps to
   an estimated outreach footprint at cell `[1429]`, outside C01. C04's Q1 Tile
   results do not establish readiness for C01. The deployed source-gap notice
   appears only after spatial pagination is exhausted and keeps the page, JSON
-  and CSV source state aligned; see [HANDOFF](../HANDOFF.md).
+  and CSV source state aligned. The 72602 generation 4 mapping now returns
+  ERO-IC10 in this region using its own per-band FITS-header frame bounds;
+  precision remains estimated and valid-pixel coverage/Tile inventory are
+  unverified. See [HANDOFF](../HANDOFF.md) for the environment and version.
   Source-query failures remain
   incomplete after paging/export; never describe every incomplete result as a
   page limit or manufacture units to fill a missing survey.
@@ -181,11 +200,40 @@ Current evidence limits are:
   groups matching product URIs by the native `tile_index` for the clicked
   HEALPix. Those results remain estimated and limited to this inventory scope.
 - Euclid ERO has no verified Tile inventory. Lookup returns named `target`
-  packages only when official ERO XML and ESA Sky outreach `stc_s` agree on
-  target identity. The outreach footprint is an estimated target extent,
-  not a verified instrument/filter footprint. Preserve every official matching
-  Stack/Catalog package URI and the source snapshot hash; do not inspect the
-  package's scientific contents or infer an ERO Tile ID.
+  packages from a locked official ERO XML inventory. Historical snapshots use
+  the associated ESA Sky outreach `stc_s`, an estimated target extent rather
+  than an instrument/filter footprint. The newer 17-target snapshot uses each
+  band's own official package FITS header to estimate ICRS/TAN frame bounds;
+  `geometryEvidence[]` retains the member identity, header SHA and polygon.
+  These frame bounds do not establish valid-pixel masks or catalogue-object
+  coverage. Preserve matching Stack/Catalog package URIs and the source
+  snapshot hash; never infer an ERO Tile ID or retrieve scientific pixels.
+- Gaia DR3 uses the actual official `gaia_source` file roster with inclusive
+  ICRS/NESTED order-8 ranges. Range intersection is exact; scientific source
+  presence remains estimated because source-ID positions are approximate and
+  file contents were not downloaded. Finer requests retain `nativePartition`
+  order 8. Upstream MD5 values are declared checksums, not independently
+  verified science checksums.
+- SDSS DR9 uses official normal rerun-301 `run/rerun/camcol/field` identities
+  and the trimmed `window_flist` field-window bounds, converted from J2000
+  great-circle coordinates to estimated ICRS polygons. Preserve the original
+  coordinates and per-band quality flags. These are not full image WCS,
+  valid-pixel masks or a primary-only inventory; documented frame URIs remain
+  unverified.
+- GALEX and JWST use locked public calibrated MAST image observations, their
+  original ICRS `s_region`, and Products API entrypoints. GALEX release, AIS
+  project and FUV/NUV selectors use explicit row metadata and real GR6/GR7
+  source paths. Preserve archive-reported `dataURL` subtypes without guessing
+  intensity filenames. JWST's current Carina and SMACS0723 bindings require
+  their actual proposal, target and NIRCam instrument. Planned observations
+  and Roman test records are excluded. Declared metadata-query pagination can
+  be complete while scientific inventory remains incomplete; complex MAST
+  footprints use the documented conservative estimated matching behavior.
+  The four new sources follow the import/review/archive workflow in
+  [native unit management](native-unit-management.md), and publish no new MOC.
+  Direct file links, mirror directories, regional provider metadata and current
+  availability checks are summarized in the
+  [source-access research note](research/survey-download-sources-20261004.md).
 - HST overlap reverse lookup uses the SHA-locked public MAST CAOM metadata
   snapshot and its local SQLite footprint index. The index stores order-4
   candidate buckets, then intersects saved `s_region` values against the

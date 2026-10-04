@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
+import { metadataFetch } from "../server/metadata-fetch.js";
 
 const SOURCE_URL = "https://mast.stsci.edu/api/v0/invoke";
 const SERVICE = "Mast.Caom.Filtered";
@@ -87,8 +88,11 @@ async function cachedPage(directory: string, page: number, pageSize: number): Pr
 async function fetchPage(page: number, pageSize: number): Promise<{ raw: Buffer; parsed: MastaPage }> {
   const request = { service: SERVICE, params: { columns: COLUMNS, filters: FILTERS }, format: "json", pagesize: pageSize, page };
   const url = new URL(SOURCE_URL);
-  url.searchParams.set("request", JSON.stringify(request));
-  const response = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(120_000) });
+  const body = new URLSearchParams({ request: JSON.stringify(request) });
+  // MAST times out on the default Node agent for this endpoint. Identify this
+  // metadata client with a compatible agent; retain TLS and source validation.
+  const response = await metadataFetch(url, { method: "POST", body, headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded",
+    "user-agent": "Mozilla/5.0 (compatible; Astro-Survey-Atlas-Assets/1.0; +https://astro.assets.72602.space/)" }, signal: AbortSignal.timeout(120_000) });
   if (!response.ok) throw new Error(`MAST returned HTTP ${response.status} for page ${page}`);
   const raw = Buffer.from(await response.arrayBuffer());
   if (raw.length > 16 * 1024 * 1024) throw new Error(`MAST page ${page} exceeded the 16 MiB response limit`);

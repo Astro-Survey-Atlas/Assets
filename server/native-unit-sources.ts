@@ -42,6 +42,7 @@ export async function nativeSourceRecipes(root: string): Promise<NativeSource[]>
   }
   const hst = await optionalDocument(path.join(root, "src/layers/recipes/hst-public-image-observations.lock.json"));
   if (hst?.status === "ready" && hst.manifest) add({ id: "hst-public-images", surveyId: "hst", releaseId: "hst-public", title: "HST public image observations", adapter: "hst-caom", unitKind: "observation", scope: hst.scope, sourceUrl: hst.sourceUrl, slot: "hst", files: [snapshotFile(hst.manifest)] });
+  for (const source of (await optionalDocument(path.join(root, "src/layers/recipes/survey-native-sources.json")))?.sources ?? []) add({ ...source, files: [] });
   return sources;
 }
 
@@ -51,6 +52,10 @@ export function sourceIdsForBinding(binding: Pick<NativeBinding, "surveyId" | "r
   if (binding.surveyId === "euclid") return [binding.releaseId === "euclid-ero" ? "euclid-ero-targets" : "euclid-q1-bgsub-tiles"];
   if (binding.surveyId === "hst") return ["hst-public-images"];
   if (binding.surveyId === "hsc-ssp") return [`${binding.releaseId}-patches`];
+  if (binding.surveyId === "gaia" && binding.releaseId === "gaia-dr3") return ["gaia-dr3-file-partitions"];
+  if (binding.surveyId === "sdss" && binding.releaseId === "sdss-dr09") return ["sdss-dr9-fields"];
+  if (binding.surveyId === "galex" && ["galex-gr6-gr7", "galex-gr6-ais"].includes(binding.releaseId)) return ["galex-public-images"];
+  if (binding.surveyId === "jwst" && binding.releaseId === "dr1") return ["jwst-early-release-images"];
   return [];
 }
 

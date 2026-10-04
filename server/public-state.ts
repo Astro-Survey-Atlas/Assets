@@ -126,7 +126,7 @@ export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot
     const archiveUnitIndex = c.surveyId === "hst"
       ? { status: "estimated" as const, unitKind: "observation", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "MAST 的公开 HST image observation 元数据使用 Assets 锁定快照和本地 SQLite s_region 索引；反查在本地将所选区域与保存的 footprint 求交并返回 observation 身份和 MAST 链接，不在请求时查询 MAST 或展开科学产品。快照中不支持的几何会继续使结果标记为不完整；显式 HST 产品查询仍可向 MAST 获取产品元数据。" }
       : c.surveyId === "euclid" && c.releaseId === "euclid-ero"
-        ? { status: "estimated" as const, unitKind: "target", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "ERO named target packages with associated ESA Sky outreach footprints; estimated target extent, not Tile inventory or verified per-filter coverage." }
+        ? { status: "estimated" as const, unitKind: "target", indexUrl: "/api/v1/coverage/reverse-lookup", notes: "ERO named target packages use locked official FITS-header image-frame WCS when available, or the older associated ESA Sky outreach footprints. Reverse-lookup evidence identifies the source and selected band. Frame bounds are estimated coverage; valid-pixel masks and Tile inventory remain unverified." }
         : undefined;
     const sourceUnitIndex=pathFileIndex
       ? {status:"exact" as const,unitKind:`NESTED order-${c.scanDefaults?.pathHealpixOrder??moc.maxOrder} HEALPix file partition`,indexUrl:"/api/v1/coverage/reverse-lookup",notes:"可按精确的路径 HEALPix 分区反查已扫描文件 URI；这是部分文件清单，不是 DESI Tile，也不代表完整 DR1/BGS。"}

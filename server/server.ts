@@ -24,14 +24,15 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 
-import { AdminHttpError, AssetsAdmin, KubernetesApiError, SUPPORTED_COVERAGE_MODES, adminFromRequest, type ConnectorInput, type CoverageTaskInput, type KubernetesResource, type MocDiscoveryInput, type ScanBatchTaskRecipe } from "./admin.js";
+import { AdminHttpError, AssetsAdmin, KubernetesApiError, SUPPORTED_COVERAGE_MODES, adminFromRequest, type ConnectorInput, type ConnectorView, type CoverageTaskInput, type CoverageTaskView, type KubernetesResource, type MocDiscoveryInput, type ScanBatchTaskRecipe } from "./admin.js";
 import { batchEvidenceLayerId, parseScanBatchRequest, resolveScanBatchIncludePattern, resolveScanBatchMode, ScanBatchValidationError } from "./scan-batch.js";
 import { ConnectorInventoryStateStore, ConnectorProbeStateStore } from "./connector-state.js";
+import { ConnectorPresentationStore } from "./connector-presentation.js";
 import { createArtifactStoreFromProcess, FilesystemArtifactStore } from "./artifact-store.js";
 import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } from "./catalog.js";
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex, type PublicSurveyIndex } from "./surveys.js";
-import { coverageBlock, coverageCatalogFromWarehouse, isWarehouseFilePartitionLayer, loadCoverageCatalog, withCoverageRevisions, type CoverageCatalog, type CoverageCellLayer, type WarehouseFileIndexSummary } from "./coverage.js";
+import { coverageBlock, coverageCatalogFromWarehouse, isWarehouseFilePartitionLayer, loadCoverageCatalog, updateCoverageNativeUnitState, withCoverageRevisions, type CoverageCatalog, type CoverageCellLayer, type WarehouseFileIndexSummary, type WarehouseGeometryLoadStatus } from "./coverage.js";
 import { layersForOverlapComponent, overlapForLayers } from "./overlap.js";
 import { AccessGate, AccessError, queryRegion, validateRegion } from "./region-access.js";
 import { loadPublicState } from "./public-state.js";
@@ -40,7 +41,7 @@ import { currentReview, productGeometry, readApprovedRelease, PUBLICATION_POLICY
 import { aggregateReadiness, deriveProductReadiness, type ProductReadiness, type ReadinessAggregate, type ReadinessLayer } from "./admin-readiness.js";
 import { SurveyEditorialStore, type SurveyEditorialContent, type SurveyEditorialRecord } from "./editorial.js";
 import { SourceUnitStore, SourceUnitWorkerStore, type SourceUnitCoverageLayer } from "./source-units.js";
-import { buildDownloadPlan, CoverageEvidenceStore, EvidenceStoreError, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanSpatialUnit, type ReverseLookupResult, type WarehouseLayerSnapshot, type WarehouseLayerStatusSnapshot } from "./evidence-store.js";
+import { buildDownloadPlan, CoverageEvidenceStore, EvidenceStoreError, warehouseGeometryFailureReason, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanSpatialUnit, type ReverseLookupResult, type WarehouseLayerSnapshot, type WarehouseLayerStatusSnapshot } from "./evidence-store.js";
 import { interleaveSpatialUnitsBySurvey, partitionReverseCells, reversePageSize, reversePlanCoverageEvidenceKey, reversePlanEntrypointKey, reversePlanFileKey, reversePlanItems, reversePlanSpatialUnitKey, type ReverseCursorScope } from "./reverse-pagination.js";
 import { resolveEuclidQ1MerFile } from "./euclid-data-links.js";
 import { buildOverlapDetails, publicExternalUrl, publicLocator } from "./overlap-details.js";
@@ -51,6 +52,9 @@ import { importMastHstObservation } from "./mast-hst-import.js";
 import { normalizedHstLookupCells } from "./hst-image-lookup.js";
 import { HstObservationIndex } from "./hst-observation-index.js";
 import { archiveNativeUnits } from "./archive-native-units.js";
+import { SurveyNativeIndex, surveyNativeBinding } from "./survey-native-index.js";
+import { alternativesForAccessUri, mergeSourceAccessUris, mergeSourceMetadata, withSurveyProviderStatuses } from "./survey-access.js";
+import { scannedFileConnectors, withWarehouseConnectorEvidence, type WarehouseConnectorContext } from "./warehouse-source-evidence.js";
 import { parseEroTargetSnapshot, type EroTargetIndex } from "./ero-target-index.js";
 import { decodeSnapshotCursor, readReverseSnapshot, snapshotPage, writeReverseSnapshot, type ReverseSnapshot } from "./reverse-snapshot.js";
 import { MocBuildService, MocBuildStore, MocPublicationStore, type MocPublication, type MocPublicationFile } from "./moc-build.js";
@@ -163,6 +167,8 @@ let sourceUnitCoverageLoadPromise: Promise<void> | null = null;
 let runtimeCoverageManifest = coverageManifest;
 let coverageLoadMode: "warehouse" | "static" | "degraded" = "static";
 let coverageLoadedAt = new Date().toISOString();
+let warehouseGeometry: WarehouseGeometryLoadStatus = { status: "unconfigured", loadedAt: coverageLoadedAt, loadedLayers: 0, uniqueCells: 0, failures: [] };
+const verifiedWarehouseLayers = new Map<string, CoverageCellLayer>();
 let runtimeSurveyIndex!: Awaited<ReturnType<typeof loadSurveyIndex>>;
 let warehouseLayerSnapshots = new Map<string, WarehouseLayerSnapshot | WarehouseLayerStatusSnapshot>();
 let warehouseFileIndexMetadataUnavailable = false;
@@ -171,6 +177,7 @@ interface NativeRuntime {
   version: string; group?: NativeGroup; references: number;
   worker?: Promise<SourceUnitWorkerStore>; fallback?: Promise<SourceUnitStore>;
   hst?: Promise<HstObservationIndex | undefined>; ero?: Promise<EroTargetIndex | undefined>;
+  survey?: Promise<SurveyNativeIndex | undefined>;
   state: "initializing" | "available" | "unavailable";
   capturedAt?: string; retire?: ReturnType<typeof setTimeout>;
 }
@@ -432,6 +439,27 @@ function currentWarehouseCoverageSnapshots(): ReadonlyMap<string, WarehouseLayer
   return snapshots;
 }
 
+let warehouseConnectorLookupCache: { expiresAt: number; value: Promise<WarehouseConnectorContext> } | undefined;
+
+function warehouseConnectorLookup(): Promise<WarehouseConnectorContext> {
+  if (warehouseConnectorLookupCache && warehouseConnectorLookupCache.expiresAt > Date.now()) return warehouseConnectorLookupCache.value;
+  const value = Promise.allSettled([admin.listTasks(), admin.listScanBatches(), admin.listConnectors()])
+    .then(([tasks, batches, connectors]) => ({
+      tasks: tasks.status === "fulfilled" ? tasks.value : [],
+      batches: batches.status === "fulfilled" ? batches.value : [],
+      connectors: connectors.status === "fulfilled" ? connectors.value : [],
+    }));
+  warehouseConnectorLookupCache = { expiresAt: Date.now() + 15_000, value };
+  return value;
+}
+
+async function currentWarehouseOverlapSnapshots(): Promise<ReadonlyMap<string, WarehouseLayerSnapshot>> {
+  const snapshots = currentWarehouseCoverageSnapshots();
+  if (![...snapshots.values()].some((snapshot) => snapshot.scanRunId || snapshot.scanRunIds?.length || snapshot.scanScope)) return snapshots;
+  const context = await warehouseConnectorLookup();
+  return new Map([...snapshots].map(([layerId, snapshot]) => [layerId, withWarehouseConnectorEvidence(snapshot, context)]));
+}
+
 function warehouseFileIndexSummary(layerId: string): WarehouseFileIndexSummary {
   const candidate = warehouseLayerSnapshots.get(layerId);
   const snapshot = candidate && "surveyId" in candidate && "releaseId" in candidate && "productId" in candidate
@@ -648,22 +676,41 @@ async function reloadWarehouseDraftStatuses(): Promise<void> {
   for (const status of statuses) warehouseLayerSnapshots.set(status.layerId, status);
 }
 
-async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string; layers: number; footprints: number }> {
+async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string; layers: number; footprints: number; warehouseGeometry: WarehouseGeometryLoadStatus }> {
   coverageManifest = JSON.parse(await readFile(path.join(releaseRoot, "src", "footprints", "survey-footprints.json"), "utf8")) as typeof coverageManifest;
   staticCoverageCatalog = await loadCoverageCatalog(releaseRoot, coverageManifest);
   coverageCatalog = staticCoverageCatalog;
   runtimeCoverageManifest = coverageManifest;
   coverageLoadMode = "static";
+  warehouseGeometry = { status: "unconfigured", loadedAt: new Date().toISOString(), loadedLayers: 0, uniqueCells: 0, failures: [] };
   warehouseLayerSnapshots = new Map();
   warehouseFileIndexMetadataUnavailable = false;
   if (managesContent && evidenceStore.configured) {
     const publicLayerIds = new Set(currentPublicState.coverage.records.keys());
+    for (const layerId of verifiedWarehouseLayers.keys()) if (!publicLayerIds.has(layerId)) verifiedWarehouseLayers.delete(layerId);
     try {
       const warehouseSnapshot = await evidenceStore.loadCurrentCoverageCatalog({
         allowedLayerIds: [...publicLayerIds],
       });
       if (warehouseSnapshot?.layers.length) {
-        coverageCatalog = coverageCatalogFromWarehouse(staticCoverageCatalog, warehouseSnapshot);
+        coverageCatalog = coverageCatalogFromWarehouse(staticCoverageCatalog, warehouseSnapshot, verifiedWarehouseLayers);
+        const failedLayers = new Set(warehouseSnapshot.failures?.map(failure => failure.layerId));
+        warehouseGeometry = {
+          status: failedLayers.size ? "degraded" : "loaded", loadedAt: new Date().toISOString(),
+          loadedLayers: warehouseSnapshot.layers.length - failedLayers.size, uniqueCells: warehouseSnapshot.coverages.length,
+          failures: (warehouseSnapshot.failures ?? []).map(failure => {
+            const layer = warehouseSnapshot.layers.find(layer => layer.layerId === failure.layerId)!;
+            const previous = verifiedWarehouseLayers.get(layer.layerId);
+            const retained = previous?.productId === layer.productId && previous.surveyId === layer.surveyId && previous.releaseId === layer.releaseId;
+            return { ...failure, surveyId: layer.surveyId, releaseId: layer.releaseId,
+              product: currentPublicState.coverage.records.get(layer.layerId)?.product ?? layer.productId,
+              retainedGeometry: retained ? "previous-scan" as const : "published" as const };
+          }),
+        };
+        for (const layer of warehouseSnapshot.layers) {
+          const verified = coverageCatalog.records.get(layer.layerId);
+          if (!failedLayers.has(layer.layerId) && verified) verifiedWarehouseLayers.set(layer.layerId, verified);
+        }
         const directSnapshots = warehouseSnapshot.layers
           .filter((layer) => coverageCatalog.records.has(layer.layerId))
           .map((layer) => [layer.layerId, layer] as const);
@@ -697,14 +744,21 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
             sourceUrl: layer.recipe?.sourceUrl,
           })),
         };
-        coverageLoadMode = "warehouse";
-        console.info(`Loaded ${warehouseSnapshot.layers.length} approved Warehouse coverage layers with ${warehouseSnapshot.coverages.length} coverage documents from ${evidenceStore.layerIndex}/${evidenceStore.coverageIndex}`);
+        coverageLoadMode = failedLayers.size ? "degraded" : "warehouse";
+        console.info(`Loaded ${warehouseGeometry.loadedLayers} Warehouse geometry layers with ${warehouseGeometry.uniqueCells} distinct real-order sky cells; ${failedLayers.size} layers failed.`);
+        for (const failure of warehouseGeometry.failures) console.warn(`Warehouse geometry unavailable for ${failure.layerId}: ${failure.reason}; retaining ${failure.retainedGeometry} geometry.`);
       } else {
+        warehouseGeometry = { ...warehouseGeometry, status: "loaded" };
         console.warn("Warehouse ES is configured but has no ACTIVE layers; using the checked-in public geometry until a scan completes.");
       }
     } catch (error) {
       coverageLoadMode = "degraded";
-      console.warn(`Warehouse coverage catalog unavailable; using checked-in geometry: ${error instanceof Error ? error.message : String(error)}`);
+      const reason = warehouseGeometryFailureReason(error);
+      warehouseGeometry = { ...warehouseGeometry, status: "degraded", error: reason,
+        failures: [...verifiedWarehouseLayers.values()].map(layer => ({ layerId: layer.layerId, surveyId: layer.surveyId, releaseId: layer.releaseId, product: layer.product, reason, retainedGeometry: "previous-scan" })),
+      };
+      coverageCatalog = withCoverageRevisions({ ...staticCoverageCatalog, records: new Map([...staticCoverageCatalog.records, ...verifiedWarehouseLayers]), layers: [] });
+      console.warn(`Warehouse coverage catalog unavailable; retaining verified geometry: ${reason}`);
       try {
         const directLayers = await evidenceStore.loadCurrentCoverageLayers({ allowedLayerIds: [...publicLayerIds] });
         const evidenceLayers = await evidenceStore.loadCurrentCoverageEvidenceSnapshots(
@@ -736,11 +790,12 @@ async function reloadRuntimeCoverage(): Promise<{ mode: string; loadedAt: string
   runtimeCoverageManifest = mergeSourceUnitFootprints(runtimeCoverageManifest, coverageCatalog.records);
   runtimeSurveyIndex = await loadSurveyIndex(releaseRoot, catalog, runtimeCoverageManifest, coverageCatalog.layers, [...publishedPublicAssets.values()].map(({ record }) => record));
   currentPublicState = mergeSourceUnitPublicState(currentPublicState, runtimeSurveyIndex, sourceUnitCoverageLayers);
-  return { mode: coverageLoadMode, loadedAt: coverageLoadedAt, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size };
+  return { mode: coverageLoadMode, loadedAt: coverageLoadedAt, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size, warehouseGeometry };
 }
 
 await reloadRuntimeCoverage();
-const admin = new AssetsAdmin(undefined, undefined, undefined, new ConnectorProbeStateStore(contentRoot, stateSnapshotSink), new ConnectorInventoryStateStore(contentRoot, stateSnapshotSink));
+const connectorPresentations = new ConnectorPresentationStore(contentRoot, stateSnapshotSink);
+const admin = new AssetsAdmin(undefined, undefined, undefined, new ConnectorProbeStateStore(contentRoot, stateSnapshotSink), new ConnectorInventoryStateStore(contentRoot, stateSnapshotSink), connectorPresentations);
 const apiManagement = managesContent ? new ApiManagement(contentRoot, stateSnapshotSink) : undefined;
 await apiManagement?.initialize();
 const apiStatsTimer = apiManagement ? setInterval(() => { void apiManagement.flush().catch(() => console.error("API statistics archive failed")); }, 60000) : undefined;
@@ -1065,7 +1120,7 @@ function nativeRuntime(): NativeRuntime {
 }
 async function closeNativeRuntime(runtime: NativeRuntime): Promise<void> {
   if (runtime.retire) clearTimeout(runtime.retire);
-  await Promise.allSettled([runtime.worker?.then(store => store.terminate()), runtime.fallback?.then(store => store.close()), runtime.hst?.then(index => index?.close())]);
+  await Promise.allSettled([runtime.worker?.then(store => store.terminate()), runtime.fallback?.then(store => store.close()), runtime.hst?.then(index => index?.close()), runtime.survey?.then(index => index?.close())]);
 }
 function retireNativeRuntime(runtime: NativeRuntime): void {
   if (runtime.version === (nativeUnits?.version ?? "imported-baseline") || runtime.references || runtime.retire) return;
@@ -1108,6 +1163,15 @@ function nativeBindingEnabled(layerId: string): boolean {
   return !group || group.bindings.some(binding => binding.layerId === layerId) && !group.report.unavailableBindings?.includes(layerId);
 }
 
+function surveyNativeIndex(): Promise<SurveyNativeIndex | undefined> {
+  const runtime = nativeRuntime();
+  if (!runtime.survey) runtime.survey = Promise.resolve().then(() => {
+    const index = runtime.group?.survey;
+    return index ? SurveyNativeIndex.open(nativeEvidencePath(sourceUnitEvidenceRoot, index.file.ref), index.buildKey) : undefined;
+  }).catch(error => { console.warn(`Locked survey native index is unavailable: ${error instanceof Error ? error.message : String(error)}`); return undefined; });
+  return runtime.survey;
+}
+
 function nativeReadOptions(group: NativeGroup | null = nativeUnits?.active ?? null): SourceUnitLoadOptions {
   if (group) {
     if (!group.generic) throw new Error("Active native index has no generic database");
@@ -1125,6 +1189,15 @@ async function verifyNativeRuntime(group: NativeGroup): Promise<void> {
   if (group.hst) {
     const index = await HstObservationIndex.open(group.hst.root ? nativeEvidencePath(sourceUnitEvidenceRoot, group.hst.root) : sourceUnitEvidenceRoot, group.hst.sourceSha256);
     index.close();
+  }
+  if (group.survey) {
+    const index = SurveyNativeIndex.open(nativeEvidencePath(sourceUnitEvidenceRoot, group.survey.file.ref), group.survey.buildKey);
+    try {
+      for (const binding of group.bindings.filter(binding => surveyNativeBinding(binding))) {
+        const cells = index.sampleCells(binding);
+        if (!cells.length || !index.lookup(binding, 4, cells.slice(0, 1), 1).units.length) throw new Error(`Native runtime cannot query ${binding.layerId}`);
+      }
+    } finally { index.close(); }
   }
 }
 
@@ -1149,11 +1222,12 @@ async function nativeProductBindings(): Promise<NativeBinding[]> {
   const store = await sourceUnitsStore();
   const bindings: NativeBinding[] = [];
   for (const layer of currentPublicState.coverage.records.values()) {
-    if (!["legacy-surveys", "desi", "euclid", "hst", "hsc-ssp"].includes(layer.surveyId) || isWarehouseFilePartitionLayer(layer)) continue;
-    const match = layer.surveyId === "hst" || layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" ? undefined : await store.match(layer.layerId, 4, [], 1, layer);
-    if (!match && layer.surveyId !== "hst" && !(layer.surveyId === "euclid" && layer.releaseId === "euclid-ero")) continue;
+    const survey = surveyNativeBinding(layer);
+    if (!survey && !["legacy-surveys", "desi", "euclid", "hst", "hsc-ssp"].includes(layer.surveyId) || isWarehouseFilePartitionLayer(layer)) continue;
+    const match = survey || layer.surveyId === "hst" || layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" ? undefined : await store.match(layer.layerId, 4, [], 1, layer);
+    if (!survey && !match && layer.surveyId !== "hst" && !(layer.surveyId === "euclid" && layer.releaseId === "euclid-ero")) continue;
     const record = products.list().find(record => record.productId === layer.productId || record.draft.surveyId === layer.surveyId && record.draft.releaseId === layer.releaseId && record.draft.name === layer.product);
-    const binding: NativeBinding = { productId: record?.productId ?? layer.productId ?? layer.layerId, layerId: layer.layerId, surveyId: layer.surveyId, releaseId: layer.releaseId, product: layer.product, modality: layer.modality, unitKind: match?.unitKind ?? (layer.surveyId === "hst" ? "observation" : "target"), sourceIds: sourceIdsForBinding(layer), revision: "", visibility: record?.published ? "published" : "imported-overview", ...(layer.surveyId === "hst" ? { instrument: layer.sourceEvidence?.instrument, filters: layer.sourceEvidence?.filters, observationId: layer.sourceEvidence?.sourceIdentity?.match(/\bobsid\s+(\d+)/i)?.[1] } : {}) };
+    const binding: NativeBinding = { productId: record?.productId ?? layer.productId ?? layer.layerId, layerId: layer.layerId, surveyId: layer.surveyId, releaseId: layer.releaseId, product: layer.product, modality: layer.modality, unitKind: match?.unitKind ?? (layer.surveyId === "hst" ? "observation" : "target"), sourceIds: sourceIdsForBinding(layer), revision: "", visibility: record?.published ? "published" : "imported-overview", ...(survey ?? {}), ...(layer.surveyId === "hst" ? { instrument: layer.sourceEvidence?.instrument, filters: layer.sourceEvidence?.filters, observationId: layer.sourceEvidence?.sourceIdentity?.match(/\bobsid\s+(\d+)/i)?.[1] } : {}) };
     bindings.push(binding);
   }
   return bindings;
@@ -1166,7 +1240,7 @@ async function reloadNativeRuntime(): Promise<void> {
     currentPublicState = await loadPublicState(currentCatalog, productCatalogRoot, currentPublicState);
     await reloadRuntimeCoverage();
     await sourceUnitCoverageReady();
-    await Promise.all([hstObservationIndex(), eroTargetIndex()]);
+    await Promise.all([hstObservationIndex(), eroTargetIndex(), surveyNativeIndex()]);
   });
   for (const runtime of nativeRuntimes.values()) retireNativeRuntime(runtime);
 }
@@ -1225,20 +1299,21 @@ function sourceUnitCoverageReady(): Promise<void> {
         const layer = currentPublicState.coverage.records.get(binding.layerId);
         if (layer) layer.nativeUnitIndexRevision = binding.revision;
       }
-      const [hst, ero] = await Promise.all([hstObservationIndex(), eroTargetIndex()]);
+      const [hst, ero, survey] = await Promise.all([hstObservationIndex(), eroTargetIndex(), surveyNativeIndex()]);
       if (version !== (nativeUnits?.version ?? "imported-baseline")) return;
       for (const layer of currentPublicState.coverage.records.values()) {
-        if (isWarehouseFilePartitionLayer(layer) || !["legacy-surveys", "desi", "euclid", "hst", "hsc-ssp"].includes(layer.surveyId)) continue;
+        if (isWarehouseFilePartitionLayer(layer) || !["legacy-surveys", "desi", "euclid", "hst", "hsc-ssp", "gaia", "sdss", "galex", "jwst"].includes(layer.surveyId)) continue;
         const binding = nativeUnits?.active?.bindings.find(binding => binding.layerId === layer.layerId);
         const unavailableBinding = nativeUnits?.active?.report.unavailableBindings?.includes(layer.layerId);
         const enabled = (!nativeUnits?.active || Boolean(binding)) && !unavailableBinding;
         const available = enabled && (layer.surveyId === "hst" ? Boolean(hst)
           : layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" ? Boolean(ero)
-          : Boolean(await store.match(layer.layerId, 4, [], 1, layer)));
-        layer.sourceUnitIndex = available
-          ? { ...layer.sourceUnitIndex, status: "estimated", unitKind: binding?.unitKind ?? (layer.surveyId === "hst" ? "observation" : layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" ? "target" : layer.sourceUnitIndex?.unitKind), indexUrl: "/api/v1/coverage/reverse-lookup", notes: layer.sourceUnitIndex?.notes ?? "The installed local native-unit mapping is available; candidate precision and inventory scope apply." }
+          : surveyNativeBinding(layer) ? Boolean(binding && survey?.hasBinding(binding)) : Boolean(await store.match(layer.layerId, 4, [], 1, layer)));
+        const surveyScope = binding && surveyNativeBinding(binding) ? survey?.summaries.find(source => binding.sourceIds.includes(source.sourceId))?.scope : undefined;
+        const sourceUnitIndex: NonNullable<CoverageCellLayer["sourceUnitIndex"]> = available
+          ? { ...layer.sourceUnitIndex, status: "estimated", unitKind: binding?.unitKind ?? (layer.surveyId === "hst" ? "observation" : layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" ? "target" : layer.sourceUnitIndex?.unitKind), indexUrl: "/api/v1/coverage/reverse-lookup", notes: surveyScope ?? layer.sourceUnitIndex?.notes ?? "The installed local native-unit mapping is available; candidate precision and inventory scope apply." }
           : { ...layer.sourceUnitIndex, status: "entrypoint-only", notes: unavailableBinding ? "This published source identity has no matching observation in the active locked metadata snapshot; its coverage and official entrypoint remain visible." : enabled ? "The local native-unit mapping is unavailable for this product; coverage and official source identities remain visible." : "This product is absent from the active reviewed native-index binding set." };
-        if (binding) layer.nativeUnitIndexRevision = binding.revision;
+        updateCoverageNativeUnitState(currentPublicState.coverage, layer.layerId, sourceUnitIndex, binding?.revision);
       }
       console.info(`Native source-unit indexes are ready; ${sourceUnitCoverageLayers.length} approved source-derived coverage layers are available.`);
     }).catch((error) => {
@@ -1253,9 +1328,11 @@ async function awaitNativeSourceUnitCoverageLoad(): Promise<void> {
   await sourceUnitCoverageLoadPromise?.catch(() => undefined);
 }
 
-void sourceUnitCoverageReady().catch((error) => {
-  console.warn(`Native source-unit indexes could not be loaded: ${error instanceof Error ? error.message : String(error)}`);
-});
+if (role !== "site") {
+  void sourceUnitCoverageReady().catch((error) => {
+    console.warn(`Native source-unit indexes could not be loaded: ${error instanceof Error ? error.message : String(error)}`);
+  });
+}
 
 function productCoverage(record: ProductRecord): Record<string, unknown> | undefined {
   const layer = productCoverageLayer(record);
@@ -2039,6 +2116,7 @@ async function adminOverview(): Promise<Record<string, unknown>> {
     generatedAt: new Date().toISOString(),
     coverage: {
       mode: coverageLoadMode,
+      warehouseGeometry,
       loadedAt: coverageLoadedAt,
       revision: coverageCatalog.revision,
       layers: coverageCatalog.layers.length,
@@ -2105,7 +2183,7 @@ function securityHeaders(response: ServerResponse): void {
   response.setHeader("X-Frame-Options", "DENY");
   response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  response.setHeader("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
+  response.setHeader("Content-Security-Policy", "default-src 'self'; img-src 'self' data: https: http:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -2797,7 +2875,16 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
     }
     const connectorDeleteMatch = /^\/api\/v1\/admin\/connectors\/([^/]+)$/.exec(pathname);
     if (connectorDeleteMatch?.[1] && request.method === "DELETE") {
-      return json(response, 200, await admin.deleteConnector(decodeURIComponent(connectorDeleteMatch[1])));
+      const result = await admin.deleteConnector(decodeURIComponent(connectorDeleteMatch[1]));
+      warehouseConnectorLookupCache = undefined;
+      return json(response, 200, result);
+    }
+    const connectorIconMatch = /^\/api\/v1\/admin\/connectors\/([^/]+)\/icon$/.exec(pathname);
+    if (connectorIconMatch?.[1] && request.method === "PUT") {
+      const input = await requestJsonBody(request, 96 * 1024);
+      const connector = await admin.updateConnectorIcon(decodeURIComponent(connectorIconMatch[1]), input);
+      warehouseConnectorLookupCache = undefined;
+      return json(response, 200, { connector, syncStatus: await apiSyncStatus("connector-presentation") });
     }
     const connectorProbeMatch = /^\/api\/v1\/admin\/connectors\/([^/]+)\/probe$/.exec(pathname);
     if (connectorProbeMatch?.[1] && request.method === "POST") {
@@ -2814,11 +2901,13 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       return json(response, 200, { connectors: connectors.map((connector) => connectorSummary(connector, tasks)) });
     }
     if (pathname === "/api/v1/admin/connectors" && request.method === "POST") {
-      const input = await requestJsonBody(request) as unknown as ConnectorInput;
-      return json(response, 201, { connector: await admin.createConnector(input) });
+      const input = await requestJsonBody(request, 96 * 1024) as unknown as ConnectorInput;
+      const connector = await admin.createConnector(input);
+      warehouseConnectorLookupCache = undefined;
+      return json(response, 201, { connector });
     }
     if (pathname === "/api/v1/admin/catalog/status" && request.method === "GET") {
-      return json(response, 200, { mode: coverageLoadMode, loadedAt: coverageLoadedAt, revision: coverageCatalog.revision, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size, warehouseConfigured: evidenceStore.configured });
+      return json(response, 200, { mode: coverageLoadMode, loadedAt: coverageLoadedAt, revision: coverageCatalog.revision, layers: coverageCatalog.layers.length, footprints: coverageCatalog.records.size, warehouseConfigured: evidenceStore.configured, warehouseGeometry });
     }
     if (pathname === "/api/v1/admin/catalog/reload" && request.method === "POST") {
       const catalogState = await reloadRuntimeCoverage();
@@ -3414,7 +3503,7 @@ async function sendCoverageOverlapDetails(request: IncomingMessage, response: Se
       coverageEvidence: content.coverageEvidence,
     }] as const];
   }));
-  const details = buildOverlapDetails({ result, component, layers: selectedLayers, surveyIndex: publicSurveyIndex(), sourceIndex: runtimeSurveyIndex, publishedSourcesByLayer, catalog:publicState.catalog, sourceUnitsByLayer:new Map(), warehouseSnapshots: currentWarehouseCoverageSnapshots() });
+  const details = buildOverlapDetails({ result, component, layers: selectedLayers, surveyIndex: publicSurveyIndex(), sourceIndex: runtimeSurveyIndex, publishedSourcesByLayer, catalog:publicState.catalog, sourceUnitsByLayer:new Map(), warehouseGeometry, warehouseSnapshots: await currentWarehouseOverlapSnapshots() });
 
   return compressedJson(request, response, 200, details, "public, max-age=60, stale-while-revalidate=120");
 }
@@ -3625,18 +3714,20 @@ function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LI
 
 async function publicSpatialUnits(layerIds: readonly string[], order: number, cells: readonly number[], limit: number, batch?: (layerId: string, units: DownloadPlanSpatialUnit[]) => void) {
   const layers = layerIds.flatMap((id) => { const layer = publicCoverageCatalog().records.get(id); return layer ? [layer] : []; });
-  const archiveCandidates = layers.filter((layer) => layer.surveyId === "hst" || (layer.surveyId === "euclid" && layer.releaseId === "euclid-ero"));
+  const archiveCandidates = layers.filter((layer) => layer.surveyId === "hst" || (layer.surveyId === "euclid" && layer.releaseId === "euclid-ero") || surveyNativeBinding(layer));
   const archiveLayers = archiveCandidates.filter(layer => nativeBindingEnabled(layer.layerId));
   const disabled = archiveCandidates.filter(layer => !nativeBindingEnabled(layer.layerId));
-  const [hstIndex, eroIndex] = await Promise.all([
+  const [hstIndex, eroIndex, surveyIndex] = await Promise.all([
     archiveLayers.some(layer => layer.surveyId === "hst") ? hstObservationIndex() : undefined,
     archiveLayers.some(layer => layer.surveyId === "euclid") ? eroTargetIndex() : undefined,
+    archiveLayers.some(layer => surveyNativeBinding(layer)) ? surveyNativeIndex() : undefined,
   ]);
   const [local, archive] = await Promise.all([
     localSpatialUnits(layers.filter((layer) => !archiveCandidates.includes(layer)).map((layer) => layer.layerId), order, cells, limit, batch),
-    archiveNativeUnits(archiveLayers, order, cells, publicLookupStore, { hstIndex, eroIndex }).then(result => { for (const layer of archiveLayers) batch?.(layer.layerId, result.units.filter(unit => unit.layerId === layer.layerId)); return result; }),
+    archiveNativeUnits(archiveLayers, order, cells, publicLookupStore, { hstIndex, eroIndex, surveyIndex, bindings: requestNativeGroup()?.bindings, limit }).then(result => { for (const layer of archiveLayers) batch?.(layer.layerId, result.units.filter(unit => unit.layerId === layer.layerId)); return result; }),
   ]);
-  return { units: [...local.units, ...archive.units], indexedLayerIds: new Set([...local.indexedLayerIds, ...archive.indexedLayerIds]),
+  const units = [...local.units, ...archive.units].map(withSurveyProviderStatuses);
+  return { units, indexedLayerIds: new Set([...local.indexedLayerIds, ...archive.indexedLayerIds]),
     unavailableLayerIds: [...local.unavailableLayerIds, ...archive.unavailableLayerIds, ...disabled.map(layer => layer.layerId)], truncated: local.truncated || archive.truncated || disabled.length > 0, notes: [...archive.notes, ...local.notes, ...(disabled.length ? ["Native lookup is unavailable for products absent from the active binding set or without a mapping in its locked inventory; source identities and entrypoints remain visible."] : [])] };
 }
 
@@ -3673,11 +3764,20 @@ async function localSpatialUnits(layerIds: readonly string[], order: number, cel
     if (match.truncated) notes.push(`${layer.surveyId} / ${layer.releaseId} / ${layer.product}: native-unit lookup returned ${match.units.length} of ${match.totalUnits} units at its ${limit}-unit result limit.`);
     if (!match.units.length) notes.push(`${layer.surveyId} / ${layer.releaseId} / ${layer.product}: the current native-unit inventory returned no match in this region; this does not establish that the survey has no data. ${match.notes}`);
     for (const unit of match.units) {
-      const accessUri = publicExternalUrl(unit.downloadUrl);
-      const accessUris = unit.accessUris?.flatMap((entry) => {
+      const sourceAccessRows = unit.accessUris?.flatMap((entry) => {
         const uri = publicExternalUrl(entry.url);
-        return uri ? [{ uri, ...(entry.fileName ? { fileName: entry.fileName } : {}) }] : [];
-      });
+        if (!uri) return [];
+        const fileName = entry.fileName;
+        const accessType = layer.surveyId === "hsc-ssp" ? "entrypoint" as const : uri.endsWith("/") ? "directory" as const : "file" as const;
+        return [{ uri, ...(fileName ? { fileName } : {}), accessType,
+          alternatives: alternativesForAccessUri(uri, { surveyId: layer.surveyId, releaseId: layer.releaseId, fileName,
+            accessType, band: fileName?.match(/(?:MOSAIC-)?(?:NISP-)?([YJH]|VIS)(?:_|-)/i)?.[1] }) }];
+      }) ?? [];
+      const accessUri = publicExternalUrl(unit.downloadUrl);
+      const accessUris = sourceAccessRows.length ? sourceAccessRows : accessUri ? [{ uri: accessUri,
+        accessType: layer.surveyId === "hsc-ssp" ? "entrypoint" as const : unit.unitKind === "tile" || accessUri.endsWith("/") ? "directory" as const : "file" as const,
+        alternatives: alternativesForAccessUri(accessUri, { surveyId: layer.surveyId, releaseId: layer.releaseId,
+          accessType: layer.surveyId === "hsc-ssp" ? "entrypoint" : unit.unitKind === "tile" || accessUri.endsWith("/") ? "directory" : "file" }) }] : [];
       units.push({
         layerId: layer.layerId,
         productId: layer.productId,
@@ -3691,7 +3791,7 @@ async function localSpatialUnits(layerIds: readonly string[], order: number, cel
         nside: 2 ** order,
         matchingCells: unit.matchingCells,
         precision: unit.geometryPrecision,
-        ...(accessUri ? { accessUri } : {}),
+        ...(accessUris.length ? { accessUri: accessUris[0]!.uri } : {}),
         ...(accessUris?.length ? { accessUris } : {}),
         ...(unit.accessAvailability ? { accessAvailability: unit.accessAvailability } : {}),
         sourceSnapshotSha256: unit.sourceSnapshotSha256,
@@ -4243,8 +4343,10 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   const warehouseEdges = [...warehouseResults.values()].flatMap(lookup => lookup.edges);
   const warehouseFiles: Array<Record<string, unknown>> = mergeWarehouseSourceFiles(warehouseResults)
     .map(({ logicalLayerId, source }) => {
+      const fileId = [source.file_id, source.fileId, source._id].find((value): value is string => typeof value === "string");
+      const normalizedFile = warehouseResults.get(logicalLayerId)?.downloadPlan.files.find(file => file.fileId === fileId);
       const fileName = typeof source.file_name === "string" ? source.file_name : typeof source.fileName === "string" ? source.fileName : typeof source.name === "string" ? source.name : undefined;
-      const sourceUri = [source.sourceUri, source.source_uri, source.uri, source.urn, source.path, source.key].find((value): value is string => typeof value === "string");
+      const sourceUri = [source.sourceUri, source.source_uri, source.uri, source.urn, source.path, source.key, normalizedFile?.sourceUri].find((value): value is string => typeof value === "string");
       const desiTileId = sourceUri?.match(/(?:^|\/)tiles\/cumulative\/(\d+)\/(?:\d{8})(?:\/|$)/)?.[1];
       const matchedEuclidLayer = warehouseLogicalLayersForSource(source, warehouseEdges, logicalLayerId)
         .map((layerId) => publicCoverageCatalog().records.get(layerId))
@@ -4253,6 +4355,9 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
       return {
         ...source,
         __logicalLayerId: logicalLayerId,
+        ...(sourceUri ? { sourceUri } : {}),
+        ...(typeof source.unitKind === "string" ? {} : typeof source.unit_kind === "string" ? { unitKind: source.unit_kind } : {}),
+        ...(typeof source.unitId === "string" ? {} : typeof source.unit_id === "string" ? { unitId: source.unit_id } : {}),
         ...(euclidLink ? { download_url: euclidLink.downloadUrl, downloadProvider: euclidLink.downloadProvider, unitKind: euclidLink.unitKind, unitId: euclidLink.tileId } : {}),
         ...(!euclidLink && desiTileId ? { unitKind: "tile", unitId: desiTileId } : {}),
       };
@@ -4304,8 +4409,9 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
       ...unit,
       matchingCells: [...new Set([...previous.matchingCells, ...unit.matchingCells])].sort((left, right) => left - right),
       ...(previous.accessUris?.length || unit.accessUris?.length ? {
-        accessUris: [...new Map([...(previous.accessUris ?? []), ...(unit.accessUris ?? [])].map((entry) => [entry.uri, entry])).values()],
+        accessUris: mergeSourceAccessUris(previous.accessUris, unit.accessUris),
       } : {}),
+      ...(previous.sourceMetadata || unit.sourceMetadata ? { sourceMetadata: mergeSourceMetadata(previous.sourceMetadata, unit.sourceMetadata) } : {}),
     } : unit);
   }
   const nativeSpatialUnits = interleaveSpatialUnitsBySurvey([...spatialUnitsByIdentity.values()].sort((left, right) => left.surveyId.localeCompare(right.surveyId)
@@ -4314,6 +4420,9 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     || left.unitKind.localeCompare(right.unitKind)
     || left.unitId.localeCompare(right.unitId, undefined, { numeric: true })));
   const unitsByIdentity = new Map(nativeSpatialUnits.map((unit) => [`${unit.layerId}:${unit.unitKind}:${unit.unitId}`, unit]));
+  const connectorContext: WarehouseConnectorContext = warehouseResults.size ? await warehouseConnectorLookup() : { tasks: [], batches: [], connectors: [] };
+  const connectorLayers = new Map(sourceDescriptors.map(({ layer }) => [layer.layerId, layer]));
+  const connectorScopes = [...warehouseResults.values()].flatMap(lookup => lookup.scanScopes ?? []);
   const scannedFilesByUnit = new Map<string, NonNullable<DownloadPlanSpatialUnit["scannedFiles"]>>();
   for (const source of warehouseFiles) {
     const layerId = typeof source.__logicalLayerId === "string" ? source.__logicalLayerId : undefined;
@@ -4328,11 +4437,18 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     const fileName = [source.file_name, source.fileName, source.name].find((value): value is string => typeof value === "string");
     const scanRunId = typeof source.scan_run_id === "string" ? source.scan_run_id : typeof source.scanRunId === "string" ? source.scanRunId : undefined;
     const sourceSnapshotSha256 = typeof source.sourceSnapshotSha256 === "string" ? source.sourceSnapshotSha256 : typeof source.source_snapshot_sha256 === "string" ? source.source_snapshot_sha256 : undefined;
+    const matchingCoverage = warehouseResults.get(layerId)?.downloadPlan.files.find(file => file.fileId === fileId)?.matchingCoverage
+      .filter(match => !source.layer_id || match.observationLayerId === source.layer_id) ?? [];
+    const runIds = [...new Set(matchingCoverage.map(match => match.scanRunId).filter((value): value is string => Boolean(value)))];
     const files = scannedFilesByUnit.get(identity) ?? [];
-    if (!files.some((file) => file.fileId === fileId && file.scanRunId === scanRunId)) {
-      files.push({ fileId, ...(fileName ? { fileName } : {}), ...(sourceUri ? { sourceUri } : {}), ...(scanRunId ? { scanRunId } : {}), ...(sourceSnapshotSha256 ? { sourceSnapshotSha256 } : {}) });
-      scannedFilesByUnit.set(identity, files);
+    for (const runId of runIds.length ? runIds : [scanRunId]) {
+      if (files.some(file => file.fileId === fileId && file.scanRunId === runId)) continue;
+      const matches = matchingCoverage.filter(match => match.scanRunId === runId);
+      const snapshotHash = matches.find(match => match.sourceSnapshotSha256)?.sourceSnapshotSha256 ?? sourceSnapshotSha256;
+      const connectors = scannedFileConnectors({ scanRunId: runId, matchingCoverage: matches }, connectorContext, connectorLayers, connectorScopes);
+      files.push({ fileId, ...(fileName ? { fileName } : {}), ...(sourceUri ? { sourceUri } : {}), ...(runId ? { scanRunId: runId } : {}), ...(snapshotHash ? { sourceSnapshotSha256: snapshotHash } : {}), ...(matches.length ? { matchingCoverage: matches } : {}), ...(connectors.length ? { connectors } : {}) });
     }
+    scannedFilesByUnit.set(identity, files);
   }
   for (const [identity, files] of scannedFilesByUnit) {
     const unit = unitsByIdentity.get(identity);
@@ -4506,6 +4622,10 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   });
   downloadPlan.warnings.push(...sourceUnitResult.notes, ...warehouseResultLimitNotes, ...regionResultLimitNotes,
     ...retryableWarehouseLayers.map((layerId) => `${layerId}: Warehouse evidence is unavailable; native results from other surveys are retained.`));
+  for (const file of downloadPlan.files) {
+    const connectors = scannedFileConnectors(file, connectorContext, connectorLayers, connectorScopes);
+    if (connectors.length) file.connectors = connectors;
+  }
   downloadPlan.truncated ||= retryableWarehouseLayers.length > 0;
   let stoppedAtLimit = false;
   let seenKeys: string[] | undefined;
@@ -4625,11 +4745,24 @@ const server = http.createServer((request, response) => {
   void requestRelease.run(context, async () => {
     securityHeaders(response);
     const pathname = requestPath(request);
+    const connectorIcon = /^\/api\/v1\/connector-icons\/([a-f0-9]{64})$/.exec(pathname);
+    if (connectorIcon && (request.method === "GET" || request.method === "HEAD")) {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      const content = await connectorPresentations.readIcon(connectorIcon[1]!);
+      if (!content) return json(response, 404, { error: "Connector icon not found" });
+      const etag = `"${connectorIcon[1]}"`;
+      response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      response.setHeader("ETag", etag);
+      if (request.headers["if-none-match"] === etag) { response.writeHead(304); response.end(); return; }
+      response.writeHead(200, { "Content-Type": content.contentType, "Content-Length": content.bytes.length });
+      response.end(request.method === "HEAD" ? undefined : content.bytes);
+      return;
+    }
     if (pathname === "/api/v1/openapi.json" && request.method === "GET") return json(response, 200, publicOpenApi());
     if (pathname === "/api/v1/status" && request.method === "GET") {
       if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
       const active = nativeUnits?.active;
-      return json(response, 200, { schemaVersion: 1, generatedAt: new Date().toISOString(), status: "available", publicRelease: { id: publicState.snapshot.releaseId, generatedAt: publicState.snapshot.generatedAt, coverageRevision: publicCoverageCatalog().revision, publishedMocLayers: publicState.geometry.size }, nativeIndex: { version: nativeUnits?.version ?? "unavailable", generation: nativeUnits?.generation ?? 0, managed: Boolean(active), verified: Boolean(active?.report.checks.length && active.report.checks.every(check => check.passed)) }, services: [{ id: "survey-healpix", status: publicState.geometry.size ? "available" : "empty", authentication: "public" }, { id: "reverse-lookup", status: nativeRuntime().state, authentication: "region:query", anonymousPreviewLimit: PUBLIC_REVERSE_PREVIEW_LIMIT }, { id: "warehouse-evidence", status: evidenceStore.configured ? "configured" : "unconfigured", authentication: "region:query" }], access: { keyIssuance: "administrator", scopes: ["region:query"], maximumRequestsPerMinute: 30, onlineBilling: false }, documentation: "/api-docs/" });
+      return json(response, 200, { schemaVersion: 1, generatedAt: new Date().toISOString(), status: "available", publicRelease: { id: publicState.snapshot.releaseId, generatedAt: publicState.snapshot.generatedAt, coverageRevision: publicCoverageCatalog().revision, publishedMocLayers: publicState.geometry.size }, warehouseGeometry, nativeIndex: { version: nativeUnits?.version ?? "unavailable", generation: nativeUnits?.generation ?? 0, managed: Boolean(active), verified: Boolean(active?.report.checks.length && active.report.checks.every(check => check.passed)) }, services: [{ id: "survey-healpix", status: publicState.geometry.size ? "available" : "empty", authentication: "public" }, { id: "reverse-lookup", status: nativeRuntime().state, authentication: "region:query", anonymousPreviewLimit: PUBLIC_REVERSE_PREVIEW_LIMIT }, { id: "warehouse-evidence", status: evidenceStore.configured ? "configured" : "unconfigured", authentication: "region:query" }], access: { keyIssuance: "administrator", scopes: ["region:query"], maximumRequestsPerMinute: 30, onlineBilling: false }, documentation: "/api-docs/" });
     }
     const surveyHealpix = /^\/api\/v1\/coverage\/surveys\/([a-z0-9-]+)\/healpix$/.exec(pathname);
     if (surveyHealpix && request.method === "GET") {
@@ -4808,7 +4941,7 @@ const server = http.createServer((request, response) => {
         ...layer,
         warehouseFileIndex: warehouseFileIndexSummary(layer.layerId),
       }));
-      const body = { ...publicCoverage, schemaVersion: 2, generatedAt: coverageLoadedAt, publicationPolicy: PUBLICATION_POLICY, publicReleaseId: approvedRelease.releaseId || null };
+      const body = { ...publicCoverage, schemaVersion: 2, generatedAt: coverageLoadedAt, warehouseGeometry, publicationPolicy: PUBLICATION_POLICY, publicReleaseId: approvedRelease.releaseId || null };
       const bodyBytes = Buffer.from(`${JSON.stringify(body)}\n`);
       const etag = `W/"catalog-${createHash("sha256").update(bodyBytes).digest("hex")}"`;
       return compressedJson(request, response, 200, body, "no-cache, must-revalidate", etag);

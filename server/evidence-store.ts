@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { BATCH_EVIDENCE_LAYER_PREFIX, batchEvidenceLayerId, isBatchEvidenceLayerId } from "./scan-batch.js";
 import { isExcludedWarehouseLayerId } from "./coverage.js";
 import { DENIED_SURVEY_IDS, isDeniedLayerId, isDeniedSurvey } from "./publication-policy.js";
+import type { ScanConnectorIdentity } from "../src/connector-icon.js";
 
 export type ReversePrecision = "exact" | "estimated" | "entrypoint-only" | "truncated";
 
@@ -32,6 +33,9 @@ export interface CoverageEdge {
   scopeId?: string;
   partitionId?: string;
   sourceSnapshotSha256?: string;
+  /** Stored cell before a finer Warehouse cell is projected to the requested order. */
+  sourceOrder?: number;
+  sourceIpix?: number;
   sourceFileId?: string;
   sourceUri?: string;
   fileName?: string;
@@ -61,8 +65,19 @@ export interface DownloadPlanMatch {
   coverageMethod?: string;
   coverageRole?: string;
   sourceOrder?: number;
+  sourceIpix?: number;
   scanRunId?: string;
   sourceSnapshotSha256?: string;
+}
+
+export interface DownloadPlanScannedFile {
+  fileId: string;
+  fileName?: string;
+  sourceUri?: string;
+  scanRunId?: string;
+  sourceSnapshotSha256?: string;
+  matchingCoverage?: DownloadPlanMatch[];
+  connectors?: ScanConnectorIdentity[];
 }
 
 export interface DownloadPlanFile {
@@ -77,6 +92,7 @@ export interface DownloadPlanFile {
   lastModified?: string;
   etag?: string;
   sourceUri?: string;
+  connectors?: ScanConnectorIdentity[];
   downloadable: boolean;
   downloadUrl?: string;
   matchingCoverage: DownloadPlanMatch[];
@@ -162,15 +178,47 @@ export interface DownloadPlanSpatialUnit {
   matchingCells: number[];
   precision: ReversePrecision;
   accessUri?: string;
-  accessUris?: Array<{ uri: string; fileName?: string }>;
+  accessUris?: SourceAccessUri[];
   accessAvailability?: "public" | "source-policy" | "unverified";
   sourceSnapshotSha256?: string;
   note?: string;
   sRegion?: string;
+  geometryEvidence?: Array<{ kind: "fits-wcs-frame"; sRegion: string; sourceUrl: string; memberName: string; sha256: string; instrument: string; filter: string }>;
   instrument?: string;
   filters?: string;
   sourceUrl?: string;
-  scannedFiles?: Array<{ fileId: string; fileName?: string; sourceUri?: string; scanRunId?: string; sourceSnapshotSha256?: string }>;
+  nativePartition?: { coordinateFrame: "ICRS"; ordering: "NESTED"; order: number; firstIpix: number; lastIpix: number; precision: "exact" };
+  sourceMetadata?: Record<string, unknown> & {
+    entrypoints?: SourceAccessAlternative[];
+    providerStatuses?: SourceAccessAlternative[];
+  };
+  scannedFiles?: DownloadPlanScannedFile[];
+}
+
+export type SourceAccessType = "file" | "directory" | "entrypoint";
+export type SourceAccessStatus = "verified" | "source-listed" | "rule-derived" | "entrypoint-only" | "unavailable";
+
+export interface SourceAccessAlternative {
+  uri: string;
+  accessType: SourceAccessType;
+  provider: string;
+  providerCountryCode?: string;
+  providerLocation?: string;
+  servingRegion?: string;
+  relationship?: "primary" | "mirror" | "directory-entrypoint" | "metadata-entrypoint" | "regional-repository";
+  status: SourceAccessStatus;
+  checkedAt?: string;
+  httpStatus?: number;
+  note?: string;
+}
+
+export interface SourceAccessUri {
+  /** One logical file or directory identity. Mirrors belong in alternatives. */
+  uri: string;
+  fileName?: string;
+  band?: string;
+  accessType?: SourceAccessType;
+  alternatives?: SourceAccessAlternative[];
 }
 
 export interface DownloadPlan {
@@ -255,7 +303,12 @@ export interface ReverseLookupOptions {
 }
 
 interface SearchHit { _id?: string; _source?: Record<string, unknown>; sort?: unknown[] }
-interface SearchResponse { timed_out?: boolean; _shards?: { failed?: number }; hits?: { hits?: SearchHit[]; total?: number | { value?: number } } }
+interface SearchResponse {
+  timed_out?: boolean;
+  _shards?: { failed?: number };
+  hits?: { hits?: SearchHit[]; total?: number | { value?: number } };
+  aggregations?: { cells?: { buckets?: Array<{ key: Record<string, unknown>; doc_count: number }>; after_key?: Record<string, unknown> } };
+}
 
 export interface WarehouseLayerSnapshot {
   layerId: string;
@@ -267,6 +320,7 @@ export interface WarehouseLayerSnapshot {
   entrypoint?: string;
   state: string;
   scanRunId?: string;
+  scanRunIds?: string[];
   /** Number of committed scan runs when a partitioned scope has many runs. */
   scanRunCount?: number;
   sourceSnapshotSha256?: string;
@@ -278,6 +332,7 @@ export interface WarehouseLayerSnapshot {
   errorCount: number;
   updatedAt?: string;
   scanScope?: ScanScopeSummary;
+  connectorEvidence?: Array<ScanConnectorIdentity & { matchingScanRuns: number }>;
 }
 
 export interface WarehouseCoverageSnapshot {
@@ -299,6 +354,17 @@ export interface WarehouseCoverageCatalogSnapshot {
   layers: WarehouseLayerSnapshot[];
   coverages: WarehouseCoverageSnapshot[];
   truncated: boolean;
+  /** A failed layer contributes no partial geometry; its scan counters remain available. */
+  failures?: Array<{ layerId: string; reason: string }>;
+}
+
+export function warehouseGeometryFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Warehouse coverage query failed";
+  // Fetch errors can contain infrastructure URLs. Public loading status contains only the cause.
+  if (message.startsWith("Warehouse evidence search failed:")) {
+    return /timeout|timed out/i.test(message) ? "Warehouse coverage query timed out" : "Warehouse coverage query failed";
+  }
+  return error instanceof EvidenceStoreError ? message : "Warehouse coverage query failed";
 }
 
 export interface WarehouseLayerStatusSnapshot {
@@ -390,7 +456,7 @@ function sourceNumber(source: Record<string, unknown>, keys: string[]): number |
 }
 
 function matchingKey(match: DownloadPlanMatch): string {
-  return [match.layerId ?? "", match.evidenceLayerId ?? "", match.observationLayerId ?? "", match.scopeId ?? "", match.partitionId ?? "", match.order, match.ipix, match.precision, match.coverageMethod ?? "", match.coverageRole ?? "", match.sourceOrder ?? "", match.scanRunId ?? "", match.sourceSnapshotSha256 ?? ""].join("|");
+  return [match.layerId ?? "", match.evidenceLayerId ?? "", match.observationLayerId ?? "", match.scopeId ?? "", match.partitionId ?? "", match.order, match.ipix, match.precision, match.coverageMethod ?? "", match.coverageRole ?? "", match.sourceOrder ?? "", match.sourceIpix ?? "", match.scanRunId ?? "", match.sourceSnapshotSha256 ?? ""].join("|");
 }
 
 /** Build the file-level public contract without turning coverage edges into files. */
@@ -420,7 +486,8 @@ export function buildDownloadPlan(input: DownloadPlanInput): DownloadPlan {
       precision: edge.precision,
       ...(edge.coverageMethod ? { coverageMethod: edge.coverageMethod } : {}),
       ...(edge.coverageRole ? { coverageRole: edge.coverageRole } : {}),
-      ...(sourceNumber(source ?? {}, ["sourceOrder", "source_order"]) !== undefined ? { sourceOrder: sourceNumber(source ?? {}, ["sourceOrder", "source_order"]) } : {}),
+      ...(edge.sourceOrder !== undefined ? { sourceOrder: edge.sourceOrder } : sourceNumber(source ?? {}, ["sourceOrder", "source_order"]) !== undefined ? { sourceOrder: sourceNumber(source ?? {}, ["sourceOrder", "source_order"]) } : {}),
+      ...(edge.sourceIpix !== undefined ? { sourceIpix: edge.sourceIpix } : {}),
     };
     const current = files.get(fileId);
     if (current) {
@@ -514,11 +581,13 @@ function stableEdgeId(source: Record<string, unknown>, fallback: string): string
   return createHash("sha256").update(key || fallback).digest("hex").slice(0, 24);
 }
 
-function normalizeEdge(hit: SearchHit, request: ReverseLookupRequest): CoverageEdge | undefined {
+function normalizeEdge(hit: SearchHit, request: ReverseLookupRequest, storedOrder = request.order): CoverageEdge | undefined {
   const source = hit._source ?? {};
   const order = number(first(source, ["order", "healpix_order", "coverage_order"]));
-  const ipix = number(first(source, ["ipix", "pixel", "healpix", "healpix_cell", "healpix_ipix", "healpix_pixel"]));
-  if (order !== request.order || ipix === undefined || !request.cells.includes(ipix)) return undefined;
+  const sourceIpix = number(first(source, ["ipix", "pixel", "healpix", "healpix_cell", "healpix_ipix", "healpix_pixel"]));
+  if (order !== storedOrder || order < request.order || sourceIpix === undefined) return undefined;
+  const ipix = Math.floor(sourceIpix / 4 ** (order - request.order));
+  if (!request.cells.includes(ipix)) return undefined;
   const layerId = text(first(source, ["layerId", "layer_id", "layer"]));
   if (request.layerIds.length && layerId && !request.layerIds.includes(layerId)) return undefined;
   const precision = text(first(source, ["precision", "coverage_precision"])) as ReversePrecision | undefined;
@@ -531,11 +600,13 @@ function normalizeEdge(hit: SearchHit, request: ReverseLookupRequest): CoverageE
     product: text(first(source, ["product", "productName", "product_name"])),
     modality: text(first(source, ["modality", "data_modality"])),
     scanRunId: text(first(source, ["scanRunId", "scan_run_id", "runId", "run_id"])),
+    sourceSnapshotSha256: text(first(source, ["sourceSnapshotSha256", "source_snapshot_sha256"])),
     sourceFileId: text(first(source, ["sourceFileId", "source_file_id", "fileId", "file_id"])),
     sourceUri: text(first(source, ["sourceUri", "source_uri", "uri", "urn"])),
     fileName: text(first(source, ["fileName", "file_name", "name"])),
-    order,
+    order: request.order,
     ipix,
+    ...(order > request.order ? { sourceOrder: order, sourceIpix } : {}),
     raMin: number(first(source, ["raMin", "ra_min", "ra_min_deg"])),
     raMax: number(first(source, ["raMax", "ra_max", "ra_max_deg"])),
     decMin: number(first(source, ["decMin", "dec_min", "dec_min_deg"])),
@@ -605,9 +676,18 @@ export class CoverageEvidenceStore {
     let response: SearchResponse;
     let bindings: EvidenceLayerBinding[] = [];
     let scanScopes: ScanScopeSummary[] = [];
+    const queryOrders = new Map<string, number>();
     try {
       ({ bindings, scanScopes } = await this.resolveEvidenceLayers(layerIds, input.evidenceLayerBindings));
-      const indexedIds = bindings.filter(binding => !binding.availableOrders || binding.availableOrders.includes(input.order)).map(binding => binding.indexedLayerId);
+      for (const binding of bindings) {
+        // A coarse region includes its real finer cells. A coarse scan cannot
+        // manufacture coverage at a finer requested order.
+        const order = binding.availableOrders !== undefined
+          ? [...binding.availableOrders].sort((a, b) => a - b).find(value => value >= input.order)
+          : input.order;
+        if (order !== undefined) queryOrders.set(binding.indexedLayerId, order);
+      }
+      const indexedIds = [...queryOrders.keys()];
       const layerShould = [{ terms: { layer_id: indexedIds } }];
       const orderShould = [{ term: { healpix_order: input.order } }];
       const pixelShould = [{ terms: { healpix_cell: cells } }];
@@ -617,12 +697,25 @@ export class CoverageEvidenceStore {
       }
       const query = {
         size: limit + 1,
-        track_total_hits: true,
-        sort: [{ source_file_id: "asc" }, { layer_id: "asc" }, { healpix_cell: "asc" }, { coverage_role: "asc" }],
+        track_total_hits: false,
+        sort: [{ source_file_id: "asc" }, { layer_id: "asc" }, { healpix_order: "asc" }, { healpix_cell: "asc" }, { coverage_role: "asc" }],
         query: { bool: { must: [
+          ...([...queryOrders.values()].every(order => order === input.order) ? [
           { bool: { should: orderShould, minimum_should_match: 1 } },
           { bool: { should: pixelShould, minimum_should_match: 1 } },
           ...(layerShould.length ? [{ bool: { should: layerShould, minimum_should_match: 1 } }] : []),
+          ] : [{ bool: { should: [...queryOrders].map(([indexedLayerId, storedOrder]) => {
+            const factor = 4 ** (storedOrder - input.order);
+            const ranges = cells.map(cell => {
+              const gte = cell * factor, lt = (cell + 1) * factor;
+              if (!Number.isSafeInteger(gte) || !Number.isSafeInteger(lt)) throw new EvidenceStoreError("Warehouse source cell range exceeds integer precision", 400);
+              return { range: { healpix_cell: { gte, lt } } };
+            });
+            return { bool: { filter: [
+              { term: { layer_id: indexedLayerId } }, { term: { healpix_order: storedOrder } },
+              { bool: { should: ranges, minimum_should_match: 1 } },
+            ] } };
+          }), minimum_should_match: 1 } }]),
         ], ...(excludeFileIds.length ? { must_not: [{ terms: { source_file_id: excludeFileIds } }] } : {}) } },
         ...(input.searchAfter ? { search_after: input.searchAfter } : {}),
       };
@@ -636,15 +729,23 @@ export class CoverageEvidenceStore {
     const byIndexedLayer = new Map(bindings.map(binding => [binding.indexedLayerId, binding]));
     const edges = (response.hits?.hits ?? []).flatMap(hit => {
       // Membership is checked with the committed-candidate map below.
-      const edge = normalizeEdge(hit, { ...input, layerIds: [], cells });
+      const indexedLayerId = text(hit._source?.layer_id);
+      const storedOrder = indexedLayerId ? queryOrders.get(indexedLayerId) : undefined;
+      if (storedOrder === undefined) return [];
+      const edge = normalizeEdge(hit, { ...input, layerIds: [], cells }, storedOrder);
       const binding = edge?.layerId ? byIndexedLayer.get(edge.layerId) : undefined;
       if (!edge || !binding) return [];
-      return [{ ...edge, layerId: binding.layerId, evidenceLayerId: binding.evidenceLayerId, ...(binding.scopeId ? {
+      return [{ ...edge, layerId: binding.layerId, evidenceLayerId: binding.evidenceLayerId,
+        scanRunId: binding.scopeId ? binding.scanRunId : edge.scanRunId ?? binding.scanRunId,
+        sourceSnapshotSha256: binding.scopeId ? binding.sourceSnapshotSha256 : edge.sourceSnapshotSha256 ?? binding.sourceSnapshotSha256,
+        ...(binding.scopeId ? {
         observationLayerId: binding.indexedLayerId, scanRunId: binding.scanRunId,
         scopeId: binding.scopeId, partitionId: binding.partitionId, sourceSnapshotSha256: binding.sourceSnapshotSha256,
       } : {}) }];
     });
-    const truncated = edges.length > limit || Number(typeof response.hits?.total === "number" ? response.hits.total : response.hits?.total?.value ?? 0) > limit;
+    // search_after does not change hits.total. The extra hit, rather than the
+    // full-query total, tells us whether another page remains.
+    const truncated = (response.hits?.hits?.length ?? 0) > limit;
     const capped = edges.slice(0, limit);
     const overflowEdge = edges[limit];
     const lastCappedEdge = capped.at(-1);
@@ -746,9 +847,13 @@ export class CoverageEvidenceStore {
       const coverageCount = resolved.bindings.some((binding) => binding.coverageCount !== undefined)
         ? resolved.bindings.reduce((total, binding) => total + (binding.coverageCount ?? 0), 0)
         : Number(resolved.sources.get(resolved.bindings[0]!.evidenceLayerId)?.coverage_count ?? 0);
-      const scanRuns = [...new Set(resolved.bindings.map((binding) => binding.scanRunId).filter((value): value is string => Boolean(value)))];
-      const sourceSnapshots = [...new Set(resolved.bindings.map((binding) => binding.sourceSnapshotSha256).filter((value): value is string => Boolean(value)))];
       const source = resolved.sources.get(resolved.bindings[0]!.evidenceLayerId);
+      const sourceScanRunId = text(source?.scan_run_id);
+      const scanRuns = [...new Set([
+        ...resolved.bindings.map((binding) => binding.scanRunId).filter((value): value is string => Boolean(value)),
+        ...(sourceScanRunId ? [sourceScanRunId] : []),
+      ])];
+      const sourceSnapshots = [...new Set(resolved.bindings.map((binding) => binding.sourceSnapshotSha256).filter((value): value is string => Boolean(value)))];
       const sourceOrders = Array.isArray(source?.available_orders)
         ? source.available_orders.filter((value): value is number => Number.isSafeInteger(value))
         : [];
@@ -761,6 +866,7 @@ export class CoverageEvidenceStore {
         ...(layer.modality ? { modality: layer.modality } : {}),
         state: "ACTIVE",
         ...(scanRuns.length === 1 ? { scanRunId: scanRuns[0] } : {}),
+        ...(scanRuns.length ? { scanRunIds: scanRuns } : {}),
         ...(scanRuns.length > 1 ? { scanRunCount: scanRuns.length } : {}),
         ...(sourceSnapshots.length === 1 ? { sourceSnapshotSha256: sourceSnapshots[0] } : {}),
         ...(sourceSnapshots.length > 1 ? { sourceSnapshotCount: sourceSnapshots.length } : {}),
@@ -778,11 +884,8 @@ export class CoverageEvidenceStore {
   /** Load explicitly public geometry and separate readiness-only draft metadata. */
   async loadCurrentCoverageCatalog(options: {
     allowedLayerIds: readonly string[];
-    maxDocuments?: number;
   }): Promise<WarehouseCoverageCatalogSnapshot | null> {
     if (!this.url) return null;
-    const maxDocuments = options.maxDocuments ?? Number(process.env.ASSETS_WAREHOUSE_COVERAGE_MAX_DOCS ?? "200000");
-    if (!Number.isSafeInteger(maxDocuments) || maxDocuments < 1) throw new EvidenceStoreError("ASSETS_WAREHOUSE_COVERAGE_MAX_DOCS must be a positive integer", 500);
     const allowedLayerIds = safeWarehouseCatalogLayerIds(options.allowedLayerIds);
     if (!allowedLayerIds.length) return { layers: [], coverages: [], truncated: false };
     const allowedSet = new Set(allowedLayerIds);
@@ -802,57 +905,68 @@ export class CoverageEvidenceStore {
     const layers = layerHits.map((hit) => this.normalizeLayer(hit)).filter((layer): layer is WarehouseLayerSnapshot => Boolean(layer));
     if (!layers.length) return { layers: [], coverages: [], truncated: false };
     const coverages: WarehouseCoverageSnapshot[] = [];
+    const failures: NonNullable<WarehouseCoverageCatalogSnapshot["failures"]> = [];
     for (const layer of layers) {
-      const raw = layerHits.find(hit => (text(hit._source?.layer_id) ?? hit._id) === layer.layerId)?._source;
-      let indexedLayerIds = [layer.layerId];
-      if (raw?.layer_mode === "PARTITIONED" || layer.state === "PARTITIONED") {
-        const resolved = await this.resolveEvidenceLayers([layer.layerId]);
-        indexedLayerIds = resolved.bindings.map(binding => binding.indexedLayerId);
-        layer.scanScope = resolved.scanScopes[0];
-        layer.availableOrders = [...new Set(resolved.bindings.flatMap(binding => binding.availableOrders ?? []))].sort((a, b) => a - b);
-        layer.fileCount = resolved.bindings.reduce((total, binding) => total + (binding.fileCount ?? 0), 0);
-        layer.coverageCount = resolved.bindings.reduce((total, binding) => total + (binding.coverageCount ?? 0), 0);
-      }
-      if (!indexedLayerIds.length) continue;
-      let searchAfter: unknown[] | undefined;
-      let loadedForLayer = 0;
-      while (true) {
-        const remaining = maxDocuments - coverages.length;
-        const response = await this.search(this.coverageIndex, {
-          // Elasticsearch caps a single search response at 10,000 hits. Keep
-          // the page bounded and advance with the explicit sort tuple below.
-          size: Math.min(10_000, Math.max(1, remaining + 1)),
-          track_total_hits: true,
-          query: { bool: { filter: [{ terms: { layer_id: indexedLayerIds } }] } },
-          sort: [
-            { layer_id: "asc" },
-            { source_file_id: "asc" },
-            { healpix_order: "asc" },
-            { healpix_cell: "asc" },
-            { coverage_role: "asc" },
-          ],
-          ...(searchAfter ? { search_after: searchAfter } : {}),
-        });
-        const hits = response.hits?.hits ?? [];
-        const total = typeof response.hits?.total === "number" ? response.hits.total : response.hits?.total?.value;
-        const allowedHits = hits.filter(hit => {
-          const indexedLayerId = text(hit._source?.layer_id);
-          return Boolean(indexedLayerId && indexedLayerIds.includes(indexedLayerId) && !isBatchEvidenceLayerId(indexedLayerId));
-        });
-        if (allowedHits.length > remaining) throw new EvidenceStoreError(`Warehouse coverage catalog exceeds the configured ${maxDocuments} document limit`, 503);
-        for (const hit of allowedHits) {
-          const coverage = this.normalizeWarehouseCoverage(hit, layer.layerId);
-          if (coverage) coverages.push(coverage);
+      // Commit geometry only after every page of this logical layer succeeds.
+      const layerCells = new Map<string, WarehouseCoverageSnapshot>();
+      try {
+        const raw = layerHits.find(hit => (text(hit._source?.layer_id) ?? hit._id) === layer.layerId)?._source;
+        let indexedLayerIds = [layer.layerId];
+        if (raw?.layer_mode === "PARTITIONED" || layer.state === "PARTITIONED") {
+          const resolved = await this.resolveEvidenceLayers([layer.layerId]);
+          indexedLayerIds = resolved.bindings.map(binding => binding.indexedLayerId);
+          layer.scanScope = resolved.scanScopes[0];
+          layer.availableOrders = [...new Set(resolved.bindings.flatMap(binding => binding.availableOrders ?? []))].sort((a, b) => a - b);
+          layer.fileCount = resolved.bindings.reduce((total, binding) => total + (binding.fileCount ?? 0), 0);
+          layer.coverageCount = resolved.bindings.reduce((total, binding) => total + (binding.coverageCount ?? 0), 0);
         }
-        loadedForLayer += hits.length;
-        const hasMore = total !== undefined ? total > loadedForLayer : hits.length === Math.min(10_000, Math.max(1, remaining + 1));
-        if (!hasMore) break;
-        const lastSort = hits.at(-1)?.sort;
-        if (!lastSort?.length) throw new EvidenceStoreError(`Warehouse coverage page for ${layer.layerId} is missing a stable sort cursor`, 503);
-        searchAfter = lastSort;
+        if (!indexedLayerIds.length) continue;
+        const seenCursors = new Set<string>();
+        let after: Record<string, unknown> | undefined;
+        while (true) {
+          const response = await this.search(this.coverageIndex, {
+            size: 0,
+            _source: false,
+            track_total_hits: false,
+            query: { bool: { filter: [{ terms: { layer_id: indexedLayerIds } }] } },
+            aggs: { cells: { composite: {
+              size: 10_000,
+              sources: [
+                { layerId: { terms: { field: "layer_id" } } },
+                { order: { terms: { field: "healpix_order", missing_bucket: true } } },
+                { ipix: { terms: { field: "healpix_cell", missing_bucket: true } } },
+              ],
+              ...(after ? { after } : {}),
+            } } },
+          });
+          const aggregation = response.aggregations?.cells;
+          if (!Array.isArray(aggregation?.buckets)) throw new EvidenceStoreError("Warehouse coverage aggregation is missing", 503);
+          for (const bucket of aggregation.buckets) {
+            if (!indexedLayerIds.includes(String(bucket.key.layerId))) continue;
+            const order = number(bucket.key.order), ipix = number(bucket.key.ipix);
+            if (!Number.isSafeInteger(order) || order! < 0 || order! > 29
+              || !Number.isSafeInteger(ipix) || ipix! < 0 || ipix! >= 12 * 4 ** order!) {
+              throw new EvidenceStoreError("Warehouse coverage contains an invalid NESTED order/ipix", 503);
+            }
+            layerCells.set(`${order}:${ipix}`, { layerId: layer.layerId, order: order!, ipix: ipix! });
+          }
+          if (!aggregation.buckets.length) break;
+          after = aggregation.after_key;
+          if (!after) {
+            if (aggregation.buckets.length === 10_000) throw new EvidenceStoreError("Warehouse coverage aggregation is missing its pagination cursor", 503);
+            break;
+          }
+          const cursorKey = JSON.stringify(after);
+          if (seenCursors.has(cursorKey)) throw new EvidenceStoreError("Warehouse coverage aggregation cursor did not advance", 503);
+          seenCursors.add(cursorKey);
+        }
+        if (layer.coverageCount > 0 && !layerCells.size) throw new EvidenceStoreError("Warehouse coverage is empty despite nonzero scan counters", 503);
+        for (const cell of layerCells.values()) coverages.push(cell);
+      } catch (error) {
+        failures.push({ layerId: layer.layerId, reason: warehouseGeometryFailureReason(error) });
       }
     }
-    return { layers, coverages, truncated: false };
+    return { layers, coverages, truncated: failures.length > 0, ...(failures.length ? { failures } : {}) };
   }
 
   /** Read only bounded counters for known draft layers; this never reads coverage edges. */
@@ -943,7 +1057,10 @@ export class CoverageEvidenceStore {
       const { layerId, evidenceLayerId } = target;
       const source = sources.get(evidenceLayerId)!;
       if (source.state === "ACTIVE" && source.layer_mode !== "PARTITIONED") {
-        bindings.push({ layerId, evidenceLayerId, indexedLayerId: evidenceLayerId });
+        bindings.push({ layerId, evidenceLayerId, indexedLayerId: evidenceLayerId,
+          scanRunId: text(source.scan_run_id), sourceSnapshotSha256: text(source.source_snapshot_sha256),
+          ...(Array.isArray(source.available_orders) ? { availableOrders: source.available_orders.filter((value): value is number => Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= 29) } : {}),
+        });
         continue;
       }
       const scopeId = text(source.active_scope_id);
@@ -1005,28 +1122,13 @@ export class CoverageEvidenceStore {
     const productId = text(source.product_id);
     if (!layerId || !surveyId || !releaseId || !productId) return undefined;
     const availableOrders = Array.isArray(source.available_orders) ? source.available_orders.map(number).filter((value): value is number => value !== undefined) : [];
+    const scanRunId = text(source.scan_run_id);
     return {
       layerId, surveyId, releaseId, productId,
       modality: text(source.modality), coverageRole: text(source.coverage_role), entrypoint: text(source.entrypoint),
-      state: text(source.state) ?? "UNKNOWN", scanRunId: text(source.scan_run_id), sourceSnapshotSha256: text(source.source_snapshot_sha256),
+      state: text(source.state) ?? "UNKNOWN", scanRunId, ...(scanRunId ? { scanRunIds: [scanRunId] } : {}), sourceSnapshotSha256: text(source.source_snapshot_sha256),
       availableOrders: [...new Set(availableOrders)].sort((a, b) => a - b), fileCount: number(source.file_count) ?? 0,
       coverageCount: number(source.coverage_count) ?? 0, errorCount: number(source.error_count) ?? 0, updatedAt: text(source.updated_at),
-    };
-  }
-
-  private normalizeWarehouseCoverage(hit: SearchHit, layerId: string): WarehouseCoverageSnapshot | undefined {
-    const source = hit._source ?? {};
-    const order = number(source.healpix_order);
-    const ipix = number(source.healpix_cell);
-    if (order === undefined || ipix === undefined) return undefined;
-    const precision = text(source.precision) as ReversePrecision | undefined;
-    return {
-      layerId,
-      sourceFileId: text(source.source_file_id), sourceUri: text(source.source_uri), order, ipix,
-      coordinateFrame: text(source.coordinate_frame), nesting: text(source.nesting), coverageMethod: text(source.coverage_method),
-      coverageRole: text(source.coverage_role), modality: text(source.modality),
-      precision: precision && ["exact", "estimated", "entrypoint-only", "truncated"].includes(precision) ? precision : undefined,
-      sourceOrder: number(source.source_order),
     };
   }
 

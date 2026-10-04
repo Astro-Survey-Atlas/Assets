@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { coverageCatalogFromWarehouse, isWarehouseFilePartitionLayer, type CoverageCellLayer } from "../server/coverage.js";
+import { coverageCatalogFromWarehouse, isWarehouseFilePartitionLayer, updateCoverageNativeUnitState, withCoverageRevisions, type CoverageCellLayer } from "../server/coverage.js";
 import { batchEvidenceLayerId } from "../server/scan-batch.js";
 import type { WarehouseCoverageCatalogSnapshot } from "../server/evidence-store.js";
 import { footprintManifest, type CoverageCatalog } from "../site/src/atlas-coverage-globe.js";
@@ -53,6 +53,57 @@ test("Warehouse-backed HEALPix file partitions are distinct from native spatial-
   assert.equal(isWarehouseFilePartitionLayer({
     sourceUnitIndex: { status: "estimated", unitKind: "tract/patch", notes: "" },
   }), false);
+});
+
+test("failed Warehouse geometry preserves verified cells while other layers update", () => {
+  const published = layer("failed", "desi", [1]);
+  const previous = layer("failed", "desi", [2]);
+  const base = { schemaVersion: 2, coordinateFrame: "ICRS" as const, ordering: "NESTED" as const,
+    tileScheme: "ipix-range-4096" as const, layers: [], records: new Map([[published.layerId, published]]) };
+  const snapshot = {
+    layers: [warehouseLayer("failed", "desi", published.productId), warehouseLayer("loaded", "euclid")],
+    coverages: [{ layerId: "failed", order: 8, ipix: 999 }, { layerId: "loaded", order: 8, ipix: 100 }],
+    failures: [{ layerId: "failed", reason: "HTTP 503" }], truncated: true,
+  };
+  const warm = coverageCatalogFromWarehouse(base, snapshot, new Map([[previous.layerId, previous]]));
+  assert.deepEqual(warm.records.get("failed")?.cells.get(4), [2]);
+  assert.equal(warm.records.get("failed")?.cells.has(8), false);
+  assert.deepEqual(warm.records.get("loaded")?.cells.get(8), [100]);
+  const cold = coverageCatalogFromWarehouse(base, snapshot);
+  assert.deepEqual(cold.records.get("failed")?.cells.get(4), [1]);
+  const incompatible = coverageCatalogFromWarehouse(base, snapshot, new Map([[previous.layerId, { ...previous, releaseId: "different-release" }]]));
+  assert.deepEqual(incompatible.records.get("failed")?.cells.get(4), [1]);
+});
+
+test("public coverage layers reflect native index state attached after catalog construction", () => {
+  const source = layer("gaia-dr3", "gaia", [190]);
+  const initial = withCoverageRevisions({
+    schemaVersion: 2 as const,
+    coordinateFrame: "ICRS" as const,
+    ordering: "NESTED" as const,
+    tileScheme: "ipix-range-4096" as const,
+    layers: [],
+    records: new Map([[source.layerId, source]]),
+  });
+
+  updateCoverageNativeUnitState(initial, source.layerId, {
+    status: "estimated",
+    unitKind: "healpix-range",
+    notes: "Reviewed native file roster.",
+  }, "native-group-revision");
+
+  const publicLayer = initial.layers.find(candidate => candidate.layerId === source.layerId)!;
+  assert.equal(initial.records.get(source.layerId)?.sourceUnitIndex?.status, "estimated");
+  assert.equal(publicLayer.sourceUnitIndex?.status, "estimated");
+  assert.equal(publicLayer.sourceUnitIndex?.unitKind, "healpix-range");
+  assert.equal(publicLayer.nativeUnitIndexRevision, "native-group-revision");
+
+  updateCoverageNativeUnitState(initial, source.layerId, {
+    status: "entrypoint-only",
+    notes: "No active binding.",
+  });
+  assert.equal(initial.records.get(source.layerId)?.nativeUnitIndexRevision, undefined);
+  assert.equal(publicLayer.nativeUnitIndexRevision, undefined);
 });
 
 test("batch evidence does not add a public layer or replace its reviewed footprint", () => {

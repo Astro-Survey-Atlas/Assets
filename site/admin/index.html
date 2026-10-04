@@ -51,6 +51,7 @@
               <form id="connector-form" method="dialog" class="admin-form">
                 <label><span>名称</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" maxlength="63" required placeholder="survey-source-source" /></label>
                 <label><span>类型</span><select name="type" id="connector-type"><option value="oss">OSS 对象存储</option><option value="s3">S3 兼容对象存储</option><option value="local">Local 本地存储</option></select></label>
+                <label><span>图标 URL <small>可选；创建后也可上传或修改图标</small></span><input name="iconUrl" placeholder="https://… 或 /assets/…" spellcheck="false" /></label>
                 <label data-connector-object><span>Endpoint</span><input name="endpoint" type="url" placeholder="https://object.example" /></label>
                 <label data-connector-object><span>Region</span><input name="region" placeholder="cn-hangzhou-zjy-d01" /></label>
                 <label data-connector-object><span>Bucket</span><input name="bucket" placeholder="data-and-computing" /></label>

@@ -23,6 +23,19 @@ export interface PublicationSchedulerOptions {
   nativeUnits?: NativeUnitController;
 }
 
+/** The owner keeps the lease while its executor is alive, including synchronous
+ * SQLite commit/integrity checks that cannot emit a child event-loop heartbeat. */
+export function maintainNativeExecutorLease(tasks: PublicationTaskStore, task: PublicationTask, ownsExecutor: () => boolean): () => void {
+  const timer = setInterval(() => {
+    const current = tasks.get(task.id);
+    if (!ownsExecutor() || current?.phase !== "running" || current.attemptId !== task.attemptId) return;
+    try { tasks.heartbeat(task.id, task.attemptId!); }
+    catch (error) { console.error("Native executor lease renewal deferred", error instanceof Error ? error.message : "unknown error"); }
+  }, 15_000);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
 /** The backend is the sole queue owner and authority pointer writer. Executors only
  * calculate/upload immutable candidates and report through fenced IPC messages. */
 export class PublicationScheduler implements PublicationRunRepository {
@@ -276,6 +289,7 @@ export class PublicationScheduler implements PublicationRunRepository {
     }
     const child = fork(new URL(import.meta.url.endsWith(".ts") ? "./native-unit-executor.ts" : "./native-unit-executor.js", import.meta.url), [], { stdio: ["ignore", "inherit", "inherit", "ipc"] });
     this.#child = child;
+    const stopLease = maintainNativeExecutorLease(this.tasks, task, () => this.#child === child && this.#active?.attemptId === task.attemptId && child.exitCode === null && child.signalCode === null);
     let tail = Promise.resolve();
     child.on("message", (message: { operation: string; message?: string; result?: NativeWorkerResult }) => {
       tail = tail.then(async () => {
@@ -292,7 +306,7 @@ export class PublicationScheduler implements PublicationRunRepository {
       });
     });
     this.#childDone = new Promise<void>(resolve => {
-      child.once("exit", () => { void tail.finally(async () => {
+      child.once("exit", () => { stopLease(); void tail.finally(async () => {
         if (this.#child !== child) return;
         if (this.#cancelling.has(task.id)) this.tasks.cancelStopped(task.id);
         this.#child = undefined; this.#active = undefined;

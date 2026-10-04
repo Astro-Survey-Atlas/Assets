@@ -36,6 +36,11 @@
         "pullPolicy"
       ]
     },
+    "startupProbeFailureThreshold": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 240
+    },
     "service": {
       "type": "object",
       "properties": {
@@ -270,8 +275,10 @@
       "properties": {
         "elasticsearchUrl": {
           "type": "string",
-          "format": "uri",
-          "minLength": 1
+          "anyOf": [
+            { "format": "uri", "minLength": 1 },
+            { "maxLength": 0 }
+          ]
         },
         "layerIndex": {
           "type": "string",

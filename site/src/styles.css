@@ -59,6 +59,12 @@
   --ochre: #f01951;
   --coral: #f01951;
   --blue: #6974d5;
+  --access-verified: #34d399;
+  --access-listed: #38bdf8;
+  --access-derived: #fbbf24;
+  --access-unavailable: #fb7185;
+  --access-internal: #fbbf24;
+  --access-note: #7dd3fc;
   --brand-gradient: linear-gradient(135deg, #2c3792 0%, #6974d5 52%, #f01951 100%);
   --home-scroll-progress: 0;
 
@@ -85,6 +91,12 @@
   --ochre: #f01951;
   --coral: #c70f3e;
   --blue: #5965c7;
+  --access-verified: #047857;
+  --access-listed: #0369a1;
+  --access-derived: #b45309;
+  --access-unavailable: #be123c;
+  --access-internal: #b45309;
+  --access-note: #0369a1;
   --brand-gradient: linear-gradient(135deg, #2c3792 0%, #5965c7 52%, #f01951 100%);
   --home-scroll-progress: 0;
 
@@ -338,12 +350,56 @@ button.command-button.overlap-evidence-more-button { height: 30px; min-height: 3
 .overlap-spatial-unit-info svg, .overlap-precision-info svg { width: 14px; height: 14px; }
 .overlap-spatial-unit-info:focus-visible, .overlap-precision-info:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .overlap-spatial-unit-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; min-width: 0; color: var(--muted); font: 600 9px/1.4 var(--font-mono), monospace; }
-.overlap-spatial-unit-modality { display: inline-flex; align-items: center; gap: 5px; padding: 2px 6px; border-left: 2px solid var(--blue); background: color-mix(in srgb, var(--blue) 11%, transparent); color: var(--ink); }
-.overlap-spatial-unit-modality .button-icon { display: inline-flex; color: var(--blue); }
+.overlap-spatial-unit-modality, .overlap-drawer-component-modality { --overlap-modality-color: var(--muted); }
+:is(.overlap-spatial-unit-modality, .overlap-drawer-component-modality)[data-modality="imaging"] { --overlap-modality-color: #60a5fa; }
+:is(.overlap-spatial-unit-modality, .overlap-drawer-component-modality)[data-modality="spectroscopy"] { --overlap-modality-color: #c084fc; }
+:is(.overlap-spatial-unit-modality, .overlap-drawer-component-modality)[data-modality="redshift"] { --overlap-modality-color: #fb923c; }
+:is(.overlap-spatial-unit-modality, .overlap-drawer-component-modality)[data-modality="catalog"] { --overlap-modality-color: #34d399; }
+:is(.overlap-spatial-unit-modality, .overlap-drawer-component-modality)[data-modality="ultraviolet"] { --overlap-modality-color: #818cf8; }
+:is(.overlap-spatial-unit-modality, .overlap-drawer-component-modality)[data-modality="infrared"] { --overlap-modality-color: #f472b6; }
+:is(.overlap-spatial-unit-modality, .overlap-drawer-component-modality)[data-modality="radio"] { --overlap-modality-color: #22d3ee; }
+:is(.overlap-spatial-unit-modality, .overlap-drawer-component-modality)[data-modality="photometry"] { --overlap-modality-color: #a3e635; }
+:is(.overlap-spatial-unit-modality, .overlap-drawer-component-modality)[data-modality="time-domain"] { --overlap-modality-color: #facc15; }
+:is(.overlap-spatial-unit-modality, .overlap-drawer-component-modality)[data-modality="integral-field"] { --overlap-modality-color: #fb7185; }
+:is(.overlap-spatial-unit-modality, .overlap-drawer-component-modality)[data-modality="simulation"] { --overlap-modality-color: #d6a15d; }
+.overlap-spatial-unit-modality { display: inline-flex; align-items: center; gap: 5px; padding: 2px 6px; border-left: 2px solid var(--overlap-modality-color); background: color-mix(in srgb, var(--overlap-modality-color) 17%, var(--paper-bright)); color: var(--ink); }
+.overlap-spatial-unit-modality .button-icon { display: inline-flex; color: var(--overlap-modality-color); }
 .overlap-spatial-unit-modality svg { width: 14px; height: 14px; }
 .overlap-precision-indicator { display: inline-flex; align-items: center; gap: 3px; color: var(--ink); font: 600 9px/1.4 var(--font-mono), monospace; white-space: nowrap; }
 .overlap-spatial-unit-match { color: var(--muted); }
 .overlap-evidence-file .overlap-spatial-unit-file-name { color: var(--muted); font: 600 8px/1.3 var(--font-mono), monospace; overflow-wrap: anywhere; }
+.overlap-evidence-file .overlap-spatial-unit-access-meta { display: grid; gap: 3px; min-width: 0; color: var(--muted); font: 600 8px/1.4 var(--font-mono), monospace; overflow-wrap: anywhere; }
+.overlap-access-meta-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
+.overlap-access-flag { display: inline-flex; flex: 0 0 18px; width: 18px; height: 18px; align-items: center; justify-content: center; }
+.overlap-access-flag img { display: block; width: 18px; height: 18px; object-fit: contain; }
+.overlap-access-flag > .button-icon, .overlap-access-flag svg { width: 16px; height: 16px; }
+.overlap-scanned-sources { display: grid; gap: 7px; min-width: 0; }
+.overlap-scanned-source { display: grid; gap: 4px; min-width: 0; padding-top: 7px; border-top: 1px solid rgba(70, 97, 107, .25); overflow-wrap: anywhere; }
+.overlap-scanned-provenance { min-width: 0; color: var(--muted); font: 600 8px/1.4 var(--font-mono), monospace; }
+.overlap-scanned-provenance > summary { cursor: pointer; }
+.overlap-scanned-provenance code { display: block; margin-top: 3px; overflow-wrap: anywhere; white-space: normal; }
+.overlap-access-status[data-status="scanned"] { color: var(--teal); }
+.overlap-access-status[data-status="internal"] { color: var(--ochre); }
+.warehouse-geometry-notice { min-width: 0; padding: 7px 9px; border-left: 2px solid var(--ochre); background: var(--paper); color: var(--ink); text-align: left; font: 500 10px/1.45 var(--font-mono), monospace; overflow-wrap: anywhere; pointer-events: auto; }
+.warehouse-geometry-notice summary { color: var(--ochre); cursor: pointer; }
+.warehouse-geometry-notice p { margin: 6px 0; }
+.warehouse-geometry-notice ul { margin: 6px 0 0; padding-left: 15px; }
+.overlap-access-status { display: inline-flex; align-items: center; gap: 3px; max-width: 100%; padding: 1px 5px; border: 1px solid currentColor; border-radius: 3px; font: 700 8px/1.3 var(--font-mono), monospace; overflow-wrap: anywhere; }
+.overlap-access-status .button-icon { display: inline-flex; flex: 0 0 12px; width: 12px; height: 12px; }
+.overlap-access-status svg { width: 12px; height: 12px; }
+.overlap-access-status[data-status="verified"] { color: var(--access-verified); background: color-mix(in srgb, var(--access-verified) 10%, transparent); }
+.overlap-access-status[data-status="source-listed"] { color: var(--access-listed); background: color-mix(in srgb, var(--access-listed) 10%, transparent); }
+.overlap-access-status[data-status="rule-derived"] { color: var(--access-derived); background: color-mix(in srgb, var(--access-derived) 10%, transparent); }
+.overlap-access-status[data-status="entrypoint-only"] { color: var(--muted); background: color-mix(in srgb, var(--muted) 8%, transparent); }
+.overlap-access-status[data-status="unavailable"] { color: var(--access-unavailable); background: color-mix(in srgb, var(--access-unavailable) 10%, transparent); }
+.overlap-access-meta-details { color: var(--muted); font: 600 8px/1.35 var(--font-mono), monospace; overflow-wrap: anywhere; }
+.overlap-warehouse-scan-note { display: flex; align-items: flex-start; gap: 5px; color: var(--muted); font: 600 9px/1.45 var(--font-mono), monospace; }
+.overlap-warehouse-scan-note .button-icon { display: inline-flex; flex: 0 0 13px; color: var(--access-note); }
+.overlap-warehouse-scan-note svg { width: 13px; height: 13px; }
+.overlap-warehouse-internal-source { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; padding: 6px 8px; border: 1px solid color-mix(in srgb, var(--access-internal) 65%, var(--line-strong)); border-left: 3px solid var(--access-internal); background: color-mix(in srgb, var(--access-internal) 7%, transparent); }
+.overlap-warehouse-internal-source img { flex: 0 0 18px; width: 18px; height: 18px; object-fit: contain; }
+.overlap-warehouse-internal-source strong { min-width: 0; color: var(--ink); font: 700 9px/1.4 var(--font-mono), monospace; overflow-wrap: anywhere; }
+.overlap-warehouse-internal-source small { color: var(--muted); font: 600 8px/1.4 var(--font-mono), monospace; }
 .overlap-evidence-file small, .overlap-evidence-file code { overflow-wrap: anywhere; color: var(--muted); font: 600 8px/1.35 var(--font-mono), monospace; }
 .overlap-evidence-file a { min-width: 0; max-width: 100%; overflow-wrap: anywhere; color: var(--teal); font: 700 8px/1.3 var(--font-mono), monospace; text-decoration: none; }
 .overlap-source-locator { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 5px; min-width: 0; }
@@ -1317,7 +1373,7 @@ footer > span:last-child { margin-left: auto; color: var(--teal); text-shadow: v
 .coverage-detail-panel.is-overlap-panel { position: fixed; }
 .overlap-expand-button { position: absolute; top: 8px; left: 0; width: 30px; min-height: 30px; padding: 0; color: var(--teal); background: rgba(13, 24, 33, .82); }
 .overlap-expand-button:hover, .overlap-expand-button:focus-visible { border-color: var(--teal); background: rgba(16, 47, 52, .9); outline: 0; }
-.overlap-drawer { position: fixed; z-index: 56; top: 68px; right: 0; bottom: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: min(1120px, max(680px, 70vw)); height: auto; max-height: none; border-left: 1px solid rgba(44, 55, 146, .55); background: rgba(5, 10, 16, .97); box-shadow: -18px 0 55px rgba(0, 0, 0, .42); backdrop-filter: blur(18px) saturate(1.08); }
+.overlap-drawer { position: fixed; z-index: 56; top: 68px; right: 0; bottom: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); width: min(1120px, max(680px, 70vw)); height: auto; max-height: none; border-left: 1px solid rgba(44, 55, 146, .55); background: rgba(5, 10, 16, .97); box-shadow: -18px 0 55px rgba(0, 0, 0, .42); backdrop-filter: blur(18px) saturate(1.08); }
 .overlap-drawer-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 22px 26px 17px; border-bottom: 1px solid rgba(70, 97, 107, .72); }
 .overlap-drawer-heading { display: grid; gap: 7px; min-width: 0; }
 .overlap-drawer-heading strong { overflow: hidden; color: var(--ink); font: 700 18px/1.15 var(--font-mono), monospace; text-overflow: ellipsis; white-space: nowrap; }
@@ -1326,10 +1382,14 @@ footer > span:last-child { margin-left: auto; color: var(--teal); text-shadow: v
 .overlap-drawer-components > strong { align-self: center; flex: 0 0 auto; margin-right: 4px; color: var(--muted); font: 700 9px/1.3 var(--font-mono), monospace; }
 .overlap-drawer-component-list { display: flex; align-items: stretch; flex: 1 1 auto; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
 .overlap-component-pagination-drawer { align-self: center; flex: 0 0 auto; margin-left: auto; }
-.overlap-drawer-component-button { display: grid; flex: 0 0 auto; gap: 4px; min-width: 90px; padding: 8px 10px; border: 1px solid rgba(70, 97, 107, .8); background: rgba(13, 24, 33, .58); color: var(--muted); text-align: left; cursor: pointer; font: 700 9px/1.2 var(--font-mono), monospace; }
+.overlap-drawer-component-button { display: grid; flex: 0 0 112px; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 4px; width: 112px; min-width: 112px; min-height: 68px; padding: 8px 10px; border: 1px solid rgba(70, 97, 107, .8); background: rgba(13, 24, 33, .58); color: var(--muted); text-align: left; cursor: pointer; font: 700 9px/1.2 var(--font-mono), monospace; }
+.overlap-drawer-component-button > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .overlap-drawer-component-button small { color: inherit; font: 600 8px/1.3 var(--font-mono), monospace; }
+.overlap-drawer-component-modalities { display: flex; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: 3px 5px; min-width: 0; min-height: 16px; }
+.overlap-drawer-component-modality { display: inline-flex; flex: 0 0 14px; width: 14px; height: 14px; align-items: center; justify-content: center; color: var(--overlap-modality-color); }
+.overlap-drawer-component-modality svg { display: block; width: 14px; height: 14px; }
 .overlap-drawer-component-button:hover, .overlap-drawer-component-button:focus-visible, .overlap-drawer-component-button.is-active { border-color: var(--teal); background: rgba(16, 47, 52, .9); color: var(--teal); outline: 0; }
-.overlap-drawer-content { max-height: 405px; min-height: 0; overflow: auto; padding: 12px 26px 20px; scrollbar-width: thin; }
+.overlap-drawer-content { min-height: 0; overflow: auto; padding: 12px 26px 20px; scrollbar-width: thin; }
 .overlap-drawer-loading { display: flex; align-items: center; gap: 10px; min-height: 120px; color: var(--muted); font: 700 10px/1.45 var(--font-mono), monospace; }
 .overlap-drawer-loading > span { width: 16px; height: 16px; flex: 0 0 auto; border: 2px solid rgba(70, 97, 107, .75); border-top-color: var(--teal); border-radius: 50%; animation: spin 800ms linear infinite; }
 .overlap-drawer-error { color: var(--coral); font: 700 10px/1.5 var(--font-mono), monospace; }
@@ -1340,6 +1400,10 @@ footer > span:last-child { margin-left: auto; color: var(--teal); text-shadow: v
 .overlap-drawer-content > .overlap-drawer-section:first-child .overlap-drawer-grid { row-gap: 4px; }
 .overlap-drawer-content > .overlap-drawer-section:nth-child(2) > .overlap-evidence-plan { margin-top: 2px; padding-top: 2px; }
 .overlap-drawer-section > h3 { margin: 0; color: var(--ochre); font: 700 10px/1.2 var(--font-mono), monospace; letter-spacing: .02em; }
+.overlap-drawer-results > h3 { overflow-wrap: anywhere; }
+.overlap-assets-evidence > summary { color: var(--ochre); cursor: pointer; font: 700 10px/1.4 var(--font-mono), monospace; }
+.overlap-assets-evidence > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.overlap-assets-evidence[open] > summary { color: var(--ink); }
 .overlap-drawer-summary { margin: 0; color: var(--teal); font: 700 11px/1.5 var(--font-mono), monospace; }
 .overlap-drawer-copy { margin: 0; color: var(--muted); font: 600 10px/1.55 var(--font-mono), monospace; }
 .overlap-drawer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 18px; margin: 0; }
@@ -1393,7 +1457,7 @@ body[data-overlap-drawer="open"][data-overlap-panels="dismissed"] .selection-que
   .overlap-drawer-header { padding: 18px 18px 14px; }
   .overlap-drawer-components { gap: 5px; padding-right: 18px; padding-left: 18px; }
   .overlap-drawer-components > strong { margin-right: 0; }
-  .overlap-drawer-component-button { min-width: 78px; padding: 7px 8px; }
+  .overlap-drawer-component-button { flex-basis: 96px; width: 96px; min-width: 96px; padding: 7px 8px; }
   .overlap-drawer-content { padding: 12px 18px 18px; }
 }
 @media (max-width: 540px) {
@@ -1415,3 +1479,4 @@ body[data-overlap-drawer="open"][data-overlap-panels="dismissed"] .selection-que
 .overlap-download-button { width: 100%; min-width: 0; justify-content: flex-start; text-align: left; }
 .overlap-download-button .button-icon { flex: 0 0 auto; }
 .overlap-download-button .button-icon svg { width: 15px; height: 15px; }
+.overlap-scan-connector { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; overflow-wrap: anywhere; }

@@ -4,17 +4,19 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { gunzipSync } from "node:zlib";
-import { acquireHstPublicImageSnapshot, parseHstMetadataRows } from "../scripts/acquire-hst-public-image-observations.js";
+import { acquireHstPublicImageSnapshot } from "../scripts/acquire-hst-public-image-observations.js";
 import { createArtifactStoreFromProcess } from "./artifact-store.js";
 import { archiveNativeFile, nativeFile, restoreNativeFile } from "./native-unit-archive.js";
 import { buildNativeDelta } from "./native-unit-delta.js";
 import { HstObservationIndex } from "./hst-observation-index.js";
+import { hstSnapshotRows, loadHstSnapshot } from "./hst-snapshot.js";
 import { cellsForStcs } from "./hst-image-lookup.js";
 import { inspectSourceUnitInput, SourceUnitStore } from "./source-units.js";
 import { SOURCE_UNIT_DISK_INDEX_VERSION } from "./source-unit-disk-index.js";
+import { importSurveySnapshot, isSurveyNativeAdapter, SurveyNativeIndex } from "./survey-native-index.js";
 import { getNativeSlot, setNativeSlot } from "./native-unit-sources.js";
-import { acquireEroTargetSnapshot, parseEroTargetSnapshot } from "./ero-target-index.js";
+import { acquireEroTargetSnapshot, eroFramesForProduct, parseEroTargetSnapshot } from "./ero-target-index.js";
+import { metadataFetch } from "./metadata-fetch.js";
 import { bindingRevision, nativeDigest, nativeEvidencePath, nativeGroupId, nativeMetadataUrl, nativeNow, type NativeFile, type NativeGroup, type NativeReport, type NativeSnapshot, type NativeSource, type NativeWorkerRequest, type NativeWorkerResult } from "./native-unit-model.js";
 
 type Document = Record<string, any>;
@@ -31,25 +33,17 @@ export function nativeDatabaseKey(file: string): string {
 
 async function hstSnapshot(root: string, source: NativeSource, manifestRef: string, snapshotRoot = ""): Promise<NativeSnapshot> {
   const manifestFile = await nativeFile(root, manifestRef, source.files[0]?.sha256 ? source.files[0] : undefined);
-  const manifest = JSON.parse(await readFile(nativeEvidencePath(root, manifestRef), "utf8")) as Document;
-  if (manifest.kind !== "mast-hst-public-image-observations" || !Array.isArray(manifest.pages) || manifest.pages.length !== manifest.pageCount) throw new Error("HST input is not a complete public CAOM metadata snapshot");
-  const filters = manifest.query?.filters as Array<{ paramName: string; values: string[] }>;
-  for (const [key, value] of [["obs_collection", "HST"], ["dataproduct_type", "image"], ["dataRights", "PUBLIC"]]) if (!filters?.some(filter => filter.paramName === key && filter.values?.length === 1 && filter.values[0] === value)) throw new Error("HST snapshot scope must be public HST images");
-  const files = [manifestFile]; let rows = 0;
-  for (const page of manifest.pages) {
-    const ref = snapshotRoot ? `${snapshotRoot}/${page.path}` : page.path;
-    files.push(await nativeFile(root, ref, page));
-    const value = JSON.parse(gunzipSync(await readFile(nativeEvidencePath(root, ref)), { maxOutputLength: 32 * 1024 * 1024 }).toString("utf8")) as Document;
-    const data = parseHstMetadataRows(value) as Document[];
-    if (data.length !== page.rows || value.paging?.page !== page.page || value.status !== "COMPLETE") throw new Error("HST metadata page is incomplete");
-    const allowed = new Set(String(manifest.query.columns).split(",").map(column => column.trim()));
-    for (const row of data) {
-      if (row.obs_collection !== "HST" || row.dataproduct_type !== "image" || row.dataRights !== "PUBLIC" || !row.obsid || Object.keys(row).some(key => !allowed.has(key))) throw new Error("HST pages must contain only public image observation metadata");
-    }
-    rows += data.length;
-  }
-  if (rows !== manifest.rowCount) throw new Error("HST page row count disagrees with its locked manifest");
-  return { id: nativeDigest({ sourceId: source.id, sourceRevision: source.revision, sha256: manifestFile.sha256 }), sourceId: source.id, sourceRevision: source.revision, sourceUrl: source.sourceUrl, capturedAt: manifest.capturedAt, scope: source.scope, files, rowCount: rows, hstRoot: snapshotRoot, hstManifest: snapshotRoot ? manifestRef.slice(snapshotRoot.length + 1) : manifestRef };
+  const snapshotPath = snapshotRoot ? nativeEvidencePath(root, snapshotRoot) : root;
+  const relativeManifest = snapshotRoot ? manifestRef.slice(snapshotRoot.length + 1) : manifestRef;
+  const plan = await loadHstSnapshot(snapshotPath, relativeManifest, manifestFile.sha256, true);
+  const files: NativeFile[] = [];
+  for (const file of plan.files) files.push(await nativeFile(root, snapshotRoot ? `${snapshotRoot}/${file.path}` : file.path, file));
+  let rows = 0;
+  for await (const data of hstSnapshotRows(snapshotPath, plan)) rows += data.length;
+  if (rows !== plan.rowCount) throw new Error("HST page row count disagrees with its locked manifest");
+  return { id: nativeDigest({ sourceId: source.id, sourceRevision: source.revision, sha256: manifestFile.sha256 }), sourceId: source.id,
+    sourceRevision: source.revision, sourceUrl: source.sourceUrl, capturedAt: plan.capturedAt, scope: source.scope,
+    files, rowCount: rows, hstRoot: snapshotRoot, hstManifest: relativeManifest };
 }
 
 async function baselineSnapshot(request: NativeWorkerRequest, source: NativeSource): Promise<NativeSnapshot> {
@@ -64,7 +58,7 @@ async function baselineSnapshot(request: NativeWorkerRequest, source: NativeSour
 }
 
 async function downloadMetadata(url: URL, ref: string, root: string, init: RequestInit = {}): Promise<NativeFile> {
-  const response = await fetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(120_000) });
+  const response = await metadataFetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(120_000) });
   if (!response.ok || !response.body) throw new Error(`Official metadata request returned HTTP ${response.status}`);
   const destination = nativeEvidencePath(root, ref); await mkdir(path.dirname(destination), { recursive: true });
   const staging = destination + ".part"; let size = 0;
@@ -77,6 +71,11 @@ async function downloadMetadata(url: URL, ref: string, root: string, init: Reque
 async function acquireSnapshot(request: NativeWorkerRequest, progress: (message: string) => void): Promise<NativeSnapshot> {
   const source = request.source!;
   const prefix = `managed/native-units/inputs/${request.taskId}`;
+  if (isSurveyNativeAdapter(source.adapter)) {
+    const file = request.operation.importFiles?.[0];
+    if (request.operation.operation !== "import" || !file || request.operation.importFiles?.length !== 1) throw new Error("Acquire official metadata with the registered survey collector, then import one staged manifest with its locked dependencies");
+    return importSurveySnapshot(request.evidenceRoot, file, source);
+  }
   if (source.adapter === "entrypoint") {
     let file: NativeFile;
     if (request.operation.importFiles) {
@@ -106,7 +105,7 @@ async function acquireSnapshot(request: NativeWorkerRequest, progress: (message:
       return hstSnapshot(request.evidenceRoot, { ...source, files: [manifest] }, manifest.ref, prefix);
     }
     const root = nativeEvidencePath(request.evidenceRoot, prefix);
-    await acquireHstPublicImageSnapshot(root, { concurrency: 2, progress });
+    await acquireHstPublicImageSnapshot(root, { concurrency: 4, progress });
     const fresh = { ...source, files: [] };
     return hstSnapshot(request.evidenceRoot, fresh, `${prefix}/source-units/hst-public-image-pages/manifest.json`, prefix);
   }
@@ -167,7 +166,7 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
     try {
       report.counts.nativeMemberships = Number((db.prepare("SELECT count(*) AS total FROM source_layer_units").get() as { total: number }).total);
       report.counts.nativeGeometries = Number((db.prepare("SELECT count(*) AS total FROM source_geometries").get() as { total: number }).total);
-      for (const binding of group.bindings.filter(binding => binding.surveyId !== "hst" && binding.unitKind !== "target")) {
+      for (const binding of group.bindings.filter(binding => !["hst", "gaia", "sdss", "galex", "jwst"].includes(binding.surveyId) && binding.unitKind !== "target")) {
         const identity = `identity:${[binding.surveyId, binding.releaseId, binding.product].map(encodeURIComponent).join("/")}`;
         const row = db.prepare(`SELECT g.coarse_pixel AS pixel FROM source_aliases a JOIN source_layers l ON l.layer_key=a.layer_key JOIN source_layer_units m ON m.layer_key=l.layer_key JOIN source_geometries g ON g.geometry_key=l.geometry_key AND g.unit_id=m.unit_id WHERE a.alias IN (?,?) LIMIT 1`).get(binding.layerId, identity) as { pixel: number } | undefined;
         if (!row) throw new Error(`No native membership exists for product binding ${binding.layerId}`);
@@ -178,6 +177,32 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
       }
     } finally { db.close(); store.close(); }
   }
+  if (group.survey) {
+    await nativeFile(request.evidenceRoot, group.survey.file.ref, group.survey.file);
+    const index = SurveyNativeIndex.open(nativeEvidencePath(request.evidenceRoot, group.survey.file.ref), group.survey.buildKey);
+    try {
+      for (const summary of index.summaries) {
+        report.counts[`${summary.sourceId}:units`] = summary.unitCount;
+        report.counts[`${summary.sourceId}:indexedRows`] = summary.indexedRows;
+        report.counts[`${summary.sourceId}:excludedRows`] = summary.excludedRows;
+        if (!summary.inventoryComplete) report.gaps.push(`${summary.sourceId}:partial-inventory`);
+        if (summary.excludedRows) report.gaps.push(`${summary.sourceId}:unsupported-rows`);
+        if (summary.adapter === "gaia-healpix-range") report.gaps.push("gaia-source-id-position-estimated", "gaia-science-content-and-checksums-unverified");
+        if (summary.adapter === "sdss-field") report.gaps.push("sdss-window-bounds-not-image-wcs", "sdss-frame-uris-unverified");
+        if (summary.adapter === "mast-observation") report.gaps.push(`${summary.sourceId}:valid-pixel-masks-unverified`);
+        report.checks.push({ id: `survey-source:${summary.sourceId}`, passed: true, detail: `${summary.unitCount} native identities in ${summary.indexedRows} supported metadata rows; ICRS/NESTED; ${summary.excludedRows} excluded rows` });
+      }
+      for (const binding of group.bindings.filter(binding => ["gaia", "sdss", "galex", "jwst"].includes(binding.surveyId))) {
+        const cells = index.sampleCells(binding);
+        if (!cells.length) throw new Error(`No release/product-scoped native metadata exists for ${binding.layerId}`);
+        const result = index.lookup(binding, 4, cells.slice(0, 1), 3);
+        const sample = result.units[0];
+        if (!sample) throw new Error(`Survey native geometry probe failed for ${binding.layerId}`);
+        report.checks.push({ id: `binding:${binding.layerId}`, passed: true, detail: `${sample.unitKind} identity and original partition/footprint resolve locally with frozen release and product selectors` });
+        report.samples.push({ layerId: binding.layerId, unitKind: sample.unitKind, unitId: sample.unitId, order: 4, cells: sample.matchingCells, precision: sample.precision, uris: sample.accessUris?.map(access => access.uri) ?? [], sRegion: sample.sRegion });
+      }
+    } finally { index.close(); }
+  } else if (group.bindings.some(binding => ["gaia", "sdss", "galex", "jwst"].includes(binding.surveyId))) throw new Error("New survey bindings require their locked native index");
   if (group.hst) {
     await nativeFile(request.evidenceRoot, group.hst.file.ref, group.hst.file);
     const root = group.hst.root ? nativeEvidencePath(request.evidenceRoot, group.hst.root) : request.evidenceRoot;
@@ -186,6 +211,11 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
     try {
       report.counts.hstObservations = index.summary.observationCount;
       report.counts.hstExcludedRows = index.summary.excludedRows;
+      report.counts.hstSupplementRows = index.summary.supplementRows;
+      if (index.summary.partialRefresh) {
+        report.gaps.push("hst-partial-refresh");
+        report.checks.push({ id: "hst-supplement-scope", passed: true, detail: `Historical input ${index.summary.baselineSnapshotSha256} captured ${index.summary.baselineCapturedAt}, plus ${index.summary.supplementRows} selected fresh metadata rows. This is a bounded supplement, not a complete current inventory refresh.` });
+      }
       if (index.summary.excludedRows) report.gaps.push("hst-unsupported-frames");
       report.checks.push({ id: "hst-local-index", passed: true, detail: `${index.summary.observationCount} observations; ${index.summary.excludedRows} rows retained as excluded evidence` });
       for (const binding of group.bindings.filter(binding => binding.surveyId === "hst")) {
@@ -220,13 +250,28 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
     report.counts.eroTargets = index.targets.length;
     report.counts.eroExcludedTargets = index.excludedTargets;
     if (index.excludedTargets) report.gaps.push("euclid-ero-footprint-association-missing");
+    const pixels = Array.from({ length: 12 * 4 ** 4 }, (_, pixel) => pixel);
+    const frames = index.targets.flatMap(target => (target.frames ?? []).map(frame => ({ target, frame })));
+    report.counts.eroImageFrames = frames.length;
+    if (frames.length) report.gaps.push("euclid-ero-valid-pixel-masks-unverified");
+    report.gaps.push(...(index.metadataTransportExceptions ?? []));
+    for (const { target, frame } of frames) {
+      const matching = cellsForStcs(4, pixels, frame.sRegion);
+      if (!matching.length) throw new Error(`ERO image frame has no supported ICRS geometry: ${target.id}/${frame.filter}`);
+      report.checks.push({ id: `ero-frame:${target.id}:${frame.instrument}:${frame.filter}`, passed: true,
+        detail: `Official package member ${frame.memberName}; FITS header SHA ${frame.sha256}; ICRS TAN frame, estimated without pixel masks` });
+    }
     for (const binding of group.bindings.filter(binding => binding.unitKind === "target")) {
       const target = index.targets[0]!;
-      const pixels = Array.from({ length: 12 * 4 ** 4 }, (_, pixel) => pixel);
-      const matching = cellsForStcs(4, pixels, target.sRegion);
-      if (!matching.length) throw new Error("ERO outreach footprint has no supported ICRS geometry");
-      report.checks.push({ id: `binding:${binding.layerId}`, passed: true, detail: "Locked official target XML and ESA Sky outreach footprint; target identity is preserved" });
-      report.samples.push({ layerId: binding.layerId, unitKind: "target", unitId: target.id, order: 4, cells: matching, precision: "estimated", uris: target.urls, sRegion: target.sRegion });
+      const selectedFrames = eroFramesForProduct(target, binding.product);
+      if (target.frames && !selectedFrames.length) throw new Error(`ERO binding has no matching band's image frame: ${binding.layerId}`);
+      const regions = [...new Set(selectedFrames.length ? selectedFrames.map(frame => frame.sRegion) : [target.sRegion])];
+      const matching = [...new Set(regions.flatMap(region => cellsForStcs(4, pixels, region)))];
+      if (!matching.length) throw new Error("ERO target footprint has no supported ICRS geometry");
+      report.checks.push({ id: `binding:${binding.layerId}`, passed: true, detail: selectedFrames.length
+        ? "Locked official target XML and selected band's FITS-header ICRS image frame; target identity is preserved, pixel-mask coverage remains estimated"
+        : "Locked official target XML and ESA Sky outreach footprint; target identity is preserved" });
+      report.samples.push({ layerId: binding.layerId, unitKind: "target", unitId: target.id, order: 4, cells: matching, precision: "estimated", uris: target.urls, sRegion: regions.join(" ") });
     }
   }
   if (Object.values(group.snapshots).some(snapshot => snapshot.sourceId === "euclid-q1-bgsub-tiles")) report.gaps.push("euclid-q1-partial-inventory");
@@ -244,7 +289,7 @@ export async function runNativeUnitWorker(request: NativeWorkerRequest, progress
   if (operation === "archive" || operation === "restore") {
     const group = structuredClone(request.active!);
     const store = createArtifactStoreFromProcess(process.env, path.join(request.catalogRoot, "var/object-store"));
-    const files = [...Object.values(group.snapshots).flatMap(snapshot => snapshot.files), ...(group.generic ? [group.generic.file] : []), ...(group.hst ? [group.hst.file] : [])];
+    const files = [...Object.values(group.snapshots).flatMap(snapshot => snapshot.files), ...(group.generic ? [group.generic.file] : []), ...(group.hst ? [group.hst.file] : []), ...(group.survey ? [group.survey.file] : [])];
     const completed = new Map<string, Promise<NativeFile>>();
     let nextFile = 0, finished = 0;
     // Four streams bound compression/read buffers and avoid serial archive round trips.
@@ -272,7 +317,7 @@ export async function runNativeUnitWorker(request: NativeWorkerRequest, progress
   }
   if (operation === "discover") {
     const url = nativeMetadataUrl(request.source!.sourceUrl, request.source!.adapter);
-    const response = await fetch(url, { method: "HEAD", redirect: "error", signal: AbortSignal.timeout(30_000) });
+    const response = await metadataFetch(url, { method: "HEAD", redirect: "error", signal: AbortSignal.timeout(30_000) });
     if (!response.ok && ![400, 405].includes(response.status)) throw new Error(`Metadata source returned HTTP ${response.status}`);
     return { discovered: { sourceUrl: url.href, reachable: true, ...(response.headers.get("content-length") ? { sizeBytes: Number(response.headers.get("content-length")) } : {}) } };
   }
@@ -283,7 +328,7 @@ export async function runNativeUnitWorker(request: NativeWorkerRequest, progress
   const lockText = request.active?.lockText ?? await readFile(path.join(request.catalogRoot, "src/layers/recipes/source-unit-indexes.lock.json"), "utf8");
   const lock = JSON.parse(lockText) as Document; const recipes = { ...request.active?.recipes };
   const snapshots: Record<string, NativeSnapshot> = { ...request.active?.snapshots };
-  if (operation === "baseline") for (const source of request.sources) { progress(`Locking ${source.title}`); snapshots[source.id] = await baselineSnapshot(request, source); }
+  if (operation === "baseline") for (const source of request.sources.filter(source => !isSurveyNativeAdapter(source.adapter))) { progress(`Locking ${source.title}`); snapshots[source.id] = await baselineSnapshot(request, source); }
   else for (const snapshot of request.snapshots) {
     const source = request.sources.find(source => source.id === snapshot.sourceId)!;
     snapshots[source.id] = snapshot;
@@ -307,16 +352,31 @@ export async function runNativeUnitWorker(request: NativeWorkerRequest, progress
   const hstSnapshotRecord = snapshots["hst-public-images"];
   if (hstSnapshotRecord && (!hst || hst.sourceSha256 !== hstSnapshotRecord.files[0]!.sha256)) {
     const root = hstSnapshotRecord.hstRoot ? nativeEvidencePath(request.evidenceRoot, hstSnapshotRecord.hstRoot) : request.evidenceRoot;
-    const index = operation === "baseline" ? await HstObservationIndex.open(root, hstSnapshotRecord.files[0]!.sha256) : await HstObservationIndex.build(root, hstSnapshotRecord.hstManifest!, hstSnapshotRecord.files[0]!.sha256);
+    if (request.active?.hst) await nativeFile(request.evidenceRoot, request.active.hst.file.ref, request.active.hst.file);
+    const baseline = request.active?.hst ? { evidenceRoot: request.active.hst.root ? nativeEvidencePath(request.evidenceRoot, request.active.hst.root) : request.evidenceRoot,
+      sourceSnapshotSha256: request.active.hst.sourceSha256 } : undefined;
+    const index = operation === "baseline" ? await HstObservationIndex.open(root, hstSnapshotRecord.files[0]!.sha256) : await HstObservationIndex.build(root, hstSnapshotRecord.hstManifest!, hstSnapshotRecord.files[0]!.sha256, baseline);
     index.close();
     const ref = path.relative(request.evidenceRoot, HstObservationIndex.indexPath(root, hstSnapshotRecord.files[0]!.sha256));
     hst = { file: await nativeFile(request.evidenceRoot, ref), root: hstSnapshotRecord.hstRoot ?? "", manifest: hstSnapshotRecord.hstManifest!, sourceSha256: hstSnapshotRecord.files[0]!.sha256 };
   }
-  const bindings = request.bindings.map(binding => ({ ...binding, revision: bindingRevision(binding, snapshots) }));
-  const candidate = { createdAt: nativeNow(), origin: operation === "baseline" ? "imported-baseline" as const : "managed-build" as const, generic, hst, lockText: nextLockText, recipes, snapshots, bindings, report: { checks: [], gaps: [], counts: {}, samples: [] } as NativeReport };
+  // Adopting installed indexes must not bind newly registered import-only sources
+  // before they have supplied a locked snapshot through the managed workflow.
+  const bindings = request.bindings.filter(binding => operation !== "baseline" || binding.sourceIds.every(id => snapshots[id]))
+    .map(binding => ({ ...binding, revision: bindingRevision(binding, snapshots) }));
+  let survey = request.active?.survey;
+  const surveySnapshots = Object.values(snapshots).filter(snapshot => isSurveyNativeAdapter(request.sources.find(source => source.id === snapshot.sourceId)!.adapter));
+  const surveyChanged = surveySnapshots.length > 0 && survey?.buildKey !== SurveyNativeIndex.key(surveySnapshots);
+  if (surveyChanged) {
+    const ref = `managed/native-units/indexes/${request.taskId}/survey-units.sqlite`;
+    const index = await SurveyNativeIndex.build(request.evidenceRoot, ref, request.sources, surveySnapshots, progress);
+    const buildKey = index.buildKey; index.close();
+    survey = { file: await nativeFile(request.evidenceRoot, ref), buildKey };
+  }
+  const candidate = { createdAt: nativeNow(), origin: operation === "baseline" ? "imported-baseline" as const : "managed-build" as const, generic, hst, ...(survey ? { survey } : {}), lockText: nextLockText, recipes, snapshots, bindings, report: { checks: [], gaps: [], counts: {}, samples: [] } as NativeReport };
   const group: NativeGroup = { ...candidate, id: nativeGroupId(candidate) };
   group.report = await verifyGroup(request, group, progress);
-  group.report.cacheHit = operation !== "baseline" && !genericChanged && request.active?.hst?.sourceSha256 === hst?.sourceSha256;
+  group.report.cacheHit = operation !== "baseline" && !genericChanged && !surveyChanged && request.active?.hst?.sourceSha256 === hst?.sourceSha256;
   group.report.elapsedMs = Date.now() - start;
   group.report.peakRssMiB = Math.round(process.resourceUsage().maxRSS / 1024);
   return { group, noChange: group.id === request.active?.id };

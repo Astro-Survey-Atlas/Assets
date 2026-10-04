@@ -73,11 +73,11 @@ export class NativeUnitController {
     return { schemaVersion: 1, active: this.#state.active, generation: this.generation, baseline: this.active ? "managed" : "imported-overview", sources: this.#state.sources.map(source => {
       const snapshots = this.#state.snapshots.filter(snapshot => snapshot.sourceId === source.id);
       return { ...source, files: source.files.map(({ ref: _ref, ...file }) => file), snapshots: snapshots.map(snapshot => ({ id: snapshot.id, sourceRevision: snapshot.sourceRevision, capturedAt: snapshot.capturedAt, rowCount: snapshot.rowCount, fileCount: snapshot.files.length, sizeBytes: snapshot.files.reduce((sum, file) => sum + file.sizeBytes, 0), active: this.active?.snapshots[source.id]?.id === snapshot.id })) };
-    }), groups: this.#state.groups.map(group => ({ id: group.id, createdAt: group.createdAt, origin: group.origin, active: group.id === this.#state.active, inputCount: Object.keys(group.snapshots).length, productCount: group.bindings.length, bindings: group.bindings, sizeBytes: (group.generic?.file.sizeBytes ?? 0) + (group.hst?.file.sizeBytes ?? 0), archived: this.#files(group).every(file => Boolean(file.objectKey)), report: { ...group.report, samples: undefined }, review: group.review, digest: groupReviewDigest(group) })), tasks: this.taskDocuments(), history: this.#state.history.slice(-128).reverse() };
+    }), groups: this.#state.groups.map(group => ({ id: group.id, createdAt: group.createdAt, origin: group.origin, active: group.id === this.#state.active, inputCount: Object.keys(group.snapshots).length, productCount: group.bindings.length, bindings: group.bindings, sizeBytes: (group.generic?.file.sizeBytes ?? 0) + (group.hst?.file.sizeBytes ?? 0) + (group.survey?.file.sizeBytes ?? 0), archived: this.#files(group).every(file => Boolean(file.objectKey)), report: { ...group.report, samples: undefined }, review: group.review, digest: groupReviewDigest(group) })), tasks: this.taskDocuments(), history: this.#state.history.slice(-128).reverse() };
   }
   detail(id: string): unknown {
     const group = this.#group(id);
-    return { id: group.id, digest: groupReviewDigest(group), bindings: group.bindings, report: group.report, review: group.review, generic: group.generic, hst: group.hst, inputs: Object.values(group.snapshots).map(snapshot => ({ id: snapshot.id, sourceId: snapshot.sourceId, sourceRevision: snapshot.sourceRevision, scope: snapshot.scope, sourceUrl: snapshot.sourceUrl, capturedAt: snapshot.capturedAt, rowCount: snapshot.rowCount, files: snapshot.files })) };
+    return { id: group.id, digest: groupReviewDigest(group), bindings: group.bindings, report: group.report, review: group.review, generic: group.generic, hst: group.hst, survey: group.survey, inputs: Object.values(group.snapshots).map(snapshot => ({ id: snapshot.id, sourceId: snapshot.sourceId, sourceRevision: snapshot.sourceRevision, scope: snapshot.scope, sourceUrl: snapshot.sourceUrl, capturedAt: snapshot.capturedAt, rowCount: snapshot.rowCount, files: snapshot.files })) };
   }
   async availableBindings(): Promise<NativeBinding[]> { return this.#options.bindings(); }
   async updateSource(id: string, body: Record<string, unknown>, actor: string): Promise<NativeSource> {
@@ -207,7 +207,7 @@ export class NativeUnitController {
       await this.#save(); queue.complete(task.id, task.attemptId!, this.#state.tasks[task.id]?.result ?? result);
     });
   }
-  #files(group: NativeGroup): NativeFile[] { return [...Object.values(group.snapshots).flatMap(snapshot => snapshot.files), ...(group.generic ? [group.generic.file] : []), ...(group.hst ? [group.hst.file] : [])]; }
+  #files(group: NativeGroup): NativeFile[] { return [...Object.values(group.snapshots).flatMap(snapshot => snapshot.files), ...(group.generic ? [group.generic.file] : []), ...(group.hst ? [group.hst.file] : []), ...(group.survey ? [group.survey.file] : [])]; }
   async activate(task: PublicationTask<NativeWorkerRequest>, queue: PublicationTaskStore): Promise<void> {
     return this.#serialized(async () => {
       const operation = task.payload.operation; const group = this.#group(operation.groupId!);

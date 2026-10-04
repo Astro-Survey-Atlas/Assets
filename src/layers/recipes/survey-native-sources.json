@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "deliveryClass": "evidence",
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "queryOrders": [4, 5, 6, 7, 8, 9, 10, 11, 12],
+  "implementationRef": "server/survey-native-index.ts",
+  "inputMode": "locked-metadata-manifest",
+  "inputHashes": "Each managed snapshot locks its manifest, metadataDocuments and rowFiles SHA-256 and size; inventories are retained in evidence storage.",
+  "outputs": {
+    "index": "Managed survey SQLite with SHA-256, buildKey and archived inputs in NativeGroup.survey",
+    "reverseLookup": "Estimated spatial evidence with original footprint or native order-8 file range; file-range membership itself is exact",
+    "manifest": "JSON/CSV metadata and source-supported URIs, with actual native order, source snapshot SHA and inventory limits"
+  },
+  "sources": [
+    {
+      "id": "gaia-dr3-file-partitions", "surveyId": "gaia", "releaseId": "gaia-dr3",
+      "title": "Gaia DR3 main-source file partitions", "adapter": "gaia-healpix-range", "unitKind": "healpix-range",
+      "scope": "Official Gaia DR3 gaia_source file roster; ICRS/NESTED order 8 inclusive ranges. Approximate source-ID position, not source occupancy or an image footprint. File bytes and upstream MD5 have not been independently verified.",
+      "sourceUrl": "https://gaia.eu-1.cdn77-storage.com/?prefix=Gaia/gdr3/gaia_source/&delimiter=/", "slot": "survey"
+    },
+    {
+      "id": "sdss-dr9-fields", "surveyId": "sdss", "releaseId": "sdss-dr09",
+      "title": "SDSS DR9 resolve fields", "adapter": "sdss-field", "unitKind": "field",
+      "scope": "Official DR9 window_flist rerun 301 run/camcol/field membership and great-circle window bounds. Estimated ICRS geometry, not per-band image WCS or valid-pixel coverage; documented frame URIs are unverified.",
+      "sourceUrl": "https://data.sdss.org/sas/dr9/env/PHOTO_RESOLVE/window_flist.fits", "slot": "survey"
+    },
+    {
+      "id": "galex-public-images", "surveyId": "galex", "releaseId": "galex-gr6-gr7",
+      "title": "GALEX public image observation metadata", "adapter": "mast-observation", "unitKind": "observation",
+      "scope": "Locked public MAST image observations with original s_region and explicit GR6/GR7 source-URI evidence. Band/release/project selectors apply; bounded snapshots do not establish complete GALEX inventory.",
+      "sourceUrl": "https://mast.stsci.edu/api/v0/invoke", "slot": "survey"
+    },
+    {
+      "id": "jwst-early-release-images", "surveyId": "jwst", "releaseId": "dr1",
+      "title": "JWST early-release public NIRCam observations", "adapter": "mast-observation", "unitKind": "observation",
+      "scope": "Observed public calibrated MAST image metadata for the existing Carina and SMACS0723 NIRCam products. Explicit proposal and instrument selectors; planned or test records are excluded. Not an all-JWST inventory.",
+      "sourceUrl": "https://mast.stsci.edu/api/v0/invoke", "slot": "survey"
+    }
+  ]
+}

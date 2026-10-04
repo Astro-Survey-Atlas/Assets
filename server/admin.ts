@@ -9,6 +9,7 @@ import { request as httpsRequest, type RequestOptions as HttpsRequestOptions } f
 import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 import type { MocCandidateSummary, MocReviewSummary } from "./moc-discovery.js";
 import { ConnectorInventoryStateStore, ConnectorProbeStateStore, type ConnectorInventoryPhase, type ConnectorInventoryState } from "./connector-state.js";
+import { ConnectorPresentationStore, parseConnectorIcon } from "./connector-presentation.js";
 import { executorLogFinding, observeDiscovery, type DiscoveryObservation, type ExecutorObservation } from "./discovery-observation.js";
 
 const API_GROUP = "/apis/atlas.zhejianglab.org/v1alpha1";
@@ -91,6 +92,7 @@ interface KubernetesResourceList {
 export interface ConnectorInput {
   name: string;
   type: ConnectorInputType;
+  iconUrl?: string;
   endpoint?: string;
   region?: string;
   bucket?: string;
@@ -105,6 +107,8 @@ export interface ConnectorInput {
 export interface ConnectorView {
   name: string;
   type: ConnectorType;
+  /** Custom presentation; omitted when the shared type default is used. */
+  iconUrl?: string;
   endpoint?: string;
   region?: string;
   bucket?: string;
@@ -1157,11 +1161,12 @@ function buildSourceConnectorPlan(connector: ConnectorDefinition): Record<string
 }
 
 function connectorDetails(input: ConnectorInput, namespace: string): ConnectorResources {
-  const allowedFields = new Set(["name", "type", "endpoint", "region", "bucket", "prefix", "accessKey", "secretKey", "pvcName", "basePath", "localPath"]);
+  const allowedFields = new Set(["name", "type", "iconUrl", "endpoint", "region", "bucket", "prefix", "accessKey", "secretKey", "pvcName", "basePath", "localPath"]);
   const unknown = Object.keys(input as unknown as Record<string, unknown>).find((key) => !allowedFields.has(key));
   if (unknown) throw new AdminHttpError(400, `${unknown} is not supported for connectors`);
   const name = dnsName(input.name, "name");
   const type = enumValue(input.type, CONNECTOR_TYPES, "type");
+  parseConnectorIcon(input.iconUrl);
   const endpoint = optionalText(input.endpoint, "endpoint", 2048);
   if (endpoint) validateEndpoint(endpoint);
   const region = optionalText(input.region, "region", 128);
@@ -1460,13 +1465,15 @@ export class AssetsAdmin {
   private readonly probeClient: ConnectorProbeClient;
   private readonly probeStateStore?: ConnectorProbeStateStore;
   private readonly inventoryStateStore?: ConnectorInventoryStateStore;
+  private readonly presentationStore?: ConnectorPresentationStore;
 
-  constructor(config: AdminConfig = loadAdminConfig(), kube = new KubernetesApi(config), probeClient: ConnectorProbeClient = new S3ConnectorProbeClient(), probeStateStore?: ConnectorProbeStateStore, inventoryStateStore?: ConnectorInventoryStateStore) {
+  constructor(config: AdminConfig = loadAdminConfig(), kube = new KubernetesApi(config), probeClient: ConnectorProbeClient = new S3ConnectorProbeClient(), probeStateStore?: ConnectorProbeStateStore, inventoryStateStore?: ConnectorInventoryStateStore, presentationStore?: ConnectorPresentationStore) {
     this.config = config;
     this.kube = kube;
     this.probeClient = probeClient;
     this.probeStateStore = probeStateStore;
     this.inventoryStateStore = inventoryStateStore;
+    this.presentationStore = presentationStore;
   }
 
   publicConfig(): Record<string, unknown> {
@@ -1509,6 +1516,23 @@ export class AssetsAdmin {
     return null;
   }
 
+  private async viewConnector(resource: KubernetesResource): Promise<ConnectorView> {
+    const view = connectorView(resource);
+    const iconUrl = await this.presentationStore?.iconUrl({ name: view.name, namespace: this.config.namespace, uid: resource.metadata?.uid });
+    return iconUrl ? { ...view, iconUrl } : view;
+  }
+
+  /** Presentation edits also work for Warehouse resources without changing their spec. */
+  async updateConnectorIcon(name: string, input: Record<string, unknown>): Promise<ConnectorView> {
+    if (Object.keys(input).some(key => key !== "iconUrl") || !("iconUrl" in input)) throw new AdminHttpError(400, "Provide only iconUrl; use null to restore the type default");
+    parseConnectorIcon(input.iconUrl);
+    const resource = await this.connectorResource(name);
+    if (!resource) throw new AdminHttpError(404, `Connector ${name} not found`);
+    if (!this.presentationStore) throw new AdminHttpError(503, "Connector presentation storage is unavailable");
+    await this.presentationStore.setIcon({ name: resource.metadata!.name!, namespace: this.config.namespace, uid: resource.metadata?.uid }, input.iconUrl);
+    return (await this.listConnectors()).find(connector => connector.name === name) ?? this.viewConnector(resource);
+  }
+
   async listConnectors(): Promise<ConnectorView[]> {
     const configMaps = await this.kube.listCore("configmaps", `app.kubernetes.io/managed-by=${ASSETS_MANAGED_BY},astro.zhejianglab.org/resource-kind=connector`, this.config.namespace);
     let dataSources: KubernetesResource[] = [];
@@ -1522,7 +1546,7 @@ export class AssetsAdmin {
       const name = resource.metadata?.name;
       if (name && !byName.has(name)) byName.set(name, resource);
     }
-    const connectors = [...byName.values()].map(connectorView).filter((connector) => CONNECTOR_TYPES.includes(connector.type));
+    const connectors = (await Promise.all([...byName.values()].map(resource => this.viewConnector(resource)))).filter((connector) => CONNECTOR_TYPES.includes(connector.type));
     if (!this.probeStateStore && !this.inventoryStateStore) return connectors.sort((a, b) => a.name.localeCompare(b.name));
     const withState = await Promise.all(connectors.map(async (connector) => {
       const state = await this.probeStateStore?.get(connector.name);
@@ -1572,7 +1596,7 @@ export class AssetsAdmin {
     const normalized = dnsName(name, "connector name");
     const resource = await this.connectorResource(normalized);
     if (!resource) throw new AdminHttpError(404, `Connector ${normalized} was not found`);
-    const base = connectorView(resource);
+    const base = await this.viewConnector(resource);
     let fingerprint = connectorConfigFingerprint(base);
     const now = new Date().toISOString();
     const definition = connectorDefinition(resource);
@@ -1665,7 +1689,7 @@ export class AssetsAdmin {
     if (!resource) {
       throw new AdminHttpError(404, `Connector ${normalized} was not found`);
     }
-    const base = connectorView(resource);
+    const base = await this.viewConnector(resource);
     const definition = connectorDefinition(resource);
     if (!CONNECTOR_TYPES.includes(definition.type)) return checkedConnector(base, "ERROR", "Connector type is unsupported");
 
@@ -1757,8 +1781,10 @@ export class AssetsAdmin {
 
   async createConnector(input: ConnectorInput): Promise<ConnectorView> {
     const resources = connectorDetails(input, this.config.namespace);
+    if (input.iconUrl && !this.presentationStore) throw new AdminHttpError(503, "Connector presentation storage is unavailable");
     const resource = resources.configMap;
     const created: Array<{ plural: string; name: string; namespace?: string }> = [];
+    let connector: KubernetesResource;
     try {
       if (resources.secret && resources.secretName) {
         try {
@@ -1774,12 +1800,14 @@ export class AssetsAdmin {
         }
         created.push({ plural: "secrets", name: resources.secretName, namespace: this.config.namespace });
       }
-      return connectorView(await this.kube.createCore("configmaps", resource, this.config.namespace));
+      connector = await this.kube.createCore("configmaps", resource, this.config.namespace);
     } catch (error) {
       await Promise.allSettled(created.reverse().map((entry) => this.kube.deleteCore(entry.plural, entry.name, entry.namespace)));
       if (error instanceof KubernetesApiError && error.statusCode === 409) throw new AdminHttpError(409, `Connector ${String(resource.metadata?.name)} already exists`);
       throw error;
     }
+    if (input.iconUrl) await this.presentationStore!.setIcon({ name: connector.metadata!.name!, namespace: this.config.namespace, uid: connector.metadata?.uid }, input.iconUrl);
+    return this.viewConnector(connector);
   }
 
   private async ensureLocalSourceVolume(definition: ConnectorDefinition, sourceName: string): Promise<void> {

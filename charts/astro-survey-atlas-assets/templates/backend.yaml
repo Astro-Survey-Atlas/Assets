@@ -221,7 +221,7 @@ spec:
             httpGet: { path: /healthz, port: http }
             periodSeconds: 3
             timeoutSeconds: 2
-            failureThreshold: 20
+            failureThreshold: {{ .Values.startupProbeFailureThreshold }}
           readinessProbe:
             httpGet: { path: /healthz, port: http }
             periodSeconds: 5

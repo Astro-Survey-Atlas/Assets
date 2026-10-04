@@ -33,7 +33,7 @@ test("Explicit HST product lookup uses public observation metadata without retri
   assert.equal(hstObservationMatchesLayer(single, result.observations[0]!), false);
 });
 
-test("ERO target URLs come from official XML and associated ESA Sky footprint, never an aggregate MOC or center", async (t) => {
+test("ERO targets use the verified IRSA directory, preserve package provenance and never invent a Tile", async (t) => {
   const oldFetch = globalThis.fetch; t.after(() => { globalThis.fetch = oldFetch; });
   const stored: string[] = [];
   const store = { putImmutable: async (_key: string, body: string) => { stored.push(body); } } as unknown as ArtifactStore;
@@ -63,7 +63,11 @@ test("ERO target URLs come from official XML and associated ESA Sky footprint, n
   globalThis.fetch = async () => { throw new Error("Runtime lookup must not acquire metadata"); };
   const result = await archiveNativeUnits([layer("euclid", "ERO VIS", "euclid-ero")], 8, [202250, 202272], store, { eroIndex });
   assert.equal(result.units[0]!.unitKind, "target"); assert.equal(result.units[0]!.unitId, "ERO-Abell2390");
-  assert.equal(result.units[0]!.accessUri, uri); assert.equal(result.units[0]!.precision, "estimated");
+  assert.equal(result.units[0]!.accessUri, "https://irsa.ipac.caltech.edu/data/Euclid/ERO/images/Abell2390/ERO-Abell2390/");
+  assert.equal(result.units[0]!.accessUris![0]!.accessType, "directory");
+  assert.equal(result.units[0]!.accessUris![0]!.alternatives![0]!.status, "verified");
+  assert.deepEqual(result.units[0]!.sourceMetadata!.archivePackageUris, [uri]);
+  assert.equal(result.units[0]!.precision, "estimated");
   assert.equal(stored.length, 0, "Read-only runtime lookup writes no evidence objects");
   const miss = await archiveNativeUnits([layer("euclid", "ERO VIS", "euclid-ero")], 8, [0], store, { eroIndex });
   assert.deepEqual(miss.units, []);

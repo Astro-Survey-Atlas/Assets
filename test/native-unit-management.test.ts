@@ -79,6 +79,17 @@ test("release delta keeps the active database immutable and preserves other rele
   await assert.rejects(readFile(missing), /ENOENT/);
 });
 
+test("baseline adoption preserves installed bindings while new import-only survey sources await metadata", async t => {
+  const f = await fixture(t);
+  const source: NativeSource = { id: "gaia-dr3-file-partitions", revision: 1, surveyId: "gaia", releaseId: "gaia-dr3", title: "Gaia file partitions", adapter: "gaia-healpix-range", unitKind: "healpix-range", scope: "awaiting import", files: [], slot: "survey", updatedAt: "2026-10-03T00:00:00Z", sourceUrl: "https://gaia.eu-1.cdn77-storage.com/?prefix=Gaia/gdr3/gaia_source/&delimiter=/" };
+  const binding: NativeBinding = { productId: "gaia", layerId: "gaia-dr3-main-source-presence", surveyId: "gaia", releaseId: "gaia-dr3", product: "Gaia DR3 main source presence", unitKind: "healpix-range", sourceIds: [source.id], revision: "", visibility: "published" };
+  const result = await runNativeUnitWorker({ ...f.request, active: undefined, operation: { kind: "native-unit", operation: "baseline", actor: "fixture", submittedAt: source.updatedAt }, sources: [...f.sources, source], bindings: [...f.group.bindings, binding] });
+  assert.deepEqual(result.group!.bindings.map(binding => binding.layerId), f.group.bindings.map(binding => binding.layerId));
+  assert.equal(result.group!.generic!.file.sha256, f.group.generic!.file.sha256);
+  assert.equal(result.group!.snapshots[source.id], undefined);
+  assert.ok(result.group!.report.checks.every(check => check.passed));
+});
+
 test("native review, archive, authority activation, site verification and isolated restore are independent", async t => {
   const f = await fixture(t);
   const store = new FilesystemArtifactStore(path.join(f.root, "var/object-store"));
