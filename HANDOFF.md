@@ -1,41 +1,100 @@
 # Assets 项目交接
 
-交接日期：2026-10-04（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-05（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
 ## 当前目标与状态
 
-最新 Dev revision 334 已部署 Connector 自定义图标、Overlap 模态区分和去重标题。
-C0x 连通区域按钮显示该区域相交产品的模态图标；区域分块结果只显示一行计数；覆盖计算制品默认折叠。
-管理页支持上传、URL 和恢复默认；现有三个 ZJLab OSS Connector 已配置用户提供的 ICO。
-Warehouse 当前 3 个图层的 266,063 个真实阶数像元全部载入，零失败；旧的 200,000 文档
-总量上限已取消。详见下方两项 Dev 续接记录。
+**第一阶段 MVP 已结束**（用户于 2026-10-04 确认）。Phase 1 覆盖 Euclid、DESI、Legacy
+Surveys、HST 与 Workspace 的公开覆盖、原生分块反查、来源链接及 JSON/CSV 下载计划。后续 Phase 2
+只更新 **Assets Dev**，不修改 72602、Workspace、公开 MOC 或 public bundle，也不下载科学像素。
 
-用户最新要求仅补充 **Dev 的原生天空分块**，优先 Gaia，随后 SDSS、GALEX、JWST，
-Roman 仅在有真实公开观测时纳入；并将已采集的 17-target ERO 输入补到 Dev。该批已部署
-并完成运行时和桌面验收；本批未发布新的 MOC，也未更新 72602 或 Workspace。此前四巡天桌面 MVP 的更多
-component 验收仍等待用户主流程反馈。当前反查使用已有分页 cursor 与冻结快照；
-不新增可创建、查询状态、停止/继续的独立查询会话资源。普通浏览按页继续，JSON/CSV
-导出可耗尽同一快照，并必须保留实际范围、精度与数据缺口。
+截至 2026-10-05，Dev Helm revision **345**，site/backend 各 1/1 Ready、重启 0，入口
+http://10.15.51.75:32083/atlas/；镜像 tag `0.1.0-20261005-190033-phase2-vphas`。
+backend liveness 为 TCP，startup/readiness 为 HTTP `/healthz`。发布前 build、425 项测试
+（423 通过、2 跳过）、31 项 Python 采集测试及 Helm lint 通过。`/healthz`、`/api/v1/status`、
+`/api/v1/assets`、`/api/v1/coverage`、coverage catalog 均 HTTP 200；用 64-byte Range 核对一个
+公开 MOC FITS 的 `X-Content-SHA256` 与目录一致。
 
-第一阶段 MVP 是 Euclid、DESI、Legacy Surveys、HST：
-普通 HEALPix 点击展示覆盖的 DR/模态；重合模式支持四巡天的任意组合，
-点击整个 component 返回各巡天实际的 Tile/brick/target/observation、原始
-footprint/s_region 和来源 URI；JSON/CSV 下载计划与页面内容一致。
-Workspace 同步公开图层/MOC 后与本地 CSST 求交，通过服务端 API Key 向 Assets
-查询公开分块，并附上 CSST 命中文件的直接父目录。桌面优先，移动端天球适配不列优先事项。
+公开 release 未改变：`reviewed-mupsxe2v-c91be91f`，603 files，SHA-256
+`0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`；105 published MOCs，
+coverage catalog 132 layers。新 Pod 的 object-store release sync 恢复的也是这个相同 release。
 
-**一个四巡天 component 的完整导出已跑通；Dev O4 C01 `[190]` 的 DESI、ERO、Gaia
-JSON/CSV 导出也已通过一致性验收。** C04 的 875 条属于 DESI + Euclid Q1，不能代表完整巡天库存。
+Dev 活动 native group 是 FDS DR1 + KiDS DR5：
+`4fcf53b6a001cb6235ac52a5d64b7477f06a267931fd747c2e11d8289cd99211`，generation **8**，
+92 bindings、192/192 checks、managed/verified=true。FDS 有 26 fields / 97 image rows；KiDS 有
+1,347 Tiles / 5,388 image rows，两来源均零排除。最新已核实控制快照 generation 1732 为 `synced`；
+之后的控制快照需在激活 VPHAS 前重新确认。
 
-## 当前部署与权威数据
+FDS/KiDS 的实际区域反查：O4 C01 cells `[2158, 2159, 2241, 2244]`，只查 color 产品绑定，
+用两页返回 63 条唯一记录（FDS 25 fields、KiDS 38 Tiles），`queryExhausted=true`、
+`inventoryComplete=false`、`resultTruncated=false`。示例分别是 `FDS_F1` 和 `KIDS_45.0_-35.1`，
+都保留 ESO DataLink 的单文件 URI。下载链接未逐文件探测，因此仍为 source-listed/unverified。
+
+VPHAS+ DR4 已登记来源 `vphas-dr4-eso-images`（source revision 1），本地 metadata capture 位于
+`/home/aaron/.local/share/astro-assets-deployments/dev/20261005-vphas-dr4-capture2/`；manifest SHA-256
+`6a6d112d20b59598007c7bb5f27f6ad02cf4b36e255c18fd7846c32c1a8c9b17`，15,534 rows / 1,306 target names，
+波段 G/R/I/U/HALPHA = 3,829/4,437/1,876/2,557/2,835。每个文件保留 32 个 CCD polygons；DataLink
+和 TAP evidence 已锁定、远端 staging SHA 已复核。snapshot ID 为
+`e9761e746032ece6510653e798c78bfdafd21f465c0f3fc8473593324beb1441`。
+
+**当前续接任务**：候选选择组 `630fbc4b978a2757bd20d71afb124972dab6661edcb828a6a05e5cd49de85c25`
+保留原 92 个产品 binding 并添加 VPHAS 的 6 个，build task `native-muv5faqe-ce37aa99` attempt 1
+仍在运行。最新进度是 VPHAS DR4 的 15,534 identities 已解析、零排除；backend 此后持续进行 SQLite
+汇总/完整性校验，当前管理 API 多次显示 running，Pod Ready、零重启、约 2 GiB RSS。曾有一次短暂
+HTTP 503 使本地轮询退出；之后已重连同一个 task 并确认它仍运行。**不要重提 import/build，不要取消任务。**
+
+接续步骤：
+
+1. 继续轮询 `native-muv5faqe-ce37aa99`；完成后检查候选 98 bindings、全部 checks、VPHAS 15,534 indexed rows、
+   unit/target 和 band counts，以及完整 gaps。旧 FDS/KiDS bindings 和文件索引必须保留。
+2. 对照报告核验 VPHAS 的缺口（DR4 final increment、CCD union estimated、mask 未核验、逐文件可用性未核验），
+   审核候选并归档所有依赖；激活前确认最新 native-units 控制快照 `synced`，以 generation 8 为 expectedActive。
+3. 激活后验证站点 `/api/v1/status`、generation 9 与真实 VPHAS 区域反查；再等激活后的控制状态同步完成。
+   public bundle/MOC 应仍保持以上 SHA、603 files、105 MOCs。
+4. 下一来源优先复核 VIKING DR1：官方文档声明 151 Tiles，但当前 ESO TAP 仅有 110 条 J tile-image rows，
+   不能把现有子清单当完整库存。Roman 暂无确认观测分块，ZTF DR7 缺少可重建的历史发布清单。详细调查见
+   [Phase 2 native-unit candidates](docs/research/phase2-next-native-unit-candidates-20261005.md)。
+
+原生分块、输入和反查必须遵守 [coverage workflow](docs/coverage-workflow.md) 与
+[native unit management](docs/native-unit-management.md)；不要把 `verified` 描述成巡天库存完整。
+
+## 第一阶段 MVP 与服务基线
+
+MVP 让用户在普通模式查看 HEALPix cell 覆盖的 DR/模态，在重合模式查询所选 component 覆盖的
+实际 Tile/brick/target/observation，并导出与页面一致的 JSON/CSV 来源清单。Workspace 将公开
+图层/MOC 与私有 CSST 区域求交，通过服务端 API Key 查询 Assets，并保留命中文件的直接父目录。
+下载计划是来源清单，不是代用户下载科学数据。
+
+| 服务 | Helm revision | 镜像 tag | 状态及入口 |
+| --- | --- | --- | --- |
+| Assets Dev | 345 | 0.1.0-20261005-190033-phase2-vphas | site/backend 各 1/1 Ready、重启 0；http://10.15.51.75:32083/atlas/ |
+| Assets 72602 | 7 | 0.1.0-20261003-153818-hst-supplement | 未在本轮更新；https://astro.assets.72602.space/atlas/ |
+| Workspace | 67 | 0.10.38-dev-20261003-0206-native-selection | 未在本轮更新；http://astro.workspace.dev.72602.space:32080/ |
+
+- Assets Dev release/namespace：`astro-survey-atlas-assets`；API 与 health 在 host 根路径。
+- `/healthz`、`/api/v1/status`、`/api/v1/coverage/catalog` 均 HTTP 200；catalog 有 132 layers。
+- generation 8 活动 native group 与 `/api/v1/status` 一致；FDS/KiDS O4 C01 实际反查分页完整，
+  返回 25 fields 和 38 Tiles。控制快照 generation 1732 曾为 synced；后续激活前需复查。
+- 本轮 `npm run build`、`npm test`（425 项：423 通过、2 跳过）、Python 采集测试（31/31）、
+  Core wheel 校验、Helm lint、
+  探针回归测试均通过；`backend-probes.test.ts` 断言 backend readiness 为 HTTP，liveness 为 TCP。
+- Dev-only Phase 2 不发布 MOC、不改变 public bundle、不更新 72602 或 Workspace。
+- Earlier overlap acceptance: Euclid + DESI O4 C01–C06 显示实际相交模态、空间分块单行计数、
+  覆盖计算默认折叠；1440/1024/390px 无横向溢出，browser page errors=0。Dev O4 C01 `[190]`
+  的 DESI、ERO、Gaia JSON/CSV 导出已通过一致性验收。
+- 当前审核接受已知范围缺口；`verified` 不等于巡天库存完整。
+
+## 历史部署基线（revision 337，2026-10-05）
+
+以下数据记录 M31 2MASS 激活前的 revision 337 / generation 5 状态；当前部署与待办以本文顶部为准。
 
 本次发布后确认 Helm、Deployment、网站 health/status：
 
 | 服务 | Helm revision | 镜像 tag | 状态及入口 |
 | --- | --- | --- | --- |
-| Assets Dev | 334 | 0.1.0-20261004-223359-overlap-ui | site/backend 各 1/1 Ready、重启 0；http://10.15.51.75:32083/atlas/ |
+| Assets Dev | 337 | 0.1.0-20261005-042120-native-phase2-2mass | site/backend 各 1/1 Ready、重启 0；http://10.15.51.75:32083/atlas/ |
 | Assets 72602 | 7 | 0.1.0-20261003-153818-hst-supplement | site/backend 各 1/1 Ready；https://astro.assets.72602.space/atlas/ |
 | Workspace | 67 | 0.10.38-dev-20261003-0206-native-selection | 1/1 Ready；http://astro.workspace.dev.72602.space:32080/ |
 
@@ -44,13 +103,15 @@ JSON/CSV 导出也已通过一致性验收。** C04 的 875 条属于 DESI + Euc
 - /healthz、/api/v1/status 均 HTTP 200；public bundle：
   reviewed-mupsxe2v-c91be91f，603 files，105 published MOCs，catalog 132 layers。
 - Bundle SHA-256：0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307。
-- Dev 活动 native group：
-  `e2a72cd78a10994462d585a96d79da670481d1eeaf9e30b7574882b1a6eecffe`，
-  generation 3，managed=true、verified=true，reverse 服务 available；原生控制 generation 775、
-  syncStatus=synced，22 个来源、64 个产品绑定。
-- Dev revision 334 镜像 digest 为
-  `sha256:40a21b1461c0e7c7a45788418fdc3d4624ba94649c4833479c49ca56c2f667c7`；本次只更新页面代码，
-  public bundle 仍为 603 files、SHA-256
+- Dev 活动 native group 为
+  `3fe4ede297e1eac20fdfad80bd76452b563acdcdb2b2f91dc3958da0c16fd104`，
+  generation 5，managed=true、verified=true，反查服务 available；24 个锁定输入、71 个产品绑定，
+  165/165 检查通过。最近读取的 native-units 控制快照 generation 1101 为 synced；候选状态仍会
+  继续产生快照，激活前需再次确认最新 generation 已同步。
+- Dev revision 337 镜像为
+  `crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/ay-dev/astro-survey-atlas-assets:0.1.0-20261005-042120-native-phase2-2mass`。
+  `/api/v1/status` 报告公开 bundle `reviewed-mupsxe2v-c91be91f`、105 个 MOC、132 个 catalog layer；
+ 之前确认的 public bundle 仍为 603 files、SHA-256
   `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`。
 - Overlap UI 验收：Euclid + DESI 的 O4 C01–C06 显示组件实际相交模态；抽屉只有一行空间分块计数，
   覆盖计算依据初始收起；1440/1024/390px 无横向溢出，browser page errors=0。
@@ -65,6 +126,39 @@ JSON/CSV 导出也已通过一致性验收。** C04 的 875 条属于 DESI + Euc
   /healthz 和 /api/v1/status 均 HTTP 200，活动 bundle SHA 仍为
   `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，603 files；
   `api/v1/status` 为 105 published MOCs，native generation 2、managed/verified=true。
+
+## Phase 2 VVV、2MASS 与 DES 采集记录（2026-10-05）
+
+VVV DR4 已进入当前活动 generation 5，不再处于候选归档状态。原始 ESO ObsCore 快照有 11,452 行；
+213 个非 Tile calibration targets 保留在输入页但不进入空间索引，11,239 行代表 348 个正式 Tile。
+H/J/Y/Z 有 1,513 个 Tile image 的 DataLink `#this` 文件身份；Ks 暂无受支持产品直链。Tile frame
+转换为 ICRS 后仍为 estimated，未检查有效像素掩膜；这是 DR4 submission increment，不是累计库存，
+`inventoryComplete=false`。当前活动组的 VVV adapter 报告 11,239 行、348 个 Tile，6 个产品绑定已活动。
+
+2MASS 6X 导入快照位于 backend evidence PVC：
+`/var/lib/assets-evidence/managed/native-units/inputs/2mass-6x-m31-1deg-atlas-images/`；来源采集目录
+为 `/home/aaron/.local/share/astro-assets-deployments/dev/20261005-2mass-6x-m31-capture2/`。
+快照 SHA 标识 `bc0cc3160eb6c3a33654c02bfb8d0e6e62efd5a0e3c746ff33e61a71eacfe0b3`，138 张 J/H/K
+Atlas images、46 个 coadd。构建 task `native-muua1o70-703f2729` 已完成，候选 group 为
+`da26e6375eb6ddcb29fd70a029553eea785e03e890dec3c9f5fbbbfd69c3ea79`，现已在 Dev generation 6
+激活。归档 task `native-muucskfc-696a7d9e` 已完成 872/872 依赖文件校验。该快照只代表 M31 一度
+范围；不要将其描述为完整 2MASS 6X 清单。
+
+DES DR2 capture3 已完成，manifest SHA-256 为
+`3863ef174b9dadc6ca630eb379e846798fef7dc1d585f14a3b892d12780bfca8`，10,169 Tiles / 50,845
+normal g/r/i/z/Y rows / 11 TAP pages；16 个输入文件哈希完整。本地适配器导入校验得到 snapshot ID
+`b4eeaa92134edd4abeb1a63f86b4922e3b903c8c3de9dea13405b6918e597d94`。原始 staging 在
+`/home/aaron/.local/share/astro-assets-deployments/dev/20261005-des-dr2-capture3/`。NOIRLab 的
+VOTable 1.2 无 namespace；Tile ID 包含 `+/-`；source-listed positive Tile URL 的字面 `+` 必须保持原样
+（HEAD 原样 200 `image/fits`，编码成 `%2B` 为 HTTP 500）。几何角点为 estimated；该 capture 尚未导入
+管理 API。DES capture1、capture2 是失败的空/部分 staging，缺少完整 manifest，禁止引用。
+
+DES capture3 与 SPHEREx capture2 已暂存并通过管理 API 导入，纳入候选 group
+`728f69e52782820fb659e97c1437ef692088d29ca2b5508f94413b210d18d1ba`。唯一构建 task
+`native-muufpsg9-c9bc42bf` 仍在运行，当前进度与后续 `review → archive → activate` 以本文顶部状态为准。
+完成后验证 DES Tile/原始 URI、SPHEREx observation/detector URI、10,169/50,845 的 DES 计数及各自
+estimated footprint 和逐文件 unverified 状态。只更新 Dev；不发布 MOC、不改变 public bundle、
+不更新 72602/Workspace，也不下载科学影像。
 
 ## Dev 原生分块补充（2026-10-04，已完成）
 

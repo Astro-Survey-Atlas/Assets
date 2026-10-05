@@ -36,6 +36,109 @@
       "title": "JWST early-release public NIRCam observations", "adapter": "mast-observation", "unitKind": "observation",
       "scope": "Observed public calibrated MAST image metadata for the existing Carina and SMACS0723 NIRCam products. Explicit proposal and instrument selectors; planned or test records are excluded. Not an all-JWST inventory.",
       "sourceUrl": "https://mast.stsci.edu/api/v0/invoke", "slot": "survey"
+    },
+    {
+      "id": "vista-vvv-dr4-observations", "surveyId": "vista", "releaseId": "vista-vvv-dr4",
+      "title": "VVV DR4 incremental Tile image metadata", "adapter": "eso-obscore-vvv", "unitKind": "tile",
+      "scope": "ESO ObsCore rows restricted to the exact VVV DR4 release-description URL and image products. This captures the 11,452-row DR4 submission increment (including Ks metadata), not the cumulative DR4 inventory; only rows with H/J/Y/Z DataLink #this records receive direct file URIs. Footprints are transformed from ObsCore J2000 to ICRS and remain estimated; valid-pixel masks are not available.",
+      "sourceUrl": "https://archive.eso.org/tap_obs/sync", "slot": "survey"
+    },
+    {
+      "id": "skymapper-dr4-2014-mar15-18-ccds", "surveyId": "skymapper", "releaseId": "skymapper-dr4",
+      "title": "SkyMapper DR4 g/r/i CCD metadata (2014-03-15 to 18 increment)", "adapter": "skymapper-dr4-ccd", "unitKind": "ccd",
+      "scope": "The complete 2014-03-15 <= image_id < 2014-03-18 g/r/i CCD metadata increment (5,666 rows) from official dr4.ccds. This is not the full DR4 inventory. The source supplies CCD ICRS polygon estimates and original filenames; each access URI is a rule-derived 5-arcmin SIAP FITS cutout, not the complete CCD file. Cutout availability has not been checked per URI.",
+      "sourceUrl": "https://api.skymapper.nci.org.au/public/tap/sync",
+      "query": "SELECT image_id, ccd, filter, filename, coverage FROM dr4.ccds WHERE image_id >= 20140315000000 AND image_id < 20140318000000 AND filter IN ('g','r','i') ORDER BY image_id, ccd",
+      "slot": "survey"
+    },
+    {
+      "id": "2mass-6x-m31-1deg-atlas-images", "surveyId": "2mass", "releaseId": "2mass-6x",
+      "title": "2MASS 6X Atlas images (M31 one-degree increment)", "adapter": "twomass-6x-atlas", "unitKind": "image",
+      "scope": "One bounded 1.0-degree NASA/IPAC IRSA SIA query centered at ICRS 10.6847083, 41.26875 for dataset sx (6X Catalog), type A Atlas images. The 138 band-images cover 46 coadds in J/H/K and are not the full 6X inventory. Source FK5/J2000 SIN WCS frame edges are transformed to estimated ICRS polygons. Whole-image .fits.gz URIs follow the documented official IBE date/hemisphere/scan/name rule; individual files are unverified.",
+      "sourceUrl": "https://irsa.ipac.caltech.edu/cgi-bin/2MASS/IM/nph-im_sia",
+      "query": "ds=sx&POS=10.6847083%2C41.26875&SIZE=1.0&FORMAT=image%2Ffits&MAXREC=1000",
+      "slot": "survey"
+    },
+    {
+      "id": "2mass-6x-lmc-1deg-atlas-images", "surveyId": "2mass", "releaseId": "2mass-6x",
+      "title": "2MASS 6X Atlas images (LMC one-degree increment)", "adapter": "twomass-6x-atlas", "unitKind": "image",
+      "scope": "One bounded 1.0-degree NASA/IPAC IRSA SIA query centered at ICRS 80.894, -69.756 for dataset sx (6X Catalog), type A Atlas images. The 165 band-images cover 55 coadds in J/H/K and are not the full 6X inventory. Source FK5/J2000 SIN WCS frame edges are transformed to estimated ICRS polygons. Whole-image .fits.gz URIs follow the documented official IBE date/hemisphere/scan/name rule; individual files are unverified.",
+      "sourceUrl": "https://irsa.ipac.caltech.edu/cgi-bin/2MASS/IM/nph-im_sia",
+      "query": "ds=sx&POS=80.894%2C-69.756&SIZE=1.0&FORMAT=image%2Ffits&MAXREC=1000",
+      "slot": "survey"
+    },
+    {
+      "id": "des-dr2-coadd-tiles", "surveyId": "des", "releaseId": "des-dr2",
+      "title": "DES DR2 normal five-band coadd Tile images", "adapter": "noirlab-des-tap", "unitKind": "tile",
+      "scope": "Official ivoa_des_dr2.siav1 inventory of all 10,169 DR2 normal g/r/i/z/Y coadd Tiles (one image per band, extension #1; _nobkg variants excluded). File-specific ICRS corners define estimated frame bounds. The source-listed Data Lab URL has no POS/SIZE cutout parameters; sampled response distinguishes the full 10,000x10,000 FITS image from smaller positional cutouts. Preserve literal '+' in positive-declination siaRef URLs: a sample HEAD returned 200 as listed and 500 when '+' was encoded as %2B. Individual file availability and valid-pixel masks are not verified.",
+      "sourceUrl": "https://datalab.noirlab.edu/tap/sync",
+      "query": "SELECT object, fileref, filter, obs_pub_did, access_url, ra1, dec1, ra2, dec2, ra3, dec3, ra4, dec4 FROM ivoa_des_dr2.siav1 WHERE obs_pub_did LIKE '%#1' AND filter IN ('g','r','i','z','Y') AND fileref NOT LIKE '%nobkg%' ORDER BY obs_pub_did",
+      "slot": "survey"
+    },
+    {
+      "id": "act-dr5-normal-whole-maps", "surveyId": "act", "releaseId": "act-dr5",
+      "title": "ACT DR5 normal ACT-only whole-map FITS files", "adapter": "act-dr5-whole-map", "unitKind": "image",
+      "scope": "The six normal ACT-only ACT DR5 whole maps for 090/150/220 GHz with night/daynight selections. These are individual direct FITS files, not Tiles and not tar archives. FITS headers declare ICRS CAR maps with 43,200x10,320x3 axes; frame-edge geometry is an estimated RA/Dec envelope, not valid-pixel coverage. ACT+Planck, source-subtracted, variance and other roster products are excluded; full ACT DR5 product inventory is not claimed.",
+      "sourceUrl": "https://lambda.gsfc.nasa.gov/product/act/actpol_dr5_coadd_maps_get.html",
+      "query": "Official ACT DR5 normal ACT-only whole-map selector: frequencies 090/150/220 GHz x night/daynight; lock the six matching FITS members from the official 42-file download script and capture only their FITS header blocks.",
+      "slot": "survey"
+    },
+    {
+      "id": "spherex-qr2-2025w17-4b-0001-1", "surveyId": "spherex", "releaseId": "spherex-qr2",
+      "title": "SPHEREx QR2 v20 2025W17_4B observation 0001_1", "adapter": "spherex-qr2-s3-observation", "unitKind": "image",
+      "scope": "One five-detector observation increment from the official QR2 level2 AWS mirror: 5 FITS images for observation 2025W17_4B_0001_1, processing path l2b-v20-2025-240, detector directories 2 through 6. ICRS TAN-SIP FITS image-frame edges are sampled from header-only range responses and remain estimated; valid-pixel masks and the rest of QR2 are not inventoried.",
+      "sourceUrl": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/",
+      "query": "ListObjectsV2 prefix=qr2/level2/2025W17_4B/l2b-v20-2025-240/{2,3,4,5,6}/level2_2025W17_4B_0001_1D{2,3,4,5,6}_spx_l2b-v20-2025-240.fits; one QR2 observation",
+      "slot": "survey"
+    },
+    {
+      "id": "decaps-dr2-native-ccds", "surveyId": "decaps", "releaseId": "decaps-dr2",
+      "title": "DECaPS DR2 CCD image extensions", "adapter": "noirlab-decaps-tap", "unitKind": "ccd",
+      "scope": "Complete 1,065,941-row DECaPS DR2 SIAv1 image-table inventory across g/i/r/Y/z, keyed by the source obs_pub_did including each FITS CCD extension. Source-listed Data Lab URLs identify the full CCD extension without POS/SIZE cutout parameters. Explicit SIAv1 ICRS corner coordinates use TPV image geometry and remain estimated frame bounds; valid-pixel masks and per-file availability are unverified.",
+      "sourceUrl": "https://datalab.noirlab.edu/tap/sync",
+      "query": "SELECT obs_collection, propid, obs_id, obs_pub_did, access_url, access_format, access_estsize, filter, im_naxis1, im_naxis2, wcsaxes1, wcsaxes2, date_obs, mjd_obs, expnum, exptime, fileref, proctype, prodtype, obstype, telescope, instrument_name, object, ra1, dec1, ra2, dec2, ra3, dec3, ra4, dec4 FROM ivoa_decaps_dr2.siav1 WHERE filter IN ('g','i','r','Y','z') ORDER BY obs_pub_did",
+      "slot": "survey"
+    },
+    {
+      "id": "fds-dr1-science-fields", "surveyId": "fds", "releaseId": "fds-dr1",
+      "title": "FDS DR1 science-image fields", "adapter": "eso-obscore-fds", "unitKind": "field",
+      "scope": "The complete 97-row FDS DR1 science-image ObsCore roster (20 u, 26 g, 26 r, 25 i) from official ESO release 157; paired weight maps are ancillary evidence, not science image units. J2000 field polygons are transformed to estimated ICRS frame bounds. Individual file availability is not verified.",
+      "sourceUrl": "https://archive.eso.org/tap_obs/sync",
+      "query": "SELECT TOP 5000 dp_id, target_name, filter, obs_id, obs_creator_did, s_region, access_url, release_description FROM ivoa.ObsCore WHERE obs_collection = 'FDS' AND release_description = 'https://www.eso.org/rm/api/v1/public/releaseDescriptions/157' AND dataproduct_type = 'image' ORDER BY dp_id",
+      "slot": "survey"
+    },
+    {
+      "id": "vista-viking-dr1-j-tiles", "surveyId": "vista", "releaseId": "viking",
+      "title": "VIKING DR1 J-band Tile images", "adapter": "eso-obscore-viking", "unitKind": "tile",
+      "scope": "Source-listed J-band VIKING DR1 Tile images from ESO release description 24. The locked selector returns 110 unique numeric Tile IDs while the release document declares 151 survey Tiles; this is a partial image roster, not complete VIKING J coverage. Original POLYGON J2000 image frames are transformed to estimated ICRS bounds; valid-pixel masks and per-file availability are unverified.",
+      "sourceUrl": "https://archive.eso.org/tap_obs/sync", "slot": "survey",
+      "query": "SELECT TOP 5000 dp_id, target_name, filter, obs_id, obs_creator_did, s_region, access_url, release_description, dataproduct_subtype FROM ivoa.ObsCore WHERE obs_collection = 'VIKING' AND release_description = 'https://www.eso.org/rm/api/v1/public/releaseDescriptions/24' AND dataproduct_type = 'image' AND filter = 'J' AND (dataproduct_subtype IS NULL OR dataproduct_subtype = '') ORDER BY dp_id",
+      "files": []
+    },
+    {
+      "id": "allwise-w3-w4-atlas", "surveyId": "allwise", "releaseId": "allwise",
+      "title": "AllWISE W3/W4 Atlas Tile images", "adapter": "allwise-ibe-atlas", "unitKind": "tile",
+      "scope": "Complete 36,480-row W3/W4 intensity-image roster from the official AllWISE allwise_p3am_cdd TAP table: 18,240 coadd Tiles per band, with identical coadd ID sets. This is the declared Atlas source-table inventory; J2000 image-frame corners become estimated ICRS geometry, valid-pixel masks are unchecked, and individual file availability is unverified.",
+      "sourceUrl": "https://irsa.ipac.caltech.edu/TAP/sync", "slot": "survey",
+      "query": "SELECT TOP 1000 coadd_id, band, ra1, dec1, ra2, dec2, ra3, dec3, ra4, dec4, crval1, crval2, crpix1, crpix2, naxis1, naxis2, ctype1, ctype2, cdelt1, cdelt2, crota2, equinox, cntr FROM allwise_p3am_cdd WHERE band IN (3,4) ORDER BY coadd_id, band",
+      "files": []
+    },
+    {
+      "id": "cfhtls-wide-t0007-single-band-images", "surveyId": "cfhtls", "releaseId": "cfhtls-wide",
+      "title": "CFHTLS Wide T0007 single-band median images", "adapter": "cadc-caom-cfhtls", "unitKind": "field",
+      "scope": "The complete 855-file CAOM selector for CFHTLS Wide T0007 single-band u/g/r/i/z median FITS images: 171 fields per band, with i split across 139 MP9701 and 32 MP9702 products. The separate 110 gri/gry/ryg RGB artifacts are excluded from this single-band source. CAOM ICRS frame polygons describe image frames, not valid-pixel masks; the listed CADC whole-file API route is derived from the source cadc: artifact URI and individually unverified.",
+      "sourceUrl": "https://ws.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/argus/sync", "slot": "survey",
+      "query": "SELECT TOP 1000 o.collection, o.observationID, o.obsID, p.productID, p.provenance_version, p.energy_bandpassName, p.position_bounds, p.position_dimension_naxis1, p.position_dimension_naxis2, a.artifactID, a.uri, a.productType, a.contentType, a.contentLength, a.contentChecksum, c.position_coordsys, c.position_equinox FROM caom2.Observation AS o JOIN caom2.Plane AS p ON o.obsID=p.obsID JOIN caom2.Artifact AS a ON a.planeID=p.planeID JOIN caom2.Part AS pt ON pt.artifactID=a.artifactID JOIN caom2.Chunk AS c ON c.partID=pt.partID WHERE o.collection='CFHTTERAPIX' AND o.observationID LIKE 'CFHTLS_W_%' AND p.provenance_version='T0007' AND a.productType='science' AND a.uri LIKE '%_T0007_MEDIAN.fits' AND p.energy_bandpassName IN ('g.MP9401','i.MP9701','i.MP9702','r.MP9601','u.MP9301','z.MP9801') ORDER BY o.observationID,p.productID,a.uri",
+      "files": []
+    },
+    {
+      "id": "panstarrs-dr1-zone23-skycells", "surveyId": "panstarrs", "releaseId": "panstarrs-dr1",
+      "title": "Pan-STARRS DR1 zone 23 stack skycells", "adapter": "panstarrs-dr1-skycell", "unitKind": "tile",
+      "scope": "All official zone 23 grid skycells (projection cells 1322-1411, 9,000 requested identities; approximately Dec 0-4 degrees across all RA). Only source-listed DR1 stack files with badflag=0 are indexed. The service responses and official grid table are locked as evidence. File URIs are direct STScI FITS links; individual availability and valid-pixel masks are unverified. This bounded zone is not the full Pan-STARRS DR1 inventory. Frame polygons follow the documented PS1 grid WCS rule, cross-checked against one metadata-only FITS header, and remain estimated.",
+      "sourceUrl": "https://ps1images.stsci.edu/cgi-bin/ps1filenames.py",
+      "query": "skycell={projection}.{subcell}&type=stack",
+      "slot": "survey",
+      "files": []
     }
   ]
 }

@@ -228,7 +228,7 @@ spec:
             timeoutSeconds: 2
             failureThreshold: 3
           livenessProbe:
-            httpGet: { path: /healthz, port: http }
+            tcpSocket: { port: http }
             initialDelaySeconds: 10
             periodSeconds: 15
             timeoutSeconds: 2

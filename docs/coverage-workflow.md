@@ -214,6 +214,16 @@ Current evidence limits are:
   file contents were not downloaded. Finer requests retain `nativePartition`
   order 8. Upstream MD5 values are declared checksums, not independently
   verified science checksums.
+- 2MASS 6X uses its real band-specific Atlas-image identity: dataset, date,
+  hemisphere, scan, image number and J/H/K band. A bounded one-degree M31 SIA
+  query currently locks 138 images across 46 coadds; this is not a complete
+  6X inventory. Preserve the source's FK5/J2000 SIN WCS and `pixflags`, use
+  each row's actual dimensions (the image height varies), and transform FITS
+  pixel-edge coordinates into estimated ICRS frame polygons. Whole-image
+  `.fits.gz` links follow the documented IRSA IBE date/hemisphere/scan/name
+  rule; sampled files were checked, but each result URI remains unverified.
+  Do not merge the three bands into one invented file or use the MOC as an
+  image identity roster.
 - SDSS DR9 uses official normal rerun-301 `run/rerun/camcol/field` identities
   and the trimmed `window_flist` field-window bounds, converted from J2000
   great-circle coordinates to estimated ICRS polygons. Preserve the original
@@ -234,6 +244,16 @@ Current evidence limits are:
   Direct file links, mirror directories, regional provider metadata and current
   availability checks are summarized in the
   [source-access research note](research/survey-download-sources-20261004.md).
+- VPHAS+ DR4 uses the official ESO release-description-145 image submission and
+  its `dp_id` identities; one row represents one unstacked OmegaCAM pawprint
+  file, not a stacked field tile. Retain the complete source `UNION J2000` of
+  CCD polygons, transform each polygon to ICRS, and match their union without
+  replacing the CCD gaps with a bounding rectangle. Complex multi-polygon
+  matching uses conservative per-polygon spherical caps and remains estimated.
+  The 15,534-row final incremental submission does not establish a cumulative
+  DR4 inventory; direct URLs are ESO DataLink `#this` single-file records, with
+  per-file availability and valid-pixel masks unverified. This Dev native
+  index does not create or publish another MOC.
 - HST overlap reverse lookup uses the SHA-locked public MAST CAOM metadata
   snapshot and its local SQLite footprint index. The index stores order-4
   candidate buckets, then intersects saved `s_region` values against the

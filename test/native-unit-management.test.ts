@@ -90,6 +90,21 @@ test("baseline adoption preserves installed bindings while new import-only surve
   assert.ok(result.group!.report.checks.every(check => check.passed));
 });
 
+test("DES and SPHEREx bindings skip legacy memberships and require their survey-native index", async t => {
+  const f = await fixture(t);
+  const bindings: NativeBinding[] = [
+    { productId: "des-dr2", layerId: "des-dr2-g-band-imaging-moc", surveyId: "des", releaseId: "des-dr2", product: "g-band imaging", modality: "imaging", unitKind: "tile", sourceIds: [], revision: "", visibility: "published" },
+    { productId: "spherex-qr2", layerId: "spherex-spherex-qr2-spherex-qr2-color-coverage-moc", surveyId: "spherex", releaseId: "spherex-qr2", product: "SPHEREx QR2 color coverage", modality: "infrared", unitKind: "image", sourceIds: [], revision: "", visibility: "published" },
+  ];
+  for (const binding of bindings) {
+    const active = { ...f.group, bindings: [...f.group.bindings, binding] };
+    await assert.rejects(
+      runNativeUnitWorker({ ...f.request, active, bindings: active.bindings }),
+      /New survey bindings require their locked native index/,
+    );
+  }
+});
+
 test("native review, archive, authority activation, site verification and isolated restore are independent", async t => {
   const f = await fixture(t);
   const store = new FilesystemArtifactStore(path.join(f.root, "var/object-store"));

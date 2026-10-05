@@ -20,6 +20,7 @@ import { metadataFetch } from "./metadata-fetch.js";
 import { bindingRevision, nativeDigest, nativeEvidencePath, nativeGroupId, nativeMetadataUrl, nativeNow, type NativeFile, type NativeGroup, type NativeReport, type NativeSnapshot, type NativeSource, type NativeWorkerRequest, type NativeWorkerResult } from "./native-unit-model.js";
 
 type Document = Record<string, any>;
+const SURVEY_NATIVE_SURVEYS = new Set(["gaia", "sdss", "galex", "jwst", "vista", "skymapper", "2mass", "allwise", "des", "spherex", "fds", "kids", "vphas", "cfhtls", "decaps", "act"]);
 export { nativeFile } from "./native-unit-archive.js";
 
 export function nativeDatabaseKey(file: string): string {
@@ -166,7 +167,7 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
     try {
       report.counts.nativeMemberships = Number((db.prepare("SELECT count(*) AS total FROM source_layer_units").get() as { total: number }).total);
       report.counts.nativeGeometries = Number((db.prepare("SELECT count(*) AS total FROM source_geometries").get() as { total: number }).total);
-      for (const binding of group.bindings.filter(binding => !["hst", "gaia", "sdss", "galex", "jwst"].includes(binding.surveyId) && binding.unitKind !== "target")) {
+      for (const binding of group.bindings.filter(binding => binding.surveyId !== "hst" && !SURVEY_NATIVE_SURVEYS.has(binding.surveyId) && binding.unitKind !== "target")) {
         const identity = `identity:${[binding.surveyId, binding.releaseId, binding.product].map(encodeURIComponent).join("/")}`;
         const row = db.prepare(`SELECT g.coarse_pixel AS pixel FROM source_aliases a JOIN source_layers l ON l.layer_key=a.layer_key JOIN source_layer_units m ON m.layer_key=l.layer_key JOIN source_geometries g ON g.geometry_key=l.geometry_key AND g.unit_id=m.unit_id WHERE a.alias IN (?,?) LIMIT 1`).get(binding.layerId, identity) as { pixel: number } | undefined;
         if (!row) throw new Error(`No native membership exists for product binding ${binding.layerId}`);
@@ -190,9 +191,20 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
         if (summary.adapter === "gaia-healpix-range") report.gaps.push("gaia-source-id-position-estimated", "gaia-science-content-and-checksums-unverified");
         if (summary.adapter === "sdss-field") report.gaps.push("sdss-window-bounds-not-image-wcs", "sdss-frame-uris-unverified");
         if (summary.adapter === "mast-observation") report.gaps.push(`${summary.sourceId}:valid-pixel-masks-unverified`);
+        if (summary.adapter === "eso-obscore-vvv") report.gaps.push("vista-vvv-dr4-increment-only", "vista-j2000-frame-bounds-estimated", "vista-direct-file-availability-unverified");
+        if (summary.adapter === "eso-obscore-fds") report.gaps.push("fds-j2000-frame-bounds-estimated", "fds-valid-pixel-masks-unverified", "fds-weight-maps-are-ancillary", "fds-individual-file-availability-unverified");
+        if (summary.adapter === "eso-obscore-kids") report.gaps.push("kids-j2000-frame-bounds-estimated", "kids-valid-pixel-masks-unverified", "kids-sources-not-byte-identical", "kids-individual-file-availability-unverified");
+        if (summary.adapter === "eso-obscore-vphas") report.gaps.push("vphas-dr4-final-increment-only", "vphas-ccd-union-bounds-estimated", "vphas-valid-pixel-masks-unverified", "vphas-individual-file-availability-unverified");
+        if (summary.adapter === "eso-obscore-viking") report.gaps.push("viking-151-official-tiles-vs-110-indexed-j-files", "viking-j2000-frame-bounds-estimated", "viking-valid-pixel-masks-unverified", "viking-individual-file-availability-unverified");
+        if (summary.adapter === "skymapper-dr4-ccd") report.gaps.push("skymapper-dr4-increment-only", "skymapper-ccd-bounds-estimated", "skymapper-access-is-cutout-not-full-ccd", "skymapper-cutout-availability-unverified");
+        if (summary.adapter === "twomass-6x-atlas") report.gaps.push("twomass-6x-bounded-region-only", "twomass-atlas-frame-bounds-estimated", "twomass-image-file-availability-unverified");
+        if (summary.adapter === "allwise-ibe-atlas") report.gaps.push("allwise-j2000-frame-bounds-estimated", "allwise-valid-pixel-masks-unverified", "allwise-individual-file-availability-unverified");
+        if (summary.adapter === "cadc-caom-cfhtls") report.gaps.push("cfhtls-wide-t0007-single-band-scope-only", "cfhtls-frame-bounds-estimated", "cfhtls-valid-pixel-masks-unverified", "cfhtls-individual-file-availability-unverified");
+        if (summary.adapter === "noirlab-des-tap") report.gaps.push("des-dr2-frame-bounds-estimated", "des-dr2-valid-pixel-masks-unverified", "des-dr2-individual-file-availability-unverified");
+        if (summary.adapter === "spherex-qr2-s3-observation") report.gaps.push("spherex-qr2-bounded-observation-only", "spherex-detector-frame-bounds-estimated", "spherex-valid-pixel-masks-unverified");
         report.checks.push({ id: `survey-source:${summary.sourceId}`, passed: true, detail: `${summary.unitCount} native identities in ${summary.indexedRows} supported metadata rows; ICRS/NESTED; ${summary.excludedRows} excluded rows` });
       }
-      for (const binding of group.bindings.filter(binding => ["gaia", "sdss", "galex", "jwst"].includes(binding.surveyId))) {
+      for (const binding of group.bindings.filter(binding => SURVEY_NATIVE_SURVEYS.has(binding.surveyId))) {
         const cells = index.sampleCells(binding);
         if (!cells.length) throw new Error(`No release/product-scoped native metadata exists for ${binding.layerId}`);
         const result = index.lookup(binding, 4, cells.slice(0, 1), 3);
@@ -202,7 +214,7 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
         report.samples.push({ layerId: binding.layerId, unitKind: sample.unitKind, unitId: sample.unitId, order: 4, cells: sample.matchingCells, precision: sample.precision, uris: sample.accessUris?.map(access => access.uri) ?? [], sRegion: sample.sRegion });
       }
     } finally { index.close(); }
-  } else if (group.bindings.some(binding => ["gaia", "sdss", "galex", "jwst"].includes(binding.surveyId))) throw new Error("New survey bindings require their locked native index");
+  } else if (group.bindings.some(binding => SURVEY_NATIVE_SURVEYS.has(binding.surveyId))) throw new Error("New survey bindings require their locked native index");
   if (group.hst) {
     await nativeFile(request.evidenceRoot, group.hst.file.ref, group.hst.file);
     const root = group.hst.root ? nativeEvidencePath(request.evidenceRoot, group.hst.root) : request.evidenceRoot;

@@ -1,12 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Healpix } from "healpixjs";
+import { Healpix, Pointing } from "healpixjs";
 import type { ArtifactStore } from "../server/artifact-store.js";
-import { lookupHstImages } from "../server/hst-image-lookup.js";
+import { candidateCellsForStcs, lookupHstImages } from "../server/hst-image-lookup.js";
 
 function table(fields: string[], values: unknown[][]): object {
   return { status: "COMPLETE", Tables: [{ Columns: fields.map((dataIndex) => ({ dataIndex })), Rows: values }] };
 }
+
+test("STC-S UNION footprints index each CCD polygon without filling the gaps between them", () => {
+  const left = "POLYGON ICRS 10 1 10.1 1 10.1 1.1 10 1.1";
+  const right = "POLYGON ICRS 20 1 20.1 1 20.1 1.1 20 1.1";
+  const union = candidateCellsForStcs(8, `UNION ICRS (${left.replace("POLYGON ICRS ", "POLYGON ")} ${right.replace("POLYGON ICRS ", "POLYGON ")})`);
+  const expected = new Set([...candidateCellsForStcs(8, left), ...candidateCellsForStcs(8, right)]);
+  assert.ok([...expected].every((cell) => union.includes(cell)));
+  const gapCell = new Healpix(2 ** 8).ang2pix(new Pointing(null, false, (90 - 1.05) * Math.PI / 180, 15 * Math.PI / 180));
+  assert.equal(union.includes(gapCell), false);
+});
 
 test("HST image lookup intersects s_region with the selected HEALPix cell and stores bounded metadata evidence", async (t) => {
   const order = 8;

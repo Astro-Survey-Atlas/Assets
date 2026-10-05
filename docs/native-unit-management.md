@@ -31,7 +31,8 @@ flowchart LR
 
 现有固定适配器覆盖 Legacy 发布成员表及共享几何、DESI Tile 表、Euclid Q1 TAP、
 Euclid ERO target 元数据、HSC tract/patch 表、HST public-image CAOM 快照、
-Gaia 原生文件分区、SDSS field 表及 GALEX/JWST public-image CAOM 元数据。
+Gaia 原生文件分区、SDSS field 表、GALEX/JWST public-image CAOM 元数据，以及
+VISTA VVV、SkyMapper DR4、2MASS 6X、NOIRLab DES DR2/DECaPS DR2、ACT DR5 和 ESO FDS DR1 的原生影像元数据。
 新增一种未支持的来源格式时可以先实现适配器；获取、校验、审核、归档和激活随后
 仍通过管理接口完成。Assets 获取官方元数据，不替用户获取科学文件。
 
@@ -52,10 +53,32 @@ SQLite 在 worker 的本地临时磁盘构建，通过完整性检查并关闭�
 | SDSS DR9 | 正常处理的 rerun 301 run/rerun/camcol/field，官方 window_flist great-circle 边界转换的 ICRS polygon | 是裁边 field-window 的 estimated 范围，保留原始坐标/逐波段质量标记；不是单幅影像 WCS、有效像素或 primary-only 库存。框架 URI 按官方规则生成，逐 URI 未验证 |
 | GALEX | MAST obsid，原始 ICRS s_region、GR6/GR7 实际 dataURL 路径、project、filters | GR6 AIS 只接受 GR6 + AIS；FUV/NUV 按原始波段记录筛选。不同 dataURL 子类型原样保留，访问使用 Products API，不改写成推测的强度影像文件 |
 | JWST | 已观测、公开、校准 image obsid 和原始 ICRS s_region | 现有 Carina 与 SMACS 产品分别限定 proposal 2731/2736、NGC-3324/SMACS-J0723.3-7327、NIRCam；不关联计划、其他仪器、其他目标或 Roman 测试记录 |
+| VISTA VVV DR4 | ESO ObsCore image identity、Tile、DataLink `#this` 文件及 J2000 footprint | 当前快照是一次 DR4 submission increment；Tile frame 转到 ICRS 后仍为 estimated，未检查有效像素掩膜，不能视为累计 DR4 库存 |
+| SkyMapper DR4 | `(image_id, ccd)` 与 `dr4.ccds.coverage` ICRS polygon | 当前快照仅覆盖 2014-03-15 至 18 的 5,666 条 g/r/i CCD 元数据；SIAP URI 是固定五角分 cutout，不是完整 CCD 文件 |
+| 2MASS 6X | dataset/date/hemisphere/scan/image/band Atlas-image identity 与 SIA WCS | 当前快照仅覆盖 M31、LMC 各一度查询；FK5/J2000 frame edge 转换后仍为 estimated，不是完整 6X 库存 |
+| AllWISE | 官方 `allwise_p3am_cdd` 的 `(coadd_id, band)` Atlas Tile 强度图 | 已锁定 W3/W4 全表 36,480 行、18,240 个 coadd；J2000 frame 转 ICRS 后为 estimated，未检查有效像素掩膜，逐文件可用性未核验。W1/W2、uncertainty 与 coverage 不属于当前产品绑定 |
+| CFHTLS Wide T0007 | CAOM observation/plane/artifact/chunk 联结出的单波段 median FITS 与 ICRS image-frame polygon | 855 个真实单波段文件、171 个 field；u/g/r/z 各 171 张，i 含 139 张旧滤镜和 32 张新滤镜。110 个 RGB 制品排除；frame 为 estimated，逐文件可用性未核验 |
+| NOIRLab DES DR2 | `(object, fileref, filter, obs_pub_did#1)` normal coadd identity 与来源提供的四角 ICRS polygon | 有界官方 TAP roster 为 10,169 Tiles、50,845 条 g/r/i/z/Y normal coadd 记录；角点是 estimated frame bounds，不含有效像素掩膜。每条 source-listed URL 不含 `POS/SIZE`；单 Tile 探测不代表所有文件可用。正赤纬 Tile 的 URI 含字面 `+`，必须保留原始 URL 查询值，不要转义为 `%2B` |
+| NOIRLab DECaPS DR2 | `obs_pub_did` 中的 FITS 文件及 CCD extension、SIAv1 明列的 ICRS TPV 四角 | 完整官方 SIAv1 表为 1,065,941 条 g/i/r/Y/z image rows；同一多 extension FITS 的各 CCD extension 是独立空间单位。Data Lab source-listed URL 带真实 `siaRef` 和 `extn`，不含 `POS/SIZE`；角点是 estimated frame bounds，不代表有效像素掩膜。完整输入由 214 个稳定 keyset 页、分页前后相同分母及五波段分母锁定；逐文件可用性未核验 |
+| ACT DR5 | 六张 source-listed ACT-only whole-map FITS，090/150/220 GHz × night/daynight；primary-header ICRS CAR WCS 的整图边界 | 官方 42-file 下载清单中的六图筛选；每个约 5.35 GB 文件均通过 HEAD 200，前 5,760 字节 Range 206 并读到 FITS `END`。边界按全 RA CAR 周期分段，precision 为 estimated；未读取像素或有效像素掩膜，不称作 Tile，也不代表 ACT DR5 全部产品库存 |
+| SPHEREx QR2 | observation ID、detector 和官方 level2 FITS object key；FITS `IMAGE` extension TAN-SIP WCS | 当前候选仅为 `2025W17_4B_0001_1` 的 5 个文件、detectors 2–6、`l2b-v20-2025-240`；范围由 FITS header range 请求估算，未读取像素或有效像素掩膜。IRSA 原始路径与 AWS mirror 的相对路径相同；这是单观测增量，不是完整 QR2 库存 |
+| ESO FDS DR1 | 官方 ObsCore `target_name` field、`POLYGON J2000`、DataLink `#this` science-image 文件 | 完整的 FDS DR1 science-image roster 为 97 张图像、26 个 field，u/g/r/i 分布为 20/26/26/25；配对 weight map 是 ancillary，不作为 science image。几何转换到 ICRS 后仍是 estimated frame bounds，未核验有效像素掩膜；单文件 URI 只抽样检查，逐文件可用性仍未验证。manifest 标为 `deliveryClass=evidence` |
+| VPHAS+ DR4 | 官方 ObsCore `dp_id` 图像身份、source-listed DataLink `#this`、32-CCD `UNION J2000` footprint | release description 145 的 15,534 行是最终增量，不是对所有 DR4 历史 release 的累计清单。保留未堆叠 OmegaCAM pawprint 的 CCD polygon 并集并转换到 ICRS；空间候选使用保守外接球冠，仍为 estimated，不代表有效像素掩膜。链接只抽样探测，逐文件可用性未核验；manifest 标为 `deliveryClass=evidence` |
 
 采集器分别是 `scripts/acquire-gaia-partitions.py`、
-`scripts/acquire-sdss-native-fields.py` 和 `scripts/acquire-mast-native-observations.py`。
-它们只采元数据，捕获日期、SHA 和实际分页保存在各自 manifest；原始输入不进入 Git。
+`scripts/acquire-sdss-native-fields.py`、`scripts/acquire-mast-native-observations.py`、
+`scripts/acquire_vvv_dr4_native_tiles.py`、`scripts/acquire-skymapper-dr4-ccds.py`、
+`scripts/acquire-2mass-6x-atlas.py`、`scripts/acquire-allwise-w3-w4-atlas.py`、
+`scripts/acquire-cfhtls-wide-t0007.py`、`scripts/acquire-des-dr2-native-tiles.py`、
+`scripts/acquire-decaps-dr2-native-ccds.py`、`scripts/acquire-act-dr5-whole-maps.py`、
+`scripts/acquire-fds-dr1-native-fields.py`、`scripts/acquire-kids-dr5-native-tiles.py` 和
+`scripts/acquire-vphas-dr4-native-images.py`。
+它们只采元数据，捕获日期、SHA 和实际分页保存在各自
+manifest；原始输入不进入 Git。FDS manifest 必须标记 `deliveryClass=evidence`，导入器会拒绝
+其他分类。`queryPagesComplete=true` 只说明声明的有界查询已采齐，不能替代
+`inventoryComplete` 对巡天库存完整性的声明。SkyMapper 和 2MASS 的已捕获 cutout/全图 URI
+语义按各自 adapter 保留；DES 适配器按原样保留 NOIRLab 的 raw `siaRef` URL，因为正号 Tile
+的 source-listed URI 使用字面 `+`，探测到将它百分号转义会改变服务端处理结果。Assets 不获取科学图像内容。
 查询接受 O4–O12 显式 NESTED cells，使用真实文件 range 或原始 footprint；粗 O4 候选
 桶不能代替几何相交。复杂 MAST polygon 延用保守 spherical cap，并标为 estimated，
 提示附近假阳性；原始 s_region 仍在 JSON/CSV 中。

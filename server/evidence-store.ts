@@ -217,6 +217,7 @@ export interface SourceAccessUri {
   uri: string;
   fileName?: string;
   band?: string;
+  sourceId?: string;
   accessType?: SourceAccessType;
   alternatives?: SourceAccessAlternative[];
 }

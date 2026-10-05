@@ -195,10 +195,17 @@ function polygonHasArea(vertices: readonly Pointing[]): boolean {
 
 function regions(region: unknown): MastRegion[] | undefined {
   if (typeof region !== "string" || region.length > MAX_STCS_REGION_LENGTH) return undefined;
-  const normalized = region.replace(/([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(?=(?:POLYGON|CIRCLE)\b)/gi, "$1 ");
+  const opens = (region.match(/\(/g) ?? []).length;
+  const closes = (region.match(/\)/g) ?? []).length;
+  if (opens !== closes || opens > 1) return undefined;
+  const normalized = region.replace(/[()]/g, " ").replace(/([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(?=(?:UNION|POLYGON|CIRCLE)\b)/gi, "$1 ");
   const tokens = normalized.trim().split(/\s+/);
   if (tokens.length > MAX_STCS_REGION_TOKENS) return undefined;
   const output: MastRegion[] = [];
+  const union = tokens[0]?.toUpperCase() === "UNION";
+  if (union) tokens.shift();
+  if (union && tokens[0]?.toUpperCase() !== "ICRS") return undefined;
+  if (union) tokens.shift();
   let partCount = 0;
   for (let index = 0; index < tokens.length;) {
     const kind = tokens[index++]!.toUpperCase();
@@ -244,7 +251,7 @@ function regions(region: unknown): MastRegion[] | undefined {
     if (uniqueVertices.size < 3 || !polygonHasArea(vertices)) continue;
     output.push({ kind: "polygon", vertices });
   }
-  return output.length ? output : undefined;
+  return output.length && (!union || output.length > 1) ? output : undefined;
 }
 
 function contains(ranges: RangeSet, pixel: number): boolean {

@@ -10,6 +10,8 @@ const CHECKED = {
   galexHead: "2026-10-04T03:41:41Z",
   sdssHead: "2026-10-04T03:38:52Z",
   casdc: "2026-10-04T03:41:41Z",
+  skymapperCutout: "2026-10-04T16:58:37Z",
+  twomassAtlasHead: "2026-10-05",
 } as const;
 
 function alternative(uri: string, details: Omit<SourceAccessAlternative, "uri">): SourceAccessAlternative {
@@ -32,6 +34,11 @@ function locationFor(uri: string, context: AccessContext, status: SourceAccessSt
     accessType, provider: "NASA/IPAC IRSA Euclid Q1 mirror", providerCountryCode: "US", providerLocation: "NASA/IPAC Infrared Science Archive",
     servingRegion: "AWS us-east-1", relationship, status,
     ...(status === "rule-derived" ? { checkedAt: CHECKED.irsaQ1, note: "The mirror uses a Tile/product directory entry. Its page lists separate files; this is not asserted to be a per-file URL." } : {}),
+  });
+  if (url.hostname === "irsa.ipac.caltech.edu" && url.pathname.startsWith("/ibe/data/twomass/sixxcat/sixxcat/")) return alternative(uri, {
+    accessType, provider: "NASA/IPAC 2MASS Infrared Science Archive", providerCountryCode: "US", providerLocation: "IPAC, Pasadena, California, US",
+    servingRegion: "IRSA public archive; exact serving node not independently located", relationship, status,
+    ...(status === "rule-derived" ? { checkedAt: CHECKED.twomassAtlasHead, note: "The whole-Atlas-image path follows the official IBE date/hemisphere/scan/file rule; representative files were checked, but this individual URI was not." } : {}),
   });
   if (url.hostname === "irsa.ipac.caltech.edu") return alternative(uri, {
     accessType, provider: "NASA/IPAC IRSA Euclid ERO mirror", providerCountryCode: "US", providerLocation: "IPAC, Pasadena, California, US",
@@ -58,6 +65,11 @@ function locationFor(uri: string, context: AccessContext, status: SourceAccessSt
     servingRegion: "United States provider; serving node not independently located", relationship, status,
     ...(status === "rule-derived" ? { checkedAt: CHECKED.sdssHead, httpStatus: 200, note: "The official DR9 frame filename rule was checked with a representative field; this individual URI may not have been tested." } : {}),
   });
+  if (url.hostname === "api.skymapper.nci.org.au") return alternative(uri, {
+    accessType, provider: "SkyMapper public image service (NCI Australia)", providerCountryCode: "AU", providerLocation: "National Computational Infrastructure, Australia",
+    servingRegion: "Australian provider; delivery edge not independently located", relationship, status,
+    ...(status === "rule-derived" ? { checkedAt: CHECKED.skymapperCutout, httpStatus: 200, note: "The documented SIAP rule returned HTTP 200 to HEAD for a representative 5-arcmin FITS cutout; this CCD's individual cutout was not checked." } : {}),
+  });
   if (url.hostname === "data.desi.lbl.gov") return alternative(uri, {
     accessType, provider: "DESI public data archive", providerCountryCode: "US", providerLocation: "Lawrence Berkeley National Laboratory, California, US",
     servingRegion: "United States provider; serving node not independently located", relationship, status,
@@ -69,6 +81,20 @@ function locationFor(uri: string, context: AccessContext, status: SourceAccessSt
   if (url.hostname === "hsc-release.mtk.nao.ac.jp") return alternative(uri, {
     accessType, provider: "HSC SSP data access", providerCountryCode: "JP", providerLocation: "National Astronomical Observatory of Japan",
     servingRegion: "Provider location; archive node not independently located", relationship, status,
+  });
+  if (url.hostname === "dataportal.eso.org") return alternative(uri, {
+    accessType, provider: "ESO Data Portal", providerCountryCode: "ES", providerLocation: "ESO / ESAC archive service",
+    servingRegion: "Provider location; delivery edge not independently located", relationship, status,
+    ...(status === "source-listed" ? { note: "This single-file URL is the ESO DataLink #this record; file availability was not verified by Assets." } : {}),
+  });
+  if (url.hostname === "archive.eso.org") return alternative(uri, {
+    accessType, provider: "ESO Archive DataLink", providerCountryCode: "ES", providerLocation: "ESO / ESAC archive service",
+    servingRegion: "Provider location; delivery edge not independently located", relationship, status,
+  });
+  if (url.hostname === "ds.astro.rug.astro-wise.org" && url.port === "8000") return alternative(uri, {
+    accessType, provider: "KiDS DR5 source list · Astro-WISE / University of Groningen", providerCountryCode: "NL",
+    providerLocation: "University of Groningen, the Netherlands", servingRegion: "Provider location; delivery node not independently located", relationship, status,
+    ...(status === "source-listed" ? { note: "This exact single-file URI appears in the official KiDS DR5 wget list and was joined by filename. Astro-WISE may serve a FITS representation with different headers from ESO; it is not claimed to be a byte-identical mirror." } : {}),
   });
   return alternative(uri, { accessType, provider: "Survey source", relationship, status });
 }
@@ -108,8 +134,9 @@ export function mastScienceFile(dataUrl: unknown, surveyId: string): DirectSurve
 export function alternativesForAccessUri(uri: string, context: AccessContext): SourceAccessAlternative[] {
   const status: SourceAccessStatus = context.surveyId === "euclid" && context.releaseId === "euclid-q1" ? "source-listed"
     : context.surveyId === "gaia" ? "source-listed"
+      : context.surveyId === "kids" && context.releaseId === "kids-dr5" ? "source-listed"
       : context.surveyId === "sdss" ? "rule-derived"
-        : context.surveyId === "galex" || context.surveyId === "jwst" ? "rule-derived" : "source-listed";
+        : context.surveyId === "galex" || context.surveyId === "jwst" || context.surveyId === "skymapper" || context.surveyId === "2mass" ? "rule-derived" : "source-listed";
   const items = [locationFor(uri, context, status)];
   if (context.surveyId === "gaia" && context.releaseId === "gaia-dr3") {
     const source = new URL(uri);

@@ -1173,6 +1173,14 @@ export class SourceUnitStore {
                 }),
               });
               store.#identityLayers.set(identity, index);
+              if (releaseId === "legacy-dr5" && productPath === "coadd") {
+                const decalsIdentity = sourceUnitIdentity("decals", "decals-dr5", "DR5 g/r/z color footprint");
+                store.#identityLayers.set(decalsIdentity, {
+                  ...index,
+                  layerId: decalsIdentity,
+                  notes: `${index.notes} This DECaLS DR5 mapping uses the official Legacy Surveys DR5 mixed-program coadd roster; it does not isolate DECaLS-only exposures.`,
+                });
+              }
 
               const cells = new Set<number>();
               for (let unitIndex = 0; unitIndex < sharedUnits.length; unitIndex += 1) {

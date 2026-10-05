@@ -1223,7 +1223,7 @@ async function nativeProductBindings(): Promise<NativeBinding[]> {
   const bindings: NativeBinding[] = [];
   for (const layer of currentPublicState.coverage.records.values()) {
     const survey = surveyNativeBinding(layer);
-    if (!survey && !["legacy-surveys", "desi", "euclid", "hst", "hsc-ssp"].includes(layer.surveyId) || isWarehouseFilePartitionLayer(layer)) continue;
+    if (!survey && !["legacy-surveys", "decals", "desi", "euclid", "hst", "hsc-ssp", "vista", "skymapper", "2mass"].includes(layer.surveyId) || isWarehouseFilePartitionLayer(layer)) continue;
     const match = survey || layer.surveyId === "hst" || layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" ? undefined : await store.match(layer.layerId, 4, [], 1, layer);
     if (!survey && !match && layer.surveyId !== "hst" && !(layer.surveyId === "euclid" && layer.releaseId === "euclid-ero")) continue;
     const record = products.list().find(record => record.productId === layer.productId || record.draft.surveyId === layer.surveyId && record.draft.releaseId === layer.releaseId && record.draft.name === layer.product);
@@ -1302,7 +1302,7 @@ function sourceUnitCoverageReady(): Promise<void> {
       const [hst, ero, survey] = await Promise.all([hstObservationIndex(), eroTargetIndex(), surveyNativeIndex()]);
       if (version !== (nativeUnits?.version ?? "imported-baseline")) return;
       for (const layer of currentPublicState.coverage.records.values()) {
-        if (isWarehouseFilePartitionLayer(layer) || !["legacy-surveys", "desi", "euclid", "hst", "hsc-ssp", "gaia", "sdss", "galex", "jwst"].includes(layer.surveyId)) continue;
+        if (isWarehouseFilePartitionLayer(layer) || !["legacy-surveys", "decals", "desi", "euclid", "hst", "hsc-ssp", "gaia", "sdss", "galex", "jwst", "vista", "skymapper", "2mass", "des", "fds", "kids", "allwise", "spherex", "vphas", "cfhtls", "act", "decaps", "panstarrs"].includes(layer.surveyId)) continue;
         const binding = nativeUnits?.active?.bindings.find(binding => binding.layerId === layer.layerId);
         const unavailableBinding = nativeUnits?.active?.report.unavailableBindings?.includes(layer.layerId);
         const enabled = (!nativeUnits?.active || Boolean(binding)) && !unavailableBinding;
