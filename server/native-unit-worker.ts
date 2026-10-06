@@ -11,7 +11,7 @@ import { buildNativeDelta } from "./native-unit-delta.js";
 import { HstObservationIndex } from "./hst-observation-index.js";
 import { hstSnapshotRows, loadHstSnapshot } from "./hst-snapshot.js";
 import { cellsForStcs } from "./hst-image-lookup.js";
-import { inspectSourceUnitInput, SourceUnitStore } from "./source-units.js";
+import { inspectSourceUnitInput, legacyDr5CoaddFallbackAlias, SourceUnitStore } from "./source-units.js";
 import { SOURCE_UNIT_DISK_INDEX_VERSION } from "./source-unit-disk-index.js";
 import { importSurveySnapshot, isSurveyNativeAdapter, SurveyNativeIndex } from "./survey-native-index.js";
 import { getNativeSlot, setNativeSlot } from "./native-unit-sources.js";
@@ -20,7 +20,7 @@ import { metadataFetch } from "./metadata-fetch.js";
 import { bindingRevision, nativeDigest, nativeEvidencePath, nativeGroupId, nativeMetadataUrl, nativeNow, type NativeFile, type NativeGroup, type NativeReport, type NativeSnapshot, type NativeSource, type NativeWorkerRequest, type NativeWorkerResult } from "./native-unit-model.js";
 
 type Document = Record<string, any>;
-const SURVEY_NATIVE_SURVEYS = new Set(["gaia", "sdss", "galex", "jwst", "vista", "skymapper", "2mass", "allwise", "des", "spherex", "fds", "kids", "vphas", "cfhtls", "decaps", "act"]);
+const SURVEY_NATIVE_SURVEYS = new Set(["gaia", "sdss", "galex", "jwst", "vista", "skymapper", "2mass", "allwise", "des", "spherex", "fds", "kids", "vphas", "cfhtls", "decaps", "act", "panstarrs", "iphas", "rubin", "akari", "ztf", "nvss", "sumss", "wenss"]);
 export { nativeFile } from "./native-unit-archive.js";
 
 export function nativeDatabaseKey(file: string): string {
@@ -169,10 +169,13 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
       report.counts.nativeGeometries = Number((db.prepare("SELECT count(*) AS total FROM source_geometries").get() as { total: number }).total);
       for (const binding of group.bindings.filter(binding => binding.surveyId !== "hst" && !SURVEY_NATIVE_SURVEYS.has(binding.surveyId) && binding.unitKind !== "target")) {
         const identity = `identity:${[binding.surveyId, binding.releaseId, binding.product].map(encodeURIComponent).join("/")}`;
-        const row = db.prepare(`SELECT g.coarse_pixel AS pixel FROM source_aliases a JOIN source_layers l ON l.layer_key=a.layer_key JOIN source_layer_units m ON m.layer_key=l.layer_key JOIN source_geometries g ON g.geometry_key=l.geometry_key AND g.unit_id=m.unit_id WHERE a.alias IN (?,?) LIMIT 1`).get(binding.layerId, identity) as { pixel: number } | undefined;
+        const aliases = [...new Set([binding.layerId, identity, legacyDr5CoaddFallbackAlias(binding.layerId, binding)].filter((alias): alias is string => Boolean(alias)))];
+        const aliasSlots = aliases.map(() => "?").join(",");
+        const row = db.prepare(`SELECT g.coarse_pixel AS pixel FROM source_aliases a JOIN source_layers l ON l.layer_key=a.layer_key JOIN source_layer_units m ON m.layer_key=l.layer_key JOIN source_geometries g ON g.geometry_key=l.geometry_key AND g.unit_id=m.unit_id WHERE a.alias IN (${aliasSlots}) LIMIT 1`).get(...aliases) as { pixel: number } | undefined;
         if (!row) throw new Error(`No native membership exists for product binding ${binding.layerId}`);
         const match = store.match(binding.layerId, 4, [row.pixel], 3, binding);
         if (!match?.units.length) throw new Error(`Native geometry probe failed for ${binding.layerId}`);
+        if (binding.surveyId === "decals" && binding.releaseId === "decals-dr5") report.gaps.push("decals-dr5-mixed-program-coadd-roster-not-decals-only");
         report.checks.push({ id: `binding:${binding.layerId}`, passed: true, detail: `${match.unitKind} identity and footprint can be queried at O4` });
         if (report.samples.length < 24) for (const unit of match.units.slice(0, 1)) report.samples.push({ layerId: binding.layerId, unitKind: unit.unitKind, unitId: unit.unitId, order: 4, cells: unit.matchingCells, precision: unit.geometryPrecision, uris: unit.accessUris?.map(uri => uri.url) ?? [unit.downloadUrl] });
       }
@@ -200,8 +203,16 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
         if (summary.adapter === "twomass-6x-atlas") report.gaps.push("twomass-6x-bounded-region-only", "twomass-atlas-frame-bounds-estimated", "twomass-image-file-availability-unverified");
         if (summary.adapter === "allwise-ibe-atlas") report.gaps.push("allwise-j2000-frame-bounds-estimated", "allwise-valid-pixel-masks-unverified", "allwise-individual-file-availability-unverified");
         if (summary.adapter === "cadc-caom-cfhtls") report.gaps.push("cfhtls-wide-t0007-single-band-scope-only", "cfhtls-frame-bounds-estimated", "cfhtls-valid-pixel-masks-unverified", "cfhtls-individual-file-availability-unverified");
+        if (summary.adapter === "iphas-dr2-pipeline") report.gaps.push("iphas-author-pipeline-recalibration-membership-only", "iphas-final-qc-not-reconciled", "iphas-four-corner-zpn-bounds-estimated", "iphas-image-links-unverified");
+        if (summary.adapter === "rubin-firstlook-avm") report.gaps.push("rubin-firstlook-outreach-images-only", "rubin-avm-position-quality-bounds-estimated", "rubin-valid-pixel-masks-unverified");
         if (summary.adapter === "noirlab-des-tap") report.gaps.push("des-dr2-frame-bounds-estimated", "des-dr2-valid-pixel-masks-unverified", "des-dr2-individual-file-availability-unverified");
         if (summary.adapter === "spherex-qr2-s3-observation") report.gaps.push("spherex-qr2-bounded-observation-only", "spherex-detector-frame-bounds-estimated", "spherex-valid-pixel-masks-unverified");
+        if (summary.adapter === "skyview-radio-maps") {
+          report.counts[`${summary.sourceId}:headerFailures`] = summary.headerFailures ?? 0;
+          report.counts[`${summary.sourceId}:geometryFailures`] = summary.geometryFailures ?? 0;
+          if (summary.spectralConflicts) report.counts[`${summary.sourceId}:spectralConflicts`] = summary.spectralConflicts;
+          report.gaps.push("radio-fits-frame-bounds-estimated", "radio-valid-pixel-masks-unverified", "skyview-map-uri-range-probed-not-full-file-verified", ...(summary.gaps ?? []));
+        }
         report.checks.push({ id: `survey-source:${summary.sourceId}`, passed: true, detail: `${summary.unitCount} native identities in ${summary.indexedRows} supported metadata rows; ICRS/NESTED; ${summary.excludedRows} excluded rows` });
       }
       for (const binding of group.bindings.filter(binding => SURVEY_NATIVE_SURVEYS.has(binding.surveyId))) {
@@ -381,9 +392,18 @@ export async function runNativeUnitWorker(request: NativeWorkerRequest, progress
   const surveyChanged = surveySnapshots.length > 0 && survey?.buildKey !== SurveyNativeIndex.key(surveySnapshots);
   if (surveyChanged) {
     const ref = `managed/native-units/indexes/${request.taskId}/survey-units.sqlite`;
-    const index = await SurveyNativeIndex.build(request.evidenceRoot, ref, request.sources, surveySnapshots, progress);
-    const buildKey = index.buildKey; index.close();
-    survey = { file: await nativeFile(request.evidenceRoot, ref), buildKey };
+    const previousSurveySnapshots = request.active
+      ? Object.values(request.active.snapshots).filter(snapshot => isSurveyNativeAdapter(request.sources.find(source => source.id === snapshot.sourceId)!.adapter))
+      : [];
+    const surveyBase = request.active?.survey && previousSurveySnapshots.length
+      && request.active.survey.buildKey === SurveyNativeIndex.key(previousSurveySnapshots)
+      ? { file: request.active.survey.file, buildKey: request.active.survey.buildKey, snapshots: previousSurveySnapshots }
+      : undefined;
+    const index = await SurveyNativeIndex.build(request.evidenceRoot, ref, request.sources, surveySnapshots, progress, surveyBase);
+    const buildKey = index.buildKey;
+    const indexRef = index.fileRef ?? ref;
+    index.close();
+    survey = { file: await nativeFile(request.evidenceRoot, indexRef), buildKey };
   }
   const candidate = { createdAt: nativeNow(), origin: operation === "baseline" ? "imported-baseline" as const : "managed-build" as const, generic, hst, ...(survey ? { survey } : {}), lockText: nextLockText, recipes, snapshots, bindings, report: { checks: [], gaps: [], counts: {}, samples: [] } as NativeReport };
   const group: NativeGroup = { ...candidate, id: nativeGroupId(candidate) };

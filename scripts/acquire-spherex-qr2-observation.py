@@ -36,6 +36,34 @@ LISTING_QUERY = (
     "ListObjectsV2 prefix=qr2/level2/2025W17_4B/l2b-v20-2025-240/"
     "{2,3,4,5,6}/level2_2025W17_4B_0001_1D{2,3,4,5,6}_spx_l2b-v20-2025-240.fits; one QR2 observation"
 )
+SPHEREX_D1_V241_SOURCE_ID = "spherex-qr2-2025w17-4b-0001-1-d1-v241"
+SPHEREX_D1_V241_QUERY = (
+    "ListObjectsV2 prefix=qr2/level2/2025W17_4B/l2b-v20-2025-241/1/"
+    "level2_2025W17_4B_0001_1D1_spx_l2b-v20-2025-241.fits; one QR2 D1 observation"
+)
+CAPTURE_PROFILES = {
+    "observation-v20-240": {
+        "source_id": SOURCE_ID,
+        "observing_run": OBSERVING_RUN,
+        "processing_version": PROCESSING_VERSION,
+        "observation_selector": OBSERVATION_SELECTOR,
+        "observation_id": OBSERVATION_ID,
+        "detectors": DETECTORS,
+        "query": LISTING_QUERY,
+        "versioned_unit_id": False,
+    },
+    "d1-v20-241": {
+        "source_id": SPHEREX_D1_V241_SOURCE_ID,
+        "observing_run": OBSERVING_RUN,
+        "processing_version": "l2b-v20-2025-241",
+        "observation_selector": OBSERVATION_SELECTOR,
+        "observation_id": OBSERVATION_ID,
+        "detectors": [1],
+        "query": SPHEREX_D1_V241_QUERY,
+        "versioned_unit_id": True,
+    },
+}
+DEFAULT_PROFILE = CAPTURE_PROFILES["observation-v20-240"]
 
 
 def sha256(body: bytes) -> str:
@@ -106,8 +134,11 @@ def parse_listing(body: bytes) -> tuple[list[dict], bool, str | None]:
     return entries, truncated, token
 
 
-def list_detector(detector: int, output: Path, timeout: int, fetch) -> tuple[list[dict], list[dict], list[dict]]:
-    prefix = f"qr2/level2/{OBSERVING_RUN}/{PROCESSING_VERSION}/{detector}/level2_{OBSERVATION_SELECTOR}D{detector}_spx_{PROCESSING_VERSION}.fits"
+def list_detector(detector: int, output: Path, timeout: int, fetch, profile: dict = DEFAULT_PROFILE) -> tuple[list[dict], list[dict], list[dict]]:
+    run = profile["observing_run"]
+    processing_version = profile["processing_version"]
+    observation_selector = profile["observation_selector"]
+    prefix = f"qr2/level2/{run}/{processing_version}/{detector}/level2_{observation_selector}D{detector}_spx_{processing_version}.fits"
     token = None
     seen_tokens = set()
     seen_keys = set()
@@ -141,7 +172,7 @@ def list_detector(detector: int, output: Path, timeout: int, fetch) -> tuple[lis
             raise ValueError("SPHEREx S3 listing repeated its continuation token")
         seen_tokens.add(next_token)
         token = next_token
-    expected = {f"level2_{OBSERVATION_SELECTOR}D{detector}_spx_{PROCESSING_VERSION}.fits"}
+    expected = {f"level2_{observation_selector}D{detector}_spx_{processing_version}.fits"}
     actual = {item["key"].rsplit("/", 1)[-1] for item in all_entries}
     if actual != expected:
         raise ValueError(f"SPHEREx detector {detector} does not have exactly one listed file for this observation")
@@ -223,11 +254,11 @@ def polygon_from_wcs(header: fits.Header) -> tuple[str, list[list[float]]]:
     return region, points
 
 
-def normalize_entry(entry: dict, detector: int, output: Path, timeout: int, fetch) -> tuple[dict, dict]:
+def normalize_entry(entry: dict, detector: int, output: Path, timeout: int, fetch, profile: dict = DEFAULT_PROFILE) -> tuple[dict, dict]:
     key = entry["key"]
     filename = key.rsplit("/", 1)[-1]
     match = re.fullmatch(
-        rf"level2_{OBSERVATION_SELECTOR}D{detector}_spx_{re.escape(PROCESSING_VERSION)}\.fits",
+        rf"level2_{profile['observation_selector']}D{detector}_spx_{re.escape(profile['processing_version'])}\.fits",
         filename,
     )
     if not match or entry["sizeBytes"] < BLOCK_SIZE * 2:
@@ -236,10 +267,11 @@ def normalize_entry(entry: dict, detector: int, output: Path, timeout: int, fetc
     original_url = IRSA_ROOT + key
     header_bytes, range_receipts = read_header(mirror_url, entry["sizeBytes"], timeout, fetch)
     extension, extension_bytes, extension_offset = header_after_primary(header_bytes)
-    if int(extension.get("DETECTOR", -1)) != detector or str(extension.get("OBSID", "")).strip() != OBSERVATION_ID:
+    if int(extension.get("DETECTOR", -1)) != detector or str(extension.get("OBSID", "")).strip() != profile["observation_id"]:
         raise ValueError("SPHEREx FITS header observation or detector differs from its listed path")
     region, frame_points = polygon_from_wcs(extension)
-    unit_id = f"{OBSERVATION_ID}/D{detector}"
+    version_part = f"/{profile['processing_version']}" if profile["versioned_unit_id"] else ""
+    unit_id = f"{profile['observation_id']}{version_part}/D{detector}"
     header_ref = f"metadata/headers/detector-{detector}/{filename}.header"
     header_path = output / header_ref
     immutable_write(header_path, header_bytes)
@@ -254,9 +286,9 @@ def normalize_entry(entry: dict, detector: int, output: Path, timeout: int, fetc
             {"uri": mirror_url, "fileName": filename, "band": f"D{detector}", "accessType": "file"},
         ],
         "sourceMetadata": {
-            "observationId": OBSERVATION_ID,
+            "observationId": profile["observation_id"],
             "detector": detector,
-            "processingVersion": PROCESSING_VERSION,
+            "processingVersion": profile["processing_version"],
             "objectKey": key,
             "fileName": filename,
             "fileSizeBytes": entry["sizeBytes"],
@@ -283,23 +315,25 @@ def normalize_entry(entry: dict, detector: int, output: Path, timeout: int, fetc
     return row, header_document
 
 
-def acquire(output: Path, timeout: int = 45, fetch=request_bytes) -> dict:
+def acquire(output: Path, timeout: int = 45, fetch=request_bytes, profile: dict = DEFAULT_PROFILE) -> dict:
     output.mkdir(parents=True, exist_ok=False)
     listings = []
     listing_pages = []
     entries = []
-    for detector in DETECTORS:
-        detector_entries, documents, pages = list_detector(detector, output, timeout, fetch)
+    detectors = profile["detectors"]
+    expected_row_count = len(detectors)
+    for detector in detectors:
+        detector_entries, documents, pages = list_detector(detector, output, timeout, fetch, profile)
         entries.extend((detector, item) for item in detector_entries)
         listings.extend(documents)
         listing_pages.extend(pages)
-    if len(entries) != EXPECTED_ROW_COUNT or len({entry["key"] for _, entry in entries}) != EXPECTED_ROW_COUNT:
+    if len(entries) != expected_row_count or len({entry["key"] for _, entry in entries}) != expected_row_count:
         raise ValueError("SPHEREx bounded observation roster has an unexpected row count or duplicate key")
 
     rows = []
     header_documents = []
     for detector, entry in entries:
-        row, document = normalize_entry(entry, detector, output, timeout, fetch)
+        row, document = normalize_entry(entry, detector, output, timeout, fetch, profile)
         rows.append(row)
         header_documents.append(document)
     rows.sort(key=lambda row: row["unitId"])
@@ -312,6 +346,8 @@ def acquire(output: Path, timeout: int = 45, fetch=request_bytes) -> dict:
         "adapter": "spherex-qr2-s3-observation",
         "surveyId": SURVEY_ID,
         "releaseId": RELEASE_ID,
+        "sourceId": profile["source_id"],
+        "query": profile["query"],
         "capturedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "coordinateFrame": "ICRS",
         "ordering": "NESTED",
@@ -319,12 +355,12 @@ def acquire(output: Path, timeout: int = 45, fetch=request_bytes) -> dict:
         "inventoryComplete": False,
         "nativeCoordinateFrame": "ICRS",
         "scope": {
-            "observingRun": OBSERVING_RUN,
-            "processingVersion": PROCESSING_VERSION,
-            "observationSelector": OBSERVATION_SELECTOR,
-            "observationId": OBSERVATION_ID,
-            "detectors": DETECTORS,
-            "expectedRowCount": EXPECTED_ROW_COUNT,
+            "observingRun": profile["observing_run"],
+            "processingVersion": profile["processing_version"],
+            "observationSelector": profile["observation_selector"],
+            "observationId": profile["observation_id"],
+            "detectors": detectors,
+            "expectedRowCount": expected_row_count,
             "fullObservationRoster": True,
             "fullReleaseInventory": False,
             "inventoryComplete": False,
@@ -333,7 +369,7 @@ def acquire(output: Path, timeout: int = 45, fetch=request_bytes) -> dict:
         },
         "sourcePagination": {
             "pageSize": PAGE_SIZE,
-            "expectedRowCount": EXPECTED_ROW_COUNT,
+            "expectedRowCount": expected_row_count,
             "queryPagesComplete": True,
             "pages": listing_pages,
         },
@@ -350,8 +386,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=45)
+    parser.add_argument("--profile", choices=sorted(CAPTURE_PROFILES), default="observation-v20-240")
     args = parser.parse_args()
-    result = acquire(args.output, args.timeout)
+    result = acquire(args.output, args.timeout, profile=CAPTURE_PROFILES[args.profile])
     print(json.dumps({key: value for key, value in result.items() if key != "manifest"}, sort_keys=True))
 
 

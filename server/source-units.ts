@@ -81,6 +81,17 @@ function sourceUnitDiskAlias(alias: string): string {
   return parts.length === 1 ? alias : `identity:${parts.map(encodeURIComponent).join("/")}`;
 }
 
+export function legacyDr5CoaddFallbackAlias(
+  layerId: string,
+  identity?: Pick<SourceUnitLayerDescriptor, "surveyId" | "releaseId" | "product">,
+): string | undefined {
+  const isDecalsDr5 = layerId === "decals-dr5-color-footprint"
+    || identity?.surveyId === "decals" && identity.releaseId === "decals-dr5" && identity.product === "DR5 g/r/z color footprint";
+  return isDecalsDr5
+    ? sourceUnitDiskAlias(sourceUnitIdentity("legacy-surveys", "legacy-dr5", "Coadded imaging"))
+    : undefined;
+}
+
 async function sourceUnitDiskCacheKey(root: string, registryText: string, lockText: string, registry: { layers?: Array<{ surveyId: string; recipePath?: string }> }, recipes: Record<string, string> = {}): Promise<string> {
   const modulePath = fileURLToPath(import.meta.url);
   const extension = path.extname(modulePath);
@@ -1173,14 +1184,6 @@ export class SourceUnitStore {
                 }),
               });
               store.#identityLayers.set(identity, index);
-              if (releaseId === "legacy-dr5" && productPath === "coadd") {
-                const decalsIdentity = sourceUnitIdentity("decals", "decals-dr5", "DR5 g/r/z color footprint");
-                store.#identityLayers.set(decalsIdentity, {
-                  ...index,
-                  layerId: decalsIdentity,
-                  notes: `${index.notes} This DECaLS DR5 mapping uses the official Legacy Surveys DR5 mixed-program coadd roster; it does not isolate DECaLS-only exposures.`,
-                });
-              }
 
               const cells = new Set<number>();
               for (let unitIndex = 0; unitIndex < sharedUnits.length; unitIndex += 1) {
@@ -1204,6 +1207,34 @@ export class SourceUnitStore {
                 coverageMethod: "unit-centers",
                 cells: new Map([[shared.coarseOrder, [...cells].sort((left, right) => left - right)]]),
               });
+            }
+            if (releaseId === "legacy-dr5") {
+              const decalsIdentity = sourceUnitIdentity("decals", "decals-dr5", "DR5 g/r/z color footprint");
+              const productMembership = new Uint8Array(sharedUnits.length);
+              for (const { roster } of release.regions.values()) {
+                for (const [unitId, member] of roster.members) {
+                  if (!member.availableBands.length) continue;
+                  const unitIndex = geometryIndexById.get(unitId);
+                  if (unitIndex !== undefined) productMembership[unitIndex] = 1;
+                }
+              }
+              const decalsIndex = buildLayerIndex(decalsIdentity, sharedUnits,
+                "Official Legacy Surveys DR5 mixed-program coadd roster joined to the locked all-sky brick grid; this mapping does not isolate DECaLS-only exposures.", shared);
+              decalsIndex.unitFilter = (unitIndex) => productMembership[unitIndex] === 1;
+              decalsIndex.accessUrisForUnit = (unitId) => [...release.regions].flatMap(([region, { roster }]) => {
+                const member = roster.members.get(unitId);
+                return member?.availableBands.length ? legacyReleaseBrickAccessUris(releaseId, region, unitId, "coadd", member.availableBands) : [];
+              });
+              decalsIndex.sourceSnapshotSha256 = release.snapshotSha256;
+              decalsIndex.diskPayloadKind = "legacy-release-roster";
+              decalsIndex.diskPayloadContext = { releaseId, productPath: "coadd" };
+              decalsIndex.diskMembershipForUnit = (unitId) => ({
+                regions: [...release.regions].flatMap(([id, { roster }]) => {
+                  const member = roster.members.get(unitId);
+                  return member?.availableBands.length ? [{ id, availableBands: member.availableBands }] : [];
+                }),
+              });
+              store.#identityLayers.set(decalsIdentity, decalsIndex);
             }
           }
         }
@@ -1295,10 +1326,16 @@ export class SourceUnitStore {
   }
 
   match(layerId: string, order: number, cells: number[], limit = 120, identity?: Pick<SourceUnitLayerDescriptor, "surveyId" | "releaseId" | "product">): SourceUnitMatch | null {
+    const identityAlias = identity ? sourceUnitIdentity(identity.surveyId, identity.releaseId, identity.product) : undefined;
+    const fallbackAlias = legacyDr5CoaddFallbackAlias(layerId, identity);
+    const fallbackIdentity = fallbackAlias ? sourceUnitIdentity("legacy-surveys", "legacy-dr5", "Coadded imaging") : undefined;
     const memoryLayer = this.#layers.get(layerId)
-      ?? (identity ? this.#identityLayers.get(sourceUnitIdentity(identity.surveyId, identity.releaseId, identity.product)) : undefined);
-    const diskLayer = this.#diskIndex?.layer(sourceUnitDiskAlias(layerId))
-      ?? (identity ? this.#diskIndex?.layer(sourceUnitDiskAlias(sourceUnitIdentity(identity.surveyId, identity.releaseId, identity.product))) : null);
+      ?? (identityAlias ? this.#identityLayers.get(identityAlias) : undefined)
+      ?? (fallbackIdentity ? this.#identityLayers.get(fallbackIdentity) : undefined);
+    const primaryDiskLayer = this.#diskIndex?.layer(sourceUnitDiskAlias(layerId))
+      ?? (identityAlias ? this.#diskIndex?.layer(sourceUnitDiskAlias(identityAlias)) : null);
+    const diskLayer = primaryDiskLayer ?? (fallbackAlias ? this.#diskIndex?.layer(fallbackAlias) : null);
+    const usedLegacyFallback = Boolean(fallbackAlias && !primaryDiskLayer && !memoryLayer && diskLayer);
     const layer = memoryLayer ?? diskLayer;
     if (!layer || order < 0 || order > 13) return null;
     const unitIndexes = new Set<number>();
@@ -1381,7 +1418,10 @@ export class SourceUnitStore {
       });
     }
     allUnits.sort((left, right) => left.unitId.localeCompare(right.unitId, undefined, { numeric: true }));
-    return { status: "exact", precision: "estimated", unitKind: layer.unitKind, units: allUnits.slice(0, limit), totalUnits: allUnits.length, truncated: allUnits.length > limit, notes: layer.notes };
+    const notes = usedLegacyFallback
+      ? `${layer.notes} DECaLS DR5 uses the official mixed-program Legacy Surveys coadd roster and does not isolate DECaLS-only exposures.`
+      : layer.notes;
+    return { status: "exact", precision: "estimated", unitKind: layer.unitKind, units: allUnits.slice(0, limit), totalUnits: allUnits.length, truncated: allUnits.length > limit, notes };
   }
 
   get cacheState(): "hit" | "built" | "memory-only" { return this.#cacheState; }

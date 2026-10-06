@@ -58,8 +58,9 @@ def sample_headers(detector):
 
 
 class FakeS3:
-    def __init__(self):
+    def __init__(self, profile=MODULE.DEFAULT_PROFILE):
         self.range_requests = []
+        self.profile = profile
 
     def __call__(self, url, headers, timeout):
         parsed = urlsplit(url)
@@ -82,7 +83,7 @@ class FakeS3:
         ET.SubElement(root, "Name").text = "nasa-irsa-spherex"
         ET.SubElement(root, "IsTruncated").text = "false"
         contents = ET.SubElement(root, "Contents")
-        filename = f"level2_{MODULE.OBSERVATION_SELECTOR}D{detector}_spx_{MODULE.PROCESSING_VERSION}.fits"
+        filename = f"level2_{self.profile['observation_selector']}D{detector}_spx_{self.profile['processing_version']}.fits"
         ET.SubElement(contents, "Key").text = prefix
         ET.SubElement(contents, "Size").text = "71634240"
         ET.SubElement(contents, "ETag").text = '"ee30fd35a2ab3d38e52d06acc1128cca"'
@@ -120,6 +121,30 @@ class SpherexAcquireTest(unittest.TestCase):
             self.assertTrue(all(len(row["sourceMetadata"]["frameEdgeIcrs"]) == 32 for row in rows))
             self.assertTrue(all(row["sourceMetadata"]["coordinateFrame"] == "ICRS" for row in rows))
             self.assertTrue(all(len(row["accessUris"]) == 2 for row in rows))
+
+    def test_d1_v241_capture_keeps_processing_version_in_its_unit_id(self):
+        profile = MODULE.CAPTURE_PROFILES["d1-v20-241"]
+        fake = FakeS3(profile)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "capture"
+            result = MODULE.acquire(output, timeout=17, fetch=fake, profile=profile)
+            manifest = result["manifest"]
+            rows_path = output / manifest["rowFiles"][0]["ref"]
+            rows = [json.loads(line) for line in gzip.decompress(rows_path.read_bytes()).splitlines()]
+
+            self.assertEqual(result["rowCount"], 1)
+            self.assertEqual(manifest["sourceId"], MODULE.SPHEREX_D1_V241_SOURCE_ID)
+            self.assertEqual(manifest["query"], MODULE.SPHEREX_D1_V241_QUERY)
+            self.assertEqual(manifest["scope"]["processingVersion"], "l2b-v20-2025-241")
+            self.assertEqual(manifest["scope"]["detectors"], [1])
+            self.assertEqual(len(manifest["sourcePagination"]["pages"]), 1)
+            self.assertEqual(len(manifest["metadataDocuments"]), 2)
+            self.assertEqual(len(fake.range_requests), 2)
+            self.assertEqual(rows[0]["unitId"], "2025W17_4B_0001_1/l2b-v20-2025-241/D1")
+            self.assertEqual(rows[0]["sourceMetadata"]["processingVersion"], "l2b-v20-2025-241")
+            self.assertEqual(rows[0]["sourceMetadata"]["objectKey"],
+                "qr2/level2/2025W17_4B/l2b-v20-2025-241/1/level2_2025W17_4B_0001_1D1_spx_l2b-v20-2025-241.fits")
+            self.assertEqual(rows[0]["bands"], ["D1"])
 
     def test_truncated_listing_without_a_continuation_token_is_rejected(self):
         body = b'<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>nasa-irsa-spherex</Name><IsTruncated>true</IsTruncated></ListBucketResult>'

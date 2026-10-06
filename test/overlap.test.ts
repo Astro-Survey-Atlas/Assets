@@ -153,7 +153,7 @@ test("exiting overlap rebases the orbit around the celestial sphere", () => {
   assert.deepEqual(pose.cameraPosition.toArray(), [5, 3, 2]);
 });
 
-test("locked source-unit snapshots reconstruct DESI Tiles and HSC tract/patch mappings", async () => {
+test("locked source-unit snapshots reconstruct DESI Tiles, HSC patches, and Legacy-backed DECaLS bricks", async () => {
   const store = await sourceUnitStore();
   assert.equal(store.match("desi-dr1-redrock-bright-file-index", 6, [128]), null);
   const requestedCells = [1087, 1130, 1173, 1216];
@@ -179,6 +179,21 @@ test("locked source-unit snapshots reconstruct DESI Tiles and HSC tract/patch ma
   assert.ok(hscMatch?.units.length);
   assert.equal(hscMatch?.unitKind, "tract/patch");
   assert.ok(hscMatch?.units.every((unit) => unit.downloadUrl?.includes("/das_search/pdr2/")));
+
+  const legacyDr5 = store.coverageLayers().find((entry) => entry.surveyId === "legacy-surveys" && entry.releaseId === "legacy-dr5" && entry.product === "Coadded imaging");
+  const decalsCell = legacyDr5?.cells.get(4)?.[0];
+  assert.notEqual(decalsCell, undefined);
+  const decals = store.match("decals-dr5-color-footprint", 4, [decalsCell!], 20, {
+    surveyId: "decals",
+    releaseId: "decals-dr5",
+    product: "DR5 g/r/z color footprint",
+  });
+  assert.ok(decals?.units.length);
+  assert.equal(decals?.unitKind, "brick");
+  assert.match(decals?.notes ?? "", /mixed-program coadd roster/i);
+  assert.ok(decals?.units.every((unit) => unit.geometryPrecision === "estimated"
+    && unit.accessUris?.length
+    && unit.accessUris.every(({ url }) => /\/dr5\/coadd\/[^/]+\/[^/]+\/legacysurvey-[^/]+-image-[grz]\.fits\.fz$/.test(url))));
 });
 
 test("Legacy DR10 matches derive Coadd and Tractor URIs from one brick identity", async () => {

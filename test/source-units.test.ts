@@ -22,6 +22,14 @@ test("Legacy DR10 coadd links include only source-listed South bands, including 
   ]);
 });
 
+test("DECaLS DR5 color bricks retain the release's source-listed g/r/z coadd files", () => {
+  assert.deepEqual(legacyReleaseBrickAccessUris("legacy-dr5", "all", "1498p020", "coadd", ["g", "r", "z"]), [
+    { fileName: "legacysurvey-1498p020-image-g.fits.fz", url: "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr5/coadd/149/1498p020/legacysurvey-1498p020-image-g.fits.fz" },
+    { fileName: "legacysurvey-1498p020-image-r.fits.fz", url: "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr5/coadd/149/1498p020/legacysurvey-1498p020-image-r.fits.fz" },
+    { fileName: "legacysurvey-1498p020-image-z.fits.fz", url: "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr5/coadd/149/1498p020/legacysurvey-1498p020-image-z.fits.fz" },
+  ]);
+});
+
 test("HSC tract/patch parser accepts official coordinates with whitespace before commas", () => {
   const content = [
     "Tract: 9812  Patch: 0,0  Center (RA, Dec): (149.507118993 , 1.48467782206)",

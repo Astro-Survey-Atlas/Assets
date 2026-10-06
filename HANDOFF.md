@@ -1,6 +1,6 @@
 # Assets 项目交接
 
-交接日期：2026-10-05（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-06（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
@@ -10,52 +10,68 @@
 Surveys、HST 与 Workspace 的公开覆盖、原生分块反查、来源链接及 JSON/CSV 下载计划。后续 Phase 2
 只更新 **Assets Dev**，不修改 72602、Workspace、公开 MOC 或 public bundle，也不下载科学像素。
 
-截至 2026-10-05，Dev Helm revision **345**，site/backend 各 1/1 Ready、重启 0，入口
-http://10.15.51.75:32083/atlas/；镜像 tag `0.1.0-20261005-190033-phase2-vphas`。
-backend liveness 为 TCP，startup/readiness 为 HTTP `/healthz`。发布前 build、425 项测试
-（423 通过、2 跳过）、31 项 Python 采集测试及 Helm lint 通过。`/healthz`、`/api/v1/status`、
-`/api/v1/assets`、`/api/v1/coverage`、coverage catalog 均 HTTP 200；用 64-byte Range 核对一个
-公开 MOC FITS 的 `X-Content-SHA256` 与目录一致。
+Dev 最近已知健康基线为 2026-10-06 Helm revision **353**，镜像 tag `0.1.0-20261006-163033`。
+截至 2026-10-07，服务暂不可用：`eva7028` 有 `disk-pressure:NoSchedule` taint，site/backend 旧 Pod
+均不可用，新 Pod 因固定 nodeSelector 无法调度；Dev NodePort `10.15.51.75:32083` 连接拒绝。
+当前不要改 Helm 调度或清理节点文件。恢复前先保全并确认原生归档任务状态。
+射电适配器镜像 `0.1.0-20261006-214520-native-radio` 已通过本地构建并推送，但不含本轮 SPHEREx D1 版本来源改动；
+部署前需为当前工作树构建并推送新的不可变 tag。
+Dev 当前 `/healthz` 与管理 API 均无法访问；backend liveness 为 TCP，startup/readiness 为 HTTP `/healthz`。
 
 公开 release 未改变：`reviewed-mupsxe2v-c91be91f`，603 files，SHA-256
 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`；105 published MOCs，
 coverage catalog 132 layers。新 Pod 的 object-store release sync 恢复的也是这个相同 release。
 
-Dev 活动 native group 是 FDS DR1 + KiDS DR5：
-`4fcf53b6a001cb6235ac52a5d64b7477f06a267931fd747c2e11d8289cd99211`，generation **8**，
-92 bindings、192/192 checks、managed/verified=true。FDS 有 26 fields / 97 image rows；KiDS 有
-1,347 Tiles / 5,388 image rows，两来源均零排除。最新已核实控制快照 generation 1732 为 `synced`；
-之后的控制快照需在激活 VPHAS 前重新确认。
+当前目录覆盖索引列出 **29 个 survey IDs**。Dev 活动 native group 仍是
+`04d99f2b2625a59d283db5fd7288f1d880fdd48a82778bfd1e68c977a972958c`，generation **11**，
+106 bindings、19 个 survey IDs、managed/verified=true。硬配额 `asa-resource` 已从 40 GiB 调至
+60 GiB；MinIO 桶用量约 42.96 GB，底层可用约 602 GB。原先 generation 3077 的 quota 错误后状态已恢复；
+最新只读确认的 native-units 状态镜像 generation 3755 于 2026-10-07 00:05 本地时间同步，激活前仍须确认最新
+`syncStatus=synced`。
 
-FDS/KiDS 的实际区域反查：O4 C01 cells `[2158, 2159, 2241, 2244]`，只查 color 产品绑定，
-用两页返回 63 条唯一记录（FDS 25 fields、KiDS 38 Tiles），`queryExhausted=true`、
-`inventoryComplete=false`、`resultTruncated=false`。示例分别是 `FDS_F1` 和 `KIDS_45.0_-35.1`，
-都保留 ESO DataLink 的单文件 URI。下载链接未逐文件探测，因此仍为 source-listed/unverified。
+**当前候选**：group `90bb738d3354b0532e43a69c3062737b22e941c1045142920693441717fb6752`，
+build task `native-muwfqf67-c35ba738` 已完成；124 bindings、26 个 survey IDs、234/234 checks 通过。
+AllWISE 18,240 units、CFHTLS 171 fields、DECaPS 1,065,941 CCDs、ACT 6 maps、Pan-STARRS 9,000 skycells、
+IPHAS 169,380 indexed units（98,793 rows excluded）、Rubin First Look 2 images、ZTF DR7 162,333 identities
+均已核验。审核接受了报告列出的 **79 项 gaps**，包括 partial inventory、estimated geometry、文件可用性未核验、
+IPHAS final-QC 未对齐及历史 HST COSMOS unavailable binding；这不代表库存完整。
 
-VPHAS+ DR4 已登记来源 `vphas-dr4-eso-images`（source revision 1），本地 metadata capture 位于
-`/home/aaron/.local/share/astro-assets-deployments/dev/20261005-vphas-dr4-capture2/`；manifest SHA-256
-`6a6d112d20b59598007c7bb5f27f6ad02cf4b36e255c18fd7846c32c1a8c9b17`，15,534 rows / 1,306 target names，
-波段 G/R/I/U/HALPHA = 3,829/4,437/1,876/2,557/2,835。每个文件保留 32 个 CCD polygons；DataLink
-和 TAP evidence 已锁定、远端 staging SHA 已复核。snapshot ID 为
-`e9761e746032ece6510653e798c78bfdafd21f465c0f3fc8473593324beb1441`。
+归档 task `native-muwp2uoh-ce290269` 的管理 API 当前不可达，无法确认队列 phase。对象存储只读检查确认
+活动指针仍为 generation 11，候选 group 前缀下没有版本 manifest，因此 1,363 项依赖的归档未完成。最后一份已同步的
+native-units 快照 generation 3755（2026-10-07 00:05 本地时间）记录 `survey-units.sqlite` 的 778,436,690 / 778,436,690
+归档字节已上传，但完整远端校验仍 pending。**不要取消/重提任务、重复上传该 SQLite 或更改活动指针。**恢复 Dev backend 后
+先确认持久队列是否恢复原 task，续做远端 SHA 校验并归档剩余依赖；同时确认最新控制快照 `synced`。以活动 generation 11
+为 expectedActive 完成审核归档和激活，再验证 `/api/v1/status` 与真实反查。
+public bundle 应保持 `reviewed-mupsxe2v-c91be91f`、603 files、SHA-256
+`0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`、105 published MOCs。
 
-**当前续接任务**：候选选择组 `630fbc4b978a2757bd20d71afb124972dab6661edcb828a6a05e5cd49de85c25`
-保留原 92 个产品 binding 并添加 VPHAS 的 6 个，build task `native-muv5faqe-ce37aa99` attempt 1
-仍在运行。最新进度是 VPHAS DR4 的 15,534 identities 已解析、零排除；backend 此后持续进行 SQLite
-汇总/完整性校验，当前管理 API 多次显示 running，Pod Ready、零重启、约 2 GiB RSS。曾有一次短暂
-HTTP 503 使本地轮询退出；之后已重连同一个 task 并确认它仍运行。**不要重提 import/build，不要取消任务。**
+接下来尚有目录中的 3 个 survey IDs：`nvss`、`sumss`、`wenss`。SkyView capture2 的 18 个受管输入文件已暂存至
+evidence PVC：`/var/lib/assets-evidence/managed/native-units/inputs/20261006-radio-native-capture2/`；
+复制后的 SHA-256 与本地一致，共 3,567 张地图及逐图 header，不含科学像素。NVSS 2,326、SUMSS 748、WENSS 493；
+WENSS 有 107 个 header 频率与名义 325 MHz 冲突，原值保留。射电适配器的 14 项 Python 测试通过；完整 Node 测试
+441 项中 439 通过、2 跳过，Core wheel 校验、Helm lint 通过。已推镜像 `0.1.0-20261006-214520-native-radio`。
+
+新增 SPHEREx D1 v20-241 header-only capture 位于
+`/home/aaron/.local/share/astro-assets-deployments/dev/20261007-spherex-d1-v241-capture1/`；manifest SHA-256
+`e8f7e3b8d1ec187751c5a1a605393a0bee0c9fb71ef79cee250e167b48a51eb1`，1 个完整 listing row、1 个 FITS 头证据
+（23,040 bytes），科学像素读取量为 0。官方 AWS object key 在 v20-240 不存在，在 v20-241 存在；IRSA 与 AWS
+整文件端点 HEAD 均曾返回 200，大小 71,634,240 bytes。capture 使用新的独立 source ID 保留处理版本；4 个文件已
+复制到 evidence PVC 路径 `/var/lib/assets-evidence/managed/native-units/inputs/20261007-spherex-d1-v241-capture1/`，
+逐文件 SHA-256 与本地 staging 一致，仍待管理 API 导入。
+
+注意：backend upload-spool 当前约 13,259 个任务、372 GB payload，主机卷约 87% 使用、剩余约 63 GB；这些历史
+任务/快照不得直接删除。线上 scheduler 已有按 SHA 跳过未变化快照的逻辑；此积压包含历史失败与当前长任务状态快照。
+监控卷余量，不要在归档期间重启 backend。
 
 接续步骤：
 
-1. 继续轮询 `native-muv5faqe-ce37aa99`；完成后检查候选 98 bindings、全部 checks、VPHAS 15,534 indexed rows、
-   unit/target 和 band counts，以及完整 gaps。旧 FDS/KiDS bindings 和文件索引必须保留。
-2. 对照报告核验 VPHAS 的缺口（DR4 final increment、CCD union estimated、mask 未核验、逐文件可用性未核验），
-   审核候选并归档所有依赖；激活前确认最新 native-units 控制快照 `synced`，以 generation 8 为 expectedActive。
-3. 激活后验证站点 `/api/v1/status`、generation 9 与真实 VPHAS 区域反查；再等激活后的控制状态同步完成。
-   public bundle/MOC 应仍保持以上 SHA、603 files、105 MOCs。
-4. 下一来源优先复核 VIKING DR1：官方文档声明 151 Tiles，但当前 ESO TAP 仅有 110 条 J tile-image rows，
-   不能把现有子清单当完整库存。Roman 暂无确认观测分块，ZTF DR7 缺少可重建的历史发布清单。详细调查见
-   [Phase 2 native-unit candidates](docs/research/phase2-next-native-unit-candidates-20261005.md)。
+1. 先恢复 `eva7028` 所需磁盘余量并等待原生服务恢复；只读确认持久队列中的 `native-muwp2uoh-ce290269`，继续原归档，检查候选所有 dependencies 均有 objectKey、远端 SHA 完整，最新 native-units 控制状态 synced。
+2. expectedActive=当前 generation 11 激活上述 26-survey 候选；验证 generation 12、Dev 状态和真实区域反查，确认公开 release/MOC 未变。
+3. 完整测试通过后为当前工作树构建并推送新的 radio + SPHEREx immutable image tag，再保留现有 Helm 设置部署 Dev，完成 rollout 与 health/status smoke。
+4. 将已在 evidence PVC 的 SPHEREx D1 capture 和 radio capture2 分别经认证管理 API 导入；新候选保留旧 bindings，
+   加入 3 个 radio bindings，并让 SPHEREx 现有 detector bindings 同时读取 v20-240 D2–D6 与 v20-241 D1。
+   审核版本、处理范围、WENSS 频率冲突及 gaps，归档并激活到后续 generation，再核对实际反查。
+5. 更新交接文档记录 active group、29 survey IDs、bindings/counts、已接受 gaps 与存储状态。
 
 原生分块、输入和反查必须遵守 [coverage workflow](docs/coverage-workflow.md) 与
 [native unit management](docs/native-unit-management.md)；不要把 `verified` 描述成巡天库存完整。
@@ -69,17 +85,19 @@ MVP 让用户在普通模式查看 HEALPix cell 覆盖的 DR/模态，在重合�
 
 | 服务 | Helm revision | 镜像 tag | 状态及入口 |
 | --- | --- | --- | --- |
-| Assets Dev | 345 | 0.1.0-20261005-190033-phase2-vphas | site/backend 各 1/1 Ready、重启 0；http://10.15.51.75:32083/atlas/ |
+| Assets Dev | 353 | 0.1.0-20261006-163033 | 当前 site/backend 不可用；NodePort http://10.15.51.75:32083/atlas/ |
 | Assets 72602 | 7 | 0.1.0-20261003-153818-hst-supplement | 未在本轮更新；https://astro.assets.72602.space/atlas/ |
 | Workspace | 67 | 0.10.38-dev-20261003-0206-native-selection | 未在本轮更新；http://astro.workspace.dev.72602.space:32080/ |
 
 - Assets Dev release/namespace：`astro-survey-atlas-assets`；API 与 health 在 host 根路径。
-- `/healthz`、`/api/v1/status`、`/api/v1/coverage/catalog` 均 HTTP 200；catalog 有 132 layers。
-- generation 8 活动 native group 与 `/api/v1/status` 一致；FDS/KiDS O4 C01 实际反查分页完整，
-  返回 25 fields 和 38 Tiles。控制快照 generation 1732 曾为 synced；后续激活前需复查。
-- 本轮 `npm run build`、`npm test`（425 项：423 通过、2 跳过）、Python 采集测试（31/31）、
-  Core wheel 校验、Helm lint、
-  探针回归测试均通过；`backend-probes.test.ts` 断言 backend readiness 为 HTTP，liveness 为 TCP。
+- 截至 2026-10-06 最后一次健康检查，`/healthz`、`/api/v1/status`、`/api/v1/coverage/catalog` 均 HTTP 200；
+  catalog 有 132 layers、survey catalog 有 29 IDs。对象存储只读检查确认当前 native generation 11，
+  public pointer 仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256
+  `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`。控制快照最近已知 synced 为 generation 3755；
+  当前同步状态需等 backend 恢复后确认。
+- `npm run build` 在 2026-10-07 通过。最近完整 `npm test` 为 441 项（439 通过、2 跳过），
+  radio/IPHAS/Rubin metadata tests、Core wheel 校验及 Helm lint 均在先前代码状态通过；本轮 SPHEREx D1 改动后未运行测试。
+  backend readiness 是 HTTP，liveness 是 TCP；当前工作树没有部署到 Dev。
 - Dev-only Phase 2 不发布 MOC、不改变 public bundle、不更新 72602 或 Workspace。
 - Earlier overlap acceptance: Euclid + DESI O4 C01–C06 显示实际相交模态、空间分块单行计数、
   覆盖计算默认折叠；1440/1024/390px 无横向溢出，browser page errors=0。Dev O4 C01 `[190]`

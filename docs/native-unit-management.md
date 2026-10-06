@@ -33,6 +33,8 @@ flowchart LR
 Euclid ERO target 元数据、HSC tract/patch 表、HST public-image CAOM 快照、
 Gaia 原生文件分区、SDSS field 表、GALEX/JWST public-image CAOM 元数据，以及
 VISTA VVV、SkyMapper DR4、2MASS 6X、NOIRLab DES DR2/DECaPS DR2、ACT DR5 和 ESO FDS DR1 的原生影像元数据。
+适配器还覆盖 Pan-STARRS DR1、IPHAS DR2、Rubin First Look、ZTF DR7、AKARI FIS，
+以及 NASA/GSFC SkyView 的 NVSS、SUMSS、WENSS 命名地图清单。
 新增一种未支持的来源格式时可以先实现适配器；获取、校验、审核、归档和激活随后
 仍通过管理接口完成。Assets 获取官方元数据，不替用户获取科学文件。
 
@@ -49,6 +51,7 @@ SQLite 在 worker 的本地临时磁盘构建，通过完整性检查并关闭�
 
 | 来源 | 原生身份和空间依据 | 必须保留的范围说明 |
 | --- | --- | --- |
+| DECaLS DR5 | 官方 Legacy DR5 的 176,811-brick roster 与锁定的全天天空 brick grid；按 `NEXP_g/r/z` 成员标记提供 g/r/z coadd URI | 这是包含其他观测项目的 Legacy DR5 mixed-program coadd 清单，不是 DECaLS-only 曝光清单。brick 几何为 estimated；有效像素掩膜和逐文件可用性未核验 |
 | Gaia DR3 | 官方 `GaiaSource_<first>-<last>` 文件，ICRS/NESTED O8 inclusive range | 分区相交规则为 exact；source_id 位置近似、实际天体占据和科学文件校验未验证，空间结果为 estimated。O8 以上仍返回 native O8，不制造更细分区 |
 | SDSS DR9 | 正常处理的 rerun 301 run/rerun/camcol/field，官方 window_flist great-circle 边界转换的 ICRS polygon | 是裁边 field-window 的 estimated 范围，保留原始坐标/逐波段质量标记；不是单幅影像 WCS、有效像素或 primary-only 库存。框架 URI 按官方规则生成，逐 URI 未验证 |
 | GALEX | MAST obsid，原始 ICRS s_region、GR6/GR7 实际 dataURL 路径、project、filters | GR6 AIS 只接受 GR6 + AIS；FUV/NUV 按原始波段记录筛选。不同 dataURL 子类型原样保留，访问使用 Products API，不改写成推测的强度影像文件 |
@@ -61,9 +64,10 @@ SQLite 在 worker 的本地临时磁盘构建，通过完整性检查并关闭�
 | NOIRLab DES DR2 | `(object, fileref, filter, obs_pub_did#1)` normal coadd identity 与来源提供的四角 ICRS polygon | 有界官方 TAP roster 为 10,169 Tiles、50,845 条 g/r/i/z/Y normal coadd 记录；角点是 estimated frame bounds，不含有效像素掩膜。每条 source-listed URL 不含 `POS/SIZE`；单 Tile 探测不代表所有文件可用。正赤纬 Tile 的 URI 含字面 `+`，必须保留原始 URL 查询值，不要转义为 `%2B` |
 | NOIRLab DECaPS DR2 | `obs_pub_did` 中的 FITS 文件及 CCD extension、SIAv1 明列的 ICRS TPV 四角 | 完整官方 SIAv1 表为 1,065,941 条 g/i/r/Y/z image rows；同一多 extension FITS 的各 CCD extension 是独立空间单位。Data Lab source-listed URL 带真实 `siaRef` 和 `extn`，不含 `POS/SIZE`；角点是 estimated frame bounds，不代表有效像素掩膜。完整输入由 214 个稳定 keyset 页、分页前后相同分母及五波段分母锁定；逐文件可用性未核验 |
 | ACT DR5 | 六张 source-listed ACT-only whole-map FITS，090/150/220 GHz × night/daynight；primary-header ICRS CAR WCS 的整图边界 | 官方 42-file 下载清单中的六图筛选；每个约 5.35 GB 文件均通过 HEAD 200，前 5,760 字节 Range 206 并读到 FITS `END`。边界按全 RA CAR 周期分段，precision 为 estimated；未读取像素或有效像素掩膜，不称作 Tile，也不代表 ACT DR5 全部产品库存 |
-| SPHEREx QR2 | observation ID、detector 和官方 level2 FITS object key；FITS `IMAGE` extension TAN-SIP WCS | 当前候选仅为 `2025W17_4B_0001_1` 的 5 个文件、detectors 2–6、`l2b-v20-2025-240`；范围由 FITS header range 请求估算，未读取像素或有效像素掩膜。IRSA 原始路径与 AWS mirror 的相对路径相同；这是单观测增量，不是完整 QR2 库存 |
+| SPHEREx QR2 | observation ID、处理版本、detector 和官方 level2 FITS object key；FITS `IMAGE` extension TAN-SIP WCS | 已有 5 个 v20-240 文件（detectors 2–6）；另有同一 observation 的 D1 v20-241 文件，因 v20-240 没有 D1，单独保留处理版本和 unit ID。D1 仅有一条已采集记录，尚待受管导入；范围从 FITS header range 请求估算，未读取像素或有效像素掩膜。IRSA 原始路径与 AWS mirror 的相对路径相同；这些都是单观测增量，不是完整 QR2 库存 |
 | ESO FDS DR1 | 官方 ObsCore `target_name` field、`POLYGON J2000`、DataLink `#this` science-image 文件 | 完整的 FDS DR1 science-image roster 为 97 张图像、26 个 field，u/g/r/i 分布为 20/26/26/25；配对 weight map 是 ancillary，不作为 science image。几何转换到 ICRS 后仍是 estimated frame bounds，未核验有效像素掩膜；单文件 URI 只抽样检查，逐文件可用性仍未验证。manifest 标为 `deliveryClass=evidence` |
 | VPHAS+ DR4 | 官方 ObsCore `dp_id` 图像身份、source-listed DataLink `#this`、32-CCD `UNION J2000` footprint | release description 145 的 15,534 行是最终增量，不是对所有 DR4 历史 release 的累计清单。保留未堆叠 OmegaCAM pawprint 的 CCD polygon 并集并转换到 ICRS；空间候选使用保守外接球冠，仍为 estimated，不代表有效像素掩膜。链接只抽样探测，逐文件可用性未核验；manifest 标为 `deliveryClass=evidence` |
+| NVSS / SUMSS / WENSS | 各自完整的 SkyView XML `Images/Image` roster、原始地图相对路径、逐图 FITS 主头 WCS；直接 URI 指向 NASA/GSFC SkyView US mirror 的单张地图 | NVSS 当前 selector 为 2,326 张 I 图，不含全巡天其他 Stokes 平面；SUMSS 为 748 张（119 Galactic、629 Extragalactic）；WENSS HIGHRES 为 493 张（444 `wn`、49 `wp`）。FK5/J2000 与 FK4/B1950 frame 转到 ICRS 的 frame 边界为 estimated；未核验有效像素掩膜或完整文件下载。3,567/3,567 个图头部范围成功；WENSS 有 107 张原始 `CRVAL3=609585595.238 Hz` 与 325 MHz 巡天标识不符，原值保留并作为审核缺口。`inventoryComplete=false` 表示这些有界选择不宣称覆盖巡天全部科学产品 |
 
 采集器分别是 `scripts/acquire-gaia-partitions.py`、
 `scripts/acquire-sdss-native-fields.py`、`scripts/acquire-mast-native-observations.py`、
@@ -71,6 +75,7 @@ SQLite 在 worker 的本地临时磁盘构建，通过完整性检查并关闭�
 `scripts/acquire-2mass-6x-atlas.py`、`scripts/acquire-allwise-w3-w4-atlas.py`、
 `scripts/acquire-cfhtls-wide-t0007.py`、`scripts/acquire-des-dr2-native-tiles.py`、
 `scripts/acquire-decaps-dr2-native-ccds.py`、`scripts/acquire-act-dr5-whole-maps.py`、
+`scripts/acquire-skyview-radio-native-maps.py`、
 `scripts/acquire-fds-dr1-native-fields.py`、`scripts/acquire-kids-dr5-native-tiles.py` 和
 `scripts/acquire-vphas-dr4-native-images.py`。
 它们只采元数据，捕获日期、SHA 和实际分页保存在各自

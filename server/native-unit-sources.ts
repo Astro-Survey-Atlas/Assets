@@ -83,6 +83,9 @@ export function sourceIdsForBinding(binding: Pick<NativeBinding, "surveyId" | "r
   if (binding.surveyId === "decals" && binding.releaseId === "decals-dr5") return ["legacy-dr5-bricks", "legacy-brick-geometry"];
   if (binding.surveyId === "desi") return [`${binding.releaseId}-tiles`];
   if (binding.surveyId === "act" && binding.releaseId === "act-dr5") return ["act-dr5-normal-whole-maps"];
+  if (binding.surveyId === "nvss" && binding.releaseId === "nvss-final") return ["nvss-final-native-maps"];
+  if (binding.surveyId === "sumss" && binding.releaseId === "sumss-final") return ["sumss-final-native-maps"];
+  if (binding.surveyId === "wenss" && binding.releaseId === "wenss-final") return ["wenss-final-native-maps"];
   if (binding.surveyId === "des" && binding.releaseId === "des-dr2") return ["des-dr2-coadd-tiles"];
   if (binding.surveyId === "decaps" && binding.releaseId === "decaps-dr2") return ["decaps-dr2-native-ccds"];
   if (binding.surveyId === "euclid") return [binding.releaseId === "euclid-ero" ? "euclid-ero-targets" : "euclid-q1-bgsub-tiles"];
@@ -97,12 +100,16 @@ export function sourceIdsForBinding(binding: Pick<NativeBinding, "surveyId" | "r
   if (binding.surveyId === "2mass" && binding.releaseId === "2mass-6x") return ["2mass-6x-m31-1deg-atlas-images", "2mass-6x-lmc-1deg-atlas-images"];
   if (binding.surveyId === "allwise" && binding.releaseId === "allwise") return ["allwise-w3-w4-atlas"];
   if (binding.surveyId === "cfhtls" && binding.releaseId === "cfhtls-wide") return ["cfhtls-wide-t0007-single-band-images"];
-  if (binding.surveyId === "spherex" && binding.releaseId === "spherex-qr2") return ["spherex-qr2-2025w17-4b-0001-1"];
+  if (binding.surveyId === "spherex" && binding.releaseId === "spherex-qr2") return ["spherex-qr2-2025w17-4b-0001-1", "spherex-qr2-2025w17-4b-0001-1-d1-v241"];
   if (binding.surveyId === "fds" && binding.releaseId === "fds-dr1") return ["fds-dr1-science-fields"];
   if (binding.surveyId === "kids" && binding.releaseId === "kids-dr5") return ["kids-dr5-eso-images"];
   if (binding.surveyId === "vphas" && binding.releaseId === "vphas-dr4") return ["vphas-dr4-eso-images"];
   if (binding.surveyId === "vista" && binding.releaseId === "viking") return ["vista-viking-dr1-j-tiles"];
   if (binding.surveyId === "panstarrs" && binding.releaseId === "panstarrs-dr1") return ["panstarrs-dr1-zone23-skycells"];
+  if (binding.surveyId === "iphas" && binding.releaseId === "iphas-dr2") return ["iphas-dr2-pipeline-images"];
+  if (binding.surveyId === "rubin" && binding.releaseId === "rubin-firstlook") return ["rubin-firstlook-public-images"];
+  if (binding.surveyId === "akari" && binding.releaseId === "akari-fis") return ["akari-fis-allsky-native-images"];
+  if (binding.surveyId === "ztf" && binding.releaseId === "ztf-dr7") return ["ztf-dr7-cds-o3-reference-images"];
   return [];
 }
 

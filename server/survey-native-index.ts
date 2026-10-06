@@ -1,5 +1,5 @@
 import { constants, createReadStream } from "node:fs";
-import { copyFile, mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
@@ -17,7 +17,13 @@ import { alternativesForAccessUri, mastScienceFile, metadataEntrypoint } from ".
 const SCHEMA = "1";
 const COARSE_ORDER = 4;
 const MAX_UNITS = 50_000;
-const ADAPTERS = new Set<NativeAdapter>(["gaia-healpix-range", "sdss-field", "mast-observation", "eso-obscore-vvv", "eso-obscore-fds", "eso-obscore-kids", "eso-obscore-vphas", "eso-obscore-viking", "skymapper-dr4-ccd", "twomass-6x-atlas", "allwise-ibe-atlas", "noirlab-des-tap", "noirlab-decaps-tap", "spherex-qr2-s3-observation", "cadc-caom-cfhtls", "act-dr5-whole-map", "panstarrs-dr1-skycell"]);
+const ADAPTERS = new Set<NativeAdapter>(["gaia-healpix-range", "sdss-field", "mast-observation", "eso-obscore-vvv", "eso-obscore-fds", "eso-obscore-kids", "eso-obscore-vphas", "eso-obscore-viking", "skymapper-dr4-ccd", "twomass-6x-atlas", "allwise-ibe-atlas", "noirlab-des-tap", "noirlab-decaps-tap", "spherex-qr2-s3-observation", "cadc-caom-cfhtls", "act-dr5-whole-map", "panstarrs-dr1-skycell", "iphas-dr2-pipeline", "rubin-firstlook-avm", "irsa-akari-fis-map", "cds-ztf-progenitor-o3", "skyview-radio-maps"]);
+const SKYVIEW_RADIO_HEADER_REF = "metadata/map-headers.ndjson.gz";
+const SKYVIEW_RADIO_SPECS: Record<string, { sourceId: string; releaseId: string; expectedRows: number; xmlName: string; mapRoot: string; band: string; nativeFrame: string; producer: string; producerCountry: string }> = {
+  nvss: { sourceId: "nvss-final-native-maps", releaseId: "nvss-final", expectedRows: 2326, xmlName: "nvss", mapRoot: "https://skyview.gsfc.nasa.gov/surveys/nvss/", band: "1400 MHZ", nativeFrame: "FK5(J2000)", producer: "National Radio Astronomy Observatory", producerCountry: "US" },
+  sumss: { sourceId: "sumss-final-native-maps", releaseId: "sumss-final", expectedRows: 748, xmlName: "sumss", mapRoot: "https://skyview.gsfc.nasa.gov/surveys/sumss/mosaics/", band: "843 MHZ", nativeFrame: "FK5(J2000)", producer: "University of Sydney SUMSS", producerCountry: "AU" },
+  wenss: { sourceId: "wenss-final-native-maps", releaseId: "wenss-final", expectedRows: 493, xmlName: "wenss", mapRoot: "https://skyview.gsfc.nasa.gov/surveys/wenss/", band: "325 MHZ", nativeFrame: "FK4(B1950)", producer: "WENSS team: NFRA/ASTRON and Leiden Observatory", producerCountry: "NL" },
+};
 const SKYMapper_SOURCE_ID = "skymapper-dr4-2014-mar15-18-ccds";
 const SKYMapper_QUERY = "SELECT image_id, ccd, filter, filename, coverage FROM dr4.ccds WHERE image_id >= 20140315000000 AND image_id < 20140318000000 AND filter IN ('g','r','i') ORDER BY image_id, ccd";
 const TWOMASS_SOURCE_SPECS: Record<string, { query: string; position: string; expectedRows: number; coaddCount: number }> = {
@@ -61,8 +67,41 @@ const PANSTARRS_GRID_URL = "https://outerspace.stsci.edu/download/attachments/29
 const PANSTARRS_IMAGE_LIST_URL = "https://ps1images.stsci.edu/cgi-bin/ps1filenames.py";
 const PANSTARRS_BANDS = ["G", "R", "I", "Z", "Y"];
 const PANSTARRS_ZONE = { zone: 23, projectionStart: 1322, projectionCount: 90, decCenter: 2, decMin: 1.3877787807814457e-17, decMax: 3.998086931795508, xCell: 6240, yCell: 6243, crpix1: 240, crpix2: 242 };
+const IPHAS_SOURCE_ID = "iphas-dr2-pipeline-images";
+const IPHAS_SOURCE_URL = "https://raw.githubusercontent.com/barentsen/iphas-dr2/e2e47c6964df6bb5fe9909e317ef18f0913698db/scripts/release-preparation/iphas-images-pipeline.fits";
+const IPHAS_EXPECTED_ROWS = 268_185;
+const IPHAS_EXPECTED_DR2_ROWS = 169_392;
+const IPHAS_EXPECTED_UNIQUE_ROWS = 169_380;
+const IPHAS_EXPECTED_DUPLICATE_ROWS = 12;
+const IPHAS_BANDS = ["HALPHA", "R", "I"];
+const RUBIN_SOURCE_ID = "rubin-firstlook-public-images";
+const RUBIN_CAPTURE_REF = "metadata/rubin-firstlook-capture.json";
+const RUBIN_IMAGE_EVIDENCE: Record<string, { fileName: string; sizeBytes: number; xmpRef: string; xmpSha256: string; dimensions: [number, number] }> = {
+  noirlab2521a: { fileName: "noirlab2521a.tif", sizeBytes: 15_142_805_372, xmpRef: "metadata/noirlab2521a-range-524-26612.bin", xmpSha256: "2434a33aab3fa183b284cb332b503b9d9bfe53f7acc48cec13e58e6df92c1d04", dimensions: [97_943, 51_536] },
+  noirlab2521b: { fileName: "noirlab2521b.tif", sizeBytes: 25_956_028_716, xmpRef: "metadata/noirlab2521b-range-524-20743.bin", xmpSha256: "9bc9699803579fb8b2fb0a6ca3c1ad13f9ac6e368c65d42f7c06d5c6173f8930", dimensions: [84_000, 51_500] },
+};
+const AKARI_SOURCE_ID = "akari-fis-allsky-native-images";
+const AKARI_QUERY = "Four complete per-band science-image queries against akari.akari_images for N60, WideS, WideL and N160; preserve each raw VOTable and compare all rows to the source region list and band directories.";
+const AKARI_ROW_COUNT = 6688;
+const AKARI_REGION_COUNT = 1672;
+const AKARI_BAND_COUNTS = { N60: 1672, WIDES: 1672, WIDEL: 1672, N160: 1672 };
+const AKARI_DATA_ROOT = "https://irsa.ipac.caltech.edu/data/AKARI/";
+const ZTF_SOURCE_ID = "ztf-dr7-cds-o3-reference-images";
+const ZTF_SOURCE_ROOT = "https://alasky.cds.unistra.fr/ZTF/DR7/";
+const ZTF_QUERY = "Enumerate every g/r/i NESTED order-3 pixel key 0..767 from CDS DR7 HpxFinder; preserve each HTTP 200 body and HTTP 404 outcome and apply the advertised IRSA whole-file resolver.";
+const ZTF_ROW_COUNT = 220349;
+const ZTF_FILE_COUNTS = { G: 65783, R: 69959, I: 26591 };
+const ZTF_BANDS = ["g", "r", "i"] as const;
+const ZTF_PAGE_ROW_COUNTS = { g: 89292, r: 95014, i: 36043 };
+const ZTF_PAGE_404_COUNTS = { g: 176, r: 175, i: 257 };
 const SPHEREX_SOURCE_ID = "spherex-qr2-2025w17-4b-0001-1";
 const SPHEREX_QUERY = "ListObjectsV2 prefix=qr2/level2/2025W17_4B/l2b-v20-2025-240/{2,3,4,5,6}/level2_2025W17_4B_0001_1D{2,3,4,5,6}_spx_l2b-v20-2025-240.fits; one QR2 observation";
+const SPHEREX_D1_V241_SOURCE_ID = "spherex-qr2-2025w17-4b-0001-1-d1-v241";
+const SPHEREX_D1_V241_QUERY = "ListObjectsV2 prefix=qr2/level2/2025W17_4B/l2b-v20-2025-241/1/level2_2025W17_4B_0001_1D1_spx_l2b-v20-2025-241.fits; one QR2 D1 observation";
+const SPHEREX_SOURCE_SPECS: Record<string, { query: string; processingVersion: string; detectors: number[]; expectedRows: number; versionedUnitId: boolean }> = {
+  [SPHEREX_SOURCE_ID]: { query: SPHEREX_QUERY, processingVersion: "l2b-v20-2025-240", detectors: [2, 3, 4, 5, 6], expectedRows: 5, versionedUnitId: false },
+  [SPHEREX_D1_V241_SOURCE_ID]: { query: SPHEREX_D1_V241_QUERY, processingVersion: "l2b-v20-2025-241", detectors: [1], expectedRows: 1, versionedUnitId: true },
+};
 const FDS_SOURCE_ID = "fds-dr1-science-fields";
 const FDS_RELEASE_DESCRIPTION = "https://www.eso.org/rm/api/v1/public/releaseDescriptions/157";
 const FDS_QUERY = `SELECT TOP 5000 dp_id, target_name, filter, obs_id, obs_creator_did, s_region, access_url, release_description FROM ivoa.ObsCore WHERE obs_collection = 'FDS' AND release_description = '${FDS_RELEASE_DESCRIPTION}' AND dataproduct_type = 'image' ORDER BY dp_id`;
@@ -94,6 +133,7 @@ interface Summary {
   sourceId: string; surveyId: string; releaseId: string; adapter: NativeAdapter;
   sourceUrl: string; sha256: string; capturedAt: string; scope: string;
   rowCount: number; indexedRows: number; unitCount: number; excludedRows: number; inventoryComplete: boolean; queryComplete: boolean;
+  gaps?: string[]; headerFailures?: number; geometryFailures?: number; spectralConflicts?: number;
 }
 interface IndexedRow {
   sourceId: string; unitId: string; sRegion: string | null; firstIpix: number | null; lastIpix: number | null;
@@ -102,6 +142,18 @@ interface IndexedRow {
 
 /** Binding selectors are release/product contracts, independent of the displayed MOC. */
 export function surveyNativeBinding(layer: Pick<NativeBinding, "layerId" | "surveyId" | "releaseId" | "product">): Pick<NativeBinding, "unitKind" | "sourceIds" | "selector"> | undefined {
+  if (layer.surveyId === "decals" && layer.releaseId === "decals-dr5" && layer.layerId === "decals-dr5-color-footprint") {
+    return { unitKind: "brick", sourceIds: ["legacy-dr5-bricks", "legacy-brick-geometry"], selector: { bands: ["G", "R", "Z"] } };
+  }
+  if (layer.surveyId === "iphas" && layer.releaseId === "iphas-dr2") {
+    const product = layer.product.toLowerCase();
+    if (product.includes("h-alpha")) return { unitKind: "ccd", sourceIds: [IPHAS_SOURCE_ID], selector: { bands: ["HALPHA"] } };
+    const band = /\b([ri])-band\b/i.exec(layer.product)?.[1]?.toUpperCase();
+    return band ? { unitKind: "ccd", sourceIds: [IPHAS_SOURCE_ID], selector: { bands: [band] } } : undefined;
+  }
+  if (layer.surveyId === "rubin" && layer.releaseId === "rubin-firstlook" && layer.layerId === "rubin-rubin-firstlook-rubin-first-look-imaging-moc") {
+    return { unitKind: "image", sourceIds: [RUBIN_SOURCE_ID], selector: { bands: ["RGB"] } };
+  }
   if (layer.surveyId === "vista" && layer.releaseId === "viking" && layer.layerId === "vista-viking-j-footprint") {
     return { unitKind: "tile", sourceIds: [VIKING_SOURCE_ID], selector: { bands: ["J"] } };
   }
@@ -139,16 +191,30 @@ export function surveyNativeBinding(layer: Pick<NativeBinding, "layerId" | "surv
     const frequency = /\b(90|150|220)\s*GHz\b/i.exec(layer.product)?.[1];
     return frequency ? { unitKind: "image", sourceIds: [ACT_SOURCE_ID], selector: { bands: [`${Number(frequency)} GHZ`] } } : undefined;
   }
+  if (["nvss", "sumss", "wenss"].includes(layer.surveyId)) {
+    const spec = SKYVIEW_RADIO_SPECS[layer.surveyId];
+    if (!spec || layer.releaseId !== spec.releaseId || !/imaging/i.test(layer.product)) return undefined;
+    return { unitKind: "image", sourceIds: [spec.sourceId], selector: { bands: [spec.band] } };
+  }
   if (layer.surveyId === "panstarrs" && layer.releaseId === "panstarrs-dr1") {
     const band = /\b([grizy])-band\s+imaging\b/i.exec(layer.product)?.[1]?.toUpperCase();
     return band ? { unitKind: "tile", sourceIds: [PANSTARRS_SOURCE_ID], selector: { bands: [band] } } : undefined;
+  }
+  if (layer.surveyId === "akari" && layer.releaseId === "akari-fis" && layer.layerId === "akari-akari-fis-akari-fis-color-coverage-moc") {
+    return { unitKind: "image", sourceIds: [AKARI_SOURCE_ID], selector: { bands: ["N60", "WIDES", "WIDEL"] } };
+  }
+  if (layer.surveyId === "ztf" && layer.releaseId === "ztf-dr7") {
+    const product = layer.product.toLowerCase();
+    if (product.includes("color")) return { unitKind: "image", sourceIds: [ZTF_SOURCE_ID], selector: { bands: ["G", "R", "I"] } };
+    const band = /\b([gri])-band\s+imaging\b/i.exec(layer.product)?.[1]?.toUpperCase();
+    return band ? { unitKind: "image", sourceIds: [ZTF_SOURCE_ID], selector: { bands: [band] } } : undefined;
   }
   if (layer.surveyId === "decaps" && layer.releaseId === "decaps-dr2" && layer.layerId === "decaps-decaps-dr2-decaps-dr2-color-imaging-moc") {
     return { unitKind: "ccd", sourceIds: [DECAPS_SOURCE_ID], selector: { bands: ["G", "I", "R", "Y", "Z"] } };
   }
   if (layer.surveyId === "spherex" && layer.releaseId === "spherex-qr2") {
     const detector = layer.product.match(/\bD([1-6])\b/i)?.[1];
-    return { unitKind: "image", sourceIds: [SPHEREX_SOURCE_ID], selector: { bands: detector ? [`D${detector}`] : ["D1", "D2", "D3", "D4", "D5", "D6"] } };
+    return { unitKind: "image", sourceIds: [SPHEREX_SOURCE_ID, SPHEREX_D1_V241_SOURCE_ID], selector: { bands: detector ? [`D${detector}`] : ["D1", "D2", "D3", "D4", "D5", "D6"] } };
   }
   if (layer.surveyId === "fds" && layer.releaseId === "fds-dr1") {
     const band = layer.product.match(/\b([ugri])-band\b/i)?.[1]?.toUpperCase();
@@ -209,6 +275,48 @@ export function parsePanstarrsListing(body: string, expectedSkycell: string): Pa
   return rows;
 }
 
+interface ZtfHpxFinderRow { name: string; fileName: string; band: string; field: string; ccd: number; quadrant: number; ra: number; dec: number; stc: string; generatorPath: string }
+
+export function parseZtfHpxFinderPage(body: string, band: typeof ZTF_BANDS[number]): ZtfHpxFinderRow[] {
+  if (!ZTF_BANDS.includes(band)) throw new Error("ZTF HpxFinder page requires one of g/r/i");
+  const rows: ZtfHpxFinderRow[] = [];
+  for (const line of body.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let sourceRow: Document;
+    try { sourceRow = JSON.parse(line) as Document; } catch { throw new Error("ZTF HpxFinder page contains invalid JSONL"); }
+    const name = String(sourceRow.name ?? "");
+    const match = /^ztf_(\d{6})_z([gri])_c(0[1-9]|1[0-6])_q([1-4])_refimg$/.exec(name);
+    const ra = Number(sourceRow.ra);
+    const dec = Number(sourceRow.dec);
+    const stc = String(sourceRow.stc ?? "").trim();
+    const tokens = stc.split(/\s+/);
+    const coordinates = tokens.slice(2).map(Number);
+    if (!match || match[2] !== band || !Number.isFinite(ra) || ra < 0 || ra >= 360 || !Number.isFinite(dec) || dec < -90 || dec > 90
+      || tokens[0]?.toUpperCase() !== "POLYGON" || tokens[1]?.toUpperCase() !== "J2000"
+      || coordinates.length !== 8 || coordinates.some((value, index) => !Number.isFinite(value) || (index % 2 === 0 ? value < 0 || value >= 360 : value < -90 || value > 90))
+      || !Number.isSafeInteger(Number(sourceRow.cellmem)) || Number(sourceRow.cellmem) < 1
+      || typeof sourceRow.path !== "string" || sourceRow.path.length > 1024) {
+      throw new Error("ZTF HpxFinder row does not match its band-specific CCD-quadrant reference image and J2000 frame");
+    }
+    rows.push({ name, fileName: `${name}.fits`, band: match[2]!.toUpperCase(), field: match[1]!, ccd: Number(match[3]), quadrant: Number(match[4]),
+      ra, dec, stc, generatorPath: sourceRow.path });
+  }
+  return rows;
+}
+
+export function ztfReferenceImageUri(fileName: string): string {
+  const match = /^ztf_(\d{6})_z([gri])_c(0[1-9]|1[0-6])_q([1-4])_refimg\.fits$/.exec(fileName);
+  if (!match) throw new Error("Invalid ZTF reference-image filename");
+  const field = match[1]!;
+  return `https://irsa.ipac.caltech.edu/ibe/data/ztf/products/ref/${field.slice(0, 3)}/field${field}/z${match[2]}/ccd${Number(match[3])}/q${match[4]}/${fileName}`;
+}
+
+export function matchesPanstarrsListingEvidence(row: Document, sourceRow: { fileName: string; responseSha256: string }, gridSha256: string): boolean {
+  const metadata = row.sourceMetadata as Document | undefined;
+  return Boolean(metadata && sourceRow.fileName === metadata.sourceFilename
+    && sourceRow.responseSha256 === metadata.listingResponseSha256 && metadata.gridSha256 === gridSha256);
+}
+
 export async function loadSurveyManifest(root: string, ref: string, source: NativeSource, expected?: Pick<NativeFile, "sha256" | "sizeBytes">): Promise<{ manifest: SurveyManifest; files: NativeFile[] }> {
   if (!isSurveyNativeAdapter(source.adapter)) throw new Error("Unsupported survey metadata adapter");
   nativeMetadataUrl(source.sourceUrl, source.adapter);
@@ -231,6 +339,95 @@ export async function loadSurveyManifest(root: string, ref: string, source: Nati
     }
     if (end !== 12 * 4 ** 8 - 1) throw new Error("Gaia native roster does not cover its declared order-8 partition domain");
   } else if (!Array.isArray(manifest.rowFiles) || !manifest.rowFiles.length || !Number.isSafeInteger(manifest.rowCount) || manifest.rowCount! < 1) throw new Error("Survey observation/field import needs locked row files");
+  if (source.adapter === "skyview-radio-maps") {
+    const spec = SKYVIEW_RADIO_SPECS[source.surveyId];
+    const documents = new Map(manifest.metadataDocuments.map((document: Document) => [document.ref, document]));
+    const pages = manifest.sourcePagination;
+    const mapReceipts = pages?.maps;
+    const headerEvidence = documents.get(SKYVIEW_RADIO_HEADER_REF);
+    const xmlEvidence = documents.get(`metadata/${source.surveyId}.xml.gz`);
+    const publisherManifest = documents.get("metadata/survey.manifest");
+    const successfulHeaders = Array.isArray(mapReceipts) ? mapReceipts.filter((item: Document) => item.headerStatus === "captured").length : -1;
+    const failedHeaders = Array.isArray(mapReceipts) ? mapReceipts.filter((item: Document) => item.headerStatus === "failed").length : -1;
+    const geometryFailures = Array.isArray(mapReceipts) ? mapReceipts.filter((item: Document) => item.geometryStatus !== "mapped").length : -1;
+    const validRows = (manifest.rowFiles ?? []).some(rowFile => rowFile.ref === "normalized/native-rows.ndjson.gz" && rowFile.rows === spec?.expectedRows);
+    if (!spec || source.id !== spec.sourceId || source.releaseId !== spec.releaseId
+      || source.sourceUrl !== `https://skyview.gsfc.nasa.gov/current/jar/surveys/xml/${spec.xmlName}.xml.gz`
+      || manifest.deliveryClass !== "evidence" || manifest.nativeCoordinateFrame !== spec.nativeFrame
+      || manifest.queryPagesComplete !== true || manifest.inventoryComplete !== false || manifest.rowCount !== spec.expectedRows
+      || manifest.scope?.expectedRowCount !== spec.expectedRows || manifest.scope?.xmlRosterPath !== `metadata/${spec.xmlName}.xml.gz`
+      || manifest.scope?.headerEvidenceRef !== SKYVIEW_RADIO_HEADER_REF || manifest.scope?.fullSurveyInventory !== false
+      || manifest.scope?.validPixelMasksChecked !== false || manifest.scope?.geometryPrecision !== "estimated"
+      || pages?.queryPagesComplete !== true || pages?.xmlStatus !== 200 || pages?.xmlUrl !== source.sourceUrl
+      || pages?.xmlRowCount !== spec.expectedRows || pages?.xmlSha256 !== xmlEvidence?.sha256
+      || pages?.publisherManifestSha256 !== publisherManifest?.sha256
+      || pages?.headerEvidenceSha256 !== headerEvidence?.sha256
+      || pages?.headerSuccessCount !== successfulHeaders || manifest.scope?.headerSuccessCount !== successfulHeaders
+      || pages?.headerFailureCount !== failedHeaders || manifest.scope?.headerFailureCount !== failedHeaders
+      || pages?.geometryFailureCount !== geometryFailures || manifest.scope?.geometryFailureCount !== geometryFailures
+      || successfulHeaders + failedHeaders !== spec.expectedRows
+      || !Array.isArray(mapReceipts) || mapReceipts.length !== spec.expectedRows
+      || ![headerEvidence, xmlEvidence, publisherManifest].every((document: Document | undefined) => document
+        && /^[a-f0-9]{64}$/.test(document.sha256 ?? "") && Number.isSafeInteger(document.sizeBytes) && document.sizeBytes > 0)
+      || !validRows || !Array.isArray(manifest.gaps) || manifest.gaps.some((gap: unknown) => typeof gap !== "string" || gap.length > 240)) {
+      throw new Error("SkyView radio import must retain the exact published XML roster, every native map identity, and its actual header-range outcome");
+    }
+    const identities = new Set<string>();
+    for (const item of mapReceipts as Document[]) {
+      if (typeof item.unitId !== "string" || !item.unitId || identities.has(item.unitId)
+        || item.url !== `${spec.mapRoot}${item.relativePath}` || item.headerStatus !== "captured" && item.headerStatus !== "failed"
+        || !["mapped", "failed", "unavailable"].includes(item.geometryStatus)
+        || item.headerStatus === "captured" && (!/^[a-f0-9]{64}$/.test(item.headerSha256 ?? "") || !Number.isSafeInteger(item.headerBytes) || item.headerBytes < 2880)
+        || item.headerStatus === "failed" && typeof item.error !== "string") {
+        throw new Error("SkyView radio XML roster contains an invalid or duplicate map identity or header receipt");
+      }
+      identities.add(item.unitId);
+    }
+  }
+  if (source.adapter === "irsa-akari-fis-map") {
+    const scope = manifest.scope;
+    const pages = manifest.sourcePagination?.pages;
+    const documents = new Map(manifest.metadataDocuments.map((document: Document) => [document.ref, document]));
+    if (source.id !== AKARI_SOURCE_ID || source.surveyId !== "akari" || source.releaseId !== "akari-fis" || source.query !== AKARI_QUERY
+      || manifest.deliveryClass !== "evidence" || manifest.nativeCoordinateFrame !== "FK5(J2000)"
+      || manifest.queryPagesComplete !== true || manifest.inventoryComplete !== true || manifest.rowCount !== AKARI_ROW_COUNT
+      || scope?.table !== "akari.akari_images" || scope?.datasetVersion !== "2.1" || scope?.regionCount !== AKARI_REGION_COUNT
+      || scope?.expectedRowCount !== AKARI_ROW_COUNT || scope?.fileType !== "science" || scope?.validPixelMasksChecked !== false
+      || JSON.stringify(scope?.bands) !== JSON.stringify(["N60", "WideS", "WideL", "N160"])
+      || !scope?.bandCounts || Object.entries(AKARI_BAND_COUNTS).some(([band, count]) => scope.bandCounts[band] !== count)
+      || manifest.sourcePagination?.queryPagesComplete !== true || manifest.sourcePagination?.denominatorsStable !== true
+      || manifest.sourcePagination?.regionListCount !== AKARI_REGION_COUNT || manifest.sourcePagination?.directoryMembershipComplete !== true
+      || !Array.isArray(pages) || pages.length !== 4 || pages.reduce((sum: number, page: Document) => sum + Number(page.rows), 0) !== AKARI_ROW_COUNT
+      || !pages.every((page: Document, index: number) => page.status === 200 && page.queryStatus === "OK" && page.overflow === false
+        && page.band === ["N60", "WideS", "WideL", "N160"][index] && page.rows === AKARI_REGION_COUNT
+        && documents.get(page.ref)?.sha256 === page.sha256 && documents.get(page.ref)?.sizeBytes === page.sizeBytes)
+      || !(manifest.rowFiles ?? []).some(rowFile => rowFile.ref === "normalized/native-rows.ndjson.gz" && rowFile.rows === AKARI_ROW_COUNT)) {
+      throw new Error("AKARI FIS import must retain the four complete source-listed science-map bands and matching region roster");
+    }
+  }
+  if (source.adapter === "cds-ztf-progenitor-o3") {
+    const scope = manifest.scope;
+    const pagination = manifest.sourcePagination;
+    const documents = new Map(manifest.metadataDocuments.map((document: Document) => [document.ref, document]));
+    const bands = scope?.fileCounts;
+    if (source.id !== ZTF_SOURCE_ID || source.surveyId !== "ztf" || source.releaseId !== "ztf-dr7" || source.query !== ZTF_QUERY
+      || manifest.deliveryClass !== "evidence" || manifest.nativeCoordinateFrame !== "FK5(J2000)"
+      || manifest.queryPagesComplete !== true || manifest.inventoryComplete !== false || manifest.rowCount !== ZTF_ROW_COUNT
+      || scope?.publisherProduct !== "CDS/P/ZTF/DR7" || scope?.progenitorOrder !== 3 || scope?.keyCount !== 2304
+      || scope?.http200Pages !== 1696 || scope?.http404Pages !== 608 || scope?.inputRows !== ZTF_ROW_COUNT
+      || scope?.uniqueReferenceImages !== 162333 || scope?.duplicateRows !== 58016 || scope?.historicalReleaseInventoryComplete !== false
+      || scope?.directFileSource !== "IRSA ZTF products/ref" || scope?.validPixelMasksChecked !== false
+      || JSON.stringify(scope?.bands) !== JSON.stringify(["g", "r", "i"])
+      || !bands || Object.entries(ZTF_FILE_COUNTS).some(([band, count]) => bands[band] !== count)
+      || pagination?.queryPagesComplete !== true || pagination?.requestedKeys !== 2304 || pagination?.http200Pages !== 1696 || pagination?.http404Pages !== 608
+      || pagination?.failedPages !== 0 || pagination?.inputRows !== ZTF_ROW_COUNT || pagination?.uniqueReferenceImages !== 162333
+      || documents.get("metadata/research-manifest.json")?.sha256 !== pagination?.researchManifestSha256
+      || !documents.has("metadata/page-evidence.ndjson.gz")
+      || !["metadata/g-metadata.xml", "metadata/r-metadata.xml", "metadata/i-metadata.xml"].every(ref => documents.has(ref))
+      || !(manifest.rowFiles ?? []).some(rowFile => rowFile.ref === "normalized/native-rows.ndjson.gz" && rowFile.rows === ZTF_ROW_COUNT)) {
+      throw new Error("ZTF import must retain all CDS DR7 O3 progenitor page outcomes and clearly bounded historical scope");
+    }
+  }
   if (source.adapter === "eso-obscore-vvv" && (source.surveyId !== "vista" || source.releaseId !== "vista-vvv-dr4"
     || manifest.nativeCoordinateFrame !== "J2000" || typeof manifest.queryPagesComplete !== "boolean"
     || manifest.scope?.releaseDescription !== "https://www.eso.org/rm/api/v1/public/releaseDescriptions/80"
@@ -599,6 +796,37 @@ export async function loadSurveyManifest(root: string, ref: string, source: Nati
       throw new Error("Pan-STARRS DR1 input must retain the complete zone 23 skycell queries, official grid, header-only WCS check and bounded-scope declaration");
     }
   }
+  if (source.adapter === "iphas-dr2-pipeline") {
+    const raw = manifest.metadataDocuments.find((document: Document) => document.ref === "metadata/iphas-images-pipeline.fits");
+    const rows = manifest.rowFiles?.find(rowFile => rowFile.ref === "normalized/native-rows.ndjson.gz");
+    const scope = manifest.scope;
+    if (manifest.deliveryClass !== "evidence" || source.id !== IPHAS_SOURCE_ID || source.surveyId !== "iphas" || source.releaseId !== "iphas-dr2"
+      || source.sourceUrl !== IPHAS_SOURCE_URL || manifest.inventoryComplete !== false || manifest.queryPagesComplete !== true
+      || manifest.nativeCoordinateFrame !== "ICRS" || manifest.rowCount !== IPHAS_EXPECTED_ROWS
+      || raw?.sha256 !== "7cae94bb03e1fb3d43a9af49e164df88e8087d4c7fe6527e10fe066af825465d" || raw.sizeBytes !== 63_570_240
+      || scope?.upstreamGitCommit !== "e2e47c6964df6bb5fe9909e317ef18f0913698db" || scope?.expectedRows !== IPHAS_EXPECTED_ROWS
+      || scope?.expectedDr2RecalibrationRows !== IPHAS_EXPECTED_DR2_ROWS || scope?.expectedUniqueRunCcdBands !== IPHAS_EXPECTED_UNIQUE_ROWS
+      || scope?.expectedDuplicateRunCcdBands !== IPHAS_EXPECTED_DUPLICATE_ROWS || scope?.finalQcReconciled !== false
+      || scope?.geometrySource !== "pinned IPHAS DR2 author pipeline table, four CCD corners, ZPN frame"
+      || rows?.rows !== IPHAS_EXPECTED_ROWS || rows.sha256 === raw.sha256) {
+      throw new Error("IPHAS DR2 input must retain the pinned full author pipeline table, its partial recalibration scope and separate normalized metadata rows");
+    }
+  }
+  if (source.adapter === "rubin-firstlook-avm") {
+    const scope = manifest.scope;
+    const capture = manifest.metadataDocuments.find((document: Document) => document.ref === RUBIN_CAPTURE_REF);
+    const rowFile = manifest.rowFiles?.find(row => row.ref === "normalized/native-rows.ndjson.gz");
+    const expectedXmp = Object.values(RUBIN_IMAGE_EVIDENCE);
+    const xmpDocuments = new Map(manifest.metadataDocuments.map((document: Document) => [document.ref, document]));
+    if (manifest.deliveryClass !== "evidence" || source.id !== RUBIN_SOURCE_ID || source.surveyId !== "rubin" || source.releaseId !== "rubin-firstlook"
+      || manifest.inventoryComplete !== false || manifest.queryPagesComplete !== true || manifest.rowCount !== expectedXmp.length
+      || scope?.expectedImageCount !== expectedXmp.length || scope?.fullScientificInventory !== false
+      || scope?.outreachImagesOnly !== true || scope?.geometryPrecision !== "estimated" || scope?.validPixelMasksChecked !== false
+      || !capture || !expectedXmp.every(item => xmpDocuments.get(item.xmpRef)?.sha256 === item.xmpSha256)
+      || rowFile?.rows !== expectedXmp.length) {
+      throw new Error("Rubin First Look input must retain the exact two publisher XMP ranges and an explicit outreach-only scope");
+    }
+  }
   if (source.adapter === "act-dr5-whole-map") {
     const scope = manifest.scope;
     const pagination = manifest.sourcePagination;
@@ -647,26 +875,29 @@ export async function loadSurveyManifest(root: string, ref: string, source: Nati
   if (source.adapter === "spherex-qr2-s3-observation") {
     const scope = manifest.scope;
     const pages = manifest.sourcePagination?.pages;
+    const spec = SPHEREX_SOURCE_SPECS[source.id];
     const expectedRows = Number(scope?.expectedRowCount);
     const rowsByDetector = new Map<number, number>();
     for (const page of Array.isArray(pages) ? pages : []) {
-      if (!Number.isSafeInteger(page.detector) || ![2, 3, 4, 5, 6].includes(page.detector)
+      if (!Number.isSafeInteger(page.detector) || !spec?.detectors.includes(page.detector)
         || page.status !== 200 || !Number.isSafeInteger(page.rows) || page.rows < 0 || page.rows > 1000
         || typeof page.isTruncated !== "boolean") throw new Error("SPHEREx input has an invalid detector listing receipt");
       rowsByDetector.set(page.detector, (rowsByDetector.get(page.detector) ?? 0) + page.rows);
     }
-    if (source.id !== SPHEREX_SOURCE_ID || source.surveyId !== "spherex" || source.releaseId !== "spherex-qr2"
-      || source.query !== SPHEREX_QUERY || manifest.queryPagesComplete !== true || manifest.inventoryComplete !== false
-      || scope?.observingRun !== "2025W17_4B" || scope?.processingVersion !== "l2b-v20-2025-240"
+    if (!spec || manifest.sourceId !== source.id || manifest.query !== spec.query
+      || source.surveyId !== "spherex" || source.releaseId !== "spherex-qr2"
+      || source.query !== spec.query || manifest.queryPagesComplete !== true || manifest.inventoryComplete !== false
+      || scope?.observingRun !== "2025W17_4B" || scope?.processingVersion !== spec.processingVersion
       || scope?.observationSelector !== "2025W17_4B_0001_1" || scope?.observationId !== "2025W17_4B_0001_1"
-      || JSON.stringify(scope?.detectors) !== JSON.stringify([2, 3, 4, 5, 6])
+      || JSON.stringify(scope?.detectors) !== JSON.stringify(spec.detectors)
       || scope?.fullObservationRoster !== true || scope?.fullReleaseInventory !== false || scope?.headerOnly !== true
-      || scope?.validPixelMasksChecked !== false || !Number.isSafeInteger(expectedRows) || expectedRows !== 5
+      || scope?.validPixelMasksChecked !== false || !Number.isSafeInteger(expectedRows) || expectedRows !== spec.expectedRows
       || manifest.rowCount !== expectedRows || manifest.sourcePagination?.queryPagesComplete !== true
       || manifest.sourcePagination?.pageSize !== 1000 || manifest.sourcePagination?.expectedRowCount !== expectedRows
-      || !Array.isArray(pages) || pages.length !== 5 || [...rowsByDetector.keys()].sort().join(",") !== "2,3,4,5,6"
+      || !Array.isArray(pages) || pages.length !== spec.detectors.length
+      || [...rowsByDetector.keys()].sort((a, b) => a - b).join(",") !== [...spec.detectors].sort((a, b) => a - b).join(",")
       || [...rowsByDetector.values()].some(count => count !== 1)
-      || !Array.isArray(manifest.metadataDocuments) || manifest.metadataDocuments.length !== 10
+      || !Array.isArray(manifest.metadataDocuments) || manifest.metadataDocuments.length !== expectedRows * 2
       || manifest.metadataDocuments.some((document: Document) => !/^[a-f0-9]{64}$/.test(document.sha256 ?? "")
         || !Number.isSafeInteger(document.sizeBytes) || document.sizeBytes < 1)) {
       throw new Error("SPHEREx input must retain the complete bounded five-detector QR2 observation roster and metadata-only FITS headers");
@@ -704,14 +935,149 @@ async function* manifestRows(root: string, ref: string, manifest: SurveyManifest
   if (total !== manifest.rowCount) throw new Error("Survey total row count differs from its locked manifest");
 }
 
+interface ZtfPageMember { sourceRow: ZtfHpxFinderRow; pageResponseSha256: string }
+
+async function validateZtfPageEvidence(root: string, manifestRef: string, manifest: SurveyManifest): Promise<Map<string, ZtfPageMember>> {
+  const documents = new Map(manifest.metadataDocuments.map((document: Document) => [document.ref, document]));
+  const researchDoc = documents.get("metadata/research-manifest.json") as Document | undefined;
+  const evidenceDoc = documents.get("metadata/page-evidence.ndjson.gz") as Document | undefined;
+  if (!researchDoc || !evidenceDoc || researchDoc.sha256 !== manifest.sourcePagination?.researchManifestSha256) throw new Error("ZTF import is missing its locked page and research evidence");
+  const baseDir = path.posix.dirname(manifestRef);
+  let research: Document;
+  try { research = JSON.parse(await readFile(nativeEvidencePath(root, path.posix.join(baseDir, researchDoc.ref)), "utf8")) as Document; }
+  catch { throw new Error("ZTF research capture manifest is invalid"); }
+  if (research.captureComplete !== true || research.sourcePageCount !== 2304 || !Array.isArray(research.results) || research.results.length !== 2304
+    || research.validation?.allPageReceiptsRevalidated !== true || research.validation?.sciencePixelBytesFetched !== 0) {
+    throw new Error("ZTF capture is not the complete metadata-only CDS O3 key enumeration");
+  }
+
+  const members = new Map<string, ZtfPageMember>();
+  const unique = new Map<string, { band: string; stc: string; ra: number; dec: number }>();
+  const pageCounts = new Map(ZTF_BANDS.map(band => [band, { pages200: 0, pages404: 0, rows: 0, unique: new Set<string>() }]));
+  const stream = createReadStream(nativeEvidencePath(root, path.posix.join(baseDir, evidenceDoc.ref))).pipe(createGunzip());
+  const lines = createInterface({ input: stream, crlfDelay: Infinity });
+  let pageIndex = 0;
+  try {
+    for await (const line of lines) {
+      if (!line.trim()) continue;
+      if (line.length > 2 * 1024 * 1024 || pageIndex >= research.results.length) throw new Error("ZTF page evidence exceeds its fixed response budget");
+      const item = JSON.parse(line) as Document;
+      const result = research.results[pageIndex] as Document;
+      const band = ZTF_BANDS[Math.floor(pageIndex / 768)]!;
+      const ipix = pageIndex % 768;
+      const expectedUrl = `${ZTF_SOURCE_ROOT}CDS_P_ZTF_DR7_${band}/HpxFinder/Norder3/Dir0/Npix${ipix}`;
+      const counts = pageCounts.get(band)!;
+      if (item.band !== band || item.order !== 3 || item.ipix !== ipix || item.url !== expectedUrl || result.band !== band || result.order !== 3
+        || result.ipix !== ipix || result.url !== expectedUrl || item.status !== result.status || item.sha256 !== result.sha256
+        || item.bytes !== result.bytes || item.rowCount !== Number(result.rowCount ?? 0) || item.finalUrl !== expectedUrl || result.finalUrl !== expectedUrl) {
+        throw new Error("ZTF page evidence order or receipt does not match the locked CDS NESTED O3 request");
+      }
+      if (item.status === 404) {
+        if (item.bodyBase64 !== "" || item.bytes !== result.bytes || item.rowCount !== 0
+          || Number(result.headers?.["Content-Length"]) !== item.bytes) throw new Error("ZTF 404 page evidence must retain its explicit status and body receipt without treating it as an image row");
+        counts.pages404++;
+      } else if (item.status === 200) {
+        const bodyBase64 = String(item.bodyBase64 ?? "");
+        const body = Buffer.from(bodyBase64, "base64");
+        const hash = createHash("sha256").update(body).digest("hex");
+        if (!body.length || body.toString("base64") !== bodyBase64 || body.length !== item.bytes || hash !== item.sha256
+          || Number(result.headers?.["Content-Length"]) !== body.length) throw new Error("ZTF source page bytes differ from their locked receipt");
+        const rows = parseZtfHpxFinderPage(body.toString("utf8"), band);
+        if (rows.length !== item.rowCount) throw new Error("ZTF source page rows differ from their locked receipt");
+        counts.pages200++; counts.rows += rows.length;
+        for (const sourceRow of rows) {
+          const memberId = `${band}/${ipix}/${sourceRow.name}`;
+          if (members.has(memberId)) throw new Error("ZTF source page repeats a reference-image row within one O3 key");
+          members.set(memberId, { sourceRow, pageResponseSha256: hash });
+          const imageId = `${band}/${sourceRow.name}`;
+          const prior = unique.get(imageId);
+          if (prior && (prior.stc !== sourceRow.stc || prior.ra !== sourceRow.ra || prior.dec !== sourceRow.dec)) {
+            throw new Error("ZTF progenitor pages disagree on a repeated reference-image footprint");
+          }
+          if (!prior) { unique.set(imageId, { band, stc: sourceRow.stc, ra: sourceRow.ra, dec: sourceRow.dec }); counts.unique.add(sourceRow.name); }
+        }
+      } else throw new Error("ZTF capture contains an unresolved HTTP outcome");
+      pageIndex++;
+    }
+  } finally { lines.close(); stream.destroy(); }
+  if (pageIndex !== 2304 || members.size !== ZTF_ROW_COUNT || unique.size !== 162333
+    || ZTF_BANDS.some(band => {
+      const counts = pageCounts.get(band)!;
+      const uppercaseBand = ({ g: "G", r: "R", i: "I" } as Record<string, string>)[band]!;
+      return counts.pages200 !== 768 - ZTF_PAGE_404_COUNTS[band]
+        || counts.pages404 !== ZTF_PAGE_404_COUNTS[band] || counts.rows !== ZTF_PAGE_ROW_COUNTS[band]
+        || counts.unique.size !== ZTF_FILE_COUNTS[uppercaseBand as keyof typeof ZTF_FILE_COUNTS];
+    })) throw new Error("ZTF page evidence counts do not match the captured CDS DR7 O3 source inventory");
+  return members;
+}
+
 export async function importSurveySnapshot(root: string, file: NativeFile, source: NativeSource): Promise<NativeSnapshot> {
   const { manifest, files } = await loadSurveyManifest(root, file.ref, source, file);
   const metadataByRef = new Map(manifest.metadataDocuments.map((document: Document) => [document.ref, document.sha256]));
+  const radioHeaderEvidence = new Map<string, Document>();
+  const radioMapReceipts = new Map<string, Document>();
+  if (source.adapter === "skyview-radio-maps") {
+    for (const item of manifest.sourcePagination?.maps as Document[]) radioMapReceipts.set(item.unitId, item);
+    const evidenceDocument = manifest.metadataDocuments.find(document => document.ref === SKYVIEW_RADIO_HEADER_REF);
+    if (!evidenceDocument || evidenceDocument.sizeBytes > 64 * 1024 * 1024) throw new Error("SkyView radio import is missing its bounded per-map FITS header evidence");
+    const evidencePath = nativeEvidencePath(root, path.posix.join(path.posix.dirname(file.ref), SKYVIEW_RADIO_HEADER_REF));
+    const contents = gunzipSync(await readFile(evidencePath), { maxOutputLength: 128 * 1024 * 1024 }).toString("utf8");
+    for (const line of contents.split(/\r?\n/)) {
+      if (!line) continue;
+      const item = JSON.parse(line) as Document;
+      if (typeof item.unitId !== "string" || radioHeaderEvidence.has(item.unitId)
+        || item.status !== "captured" && item.status !== "failed") throw new Error("SkyView radio header evidence contains an invalid or duplicate map result");
+      if (item.status === "captured") {
+        const header = Buffer.from(String(item.headerBase64 ?? ""), "base64");
+        if (!header.length || header.toString("base64") !== item.headerBase64
+          || createHash("sha256").update(header).digest("hex") !== item.headerSha256
+          || item.headerBytes !== header.length || item.headerBytes % 2880 !== 0) throw new Error("SkyView radio FITS header evidence hash or padded size is invalid");
+      } else if (typeof item.error !== "string" || !item.error) throw new Error("SkyView radio failed-header evidence has no reason");
+      radioHeaderEvidence.set(item.unitId, item);
+    }
+    if (radioHeaderEvidence.size !== manifest.rowCount) throw new Error("SkyView radio header evidence does not retain every XML-listed map outcome");
+  }
   const kidsDataLinkEvidence = new Map<string, { sha256: string; url: string }>();
   const kidsAstroWiseRoster = new Map<string, string>();
   const vphasDataLinkEvidence = new Map<string, { sha256: string; url: string }>();
   const vikingDataLinkEvidence = new Map<string, { sha256: string; url: string }>();
   const panstarrsListingEvidence = new Map<string, { fileName: string; responseSha256: string }>();
+  const iphasUniqueRows = new Map<string, string>();
+  let iphasDr2Rows = 0;
+  let iphasDuplicateRows = 0;
+  const rubinImages = new Map<string, Document>();
+  const ztfPageMembers = source.adapter === "cds-ztf-progenitor-o3" ? await validateZtfPageEvidence(root, file.ref, manifest) : new Map<string, ZtfPageMember>();
+  if (source.adapter === "rubin-firstlook-avm") {
+    const captureDocument = manifest.metadataDocuments.find(document => document.ref === RUBIN_CAPTURE_REF);
+    if (!captureDocument) throw new Error("Rubin First Look import is missing the publisher range-capture receipt");
+    let capture: Document;
+    try { capture = JSON.parse(await readFile(nativeEvidencePath(root, path.posix.join(path.posix.dirname(file.ref), captureDocument.ref)), "utf8")) as Document; }
+    catch { throw new Error("Rubin First Look publisher range-capture receipt is invalid"); }
+    if (capture.schemaVersion !== 1 || capture.pixelPayloadRead !== false || capture.images?.length !== Object.keys(RUBIN_IMAGE_EVIDENCE).length) {
+      throw new Error("Rubin First Look capture must contain only the two bounded publisher metadata records");
+    }
+    for (const image of capture.images as Document[]) {
+      const expected = RUBIN_IMAGE_EVIDENCE[String(image.imageId)];
+      const xmpSha256 = metadataByRef.get(String(image.xmpRef));
+      const rangeDocuments = new Map(manifest.metadataDocuments.map((document: Document) => [document.ref, document]));
+      const rangesArchived = Array.isArray(image.ranges) && image.ranges.length === 5 && image.ranges.every((range: Document) => {
+        const document = rangeDocuments.get(range.ref) as Document | undefined;
+        return range.status === 206 && Number.isSafeInteger(range.start) && Number.isSafeInteger(range.endInclusive)
+          && range.endInclusive >= range.start && range.bytesRead === range.endInclusive - range.start + 1
+          && range.contentRange === `bytes ${range.start}-${range.endInclusive}/${image.fileSizeBytes}`
+          && document?.sha256 === range.sha256 && document?.sizeBytes === range.bytesRead;
+      });
+      if (!expected || rubinImages.has(String(image.imageId)) || image.fileName !== expected.fileName || image.imageUrl !== `https://storage.noirlab.edu/media/archives/images/original/${expected.fileName}`
+        || image.fileSizeBytes !== expected.sizeBytes || image.headStatus !== 200 || image.xmpRef !== expected.xmpRef
+        || image.xmpSha256 !== expected.xmpSha256 || xmpSha256 !== expected.xmpSha256 || image.width !== expected.dimensions[0]
+        || image.height !== expected.dimensions[1] || image.coordinateFrame !== "ICRS" || image.equinox !== "J2000"
+        || image.projection !== "TAN" || image.quality !== "Position" || typeof image.footprint !== "string"
+        || !rangesArchived) {
+        throw new Error("Rubin First Look capture does not match its pinned publisher image and AVM range evidence");
+      }
+      rubinImages.set(String(image.imageId), image);
+    }
+  }
   if (source.adapter === "eso-obscore-kids") {
     const evidence = manifest.metadataDocuments.find(document => document.ref === "metadata/datalinks.ndjson.gz");
     if (!evidence) throw new Error("KiDS import is missing its raw DataLink response bundle");
@@ -848,8 +1214,116 @@ export async function importSurveySnapshot(root: string, file: NativeFile, sourc
   const decapsCcds = new Set<string>();
   const decapsBands = new Map<string, number>();
   const actMaps = new Set<string>();
+  const radioMaps = new Set<string>();
+  let radioHeaderFailures = 0;
+  let radioGeometryFailures = 0;
+  let radioSpectralConflicts = 0;
+  const akariRegions = new Set<string>();
+  const akariFiles = new Set<string>();
+  const akariRegionBands = new Set<string>();
+  const akariBands = new Map<string, number>();
+  const ztfRowsByBand = new Map<string, number>();
+  const ztfImagesByBand = new Map<string, Set<string>>();
   for await (const row of manifestRows(root, file.ref, manifest)) {
     rows++;
+
+    if (source.adapter === "skyview-radio-maps") {
+      const spec = SKYVIEW_RADIO_SPECS[source.surveyId]!;
+      const metadata = row.sourceMetadata as Document | undefined;
+      const relativePath = String(metadata?.relativePath ?? "");
+      const unitId = String(row.unitId ?? "");
+      const receipt = radioMapReceipts.get(unitId);
+      const evidence = radioHeaderEvidence.get(unitId);
+      const fileName = relativePath.split("/").at(-1) ?? "";
+      const uri = row.accessUris?.[0] ? publicUri(row.accessUris[0].uri ?? row.accessUris[0].url) : undefined;
+      const expectedRegion = Array.isArray(metadata?.frameEdgeIcrs) && metadata.frameEdgeIcrs.length === 128
+        ? `POLYGON ICRS ${metadata.frameEdgeIcrs.map((point: number[]) => `${Number(point[0]).toFixed(8)} ${Number(point[1]).toFixed(8)}`).join(" ")}`
+        : "";
+      const normalized = normalizedRow(row, source);
+      if (!metadata || !receipt || !evidence || radioMaps.has(unitId) || unitId !== relativePath
+        || !fileName || row.filename !== fileName || metadata.fileName !== fileName
+        || metadata.headerStatus !== receipt.headerStatus || evidence.status !== receipt.headerStatus
+        || metadata.geometryStatus !== receipt.geometryStatus
+        || receipt.relativePath !== relativePath || receipt.url !== `${spec.mapRoot}${relativePath}`
+        || metadata.mirrorCountry !== "US" || metadata.producerCountry !== spec.producerCountry
+        || metadata.producer !== spec.producer || metadata.publisherBand !== spec.band
+        || row.bands?.length !== 1 || row.bands[0] !== spec.band
+        || row.accessUris?.length !== 1 || uri !== receipt.url
+        || row.accessUris[0].sourceId !== "skyview-gsfc-us" || row.accessUris[0].countryCode !== "US"
+        || metadata.headerEvidenceRef !== SKYVIEW_RADIO_HEADER_REF
+        || metadata.headerSha256 !== receipt.headerSha256 || metadata.headerBytes !== receipt.headerBytes
+        || evidence.headerSha256 !== receipt.headerSha256
+        || receipt.headerStatus === "failed" && typeof metadata.failure !== "string"
+        || receipt.headerStatus === "captured" && (!receipt.headerSha256 || !receipt.headerBytes)
+        || receipt.geometryStatus === "mapped" && (!normalized || row.sRegion !== expectedRegion
+          || metadata.geometrySource !== "actual FITS primary-header WCS pixel-edge samples transformed to ICRS"
+          || metadata.coordinateFrame !== "ICRS" || metadata.nativeCoordinateFrame !== spec.nativeFrame
+          || metadata.geometryPrecision !== "estimated" || metadata.validPixelMasksChecked !== false
+          || metadata.frameEdgeIcrs.length !== 128)
+        || receipt.geometryStatus !== "mapped" && (normalized || row.sRegion !== null || typeof metadata.failure !== "string")) {
+        throw new Error("SkyView radio map row does not match its XML identity, source-listed URI and actual per-map header outcome");
+      }
+      if (source.surveyId === "wenss" && metadata.spectralMetadataConflict === true) radioSpectralConflicts++;
+      radioMaps.add(unitId);
+      if (receipt.headerStatus === "failed") radioHeaderFailures++;
+      if (receipt.geometryStatus !== "mapped") radioGeometryFailures++;
+    }
+    if (source.adapter === "irsa-akari-fis-map") {
+      const normalized = normalizedRow(row, source);
+      const metadata = normalized?.sourceMetadata as Document | undefined;
+      const band = String(normalized?.bands?.[0] ?? "").toUpperCase();
+      if (!normalized || !metadata || akariFiles.has(String(metadata.fileName))) throw new Error("AKARI FIS input contains an invalid or duplicate direct science-map identity");
+      akariFiles.add(String(metadata.fileName)); akariRegions.add(String(metadata.regionId));
+      akariRegionBands.add(`${metadata.regionId}/${band}`); akariBands.set(band, (akariBands.get(band) ?? 0) + 1);
+    }
+    if (source.adapter === "cds-ztf-progenitor-o3") {
+      const normalized = normalizedRow(row, source);
+      const metadata = normalized?.sourceMetadata as Document | undefined;
+      if (!normalized || !metadata) throw new Error("ZTF input contains an unsupported progenitor reference-image row");
+      const memberId = `${metadata.pageBand}/${metadata.pageIpix}/${metadata.sourceName}`;
+      const evidence = ztfPageMembers.get(memberId);
+      if (!evidence || evidence.pageResponseSha256 !== metadata.pageResponseSha256
+        || evidence.sourceRow.fileName !== normalized.filename || evidence.sourceRow.stc !== metadata.sourceStc
+        || evidence.sourceRow.generatorPath !== metadata.generatorPath || evidence.sourceRow.field !== metadata.field
+        || evidence.sourceRow.ccd !== metadata.ccd || evidence.sourceRow.quadrant !== metadata.quadrant
+        || evidence.sourceRow.ra !== metadata.sourceCenterRa || evidence.sourceRow.dec !== metadata.sourceCenterDec) {
+        throw new Error("ZTF normalized rows do not reproduce their locked HpxFinder source-page members");
+      }
+      const band = String(normalized.bands[0]).toUpperCase();
+      ztfRowsByBand.set(band, (ztfRowsByBand.get(band) ?? 0) + 1);
+      const images = ztfImagesByBand.get(band) ?? new Set<string>(); images.add(String(metadata.sourceName)); ztfImagesByBand.set(band, images);
+    }
+    if (source.adapter === "iphas-dr2-pipeline") {
+      const normalized = normalizedRow(row, source);
+      const recalibrated = row.sourceMetadata?.inDr2 === true;
+      if (recalibrated) {
+        if (!normalized) throw new Error("IPHAS DR2 recalibration member lacks a supported CCD image footprint");
+        iphasDr2Rows++;
+        const key = `${normalized.unitId}/${normalized.bands[0]}`;
+        const hash = nativeDigest(normalized);
+        const prior = iphasUniqueRows.get(key);
+        if (prior && prior !== hash) throw new Error("IPHAS DR2 contains conflicting duplicate run/CCD/band metadata");
+        if (prior) iphasDuplicateRows++;
+        else iphasUniqueRows.set(key, hash);
+      } else if (normalized || row.sourceMetadata?.inDr2 !== false) {
+        throw new Error("IPHAS pipeline rows must carry a boolean in_dr2 membership flag");
+      }
+    }
+    if (source.adapter === "rubin-firstlook-avm") {
+      const normalized = normalizedRow(row, source);
+      const metadata = normalized?.sourceMetadata as Document | undefined;
+      const image = metadata ? rubinImages.get(String(metadata.imageId)) : undefined;
+      const capturedAvm = image?.avm as Document | undefined;
+      const normalizedAvm = metadata?.avm as Document | undefined;
+      const avmMatches = !!capturedAvm && !!normalizedAvm
+        && JSON.stringify(Object.entries(capturedAvm).sort()) === JSON.stringify(Object.entries(normalizedAvm).sort());
+      if (!normalized || !image || rubinImages.has(`${String(metadata?.imageId)}:seen`)
+        || row.sRegion !== image.footprint || metadata?.xmpRef !== image.xmpRef || metadata?.xmpSha256 !== image.xmpSha256
+        || metadata?.fileSizeBytes !== image.fileSizeBytes || !avmMatches) {
+        throw new Error("Rubin First Look normalized rows do not match the captured publisher IFD/XMP evidence");
+      }
+      rubinImages.set(`${String(metadata?.imageId)}:seen`, image);
+    }
     if (source.adapter === "eso-obscore-fds") {
       const normalized = normalizedRow(row, source);
       if (!normalized) throw new Error("FDS DR1 contains a row without a supported field footprint");
@@ -946,8 +1420,8 @@ export async function importSurveySnapshot(root: string, file: NativeFile, sourc
       const band = String(normalized.bands[0]);
       const key = `${normalized.unitId}/${band}`;
       const sourceRow = panstarrsListingEvidence.get(key);
-      if (!sourceRow || sourceRow.fileName !== normalized.filename || sourceRow.responseSha256 !== metadata.listingResponseSha256
-        || metadata.gridSha256 !== metadataByRef.get("metadata/ps1-grid.fits")) {
+      const gridSha256 = metadataByRef.get("metadata/ps1-grid.fits");
+      if (!sourceRow || !gridSha256 || !matchesPanstarrsListingEvidence(normalized, sourceRow, gridSha256)) {
         throw new Error("Pan-STARRS stack-file identity or URI does not match its exact skycell query response");
       }
       panstarrsListingEvidence.delete(key);
@@ -956,6 +1430,14 @@ export async function importSurveySnapshot(root: string, file: NativeFile, sourc
       const metadata = row.sourceMetadata;
       if (!metadata || metadataByRef.get(metadata.wcsHeaderRef) !== metadata.wcsHeaderSha256) throw new Error("SPHEREx row WCS provenance does not match its locked header evidence");
     }
+  }
+  if (source.adapter === "iphas-dr2-pipeline" && (rows !== IPHAS_EXPECTED_ROWS || iphasDr2Rows !== IPHAS_EXPECTED_DR2_ROWS
+    || iphasUniqueRows.size !== IPHAS_EXPECTED_UNIQUE_ROWS || iphasDuplicateRows !== IPHAS_EXPECTED_DUPLICATE_ROWS)) {
+    throw new Error("IPHAS DR2 pipeline rows do not match the pinned table and recalibration/duplicate denominators");
+  }
+  if (source.adapter === "rubin-firstlook-avm" && (rows !== Object.keys(RUBIN_IMAGE_EVIDENCE).length
+    || [...rubinImages.keys()].filter(key => key.endsWith(":seen")).length !== Object.keys(RUBIN_IMAGE_EVIDENCE).length)) {
+    throw new Error("Rubin First Look input must contain each publisher original image exactly once");
   }
   if (source.adapter === "eso-obscore-fds" && (rows !== 97 || fdsFiles.size !== 97 || fdsFields.size !== 26
     || Object.entries(FDS_BAND_COUNTS).some(([band, count]) => fdsBands.get(band) !== count))) {
@@ -997,6 +1479,26 @@ export async function importSurveySnapshot(root: string, file: NativeFile, sourc
   if (source.adapter === "panstarrs-dr1-skycell" && (rows !== manifest.rowCount || panstarrsListingEvidence.size !== 0)) {
     throw new Error("Pan-STARRS DR1 normalized rows do not exactly match the locked zone 23 stack-file responses");
   }
+  if (source.adapter === "irsa-akari-fis-map" && (rows !== AKARI_ROW_COUNT || akariFiles.size !== AKARI_ROW_COUNT
+    || akariRegions.size !== AKARI_REGION_COUNT || akariRegionBands.size !== AKARI_ROW_COUNT
+    || Object.entries(AKARI_BAND_COUNTS).some(([band, count]) => akariBands.get(band) !== count))) {
+    throw new Error("AKARI FIS image rows do not match all four 1,672-region source rosters");
+  }
+  if (source.adapter === "cds-ztf-progenitor-o3" && (rows !== ZTF_ROW_COUNT || ztfPageMembers.size !== ZTF_ROW_COUNT
+    || Object.entries(ZTF_PAGE_ROW_COUNTS).some(([band, count]) => ztfRowsByBand.get(band.toUpperCase()) !== count)
+    || Object.entries(ZTF_FILE_COUNTS).some(([band, count]) => ztfImagesByBand.get(band)?.size !== count))) {
+    throw new Error("ZTF normalized reference images do not match the complete CDS O3 progenitor rows and file counts");
+  }
+  if (source.adapter === "skyview-radio-maps") {
+    const spec = SKYVIEW_RADIO_SPECS[source.surveyId]!;
+    if (rows !== spec.expectedRows || radioMaps.size !== spec.expectedRows
+      || radioHeaderEvidence.size !== spec.expectedRows
+      || manifest.sourcePagination?.headerFailureCount !== radioHeaderFailures
+      || manifest.sourcePagination?.geometryFailureCount !== radioGeometryFailures
+      || source.surveyId === "wenss" && manifest.scope?.spectralConflictCount !== radioSpectralConflicts) {
+      throw new Error("SkyView radio normalized rows do not match the complete explicit XML roster and retained per-map header results");
+    }
+  }
   return { id: nativeDigest({ sourceId: source.id, sourceRevision: source.revision, sha256: files[0]!.sha256 }), sourceId: source.id, sourceRevision: source.revision,
     capturedAt: manifest.capturedAt, sourceUrl: source.sourceUrl, scope: source.scope, files, rowCount: rows };
 }
@@ -1004,6 +1506,15 @@ export async function importSurveySnapshot(root: string, file: NativeFile, sourc
 function publicUri(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password ? url.href : undefined; } catch { return undefined; }
+}
+
+function iphasImageUri(value: unknown, expected: string): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" && url.hostname === "www.iphas.org" && !url.username && !url.password
+      && !url.search && !url.hash && url.href === expected ? url.href : undefined;
+  } catch { return undefined; }
 }
 
 function publicKidsUri(value: unknown): string | undefined {
@@ -1035,6 +1546,111 @@ export function normalizedRow(row: Document, source: NativeSource): Document | u
   const unitId = String(row.unitId ?? "");
   if (!unitId || unitId.length > 160 || /[\x00-\x1f]/.test(unitId)) throw new Error("Invalid native unit identity");
   if (source.adapter === "gaia-healpix-range") return row;
+  if (source.adapter === "skyview-radio-maps") {
+    const spec = SKYVIEW_RADIO_SPECS[source.surveyId];
+    const metadata = row.sourceMetadata as Document | undefined;
+    const relativePath = String(metadata?.relativePath ?? "");
+    const fileName = relativePath.split("/").at(-1) ?? "";
+    const validPath = source.surveyId === "nvss" ? /^I\d{4}[PM]\d{2}\.fits\.gz$/.test(relativePath)
+      : source.surveyId === "sumss" ? /^(?:Galactic|Extragalactic)\/J\d{4}[PM]\d{2}\.FITS$/.test(relativePath)
+      : source.surveyId === "wenss" ? /^(?:wn|wp)\d{5}h\.fits\.gz$/.test(relativePath)
+      : false;
+    if (metadata?.headerStatus === "failed" || metadata?.geometryStatus !== "mapped") return undefined;
+    const framePoints = metadata?.frameEdgeIcrs;
+    const validFrame = Array.isArray(framePoints) && framePoints.length === 128 && framePoints.every((point: unknown) => Array.isArray(point)
+      && point.length === 2 && point.every((value: unknown) => Number.isFinite(value))
+      && Number(point[0]) >= 0 && Number(point[0]) < 360 && Number(point[1]) >= -90 && Number(point[1]) <= 90);
+    const expectedRegion = validFrame
+      ? `POLYGON ICRS ${framePoints.map((point: number[]) => `${Number(point[0]).toFixed(8)} ${Number(point[1]).toFixed(8)}`).join(" ")}`
+      : "";
+    const rawFrequency = metadata?.rawFrequencyHz;
+    const frequencyConflict = typeof rawFrequency === "number" && Number.isFinite(rawFrequency)
+      && Math.abs(rawFrequency - 325_000_000) > 32_500_000;
+    const access = row.accessUris?.[0];
+    const uri = access ? publicUri(access.uri ?? access.url) : undefined;
+    if (!spec || !validPath || !fileName || unitId !== relativePath || row.filename !== fileName || metadata?.fileName !== fileName
+      || source.id !== spec.sourceId || source.releaseId !== spec.releaseId || source.query === undefined
+      || metadata?.relativePath !== relativePath || metadata?.headerStatus !== "captured"
+      || !/^[a-f0-9]{64}$/.test(String(metadata?.headerSha256 ?? "")) || !Number.isSafeInteger(metadata?.headerBytes)
+      || metadata.headerBytes < 2880 || metadata.headerBytes % 2880 !== 0 || metadata?.headerEvidenceRef !== SKYVIEW_RADIO_HEADER_REF
+      || metadata?.coordinateFrame !== "ICRS" || metadata?.nativeCoordinateFrame !== spec.nativeFrame
+      || metadata?.geometrySource !== "actual FITS primary-header WCS pixel-edge samples transformed to ICRS"
+      || metadata?.geometryPrecision !== "estimated" || metadata?.validPixelMasksChecked !== false
+      || metadata?.mirrorCountry !== "US" || metadata?.producerCountry !== spec.producerCountry || metadata?.producer !== spec.producer
+      || metadata?.publisherBand !== spec.band || row.bands?.length !== 1 || row.bands[0] !== spec.band
+      || !validFrame || metadata?.footprint !== expectedRegion || row.sRegion !== expectedRegion
+      || source.surveyId === "wenss" && metadata?.spectralMetadataConflict !== frequencyConflict
+      || source.surveyId !== "wenss" && metadata?.spectralMetadataConflict !== false
+      || row.accessUris?.length !== 1 || access?.sourceId !== "skyview-gsfc-us" || access.countryCode !== "US"
+      || access.fileName !== fileName || access.accessType !== "file" || !uri || uri !== `${spec.mapRoot}${relativePath}`) {
+      throw new Error("SkyView radio row does not match its source-listed native image and actual FITS WCS evidence");
+    }
+  }
+  if (source.adapter === "irsa-akari-fis-map") {
+    const metadata = row.sourceMetadata as Document | undefined;
+    const band = String(row.bands?.[0] ?? "").toUpperCase();
+    const fileName = String(metadata?.fileName ?? "");
+    const fileRef = String(metadata?.fileRef ?? "");
+    const regionId = String(metadata?.regionId ?? "");
+    const corners = metadata?.cornersIcrs;
+    const validCorners = Array.isArray(corners) && corners.length === 4 && corners.every((point: unknown) => Array.isArray(point)
+      && point.length === 2 && point.every((value: unknown) => Number.isFinite(value))
+      && (point as number[])[0]! >= 0 && (point as number[])[0]! < 360 && (point as number[])[1]! >= -90 && (point as number[])[1]! <= 90);
+    const expectedRegion = validCorners ? `POLYGON ICRS ${corners.map((point: number[]) => `${Number(point[0]).toFixed(10)} ${Number(point[1]).toFixed(10)}`).join(" ")}` : "";
+    const access = row.accessUris?.[0];
+    const uri = access ? publicUri(access.uri ?? access.url) : undefined;
+    const expectedUri = `${AKARI_DATA_ROOT}${fileRef}`;
+    const acceptedBands = ["N60", "WIDES", "WIDEL", "N160"];
+    if (source.id !== AKARI_SOURCE_ID || source.surveyId !== "akari" || source.releaseId !== "akari-fis"
+      || !acceptedBands.includes(band) || row.bands?.length !== 1 || !/^images\/(?:N60|WideS|WideL|N160)\/[^/]+_fixstripe\.fits$/.test(fileRef)
+      || fileName !== fileRef.split("/").at(-1) || unitId !== fileRef || metadata?.regionId !== fileName.replace(/_(?:N60|WideS|WideL|N160)_fixstripe\.fits$/, "")
+      || metadata?.bandName !== ({ N60: "N60", WIDES: "WideS", WIDEL: "WideL", N160: "N160" } as Record<string, string>)[band]
+      || metadata?.fileType !== "science" || metadata?.datasetVersion !== "2.1" || metadata?.equinox !== 2000
+      || metadata?.coordinateFrame !== "FK5(J2000)" || metadata?.geometrySource !== "IRSA akari.akari_images four J2000 image-frame corners transformed to ICRS"
+      || metadata?.geometryPrecision !== "estimated" || metadata?.validPixelMasksChecked !== false
+      || !Array.isArray(metadata?.sourceCornersJ2000) || metadata.sourceCornersJ2000.length !== 4
+      || metadata.sourceCornersJ2000.some((point: unknown) => !Array.isArray(point) || point.length !== 2 || point.some((value: unknown) => !Number.isFinite(value)))
+      || !validCorners || metadata?.footprint !== expectedRegion || row.sRegion !== expectedRegion
+      || access?.sourceId !== "irsa-akari-fis" || access.fileName !== fileName || access.accessType !== "file" || String(access.band).toUpperCase() !== band
+      || row.accessUris?.length !== 1 || !uri || uri !== expectedUri || !/^https:\/\/irsa\.ipac\.caltech\.edu\/data\/AKARI\/images\//.test(uri)) {
+      throw new Error("AKARI FIS rows must retain a source-listed all-sky science-map FITS, its J2000-to-ICRS frame and direct IRSA file URI");
+    }
+  }
+  if (source.adapter === "cds-ztf-progenitor-o3") {
+    const metadata = row.sourceMetadata as Document | undefined;
+    const name = String(metadata?.sourceName ?? "");
+    const match = /^ztf_(\d{6})_z([gri])_c(0[1-9]|1[0-6])_q([1-4])_refimg$/.exec(name);
+    const band = String(row.bands?.[0] ?? "").toUpperCase();
+    const expectedBand = match ? ({ g: "G", r: "R", i: "I" } as Record<string, string>)[match[2]!] : undefined;
+    const fileName = match ? `${name}.fits` : "";
+    const pageBand = metadata?.pageBand;
+    const pageIpix = metadata?.pageIpix;
+    const pageUrl = typeof pageBand === "string" && ZTF_BANDS.some(band => band === pageBand)
+      && typeof pageIpix === "number" && Number.isSafeInteger(pageIpix) && pageIpix >= 0 && pageIpix < 768
+      ? `${ZTF_SOURCE_ROOT}CDS_P_ZTF_DR7_${pageBand}/HpxFinder/Norder3/Dir0/Npix${pageIpix}` : "";
+    const coordinates = String(row.sRegion ?? "").replace(/^POLYGON ICRS\s+/i, "").trim().split(/\s+/).map(Number);
+    const validPolygon = /^POLYGON ICRS\s/i.test(String(row.sRegion ?? "")) && coordinates.length === 8
+      && coordinates.every((value, index) => Number.isFinite(value) && (index % 2 === 0 ? value >= 0 && value < 360 : value >= -90 && value <= 90));
+    const access = row.accessUris?.[0];
+    const uri = access ? publicUri(access.uri ?? access.url) : undefined;
+    const expectedUri = fileName ? ztfReferenceImageUri(fileName) : "";
+    if (source.id !== ZTF_SOURCE_ID || source.surveyId !== "ztf" || source.releaseId !== "ztf-dr7" || !match
+      || unitId !== name || row.filename !== fileName || band !== expectedBand || row.bands?.length !== 1
+      || metadata?.field !== match[1] || metadata?.filterCode !== `z${match[2]}` || metadata?.ccd !== Number(match[3]) || metadata?.quadrant !== Number(match[4])
+      || metadata?.pageOrder !== 3 || metadata?.pageIpix !== pageIpix || metadata?.pageBand !== pageBand
+      || metadata?.pageUrl !== pageUrl || !/^[a-f0-9]{64}$/.test(String(metadata?.pageResponseSha256 ?? ""))
+      || typeof metadata?.generatorPath !== "string" || metadata.generatorPath.length > 1024
+      || metadata?.nativeIdentityKind !== "reference-image CCD quadrant" || metadata?.coordinateFrame !== "FK5(J2000)"
+      || !/^POLYGON J2000\s/i.test(String(metadata?.sourceStc ?? "")) || metadata?.geometrySource !== "CDS DR7 HpxFinder J2000 image frame transformed to ICRS"
+      || metadata?.geometryPrecision !== "estimated" || metadata?.validPixelMasksChecked !== false
+      || !Array.isArray(metadata?.cornersIcrs) || metadata.cornersIcrs.length !== 4
+      || metadata.cornersIcrs.some((point: unknown) => !Array.isArray(point) || point.length !== 2 || point.some((value: unknown) => !Number.isFinite(value)))
+      || !validPolygon || metadata?.footprint !== row.sRegion || access?.sourceId !== "irsa-ztf-reference-images"
+      || access.fileName !== fileName || access.accessType !== "file" || String(access.band).toUpperCase() !== band
+      || row.accessUris?.length !== 1 || !uri || uri !== expectedUri) {
+      throw new Error("ZTF DR7 rows must retain one CDS O3 progenitor reference-image quadrant and its source-rule whole-file IRSA FITS URI");
+    }
+  }
   if (source.adapter === "sdss-field") {
     const metadata = row.sourceMetadata;
     if (!metadata || ![metadata.run, metadata.camcol, metadata.field].every(Number.isSafeInteger)
@@ -1078,6 +1694,66 @@ export function normalizedRow(row: Document, source: NativeSource): Document | u
   }
   const sRegion = row.sRegion;
   if (typeof sRegion !== "string" || sRegion.length > 131_072) return undefined;
+  if (source.adapter === "iphas-dr2-pipeline") {
+    const metadata = row.sourceMetadata as Document | undefined;
+    const match = /^r(\d{6})-([1-4])\.fits\.fz$/i.exec(String(row.filename ?? ""));
+    const run = metadata?.run;
+    const ccd = metadata?.ccd;
+    const band = String(metadata?.band ?? "").toUpperCase();
+    const bounds = [metadata?.raMin, metadata?.raMax, metadata?.decMin, metadata?.decMax];
+    const validBounds = bounds.every(Number.isFinite) && bounds[0]! >= 0 && bounds[0]! < 360
+      && bounds[1]! > bounds[0]! && bounds[1]! - bounds[0]! < 5
+      && bounds[2]! >= -90 && bounds[3]! <= 90 && bounds[3]! > bounds[2]!;
+    const coordinates = sRegion.replace(/^POLYGON ICRS\s+/i, "").trim().split(/\s+/).map(Number);
+    const expectedCorners = validBounds ? [[bounds[0]!, bounds[2]!], [bounds[1]!, bounds[2]!], [bounds[1]!, bounds[3]!], [bounds[0]!, bounds[3]!]] : [];
+    const polygonMatches = /^POLYGON ICRS\s/i.test(sRegion) && coordinates.length === 8
+      && coordinates.every(Number.isFinite) && expectedCorners.every(([ra, dec], index) =>
+        Math.abs((((coordinates[index * 2]! - ra + 540) % 360) + 360) % 360 - 180) < 1e-7
+        && Math.abs(coordinates[index * 2 + 1]! - dec) < 1e-7);
+    const fileName = String(row.filename ?? "");
+    const expectedUri = match ? `http://www.iphas.org/data/images/${fileName.slice(0, 4)}/${fileName}` : "";
+    const access = row.accessUris?.[0];
+    const uri = access ? iphasImageUri(access.uri ?? access.url, expectedUri) : undefined;
+    if (source.id !== IPHAS_SOURCE_ID || source.surveyId !== "iphas" || source.releaseId !== "iphas-dr2"
+      || !match || !Number.isSafeInteger(run) || Number(run) < 1 || Number(run) !== Number(match[1])
+      || !Number.isSafeInteger(ccd) || Number(ccd) < 1 || Number(ccd) > 4 || Number(ccd) !== Number(match[2])
+      || unitId !== `${run}/${ccd}` || !["true", "false"].includes(String(metadata?.inDr2)) && typeof metadata?.inDr2 !== "boolean"
+      || !IPHAS_BANDS.includes(band) || row.bands?.length !== 1 || String(row.bands[0]).toUpperCase() !== band
+      || !validBounds || !polygonMatches || row.sRegion !== metadata?.footprint
+      || metadata?.coordinateFrame !== "ICRS" || metadata?.projection !== "ZPN"
+      || metadata?.geometrySource !== "pinned IPHAS DR2 author pipeline table, four CCD corners, ZPN frame"
+      || metadata?.sourceFilename !== fileName || !uri || uri !== expectedUri || row.accessUris?.length !== 1
+      || access?.sourceId !== "iphas-publisher" || access.fileName !== fileName || access.accessType !== "file" || access.band !== band) {
+      throw new Error("IPHAS DR2 rows must retain the pinned run/CCD, band, recalibration flag, author-derived ICRS bounds and source-rule image URI");
+    }
+    if (metadata?.inDr2 !== true && metadata?.inDr2 !== "true") return undefined;
+  }
+  if (source.adapter === "rubin-firstlook-avm") {
+    const metadata = row.sourceMetadata as Document | undefined;
+    const imageId = String(metadata?.imageId ?? "");
+    const expected = RUBIN_IMAGE_EVIDENCE[imageId];
+    const avm = metadata?.avm as Document | undefined;
+    const sourceImageUrl = expected ? `https://storage.noirlab.edu/media/archives/images/original/${expected.fileName}` : "";
+    const access = row.accessUris?.[0];
+    const uri = access ? publicUri(access.uri ?? access.url) : undefined;
+    const numericPair = (value: unknown, expectedValues: number[]) => Array.isArray(value) && value.length === expectedValues.length
+      && value.every((item, index) => typeof item === "number" && Math.abs(item - expectedValues[index]!) < 1e-10);
+    const expectedAvm = imageId === "noirlab2521a"
+      ? { referenceValue: [186.368524202294, 6.930215747979968], referencePixel: [48971.5, 25768], scale: [-5.55399208524905e-5, 5.55399208524905e-5], rotation: 48.96 }
+      : { referenceValue: [271.6317360235022, -23.762469026534358], referencePixel: [42000, 25750], scale: [-5.553994996501517e-5, 5.553994996501517e-5], rotation: -12 };
+    if (source.id !== RUBIN_SOURCE_ID || source.surveyId !== "rubin" || source.releaseId !== "rubin-firstlook" || !expected
+      || unitId !== imageId || row.filename !== expected.fileName || metadata?.fileSizeBytes !== expected.sizeBytes
+      || metadata?.xmpRef !== expected.xmpRef || metadata?.xmpSha256 !== expected.xmpSha256 || metadata?.captureRef !== RUBIN_CAPTURE_REF
+      || metadata?.coordinateFrame !== "ICRS" || metadata?.equinox !== "J2000" || metadata?.projection !== "TAN" || metadata?.quality !== "Position"
+      || metadata?.geometrySource !== "NOIRLab publisher BigTIFF IFD and AVM XMP range; AVM Position quality"
+      || !numericPair(avm?.referenceValue, expectedAvm.referenceValue) || !numericPair(avm?.referencePixel, expectedAvm.referencePixel)
+      || !numericPair(avm?.scale, expectedAvm.scale) || typeof avm?.rotation !== "number" || Math.abs(avm.rotation - expectedAvm.rotation) > 1e-10
+      || !numericPair(avm?.referenceDimension, expected.dimensions) || !uri || uri !== sourceImageUrl || row.accessUris?.length !== 1
+      || access?.sourceId !== "noirlab-publisher" || access.fileName !== expected.fileName || access.accessType !== "file" || access.band !== "RGB"
+      || row.bands?.length !== 1 || String(row.bands[0]).toUpperCase() !== "RGB" || metadata?.footprint !== sRegion) {
+      throw new Error("Rubin First Look rows must match the two publisher TIFF identities, verified AVM metadata and exact whole-image URLs");
+    }
+  }
   if (source.adapter === "panstarrs-dr1-skycell") {
     const metadata = row.sourceMetadata;
     const band = String(row.bands?.[0] ?? "");
@@ -1482,11 +2158,14 @@ export function normalizedRow(row: Document, source: NativeSource): Document | u
   }
   if (source.adapter === "spherex-qr2-s3-observation") {
     const metadata = row.sourceMetadata;
+    const spec = SPHEREX_SOURCE_SPECS[source.id];
     const detector = Number(metadata?.detector);
     const filename = String(metadata?.fileName ?? "");
     const key = String(metadata?.objectKey ?? "");
-    const match = /^level2_2025W17_4B_0001_1D([2-6])_spx_l2b-v20-2025-240\.fits$/.exec(filename);
-    const expectedPrefix = "qr2/level2/2025W17_4B/l2b-v20-2025-240/";
+    const match = spec ? new RegExp(`^level2_2025W17_4B_0001_1D([${spec.detectors.join("")}])_spx_${spec.processingVersion}\\.fits$`).exec(filename) : null;
+    const expectedPrefix = spec ? `qr2/level2/2025W17_4B/${spec.processingVersion}/` : "";
+    const expectedUnitId = spec?.versionedUnitId
+      ? `2025W17_4B_0001_1/${spec.processingVersion}/D${detector}` : `2025W17_4B_0001_1/D${detector}`;
     const originalUri = publicUri(`https://irsa.ipac.caltech.edu/ibe/data/spherex/${key}`);
     const mirrorUri = publicUri(`https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/${key}`);
     const validFrame = Array.isArray(metadata?.frameEdgeIcrs) && metadata.frameEdgeIcrs.length === 32
@@ -1498,11 +2177,11 @@ export function normalizedRow(row: Document, source: NativeSource): Document | u
       ? `POLYGON ICRS ${metadata.frameEdgeIcrs.map((point: number[]) => `${point[0]!.toFixed(10)} ${point[1]!.toFixed(10)}`).join(" ")}`
       : "";
     const uris = row.accessUris ?? [];
-    if (source.id !== SPHEREX_SOURCE_ID || source.surveyId !== "spherex" || source.releaseId !== "spherex-qr2"
+    if (!spec || source.surveyId !== "spherex" || source.releaseId !== "spherex-qr2"
       || detector !== Number(match?.[1])
-      || unitId !== `2025W17_4B_0001_1/D${detector}` || row.filename !== filename
+      || unitId !== expectedUnitId || row.filename !== filename
       || !key.startsWith(expectedPrefix + `${detector}/`) || !key.endsWith(`/${filename}`)
-      || metadata?.observationId !== "2025W17_4B_0001_1" || metadata?.processingVersion !== "l2b-v20-2025-240"
+      || metadata?.observationId !== "2025W17_4B_0001_1" || metadata?.processingVersion !== spec.processingVersion
       || metadata?.coordinateFrame !== "ICRS" || metadata?.geometrySource !== "SPHEREx FITS IMAGE extension TAN-SIP pixel-edge transform"
       || metadata?.availabilityEvidence !== "public-object-listing-and-header-ranges"
       || metadata?.frameSemantics !== "detector image frame; valid-pixel mask not checked"
@@ -1536,23 +2215,61 @@ export class SurveyNativeIndex {
   readonly #db: DatabaseSync;
   readonly #sources: Map<string, Summary>;
   readonly buildKey: string;
-  private constructor(db: DatabaseSync, buildKey: string) {
-    this.#db = db; this.buildKey = buildKey;
+  readonly fileRef?: string;
+  private constructor(db: DatabaseSync, buildKey: string, fileRef?: string) {
+    this.#db = db; this.buildKey = buildKey; this.fileRef = fileRef;
     db.exec("PRAGMA cache_size=-8192; PRAGMA mmap_size=0; CREATE TEMP TABLE request_cells(cell INTEGER PRIMARY KEY) WITHOUT ROWID;");
     this.#sources = new Map((db.prepare("SELECT source_id AS sourceId, payload FROM survey_sources").all() as Array<{ sourceId: string; payload: string }>).map(row => [row.sourceId, JSON.parse(row.payload) as Summary]));
   }
-  static open(file: string, buildKey: string): SurveyNativeIndex {
+  static open(file: string, buildKey: string, fileRef?: string): SurveyNativeIndex {
     const db = new DatabaseSync(file, { readOnly: true });
     try {
       const meta = new Map((db.prepare("SELECT key,value FROM survey_meta").all() as Array<{ key: string; value: string }>).map(row => [row.key, row.value]));
       if (meta.get("schema") !== SCHEMA || meta.get("build_key") !== buildKey) throw new Error("Survey native index schema or locked inputs do not match");
-      return new SurveyNativeIndex(db, buildKey);
+      return new SurveyNativeIndex(db, buildKey, fileRef);
     } catch (error) { db.close(); throw error; }
   }
   static key(snapshots: NativeSnapshot[]): string { return nativeDigest({ schema: SCHEMA, construction: "local-staging-v1", inputs: snapshots.map(snapshot => [snapshot.sourceId, snapshot.id, snapshot.files[0]!.sha256]).sort() }); }
-  static async build(root: string, ref: string, sources: NativeSource[], snapshots: NativeSnapshot[], progress: (message: string) => void): Promise<SurveyNativeIndex> {
+  private static async reusableFileRef(root: string, buildKey: string): Promise<string | undefined> {
+    const directory = nativeEvidencePath(root, "managed/native-units/indexes");
+    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries.filter(item => item.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
+      const ref = `managed/native-units/indexes/${entry.name}/survey-units.sqlite`;
+      try {
+        const file = nativeEvidencePath(root, ref);
+        if (!(await stat(file)).isFile()) continue;
+        const index = this.open(file, buildKey, ref);
+        index.close();
+        return ref;
+      } catch {
+        continue;
+      }
+    }
+    return undefined;
+  }
+  static async build(root: string, ref: string, sources: NativeSource[], snapshots: NativeSnapshot[], progress: (message: string) => void,
+    base?: { file: NativeFile; buildKey: string; snapshots: NativeSnapshot[] }): Promise<SurveyNativeIndex> {
     const file = nativeEvidencePath(root, ref); await mkdir(path.dirname(file), { recursive: true });
     const buildKey = this.key(snapshots);
+    try {
+      if ((await stat(file)).isFile()) return this.open(file, buildKey, ref);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const reusableRef = await this.reusableFileRef(root, buildKey);
+    if (reusableRef) {
+      progress(`Reusing verified survey metadata SQLite from ${reusableRef}`);
+      return this.open(nativeEvidencePath(root, reusableRef), buildKey, reusableRef);
+    }
+    const currentBySource = new Map(snapshots.map(snapshot => [snapshot.sourceId, snapshot]));
+    const matchesLockedInput = (previous: NativeSnapshot): boolean => {
+      const current = currentBySource.get(previous.sourceId);
+      return Boolean(current && current.id === previous.id && current.sourceRevision === previous.sourceRevision
+        && current.files.length === previous.files.length
+        && current.files.every((file, index) => file.sha256 === previous.files[index]?.sha256));
+    };
+    const canExtend = Boolean(base && base.snapshots.length > 0 && snapshots.length > base.snapshots.length
+      && base.buildKey === this.key(base.snapshots) && base.snapshots.every(matchesLockedInput));
     // SQLite's random page writes can stall for minutes on the evidence NFS.
     // Build on the worker's temporary disk, then atomically install the closed DB.
     const scratch = await mkdtemp(path.join(os.tmpdir(), "assets-survey-native-"));
@@ -1562,21 +2279,33 @@ export class SurveyNativeIndex {
     let db: DatabaseSync | undefined;
     const healpix = new Healpix(2 ** COARSE_ORDER);
     try {
-      db = new DatabaseSync(staging);
-      db.exec(`PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA cache_size=-16384;
-        CREATE TABLE survey_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL) WITHOUT ROWID;
-        CREATE TABLE survey_sources(source_id TEXT PRIMARY KEY,payload TEXT NOT NULL) WITHOUT ROWID;
-        CREATE TABLE survey_units(row_id INTEGER PRIMARY KEY, source_id TEXT NOT NULL, unit_id TEXT NOT NULL, row_hash TEXT UNIQUE NOT NULL,
-          s_region TEXT, first_ipix INTEGER, last_ipix INTEGER, bands TEXT NOT NULL, release_tag TEXT, proposal_id TEXT, instrument TEXT, target TEXT, project TEXT, payload TEXT NOT NULL);
-        CREATE INDEX survey_units_by_source ON survey_units(source_id,unit_id,row_id);
-        CREATE INDEX survey_units_by_partition ON survey_units(source_id,first_ipix,last_ipix);
-        CREATE TABLE survey_cells(coarse_cell INTEGER NOT NULL,row_id INTEGER NOT NULL,PRIMARY KEY(coarse_cell,row_id)) WITHOUT ROWID;
-        CREATE TEMP TABLE native_ids(unit_id TEXT PRIMARY KEY) WITHOUT ROWID;
-        BEGIN IMMEDIATE;`);
+      if (canExtend && base) {
+        const previousFile = nativeEvidencePath(root, base.file.ref);
+        await nativeFile(root, base.file.ref, base.file);
+        const verified = this.open(previousFile, base.buildKey, base.file.ref);
+        verified.close();
+        progress(`Extending verified survey metadata SQLite with ${snapshots.length - base.snapshots.length} new source snapshots`);
+        await copyFile(previousFile, staging, constants.COPYFILE_EXCL);
+        db = new DatabaseSync(staging);
+        db.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA cache_size=-16384; CREATE TEMP TABLE native_ids(unit_id TEXT PRIMARY KEY) WITHOUT ROWID; BEGIN IMMEDIATE;");
+      } else {
+        db = new DatabaseSync(staging);
+        db.exec(`PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA cache_size=-16384;
+          CREATE TABLE survey_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL) WITHOUT ROWID;
+          CREATE TABLE survey_sources(source_id TEXT PRIMARY KEY,payload TEXT NOT NULL) WITHOUT ROWID;
+          CREATE TABLE survey_units(row_id INTEGER PRIMARY KEY, source_id TEXT NOT NULL, unit_id TEXT NOT NULL, row_hash TEXT UNIQUE NOT NULL,
+            s_region TEXT, first_ipix INTEGER, last_ipix INTEGER, bands TEXT NOT NULL, release_tag TEXT, proposal_id TEXT, instrument TEXT, target TEXT, project TEXT, payload TEXT NOT NULL);
+          CREATE INDEX survey_units_by_source ON survey_units(source_id,unit_id,row_id);
+          CREATE INDEX survey_units_by_partition ON survey_units(source_id,first_ipix,last_ipix);
+          CREATE TABLE survey_cells(coarse_cell INTEGER NOT NULL,row_id INTEGER NOT NULL,PRIMARY KEY(coarse_cell,row_id)) WITHOUT ROWID;
+          CREATE TEMP TABLE native_ids(unit_id TEXT PRIMARY KEY) WITHOUT ROWID;
+          BEGIN IMMEDIATE;`);
+      }
       const insert = db.prepare("INSERT OR IGNORE INTO survey_units(source_id,unit_id,row_hash,s_region,first_ipix,last_ipix,bands,release_tag,proposal_id,instrument,target,project,payload) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
       const insertCell = db.prepare("INSERT OR IGNORE INTO survey_cells VALUES (?,?)");
       const insertId = db.prepare("INSERT OR IGNORE INTO native_ids VALUES (?)");
       for (const snapshot of snapshots) {
+        if (canExtend && base?.snapshots.some(previous => previous.sourceId === snapshot.sourceId)) continue;
         const source = sources.find(item => item.id === snapshot.sourceId)!;
         const { manifest } = await loadSurveyManifest(root, snapshot.files[0]!.ref, source, snapshot.files[0]);
         let rowCount = 0, indexedRows = 0, excludedRows = 0;
@@ -1598,13 +2327,19 @@ export class SurveyNativeIndex {
         const summary: Summary = { sourceId: source.id, surveyId: source.surveyId, releaseId: source.releaseId, adapter: source.adapter,
           sourceUrl: source.sourceUrl, sha256: snapshot.files[0]!.sha256, capturedAt: manifest.capturedAt, scope: snapshot.scope,
           rowCount, indexedRows, unitCount, excludedRows, inventoryComplete: source.adapter === "gaia-healpix-range" || manifest.inventoryComplete === true && excludedRows === 0,
-          queryComplete: ["gaia-healpix-range", "sdss-field"].includes(source.adapter) || manifest.queryPagesComplete === true || manifest.sourcePagination?.queryPagesComplete === true };
+          queryComplete: ["gaia-healpix-range", "sdss-field"].includes(source.adapter) || manifest.queryPagesComplete === true || manifest.sourcePagination?.queryPagesComplete === true,
+          ...(Array.isArray(manifest.gaps) ? { gaps: manifest.gaps } : {}),
+          ...(source.adapter === "skyview-radio-maps" ? { headerFailures: Number(manifest.sourcePagination?.headerFailureCount ?? 0),
+            geometryFailures: Number(manifest.sourcePagination?.geometryFailureCount ?? 0), spectralConflicts: Number(manifest.scope?.spectralConflictCount ?? 0) } : {}) };
         if (!unitCount) throw new Error(`${source.id} has no supported native metadata geometry`);
         db.prepare("INSERT INTO survey_sources VALUES (?,?)").run(source.id, JSON.stringify(summary));
         progress(`${source.title}: ${unitCount} identities; ${excludedRows} excluded rows retained in input evidence`);
       }
-      db.prepare("INSERT INTO survey_meta VALUES ('schema',?)").run(SCHEMA);
-      db.prepare("INSERT INTO survey_meta VALUES ('build_key',?)").run(buildKey);
+      if (canExtend) db.prepare("UPDATE survey_meta SET value=? WHERE key='build_key'").run(buildKey);
+      else {
+        db.prepare("INSERT INTO survey_meta VALUES ('schema',?)").run(SCHEMA);
+        db.prepare("INSERT INTO survey_meta VALUES ('build_key',?)").run(buildKey);
+      }
       db.exec("COMMIT;");
       if ((db.prepare("PRAGMA quick_check").get() as { quick_check: string }).quick_check !== "ok") throw new Error("Survey native SQLite failed integrity verification");
       db.close();
@@ -1612,7 +2347,7 @@ export class SurveyNativeIndex {
       installStarted = true;
       await copyFile(staging, installing, constants.COPYFILE_EXCL);
       await rename(installing, file);
-      return this.open(file, buildKey);
+      return this.open(file, buildKey, ref);
     } catch (error) { try { db?.exec("ROLLBACK;"); } catch {} try { db?.close(); } catch {} throw error; }
     finally {
       await rm(scratch, { recursive: true, force: true });
@@ -1669,7 +2404,9 @@ export class SurveyNativeIndex {
         if (!unit) {
           unit = { layerId: binding.layerId, productId: binding.productId, surveyId: binding.surveyId, releaseId: binding.releaseId, product: binding.product,
             ...(binding.modality ? { modality: binding.modality } : {}), unitKind: binding.unitKind, unitId: row.unitId, order, nside: 2 ** order, matchingCells: [], precision: "estimated",
-            sourceSnapshotSha256: rowSummary.sha256, sourceUrl: rowSummary.sourceUrl, accessAvailability: ["sdss-field", "eso-obscore-vvv", "eso-obscore-fds", "eso-obscore-kids", "eso-obscore-vphas", "eso-obscore-viking", "skymapper-dr4-ccd", "twomass-6x-atlas", "allwise-ibe-atlas", "noirlab-des-tap", "noirlab-decaps-tap", "cadc-caom-cfhtls", "act-dr5-whole-map"].includes(rowSummary.adapter) ? "unverified" : "source-policy",
+            sourceSnapshotSha256: rowSummary.sha256, sourceUrl: rowSummary.sourceUrl,
+            accessAvailability: rowSummary.adapter === "rubin-firstlook-avm" && payload.sourceMetadata?.accessAvailability === "public" ? "public"
+              : ["sdss-field", "eso-obscore-vvv", "eso-obscore-fds", "eso-obscore-kids", "eso-obscore-vphas", "eso-obscore-viking", "skymapper-dr4-ccd", "twomass-6x-atlas", "allwise-ibe-atlas", "noirlab-des-tap", "noirlab-decaps-tap", "cadc-caom-cfhtls", "act-dr5-whole-map", "iphas-dr2-pipeline", "irsa-akari-fis-map", "cds-ztf-progenitor-o3", "skyview-radio-maps"].includes(rowSummary.adapter) ? "unverified" : "source-policy",
             sourceMetadata: { capturedAt: rowSummary.capturedAt, inventoryComplete: rowSummary.inventoryComplete,
               sourceSnapshots: [{ sourceId: rowSummary.sourceId, sha256: rowSummary.sha256, capturedAt: rowSummary.capturedAt, scope: rowSummary.scope }], records: [] },
             note: rowSummary.scope };
@@ -1707,7 +2444,9 @@ export class SurveyNativeIndex {
               const sourceId = typeof access.sourceId === "string" ? access.sourceId : undefined;
               const generatedCutout = rowSummary.adapter === "skymapper-dr4-ccd" && uri !== undefined
                 && new URL(uri).hostname === "api.skymapper.nci.org.au" && new URL(uri).pathname === "/public/siap/dr4/get_image";
-              if (uri && (generatedCutout || /\.(?:fits(?:\.(?:gz|bz2|fz))?|asdf)$/i.test(fileName)) && !accessUris.some(item => item.uri === uri)) {
+              const supportedFile = /\.(?:fits(?:\.(?:gz|bz2|fz))?|asdf)$/i.test(fileName)
+                || rowSummary.adapter === "rubin-firstlook-avm" && /\.tiff?$/i.test(fileName);
+              if (uri && (generatedCutout || supportedFile) && !accessUris.some(item => item.uri === uri)) {
                 accessUris.push({ uri, ...(fileName ? { fileName } : {}), ...(typeof access.band === "string" ? { band: access.band.toUpperCase() } : {}),
                   ...(sourceId ? { sourceId } : {}), accessType: "file", alternatives: alternativesForAccessUri(uri,
                   { surveyId: binding.surveyId, releaseId: binding.releaseId, fileName, band: access.band }) });
@@ -1780,6 +2519,14 @@ export class SurveyNativeIndex {
         }
         if (summary.adapter === "cadc-caom-cfhtls") {
           const detail = "CFHTLS Wide returns the complete 855-file T0007 single-band u/g/r/i/z median-image selector across 171 fields; the 110 gri/gry/ryg RGB artifacts are separate products and excluded here. Each native CAOM frame polygon is explicitly corroborated as ICRS by its joined Chunk metadata, but remains estimated without valid-pixel masks. CADC whole-file API URLs are derived from the source cadc: artifact identity; only a representative file was checked, so per-file availability remains unverified.";
+          notes.push(detail); for (const unit of matched.values()) unit.note += ` ${detail}`;
+        }
+        if (summary.adapter === "iphas-dr2-pipeline") {
+          const detail = "IPHAS results use the pinned author image-pipeline table's in_dr2 recalibration flag and run/CCD identity; this does not establish final DR2 QC membership. Four-corner ZPN frame bounds are estimated, and the source-rule whole-image URLs are currently unverified.";
+          notes.push(detail); for (const unit of matched.values()) unit.note += ` ${detail}`;
+        }
+        if (summary.adapter === "rubin-firstlook-avm") {
+          const detail = "Rubin First Look resolves only the two NOIRLab publisher TIFFs underlying the public outreach HiPS layer. AVM declares Position quality, so TAN frame bounds are estimated; these are not Rubin DP1 scientific exposures and do not represent the Rubin science inventory.";
           notes.push(detail); for (const unit of matched.values()) unit.note += ` ${detail}`;
         }
         if (summary.adapter === "noirlab-des-tap") {

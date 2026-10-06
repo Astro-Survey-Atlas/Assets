@@ -3,7 +3,7 @@ import path from "node:path";
 import { isDeniedSurvey } from "./publication-policy.js";
 import { AdminHttpError } from "./admin-error.js";
 
-export type NativeAdapter = "legacy-roster" | "legacy-geometry" | "desi-tile" | "euclid-tap" | "hst-caom" | "hsc-patch" | "entrypoint" | "gaia-healpix-range" | "sdss-field" | "mast-observation" | "eso-obscore-vvv" | "eso-obscore-fds" | "eso-obscore-kids" | "eso-obscore-vphas" | "eso-obscore-viking" | "skymapper-dr4-ccd" | "twomass-6x-atlas" | "allwise-ibe-atlas" | "noirlab-des-tap" | "noirlab-decaps-tap" | "spherex-qr2-s3-observation" | "cadc-caom-cfhtls" | "act-dr5-whole-map" | "panstarrs-dr1-skycell";
+export type NativeAdapter = "legacy-roster" | "legacy-geometry" | "desi-tile" | "euclid-tap" | "hst-caom" | "hsc-patch" | "entrypoint" | "gaia-healpix-range" | "sdss-field" | "mast-observation" | "eso-obscore-vvv" | "eso-obscore-fds" | "eso-obscore-kids" | "eso-obscore-vphas" | "eso-obscore-viking" | "skymapper-dr4-ccd" | "twomass-6x-atlas" | "allwise-ibe-atlas" | "noirlab-des-tap" | "noirlab-decaps-tap" | "spherex-qr2-s3-observation" | "cadc-caom-cfhtls" | "act-dr5-whole-map" | "panstarrs-dr1-skycell" | "iphas-dr2-pipeline" | "rubin-firstlook-avm" | "irsa-akari-fis-map" | "cds-ztf-progenitor-o3" | "skyview-radio-maps";
 export type NativeTaskKind = "baseline" | "discover" | "acquire" | "import" | "build" | "verify" | "archive" | "activate" | "restore";
 export interface NativeFile {
   ref: string; sha256: string; sizeBytes: number; objectKey?: string; sourceUrl?: string;
@@ -73,7 +73,7 @@ export function nativeEvidencePath(root: string, ref: string): string {
   return path.join(root, ref);
 }
 export function assertNativeSurvey(surveyId: string): void {
-  if (isDeniedSurvey(surveyId) || !["legacy-surveys", "act", "decals", "des", "decaps", "desi", "euclid", "fds", "hst", "hsc-ssp", "kids", "gaia", "sdss", "galex", "jwst", "vista", "skymapper", "2mass", "allwise", "spherex", "vphas", "cfhtls", "panstarrs"].includes(surveyId)) throw new AdminHttpError(400, "Native-unit management accepts only registered public surveys");
+  if (isDeniedSurvey(surveyId) || !["legacy-surveys", "act", "akari", "decals", "des", "decaps", "desi", "euclid", "fds", "hst", "hsc-ssp", "kids", "gaia", "sdss", "galex", "jwst", "vista", "skymapper", "2mass", "allwise", "spherex", "vphas", "cfhtls", "panstarrs", "iphas", "rubin", "ztf", "nvss", "sumss", "wenss"].includes(surveyId)) throw new AdminHttpError(400, "Native-unit management accepts only registered public surveys");
 }
 export function nativeMetadataUrl(value: string, adapter: NativeAdapter): URL {
   const url = new URL(value);
@@ -93,6 +93,10 @@ export function nativeMetadataUrl(value: string, adapter: NativeAdapter): URL {
     "cadc-caom-cfhtls": ["ws.cadc-ccda.hia-iha.nrc-cnrc.gc.ca"],
     "act-dr5-whole-map": ["lambda.gsfc.nasa.gov"],
     "panstarrs-dr1-skycell": ["ps1images.stsci.edu"],
+    "iphas-dr2-pipeline": ["raw.githubusercontent.com"],
+    "rubin-firstlook-avm": ["noirlab.edu"],
+    "irsa-akari-fis-map": ["irsa.ipac.caltech.edu"],
+    "cds-ztf-progenitor-o3": ["alasky.cds.unistra.fr"], "skyview-radio-maps": ["skyview.gsfc.nasa.gov"],
     entrypoint: ["euclid.esac.esa.int", "www.cosmos.esa.int"],
   };
   if (url.protocol !== "https:" || url.username || url.password || !hosts[adapter].includes(url.host)) throw new AdminHttpError(400, "Use an official public metadata source for this adapter");
@@ -115,6 +119,11 @@ export function nativeMetadataUrl(value: string, adapter: NativeAdapter): URL {
   if (adapter === "cadc-caom-cfhtls" && url.pathname !== "/argus/sync") throw new AdminHttpError(400, "Use the official CADC CAOM TAP service for CFHTLS metadata");
   if (adapter === "act-dr5-whole-map" && url.pathname !== "/product/act/actpol_dr5_coadd_maps_get.html") throw new AdminHttpError(400, "Use the official ACT DR5 normal-map roster page");
   if (adapter === "panstarrs-dr1-skycell" && url.pathname !== "/cgi-bin/ps1filenames.py") throw new AdminHttpError(400, "Use the official Pan-STARRS DR1 image-list service");
+  if (adapter === "iphas-dr2-pipeline" && url.pathname !== "/barentsen/iphas-dr2/e2e47c6964df6bb5fe9909e317ef18f0913698db/scripts/release-preparation/iphas-images-pipeline.fits") throw new AdminHttpError(400, "Use the pinned IPHAS DR2 author pipeline-metadata snapshot");
+  if (adapter === "rubin-firstlook-avm" && url.pathname !== "/public/images/noirlab2521a/") throw new AdminHttpError(400, "Use the publisher page for the two Rubin First Look source images");
+  if (adapter === "irsa-akari-fis-map" && url.pathname !== "/TAP/sync") throw new AdminHttpError(400, "Use the official IRSA TAP image metadata endpoint for AKARI FIS");
+  if (adapter === "cds-ztf-progenitor-o3" && !/^\/ZTF\/DR7\/CDS_P_ZTF_DR7_[gri]\/HpxFinder\/(?:metadata\.xml|properties|Norder3\/Dir0\/Npix(?:[0-9]|[1-6][0-9]{1,2}|7(?:[0-5][0-9]|6[0-7])))$/.test(url.pathname)) throw new AdminHttpError(400, "Use a published CDS ZTF DR7 progenitor metadata endpoint");
+  if (adapter === "skyview-radio-maps" && !/^\/current\/jar\/surveys\/xml\/(?:nvss|sumss|wenss)\.xml\.gz$/.test(url.pathname)) throw new AdminHttpError(400, "Use one of the published SkyView NVSS, SUMSS or WENSS XML inventories");
   return url;
 }
 export function groupReviewDigest(group: NativeGroup): string {

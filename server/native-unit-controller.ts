@@ -189,7 +189,9 @@ export class NativeUnitController {
       }
       if (result.group) {
         const group = result.group; const existing = this.#state.groups.find(item => item.id === group.id);
-        if (existing && operation.operation === "archive") {
+        if (existing && operation.operation === "build") {
+          Object.assign(existing, group); existing.review = undefined;
+        } else if (existing && operation.operation === "archive") {
           // Archiving changes storage locations, never the reviewed scientific content.
           const review = existing.review; Object.assign(existing, group); existing.review = review;
         } else if (existing && operation.operation === "restore") {

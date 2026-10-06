@@ -1302,7 +1302,7 @@ function sourceUnitCoverageReady(): Promise<void> {
       const [hst, ero, survey] = await Promise.all([hstObservationIndex(), eroTargetIndex(), surveyNativeIndex()]);
       if (version !== (nativeUnits?.version ?? "imported-baseline")) return;
       for (const layer of currentPublicState.coverage.records.values()) {
-        if (isWarehouseFilePartitionLayer(layer) || !["legacy-surveys", "decals", "desi", "euclid", "hst", "hsc-ssp", "gaia", "sdss", "galex", "jwst", "vista", "skymapper", "2mass", "des", "fds", "kids", "allwise", "spherex", "vphas", "cfhtls", "act", "decaps", "panstarrs"].includes(layer.surveyId)) continue;
+        if (isWarehouseFilePartitionLayer(layer) || !["legacy-surveys", "decals", "desi", "euclid", "hst", "hsc-ssp", "gaia", "sdss", "galex", "jwst", "vista", "skymapper", "2mass", "des", "fds", "kids", "allwise", "spherex", "vphas", "cfhtls", "act", "decaps", "panstarrs", "nvss", "sumss", "wenss"].includes(layer.surveyId)) continue;
         const binding = nativeUnits?.active?.bindings.find(binding => binding.layerId === layer.layerId);
         const unavailableBinding = nativeUnits?.active?.report.unavailableBindings?.includes(layer.layerId);
         const enabled = (!nativeUnits?.active || Boolean(binding)) && !unavailableBinding;

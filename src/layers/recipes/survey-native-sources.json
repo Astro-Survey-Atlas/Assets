@@ -92,6 +92,14 @@
       "slot": "survey"
     },
     {
+      "id": "spherex-qr2-2025w17-4b-0001-1-d1-v241", "surveyId": "spherex", "releaseId": "spherex-qr2",
+      "title": "SPHEREx QR2 v20-241 2025W17_4B observation 0001_1 detector 1", "adapter": "spherex-qr2-s3-observation", "unitKind": "image",
+      "scope": "One public D1 FITS image for observation 2025W17_4B_0001_1 from processing path l2b-v20-2025-241. The same observation has no D1 object under v20-2025-240, so this remains a separately identified processing version. Its ICRS TAN-SIP image-frame edge is derived from header-only range responses and remains estimated; this is not a full QR2 inventory and valid-pixel masks are not checked.",
+      "sourceUrl": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/",
+      "query": "ListObjectsV2 prefix=qr2/level2/2025W17_4B/l2b-v20-2025-241/1/level2_2025W17_4B_0001_1D1_spx_l2b-v20-2025-241.fits; one QR2 D1 observation",
+      "slot": "survey"
+    },
+    {
       "id": "decaps-dr2-native-ccds", "surveyId": "decaps", "releaseId": "decaps-dr2",
       "title": "DECaPS DR2 CCD image extensions", "adapter": "noirlab-decaps-tap", "unitKind": "ccd",
       "scope": "Complete 1,065,941-row DECaPS DR2 SIAv1 image-table inventory across g/i/r/Y/z, keyed by the source obs_pub_did including each FITS CCD extension. Source-listed Data Lab URLs identify the full CCD extension without POS/SIZE cutout parameters. Explicit SIAv1 ICRS corner coordinates use TPV image geometry and remain estimated frame bounds; valid-pixel masks and per-file availability are unverified.",
@@ -139,6 +147,66 @@
       "query": "skycell={projection}.{subcell}&type=stack",
       "slot": "survey",
       "files": []
+    },
+    {
+      "id": "iphas-dr2-pipeline-images", "surveyId": "iphas", "releaseId": "iphas-dr2",
+      "title": "IPHAS DR2 recalibration-member CCD images", "adapter": "iphas-dr2-pipeline", "unitKind": "ccd",
+      "scope": "Pinned author-owned IPHAS DR2 image-pipeline metadata; only in_dr2 recalibration members are indexed, keyed by run/CCD with band retained. This is not the final QC-reconciled DR2 inventory. Four-corner ZPN image-frame bounds are estimated; source-rule image links are currently unverified.",
+      "sourceUrl": "https://raw.githubusercontent.com/barentsen/iphas-dr2/e2e47c6964df6bb5fe9909e317ef18f0913698db/scripts/release-preparation/iphas-images-pipeline.fits",
+      "query": "Pinned author pipeline table; retain rows where in_dr2=true, group by run+CCD and band; exclude no rows silently.",
+      "slot": "survey",
+      "files": []
+    },
+    {
+      "id": "rubin-firstlook-public-images", "surveyId": "rubin", "releaseId": "rubin-firstlook",
+      "title": "Rubin First Look publisher TIFF images", "adapter": "rubin-firstlook-avm", "unitKind": "image",
+      "scope": "Exactly the two NOIRLab original outreach TIFFs named by the CDS Rubin First Look source record. AVM Spatial.Quality is Position, so TAN image-frame footprints are estimated. These are public outreach images, not Rubin DP1 science exposures or a scientific Rubin inventory.",
+      "sourceUrl": "https://noirlab.edu/public/images/noirlab2521a/",
+      "query": "Fixed source roster: noirlab2521a.tif and noirlab2521b.tif; capture BigTIFF IFD and AVM XMP metadata only.",
+      "slot": "survey",
+      "files": []
+    },
+    {
+      "id": "akari-fis-allsky-native-images", "surveyId": "akari", "releaseId": "akari-fis",
+      "title": "AKARI FIS version 2.1 all-sky region images", "adapter": "irsa-akari-fis-map", "unitKind": "image",
+      "scope": "Complete IRSA akari.akari_images science-map inventory for the matching DARTS 2.1 region roster: 1,672 source-listed regions in each of N60, WideS, WideL and N160 (6,688 individual FITS files). Only N60/WideS/WideL bind to the existing CDS color product; N160 remains visible source evidence but is not falsely assigned to that color product. Four-corner J2000 image frames are converted to estimated ICRS geometry; valid-pixel masks are not checked and individual files are unverified.",
+      "sourceUrl": "https://irsa.ipac.caltech.edu/TAP/sync",
+      "query": "Four complete per-band science-image queries against akari.akari_images for N60, WideS, WideL and N160; preserve each raw VOTable and compare all rows to the source region list and band directories.",
+      "slot": "survey",
+      "files": []
+    },
+    {
+      "id": "ztf-dr7-cds-o3-reference-images", "surveyId": "ztf", "releaseId": "ztf-dr7",
+      "title": "ZTF DR7 CDS O3 reference-image progenitor metadata", "adapter": "cds-ztf-progenitor-o3", "unitKind": "image",
+      "scope": "Complete enumeration of served CDS DR7 g/r/i NESTED O3 HpxFinder metadata: 2,304 keys, 1,696 successful pages, 608 recorded 404 pages, 220,349 rows and 162,333 deduplicated reference-image quadrants. This is the CDS product's 2021 progenitor metadata scope, not a frozen or complete IRSA ZTF DR7 inventory; its J2000 image-frame polygons are estimated and current IRSA file bytes may differ from historical progenitors. Whole-file IRSA FITS paths follow the publisher's metadata.xml rule; only representative links were checked.",
+      "sourceUrl": "https://alasky.cds.unistra.fr/ZTF/DR7/CDS_P_ZTF_DR7_g/HpxFinder/metadata.xml",
+      "query": "Enumerate every g/r/i NESTED order-3 pixel key 0..767 from CDS DR7 HpxFinder; preserve each HTTP 200 body and HTTP 404 outcome and apply the advertised IRSA whole-file resolver.",
+      "slot": "survey",
+      "files": []
+    },
+    {
+      "id": "nvss-final-native-maps", "surveyId": "nvss", "releaseId": "nvss-final",
+      "title": "NVSS final intensity-map images", "adapter": "skyview-radio-maps", "unitKind": "image",
+      "scope": "The complete 2,326-map I-only inventory enumerated by SkyView's published NVSS XML. NASA/GSFC SkyView is the reachable US mirror; NRAO's anonymous FTP route was unavailable during the 2026-10-06 audit. The full NVSS release includes additional Stokes planes outside this mirror selector. Each ICRS frame is estimated from that map's actual FK5/J2000 FITS WCS; valid-pixel masks and full-file availability are not verified.",
+      "sourceUrl": "https://skyview.gsfc.nasa.gov/current/jar/surveys/xml/nvss.xml.gz",
+      "query": "Parse every Images/Image row and SpellPrefix from the published NVSS XML; retain source-listed whole-map paths and each actual FITS primary header using validated byte ranges only.",
+      "slot": "survey", "files": []
+    },
+    {
+      "id": "sumss-final-native-maps", "surveyId": "sumss", "releaseId": "sumss-final",
+      "title": "SUMSS final native mosaic images", "adapter": "skyview-radio-maps", "unitKind": "image",
+      "scope": "The complete 748-map Galactic/Extragalactic roster enumerated by SkyView's published SUMSS XML (119 Galactic, 629 Extragalactic). NASA/GSFC SkyView is the only reachable whole-map mirror confirmed in the 2026-10-06 audit; the Sydney original archive was unavailable. Each ICRS frame is estimated from that map's actual FK5/J2000 FITS WCS; valid-pixel masks and full-file availability are not verified.",
+      "sourceUrl": "https://skyview.gsfc.nasa.gov/current/jar/surveys/xml/sumss.xml.gz",
+      "query": "Parse every Images/Image row and SpellPrefix from the published SUMSS XML; retain the exact Galactic/Extragalactic path and each actual FITS primary header using validated byte ranges only.",
+      "slot": "survey", "files": []
+    },
+    {
+      "id": "wenss-final-native-maps", "surveyId": "wenss", "releaseId": "wenss-final",
+      "title": "WENSS final native map images", "adapter": "skyview-radio-maps", "unitKind": "image",
+      "scope": "The complete 493-map HIGHRES inventory enumerated by SkyView's published WENSS XML (444 wn, 49 wp), recording the publisher's 325 MHz identity separately from each header's raw frequency metadata. NASA/GSFC SkyView is the reachable US mirror; original ASTRON/Leiden image routes were unavailable in the 2026-10-06 audit. Actual FITS WCS is transformed from FK4/B1950 to estimated ICRS frame bounds; the observed header-frequency conflict and unverified masks/full-file availability remain explicit.",
+      "sourceUrl": "https://skyview.gsfc.nasa.gov/current/jar/surveys/xml/wenss.xml.gz",
+      "query": "Parse every Images/Image row and SpellPrefix from the published WENSS XML; retain each whole-map path and actual FITS primary header using validated byte ranges only, without repairing raw frequency fields.",
+      "slot": "survey", "files": []
     }
   ]
 }

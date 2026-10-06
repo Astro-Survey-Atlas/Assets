@@ -8,7 +8,7 @@ import { FilesystemArtifactStore } from "../server/artifact-store.js";
 import { nativeFile, archiveNativeFile, restoreNativeFile } from "../server/native-unit-archive.js";
 import { assertNativeSurvey, nativeMetadataUrl, type NativeBinding, type NativeSource } from "../server/native-unit-model.js";
 import { cellsForStcs } from "../server/hst-image-lookup.js";
-import { importSurveySnapshot, loadSurveyManifest, normalizedRow, parsePanstarrsListing, SurveyNativeIndex, surveyNativeBinding } from "../server/survey-native-index.js";
+import { importSurveySnapshot, loadSurveyManifest, matchesPanstarrsListingEvidence, normalizedRow, parsePanstarrsListing, SurveyNativeIndex, surveyNativeBinding } from "../server/survey-native-index.js";
 import { sourceIdsForBinding } from "../server/native-unit-sources.js";
 import { alternativesForAccessUri, casdcProviderStatuses } from "../server/survey-access.js";
 import { OVERLAP_DOWNLOAD_HEADER, overlapCsvRows } from "../site/src/overlap-download.js";
@@ -81,6 +81,99 @@ test("VPHAS+ DR4 products bind source image identities by their actual filter an
   assert.throws(() => nativeMetadataUrl("https://example.org/tap_obs/sync", "eso-obscore-vphas"), /official public metadata source/);
 });
 
+test("IPHAS DR2 binds only recalibration CCD rows and preserves their source-rule image URI", () => {
+  const src: NativeSource = { ...source("gaia"), id: "iphas-dr2-pipeline-images", surveyId: "iphas", releaseId: "iphas-dr2",
+    adapter: "iphas-dr2-pipeline", unitKind: "ccd", sourceUrl: "https://raw.githubusercontent.com/barentsen/iphas-dr2/e2e47c6964df6bb5fe9909e317ef18f0913698db/scripts/release-preparation/iphas-images-pipeline.fits",
+    query: "Pinned IPHAS author pipeline table; only in_dr2 recalibration members bind to the DR2 products",
+    scope: "Partial DR2 recalibration-member precursor; final QC is not reconciled", files: [] };
+  const layer = { surveyId: "iphas", releaseId: "iphas-dr2", layerId: "iphas-dr2-color", product: "IPHAS DR2 color imaging" };
+  assert.deepEqual(surveyNativeBinding({ ...layer, product: "IPHAS DR2 H-alpha imaging" })?.selector, { bands: ["HALPHA"] });
+  assert.deepEqual(surveyNativeBinding({ ...layer, product: "IPHAS DR2 r-band imaging" })?.selector, { bands: ["R"] });
+  assert.deepEqual(surveyNativeBinding({ ...layer, product: "IPHAS DR2 i-band imaging" })?.selector, { bands: ["I"] });
+  assert.deepEqual(sourceIdsForBinding(layer), ["iphas-dr2-pipeline-images"]);
+  assert.equal(surveyNativeBinding(layer), undefined, "the aggregate color product must not bypass band-specific source identities");
+
+  const footprint = "POLYGON ICRS 40.3430730489 56.1273298822 41.0252753622 56.1273298822 41.0252753622 56.3203180851 40.3430730489 56.3203180851";
+  const row = { unitId: "375643/1", filename: "r375643-1.fits.fz", sRegion: footprint, bands: ["HALPHA"],
+    accessUris: [{ sourceId: "iphas-publisher", uri: "http://www.iphas.org/data/images/r375/r375643-1.fits.fz",
+      fileName: "r375643-1.fits.fz", accessType: "file", band: "HALPHA" }],
+    sourceMetadata: { run: 375643, ccd: 1, inDr2: true, band: "HALPHA", sourceFilename: "r375643-1.fits.fz",
+      raMin: 40.34307304889804, raMax: 41.02527536218735, decMin: 56.12732988220369, decMax: 56.32031808508418,
+      coordinateFrame: "ICRS", projection: "ZPN", geometrySource: "pinned IPHAS DR2 author pipeline table, four CCD corners, ZPN frame",
+      footprint, accessAvailability: "unverified" } };
+  assert.equal(normalizedRow(row, src)?.unitId, "375643/1");
+  assert.throws(() => normalizedRow({ ...row, accessUris: [{ ...row.accessUris[0]!, uri: "http://www.iphas.org/data/images/r376/r375643-1.fits.fz" }] }, src), /IPHAS DR2 rows/);
+  assert.equal(normalizedRow({ ...row, sourceMetadata: { ...row.sourceMetadata, inDr2: false } }, src), undefined);
+});
+
+test("Rubin First Look binds its two publisher AVM images as estimated outreach frames", () => {
+  const sourceId = "rubin-firstlook-public-images";
+  const src: NativeSource = { ...source("gaia"), id: sourceId, surveyId: "rubin", releaseId: "rubin-firstlook",
+    adapter: "rubin-firstlook-avm", unitKind: "image", sourceUrl: "https://noirlab.edu/public/images/noirlab2521a/",
+    query: "The two original publisher TIFFs listed by the CDS Rubin First Look record", scope: "Two outreach images only", files: [] };
+  const layer = { surveyId: "rubin", releaseId: "rubin-firstlook", layerId: "rubin-rubin-firstlook-rubin-first-look-imaging-moc",
+    product: "Rubin First Look imaging" };
+  assert.deepEqual(surveyNativeBinding(layer), { unitKind: "image", sourceIds: [sourceId], selector: { bands: ["RGB"] } });
+  assert.deepEqual(sourceIdsForBinding(layer), [sourceId]);
+
+  const footprint = "POLYGON ICRS 185.3 7.8 187.4 7.1 186.9 6.0 184.8 6.7";
+  const row = { unitId: "noirlab2521a", filename: "noirlab2521a.tif", sRegion: footprint, bands: ["RGB"],
+    accessUris: [{ sourceId: "noirlab-publisher", uri: "https://storage.noirlab.edu/media/archives/images/original/noirlab2521a.tif",
+      fileName: "noirlab2521a.tif", accessType: "file", band: "RGB" }],
+    sourceMetadata: { imageId: "noirlab2521a", fileSizeBytes: 15_142_805_372, xmpRef: "metadata/noirlab2521a-range-524-26612.bin",
+      xmpSha256: "2434a33aab3fa183b284cb332b503b9d9bfe53f7acc48cec13e58e6df92c1d04",
+      captureRef: "metadata/rubin-firstlook-capture.json", coordinateFrame: "ICRS", equinox: "J2000", projection: "TAN", quality: "Position",
+      geometrySource: "NOIRLab publisher BigTIFF IFD and AVM XMP range; AVM Position quality", footprint,
+      avm: { referenceValue: [186.368524202294, 6.930215747979968], referencePixel: [48_971.5, 25_768],
+        scale: [-5.55399208524905e-5, 5.55399208524905e-5], rotation: 48.96, referenceDimension: [97_943, 51_536] } } };
+  assert.equal(normalizedRow(row, src)?.unitId, "noirlab2521a");
+  assert.throws(() => normalizedRow({ ...row, sourceMetadata: { ...row.sourceMetadata, xmpSha256: "f".repeat(64) } }, src), /Rubin First Look rows/);
+});
+
+test("SkyView radio bindings keep exact native filenames and reject unlisted URI shapes", () => {
+  const cases = [
+    { surveyId: "nvss", releaseId: "nvss-final", sourceId: "nvss-final-native-maps", band: "1400 MHZ", product: "1.4 GHz radio imaging",
+      path: "I0000M04.fits.gz", root: "https://skyview.gsfc.nasa.gov/surveys/nvss/", nativeFrame: "FK5(J2000)",
+      producer: "National Radio Astronomy Observatory", producerCountry: "US" },
+    { surveyId: "sumss", releaseId: "sumss-final", sourceId: "sumss-final-native-maps", band: "843 MHZ", product: "SUMSS 843 MHz imaging",
+      path: "Extragalactic/J0000M84.FITS", root: "https://skyview.gsfc.nasa.gov/surveys/sumss/mosaics/", nativeFrame: "FK5(J2000)",
+      producer: "University of Sydney SUMSS", producerCountry: "AU" },
+    { surveyId: "wenss", releaseId: "wenss-final", sourceId: "wenss-final-native-maps", band: "325 MHZ", product: "WENSS 325 MHz imaging",
+      path: "wn30000h.fits.gz", root: "https://skyview.gsfc.nasa.gov/surveys/wenss/", nativeFrame: "FK4(B1950)",
+      producer: "WENSS team: NFRA/ASTRON and Leiden Observatory", producerCountry: "NL", rawFrequencyHz: 609_585_595.238 },
+  ];
+  const points: Array<[number, number]> = Array.from({ length: 128 }, (_, index) => [10 + (index % 16) * 0.01, 30 + Math.floor(index / 16) * 0.01]);
+  const footprint = `POLYGON ICRS ${points.map(([ra, dec]) => `${ra.toFixed(8)} ${dec.toFixed(8)}`).join(" ")}`;
+
+  for (const item of cases) {
+    const layer = { surveyId: item.surveyId, releaseId: item.releaseId, layerId: `${item.surveyId}-imaging`, product: item.product };
+    assert.deepEqual(surveyNativeBinding(layer), { unitKind: "image", sourceIds: [item.sourceId], selector: { bands: [item.band] } });
+    assert.deepEqual(sourceIdsForBinding(layer), [item.sourceId]);
+
+    const src: NativeSource = { ...source("gaia"), id: item.sourceId, surveyId: item.surveyId, releaseId: item.releaseId,
+      adapter: "skyview-radio-maps", unitKind: "image", sourceUrl: `https://skyview.gsfc.nasa.gov/current/jar/surveys/xml/${item.surveyId}.xml.gz`,
+      query: "Parse the complete source-listed SkyView XML roster and capture each actual image header", scope: "Publisher-listed maps only", files: [] };
+    const filename = item.path.split("/").at(-1)!;
+    const uri = item.root + item.path;
+    const conflict = item.surveyId === "wenss";
+    const row = { unitId: item.path, filename, sRegion: footprint, bands: [item.band],
+      accessUris: [{ sourceId: "skyview-gsfc-us", uri, fileName: filename, accessType: "file", countryCode: "US", band: item.band }],
+      sourceMetadata: { relativePath: item.path, fileName: filename, headerStatus: "captured", geometryStatus: "mapped",
+        headerSha256: "a".repeat(64), headerBytes: 2880, headerEvidenceRef: "metadata/map-headers.ndjson.gz",
+        coordinateFrame: "ICRS", nativeCoordinateFrame: item.nativeFrame, geometrySource: "actual FITS primary-header WCS pixel-edge samples transformed to ICRS",
+        geometryPrecision: "estimated", validPixelMasksChecked: false, frameEdgeIcrs: points, footprint,
+        mirrorCountry: "US", producerCountry: item.producerCountry, producer: item.producer, publisherBand: item.band,
+        rawFrequencyHz: item.rawFrequencyHz, spectralMetadataConflict: conflict } };
+    assert.equal(normalizedRow(row, src)?.unitId, item.path);
+    if (conflict) {
+      assert.equal(normalizedRow(row, src)?.sourceMetadata.spectralMetadataConflict, true);
+      assert.equal(normalizedRow(row, src)?.sourceMetadata.rawFrequencyHz, item.rawFrequencyHz);
+    }
+    assert.throws(() => normalizedRow({ ...row, unitId: `${item.path}?download=1`,
+      sourceMetadata: { ...row.sourceMetadata, relativePath: `${item.path}?download=1` } }, src), /SkyView radio row/);
+  }
+});
+
 test("VIKING DR1 J footprint binds numeric ESO Tile identities and only accepts ESO TAP", () => {
   const layer = { surveyId: "vista", releaseId: "viking", layerId: "vista-viking-j-footprint", product: "VIKING J footprint" };
   assert.deepEqual(surveyNativeBinding(layer), { unitKind: "tile", sourceIds: ["vista-viking-dr1-j-tiles"], selector: { bands: ["J"] } });
@@ -126,7 +219,10 @@ test("Pan-STARRS DR1 exposes only source-listed single-band skycell files with g
 
   const header = "projcell subcell ra dec filter mjd type filename shortname badflag";
   const sourceRow = `1405 53 332.6004516572 2.1998090576 g 0.0 stack ${sourceFilename} ${fileName} 0`;
-  assert.equal(parsePanstarrsListing(`${header}\n${sourceRow}\n`, "1405.053").length, 1);
+  const parsedRow = parsePanstarrsListing(`${header}\n${sourceRow}\n`, "1405.053")[0]!;
+  assert.equal(parsedRow.fileName, sourceFilename);
+  assert.notEqual(parsedRow.fileName, row.filename, "source evidence retains the full path while normalized filename is a basename");
+  assert.equal(matchesPanstarrsListingEvidence(row, { fileName: parsedRow.fileName, responseSha256: "b".repeat(64) }, "a".repeat(64)), true);
   const negativeRaListing = sourceRow.replace("332.6004516572", "-0.1999643937");
   assert.equal(parsePanstarrsListing(`${header}\n${negativeRaListing}\n`, "1405.053")[0]?.ra, 359.8000356063);
   assert.equal(parsePanstarrsListing(`${header}\n`, "1411.999").length, 0);
@@ -420,6 +516,29 @@ test("Gaia uses inclusive native O8 ranges at both sides of a boundary and keeps
   await assert.rejects(importSurveySnapshot(f.root, await nativeFile(f.root, "inputs/bad.json"), src), /overlapping/);
 });
 
+test("survey-native builds reuse a completed locked-input index from an earlier task", async t => {
+  const src = source("gaia");
+  const files = [[0, 255], [256, 12 * 4 ** 8 - 1]].map(([firstIpix, lastIpix]) => {
+    const unitId = `GaiaSource_${String(firstIpix).padStart(6, "0")}-${String(lastIpix).padStart(6, "0")}`;
+    return { unitId, filename: `${unitId}.csv.gz`, firstIpix, lastIpix, url: `https://cdn.gea.esac.esa.int/Gaia/gdr3/gaia_source/${unitId}.csv.gz`, sourceMd5: "a".repeat(32), sizeBytes: 123 };
+  });
+  const f = await stage(t, src, { nativeOrder: 8, listing: { complete: true }, scope: { fileRosterComplete: true }, files });
+  const originalRef = "managed/native-units/indexes/first-task/survey-units.sqlite";
+  const first = await SurveyNativeIndex.build(f.root, originalRef, [src], [f.snapshot], () => {});
+  const buildKey = first.buildKey;
+  first.close();
+
+  const messages: string[] = [];
+  const retryRef = "managed/native-units/indexes/retry-task/survey-units.sqlite";
+  const retry = await SurveyNativeIndex.build(f.root, retryRef, [src], [f.snapshot], message => messages.push(message));
+  try {
+    assert.equal(retry.buildKey, buildKey);
+    assert.equal(retry.fileRef, originalRef);
+    assert.ok(messages.some(message => message.includes("Reusing verified survey metadata SQLite")));
+    await assert.rejects(readFile(path.join(f.root, retryRef)), /ENOENT/);
+  } finally { retry.close(); }
+});
+
 const footprint = "CIRCLE ICRS 291.44945899 75.14693546 0.625";
 const mastRow = (id: string, release: string, filters: string) => {
   const suffix = filters === "FUV" ? "fd-exp" : "nd-int";
@@ -475,6 +594,40 @@ test("JWST file URIs become direct MAST links while Products API remains an entr
   assert.throws(() => assertNativeSurvey("roman"), /public surveys/);
   assert.throws(() => nativeMetadataUrl("https://cdn.gea.esac.esa.int/Gaia/gdr3/gaia_source/file.csv.gz", "gaia-healpix-range"), /metadata source/);
   assert.throws(() => nativeMetadataUrl("https://data.sdss.org/sas/dr9/frames/image.fits", "sdss-field"), /metadata table/);
+});
+
+test("survey-native builds extend a verified immutable index when adding new source snapshots", async t => {
+  const oldSource = source("galex");
+  const newSource = source("jwst");
+  const oldInput = await stage(t, oldSource, { rows: [mastRow("9039", "GR6", "FUV")] });
+  const jwstRow = { ...mastRow("1", "GR6", "F200W"), obs_collection: "JWST", instrument: "NIRCAM/IMAGE", project: "JWST",
+    provenance_name: "CALJWST", proposalId: "2731", targetName: "NGC-3324", calib_level: 3, t_min: 59733.4,
+    dataURL: "mast:JWST/product/jw02731-o002_t017_nircam_clear-f200w_i2d.fits" };
+  const newInput = await stage(t, newSource, { rows: [jwstRow] }, oldInput.root);
+  const sources = [oldSource, newSource];
+  const originalRef = "managed/native-units/indexes/original/survey-units.sqlite";
+  const original = await SurveyNativeIndex.build(oldInput.root, originalRef, sources, [oldInput.snapshot], () => {});
+  const originalBuildKey = original.buildKey;
+  const galexLayer = binding("galex", "galex-gr6-ais", "galex-fuv", "GALEX AIS FUV imaging");
+  const originalCells = cellsForStcs(8, Array.from({ length: 12 * 4 ** 8 }, (_, cell) => cell), footprint).slice(0, 2);
+  const originalUnits = original.lookup(galexLayer, 8, originalCells).units;
+  original.close();
+
+  const baseFile = await nativeFile(oldInput.root, originalRef);
+  const candidateRef = "managed/native-units/indexes/candidate/survey-units.sqlite";
+  const extended = await SurveyNativeIndex.build(oldInput.root, candidateRef, sources, [oldInput.snapshot, newInput.snapshot], () => {},
+    { file: baseFile, buildKey: originalBuildKey, snapshots: [oldInput.snapshot] });
+  t.after(() => extended.close());
+
+  assert.notEqual(extended.buildKey, originalBuildKey);
+  assert.deepEqual(extended.summaries.map(summary => summary.sourceId).sort(), [oldSource.id, newSource.id].sort());
+  assert.deepEqual(extended.lookup(galexLayer, 8, originalCells).units, originalUnits);
+  const jwstLayer = binding("jwst", "dr1", "moc-jwst-dr1-611dfe774f60", "Carina NIRCam");
+  assert.deepEqual(extended.lookup(jwstLayer, 4, extended.sampleCells(jwstLayer)).units.map(unit => unit.unitId), ["1"]);
+
+  const untouched = SurveyNativeIndex.open(path.join(oldInput.root, originalRef), originalBuildKey);
+  try { assert.deepEqual(untouched.summaries.map(summary => summary.sourceId), [oldSource.id]); }
+  finally { untouched.close(); }
 });
 
 test("SDSS keeps native fields, original window geometry and per-product unverified frame URIs", async t => {
@@ -1047,7 +1200,7 @@ test("SPHEREx QR2 binds one header-derived detector observation without claiming
   await writeFile(path.join(root, "inputs/rows.jsonl.gz"), rowBody);
   const rowFile = await nativeFile(root, "inputs/rows.jsonl.gz");
   const manifest = {
-    schemaVersion: 1, adapter: src.adapter, surveyId: src.surveyId, releaseId: src.releaseId, capturedAt,
+    schemaVersion: 1, adapter: src.adapter, surveyId: src.surveyId, releaseId: src.releaseId, sourceId, query, capturedAt,
     coordinateFrame: "ICRS", ordering: "NESTED", queryPagesComplete: true, inventoryComplete: false,
     nativeCoordinateFrame: "ICRS",
     scope: { observingRun: "2025W17_4B", processingVersion: "l2b-v20-2025-240", observationSelector: "2025W17_4B_0001_1",
@@ -1092,8 +1245,10 @@ test("regional source status remains explicit when a public mirror is currently 
 });
 
 test("DECaLS DR5 binds to the locked DR5 brick sources with a mixed-program scope", () => {
+  const layer = { surveyId: "decals", releaseId: "decals-dr5", layerId: "decals-dr5-color-footprint", product: "DR5 g/r/z color footprint" };
   assert.equal(assertNativeSurvey("decals"), undefined);
-  assert.deepEqual(sourceIdsForBinding({ surveyId: "decals", releaseId: "decals-dr5" }), ["legacy-dr5-bricks", "legacy-brick-geometry"]);
+  assert.deepEqual(surveyNativeBinding(layer), { unitKind: "brick", sourceIds: ["legacy-dr5-bricks", "legacy-brick-geometry"], selector: { bands: ["G", "R", "Z"] } });
+  assert.deepEqual(sourceIdsForBinding(layer), ["legacy-dr5-bricks", "legacy-brick-geometry"]);
 });
 
 test("Euclid Q1 adds only the checked VIS directory mirror rule", () => {

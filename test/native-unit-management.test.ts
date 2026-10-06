@@ -3,7 +3,9 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { SourceUnitStore } from "../server/source-units.js";
+import { Healpix, Pointing } from "healpixjs";
+import { SourceUnitDiskIndex } from "../server/source-unit-disk-index.js";
+import { legacyDr5CoaddFallbackAlias, SourceUnitStore } from "../server/source-units.js";
 import { nativeDatabaseKey, nativeFile, runNativeUnitWorker } from "../server/native-unit-worker.js";
 import { buildNativeDelta } from "../server/native-unit-delta.js";
 import { NativeUnitController } from "../server/native-unit-controller.js";
@@ -15,6 +17,59 @@ const patchText = (tract: number) => [
   `Tract: ${tract}  Patch: 0,0  Center (RA, Dec): (149.507118993 , 1.48467782206)`,
   ...[[149.600381219, 1.39136228924], [149.413758093, 1.39142133554], [149.413840978, 1.57799734129], [149.600487771, 1.577930368]].map(([ra, dec], index) => `Tract: ${tract}  Patch: 0,0  Corner${index} (RA, Dec): (${ra}, ${dec})`),
 ].join("\n");
+
+test("DECaLS DR5 can query an older index through its Legacy mixed-program coadd membership", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "managed-native-decals-compat-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const evidenceRoot = path.join(root, "evidence");
+  await mkdir(path.join(root, "src/layers/recipes"), { recursive: true });
+  await mkdir(evidenceRoot);
+  await writeFile(path.join(root, "src/layers/layer-registry.json"), JSON.stringify({ layers: [] }));
+  await writeFile(path.join(root, "src/layers/recipes/source-unit-indexes.lock.json"), JSON.stringify({ layerBindings: [] }));
+
+  const identity = { surveyId: "decals", releaseId: "decals-dr5", product: "DR5 g/r/z color footprint" };
+  const legacyAlias = legacyDr5CoaddFallbackAlias("decals-dr5-color-footprint", identity);
+  assert.equal(legacyAlias, "identity:legacy-surveys/legacy-dr5/Coadded%20imaging");
+  const center = new Pointing(null, false, Math.PI / 2, 0);
+  const cell = new Healpix(16).ang2pix(center);
+  const indexPath = path.join(evidenceRoot, "installed/native-units.sqlite");
+  const diskIndex = await SourceUnitDiskIndex.create(indexPath, "a".repeat(64), [{
+    key: legacyAlias!,
+    geometryKey: "legacy-dr5-geometry",
+    payloadKind: "legacy-release-roster",
+    payloadContext: { releaseId: "legacy-dr5", productPath: "coadd" },
+    aliases: [legacyAlias!],
+    layerId: legacyAlias!,
+    surveyId: "legacy-surveys",
+    releaseId: "legacy-dr5",
+    product: "Coadded imaging",
+    coarseOrder: 4,
+    maxUnitRadiusDeg: 10,
+    unitKind: "brick",
+    notes: "Official Legacy DR5 coadd roster.",
+    sourceSnapshotSha256: "b".repeat(64),
+    units: [{
+      coarsePixel: cell,
+      unit: { unitId: "1498p020", unitKind: "brick", raDeg: 0, decDeg: 0, radiusDeg: 10, downloadUrl: "https://portal.nersc.gov/", geometryPrecision: "estimated", sourceSnapshotSha256: "b".repeat(64) },
+      membershipPayload: { regions: [{ id: "all", availableBands: ["g", "r", "z"] }] },
+    }],
+  }], []);
+  assert.equal([...diskIndex.units(legacyAlias!, [cell])].length, 1);
+  diskIndex.close();
+
+  const store = await SourceUnitStore.load(root, evidenceRoot, { readOnly: true, indexPath, buildKey: "a".repeat(64), lockText: "{}" });
+  try {
+    const match = store.match("decals-dr5-color-footprint", 4, [cell], 10, identity);
+    assert.equal(match?.totalUnits, 1);
+    assert.equal(match?.units[0]?.unitId, "1498p020");
+    assert.match(match?.notes ?? "", /mixed-program.*does not isolate DECaLS-only/i);
+    assert.deepEqual(match?.units[0]?.accessUris?.map(uri => uri.fileName), [
+      "legacysurvey-1498p020-image-g.fits.fz",
+      "legacysurvey-1498p020-image-r.fits.fz",
+      "legacysurvey-1498p020-image-z.fits.fz",
+    ]);
+  } finally { store.close(); }
+});
 
 async function fixture(t: { after(fn: () => unknown): void }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "managed-native-"));
@@ -90,11 +145,43 @@ test("baseline adoption preserves installed bindings while new import-only surve
   assert.ok(result.group!.report.checks.every(check => check.passed));
 });
 
-test("DES and SPHEREx bindings skip legacy memberships and require their survey-native index", async t => {
+test("build completion persists a verification report when the candidate group already exists", async t => {
+  const f = await fixture(t);
+  const store = new FilesystemArtifactStore(path.join(f.root, "var/object-store"));
+  const options = { contentRoot: path.join(f.root, "content"), catalogRoot: f.root, evidenceRoot: f.evidenceRoot, store,
+    bindings: async () => f.group.bindings, changed: async () => {}, verifyRuntime: async () => {} };
+  const controller = new NativeUnitController(options); await controller.initialize();
+  const queue = new PublicationTaskStore(path.join(f.root, "tasks.sqlite")); t.after(() => queue.close()); controller.attachQueue(queue);
+
+  const baseline = await controller.submit({ operation: "baseline", expectedActive: null }, "fixture");
+  const baselineTask = queue.claim<NativeWorkerRequest>()!;
+  assert.equal(baselineTask.id, baseline.id);
+  await controller.complete(baselineTask, { group: f.group }, queue);
+
+  const selection = await controller.changeBindings(f.group.id, {
+    digest: groupReviewDigest(f.group), productIds: ["pdr3"],
+  }, "fixture") as { id: string; bindings: NativeBinding[] };
+  const build = await controller.submit({ operation: "build", groupId: selection.id, expectedActive: null,
+    snapshotIds: [f.snapshots["hsc-pdr3-patches"]!.id] }, "fixture");
+  const buildTask = queue.claim<NativeWorkerRequest>()!;
+  assert.equal(buildTask.id, build.id);
+
+  await controller.complete(buildTask, { group: { ...f.group, id: selection.id, bindings: selection.bindings } }, queue);
+  const persisted = await controller.detail(selection.id) as { report: NativeGroup["report"]; review?: unknown };
+  assert.deepEqual(persisted.report.checks, f.group.report.checks);
+  assert.equal(persisted.review, undefined);
+});
+
+test("survey-native bindings skip legacy memberships and require their survey-native index", async t => {
   const f = await fixture(t);
   const bindings: NativeBinding[] = [
     { productId: "des-dr2", layerId: "des-dr2-g-band-imaging-moc", surveyId: "des", releaseId: "des-dr2", product: "g-band imaging", modality: "imaging", unitKind: "tile", sourceIds: [], revision: "", visibility: "published" },
     { productId: "spherex-qr2", layerId: "spherex-spherex-qr2-spherex-qr2-color-coverage-moc", surveyId: "spherex", releaseId: "spherex-qr2", product: "SPHEREx QR2 color coverage", modality: "infrared", unitKind: "image", sourceIds: [], revision: "", visibility: "published" },
+    { productId: "ps1-dr1", layerId: "ps1-dr1-g", surveyId: "panstarrs", releaseId: "panstarrs-dr1", product: "DR1 g-band imaging", modality: "imaging", unitKind: "tile", sourceIds: [], revision: "", visibility: "published" },
+    { productId: "iphas-dr2", layerId: "iphas-dr2-ha", surveyId: "iphas", releaseId: "iphas-dr2", product: "H-alpha imaging", modality: "imaging", unitKind: "ccd", sourceIds: [], revision: "", visibility: "published" },
+    { productId: "rubin-firstlook", layerId: "rubin-firstlook-image", surveyId: "rubin", releaseId: "rubin-firstlook", product: "Rubin First Look imaging", modality: "imaging", unitKind: "image", sourceIds: [], revision: "", visibility: "published" },
+    { productId: "akari-fis", layerId: "akari-fis-color", surveyId: "akari", releaseId: "akari-fis", product: "AKARI FIS color imaging", modality: "infrared", unitKind: "image", sourceIds: [], revision: "", visibility: "published" },
+    { productId: "ztf-dr7", layerId: "ztf-dr7-g", surveyId: "ztf", releaseId: "ztf-dr7", product: "g-band imaging", modality: "imaging", unitKind: "image", sourceIds: [], revision: "", visibility: "published" },
   ];
   for (const binding of bindings) {
     const active = { ...f.group, bindings: [...f.group.bindings, binding] };
