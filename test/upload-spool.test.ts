@@ -60,6 +60,24 @@ async function fixture(prefix: string): Promise<{ root: string; spoolRoot: strin
   };
 }
 
+test("shared spool capacity rejects concurrent excess writes without losing an admitted file", async () => {
+  const { root, spoolRoot, source, store } = await fixture("upload-spool-capacity-");
+  try {
+    await writeFile(source, Buffer.alloc(2500, 42));
+    const first = new UploadSpool({ root: spoolRoot, store, maxBytes: 4096 });
+    const second = new UploadSpool({ root: spoolRoot, store, maxBytes: 4096 });
+    const results = await Promise.allSettled([
+      first.enqueueFile({ kind: "moc", sourcePath: source, objectKey: "evidence/one", uploadId: "capacity-one" }),
+      second.enqueueFile({ kind: "moc", sourcePath: source, objectKey: "evidence/two", uploadId: "capacity-two" }),
+    ]);
+    assert.equal(results.filter(r => r.status === "fulfilled").length, 1);
+    assert.equal(results.filter(r => r.status === "rejected" && /capacity|limit/i.test(String(r.reason))).length, 1);
+    const admitted = await first.listManifests();
+    assert.equal(admitted.length, 1);
+    assert.equal((await readFile(path.join(spoolRoot, "jobs", admitted[0]!.uploadId, "payload"))).length, 2500);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("upload spool enqueues atomically and uploads an idempotent job", async () => {
   const { root, spoolRoot, source, store } = await fixture("upload-spool-success-");
   try {

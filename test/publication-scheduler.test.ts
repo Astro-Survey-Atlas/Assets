@@ -119,3 +119,26 @@ test("scheduler freezes package-mode payloads and keys duplicates by mode, basel
   assert.deepEqual(retry.selectedProducts, []);
   scheduler.tasks.close();
 });
+
+test("executor heartbeats do not enqueue another full queue checkpoint", async t => {
+  const f = await reviewedFixture();
+  t.after(() => rm(f.base, { recursive: true, force: true }));
+  let checkpoints = 0;
+  let now = Date.now();
+  t.mock.method(Date, "now", () => now);
+  const scheduler = new PublicationScheduler({ contentRoot:f.contentRoot, baselineRoot:f.root, store:f.store,
+    freeze:async () => ({products:[],publications:[]}), synchronize:async () => {},
+    snapshotSink:{ enqueue:async namespace => { checkpoints += 1; return {namespace,generation:checkpoints,snapshotKey:"fixture",snapshotSha256:"0".repeat(64),sizeBytes:0,uploadId:`fixture-${checkpoints}`}; } },
+  });
+  t.after(() => scheduler.tasks.close());
+  scheduler.tasks.submit("lease-only", "lease-only", {input:"frozen"});
+  const claimed = scheduler.tasks.claim()!;
+  await scheduler.snapshot();
+  now += 15_000;
+  scheduler.tasks.heartbeat(claimed.id,claimed.attemptId!);
+  await scheduler.snapshot();
+  assert.equal(checkpoints,1,"lease renewal is durable in SQLite and must not duplicate the full history checkpoint");
+  scheduler.tasks.fail(claimed.id,claimed.attemptId!,"real task failure",false);
+  await scheduler.snapshot();
+  assert.equal(checkpoints,2,"semantic task changes must still be checkpointed");
+});

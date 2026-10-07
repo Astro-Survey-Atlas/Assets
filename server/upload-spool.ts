@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { copyFile, mkdir, open, readdir, readFile, lstat, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { withLocalFileLock } from "./local-file-lock.js";
 
 import {
   ArtifactStoreConflictError,
@@ -55,6 +56,8 @@ export interface UploadSpoolOptions {
   retryBaseMs?: number;
   retryMaxMs?: number;
   now?: () => Date;
+  /** Admission budget for durable job/quarantine bytes; local-path PVCs do not enforce capacity. */
+  maxBytes?: number;
 }
 
 export interface UploadProcessResult {
@@ -173,6 +176,7 @@ export class UploadSpool {
   readonly #retryMaxMs: number;
   #lastSnapshotNamespace = "";
   readonly #now: () => Date;
+  readonly #maxBytes: number;
 
   constructor(options: UploadSpoolOptions) {
     const root = path.resolve(options.root);
@@ -185,6 +189,8 @@ export class UploadSpool {
     this.#retryBaseMs = options.retryBaseMs ?? 1_000;
     this.#retryMaxMs = options.retryMaxMs ?? 15 * 60 * 1000;
     this.#now = options.now ?? (() => new Date());
+    this.#maxBytes = options.maxBytes ?? Number(process.env.ASSETS_UPLOAD_SPOOL_MAX_BYTES ?? 1024 ** 3);
+    if (!Number.isSafeInteger(this.#maxBytes) || this.#maxBytes < 1) throw new Error("Upload spool capacity limit must be a positive safe integer");
     if (!Number.isFinite(this.#leaseMs) || this.#leaseMs <= 0 || !Number.isFinite(this.#retryBaseMs) || this.#retryBaseMs < 0 || !Number.isFinite(this.#retryMaxMs) || this.#retryMaxMs < this.#retryBaseMs) {
       throw new Error("Upload spool timing options are invalid");
     }
@@ -219,6 +225,10 @@ export class UploadSpool {
 
   async enqueueFile(options: EnqueueUploadOptions): Promise<UploadJobManifest> {
     await this.initialize();
+    return withLocalFileLock(path.join(this.root, "locks", "upload-admission.flock"), () => this.enqueueFileLocked(options), 5000);
+  }
+
+  private async enqueueFileLocked(options: EnqueueUploadOptions): Promise<UploadJobManifest> {
     if (!options.kind.trim()) throw new Error("Upload kind is required");
     const uploadId = safeUploadId(options.uploadId ?? `upload-${Date.now().toString(36)}-${randomUUID()}`);
     const objectKey = safeObjectKey(options.objectKey);
@@ -265,6 +275,12 @@ export class UploadSpool {
       createdAt,
       updatedAt: createdAt,
     };
+    await this.compactSnapshotsLocked();
+    const resident = await this.residentJobBytes();
+    const required = source.sizeBytes + Buffer.byteLength(JSON.stringify(manifest, null, 2)) + Buffer.byteLength(uploadId) + 2;
+    if (resident + required > this.#maxBytes) {
+      throw new Error(`Upload spool capacity limit exceeded: ${resident} retained bytes + ${required} requested bytes > ${this.#maxBytes}; local state is retained, retry after freeing acknowledged or superseded jobs`);
+    }
     const temporaryRoot = path.join(this.root, `.job-${uploadId}-${randomUUID()}`);
     await mkdir(temporaryRoot, { recursive: true });
     try {
@@ -277,6 +293,7 @@ export class UploadSpool {
       await writeFile(path.join(temporaryRoot, READY_FILE), `${uploadId}\n`, { flag: "wx", mode: 0o600 });
       await mkdir(path.dirname(jobRoot), { recursive: true });
       await rename(temporaryRoot, jobRoot);
+      await this.compactSnapshotsLocked().catch(error => console.error("Upload checkpoint compaction deferred:", errorText(error)));
       return manifest;
     } catch (error) {
       await rm(temporaryRoot, { recursive: true, force: true });
@@ -289,11 +306,88 @@ export class UploadSpool {
     }
   }
 
+  private async residentJobBytes(): Promise<number> {
+    const size = async (directory: string): Promise<number> => {
+      let total = 0;
+      for (const entry of await readdir(directory, { withFileTypes: true }).catch(error => {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+        throw error;
+      })) {
+        const file = path.join(directory, entry.name);
+        if (entry.isDirectory()) total += await size(file);
+        else if (entry.isFile()) total += (await lstat(file).catch(error => {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+          throw error;
+        }))?.size ?? 0;
+      }
+      return total;
+    };
+    let total = await size(this.jobsRoot) + await size(path.join(this.root, "quarantine"));
+    for (const entry of await readdir(this.root, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith(".job-")) total += await size(path.join(this.root, entry.name));
+    }
+    return total;
+  }
+
+  private snapshotNamespace(manifest: UploadJobManifest): string | undefined {
+    const namespace = manifest.metadata?.stateNamespace;
+    const generation = Number(manifest.metadata?.stateGeneration);
+    return manifest.kind === "state-snapshot" && namespace && /^[a-z][a-z0-9-]{0,63}$/.test(namespace)
+      && Number.isSafeInteger(generation) && generation > 0
+      && manifest.objectKey === `state/${namespace}/snapshots/${generation}-${manifest.sha256}.json` ? namespace : undefined;
+  }
+
+  /** Full checkpoints include history; retain two verified local generations,
+   * every leased upload, conflicts, and all unique file/artifact jobs. */
+  private async compactSnapshotsLocked(): Promise<void> {
+    const groups = new Map<string, UploadJobManifest[]>();
+    for (const manifest of await this.listManifests()) {
+      const namespace = this.snapshotNamespace(manifest);
+      if (!namespace) continue;
+      const group = groups.get(namespace) ?? [];
+      group.push(manifest); groups.set(namespace, group);
+    }
+    for (const manifests of groups.values()) {
+      const generations = [...new Set(manifests.map(m => Number(m.metadata!.stateGeneration)))].sort((a,b) => b-a);
+      if (generations.length <= 2) continue;
+      const boundary = generations[1]!;
+      const replacements = manifests.filter(m => Number(m.metadata!.stateGeneration) >= boundary);
+      let verified = true;
+      for (const manifest of replacements) {
+        const peers = replacements.filter(m => m.metadata!.stateGeneration === manifest.metadata!.stateGeneration);
+        const details = await fileDetails(path.join(this.jobsRoot, manifest.uploadId, manifest.payloadPath)).catch(() => undefined);
+        if (manifest.status === "conflict" || peers.some(m => m.sha256 !== manifest.sha256)
+          || details?.sha256 !== manifest.sha256 || details.sizeBytes !== manifest.sizeBytes) { verified = false; break; }
+      }
+      if (!verified) continue;
+      for (const manifest of manifests) {
+        if (Number(manifest.metadata!.stateGeneration) >= boundary || ["uploaded", "conflict"].includes(manifest.status)) continue;
+        const jobRoot = path.join(this.jobsRoot, manifest.uploadId);
+        const leasePath = path.join(jobRoot, LEASE_FILE);
+        let lease: Awaited<ReturnType<typeof open>>;
+        try { lease = await open(leasePath, "wx", 0o600); }
+        catch (error) {
+          if (["EEXIST", "ENOENT"].includes((error as NodeJS.ErrnoException).code ?? "")) continue;
+          throw error;
+        }
+        try {
+          await lease.writeFile(JSON.stringify({ pid:process.pid, acquiredAt:this.#now().toISOString() }) + "\n");
+          const current = await this.readManifest(manifest.uploadId);
+          if (sameJob(current, manifest) && !["uploaded", "conflict"].includes(current.status)) await rm(jobRoot, { recursive:true, force:true });
+        } finally {
+          await lease.close();
+          await rm(leasePath, { force:true });
+        }
+      }
+    }
+  }
+
   async processPending(options: UploadProcessOptions = {}): Promise<UploadProcessResult> {
     if (options.maxUploads !== undefined && (!Number.isSafeInteger(options.maxUploads) || options.maxUploads < 1)) {
       throw new Error("Upload batch size must be a positive safe integer");
     }
     await this.initialize();
+    await withLocalFileLock(path.join(this.root, "locks", "upload-admission.flock"), () => this.compactSnapshotsLocked(), 5000);
     const result: UploadProcessResult = { scanned: 0, uploaded: [], uploadedManifests: [], retryable: [], conflicts: [], skipped: [], quarantined: [] };
     const entries = await readdir(this.jobsRoot, { withFileTypes: true });
     let pending: UploadJobManifest[] = [];
@@ -320,7 +414,7 @@ export class UploadSpool {
     if (options.maxUploads !== undefined) {
       // A snapshot contains the complete namespace state, including its audit
       // history. Sync its newest generation before replaying older snapshots;
-      // every older job remains durable and is still uploaded in later batches.
+      // superseded unleased checkpoints are compacted; unique file jobs remain durable.
       const latest = new Map<string, UploadJobManifest>();
       for (const manifest of pending) {
         const namespace = manifest.metadata?.stateNamespace;

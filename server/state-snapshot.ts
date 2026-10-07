@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { lstat, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { ArtifactStore } from "./artifact-store.js";
 import type { UploadJobManifest, UploadSpool } from "./upload-spool.js";
+import { withLocalFileLock } from "./local-file-lock.js";
 
 export interface StateSnapshotPointer {
   schemaVersion: 1;
@@ -243,49 +244,9 @@ async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> 
   await rename(temporary, filePath);
 }
 
-function processAlive(pid: number): boolean {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-}
-
 /** Serialize generation allocation across site and worker processes sharing the spool PVC. */
 async function withGenerationLock<T>(root: string, namespace: string, work: () => Promise<T>): Promise<T> {
-  const lockRoot = path.join(root, "locks");
-  const lockPath = path.join(lockRoot, `${namespace}.lock`);
-  await mkdir(lockRoot, { recursive: true });
-  let handle: Awaited<ReturnType<typeof open>> | undefined;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    try {
-      handle = await open(lockPath, "wx", 0o600);
-      await handle.writeFile(JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() }) + "\n", "utf8");
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      let owner: { pid?: number; acquiredAt?: string } = {};
-      try { owner = JSON.parse(await readFile(lockPath, "utf8")) as { pid?: number; acquiredAt?: string }; } catch { /* inspect age below */ }
-      const acquiredAt = Date.parse(owner.acquiredAt ?? "");
-      const stale = !Number.isFinite(acquiredAt)
-        ? attempt >= 20
-        : Date.now() - acquiredAt > 10 * 60 * 1000 && !processAlive(owner.pid ?? 0);
-      if (stale) {
-        await rm(lockPath, { force: true });
-        continue;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  }
-  if (!handle) throw new Error(`Timed out waiting for state generation lock: ${namespace}`);
-  try {
-    return await work();
-  } finally {
-    await handle.close().catch(() => undefined);
-    await rm(lockPath, { force: true }).catch(() => undefined);
-  }
+  return withLocalFileLock(path.join(root, "locks", `${namespace}.flock`), work, 5000);
 }
 
 /**
@@ -485,6 +446,11 @@ export class StateSnapshotCoordinator implements StateSnapshotSink {
       .filter(({ generation }) => Number.isSafeInteger(generation) && generation > pointerGeneration)
       .sort((left, right) => left.generation - right.generation);
     const latest = jobs.at(-1);
+    const localGeneration = await this.readLocalGeneration(namespace);
+    if (localGeneration > Math.max(pointerGeneration, latest?.generation ?? 0)) {
+      return { namespace, status: "failed", generation: localGeneration,
+        error: "The latest local state checkpoint was not admitted to the durable upload spool; retry after resolving its enqueue or capacity failure" };
+    }
     const failed = jobs.find(({ manifest }) => manifest.status === "conflict" || manifest.status === "retryable-failed");
     if (failed) {
       return {
@@ -529,9 +495,8 @@ export class StateSnapshotCoordinator implements StateSnapshotSink {
       const sourceRoot = path.join(this.root, "pending", namespace);
       const sourcePath = path.join(sourceRoot, `${generation}-${digest}.json`);
       await mkdir(sourceRoot, { recursive: true });
-      await writeFile(sourcePath, bytes, { flag: "wx", mode: 0o600 });
-      let enqueued = false;
       try {
+        await writeFile(sourcePath, bytes, { flag: "wx", mode: 0o600 });
         const manifest = await this.#spool.enqueueFile({
           kind: "state-snapshot",
           sourcePath,
@@ -540,10 +505,11 @@ export class StateSnapshotCoordinator implements StateSnapshotSink {
           contentType: "application/json; charset=utf-8",
           metadata: { stateNamespace: namespace, stateGeneration: String(generation) },
         });
-        enqueued = true;
         return { namespace, generation, snapshotKey: key, snapshotSha256: digest, sizeBytes: bytes.length, uploadId: manifest.uploadId };
       } finally {
-        if (enqueued) await rm(sourcePath, { force: true });
+        // An admission failure must not leave another unbounded copy in pending/.
+        // The caller receives the failure; only complete spool jobs are replayable.
+        await rm(sourcePath, { force: true });
       }
     });
   }

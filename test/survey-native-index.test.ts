@@ -1218,8 +1218,12 @@ test("SPHEREx QR2 binds one header-derived detector observation without claiming
 
   assert.equal(assertNativeSurvey("spherex"), undefined);
   assert.equal(nativeMetadataUrl(sourceUrl, src.adapter).hostname, "nasa-irsa-spherex.s3.us-east-1.amazonaws.com");
-  assert.deepEqual(sourceIdsForBinding({ surveyId: "spherex", releaseId: "spherex-qr2" }), [sourceId]);
-  const d2 = binding("spherex", "spherex-qr2", "spherex-spherex-qr2-spherex-qr2-d2-coverage-moc", "SPHEREx QR2 D2 coverage");
+  assert.deepEqual(sourceIdsForBinding({ surveyId: "spherex", releaseId: "spherex-qr2" }), [sourceId, `${sourceId}-d1-v241`]);
+  const proposedD2 = binding("spherex", "spherex-qr2", "spherex-spherex-qr2-spherex-qr2-d2-coverage-moc", "SPHEREx QR2 D2 coverage");
+  assert.equal(index.hasBinding(proposedD2), false, "a proposed binding needs both processing-version inputs locked");
+  // Installed versions keep their original frozen sources. This fixture contains
+  // only the earlier five-detector input, so it must not claim the new D1 source.
+  const d2 = { ...proposedD2, sourceIds: [sourceId] };
   assert.equal(d2.unitKind, "image");
   assert.deepEqual(d2.selector?.bands, ["D2"]);
   const result = index.lookup(d2, 4, index.sampleCells(d2));
@@ -1228,7 +1232,7 @@ test("SPHEREx QR2 binds one header-derived detector observation without claiming
   assert.equal(result.inventoryComplete, false);
   assert.equal(result.queryExhausted, true);
   assert.match(result.notes.join(" "), /not the full QR2 inventory/i);
-  const color = binding("spherex", "spherex-qr2", "spherex-spherex-qr2-spherex-qr2-color-coverage-moc", "SPHEREx QR2 color coverage");
+  const color = { ...binding("spherex", "spherex-qr2", "spherex-spherex-qr2-spherex-qr2-color-coverage-moc", "SPHEREx QR2 color coverage"), sourceIds: [sourceId] };
   assert.deepEqual(color.selector?.bands, ["D1", "D2", "D3", "D4", "D5", "D6"]);
   assert.equal(index.lookup(color, 4, index.sampleCells(color)).units.length, 5);
   assert.equal(surveyNativeBinding({ surveyId: "spherex", releaseId: "spherex-qr2", layerId: "x", product: "SPHEREx QR2 D1 coverage" })?.selector?.bands?.[0], "D1");

@@ -71,6 +71,22 @@ or reviews require a new submission. Runs and attempts are retained. The
 pending snapshots remain recoverable from the local PVC. Never expose these
 snapshots or normalized scans in initial browser payloads.
 
+The upload spool keeps the latest two complete checkpoints per namespace. Before
+retiring an older unleased checkpoint, it verifies the replacement files' size and
+SHA-256. Leased uploads, conflicts, uploaded jobs awaiting acknowledgement, and
+unique artifact/file dependencies are retained. Queue heartbeats update SQLite;
+`lease_until` changes alone do not enqueue another full task-history checkpoint.
+
+`ASSETS_UPLOAD_SPOOL_MAX_BYTES` sets the admission budget in bytes (default
+`1073741824`, 1 GiB). Local-path PVC capacity declarations do not impose a write
+quota. Writers share a kernel lock when checking the resident job, quarantine and
+temporary-job bytes and admitting a payload. If the budget is exhausted, enqueue
+fails without copying another payload or leaving a temporary snapshot source;
+the newest unadmitted generation reports failed even if an older job is pending.
+Business state remains on its owning PVC and must be retried after resolving the
+capacity/upload failure. This budget is not a filesystem quota: receipts, leases,
+control metadata and the transient snapshot source also need disk headroom.
+
 ## Dev cutover
 
 Use the existing Helm values plus the new image, with these ordered stages:

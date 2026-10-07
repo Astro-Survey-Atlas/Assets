@@ -78,7 +78,11 @@ export class PublicationScheduler implements PublicationRunRepository {
   async snapshot(): Promise<void> {
     if (!this.#options.snapshotSink) return;
     const snapshot = this.tasks.snapshot();
-    const digest = createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+    // The local SQLite owns executor leases. Lease-only heartbeats do not change
+    // recovery history and must not duplicate the entire frozen task inventory.
+    const digest = createHash("sha256").update(JSON.stringify({ ...snapshot,
+      tasks: snapshot.tasks.map(task => ({ ...task, lease_until: null })),
+    })).digest("hex");
     if (digest === this.#snapshotDigest) return;
     await this.#options.snapshotSink.enqueue("publication-tasks", snapshot);
     this.#snapshotDigest = digest;

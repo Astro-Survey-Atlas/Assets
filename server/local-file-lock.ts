@@ -6,9 +6,10 @@ import path from "node:path";
  * The lock file must never be unlinked, otherwise contenders could lock different inodes.
  * Use on the role's local PVC, never as a distributed lease on object storage.
  */
-export async function acquireLocalFileLock(file: string): Promise<() => Promise<void>> {
+export async function acquireLocalFileLock(file: string, waitMs = 0): Promise<() => Promise<void>> {
+  if (!Number.isFinite(waitMs) || waitMs < 0) throw new Error("Invalid local lock wait duration");
   await mkdir(path.dirname(file), { recursive: true });
-  const child = spawn("flock", ["--exclusive", "--nonblock", "--conflict-exit-code", "75", file,
+  const child = spawn("flock", ["--exclusive", ...(waitMs ? ["--timeout", String(waitMs / 1000)] : ["--nonblock"]), "--conflict-exit-code", "75", file,
     "sh", "-c", "echo locked; cat >/dev/null"], { stdio: ["pipe", "pipe", "pipe"] });
   let stderr = "";
   child.stderr.on("data", bytes => { stderr += String(bytes); });
@@ -29,7 +30,7 @@ export async function acquireLocalFileLock(file: string): Promise<() => Promise<
   }
 }
 
-export async function withLocalFileLock<T>(file: string, work: () => Promise<T>): Promise<T> {
-  const release = await acquireLocalFileLock(file);
+export async function withLocalFileLock<T>(file: string, work: () => Promise<T>, waitMs = 0): Promise<T> {
+  const release = await acquireLocalFileLock(file, waitMs);
   try { return await work(); } finally { await release(); }
 }

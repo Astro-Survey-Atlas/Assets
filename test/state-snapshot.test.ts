@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -229,4 +229,84 @@ test("writing another namespace never regresses a counter cached by an older coo
   } finally {
     await rm(base, { recursive: true, force: true });
   }
+});
+
+test("an upload outage retains two full checkpoints while preserving the entire task history", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "state-snapshot-bounded-"));
+  try {
+    const store = new LocalS3Adapter(new FilesystemArtifactStore(path.join(base, "remote")));
+    const { coordinator, spool } = await makeCoordinator(base, store);
+    const history: string[] = [];
+    for (let revision = 1; revision <= 12; revision += 1) {
+      history.push(`task-${revision}`);
+      await coordinator.enqueue("publication-tasks", { history: [...history], revision });
+    }
+    assert.equal((await spool.listManifests()).length, 2, "unprocessed full checkpoints must not accumulate during an outage");
+    const uploaded = await spool.processPending();
+    await coordinator.reconcileUploaded(uploaded.uploadedManifests);
+    const restored = await coordinator.restore("publication-tasks");
+    assert.equal(restored?.pointer.generation, 12);
+    assert.deepEqual(restored?.state, { history, revision: 12 });
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test("checkpoint compaction keeps leased uploads and unique referenced files", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "state-snapshot-leased-"));
+  try {
+    const store = new LocalS3Adapter(new FilesystemArtifactStore(path.join(base, "remote")));
+    const { coordinator, spool } = await makeCoordinator(base, store);
+    const first = await coordinator.enqueue("native-units", { revision: 1 });
+    await writeFile(path.join(spool.jobsRoot, first.uploadId, ".lease"), JSON.stringify({ acquiredAt: new Date().toISOString() }));
+    const source = path.join(base, "unique-index.bin");
+    await writeFile(source, "unique index dependency");
+    const dependency = await coordinator.enqueueFile("native-units", source);
+    for (let revision = 2; revision <= 5; revision += 1) await coordinator.enqueue("native-units", { revision });
+    const remaining = await spool.listManifests();
+    assert.deepEqual(remaining.filter(m => m.kind === "state-snapshot").map(m => Number(m.metadata?.stateGeneration)).sort((a,b) => a-b), [1,4,5]);
+    assert.ok(remaining.some(m => m.uploadId === dependency.uploadId));
+    assert.equal(await readFile(path.join(spool.jobsRoot, dependency.uploadId, "payload"), "utf8"), "unique index dependency");
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test("capacity rejection leaves no abandoned snapshot source file", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "state-snapshot-capacity-"));
+  try {
+    const store = new LocalS3Adapter(new FilesystemArtifactStore(path.join(base, "remote")));
+    const spool = new UploadSpool({ root: path.join(base, "uploads"), store, maxBytes: 8 });
+    const coordinator = new StateSnapshotCoordinator({ root: path.join(base, "state"), store, spool });
+    await assert.rejects(() => coordinator.enqueue("products", { description: "large checkpoint" }), /capacity|limit/i);
+    assert.deepEqual(await readdir(path.join(base, "state", "pending", "products")), []);
+    assert.deepEqual(await spool.listManifests(), []);
+    assert.equal((await coordinator.syncStatus("products")).status, "failed", "rejected latest state must not appear synced");
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test("a rejected checkpoint is reported even when an older checkpoint is still pending", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "state-snapshot-rejected-latest-"));
+  try {
+    const store = new LocalS3Adapter(new FilesystemArtifactStore(path.join(base, "remote")));
+    const spool = new UploadSpool({ root: path.join(base, "uploads"), store, maxBytes: 4096 });
+    const coordinator = new StateSnapshotCoordinator({ root: path.join(base, "state"), store, spool });
+    await coordinator.enqueue("products", { revision: 1 });
+    await assert.rejects(() => coordinator.enqueue("products", { revision: 2, content: "x".repeat(4096) }), /capacity|limit/i);
+    const status = await coordinator.syncStatus("products");
+    assert.equal(status.status, "failed");
+    assert.equal(status.generation, 2);
+    assert.match(status.error ?? "", /not admitted/i);
+    assert.equal((await spool.listManifests()).length, 1, "the older checkpoint is still available for recovery");
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test("a corrupt replacement checkpoint cannot retire the last valid older checkpoint", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "state-snapshot-corrupt-replacement-"));
+  try {
+    const store = new LocalS3Adapter(new FilesystemArtifactStore(path.join(base, "remote")));
+    const { coordinator, spool } = await makeCoordinator(base, store);
+    const first = await coordinator.enqueue("products", { revision: 1 });
+    const second = await coordinator.enqueue("products", { revision: 2 });
+    await writeFile(path.join(spool.jobsRoot, second.uploadId, "payload"), "corrupt checkpoint");
+    await coordinator.enqueue("products", { revision: 3 });
+    assert.ok((await spool.listManifests()).some(m => m.uploadId === first.uploadId));
+    assert.deepEqual(JSON.parse(await readFile(path.join(spool.jobsRoot, first.uploadId, "payload"), "utf8")), { revision: 1 });
+  } finally { await rm(base, { recursive: true, force: true }); }
 });
