@@ -1,6 +1,6 @@
 # Assets 项目交接
 
-交接日期：2026-10-06（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-07（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
@@ -10,68 +10,174 @@
 Surveys、HST 与 Workspace 的公开覆盖、原生分块反查、来源链接及 JSON/CSV 下载计划。后续 Phase 2
 只更新 **Assets Dev**，不修改 72602、Workspace、公开 MOC 或 public bundle，也不下载科学像素。
 
-Dev 最近已知健康基线为 2026-10-06 Helm revision **353**，镜像 tag `0.1.0-20261006-163033`。
-截至 2026-10-07，服务暂不可用：`eva7028` 有 `disk-pressure:NoSchedule` taint，site/backend 旧 Pod
-均不可用，新 Pod 因固定 nodeSelector 无法调度；Dev NodePort `10.15.51.75:32083` 连接拒绝。
-当前不要改 Helm 调度或清理节点文件。恢复前先保全并确认原生归档任务状态。
-射电适配器镜像 `0.1.0-20261006-214520-native-radio` 已通过本地构建并推送，但不含本轮 SPHEREx D1 版本来源改动；
-部署前需为当前工作树构建并推送新的不可变 tag。
-Dev 当前 `/healthz` 与管理 API 均无法访问；backend liveness 为 TCP，startup/readiness 为 HTTP `/healthz`。
+Dev 当前 Helm revision **356**，site/backend 均 1/1 Ready，镜像 tag
+`0.1.0-20261007-202614-casdc-status`。本机构建 image ID 为
+`73969d6b62cd91fece39e19c1ff7498c3616334fe996476303b318df54ab94c7`，registry manifest digest 为
+`sha256:1eed7b2b71f9f1c68dcb9e07b4dec00cdf6ce089070ff338feb2c027c56ae249`。此前 revision 354 部署的
+防积压修复 commit `d776e48` 已推送并保留在当前版本中。
+
+2026-10-07 按用户授权清理 upload-spool 的旧完整状态快照，释放 **383.611 GiB**；
+`eva7028` 于 **09:12:25 CST** 自动报告 `DiskPressure=False`，taint 已消失。最新复查根盘约
+**48.07 GB 已用 / 421.30 GiB 可用 / 10%**，两个节点 `DiskPressure=False`。
+旧版 backend 曾使 spool 回涨到 **37,180,447,529 bytes**；修复版启动后的校验压缩曾将其降到约
+**0.57 GiB**。当前 spool 约 **140,780,790 bytes / 0.13 GiB**，低于 1 GiB 应用层 admission 上限。
+Dev `/healthz` 与 `/api/v1/status` 均 HTTP 200；backend liveness 为 TCP，startup/readiness 为 HTTP `/healthz`。
+
+### 2026-10-07 upload-spool 根因、清理与修复
+
+用户提供 `ssh zjlab@10.15.51.75` 并明确授权清理历史无用数据。主机目录审计确认该 PVC
+落在 eva7028 根盘，14,128 个 jobs 共 **412,431,876,198 bytes / 384.1 GiB**，全部为 JSON
+状态快照，未含科学影像：publication-tasks 11,772 份约 354.7 GiB、native-units 2,356 份约
+29.4 GiB。只有 10 份 SHA 完全相同，不能仅靠 SHA 去重解决。
+
+根因是 scheduler 每 5 秒检查完整快照，而 executor 每 15 秒更新 `lease_until`；纯心跳
+也改变 SHA，反复复制几十 MB 的全量状态。上传 quota/timeout 失败后全部旧代都留存，且
+入队没有容量预算；local-path 不执行 PVC 声明的 1 GiB 写入配额。这是 Assets 实现缺陷。
+
+backend 临时缩至 0 后，先完整校验并备份最新本地状态、每 namespace 最近两份待上传快照，
+以及当前任务 SQLite（130 tasks / 142 attempts / 51 runs，`integrity_check=ok`）。备份及清理
+清单在 **eva7028** 的 `/home/zjlab/astro-assets-spool-recovery/20261007/`，目录约 **209 MiB**；
+本机审计回执在 `/home/aaron/.local/share/astro-assets-deployments/dev/20261007-spool-audit/`。
+原任务、已安装索引、输入证据和科学文件均未删除。
+
+校验清单并原子退休后删除 **14,109 份**旧检查点，回收 **411,898,943,716 bytes**；
+保留最近两代和所有带 lease 的 jobs，共 **19 份 / 0.496 GiB**。backend 副本数已恢复原值 1。
+根盘从 428G 已用 / 39G 可用 / 92% 降至约 45G 已用 / 422G 可用 / 10%；kubelet 自动解除压力。
+
+本轮只读验证了远端 pointer 与对象 size/SHA metadata：publication-tasks generation 14652、
+native-units generation 3755。没有完成远端整份对象 SHA 重读（50 MB GET 超时）；
+`remote-status.json` 明确 `metadataVerified=true`、`fullBodyShaReverified=false`。
+安全清理依赖的是完整 SHA 校验的最新本地状态和 /home 备份，不能声称远端包含全部本地更新。
+
+防复发修复已在 Dev revision 354 生效：
+
+- scheduler 去重忽略纯 `lease_until` 变化，真实任务 phase/结果/历史变化仍生成完整快照。
+- 仅合并合法 `state-snapshot`，每 namespace 保留最新两代；先完整 SHA/size 校验替代快照，
+  保留 leased、conflict、uploaded 未确认记录及全部唯一文件依赖。损坏替代快照不能触发删除。
+- `ASSETS_UPLOAD_SPOOL_MAX_BYTES` 默认 **1073741824**（1 GiB），跨进程 flock 序列化入队与预算检查；
+  统计 jobs/quarantine/临时 job 实际字节，超预算拒绝新入队，不删除唯一文件。这是应用入队预算，
+  不是文件系统硬配额；lease/receipt/控制元数据仍需少量空间。
+- 快照入队失败清除临时 pending 源文件，并把最新未入队的本地 generation 标记 failed；
+  较旧 pending 不能遮住这个错误。本地业务状态仍保留，需处理失败后重试同步。
+
+28/28 针对性测试、`npm run build`、完整 `npm test`（448 项，446 通过、2 跳过）、Core wheel
+校验、Helm lint 与 `git diff --check` 已通过。修正了旧 SPHEREx fixture：保留其原始锁定的五探测器
+来源，同时检查新提议绑定依赖独立 D1 输入；没有改变已安装索引。
+续接时重新执行 `npm run build`、完整 `npm test`（448 项，446 通过、2 跳过）、Core wheel 校验
+和 Helm lint，全部通过。Registry 拉回镜像的 ID 与构建 ID 一致。该修复有 1 GiB 应用层 spool
+admission limit，不是 local-path 文件系统硬配额；入队失败会保留业务状态并将最新快照标为 failed。
+
+### 2026-10-07 Warehouse 历史执行记录清理（用户明确追加授权）
+
+用户要求清理 `atlas-warehouse` 历史任务。本轮先备份完整请求和工作负载元数据，压缩请求备份约
+**27,830,579 bytes**，再保存 48 个任务 Pod 的有限诊断日志。归档、UID 清单和执行回执位于本机
+`/home/aaron/.local/share/astro-assets-deployments/dev/20261007-spool-audit/`：
+`warehouse-requests-before.json.gz`、`warehouse-workloads-before.json`、`warehouse-cleanup-plan.json`、
+`warehouse-cleanup-receipt.json`、`warehouse-workloads-after.json`、`warehouse-terminal-pod-logs/`。
+这些材料不入 Git，也不进入浏览器初始响应。
+
+已清理：**62 个**超过 7 天且已结束的 MocDiscoveryRequest、**49 个**旧自测 ScanRequest、
+**1 个**旧自测 ScanBatchRequest，以及 **51 个**已结束 Job 和 **51 个**旧 Pod（48 个关联任务 Pod、
+2 个独立已完成检查/上传 Pod、1 个旧 MinIO Evicted Pod）。删除使用 UID precondition 并重查终态；
+没有删除运行中的扫描。旧 MOC controller 缺少终态防重建保护，仅删除 Job 会重新生成任务，因此
+归档后连同这些历史请求清理，不能仅用 Job TTL 代替。
+
+保留 **1,664 个**实际扫描 ScanRequest 与 **6 个**ScanBatchRequest，用于源身份和批次追溯；
+未清理 Elasticsearch 文档、MinIO 对象或 PVC 内容。09:35 验证 namespace **Job=0**，只剩
+Elasticsearch、Kafka、MinIO 三个 Pod，全部 Running / Ready；三个相应工作负载均 1/1。
+这是用户授权的运行记录维护，没有修改 Warehouse 代码、镜像、部署或资源 limits。
+
+### 历史集群故障快照（2026-10-07 约 06:50 CST，已由上文清理记录更新）
+
+**已确认的直接触发因素是 `eva7028` 的节点文件系统磁盘压力，不是集群控制面整体宕机。** Kubernetes
+仍报告该节点 `Ready=True`，但 `DiskPressure=True`（自 00:42 起），并带有
+`node.kubernetes.io/disk-pressure:NoSchedule` taint。kubelet 事件报告正在回收 ephemeral storage，且驱逐了该节点上的
+Pod。节点 stats/summary 当时报告容量约 527.3 GB、已用约 467.3 GB、可用约 33.1 GB；inode 使用约 401,488 / 32,768,000，
+不是 inode 耗尽。另一节点 `zjlab-ubuntu` 为 Ready 且没有 DiskPressure。
+
+此次读到至少 12 个位于 `eva7028` 的失败/驱逐 Pod，涉及 Assets、Workspace、Atlas operator/discovery、Warehouse MinIO、
+Prometheus、node exporter、kube-state-metrics、反向隧道和 NFS provisioner。部分旧 Pod 显示 `Evicted` 或
+`ContainerStatusUnknown`。控制器创建替代 Pod 后出现两种结果：
+
+- Assets site/backend 与 Prometheus server 有 `Pending` 替代 Pod；调度事件明确指出另一个节点不符合 Pod 的
+  node affinity/selector，而 `eva7028` 有未容忍的 disk-pressure taint。Assets 两个 Deployment 当前均无 Ready 副本，
+  Dev NodePort `10.15.51.75:32083` 不可用。
+- Workspace 主 Pod 已在 `zjlab-ubuntu` 运行但 readiness 失败，因为 Workspace Elasticsearch 不可用。其 Elasticsearch
+  容器状态为 `OOMKilled` / exit 137，内存 limit 1 GiB、JVM heap 512 MiB；本次快照约 75 次重启且仍在增长。
+  Atlas operator 容器也为 `OOMKilled` / exit 137，limit 1 GiB，本次快照约 70 次重启且仍在增长。两者的直接退出原因是
+  容器内存上限；两节点的 `MemoryPressure` 都是 False，因此不要将其描述成已证实的全节点内存耗尽。超限前的峰值及
+  应调整的资源值尚未确认。
+
+这不是全群服务中断：Argo CD、数据库、基础网络/存储，以及 Warehouse Elasticsearch、Kafka、MinIO 当前有 Ready 副本；
+已完成的 Warehouse Job 显示 `Completed` 是正常结果，不是故障。上述故障快照中没有清理节点文件、手动移除 taint、
+改 Helm 调度或重启 backend。用户将另行安排集群修复。
+
+**以下是清理前的历史诊断，不是当前状态。** 当时磁盘占用来源尚未查明：Kubernetes 只证明节点 filesystem 余量触发了压力和驱逐；没有 `eva7028` 的目录级占用
+证据。backend upload-spool 的约 13,259 个任务、372 GB payload 是既有待核查线索，尚未证明其实际落在触发压力的节点文件系统上，
+也不能据此删除任务或快照。此前 SSH 到 `eva7028` 因主机名无法解析而失败；本轮只有 Kubernetes 节点统计，没有主机目录检查。
+修复人员需在主机上核对 filesystem/mount 对应关系、`df -hT`/`df -i` 与分目录用量，至少检查
+k3s/containerd、kubelet、local-path/PVC 和日志路径；处置前先确认数据归属及任务状态。释放空间后应等 kubelet 报告
+`DiskPressure=False` 且 taint 自动消失，再检查受影响工作负载的调度、PVC 挂载、Pod readiness 和 Assets NodePort。
+Workspace Elasticsearch 与 Atlas operator 的 OOM 需要另外根据实际 RSS、启动日志及 limit 做诊断，不要只通过重启判断恢复。
 
 公开 release 未改变：`reviewed-mupsxe2v-c91be91f`，603 files，SHA-256
 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`；105 published MOCs，
 coverage catalog 132 layers。新 Pod 的 object-store release sync 恢复的也是这个相同 release。
 
-当前目录覆盖索引列出 **29 个 survey IDs**。Dev 活动 native group 仍是
-`04d99f2b2625a59d283db5fd7288f1d880fdd48a82778bfd1e68c977a972958c`，generation **11**，
-106 bindings、19 个 survey IDs、managed/verified=true。硬配额 `asa-resource` 已从 40 GiB 调至
-60 GiB；MinIO 桶用量约 42.96 GB，底层可用约 602 GB。原先 generation 3077 的 quota 错误后状态已恢复；
-最新只读确认的 native-units 状态镜像 generation 3755 于 2026-10-07 00:05 本地时间同步，激活前仍须确认最新
-`syncStatus=synced`。
+截至 2026-10-07 10:11 UTC，目录列出的 **29 个 survey IDs** 已进入 Dev 活动 native group
+`9b85d5cd59e506748a6e77d1486e8d1e392d616ecc030c7d98fb150f7f0ea54c`，generation **13**，
+128 bindings，managed/verified=true。活动 group digest
+`29356a9837365891a7f16771e9570149800e199cafec7244e4298bca9ad756e1`；242/242 checks 通过，
+审核明确接受 108 项 gaps。原归档 task `native-muxtcz30-f27a5bc2` attempt 1 完成
+**1385/1385** metadata/index dependencies 的远端校验；激活 task `native-muxxw3q4-46ab59f4`
+attempt 1 已完成 runtime 与 site HTTP 验证。最新 native-units 控制快照 **5472 / synced**。
+18:32 CST 的实时管理 API 复查确认活动索引仍为 generation 13，目录 **29/29 个 survey IDs**
+都有 binding，原生任务队列没有非终态任务。活动版与 generation 12 回滚版的引用感知容量盘点、
+历史 group 中未归档引用及备份端点资格见 [Dev 存储规划](docs/storage-plan-dev-20261007.md)。
 
-**当前候选**：group `90bb738d3354b0532e43a69c3062737b22e941c1045142920693441717fb6752`，
+### 旧 generation 12 group（现已被 generation 13 取代）
 build task `native-muwfqf67-c35ba738` 已完成；124 bindings、26 个 survey IDs、234/234 checks 通过。
 AllWISE 18,240 units、CFHTLS 171 fields、DECaPS 1,065,941 CCDs、ACT 6 maps、Pan-STARRS 9,000 skycells、
 IPHAS 169,380 indexed units（98,793 rows excluded）、Rubin First Look 2 images、ZTF DR7 162,333 identities
 均已核验。审核接受了报告列出的 **79 项 gaps**，包括 partial inventory、estimated geometry、文件可用性未核验、
 IPHAS final-QC 未对齐及历史 HST COSMOS unavailable binding；这不代表库存完整。
 
-归档 task `native-muwp2uoh-ce290269` 的管理 API 当前不可达，无法确认队列 phase。对象存储只读检查确认
-活动指针仍为 generation 11，候选 group 前缀下没有版本 manifest，因此 1,363 项依赖的归档未完成。最后一份已同步的
-native-units 快照 generation 3755（2026-10-07 00:05 本地时间）记录 `survey-units.sqlite` 的 778,436,690 / 778,436,690
-归档字节已上传，但完整远端校验仍 pending。**不要取消/重提任务、重复上传该 SQLite 或更改活动指针。**恢复 Dev backend 后
-先确认持久队列是否恢复原 task，续做远端 SHA 校验并归档剩余依赖；同时确认最新控制快照 `synced`。以活动 generation 11
-为 expectedActive 完成审核归档和激活，再验证 `/api/v1/status` 与真实反查。
-public bundle 应保持 `reviewed-mupsxe2v-c91be91f`、603 files、SHA-256
-`0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`、105 published MOCs。
+generation 11 到 generation 12 的前一轮流程已完成：归档 task `native-muwp2uoh-ce290269`
+attempt 4 完成 1,363/1,363 dependencies 的归档校验，group
+`90bb738d3354b0532e43a69c3062737b22e941c1045142920693441717fb6752` 曾作为 generation 12 活动版本。
+该版本已由上面的 generation 13 group 取代；早期 attempt 和 spool 状态记录仅作为历史排查材料。
 
-接下来尚有目录中的 3 个 survey IDs：`nvss`、`sumss`、`wenss`。SkyView capture2 的 18 个受管输入文件已暂存至
-evidence PVC：`/var/lib/assets-evidence/managed/native-units/inputs/20261006-radio-native-capture2/`；
-复制后的 SHA-256 与本地一致，共 3,567 张地图及逐图 header，不含科学像素。NVSS 2,326、SUMSS 748、WENSS 493；
-WENSS 有 107 个 header 频率与名义 325 MHz 冲突，原值保留。射电适配器的 14 项 Python 测试通过；完整 Node 测试
-441 项中 439 通过、2 跳过，Core wheel 校验、Helm lint 通过。已推镜像 `0.1.0-20261006-214520-native-radio`。
+SkyView radio capture2 的 18 个受管输入文件位于 evidence PVC
+`/var/lib/assets-evidence/managed/native-units/inputs/20261006-radio-native-capture2/`，共 3,567 张地图及逐图 header，
+没有科学像素。NVSS 2,326 张 I 图、SUMSS 748 张、WENSS 493 张已导入并进入 generation 13；WENSS 的 107 个
+header 频率与名义 325 MHz 冲突，原值保留并作为已接受 gap。射电适配器的 14 项 Python 测试通过；完整 Node 测试
+441 项中 439 通过、2 跳过，Core wheel 校验、Helm lint 通过。
 
-新增 SPHEREx D1 v20-241 header-only capture 位于
-`/home/aaron/.local/share/astro-assets-deployments/dev/20261007-spherex-d1-v241-capture1/`；manifest SHA-256
-`e8f7e3b8d1ec187751c5a1a605393a0bee0c9fb71ef79cee250e167b48a51eb1`，1 个完整 listing row、1 个 FITS 头证据
-（23,040 bytes），科学像素读取量为 0。官方 AWS object key 在 v20-240 不存在，在 v20-241 存在；IRSA 与 AWS
-整文件端点 HEAD 均曾返回 200，大小 71,634,240 bytes。capture 使用新的独立 source ID 保留处理版本；4 个文件已
-复制到 evidence PVC 路径 `/var/lib/assets-evidence/managed/native-units/inputs/20261007-spherex-d1-v241-capture1/`，
-逐文件 SHA-256 与本地 staging 一致，仍待管理 API 导入。
+SPHEREx D1 v20-241 header-only capture 原始 staging 位于
+`/home/aaron/.local/share/astro-assets-deployments/dev/20261007-spherex-d1-v241-capture1/`，manifest SHA-256
+`e8f7e3b8d1ec187751c5a1a605393a0bee0c9fb71ef79cee250e167b48a51eb1`。1 个 listing row 和 23,040-byte FITS 头已导入；
+4 个输入文件在 evidence PVC 路径 `/var/lib/assets-evidence/managed/native-units/inputs/20261007-spherex-d1-v241-capture1/`，
+逐文件 SHA 与本地 staging 一致。v20-241 D1 使用独立来源，原 v20-240 D2–D6 输入仍保留；没有读取科学像素。
 
-注意：backend upload-spool 当前约 13,259 个任务、372 GB payload，主机卷约 87% 使用、剩余约 63 GB；这些历史
-任务/快照不得直接删除。线上 scheduler 已有按 SHA 跳过未变化快照的逻辑；此积压包含历史失败与当前长任务状态快照。
-监控卷余量，不要在归档期间重启 backend。
+最新 storage 复测显示 `asa-resource` 共享桶为 **46,756,999,982 bytes / 43.55 GiB**、11,983 objects，
+60 GiB 配额余 **16.45 GiB**（72.6% 已用）；证据 PVC 为 **109,692,214,128 bytes / 102.16 GiB**。
+下一批可选来源归档前应先确定独立备份存储和引用感知留存 dry-run。详细迁移规划见
+[Dev 存储规划](docs/storage-plan-dev-20261007.md)。
+
+用户于 2026-10-07 确认本轮不需要回滚，并要求后续 Dev 每条逻辑内容版本线最多保留 **3 个已完成版本**，
+包括活动版本。候选构建或归档任务进行中时，其依赖仍需保留；共享对象只可在确认没有任何保留版本引用后清理。
+这是留存目标，实际清理前仍需完成引用感知 dry-run；本轮 API 检查没有删除历史对象，也没有改动公开 release、MOC 或 bundle。
 
 接续步骤：
 
-1. 先恢复 `eva7028` 所需磁盘余量并等待原生服务恢复；只读确认持久队列中的 `native-muwp2uoh-ce290269`，继续原归档，检查候选所有 dependencies 均有 objectKey、远端 SHA 完整，最新 native-units 控制状态 synced。
-2. expectedActive=当前 generation 11 激活上述 26-survey 候选；验证 generation 12、Dev 状态和真实区域反查，确认公开 release/MOC 未变。
-3. 完整测试通过后为当前工作树构建并推送新的 radio + SPHEREx immutable image tag，再保留现有 Helm 设置部署 Dev，完成 rollout 与 health/status smoke。
-4. 将已在 evidence PVC 的 SPHEREx D1 capture 和 radio capture2 分别经认证管理 API 导入；新候选保留旧 bindings，
-   加入 3 个 radio bindings，并让 SPHEREx 现有 detector bindings 同时读取 v20-240 D2–D6 与 v20-241 D1。
-   审核版本、处理范围、WENSS 频率冲突及 gaps，归档并激活到后续 generation，再核对实际反查。
-5. 更新交接文档记录 active group、29 survey IDs、bindings/counts、已接受 gaps 与存储状态。
+1. 在开始下一批可选巡天归档前，选择与 `10.15.49.212` 故障域独立的备份/对象存储，完成引用感知的 dry-run 清单，
+   按每条逻辑内容版本线最多保留 3 个已完成版本估算回收量并预留容量。dry-run 审核前不要删除远端历史对象或切换存储。
+2. 从 [2026-10-07 残余来源复查](docs/research/phase2-residual-native-surveys-followup-20261007.md)、
+   [残余巡天调查](docs/research/phase2-residual-native-surveys-20261006.md) 和
+   [剩余候选审计](docs/research/phase2-remaining-native-unit-candidates-20261006.md) 接续。存储目标与留存决策完成后，
+   可评估导入 IPHAS 固定提交中的 QC 元数据；保留重复 field 关联并维持 `inventoryComplete=false`。
+   ZTF 不要把当前 IRSA 内容冒充冻结 DR7；逐项记录真实范围、精度与 gaps。
+3. 后续仅更新 Assets Dev，不修改 72602、Workspace、公开 MOC/public bundle，也不下载科学影像。
 
 原生分块、输入和反查必须遵守 [coverage workflow](docs/coverage-workflow.md) 与
 [native unit management](docs/native-unit-management.md)；不要把 `verified` 描述成巡天库存完整。
@@ -85,19 +191,28 @@ MVP 让用户在普通模式查看 HEALPix cell 覆盖的 DR/模态，在重合�
 
 | 服务 | Helm revision | 镜像 tag | 状态及入口 |
 | --- | --- | --- | --- |
-| Assets Dev | 353 | 0.1.0-20261006-163033 | 当前 site/backend 不可用；NodePort http://10.15.51.75:32083/atlas/ |
+| Assets Dev | 356 | 0.1.0-20261007-202614-casdc-status | site/backend 均 1/1 Ready；NodePort http://10.15.51.75:32083/atlas/ |
 | Assets 72602 | 7 | 0.1.0-20261003-153818-hst-supplement | 未在本轮更新；https://astro.assets.72602.space/atlas/ |
 | Workspace | 67 | 0.10.38-dev-20261003-0206-native-selection | 未在本轮更新；http://astro.workspace.dev.72602.space:32080/ |
 
 - Assets Dev release/namespace：`astro-survey-atlas-assets`；API 与 health 在 host 根路径。
-- 截至 2026-10-06 最后一次健康检查，`/healthz`、`/api/v1/status`、`/api/v1/coverage/catalog` 均 HTTP 200；
-  catalog 有 132 layers、survey catalog 有 29 IDs。对象存储只读检查确认当前 native generation 11，
-  public pointer 仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256
-  `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`。控制快照最近已知 synced 为 generation 3755；
-  当前同步状态需等 backend 恢复后确认。
-- `npm run build` 在 2026-10-07 通过。最近完整 `npm test` 为 441 项（439 通过、2 跳过），
-  radio/IPHAS/Rubin metadata tests、Core wheel 校验及 Helm lint 均在先前代码状态通过；本轮 SPHEREx D1 改动后未运行测试。
-  backend readiness 是 HTTP，liveness 是 TCP；当前工作树没有部署到 Dev。
+- 2026-10-07 revision 356 下，`/healthz` 与 `/api/v1/status` 均 HTTP 200；catalog 有 132 layers、
+  survey catalog 有 29 IDs。当前 native generation 13，active group 与顶部记录一致；public pointer
+  仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256
+  `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，105 published MOCs。
+- 本轮确认 CASDC index 与 `/Gaia/`、`/GALEX/`、`/Euclid-Q1/` 目录索引均 HTTP 200。线上 Gaia
+  reverse-lookup 返回 `https://casdc.china-vo.org/mirror/Gaia/`、`status=verified`；根 index 仍是
+  `entrypoint-only`。状态由 `server/survey-access.ts` 中的人工检查快照生成，不是页面实时探测；
+  目录索引可达不代表单个科学文件已核验。
+- 本轮只读 smoke 中，`/healthz`、`/api/v1/status`、`/api/v1/coverage/catalog`、
+  `/api/v1/resource-packages/catalog.json` 与 `/api/v1/releases` 均 HTTP 200；HEALPix 和 reverse-lookup
+  服务 available，Warehouse evidence configured。Coverage catalog 有 132 层，其中 111 层支持多个 order。
+  DESI 资源包 v3.5.0 下载 HTTP 200，1,805,131 bytes 的 SHA 与响应头一致；`healpix/order4.json` 和
+  `order8.json` 分别含 1,385 与 271,022 个巡天并集 cell，文件内另有逐 layer `cells[]`。SPHEREx v3.1.0
+  的 O8 并集为空且 7 层均因原生最高阶不足而省略；包固定生成 O4/O8 文件，不保证每个 order 非空。
+- `npm run build`、完整 `npm test`（448 项，446 通过、2 跳过）、Core wheel 校验及 Helm lint
+  在 2026-10-07 当前代码通过。revision 356 的镜像 push 与 Helm rollout 成功，site/backend 均 1/1 Ready；
+  backend readiness 是 HTTP，liveness 是 TCP；防积压修复已部署到 Dev。
 - Dev-only Phase 2 不发布 MOC、不改变 public bundle、不更新 72602 或 Workspace。
 - Earlier overlap acceptance: Euclid + DESI O4 C01–C06 显示实际相交模态、空间分块单行计数、
   覆盖计算默认折叠；1440/1024/390px 无横向溢出，browser page errors=0。Dev O4 C01 `[190]`

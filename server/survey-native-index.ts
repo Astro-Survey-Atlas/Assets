@@ -247,6 +247,14 @@ export function surveyNativeBinding(layer: Pick<NativeBinding, "layerId" | "surv
   return undefined;
 }
 
+export function nativeBindingIndexRoute(binding: Pick<NativeBinding, "layerId" | "surveyId" | "releaseId" | "product">): "survey" | "source-unit" | "unsupported" {
+  const mapped = surveyNativeBinding(binding);
+  if (!mapped?.sourceIds.length) return "unsupported";
+  if (mapped.sourceIds.every(sourceId => sourceId.startsWith("legacy-"))) return "source-unit";
+  if (mapped.sourceIds.every(sourceId => !sourceId.startsWith("legacy-"))) return "survey";
+  return "unsupported";
+}
+
 interface PanstarrsListingRow { projectionId: number; subcell: number; ra: number; dec: number; band: string; type: string; fileName: string; shortName: string; badFlag: number }
 
 export function parsePanstarrsListing(body: string, expectedSkycell: string): PanstarrsListingRow[] {

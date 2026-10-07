@@ -52,7 +52,8 @@ import { importMastHstObservation } from "./mast-hst-import.js";
 import { normalizedHstLookupCells } from "./hst-image-lookup.js";
 import { HstObservationIndex } from "./hst-observation-index.js";
 import { archiveNativeUnits } from "./archive-native-units.js";
-import { SurveyNativeIndex, surveyNativeBinding } from "./survey-native-index.js";
+import { SurveyNativeIndex, nativeBindingIndexRoute, surveyNativeBinding } from "./survey-native-index.js";
+import { verifyNativeRuntimeBindings } from "./native-runtime-verification.js";
 import { alternativesForAccessUri, mergeSourceAccessUris, mergeSourceMetadata, withSurveyProviderStatuses } from "./survey-access.js";
 import { scannedFileConnectors, withWarehouseConnectorEvidence, type WarehouseConnectorContext } from "./warehouse-source-evidence.js";
 import { parseEroTargetSnapshot, type EroTargetIndex } from "./ero-target-index.js";
@@ -1185,20 +1186,17 @@ function nativeReadOptions(group: NativeGroup | null = nativeUnits?.active ?? nu
 
 async function verifyNativeRuntime(group: NativeGroup): Promise<void> {
   const store = await SourceUnitStore.load(productCatalogRoot, sourceUnitEvidenceRoot, nativeReadOptions(group));
-  store.close();
-  if (group.hst) {
-    const index = await HstObservationIndex.open(group.hst.root ? nativeEvidencePath(sourceUnitEvidenceRoot, group.hst.root) : sourceUnitEvidenceRoot, group.hst.sourceSha256);
-    index.close();
-  }
-  if (group.survey) {
-    const index = SurveyNativeIndex.open(nativeEvidencePath(sourceUnitEvidenceRoot, group.survey.file.ref), group.survey.buildKey);
-    try {
-      for (const binding of group.bindings.filter(binding => surveyNativeBinding(binding))) {
-        const cells = index.sampleCells(binding);
-        if (!cells.length || !index.lookup(binding, 4, cells.slice(0, 1), 1).units.length) throw new Error(`Native runtime cannot query ${binding.layerId}`);
-      }
-    } finally { index.close(); }
-  }
+  try {
+    if (group.hst) {
+      const index = await HstObservationIndex.open(group.hst.root ? nativeEvidencePath(sourceUnitEvidenceRoot, group.hst.root) : sourceUnitEvidenceRoot, group.hst.sourceSha256);
+      index.close();
+    }
+    if (group.survey) {
+      const index = SurveyNativeIndex.open(nativeEvidencePath(sourceUnitEvidenceRoot, group.survey.file.ref), group.survey.buildKey);
+      try { verifyNativeRuntimeBindings(group.bindings, store, index); }
+      finally { index.close(); }
+    }
+  } finally { store.close(); }
 }
 
 async function verifyNativeSite(group: NativeGroup): Promise<void> {
@@ -1308,8 +1306,8 @@ function sourceUnitCoverageReady(): Promise<void> {
         const enabled = (!nativeUnits?.active || Boolean(binding)) && !unavailableBinding;
         const available = enabled && (layer.surveyId === "hst" ? Boolean(hst)
           : layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" ? Boolean(ero)
-          : surveyNativeBinding(layer) ? Boolean(binding && survey?.hasBinding(binding)) : Boolean(await store.match(layer.layerId, 4, [], 1, layer)));
-        const surveyScope = binding && surveyNativeBinding(binding) ? survey?.summaries.find(source => binding.sourceIds.includes(source.sourceId))?.scope : undefined;
+          : nativeBindingIndexRoute(binding ?? layer) === "survey" ? Boolean(binding && survey?.hasBinding(binding)) : Boolean(await store.match(layer.layerId, 4, [], 1, layer)));
+        const surveyScope = binding && nativeBindingIndexRoute(binding) === "survey" ? survey?.summaries.find(source => binding.sourceIds.includes(source.sourceId))?.scope : undefined;
         const sourceUnitIndex: NonNullable<CoverageCellLayer["sourceUnitIndex"]> = available
           ? { ...layer.sourceUnitIndex, status: "estimated", unitKind: binding?.unitKind ?? (layer.surveyId === "hst" ? "observation" : layer.surveyId === "euclid" && layer.releaseId === "euclid-ero" ? "target" : layer.sourceUnitIndex?.unitKind), indexUrl: "/api/v1/coverage/reverse-lookup", notes: surveyScope ?? layer.sourceUnitIndex?.notes ?? "The installed local native-unit mapping is available; candidate precision and inventory scope apply." }
           : { ...layer.sourceUnitIndex, status: "entrypoint-only", notes: unavailableBinding ? "This published source identity has no matching observation in the active locked metadata snapshot; its coverage and official entrypoint remain visible." : enabled ? "The local native-unit mapping is unavailable for this product; coverage and official source identities remain visible." : "This product is absent from the active reviewed native-index binding set." };
@@ -3714,13 +3712,13 @@ function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LI
 
 async function publicSpatialUnits(layerIds: readonly string[], order: number, cells: readonly number[], limit: number, batch?: (layerId: string, units: DownloadPlanSpatialUnit[]) => void) {
   const layers = layerIds.flatMap((id) => { const layer = publicCoverageCatalog().records.get(id); return layer ? [layer] : []; });
-  const archiveCandidates = layers.filter((layer) => layer.surveyId === "hst" || (layer.surveyId === "euclid" && layer.releaseId === "euclid-ero") || surveyNativeBinding(layer));
+  const archiveCandidates = layers.filter((layer) => layer.surveyId === "hst" || (layer.surveyId === "euclid" && layer.releaseId === "euclid-ero") || nativeBindingIndexRoute(layer) === "survey");
   const archiveLayers = archiveCandidates.filter(layer => nativeBindingEnabled(layer.layerId));
   const disabled = archiveCandidates.filter(layer => !nativeBindingEnabled(layer.layerId));
   const [hstIndex, eroIndex, surveyIndex] = await Promise.all([
     archiveLayers.some(layer => layer.surveyId === "hst") ? hstObservationIndex() : undefined,
     archiveLayers.some(layer => layer.surveyId === "euclid") ? eroTargetIndex() : undefined,
-    archiveLayers.some(layer => surveyNativeBinding(layer)) ? surveyNativeIndex() : undefined,
+    archiveLayers.some(layer => nativeBindingIndexRoute(layer) === "survey") ? surveyNativeIndex() : undefined,
   ]);
   const [local, archive] = await Promise.all([
     localSpatialUnits(layers.filter((layer) => !archiveCandidates.includes(layer)).map((layer) => layer.layerId), order, cells, limit, batch),

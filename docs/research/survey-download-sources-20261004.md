@@ -23,7 +23,7 @@ institution's country is not evidence for the exact serving node.
 | GALEX GR6/GR7 | The CAOM row's reported `dataURL` is retained as the file identity. For the checked AIS sample, changing the reported `http` scheme to `https` returned HTTP 200. | MAST Products API query is stored separately as a metadata entrypoint. | Never construct a filename from the observation ID or band. Only source-reported file-shaped paths are exposed. |
 | JWST public calibrated images | A source-reported `mast:JWST/product/...` URI is converted through MAST's public `/api/v0.1/Download/file?uri=...` endpoint. The captured Carina MIRI sample returned HTTP 200 to `HEAD`. | The corresponding MAST Products API query remains a separate entrypoint. | Only archive-reported product identities are converted; planned/test observations and unrelated instruments/targets remain excluded. |
 | HST public images | The locked observation snapshot currently supplies a MAST Products API query, not a file roster. | MAST remains an `entrypoint-only` source. | No product filename or direct file URL is guessed from an observation ID. |
-| CASDC mirror | `https://casdc.china-vo.org/mirror/` currently returns HTTP 200. | The index names Gaia, GALEX and Euclid-Q1; their recorded target directories currently return HTTP 404. These are retained with country `CN` and status `unavailable`, ready to be rechecked after recovery. | A listed institution/repository is not presented as a usable file link while its target path returns 404. The download node location is unknown. |
+| CASDC mirror | On 2026-10-07, the index and canonical directory URLs for Gaia, GALEX and Euclid-Q1 returned HTTP 200 and exposed directory listings (`/Gaia/`, `/GALEX/`, `/Euclid-Q1/`). Gaia DR3, GALEX GR6 and Euclid-Q1 subdirectory listings were also reachable. | The provider directory is now marked `verified`; the survey index remains an `entrypoint-only` record. | Directory reachability does not verify individual file URLs or scientific bytes. The download node location is unknown. |
 
 ### Runtime link behavior
 
@@ -33,6 +33,13 @@ site shows the provider flag and a status badge for a verified file/directory,
 source-listed URL, rule-derived URL, metadata entrypoint or unavailable mirror.
 It does not fetch or proxy the science file. Users choose an available source
 and download under that archive's access policy.
+
+Provider status is a manually checked snapshot, not a live probe when the page
+loads. Update `server/survey-access.ts` with the exact canonical URL, HTTP status
+and check time after verifying the target page. `verified` for a directory means
+the directory returned HTTP 200 and exposed a listing; it does not verify each
+listed file or its scientific bytes. Deploy the backend for this snapshot to
+appear in overlap and reverse-lookup responses.
 
 Provider flags use the user-selected public Icons8 CDN images, including
 `https://img.icons8.com/color/48/usa-circular.png`, rather than platform-dependent

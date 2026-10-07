@@ -4,7 +4,7 @@ import type { DownloadPlanSpatialUnit } from "./evidence-store.js";
 import { cellsForStcs } from "./hst-image-lookup.js";
 import type { HstObservationIndex } from "./hst-observation-index.js";
 import { ERO_METADATA_URL, eroFramesForProduct, type EroTargetIndex } from "./ero-target-index.js";
-import { surveyNativeBinding, type SurveyNativeIndex } from "./survey-native-index.js";
+import { nativeBindingIndexRoute, type SurveyNativeIndex } from "./survey-native-index.js";
 import type { NativeBinding } from "./native-unit-model.js";
 import { metadataEntrypoint, verifiedDirectoryAlternative } from "./survey-access.js";
 
@@ -35,7 +35,7 @@ export async function archiveNativeUnits(layers: readonly CoverageCellLayer[], o
   let truncated = false;
   const hst = layers.filter((layer) => layer.surveyId === "hst");
   const ero = layers.filter((layer) => layer.surveyId === "euclid" && layer.releaseId === "euclid-ero");
-  for (const layer of layers.filter(layer => surveyNativeBinding(layer))) {
+  for (const layer of layers.filter(layer => nativeBindingIndexRoute(layer) === "survey")) {
     try {
       const binding = options.bindings?.find(binding => binding.layerId === layer.layerId);
       if (!binding || !options.surveyIndex) throw new Error("The reviewed local survey-native index or product binding is unavailable");

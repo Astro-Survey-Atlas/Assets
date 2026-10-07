@@ -9,7 +9,7 @@ const CHECKED = {
   mastHead: "2026-10-04T03:41:42Z",
   galexHead: "2026-10-04T03:41:41Z",
   sdssHead: "2026-10-04T03:38:52Z",
-  casdc: "2026-10-04T03:41:41Z",
+  casdc: "2026-10-07T12:22:24Z",
   skymapperCutout: "2026-10-04T16:58:37Z",
   twomassAtlasHead: "2026-10-05",
 } as const;
@@ -179,9 +179,9 @@ export function casdcProviderStatuses(surveyId: string, releaseId: string): Sour
   const common = { provider: "CASDC mirror catalog · NAOC/CASDC", providerCountryCode: "CN", providerLocation: "National Astronomical Observatories of China / CASDC", servingRegion: "Download node location unknown" };
   return [
     alternative(root, { ...common, accessType: "entrypoint", relationship: "regional-repository", status: "entrypoint-only", checkedAt: CHECKED.casdc, httpStatus: 200,
-      note: "The mirror index is reachable and lists this survey. The linked survey directory currently returns HTTP 404." }),
-    alternative(new URL(dataset, root).toString(), { ...common, accessType: "directory", relationship: "regional-repository", status: "unavailable", checkedAt: CHECKED.casdc, httpStatus: 404,
-      note: "Registered from the CASDC mirror index; this target currently returns HTTP 404. The repository entry remains recorded for a future recovery." }),
+      note: "The mirror index is reachable and lists this survey; the target directory is checked separately below." }),
+    alternative(new URL(`${dataset}/`, root).toString(), { ...common, accessType: "directory", relationship: "regional-repository", status: "verified", checkedAt: CHECKED.casdc, httpStatus: 200,
+      note: "The target directory returned HTTP 200 and exposed a directory listing. Individual file URLs and scientific bytes were not checked." }),
   ];
 }
 

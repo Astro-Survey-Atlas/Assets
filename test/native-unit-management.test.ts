@@ -11,6 +11,8 @@ import { buildNativeDelta } from "../server/native-unit-delta.js";
 import { NativeUnitController } from "../server/native-unit-controller.js";
 import { PublicationTaskStore } from "../server/publication-task-store.js";
 import { FilesystemArtifactStore } from "../server/artifact-store.js";
+import { verifyNativeRuntimeBindings } from "../server/native-runtime-verification.js";
+import { nativeBindingIndexRoute } from "../server/survey-native-index.js";
 import { bindingRevision, nativeDigest, nativeGroupId, groupReviewDigest, type NativeBinding, type NativeGroup, type NativeSource, type NativeWorkerRequest, type NativeSnapshot } from "../server/native-unit-model.js";
 
 const patchText = (tract: number) => [
@@ -53,7 +55,11 @@ test("DECaLS DR5 can query an older index through its Legacy mixed-program coadd
       unit: { unitId: "1498p020", unitKind: "brick", raDeg: 0, decDeg: 0, radiusDeg: 10, downloadUrl: "https://portal.nersc.gov/", geometryPrecision: "estimated", sourceSnapshotSha256: "b".repeat(64) },
       membershipPayload: { regions: [{ id: "all", availableBands: ["g", "r", "z"] }] },
     }],
-  }], []);
+  }], [{
+    layerId: legacyAlias!, surveyId: "legacy-surveys", releaseId: "legacy-dr5", product: "Coadded imaging", modality: "imaging",
+    unitKind: "brick", sourceSnapshotSha256: "b".repeat(64), sourceUrls: ["https://portal.nersc.gov/"], accessUrl: "https://portal.nersc.gov/",
+    notes: "Official Legacy DR5 coadd roster.", cells: new Map([[cell, []]]),
+  }]);
   assert.equal([...diskIndex.units(legacyAlias!, [cell])].length, 1);
   diskIndex.close();
 
@@ -68,6 +74,17 @@ test("DECaLS DR5 can query an older index through its Legacy mixed-program coadd
       "legacysurvey-1498p020-image-r.fits.fz",
       "legacysurvey-1498p020-image-z.fits.fz",
     ]);
+    const binding: NativeBinding = { productId: "decals-dr5", layerId: "decals-dr5-color-footprint", ...identity, modality: "imaging", unitKind: "brick",
+      sourceIds: ["legacy-dr5-bricks", "legacy-brick-geometry"], revision: "", visibility: "published", selector: { bands: ["G", "R", "Z"] } };
+    assert.equal(nativeBindingIndexRoute(binding), "source-unit");
+    let surveyIndexQueries = 0;
+    const surveyIndex = {
+      hasBinding: () => false,
+      sampleCells: () => { surveyIndexQueries++; throw new Error("Product has no locked survey-native source"); },
+      lookup: () => { throw new Error("Survey index must not query Legacy-backed bindings"); },
+    } as unknown as import("../server/survey-native-index.js").SurveyNativeIndex;
+    verifyNativeRuntimeBindings([binding], store, surveyIndex);
+    assert.equal(surveyIndexQueries, 0);
   } finally { store.close(); }
 });
 

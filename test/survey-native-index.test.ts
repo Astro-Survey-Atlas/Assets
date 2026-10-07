@@ -1239,13 +1239,22 @@ test("SPHEREx QR2 binds one header-derived detector observation without claiming
   assert.throws(() => nativeMetadataUrl("https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/qr2/level2/", src.adapter), /AWS metadata listing/);
 });
 
-test("regional source status remains explicit when a public mirror is currently unavailable", () => {
-  const providers = casdcProviderStatuses("gaia", "gaia-dr3");
-  assert.deepEqual(providers.map(item => [item.providerCountryCode, item.accessType, item.status, item.httpStatus]), [
-    ["CN", "entrypoint", "entrypoint-only", 200],
-    ["CN", "directory", "unavailable", 404],
-  ]);
-  assert.equal(providers[1]!.uri, "https://casdc.china-vo.org/mirror/Gaia");
+test("CASDC provider status records reachable survey directories with canonical URLs", () => {
+  const cases = [
+    ["gaia", "gaia-dr3", "Gaia"],
+    ["galex", "galex-gr6-gr7", "GALEX"],
+    ["euclid", "euclid-q1", "Euclid-Q1"],
+  ] as const;
+  for (const [surveyId, releaseId, directory] of cases) {
+    const providers = casdcProviderStatuses(surveyId, releaseId);
+    assert.deepEqual(providers.map(item => [item.providerCountryCode, item.accessType, item.status, item.httpStatus]), [
+      ["CN", "entrypoint", "entrypoint-only", 200],
+      ["CN", "directory", "verified", 200],
+    ]);
+    assert.equal(providers[1]!.uri, `https://casdc.china-vo.org/mirror/${directory}/`);
+    assert.match(providers[1]!.note ?? "", /directory listing/i);
+    assert.match(providers[1]!.note ?? "", /individual file URLs and scientific bytes were not checked/i);
+  }
 });
 
 test("DECaLS DR5 binds to the locked DR5 brick sources with a mixed-program scope", () => {
