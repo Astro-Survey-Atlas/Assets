@@ -4,6 +4,23 @@ Snapshot date: 2026-10-07, after native generation 13 activation. This plan
 covers Dev only. It does not change storage, delete objects, or move data.
 Assets stores metadata and indexes, not survey science images or spectra.
 
+## Pending Status, 2026-10-08
+
+The storage work remains pending and is recorded in the current
+[handoff checklist](../HANDOFF.md). The figures below are the 2026-10-07
+measurements, not a new capacity audit. The three-completed-version target
+includes the active version; candidate and in-flight task dependencies remain
+protected, and shared objects remain while any retained version references them.
+
+Before the next optional survey archive, complete the full reference-aware dry
+run, select and qualify independent backup storage, and implement the retention
+workflow. Independent copying, checksum verification, restore rehearsal and
+cutover are still pending. Capacity alerts and provider-enforced filesystem
+quotas are also pending; the proposed thresholds below have not been deployed.
+The existing pair-of-generations inventory is only a partial dependency audit.
+No historical versions were pruned and no storage endpoint was switched by this
+documentation update.
+
 ## Current Footprint
 
 Measurements use `du -sb` inside the Assets pods, a read-only `ListObjectsV2`
@@ -100,8 +117,9 @@ those two local-only files (up to their 6,988,058,090 raw bytes before
 compression), before adding control snapshots, public release state or a new
 candidate. No files were copied, removed or rewritten during this dry run.
 
-The spool compaction fix is deployed at Helm revision 354; Dev is currently at
-revision 355. It reduced the local spool from 37,180,447,529 bytes to about
+The spool compaction fix was deployed at Helm revision 354; as of 2026-10-08,
+Assets Dev is at revision 358 and retains that fix. It reduced the local spool
+from 37,180,447,529 bytes to about
 0.57 GiB while preserving leased and unique jobs. The current spool is
 140,780,790 bytes. The 1 GiB admission limit is an application guard, not a filesystem
 quota. If admission reaches that limit, new state checkpoints fail closed while

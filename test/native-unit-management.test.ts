@@ -189,6 +189,38 @@ test("build completion persists a verification report when the candidate group a
   assert.equal(persisted.review, undefined);
 });
 
+test("identical native candidates show the active generation and cannot be reviewed again", async t => {
+  const f = await fixture(t);
+  const contentRoot = path.join(f.root, "comparison-content");
+  await mkdir(path.join(contentRoot, "native-units"), { recursive: true });
+  const candidate = { ...structuredClone(f.group), id: "identical-candidate" };
+  await writeFile(path.join(contentRoot, "native-units/state.json"), JSON.stringify({
+    schemaVersion: 1,
+    sources: f.sources,
+    snapshots: Object.values(f.snapshots),
+    groups: [f.group, candidate],
+    active: f.group.id,
+    generation: 13,
+    history: [],
+    tasks: {},
+  }));
+  const controller = new NativeUnitController({ contentRoot, catalogRoot: f.root, evidenceRoot: f.evidenceRoot,
+    store: new FilesystemArtifactStore(path.join(f.root, "comparison-store")), bindings: async () => f.group.bindings,
+    changed: async () => {}, verifyRuntime: async () => {} });
+  await controller.initialize();
+
+  const view = controller.view() as {
+    groups: Array<{
+      id: string;
+      comparison: { baseline: { groupId: string; generation: number } | null; hasChanges: boolean | null };
+    }>;
+  };
+  const displayed = view.groups.find(group => group.id === candidate.id)!;
+  assert.deepEqual(displayed.comparison.baseline, { groupId: f.group.id, generation: 13 });
+  assert.equal(displayed.comparison.hasChanges, false);
+  await assert.rejects(controller.review(candidate.id, { digest: groupReviewDigest(candidate), acceptedGaps: candidate.report.gaps }, "fixture"), /no content changes/);
+});
+
 test("survey-native bindings skip legacy memberships and require their survey-native index", async t => {
   const f = await fixture(t);
   const bindings: NativeBinding[] = [

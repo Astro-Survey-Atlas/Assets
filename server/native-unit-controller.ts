@@ -6,6 +6,7 @@ import { AdminHttpError } from "./admin-error.js";
 import type { PublicationTask, PublicationTaskStore } from "./publication-task-store.js";
 import type { StateSnapshotSink } from "./state-snapshot.js";
 import { nativeSourceRecipes } from "./native-unit-sources.js";
+import { compareNativeGroups } from "./native-unit-comparison.js";
 import { nativeFile, restoreNativeFile } from "./native-unit-archive.js";
 import { assertNativeSurvey, bindingRevision, groupReviewDigest, nativeDigest, nativeEvidencePath, nativeGroupId, nativeMetadataUrl, nativeNow, type NativeBinding, type NativeFile, type NativeGroup, type NativeOperation, type NativeSnapshot, type NativeSource, type NativeState, type NativeTaskDocument, type NativeTaskKind, type NativeWorkerRequest, type NativeWorkerResult } from "./native-unit-model.js";
 
@@ -70,14 +71,32 @@ export class NativeUnitController {
     }).reverse();
   }
   view(): unknown {
-    return { schemaVersion: 1, active: this.#state.active, generation: this.generation, baseline: this.active ? "managed" : "imported-overview", sources: this.#state.sources.map(source => {
-      const snapshots = this.#state.snapshots.filter(snapshot => snapshot.sourceId === source.id);
-      return { ...source, files: source.files.map(({ ref: _ref, ...file }) => file), snapshots: snapshots.map(snapshot => ({ id: snapshot.id, sourceRevision: snapshot.sourceRevision, capturedAt: snapshot.capturedAt, rowCount: snapshot.rowCount, fileCount: snapshot.files.length, sizeBytes: snapshot.files.reduce((sum, file) => sum + file.sizeBytes, 0), active: this.active?.snapshots[source.id]?.id === snapshot.id })) };
-    }), groups: this.#state.groups.map(group => ({ id: group.id, createdAt: group.createdAt, origin: group.origin, active: group.id === this.#state.active, inputCount: Object.keys(group.snapshots).length, productCount: group.bindings.length, bindings: group.bindings, sizeBytes: (group.generic?.file.sizeBytes ?? 0) + (group.hst?.file.sizeBytes ?? 0) + (group.survey?.file.sizeBytes ?? 0), archived: this.#files(group).every(file => Boolean(file.objectKey)), report: { ...group.report, samples: undefined }, review: group.review, digest: groupReviewDigest(group) })), tasks: this.taskDocuments(), history: this.#state.history.slice(-128).reverse() };
+    return {
+      schemaVersion: 1,
+      active: this.#state.active,
+      generation: this.generation,
+      baseline: this.active ? "managed" : "imported-overview",
+      sources: this.#state.sources.map(source => {
+        const snapshots = this.#state.snapshots.filter(snapshot => snapshot.sourceId === source.id);
+        return { ...source, files: source.files.map(({ ref: _ref, ...file }) => file), snapshots: snapshots.map(snapshot => ({ id: snapshot.id, sourceRevision: snapshot.sourceRevision, capturedAt: snapshot.capturedAt, rowCount: snapshot.rowCount, fileCount: snapshot.files.length, sizeBytes: snapshot.files.reduce((sum, file) => sum + file.sizeBytes, 0), active: this.active?.snapshots[source.id]?.id === snapshot.id })) };
+      }),
+      groups: this.#state.groups.map(group => {
+        const comparison = compareNativeGroups(this.active, group, this.generation);
+        return {
+          id: group.id, createdAt: group.createdAt, origin: group.origin, active: group.id === this.#state.active,
+          inputCount: Object.keys(group.snapshots).length, productCount: group.bindings.length, bindings: group.bindings,
+          sizeBytes: (group.generic?.file.sizeBytes ?? 0) + (group.hst?.file.sizeBytes ?? 0) + (group.survey?.file.sizeBytes ?? 0),
+          archived: this.#files(group).every(file => Boolean(file.objectKey)),
+          report: { ...group.report, samples: undefined }, review: group.review, digest: groupReviewDigest(group),
+          comparison: { baseline: comparison.baseline, hasChanges: comparison.hasChanges, summary: comparison.summary },
+        };
+      }),
+      tasks: this.taskDocuments(), history: this.#state.history.slice(-128).reverse(),
+    };
   }
   detail(id: string): unknown {
     const group = this.#group(id);
-    return { id: group.id, digest: groupReviewDigest(group), bindings: group.bindings, report: group.report, review: group.review, generic: group.generic, hst: group.hst, survey: group.survey, inputs: Object.values(group.snapshots).map(snapshot => ({ id: snapshot.id, sourceId: snapshot.sourceId, sourceRevision: snapshot.sourceRevision, scope: snapshot.scope, sourceUrl: snapshot.sourceUrl, capturedAt: snapshot.capturedAt, rowCount: snapshot.rowCount, files: snapshot.files })) };
+    return { id: group.id, digest: groupReviewDigest(group), bindings: group.bindings, report: group.report, review: group.review, generic: group.generic, hst: group.hst, survey: group.survey, comparison: compareNativeGroups(this.active, group, this.generation), inputs: Object.values(group.snapshots).map(snapshot => ({ id: snapshot.id, sourceId: snapshot.sourceId, sourceRevision: snapshot.sourceRevision, scope: snapshot.scope, sourceUrl: snapshot.sourceUrl, capturedAt: snapshot.capturedAt, rowCount: snapshot.rowCount, files: snapshot.files })) };
   }
   async availableBindings(): Promise<NativeBinding[]> { return this.#options.bindings(); }
   async updateSource(id: string, body: Record<string, unknown>, actor: string): Promise<NativeSource> {
@@ -145,6 +164,7 @@ export class NativeUnitController {
     return this.#serialized(async () => {
       const group = this.#group(id); const digest = groupReviewDigest(group);
       if (body.digest !== digest) throw new AdminHttpError(409, "Index verification or product bindings changed");
+      if (group.id !== this.#state.active && compareNativeGroups(this.active, group, this.generation).hasChanges === false) throw new AdminHttpError(409, "Candidate has no content changes from the active index");
       if (!group.report.checks.length || group.report.checks.some(check => !check.passed)) throw new AdminHttpError(422, "Index has not passed verification");
       if (!Array.isArray(body.acceptedGaps) || group.report.gaps.some(gap => !(body.acceptedGaps as unknown[]).includes(gap)) || body.acceptedGaps.some(gap => !group.report.gaps.includes(String(gap)))) throw new AdminHttpError(422, "Explicitly accept every reported gap");
       group.review = { at: nativeNow(), actor, digest, acceptedGaps: body.acceptedGaps as string[] };

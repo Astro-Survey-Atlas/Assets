@@ -79,6 +79,10 @@ interface MocBuildProgress { phase: string; step: number; totalSteps: number; pe
 interface MocBuildRequest { schemaVersion: 1; kind: "MocBuildRequest"; name: string; discoveryRequestName: string; provider: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; productId?: string; workKey?: string; workTitle?: string; createdAt: string; updatedAt: string; phase: string; progress: MocBuildProgress; source: { url: string; snapshotSha256?: string; sizeBytes?: number; evidenceRef?: string }; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number; moc?: { ref: string; sha256: string; sizeBytes?: number }; query?: { ref: string; sha256?: string; order: number }; preview?: { ref: string; sha256?: string; order: number }; statistics?: { ref: string; sha256?: string; sizeBytes?: number }; manifest?: { ref: string; sha256?: string; sizeBytes?: number } }; error?: { reason: string; message: string }; duplicateOf?: string; publishedAt?: string; publicationId?: string; lifecycle?: ProductLifecycle }
 interface MocRegistrationDefaults { releaseId: string; releaseLabel: string; releaseKind: string; productName: string; productDescription: string; productStatus: string; modality: string; dataOrigin: string }
 interface ReviewProduct { publicCoverage?: {published:boolean;orders:number[];retired:boolean}; productId: string; name: string; canonicalName?: string; modality?: string; description: string; status: string; sourceUrl?: string; dataOrigin?: string; sourceTier?: string; originNote?: string; sourceLabel?: string; geometrySourceUrl?: string; geometrySourceLabel?: string; reason?: string; manualStep?: string; retiredAt?: string; retirementReason?: string; coverage?: { availableOrders?: number[]; overviewOrder?: number; maxOrder?: number; layerId?: string; areaDeg2?: number }; readiness?: ReadinessVersions; mocBuild?: MocBuildSummary; lifecycle?: ProductLifecycle; review?: { state: string; draftRevision?: number; publishedRevision?: number | null; reviewedRevision?: number; reviewedAt?: string; acceptedGaps?: string[]; updatedAt?: string; publishedAt?: string | null } }
+type ReviewEligibilityState = "ready" | "confirm-limitations" | "blocked" | "published" | "retired" | "stale" | "unregistered" | "unmatched" | "loading" | "error";
+interface ProductReviewQualification { productId: string; revision: number; reviewEligibility: { state: "ready" | "confirm-limitations" | "blocked" | "retired" | "stale" | "published"; blockingGaps: string[]; confirmationGaps: string[] }; publicationEligibility: { state: "ready" | "needs-review" | "confirm-limitations" | "blocked" | "retired" | "stale" | "published"; unacceptedGaps: string[] }; nativeOrder: { minimum: number; state: "passed" | "blocked" | "not-checked"; maxOrder?: number; message: string } }
+interface SurveyReviewReadiness { surveyId: string; generatedAt: string; products: ProductReviewQualification[] }
+interface SurveyQualificationLoad { signature: string; state: "loading" | "ready" | "error"; products?: Map<string, ProductReviewQualification>; error?: string }
 interface ReviewRelease { id: string; label: string; kind: string; releasedYear?: number; modalities: string[]; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; readiness?: { draft: ReadinessAggregate; published: ReadinessAggregate }; products: ReviewProduct[] }
 interface ReviewMocBuild { name: string; discoveryRequestName: string; candidateId: string; candidateTitle?: string; surveyId?: string; releaseId?: string; sourceUrl?: string; phase: string; progress?: { percent?: number; message?: string }; createdAt?: string; updatedAt?: string; outputs?: { cellCount?: number; availableOrders?: number[]; maxOrder?: number }; lifecycle?: ProductLifecycle }
 interface ReviewSurvey { id: string; surveyId: string; name: string; mission: string; color: string; description: string; modalities: string[]; imageUrl: string; statistics: Record<string, number>; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; readiness?: { draft: ReadinessAggregate; published: ReadinessAggregate }; releases: ReviewRelease[]; unmatchedProducts?: Array<Record<string, unknown>>; unmatchedBuilds?: ReviewMocBuild[] }
@@ -1583,6 +1587,7 @@ async function resubmitTask(name: string): Promise<void> {
 let productRecords: Product[] = [];
 let reviewSurveyRecords: ReviewSurvey[] = [];
 let selectedReviewSurveyId = "";
+const reviewQualificationLoads = new Map<string, SurveyQualificationLoad>();
 let productQuery = "";
 const workspaceRequests = new WorkspaceRequests();
 const resourceCache = new Map<Resource, unknown>();
@@ -1686,16 +1691,108 @@ function mocBuildStatusText(build?: MocBuildSummary): string {
   return `MOC build ${build.phase}${percent}${published}`;
 }
 
-type ReviewFilter = "all" | "pending" | "reviewed" | "published" | "retired";
+type ReviewFilter = "all" | "pending" | "reviewed" | "published" | "retired" | "unregistered";
 let reviewFilter: ReviewFilter = "all";
-const reviewFilterLabels: Record<ReviewFilter, string> = { all: "全部", pending: "待审核", reviewed: "已审核", published: "已发布", retired: "已退休" };
+type ReviewEligibilityFilter = "all" | "ready" | "confirm-limitations" | "blocked" | "unregistered";
+let reviewEligibilityFilter: ReviewEligibilityFilter = "all";
+const reviewFilterLabels: Record<ReviewFilter, string> = { all: "全部", pending: "待审核", reviewed: "已审核", published: "已发布", retired: "已退休", unregistered: "未登记" };
+const reviewEligibilityFilterLabels: Record<ReviewEligibilityFilter, string> = { all: "全部资格", ready: "可审核", "confirm-limitations": "需确认限制", blocked: "暂不可审核", unregistered: "未登记" };
 
 function reviewProductState(product: ReviewProduct): Exclude<ReviewFilter, "all"> {
   if (product.retiredAt || product.lifecycle?.publication?.state === "RETIRED") return "retired";
   const state = product.review?.state;
+  if (state === "unmatched") return "unregistered";
+  if (state === "published" && product.review?.draftRevision !== undefined && product.review.publishedRevision !== product.review.draftRevision) {
+    return product.review.reviewedRevision === product.review.draftRevision ? "reviewed" : "pending";
+  }
   if (state === "reviewed") return "reviewed";
   if (state === "published" || state === "unmatched-published") return "published";
   return "pending";
+}
+
+function surveyQualificationSignature(survey: ReviewSurvey): string {
+  return JSON.stringify(reviewEntries(survey).map(({ product }) => [product.productId, product.review?.state, product.review?.draftRevision,
+    product.review?.publishedRevision, product.readiness?.draft.gaps ?? [], product.retiredAt ?? ""]));
+}
+
+function loadReviewQualifications(survey: ReviewSurvey, force = false): void {
+  if (survey.id.startsWith("__")) return;
+  const signature = surveyQualificationSignature(survey);
+  const existing = reviewQualificationLoads.get(survey.id);
+  if (!force && existing?.signature === signature) return;
+  if (existing?.signature === signature && existing.state === "loading") return;
+  reviewQualificationLoads.set(survey.id, { signature, state: "loading" });
+  void api<SurveyReviewReadiness>(`/api/v1/admin/products/review-readiness?surveyId=${encodeURIComponent(survey.id)}`).then(response => {
+    if (response.surveyId !== survey.id) throw new Error("资格检查返回了错误的巡天 ID");
+    const latest = reviewSurveyRecords.find(item => item.id === survey.id);
+    if (!latest || surveyQualificationSignature(latest) !== signature) return;
+    reviewQualificationLoads.set(survey.id, { signature, state: "ready", products: new Map(response.products.map(item => [item.productId, item])) });
+    if (selectedReviewSurveyId === survey.id) renderReviewSurveys(reviewSurveyRecords);
+  }).catch(error => {
+    const latest = reviewSurveyRecords.find(item => item.id === survey.id);
+    if (!latest || surveyQualificationSignature(latest) !== signature) return;
+    reviewQualificationLoads.set(survey.id, { signature, state: "error", error: error instanceof Error ? error.message : "审核资格检查失败" });
+    if (selectedReviewSurveyId === survey.id) renderReviewSurveys(reviewSurveyRecords);
+  });
+}
+
+function reviewEligibilityState(survey: ReviewSurvey, product: ReviewProduct): ReviewEligibilityState {
+  if (product.retiredAt || product.review?.state === "retired") return "retired";
+  if (product.review?.state === "unmatched") return "unregistered";
+  if (product.review?.state === "published" && (product.review.publishedRevision === undefined || product.review.publishedRevision === product.review.draftRevision)) return "published";
+  if (survey.id.startsWith("__")) return "unmatched";
+  const load = reviewQualificationLoads.get(survey.id);
+  if (!load || load.state === "loading") return "loading";
+  if (load.state === "error") return "error";
+  const result = load.products?.get(product.productId);
+  if (!result) return "unregistered";
+  if (product.review?.draftRevision !== undefined && result.revision !== product.review.draftRevision) return "stale";
+  return result.reviewEligibility.state;
+}
+
+function qualificationFor(survey: ReviewSurvey, product: ReviewProduct): ProductReviewQualification | undefined {
+  return reviewQualificationLoads.get(survey.id)?.products?.get(product.productId);
+}
+
+function qualificationMatchesFilter(survey: ReviewSurvey, product: ReviewProduct): boolean {
+  if (reviewEligibilityFilter === "all") return true;
+  const state = reviewEligibilityState(survey, product);
+  if (reviewEligibilityFilter === "blocked") return ["blocked", "stale", "error"].includes(state);
+  if (reviewEligibilityFilter === "unregistered") return state === "unregistered" || state === "unmatched";
+  return state === reviewEligibilityFilter;
+}
+
+function qualificationReadout(survey: ReviewSurvey, product: ReviewProduct): { state: ReviewEligibilityState; label: string; reason: string; publication: string } {
+  const state = reviewEligibilityState(survey, product);
+  const qualification = qualificationFor(survey, product);
+  const load = reviewQualificationLoads.get(survey.id);
+  let reason = "";
+  if (state === "ready") reason = "审核条件满足";
+  else if (state === "confirm-limitations") {
+    const gap = qualification?.reviewEligibility.confirmationGaps[0];
+    reason = gap ? gapGuidance[gap]?.title ?? gap : `${qualification?.reviewEligibility.confirmationGaps.length ?? 0} 项限制待确认`;
+  } else if (state === "blocked") {
+    const gap = qualification?.reviewEligibility.blockingGaps[0];
+    reason = gap ? gapGuidance[gap]?.title ?? gap : qualification?.nativeOrder.message ?? "未通过审核门禁";
+  } else if (state === "stale") reason = "产品版本已变化，请刷新审核列表";
+  else if (state === "unregistered") reason = "公共目录产品尚未登记到审核库";
+  else if (state === "unmatched") reason = "产品尚未匹配公共目录身份";
+  else if (state === "error") reason = load?.error ?? "审核资格检查失败";
+  else if (state === "loading") reason = "正在检查真实 MOC 阶数和审核缺口";
+
+  const labels: Record<ReviewEligibilityState, string> = {
+    ready: "可审核", "confirm-limitations": "需确认限制后可审核", blocked: "暂不可审核", published: "本版已发布",
+    retired: "已退休", stale: "版本已变化", unregistered: "未登记", unmatched: "目录未匹配", loading: "正在检查", error: "检查失败",
+  };
+  const publicationLabels: Record<string, string> = {
+    ready: "发布：可提交", "needs-review": "发布：待审核", "confirm-limitations": "发布：需确认限制",
+    blocked: "发布：未通过门禁", published: "发布：已完成", retired: "发布：已退休", stale: "发布：版本已变化",
+  };
+  const publicationState = qualification?.publicationEligibility.state;
+  const publication = state === "unregistered" ? "发布：未登记" : state === "unmatched" ? "发布：目录未匹配"
+    : state === "error" ? "发布：资格检查失败" : state === "loading" ? "发布：检查中"
+      : publicationLabels[publicationState ?? ""] ?? (state === "published" ? "发布：已完成" : state === "retired" ? "发布：已退休" : "发布：待检查");
+  return { state, label: labels[state], reason, publication };
 }
 
 function reviewEntries(survey: ReviewSurvey): Array<{ product: ReviewProduct; release: string; unmatched?: boolean }> {
@@ -1722,11 +1819,12 @@ function renderReviewSurveys(surveys: ReviewSurvey[]): void {
   reconcileMarkup(list, `<div class="review-survey-grid">${visible.map(survey => {
     const entries = reviewEntries(survey);
     const count = (state: ReviewFilter) => entries.filter(({product}) => reviewProductState(product) === state).length;
-    return `<button type="button" class="review-survey-card" data-review-survey="${escapeText(survey.id)}" aria-haspopup="dialog"><span class="review-card-name"><i data-lucide="globe-2"></i><strong>${escapeText(survey.name)}</strong></span><span class="review-card-total">${entries.length} 个产品 · ${survey.releases.length} 个 Release</span><span class="review-card-counts"><span>待审核 <strong>${count("pending")}</strong></span><span>已审核 <strong>${count("reviewed")}</strong></span><span>已发布 <strong>${count("published")}</strong></span>${count("retired") ? `<span>已退休 <strong>${count("retired")}</strong></span>` : ""}</span>${survey.unmatchedBuilds?.length ? `<small>${survey.unmatchedBuilds.length} 个构建待登记</small>` : ""}<span class="review-card-open">查看产品 <i data-lucide="arrow-right"></i></span></button>`;
+    return `<button type="button" class="review-survey-card" data-review-survey="${escapeText(survey.id)}" aria-haspopup="dialog"><span class="review-card-name"><i data-lucide="globe-2"></i><strong>${escapeText(survey.name)}</strong></span><span class="review-card-total">${entries.length} 个产品 · ${survey.releases.length} 个 Release</span><span class="review-card-counts"><span>待审核 <strong>${count("pending")}</strong></span><span>已审核 <strong>${count("reviewed")}</strong></span><span>已发布 <strong>${count("published")}</strong></span>${count("unregistered") ? `<span>未登记 <strong>${count("unregistered")}</strong></span>` : ""}${count("retired") ? `<span>已退休 <strong>${count("retired")}</strong></span>` : ""}</span>${survey.unmatchedBuilds?.length ? `<small>${survey.unmatchedBuilds.length} 个构建待登记</small>` : ""}<span class="review-card-open">查看产品 <i data-lucide="arrow-right"></i></span></button>`;
   }).join("") || '<p class="resource-empty">没有匹配的巡天或产品</p>'}</div>`);
   list.querySelectorAll<HTMLButtonElement>("[data-review-survey]").forEach(button => button.onclick = () => {
     selectedReviewSurveyId = button.dataset.reviewSurvey ?? "";
     reviewFilter = "all";
+    reviewEligibilityFilter = "all";
     renderReviewSurveys(reviewSurveyRecords);
   });
   const dialog = byId<HTMLDialogElement>("review-survey-dialog");
@@ -1736,15 +1834,23 @@ function renderReviewSurveys(surveys: ReviewSurvey[]): void {
     renderIcons();
     return;
   }
+  loadReviewQualifications(survey);
+  const qualificationLoad = reviewQualificationLoads.get(survey.id);
   byId("review-survey-dialog-title").textContent = survey.name;
   const entries = reviewEntries(survey).filter(({product, release}) => !productQuery || matchesSurvey(survey) || reviewProductMatches(product) || release.toLocaleLowerCase().includes(productQuery));
-  const filtered = entries.filter(({product}) => reviewFilter === "all" || reviewProductState(product) === reviewFilter);
+  const filtered = entries.filter(({product}) => (reviewFilter === "all" || reviewProductState(product) === reviewFilter) && qualificationMatchesFilter(survey, product));
+  const qualificationCount = (state: ReviewEligibilityFilter) => entries.filter(({product}) => state === "all" || (state === "blocked" ? ["blocked", "stale", "error"].includes(reviewEligibilityState(survey, product)) : state === "unregistered" ? ["unregistered", "unmatched"].includes(reviewEligibilityState(survey, product)) : reviewEligibilityState(survey, product) === state)).length;
   const content = byId("review-survey-content");
-  reconcileMarkup(content, `<div class="review-browser-toolbar"><div class="review-filters" aria-label="产品审核状态">${(Object.keys(reviewFilterLabels) as ReviewFilter[]).map(state => `<button type="button" class="admin-quiet" data-review-filter="${state}" aria-pressed="${reviewFilter === state}">${reviewFilterLabels[state]} <span>${state === "all" ? entries.length : entries.filter(({product}) => reviewProductState(product) === state).length}</span></button>`).join("")}</div>${survey.id.startsWith("__") ? "" : `<button type="button" class="admin-quiet" data-edit-editorial="${escapeText(survey.id)}"><i data-lucide="pencil-line"></i><span>编辑巡天文案</span></button>`}</div><div class="review-compact-list">${filtered.map(({product, release, unmatched}) => {
+  reconcileMarkup(content, `<div class="review-browser-toolbar"><div class="review-filter-stack"><div class="review-filters" aria-label="产品记录状态">${(Object.keys(reviewFilterLabels) as ReviewFilter[]).map(state => `<button type="button" class="admin-quiet" data-review-filter="${state}" aria-pressed="${reviewFilter === state}">${reviewFilterLabels[state]} <span>${state === "all" ? entries.length : entries.filter(({product}) => reviewProductState(product) === state).length}</span></button>`).join("")}</div><div class="review-filters review-eligibility-filters" aria-label="产品审核资格">${(Object.keys(reviewEligibilityFilterLabels) as ReviewEligibilityFilter[]).map(state => `<button type="button" class="admin-quiet" data-review-eligibility-filter="${state}" aria-pressed="${reviewEligibilityFilter === state}">${reviewEligibilityFilterLabels[state]} <span>${qualificationCount(state)}</span></button>`).join("")}</div>${qualificationLoad?.state === "loading" ? `<small class="review-qualification-status" role="status">正在检查本巡天已登记产品的审核条件…</small>` : ""}${qualificationLoad?.state === "error" ? `<span class="review-qualification-error" role="alert">${escapeText(qualificationLoad.error ?? "审核资格检查失败")}</span><button type="button" class="admin-quiet" data-retry-review-readiness>重试资格检查</button>` : ""}</div>${survey.id.startsWith("__") ? "" : `<button type="button" class="admin-quiet" data-edit-editorial="${escapeText(survey.id)}"><i data-lucide="pencil-line"></i><span>编辑巡天文案</span></button>`}</div><div class="review-compact-list">${filtered.map(({product, release, unmatched}) => {
     const state = reviewProductState(product);
-    return `<article class="review-product-row review-compact-row${state === "retired" ? " is-retired" : ""}" data-row-key="${escapeText(product.productId)}"><div class="review-compact-name"><i data-lucide="${modalityIcon(product.modality)}"></i><div><strong>${escapeText(product.name)}</strong><small>${escapeText(product.modality ?? "模态未指定")}${unmatched ? " · 待匹配目录" : ""}</small></div></div><div class="review-compact-release"><small>Release</small><span>${escapeText(release)}</span></div>${(() => { const run = productPublicationRun(product.productId); const active = run && ["queued", "building", "uploading", "verifying"].includes(run.status); const label = active ? publicationRunStatusLabel(run) : run?.status === "failed" ? "发布失败 · 查看详情" : state === "retired" ? `已退休 · ${withdrawalLabel(product)}` : reviewFilterLabels[state]; return `<span class="review-state review-state-${active ? "publishing" : run?.status === "failed" ? "failed" : state}">${active ? `<i data-lucide="loader-circle" class="button-spinner"></i>` : ""}${escapeText(label)}</span>`; })()}<div class="product-row-actions"><button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}"><i data-lucide="eye"></i><span>${state === "pending" ? "查看并审核" : "产品详情"}</span></button>${state === "reviewed" && !["queued", "building", "uploading", "verifying"].includes(productPublicationRun(product.productId)?.status ?? "") ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish><i data-lucide="upload"></i><span>发布</span></button>` : ""}</div></article>`;
-  }).join("") || '<p class="resource-empty">当前分类没有产品</p>'}</div>${(reviewFilter === "all" || reviewFilter === "pending") && survey.unmatchedBuilds?.length ? `<section class="review-registration-queue"><h5>待登记构建 · ${survey.unmatchedBuilds.length}</h5>${survey.unmatchedBuilds.map(build => `<article class="review-product-row review-compact-row"><div class="review-compact-name"><i data-lucide="box"></i><div><strong>${escapeText(build.candidateTitle ?? build.candidateId)}</strong><small>${escapeText(build.phase)}</small></div></div><div class="product-row-actions"><button type="button" class="admin-quiet" data-moc-build-details="${escapeText(build.name)}">构建详情</button><button type="button" class="admin-quiet" data-register-moc-build="${escapeText(build.name)}">登记产品</button></div></article>`).join("")}</section>` : ""}`);
+    const qualification = qualificationReadout(survey, product);
+    const managedRecord = state !== "unregistered";
+    const eligibilityMarkup = `<div class="review-eligibility" data-state="${qualification.state}"><strong>${escapeText(qualification.label)}</strong><small>${escapeText(qualification.reason)}</small><small class="review-publication-eligibility">${escapeText(qualification.publication)}</small></div>`;
+    return `<article class="review-product-row review-compact-row${state === "retired" ? " is-retired" : ""}" data-row-key="${escapeText(product.productId)}"><div class="review-compact-name"><i data-lucide="${modalityIcon(product.modality)}"></i><div><strong>${escapeText(product.name)}</strong><small>${escapeText(product.modality ?? "模态未指定")}${unmatched ? " · 待匹配目录" : ""}</small></div></div><div class="review-compact-release"><small>Release</small><span>${escapeText(release)}</span></div>${(() => { const run = productPublicationRun(product.productId); const active = run && ["queued", "building", "uploading", "verifying"].includes(run.status); const label = active ? publicationRunStatusLabel(run) : run?.status === "failed" ? "发布失败 · 查看详情" : state === "retired" ? `已退休 · ${withdrawalLabel(product)}` : reviewFilterLabels[state]; return `<span class="review-state review-state-${active ? "publishing" : run?.status === "failed" ? "failed" : state}">${active ? `<i data-lucide="loader-circle" class="button-spinner"></i>` : ""}${escapeText(label)}</span>`; })()}${eligibilityMarkup}<div class="product-row-actions">${managedRecord ? `<button type="button" class="admin-quiet" data-edit-product="${escapeText(product.productId)}"><i data-lucide="eye"></i><span>${qualification.state === "ready" || qualification.state === "confirm-limitations" ? state === "pending" ? "查看并审核" : "产品详情" : state === "pending" ? "查看条件" : "产品详情"}</span></button>` : `<span class="review-unregistered-note">无审核记录</span>`}${state === "reviewed" && !["queued", "building", "uploading", "verifying"].includes(productPublicationRun(product.productId)?.status ?? "") ? `<button type="button" class="admin-quiet" data-publish-product="${escapeText(product.productId)}" data-publish ${qualification.publication !== "发布：可提交" ? "disabled" : ""}><i data-lucide="upload"></i><span>发布</span></button>` : ""}</div></article>`;
+  }).join("") || '<p class="resource-empty">当前筛选没有产品</p>'}</div>${(reviewFilter === "all" || reviewFilter === "pending") && survey.unmatchedBuilds?.length ? `<section class="review-registration-queue"><h5>待登记构建 · ${survey.unmatchedBuilds.length}</h5>${survey.unmatchedBuilds.map(build => `<article class="review-product-row review-compact-row"><div class="review-compact-name"><i data-lucide="box"></i><div><strong>${escapeText(build.candidateTitle ?? build.candidateId)}</strong><small>${escapeText(build.phase)}</small></div></div><div class="product-row-actions"><button type="button" class="admin-quiet" data-moc-build-details="${escapeText(build.name)}">构建详情</button><button type="button" class="admin-quiet" data-register-moc-build="${escapeText(build.name)}">登记产品</button></div></article>`).join("")}</section>` : ""}`);
   content.querySelectorAll<HTMLButtonElement>("[data-review-filter]").forEach(button => button.onclick = () => { reviewFilter = button.dataset.reviewFilter as ReviewFilter; renderReviewSurveys(reviewSurveyRecords); });
+  content.querySelectorAll<HTMLButtonElement>("[data-review-eligibility-filter]").forEach(button => button.onclick = () => { reviewEligibilityFilter = button.dataset.reviewEligibilityFilter as ReviewEligibilityFilter; renderReviewSurveys(reviewSurveyRecords); });
+  content.querySelector<HTMLButtonElement>("[data-retry-review-readiness]")?.addEventListener("click", () => loadReviewQualifications(survey, true));
   content.querySelectorAll<HTMLButtonElement>("[data-edit-editorial]").forEach(button => button.onclick = () => void openEditorial(button.dataset.editEditorial ?? ""));
   content.querySelectorAll<HTMLButtonElement>("[data-edit-product]").forEach(button => button.onclick = () => openProduct(button.dataset.editProduct ?? ""));
   content.querySelectorAll<HTMLButtonElement>("[data-publish-product]").forEach(button => button.onclick = () => void publishProduct(button.dataset.publishProduct ?? ""));

@@ -14,6 +14,17 @@ not new acquisitions in this note. Rechecks below occurred on **2026-10-07,
 availability used HEAD. No cluster, management state, PVC, object store,
 deployment, public bundle/MOC, Workspace or 72602 was changed.
 
+## Follow-up status, 2026-10-08
+
+These recommendations are now tracked as pending work in the
+[handoff checklist](../../HANDOFF.md). The pinned IPHAS QC research has not yet
+been imported as a managed input, and no frozen IRSA DR7 processing inventory
+has been recovered. Keep the existing IPHAS/CDS ZTF provenance and incomplete
+inventory declarations. Importing the QC evidence must preserve duplicate field
+associations and follow storage qualification and the full retention dry run;
+29 bound survey IDs in active generation 13 do not establish complete inventory.
+This status update does not acquire metadata, build an index or start a task.
+
 ## IPHAS: pinned QC can strengthen the existing precursor evidence
 
 The [pinned DR2 Git tree][iphas-tree] returned HTTP 200 and is not truncated.

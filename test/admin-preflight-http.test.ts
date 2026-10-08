@@ -51,6 +51,16 @@ for (const order of [0, 4]) test(`admin preflight validates actual O${order}; in
   assert.equal(preflight.nativeOrder.state, order < 4 ? "blocked" : "passed");
   assert.match(preflight.nativeOrder.message, order < 4 ? /order 0.*order 4/ : /O4 ≥ O4/);
   assert.equal(await readFile(path.join(f.contentRoot, "product-content-v1.json"), "utf8"), before, "preflight does not mutate products");
+  const readiness = await get("/api/v1/admin/products/review-readiness?surveyId=jwst");
+  assert.equal(readiness.surveyId, "jwst");
+  assert.deepEqual(readiness.products.map((product: any) => product.productId), ["jwst-draft"]);
+  assert.equal(readiness.products[0].revision, 1);
+  assert.equal(readiness.products[0].nativeOrder.state, order < 4 ? "blocked" : "passed");
+  if (readiness.products[0].reviewEligibility.blockingGaps.length || order < 4) assert.equal(readiness.products[0].reviewEligibility.state, "blocked");
+  else if (readiness.products[0].reviewEligibility.confirmationGaps.length) assert.equal(readiness.products[0].reviewEligibility.state, "confirm-limitations");
+  else assert.equal(readiness.products[0].reviewEligibility.state, "ready");
+  const unscopedReadiness = await fetch(base + "/api/v1/admin/products/review-readiness", { headers: { Authorization: "Bearer fixture" } });
+  assert.equal(unscopedReadiness.status, 400, "bulk qualification requires one selected survey");
   const overview = await get("/api/v1/admin/overview");
   const review = await get("/api/v1/admin/products?view=surveys");
   for (const body of [overview, review]) {

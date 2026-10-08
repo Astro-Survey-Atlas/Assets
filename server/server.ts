@@ -1483,6 +1483,37 @@ const NON_ACCEPTABLE_PUBLICATION_GAPS = new Set([
   "output-validation-missing",
 ]);
 
+async function productNativeOrderPreflight(record: ProductRecord): Promise<{ minimum: number; state: "passed" | "blocked"; maxOrder?: number; message: string }> {
+  let maxOrder: number | undefined;
+  let error: string | undefined;
+  try {
+    // Read staged bytes without preparing/publishing a candidate or mutating the build.
+    const staged = mocBuildStore.list().find(build => build.productId === record.productId && build.phase === "STAGED");
+    if (staged?.outputs?.moc) {
+      const file = staged.outputs.moc;
+      const bytes = await readFile(path.resolve(evidenceRoot, file.ref));
+      if (nativeSha256(bytes) !== file.sha256) throw new Error("MOC 校验和不一致，请重新校验构建输出。");
+      maxOrder = decodeNativeMoc(bytes).maxOrder;
+      assertPublicCoverageOrder(maxOrder);
+    } else {
+      const material = await productGeometry(record, { root: catalog.root, files: catalog.manifest.files,
+        publications: mocPublicationStore.list(), publicationFile: file => mocPublicationStore.absolutePath(file) });
+      if (!material) throw new Error("尚无可验证的原生 MOC，请先构建并校验覆盖。非预览阶数检查。");
+      maxOrder = material.moc.maxOrder;
+    }
+  } catch (failure) { error = failure instanceof Error ? failure.message : "原生覆盖精度检查失败"; }
+  return {
+    minimum: MIN_PUBLIC_COVERAGE_ORDER,
+    state: error ? "blocked" : "passed",
+    ...(maxOrder !== undefined ? { maxOrder } : {}),
+    message: error ?? `真实原生最高阶数 O${maxOrder} ≥ O${MIN_PUBLIC_COVERAGE_ORDER}（已读取并校验 MOC）`,
+  };
+}
+
+function hasCurrentProductReview(record: ProductRecord): boolean {
+  return record.review?.revision === record.revision && record.review.contentSha256 === record.contentSha256;
+}
+
 function assertReviewableProduct(record: ProductRecord, acceptedGaps: readonly string[]): void {
   const readiness = productReadiness(record).draft;
   const unknown = acceptedGaps.filter((gap) => !readiness.gaps.includes(gap));
@@ -1934,7 +1965,7 @@ function adminProductSurveys(records: ProductRecord[], index: typeof runtimeSurv
           ...(mocBuild ? { mocBuild } : {}),
           ...(record ? { readiness: productReadiness(record), lifecycle: adminProductLifecycle(record, mocBuild ? mocBuildStore.get(String(mocBuild.name)) : undefined), ...(record.retiredAt ? { retiredAt: record.retiredAt } : {}), ...(record.retirementReason ? { retirementReason: record.retirementReason } : {}) } : {}),
           review: record ? {
-            state: record.retiredAt ? "retired" : record.published ? "published" : record.review?.revision === record.revision && record.review.contentSha256 === record.contentSha256 ? "reviewed" : "draft",
+            state: record.retiredAt ? "retired" : record.published && record.publishedRevision === record.revision ? "published" : hasCurrentProductReview(record) ? "reviewed" : "draft",
             draftRevision: record.revision,
             publishedRevision: record.publishedRevision,
             updatedAt: record.updatedAt,
@@ -1980,7 +2011,7 @@ function adminProductSurveys(records: ProductRecord[], index: typeof runtimeSurv
     ...(record.retirementReason ? { retirementReason: record.retirementReason } : {}),
     readiness: productReadiness(record),
     review: {
-      state: record.retiredAt ? "retired" : record.published ? "unmatched-published" : "unmatched-draft",
+      state: record.retiredAt ? "retired" : record.published && record.publishedRevision === record.revision ? "unmatched-published" : "unmatched-draft",
       draftRevision: record.revision,
       publishedRevision: record.publishedRevision,
       updatedAt: record.updatedAt,
@@ -3173,32 +3204,53 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         return json(response, 200, { editorial: editorialApiRecord(record), syncStatus: await apiSyncStatus("editorial") });
       }
     }
+    const reviewReadinessMatch = /^\/api\/v1\/admin\/products\/review-readiness$/.exec(pathname);
+    if (reviewReadinessMatch && request.method === "GET") {
+      const surveyId = requestQuery(request).get("surveyId")?.trim();
+      if (!surveyId) throw new AdminHttpError(400, "surveyId is required; qualification is limited to one survey");
+      const survey = adminSurveyIndex().surveys.find(item => item.id === surveyId);
+      if (!survey) throw new AdminHttpError(404, "Survey not found in the current admin catalog");
+      const catalogProductIds = new Set(survey.releases.flatMap(release => release.products.map(product => product.productId ?? `${survey.id}:${release.id}:${product.name}`)));
+      const records = products.list().filter(record => catalogProductIds.has(record.productId));
+      const qualifications = await Promise.all(records.map(async sourceRecord => {
+        const record = structuredClone(sourceRecord);
+        const revision = record.revision;
+        const readiness = productReadiness(record).draft;
+        const retired = Boolean(record.retiredAt);
+        const currentRevisionPublished = Boolean(record.published && record.publishedRevision === revision);
+        const reviewIsCurrent = hasCurrentProductReview(record);
+        const needsOrderCheck = !retired && !currentRevisionPublished;
+        const nativeOrder = needsOrderCheck
+          ? await productNativeOrderPreflight(record)
+          : { minimum: MIN_PUBLIC_COVERAGE_ORDER, state: "not-checked" as const, message: retired ? "已退休产品不进入审核或发布流程" : "当前版本已发布" };
+        const latest = products.list().find(item => item.productId === record.productId);
+        const stale = !latest || latest.revision !== revision;
+        const blockingGaps = readiness.gaps.filter(gap => NON_ACCEPTABLE_PUBLICATION_GAPS.has(gap));
+        const confirmationGaps = readiness.gaps.filter(gap => !NON_ACCEPTABLE_PUBLICATION_GAPS.has(gap));
+        const reviewState = stale ? "stale" : retired ? "retired" : currentRevisionPublished ? "published"
+          : blockingGaps.length || nativeOrder.state !== "passed" ? "blocked"
+            : confirmationGaps.length ? "confirm-limitations" : "ready";
+        const accepted = new Set(reviewIsCurrent ? record.review?.acceptedGaps ?? [] : []);
+        const unacceptedGaps = readiness.gaps.filter(gap => !accepted.has(gap));
+        const publicationState = stale ? "stale" : retired ? "retired" : currentRevisionPublished ? "published"
+          : blockingGaps.length || nativeOrder.state !== "passed" ? "blocked"
+            : !reviewIsCurrent ? "needs-review"
+              : unacceptedGaps.length ? "confirm-limitations" : "ready";
+        return {
+          productId: record.productId,
+          revision,
+          reviewEligibility: { state: reviewState, blockingGaps, confirmationGaps },
+          publicationEligibility: { state: publicationState, unacceptedGaps },
+          nativeOrder,
+        };
+      }));
+      response.setHeader("Cache-Control", "no-store");
+      return json(response, 200, { surveyId, generatedAt: new Date().toISOString(), products: qualifications });
+    }
     const preflightMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/preflight$/.exec(pathname);
     if (preflightMatch?.[1] && request.method === "GET") {
       const record = products.get(decodeAdminPathSegment(preflightMatch[1]));
-      const revision = record.revision;
-      let maxOrder: number | undefined;
-      let error: string | undefined;
-      try {
-        // Read staged bytes without preparing/publishing a candidate or mutating the build.
-        const staged = mocBuildStore.list().find(b => b.productId === record.productId && b.phase === "STAGED");
-        if (staged?.outputs?.moc) {
-          const file = staged.outputs.moc;
-          const bytes = await readFile(path.resolve(evidenceRoot, file.ref));
-          if (nativeSha256(bytes) !== file.sha256) throw new Error("MOC 校验和不一致，请重新校验构建输出。");
-          maxOrder = decodeNativeMoc(bytes).maxOrder;
-          assertPublicCoverageOrder(maxOrder);
-        } else {
-          const material = await productGeometry(record, { root: catalog.root, files: catalog.manifest.files,
-            publications: mocPublicationStore.list(), publicationFile: file => mocPublicationStore.absolutePath(file) });
-          if (!material) throw new Error("尚无可验证的原生 MOC，请先构建并校验覆盖。非预览阶数检查。");
-          maxOrder = material.moc.maxOrder;
-        }
-      } catch (failure) { error = failure instanceof Error ? failure.message : "原生覆盖精度检查失败"; }
-      return json(response, 200, { productId: record.productId, revision, nativeOrder: {
-        minimum: MIN_PUBLIC_COVERAGE_ORDER, state: error ? "blocked" : "passed", ...(maxOrder !== undefined ? { maxOrder } : {}),
-        message: error ?? `真实原生最高阶数 O${maxOrder} ≥ O${MIN_PUBLIC_COVERAGE_ORDER}（已读取并校验 MOC）`,
-      } });
+      return json(response, 200, { productId: record.productId, revision: record.revision, nativeOrder: await productNativeOrderPreflight(record) });
     }
     const productMatch = /^\/api\/v1\/admin\/products\/([^/]+)$/.exec(pathname);
     const draftMatch = /^\/api\/v1\/admin\/products\/([^/]+)\/draft$/.exec(pathname);

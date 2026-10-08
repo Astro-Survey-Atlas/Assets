@@ -1,6 +1,6 @@
 # Assets 项目交接
 
-交接日期：2026-10-07（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-08（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
@@ -9,12 +9,82 @@
 **第一阶段 MVP 已结束**（用户于 2026-10-04 确认）。Phase 1 覆盖 Euclid、DESI、Legacy
 Surveys、HST 与 Workspace 的公开覆盖、原生分块反查、来源链接及 JSON/CSV 下载计划。后续 Phase 2
 只更新 **Assets Dev**，不修改 72602、Workspace、公开 MOC 或 public bundle，也不下载科学像素。
+2026-10-08 用户另行授权恢复 **Workspace Dev 的 503**；该维护例外仅涉及 Workspace 的
+Elasticsearch 内存配置，不扩大巡天补数据或公开发布的范围。
 
-Dev 当前 Helm revision **356**，site/backend 均 1/1 Ready，镜像 tag
-`0.1.0-20261007-202614-casdc-status`。本机构建 image ID 为
-`73969d6b62cd91fece39e19c1ff7498c3616334fe996476303b318df54ab94c7`，registry manifest digest 为
-`sha256:1eed7b2b71f9f1c68dcb9e07b4dec00cdf6ce089070ff338feb2c027c56ae249`。此前 revision 354 部署的
+Dev 当前 Helm revision **358**，site/backend 均 1/1 Ready，镜像 tag
+`0.1.0-20261008-070003-native-review-fix`。本机构建 image ID 为
+`46145c5c34ccdf38f92ee907b13c9b5dd535260171c28d2b505a9fc70701e351`，registry manifest digest 为
+`sha256:904a5f576a7986fe32637a0e13cd9392adf98c853b2b5407627eeab4e5890510`。此前 revision 354 部署的
 防积压修复 commit `d776e48` 已推送并保留在当前版本中。
+
+### 2026-10-08 Workspace Dev 503 恢复
+
+Workspace 应用自身 `/healthz` 为 HTTP 200，但其 Elasticsearch 在 **1 GiB** 内存上限下反复
+OOM，导致 Workspace readiness 失败，Ingress 没有 Ready 后端而返回 503。维护前 ES Pod 已重启
+370 次；最后确认的退出状态为 `OOMKilled` / exit 137，宿主机对应 cgroup 的 `memory.events`
+也记录了 OOM。节点没有 MemoryPressure 或 DiskPressure，NFS 仍有约 716.5 GiB 可用。
+
+已从 Helm revision 67 保存的 chart 与现有 values 恢复部署输入，复用 Elasticsearch 21.6.3
+依赖。server dry-run 对比确认 15 个资源中只有 ES StatefulSet 的两个内存字段变化；跳过升级
+hooks，部署为 **Workspace Dev Helm revision 68**。request 从 768 MiB 调整为 **1 GiB**，limit
+从 1 GiB 调整为 **2 GiB**；JVM heap 仍为 **512 MiB**，CPU、镜像与启动探针参数保持原值。
+覆盖参数已保存进 Helm release，后续升级需保留这些 values。没有部署 Workspace 工作树中的
+其他变更。
+
+10:29 CST 首次完整恢复检查通过：ES 和 Workspace 均 1/1 Ready、重启数为 0；实际 Dev 域名
+首页、`/healthz`、`/api/data-assets/status` 均 HTTP 200，业务响应结构正常。ES health 为 yellow、
+`timed_out=false`，3 个 primary shards 已恢复；单节点的 3 个 replica shards 未分配。
+新 ES Pod 首次检查内存约 1.23 GiB，超过旧 limit。**10:29–10:39 CST 稳定性观察已通过**：
+连续观察 608 秒、21 次采样全部通过，两个 Pod 始终 Ready、重启数为 0，ES cgroup 的
+`oom` / `oom_kill` 均为 0；峰值内存约 **1.26 GiB**。PVC UID 和绑定 PV 保持不变。
+原始 `curl --fail` 复现从 HTTP 503 / exit 22 变为 HTTP 200 / exit 0；同源 JS/CSS 均 HTTP 200。
+恢复后的同版 Helm chart lint 通过，文档 diff 检查与本地链接检查通过。完整状态汇总见仓库外
+`recovery-receipt.json` 与 `availability-observation.jsonl`。
+
+业务状态复核中，两条资产记录的 `objects` 均为 `queryable`。其中一条覆盖状态仍为 failed；
+只读核对确认对应的最新覆盖制品在 2026-09-24 已是 failed，早于本次恢复，关联的最近扫描
+任务为 succeeded。该历史制品问题单独登记为 Workspace 后续待办，未重试或重建任务。
+
+配置备份、已审核的部署差异及仅含状态汇总的验证记录位于仓库外
+`/home/aaron/.local/share/astro-workspace-recovery/20261008T022530Z/`。
+ES PVC `data-asa-elasticsearch-master-0` 继续绑定原 PV，UID 为
+`d156eaf2-7e3c-40c1-9423-1ed0f5f2e959`。没有删除或重建 PVC、重置索引或下载科学数据；
+Workspace 私有响应正文、文件身份和 HEALPix cells 未写入 Assets 文档或验证记录。
+
+### 待做清单（2026-10-08）
+
+以下事项仅登记待做，本次不启动新的补数据、审核、清理或迁移。存储事项应先于下一批可选
+巡天归档完成。第一阶段 MVP、防积压修复部署、审核界面部署、Wiki 中英文发布与 CASDC 状态
+更新已完成，不再作为待办。
+
+| 优先级 | 待做 | 当前状态与完成标准 |
+| --- | --- | --- |
+| P1 | 审核功能代码提交、推送 | Dev revision 358 已部署并通过完整校验；代码已暂存但尚未提交、推送。检查并保留既有工作树修改，提交后登记 commit 与镜像的对应关系。 |
+| P1（下次归档前） | 最多保留三个已完成版本 | 每条逻辑内容版本线包含活动版在内最多保留 3 个已完成版本。现仅盘点部分引用；需覆盖所有保留版本、控制状态和进行中任务依赖，完成引用感知 dry-run，再实施清理与自动留存。共享对象仍有引用时必须保留。 |
+| P1（下次归档前） | 独立备份与存储迁移 | 目标尚未选定。确认独立于 `10.15.49.212` 的故障域、所有权和配额；冻结权威依赖清单，逐对象核对 size/SHA，完成恢复演练和 Dev 切换验证。见 [Dev 存储规划](docs/storage-plan-dev-20261007.md)。 |
+| P1 | 容量报警与硬配额 | 桶 75%/85%、spool 750/900 MiB 仍为建议阈值，实际报警未落地。核实 NFS/local-path 的硬配额能力，落地容量预警；PVC 声明容量和 1 GiB spool 入队预算不能视为文件系统硬限制。 |
+| P2 | 剩余巡天证据与库存缺口 | IPHAS pinned QC 尚待受管导入，保留重复 field/QC 关联；ZTF DR7 仍缺冻结的历史处理清单，不能以当前 IRSA 内容替代。29 个巡天已绑定不代表库存完整；继续按来源核验候选 URI 的实际可用性。ERO 17-target 映射已纳入 Dev，后续精度仍依赖官方有效像素 footprint/MOC 或真实 Tile roster。见 [残余来源复查](docs/research/phase2-residual-native-surveys-followup-20261007.md)。 |
+| P2 | 实际产品审核与模态复核 | 审核界面改进已完成，业务审核尚未完成。SDSS 的 25 个产品中 19 个待审项因缺少可验证 MOC 证据而 blocked，6 个已发布；先补足证据再审核，逐产品复核 imaging/catalog/spectroscopy 等身份。DR10 color imaging 已纠正。 |
+| P2 | 性能与更广回归 | 测冷/热启动、geometry/native 查询、分页和完整 JSON/CSV 导出；检查更多 component 与中文字体冷缓存首屏。每项记录产品、order/cells、活动版本和实际验收范围，不能把已有局部 smoke 扩写为全局完成。 |
+| P2（Workspace 另行安排） | 历史覆盖制品失败 | 本次 503 已恢复，索引查询正常；另有一个维护前已失败的覆盖制品，需在 Workspace 自身的管理流程核对失败原因与恢复办法。Assets 只记录服务状态汇总，不保存私有制品或扫描正文。 |
+| 暂缓 | 长期接口与产品能力 | Warehouse/PVC inventory 接口、统一 SQLite、API 自助购买和计费。管理员发 Key、鉴权、配额及公开覆盖 HEALPix API 已有；`onlineBilling=false`。 |
+
+### 2026-10-08 审核体验部署
+
+部署原生索引差异和巡天产品审核资格显示后，真实管理员请求发现可选绑定字段缺失时会令
+`/api/v1/admin/native-units` 返回 500。比较签名已改为对规范化值外包一层对象再哈希，使缺失值与
+`null` 保持可区分；新增候选缺少 `selector` 的回归测试。变更已构建、推送并部署至 Dev revision
+358。backend 冷启动约 4 分钟后 Ready，之后 site/backend 均 1/1 Ready。
+
+`npm run validate` 通过：454 项测试中 452 通过、2 跳过，Core wheel 校验通过；Helm lint 通过。
+Dev 上管理员 `/api/v1/admin/native-units` 返回 HTTP 200，generation 13、活动 group
+`9b85d5cd59e506748a6e77d1486e8d1e392d616ecc030c7d98fb150f7f0ea54c`，31 个版本条目均有对比摘要，
+30 个非活动候选均有内容差异。SDSS readiness 返回 25 个产品，其中 19 个待审项因没有可验证的
+原生 MOC 覆盖而标为 blocked、6 个已发布；浏览器工作流 smoke 通过。公开 bundle 仍为
+`reviewed-mupsxe2v-c91be91f` / SHA-256
+`0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，603 files；没有改动 MOC、public
+bundle、72602 或 Workspace。审核功能工作树仍未提交。
 
 2026-10-07 按用户授权清理 upload-spool 的旧完整状态快照，释放 **383.611 GiB**；
 `eva7028` 于 **09:12:25 CST** 自动报告 `DiskPressure=False`，taint 已消失。最新复查根盘约
@@ -191,12 +261,12 @@ MVP 让用户在普通模式查看 HEALPix cell 覆盖的 DR/模态，在重合�
 
 | 服务 | Helm revision | 镜像 tag | 状态及入口 |
 | --- | --- | --- | --- |
-| Assets Dev | 356 | 0.1.0-20261007-202614-casdc-status | site/backend 均 1/1 Ready；NodePort http://10.15.51.75:32083/atlas/ |
+| Assets Dev | 358 | 0.1.0-20261008-070003-native-review-fix | site/backend 均 1/1 Ready；审核页 http://10.15.51.75:32083/admin/ |
 | Assets 72602 | 7 | 0.1.0-20261003-153818-hst-supplement | 未在本轮更新；https://astro.assets.72602.space/atlas/ |
-| Workspace | 67 | 0.10.38-dev-20261003-0206-native-selection | 未在本轮更新；http://astro.workspace.dev.72602.space:32080/ |
+| Workspace Dev | 68 | 0.10.38-dev-20261003-0206-native-selection | 503 已恢复；ES/应用均 1/1 Ready，仅调整 ES 内存；http://astro.workspace.dev.72602.space:32080/ |
 
 - Assets Dev release/namespace：`astro-survey-atlas-assets`；API 与 health 在 host 根路径。
-- 2026-10-07 revision 356 下，`/healthz` 与 `/api/v1/status` 均 HTTP 200；catalog 有 132 layers、
+- 2026-10-08 revision 358 下，`/healthz` 与管理员原生索引、产品审核 API 均 HTTP 200；catalog 有 132 layers、
   survey catalog 有 29 IDs。当前 native generation 13，active group 与顶部记录一致；public pointer
   仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256
   `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，105 published MOCs。
@@ -619,13 +689,15 @@ Workspace，不进入 Assets 请求、日志、仓库或归档。
 `docs/download-plan-workflow.md`、`docs/api-reference.md` 和
 `docs/phase2-mvp-verification-20261003.md`。后续先收集用户桌面反馈，再扩大组件范围。
 
-## ERO C01：72602 已补齐目标映射，Dev 仍保留旧缺口
+## ERO C01：72602 补齐与 Dev 后续纳管
 
 2026-10-03 用户要求继续补充巡天数据，优先 ERO，并去掉
 `.overlap-drawer-content` 的 `max-height: 405px`。72602 已部署该样式变化；
 1440px/1024px、1000px 高度的浏览器检查为 `max-height=none`、内容高度 785px，
 无横向溢出和 JavaScript errors。随后通过官方包内 FITS 头补齐全部 17 个 ERO target，
-原来的 7-target 空间映射缺口在 **72602** 已解决。以下旧状态仅适用于 Dev 及历史快照。
+原来的 7-target 空间映射缺口在 **72602** 已解决。2026-10-08 管理 API 只读复查确认，Dev
+generation 13 的 ERO 活动输入也已是下述 snapshot、17 rows；“Dev 仍保留旧缺口”已过期。
+下文 10-row 输入和 C01 缺口只作为旧快照的历史记录，不是当前 Dev 状态。
 
 ERO 新输入从官方 XML 明确列出的 34 个 VIS/NISP Stack 包采集 85 份头文件，
 仅请求 tar 头和压缩 FITS 头前缀、解码至 END 头块；未获取完整科学包或像素。
@@ -657,7 +729,7 @@ hostname 仍验证，没有禁用运行时 TLS。科学库存、Q1 范围和 HST
 发布/HTTP/浏览器验证在
 `/home/aaron/.local/share/astro-assets-deployments/72602/20261003-145758-ero/`。
 
-### Dev 与旧快照的 C01 缺口（历史基线）
+### 旧 Dev 快照的 C01 缺口（历史基线）
 
 用户点击的是 O4 C01、cell [190]，面积 13.4287 deg²，
 RA 0–9°、Dec 57.3995–63.4483°。当前公开覆盖图命中 Euclid ERO 与 DESI，
@@ -821,21 +893,12 @@ assets-euclid-pagination-desktop.log 末尾有一次追加三巡天驱动失败�
 成功的两巡天结果已摘出为 main-flow.jsonl，成功三巡天另用全新浏览器验证。
 私有响应、导出和偏好仅在内存中使用，保存的 Workspace 证据只有汇总。
 
-## 尚未完成的计划与验收标准
+## 历史性能基线与验收限制
 
-| 优先级 | 待做 | 接续与完成标准 |
-| --- | --- | --- |
-| P0 | 核验 ERO 更精确的官方空间证据 | 72602 已完成 17-target FITS 头映射和 IC10 C01 验证。下一步若有官方有效像素 footprint/MOC 或 Tile roster，再补精度及身份；当前 frame bounds 为 estimated，不获取科学像素/掩膜，不编造 Tile。Dev 仍保留旧快照，后续更新需单独部署和受管激活。 |
-| P0 | 用户桌面验证最小 MVP | 由用户验证 72602 的四巡天 C02 页面/JSON/CSV、C01 ERO 命中与精度说明及原生管理页布局，并在 Workspace 67 验证公共图层+用户覆盖求交、原生分块/直接父目录、所选文件预览确认、下载 Connector 和资产扫描流程。Euclid 超限文件与 ERO 的 frame/Tile 精度限制仍明确保留；收到反馈前不扩大到其余 component。 |
-| P1 | 其余 component 检查 | 用户确认最小 MVP 后，再逐一检查当前 DESI + Euclid C01–C06 与四巡天 component。记录产品/order/cells/活动版本，区分原生命中、缺口、查询失败，验证首屏/续页/JSON/CSV。 |
-| P1 | 查询与首次等待性能 | 保持完整七-cell 区域、真实精度和 Key 配额，测冷/热 geometry、native 查询、快照、分页/导出阶段。现已做 SSE、snapshot gzip/有界缓存和 Workspace 私有父目录聚合；下一步针对剩余阶段测量优化。 |
-| P1 | 四巡天数据模态复核 | 逐产品核对 imaging/catalog/spectroscopy/redshift 等身份与实际输出；纠错走产品草稿、审核和发布，再核对公开图层/API/Workspace。DR10 color imaging 已完成，不再重复列为未修正。 |
-| P2 | 按来源补数据及核验 URI | 按下表冻结范围选择增量任务，每批登记来源/快照/精度/完整性，评估流式/增量构建，再受管构建与激活。现有候选 URI 不等于所有文件存在性已确认。 |
-| P2 | 公开 API 的商业化后续 | 鉴权、管理员发 Key、配额和 Swagger 已有；在线收费、自助购买/账单尚未设计或实施。待用户明确收费范围后规划，当前 status 的 onlineBilling 保持 false。 |
-| P2 | 中文字体首屏传输 | 两个 NotoSansSC WOFF2 合计约 23.5 MB，历史 SSH 隧道冷加载约 2 分钟。评估字集拆分或系统字体回退，用桌面冷缓存验收；不能将字体传输直接当作反查等待的原因。 |
-| P2 | 生产迁移与存储留存 | 正式迁移前冻结业务状态、列出权威依赖并验证目标恢复。反查快照一小时是 cursor 访问期限，不是对象删除；历史盘点没有生命周期清理，需单独设计留存策略，保留审核/任务与恢复依赖。 |
+当前待办统一见本文顶部“待做清单（2026-10-08）”。第一阶段 MVP 已结束，旧的 MVP 等待确认
+步骤及“Dev 仍保留旧 ERO 快照”不再作为当前接续条件。
 
-最近可用的性能基线是激活后的 Assets 首批 4.437 s / 完整查询 20.189 s，
+历史固定场景的性能基线为激活后的 Assets 首批 4.437 s / 完整查询 20.189 s，
 Workspace 首批 4.692 s / 完整查询 33.495 s，geometry 冷 12.376 s /
 复用 0.560 s。这些不含后续全部分页导出和 Key 配额等待；
 50/87 秒等早期数字留在历史记录，不是当前基线。
@@ -857,15 +920,18 @@ HST 与 Legacy 来源补查结论见 [HST footprint 审计](docs/research/hst-un
 [Legacy North 补查](docs/research/legacy-north-source-supplement-20261001.md)
 及 [原生 URI 调研](docs/research/native-block-access-uris.md)。
 
-## 存储、生产搬迁与暂缓事项
+## 历史存储盘点与暂缓事项（2026-10-01）
 
 公开清单和两份 SQLite 的安装/恢复位置是 Assets evidence PVC；
-当前受管输入与索引已按 authority 归档。两份库分别是通用 native source-unit
+当时的受管输入与索引已按 authority 归档。两份库分别是通用 native source-unit
 索引（Legacy/DESI/Euclid Q1/HSC 等）和 HST 专用 observation/footprint 索引，
 不是两个重复库。ERO 使用锁定的 target 元数据。
 用户偏好统一 SQLite，但明确“先这样”；统一库暂缓。
 
-最近权威对象盘点：native 去重依赖加指针/manifest 为 943.69 MiB，
+以下为 2026-10-01 的历史迁移盘点，不能用于当前 Dev generation 13 的容量或搬迁估算；
+当前 Dev 实测容量及待完成的引用清单见 [Dev 存储规划](docs/storage-plan-dev-20261007.md)。
+
+当时的权威对象盘点：native 去重依赖加指针/manifest 为 943.69 MiB，
 public 为 155.43 MiB，合计 1,152,509,295 bytes / 1.073 GiB。
 加业务状态/其他证据的旧估算后，生产首次迁移约 1.26 GiB，可按 1.3 GiB 理解；
 业务状态尚未重新冻结，不能当作精确复制清单。原始输入与两份索引恢复后约 2.904 GiB。
