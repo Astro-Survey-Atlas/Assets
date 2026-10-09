@@ -44,16 +44,6 @@ body.homepage .site-header {
 body.homepage .brand-logo { width: 88px; height: 34px; opacity: 1; }
 body.homepage .brand strong { font-size: 13px; }
 body.homepage .brand small { color: var(--home-muted); }
-body.homepage .site-nav-link[aria-current="page"] { position: relative; }
-body.homepage .site-nav-link[aria-current="page"]::after {
-  position: absolute;
-  right: 10px;
-  bottom: 2px;
-  left: 10px;
-  height: 2px;
-  background: var(--home-red);
-  content: "";
-}
 
 .homepage-main,
 .home-footer {

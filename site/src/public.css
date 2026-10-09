@@ -138,6 +138,7 @@ body.resources-page .site-nav {
 
 body.public-site .site-nav-link,
 body.resources-page .site-nav-link {
+  position: relative;
   display: inline-flex;
   align-items: center;
   min-height: 34px;
@@ -165,6 +166,19 @@ body.resources-page .site-nav-link[aria-current="page"] {
   background: var(--public-surface-raised);
   color: var(--public-text);
   outline: 0;
+}
+
+body.public-site .site-nav-link[aria-current="page"]::after,
+body.resources-page .site-nav-link[aria-current="page"]::after {
+  position: absolute;
+  right: 10px;
+  bottom: 2px;
+  left: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--brand-magenta);
+  content: "";
+  pointer-events: none;
 }
 
 .theme-toggle,
