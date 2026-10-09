@@ -1,0 +1,42 @@
+# Copyright 2026 Astro Survey Atlas contributors.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements/requirements.lock
+
+      - run: python -m pip install -r requirements/requirements.lock
+      - run: npm ci
+      - run: npm run test:node
+      - run: npm run test:python
+
+      - name: Install Chromium test browser
+        run: |
+          python -m pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium
+
+      - run: npm run test:homepage

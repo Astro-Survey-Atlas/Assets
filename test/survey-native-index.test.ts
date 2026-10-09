@@ -10,7 +10,7 @@ import { assertNativeSurvey, nativeMetadataUrl, type NativeBinding, type NativeS
 import { cellsForStcs } from "../server/hst-image-lookup.js";
 import { importSurveySnapshot, loadSurveyManifest, matchesPanstarrsListingEvidence, normalizedRow, parsePanstarrsListing, SurveyNativeIndex, surveyNativeBinding } from "../server/survey-native-index.js";
 import { sourceIdsForBinding } from "../server/native-unit-sources.js";
-import { alternativesForAccessUri, casdcProviderStatuses } from "../server/survey-access.js";
+import { alternativesForAccessUri, casdcProviderStatuses, withSurveyProviderStatuses } from "../server/survey-access.js";
 import { OVERLAP_DOWNLOAD_HEADER, overlapCsvRows } from "../site/src/overlap-download.js";
 
 const capturedAt = "2026-10-03T08:00:00Z";
@@ -1255,6 +1255,33 @@ test("CASDC provider status records reachable survey directories with canonical 
     assert.match(providers[1]!.note ?? "", /directory listing/i);
     assert.match(providers[1]!.note ?? "", /individual file URLs and scientific bytes were not checked/i);
   }
+});
+
+test("CASDC Euclid reverse lookup links to the matching Tile and checked product directories", () => {
+  const unit = withSurveyProviderStatuses({
+    layerId: "euclid-q1-vis", productId: "euclid-q1-vis", surveyId: "euclid", releaseId: "euclid-q1",
+    product: "Euclid Q1 VIS", modality: "imaging", unitKind: "tile", unitId: "102018211",
+    order: 8, nside: 256, matchingCells: [1], precision: "exact",
+    accessUris: [
+      { uri: "https://eas.esac.esa.int/sas-dd/vis.fits", fileName: "EUC_MER_BGSUB-MOSAIC-VIS_TILE102018211.fits", band: "VIS" },
+      { uri: "https://eas.esac.esa.int/sas-dd/h.fits", fileName: "EUC_MER_BGSUB-MOSAIC-NIR-H_TILE102018211.fits", band: "H" },
+    ],
+  });
+  const mirrorDirectories = unit.sourceMetadata!.providerStatuses!.filter(item => item.relationship === "directory-entrypoint");
+  assert.deepEqual(mirrorDirectories.map(item => item.uri), [
+    "https://casdc.china-vo.org/mirror/Euclid-Q1/MER/102018211/VIS/",
+    "https://casdc.china-vo.org/mirror/Euclid-Q1/MER/102018211/NISP/",
+  ]);
+  assert.ok(mirrorDirectories.every(item => item.status === "verified" && item.httpStatus === 200));
+  assert.ok(mirrorDirectories.every(item => /individual file bodies were not checked/i.test(item.note ?? "")));
+});
+
+test("CASDC DESI records the verified iron zcatalog entrypoint without claiming tile files", () => {
+  const providers = casdcProviderStatuses("desi", "desi-dr1");
+  const zcatalog = providers.find(item => item.uri.endsWith("/DESI-DR1/spectro/redux/iron/zcatalog/"));
+  assert.equal(zcatalog?.accessType, "directory");
+  assert.equal(zcatalog?.status, "verified");
+  assert.match(zcatalog?.note ?? "", /does not establish a tile-specific mirror path/i);
 });
 
 test("DECaLS DR5 binds to the locked DR5 brick sources with a mixed-program scope", () => {

@@ -2,10 +2,10 @@
 
 ## Find survey data for your patch of sky
 
-Load Euclid, DESI, Legacy Surveys and HST on one sky. Compare releases and
-modalities, inspect overlap, find the native Tile, brick, target or observation
-links, and export the same results as a JSON/CSV source manifest. HSC-SSP also
-provides its existing tract/patch adapter.
+Load Euclid, DESI, Legacy Surveys, Gaia DR3 and HST on one sky. Compare releases
+and modalities, inspect overlap, find the native Tile, brick, partition, target
+or observation links, and export the same results as a JSON/CSV source manifest.
+HSC-SSP also provides its existing tract/patch adapter.
 
 **[Open Sky Atlas](https://astro.assets.72602.space/atlas/)** ·
 [Browse surveys](https://astro.assets.72602.space/surveys/) ·
@@ -33,14 +33,22 @@ contains no scientific data. Users obtain that data from the source. Known
 source evidence remains useful without a download link. See the
 [coverage workflow](docs/coverage-workflow.md) for the scope and precision rules.
 
-The current native mappings have explicit source limits:
+The current product and native-unit mappings have explicit source limits. A
+listed product is not proof that every file or public archive product has been
+indexed; source files remain at their archive under its access policy.
 
 | Survey | Native units and access | Captured scope |
 | --- | --- | --- |
-| Euclid | Q1 Tile IDs and ESA product URIs; ERO target/package links | Q1 contains 2,908 BGSUB metadata rows / 352 Tiles. ERO target extents are estimated and have no verified Tile roster. |
-| DESI DR1/EDR | Estimated Tile candidates and official directories | Circular focal-plane matches do not establish target-level spectral coverage or a complete science-file inventory. |
-| Legacy Surveys | Release-specific bricks and candidate product URIs | DR10 South covers the official 366,912-member roster; northern imaging retains DR9 North identity. Candidate URIs still require per-file verification. |
-| HST | Observation IDs, original `s_region` and MAST entrypoints | A locked local CAOM snapshot supplies the mapping. Eighteen unresolved-frame rows remain excluded; MAST provides current products and source access policy. |
+| Euclid | Q1 Tile IDs and ESA product URIs; ERO target/package links | Q1 contains 2,908 BGSUB metadata rows / 352 Tiles. The CASDC VIS/NISP directories for Tile `102018211` returned HTTP 200; other Tile paths are rule-derived and file bodies were not checked. ERO target extents are estimated and have no verified Tile roster. |
+| DESI DR1/EDR | Estimated Tile candidates and official directories | The CASDC DR1 iron zcatalog directory returned HTTP 200, but this does not verify a Tile-specific mirror path or individual files. Circular focal-plane matches do not establish target-level spectral coverage or a complete science-file inventory. |
+| Legacy Surveys | Release-specific bricks and candidate product URIs | The catalog spans DR1-DR10. DR10 South covers the official 366,912-member roster; northern imaging retains DR9 North identity. Candidate URIs still require per-file verification, and later releases are not implied by the DR10 roster. |
+| Gaia DR3 | `gaia_source` HEALPix file partitions | The locked ICRS/NESTED order-8 ranges describe source-ID file partitions, not actual source occupancy or verified file contents. Other Gaia DR3 products are not represented by this binding. |
+| HST | Observation IDs, original `s_region` and MAST entrypoints | A locked local CAOM snapshot supplies the mapping. Eighteen unresolved-frame rows remain excluded; this is not a complete HST public-image inventory. MAST provides current products and source access policy. |
+
+These are bounded, evidence-backed scopes rather than complete inventories of
+the five archives. Coverage MOCs, native-unit mappings, source directories and
+verified scientific file bytes are separate evidence; the directory checks
+above establish only that the listed entrypoints responded at the time checked.
 
 HSC-SSP's existing PDR2/PDR3 tract/patch adapter links to the corresponding
 DAS Search, which requires an account; a match does not prove a file exists.

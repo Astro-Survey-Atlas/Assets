@@ -285,7 +285,7 @@ function drawGraphic(svg: SVGElement, mode: TabName): void {
 const tabs = [...document.querySelectorAll<HTMLButtonElement>("[data-home-tab]")];
 const workflow = document.querySelector<HTMLElement>(".home-workflow");
 const rotationButton = document.querySelector<HTMLButtonElement>("[data-home-autoplay]");
-const rotationLabel = rotationButton?.querySelector<HTMLElement>("span");
+const rotationLabel = rotationButton?.querySelector<HTMLElement>("[data-i18n]");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let currentTab: TabName = "overlap";
 let autoIntent: boolean | null = null;
@@ -368,9 +368,10 @@ function syncRotationControl(): void {
   rotationButton.setAttribute("aria-label", t(enabled ? "home.pauseRotation" : "home.resumeRotation"));
   rotationButton.setAttribute("aria-pressed", String(!enabled));
   const iconHost = rotationButton.querySelector<HTMLElement>(".home-rotation-icon");
-  if (iconHost) {
+  const iconName = enabled ? "pause" : "play";
+  if (iconHost && iconHost.querySelector("[data-lucide]")?.getAttribute("data-lucide") !== iconName) {
     const icon = document.createElement("i");
-    icon.dataset.lucide = enabled ? "pause" : "play";
+    icon.dataset.lucide = iconName;
     iconHost.replaceChildren(icon);
     renderIcons(iconHost);
   }
@@ -470,8 +471,11 @@ window.addEventListener("resize", () => drawGraphic(byId<SVGElement>("home-diagr
 window.addEventListener("popstate", () => chooseTab(new URLSearchParams(window.location.search).get("tab") ?? "overlap", false));
 window.addEventListener("atlas:locale-change", () => {
   renderTab(currentTab);
-  if (loadedSurveys) renderFeaturedSurveys(loadedSurveys);
-  else if (catalogFailed) renderCatalogFailure();
+  if (loadedSurveys) {
+    renderStats(loadedSurveys);
+    renderFeaturedSurveys(loadedSurveys);
+  } else if (catalogFailed) renderCatalogFailure();
+  syncRotationControl();
   scheduleRotation();
 });
 

@@ -70,7 +70,7 @@ export function publicOpenApi() {
     },
   };
   return {
-    openapi: "3.0.3", info: { title: "Astro Survey Atlas Assets API", version: "1.0.0", description: "Public survey coverage and source manifests. Coordinates are ICRS; HEALPix is NESTED. Download plans contain metadata and source links. Source access policies apply. Full region lookup uses an administrator-issued API Key; this service does not currently provide online billing." }, servers: [{ url: "/" }],
+    openapi: "3.0.3", info: { title: "Astro Survey Atlas Assets API", version: "0.0.1", description: "Public survey coverage and source manifests. Coordinates are ICRS; HEALPix is NESTED. Download plans contain metadata and source links. Source access policies apply. Full region lookup uses an administrator-issued API Key; this service does not currently provide online billing." }, servers: [{ url: "/" }],
     tags: [{ name: "Public coverage" }, { name: "Authenticated lookup" }],
     components: { securitySchemes: { ApiKey: { type: "apiKey", in: "header", name: "X-Assets-API-Key" } }, schemas: {
       CoverageOverviewFootprint: overviewFootprint,

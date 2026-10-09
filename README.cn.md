@@ -14,9 +14,25 @@ Assets 绝不代替用户下载科学数据。可下载的 JSON/CSV **下载计�
 
 | 项目 | 职责 | 入口 |
 | --- | --- | --- |
-| [Assets](https://github.com/Astro-Survey-Atlas/Assets) | 公共巡天目录、覆盖天球、MOC、重合查询和发布制品 | [在线目录](https://astro.assets.dev.72602.space:32443/surveys/) |
+| [Assets](https://github.com/Astro-Survey-Atlas/Assets) | 公共巡天目录、覆盖天球、MOC、重合查询和发布制品 | [在线目录](https://astro.assets.72602.space/surveys/) |
 | [Warehouse](https://github.com/Astro-Survey-Atlas/Warehouse) | Scanner、ScanPlan/ScanRequest 执行、当前文件/覆盖索引和 evidence | [Warehouse README](https://github.com/Astro-Survey-Atlas/Warehouse) |
 | [Workspace](https://github.com/Astro-Survey-Atlas/Workspace) | 用户资产、Connector、本地工作流、用户 MOC 和私有探索 | [Workspace README](https://github.com/Astro-Survey-Atlas/Workspace) |
+
+## 巡天数据范围
+
+已登记的产品不代表档案中的每个公开产品或科学文件都已纳入索引。来源文件仍由
+原档案按其访问政策提供；目录入口可用也不等于逐文件校验。
+
+| 巡天 | 天区单位与来源 | 已捕获范围及限制 |
+| --- | --- | --- |
+| Euclid | Q1 Tile 与 ESA 产品 URI；ERO target/package | Q1 锁定 BGSUB 清单有 2,908 行、352 个 Tile。CASDC 中 Tile `102018211` 的 VIS/NISP 目录在 2026-10-09 检查时返回 HTTP 200；其他 Tile 路径由规则推导，未检查文件字节。ERO target 范围为估算，尚无已核验 Tile roster。 |
+| DESI DR1/EDR | 估算 Tile 候选与官方目录 | CASDC DR1 iron zcatalog 目录在 2026-10-09 检查时返回 HTTP 200；这不证明有 Tile 专属镜像路径或逐文件可用。圆形焦平面近似不等于目标级光谱覆盖或完整科学文件清单。 |
+| Legacy Surveys | 按 release 区分的 brick 与候选产品 URI | 当前目录登记 DR1-DR10。DR10 South 对应官方 366,912 个成员；北区成像保留 DR9 North 身份。候选 URI 尚未逐文件核验，DR10 roster 不代表后续 release。 |
+| Gaia DR3 | `gaia_source` HEALPix 文件分区 | 锁定的 ICRS/NESTED O8 范围描述 source-ID 分区，不证明实际天体占据或文件内容；其他 Gaia DR3 产品不在此绑定中。 |
+| HST | Observation ID、原始 `s_region` 和 MAST 入口 | 本地锁定 CAOM 快照提供映射；18 条坐标框架未解析记录仍排除。这不是完整 HST 公共影像清单，MAST 仍负责实时产品与访问政策。 |
+
+以上是有边界、基于证据的范围，不是五个档案的完整产品清单。MOC 覆盖、原生分块、
+来源目录和已校验科学文件字节是不同证据；目录检查只说明对应入口在检查时响应。
 
 ## 当前实现
 

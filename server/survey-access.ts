@@ -9,7 +9,7 @@ const CHECKED = {
   mastHead: "2026-10-04T03:41:42Z",
   galexHead: "2026-10-04T03:41:41Z",
   sdssHead: "2026-10-04T03:38:52Z",
-  casdc: "2026-10-07T12:22:24Z",
+  casdc: "2026-10-09",
   skymapperCutout: "2026-10-04T16:58:37Z",
   twomassAtlasHead: "2026-10-05",
 } as const;
@@ -170,23 +170,59 @@ export function verifiedDirectoryAlternative(uri: string, provider: string, prov
     status: "verified", checkedAt, httpStatus: 200, note });
 }
 
-export function casdcProviderStatuses(surveyId: string, releaseId: string): SourceAccessAlternative[] {
+export function casdcProviderStatuses(
+  surveyId: string,
+  releaseId: string,
+  unitId?: string,
+  accessUris?: SourceAccessUri[],
+): SourceAccessAlternative[] {
   const dataset = surveyId === "gaia" && releaseId === "gaia-dr3" ? "Gaia"
     : surveyId === "galex" && releaseId.startsWith("galex-") ? "GALEX"
-      : surveyId === "euclid" && releaseId === "euclid-q1" ? "Euclid-Q1" : undefined;
+      : surveyId === "euclid" && releaseId === "euclid-q1" ? "Euclid-Q1"
+        : surveyId === "desi" && releaseId === "desi-dr1" ? "DESI-DR1" : undefined;
   if (!dataset) return [];
   const root = "https://casdc.china-vo.org/mirror/";
   const common = { provider: "CASDC mirror catalog · NAOC/CASDC", providerCountryCode: "CN", providerLocation: "National Astronomical Observatories of China / CASDC", servingRegion: "Download node location unknown" };
-  return [
+  const statuses = [
     alternative(root, { ...common, accessType: "entrypoint", relationship: "regional-repository", status: "entrypoint-only", checkedAt: CHECKED.casdc, httpStatus: 200,
       note: "The mirror index is reachable and lists this survey; the target directory is checked separately below." }),
     alternative(new URL(`${dataset}/`, root).toString(), { ...common, accessType: "directory", relationship: "regional-repository", status: "verified", checkedAt: CHECKED.casdc, httpStatus: 200,
       note: "The target directory returned HTTP 200 and exposed a directory listing. Individual file URLs and scientific bytes were not checked." }),
   ];
+  if (surveyId === "desi" && releaseId === "desi-dr1") {
+    statuses.push(alternative(new URL("DESI-DR1/spectro/redux/iron/zcatalog/", root).toString(), {
+      ...common, accessType: "directory", relationship: "directory-entrypoint", status: "verified", checkedAt: CHECKED.casdc, httpStatus: 200,
+      note: "The DR1 iron zcatalog directory returned HTTP 200. It does not establish a tile-specific mirror path or verify individual files.",
+    }));
+  }
+  if (surveyId === "euclid" && releaseId === "euclid-q1" && unitId) {
+    const tileId = /^\d{8,12}$/.test(unitId) ? unitId : undefined;
+    if (tileId) {
+      const kinds = new Set((accessUris ?? []).map((entry) => {
+        const name = `${entry.fileName ?? ""} ${entry.band ?? ""}`.toUpperCase();
+        if (/VIS/.test(name)) return "VIS";
+        if (/NISP|NIR-[YJH]/.test(name)) return "NISP";
+        return undefined;
+      }).filter((kind): kind is "VIS" | "NISP" => kind !== undefined));
+      const folders = kinds.size ? [...kinds] : [""];
+      for (const folder of folders) {
+        const uri = new URL(`Euclid-Q1/MER/${tileId}/${folder ? `${folder}/` : ""}`, root).toString();
+        const checked = tileId === "102018211";
+        statuses.push(alternative(uri, {
+          ...common, accessType: "directory", relationship: "directory-entrypoint", status: checked ? "verified" : "rule-derived",
+          ...(checked ? { checkedAt: CHECKED.casdc, httpStatus: 200 } : {}),
+          note: checked
+            ? "The Tile directory and listed VIS/NISP child directories returned HTTP 200. The directory lists products for this Tile; individual file bodies were not checked."
+            : "The path follows the checked CASDC Euclid-Q1 MER Tile layout. This Tile directory and its files have not been individually checked.",
+        }));
+      }
+    }
+  }
+  return statuses;
 }
 
 export function withSurveyProviderStatuses(unit: DownloadPlanSpatialUnit): DownloadPlanSpatialUnit {
-  const statuses = casdcProviderStatuses(unit.surveyId, unit.releaseId);
+  const statuses = casdcProviderStatuses(unit.surveyId, unit.releaseId, unit.unitId, unit.accessUris);
   if (!statuses.length) return unit;
   const sourceMetadata = unit.sourceMetadata ?? {};
   const old = Array.isArray(sourceMetadata.providerStatuses) ? sourceMetadata.providerStatuses as SourceAccessAlternative[] : [];

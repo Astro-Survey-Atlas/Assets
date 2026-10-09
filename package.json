@@ -1,6 +1,6 @@
 {
   "name": "astro-survey-atlas-assets",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -34,7 +34,9 @@
     "dev:site": "vite --host 0.0.0.0 --port 5174",
     "test:admin-browser": "python3 scripts/admin-browser-smoke.py",
     "start": "node dist/server/server.js",
-    "test:node": "tsx --test test/*.test.ts",
+    "test:node": "tsx --test --test-concurrency=4 test/*.test.ts",
+    "test:python": "python3 -m unittest discover -s test -p 'test_*.py'",
+    "test:homepage": "npm run build:site && python3 scripts/homepage-carousel-smoke.py",
     "test:core": "python3 scripts/verify_core_wheel.py",
     "test": "npm run test:node && npm run test:core",
     "validate": "npm run build && npm test"

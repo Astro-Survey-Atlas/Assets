@@ -20,6 +20,16 @@
 
 Dev Helm revision **360** 已部署镜像 `0.1.0-20261009-143026-homepage-brand`；site/backend 均 1/1 Ready、重启数为 0。NodePort `http://10.15.51.75:32083/` 首页、health、assets、coverage 和静态 CSS 返回 HTTP 200。health 的 bundle SHA 为 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，发布清单 602 files 加 1 个 retained package，共 603 项，与 health 计数一致。FITS 资产 16-byte Range 返回 HTTP 206，`X-Content-SHA256` 与清单一致。当前机器无法连接 Ingress `astro.assets.dev.72602.space`，因此使用 NodePort 验收。未启动或修改 Warehouse/Elasticsearch。
 
+## 2026-10-09 基础数据、CI 与 Dev 留存
+
+实现分支 `feat/foundation-data-0.0.1` 基于 `origin/main` `173f4cf`，并包含首页 v4 的四个既有提交。此次代码加入 PR/main CI（Node、Python 和首页 Chromium 回归），将 Node 测试默认并发固定为 4，并把包、Chart、API 与 health 版本统一为 `0.0.1`。首页暂停图标不再在每次状态同步时重建；语言切换更新首页目录、统计、说明和轮播控制。CASDC 来源入口增加 Euclid Q1 Tile 的 VIS/NISP 目录及 DESI DR1 iron zcatalog，并在中英文 README 明确已捕获范围、逐文件校验限制和目录检查边界。
+
+Dev Helm revision **362** 使用镜像 `0.1.0-20261009-173805-foundation-data`；site/backend 均 1/1 Ready、重启数为 0。NodePort `/healthz` 返回 HTTP 200，版本 `0.0.1`，public bundle 仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，603 项。Helm release 已设 `objectStore.retainReleases=3`、`cleanup=true`。
+
+按目录 mtime 预览后，经 `cleanupReleaseHistory("/data", 3)` 删除 Dev `assets` PVC 中 38 个历史 public release 缓存目录。活动版 `0e49b04b…` 与最近两个回滚版 `0e23aca2…`、`c66125a8…` 保留；`/data/releases` 从 41 个目录、5,248,560,917 bytes 降至 3 个目录、约 657 MB，释放约 4.56 GB。evidence PVC、原生索引依赖、源快照和对象存储内容没有清理。
+
+`npm run build`、`npm test`（458 项，456 通过、2 跳过）、`npm run test:python`（68 项）、`npm run test:homepage`、Helm lint 和 `git diff --check` 通过。Dev rollout 通过，两个 Pod 0 重启。此次没有生成新的 MOC、原生索引版本或 public bundle。活动 native generation 仍为 13；五个重点巡天的证据/库存缺口尚未补齐，因此**不要创建 `v0.0.1` release tag 或将其描述为数据完成版本**。下一步继续按原生分块管理流程补证据、构建候选、审核、归档、激活并验证；独立备份和存储迁移按用户决定暂缓。
+
 ## 当前目标与状态
 
 **第一阶段 MVP 已结束**（用户于 2026-10-04 确认）。Phase 1 覆盖 Euclid、DESI、Legacy
@@ -28,8 +38,9 @@ Surveys、HST 与 Workspace 的公开覆盖、原生分块反查、来源链接�
 2026-10-08 用户另行授权恢复 **Workspace Dev 的 503**；该维护例外仅涉及 Workspace 的
 Elasticsearch 内存配置，不扩大巡天补数据或公开发布的范围。
 
-Dev 当前 Helm revision **360**，site/backend 均 1/1 Ready、重启数为 0，镜像 tag
-`0.1.0-20261009-143026-homepage-brand`。当前 public bundle SHA-256 为
+Dev 当前 Helm revision **362**，site/backend 均 1/1 Ready、重启数为 0，镜像 tag
+`0.1.0-20261009-173805-foundation-data`。public release cache 保留活动版和最近两版；Helm 值为
+`retainReleases=3`、`cleanup=true`。当前 public bundle SHA-256 为
 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，release manifest 共 603 项。此前 revision 354 部署的
 防积压修复 commit `d776e48` 已推送并保留在当前版本中。
 
@@ -67,15 +78,14 @@ ES PVC `data-asa-elasticsearch-master-0` 继续绑定原 PV，UID 为
 `d156eaf2-7e3c-40c1-9423-1ed0f5f2e959`。没有删除或重建 PVC、重置索引或下载科学数据；
 Workspace 私有响应正文、文件身份和 HEALPix cells 未写入 Assets 文档或验证记录。
 
-### 待做清单（2026-10-08）
+### 2026-10-08 待做快照
 
-以下事项仅登记待做，本次不启动新的补数据、审核、清理或迁移。存储事项应先于下一批可选
-巡天归档完成。第一阶段 MVP、防积压修复部署、审核界面部署、Wiki 中英文发布与 CASDC 状态
-更新已完成，不再作为待办。
+以下表格保留 2026-10-08 的待做快照，后续状态以本文件顶部更新为准。它与 Dev public release
+缓存留存不是同一存储层；evidence 归档版本的引用盘点和留存策略尚未完成。
 
 | 优先级 | 待做 | 当前状态与完成标准 |
 | --- | --- | --- |
-| P1 | 审核功能代码提交、推送 | Dev revision 358 已部署并通过完整校验；代码已暂存但尚未提交、推送。检查并保留既有工作树修改，提交后登记 commit 与镜像的对应关系。 |
+| P1 | 审核功能代码提交、推送 | 已包含在 `main` `173f4cf`；此旧待办关闭。 |
 | P1（下次归档前） | 最多保留三个已完成版本 | 每条逻辑内容版本线包含活动版在内最多保留 3 个已完成版本。现仅盘点部分引用；需覆盖所有保留版本、控制状态和进行中任务依赖，完成引用感知 dry-run，再实施清理与自动留存。共享对象仍有引用时必须保留。 |
 | P1（下次归档前） | 独立备份与存储迁移 | 目标尚未选定。确认独立于 `10.15.49.212` 的故障域、所有权和配额；冻结权威依赖清单，逐对象核对 size/SHA，完成恢复演练和 Dev 切换验证。见 [Dev 存储规划](docs/storage-plan-dev-20261007.md)。 |
 | P1 | 容量报警与硬配额 | 桶 75%/85%、spool 750/900 MiB 仍为建议阈值，实际报警未落地。核实 NFS/local-path 的硬配额能力，落地容量预警；PVC 声明容量和 1 GiB spool 入队预算不能视为文件系统硬限制。 |
