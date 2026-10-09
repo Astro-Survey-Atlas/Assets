@@ -1,6 +1,6 @@
 # Assets 项目交接
 
-交接日期：2026-10-08（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-09（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
@@ -10,7 +10,15 @@
 
 首页已按 v4 设计呈现炭黑/浅色主题、透明双主题 Logo、横排标题、概念空间示意、三组同步 Tab、真实四巡天目录行、统计和资源入口。Tab 每 5 秒循环；手动选择重计时，悬停、键盘焦点、隐藏页面暂停；减少动态效果默认暂停。来源清单与科学数据获取分别说明。
 
-验收：`npm run build:site`、`npx tsc -p tsconfig.site.json` 和 `git diff --check` 通过。Playwright/Chromium 使用公开目录 fixture 检查 1440、1024、390、320px，主题、语言、导航、统计、目录失败提示、Tab 联动、轮播计时、悬停/焦点/隐藏暂停和减少动态效果；无横向溢出或浏览器错误。未启动 Warehouse/Elasticsearch，未部署。浏览器截图在 `/tmp/asa-homepage-v4/`。
+验收：`npm run build:site`、`npx tsc -p tsconfig.site.json` 和 `git diff --check` 通过。Playwright/Chromium 使用公开目录 fixture 检查 1440、1024、390、320px，主题、语言、导航、统计、目录失败提示、Tab 联动、轮播计时、悬停/焦点/隐藏暂停和减少动态效果；无横向溢出或浏览器错误。后续文案、标记和 Dev 部署见下节。未启动 Warehouse/Elasticsearch。浏览器截图在 `/tmp/asa-homepage-v4/`。
+
+## 2026-10-09 首页文案与品牌统一 / Dev revision 360
+
+首页标题明确为“按天区查巡天覆盖，再定位数据来源”，说明比较巡天重叠、追到档案来源，并区分 JSON/CSV 来源清单和科学数据。四个首页巡天行、管理台巡天卡片和目录预览共用同一套天区网格、轨迹、红色定位点及巡天简称标记；管理台不再使用风格各异的巡天展示图。页头复用透明双主题站点 Logo。公开首页、天球、目录和管理页页头统一为桌面 64px、手机 60px。仅改文案与前端表现，没有更改路由、API、后端、数据或天球主体。
+
+代码提交 `1598ea7` 已推送到 `feat/homepage-v4`。`npm run build`、`npm test`（456 项，454 通过、2 跳过）、站点 TypeScript 检查、`git diff --check` 和 Helm lint 通过。浏览器验证了 1440、390、320px，中文深浅主题、巡天目录标记、各页页头高度和手动选择后自动轮播；没有横向溢出或浏览器异常。
+
+Dev Helm revision **360** 已部署镜像 `0.1.0-20261009-143026-homepage-brand`；site/backend 均 1/1 Ready、重启数为 0。NodePort `http://10.15.51.75:32083/` 首页、health、assets、coverage 和静态 CSS 返回 HTTP 200。health 的 bundle SHA 为 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，发布清单 602 files 加 1 个 retained package，共 603 项，与 health 计数一致。FITS 资产 16-byte Range 返回 HTTP 206，`X-Content-SHA256` 与清单一致。当前机器无法连接 Ingress `astro.assets.dev.72602.space`，因此使用 NodePort 验收。未启动或修改 Warehouse/Elasticsearch。
 
 ## 当前目标与状态
 
@@ -20,10 +28,9 @@ Surveys、HST 与 Workspace 的公开覆盖、原生分块反查、来源链接�
 2026-10-08 用户另行授权恢复 **Workspace Dev 的 503**；该维护例外仅涉及 Workspace 的
 Elasticsearch 内存配置，不扩大巡天补数据或公开发布的范围。
 
-Dev 当前 Helm revision **358**，site/backend 均 1/1 Ready，镜像 tag
-`0.1.0-20261008-070003-native-review-fix`。本机构建 image ID 为
-`46145c5c34ccdf38f92ee907b13c9b5dd535260171c28d2b505a9fc70701e351`，registry manifest digest 为
-`sha256:904a5f576a7986fe32637a0e13cd9392adf98c853b2b5407627eeab4e5890510`。此前 revision 354 部署的
+Dev 当前 Helm revision **360**，site/backend 均 1/1 Ready、重启数为 0，镜像 tag
+`0.1.0-20261009-143026-homepage-brand`。当前 public bundle SHA-256 为
+`0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，release manifest 共 603 项。此前 revision 354 部署的
 防积压修复 commit `d776e48` 已推送并保留在当前版本中。
 
 ### 2026-10-08 Workspace Dev 503 恢复
