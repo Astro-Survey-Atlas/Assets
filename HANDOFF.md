@@ -4,6 +4,14 @@
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
+## 2026-10-09 首页 v4 前端实现
+
+实现分支 `feat/homepage-v4` 基于最新 `main` `173f4cf`。本次只调整公开首页的标记、样式、双语文案和浏览器交互；复用现有 `/api/v1/surveys`、导航、主题、语言与目录路由，没有修改后端、数据或天球页面。
+
+首页已按 v4 设计呈现炭黑/浅色主题、透明双主题 Logo、横排标题、概念空间示意、三组同步 Tab、真实四巡天目录行、统计和资源入口。Tab 每 5 秒循环；手动选择重计时，悬停、键盘焦点、隐藏页面暂停；减少动态效果默认暂停。来源清单与科学数据获取分别说明。
+
+验收：`npm run build:site`、`npx tsc -p tsconfig.site.json` 和 `git diff --check` 通过。Playwright/Chromium 使用公开目录 fixture 检查 1440、1024、390、320px，主题、语言、导航、统计、目录失败提示、Tab 联动、轮播计时、悬停/焦点/隐藏暂停和减少动态效果；无横向溢出或浏览器错误。未启动 Warehouse/Elasticsearch，未部署。浏览器截图在 `/tmp/asa-homepage-v4/`。
+
 ## 当前目标与状态
 
 **第一阶段 MVP 已结束**（用户于 2026-10-04 确认）。Phase 1 覆盖 Euclid、DESI、Legacy
