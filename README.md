@@ -43,7 +43,7 @@ indexed; source files remain at their archive under its access policy.
 | DESI DR1/EDR | Estimated Tile candidates and official directories | The CASDC DR1 iron zcatalog directory returned HTTP 200, but this does not verify a Tile-specific mirror path or individual files. Circular focal-plane matches do not establish target-level spectral coverage or a complete science-file inventory. |
 | Legacy Surveys | Release-specific bricks and candidate product URIs | The catalog spans DR1-DR10. DR10 South covers the official 366,912-member roster; northern imaging retains DR9 North identity. Candidate URIs still require per-file verification, and later releases are not implied by the DR10 roster. |
 | Gaia DR3 | `gaia_source` HEALPix file partitions | The locked ICRS/NESTED order-8 ranges describe source-ID file partitions, not actual source occupancy or verified file contents. Other Gaia DR3 products are not represented by this binding. |
-| HST | Observation IDs, original `s_region` and MAST entrypoints | A locked local CAOM snapshot supplies the mapping. Eighteen unresolved-frame rows remain excluded; this is not a complete HST public-image inventory. MAST provides current products and source access policy. |
+| HST | Observation IDs, original `s_region` and MAST entrypoints | An Assets Dev-only supplement adds one public observation to the native mapping; it is not included in the current public bundle and does not complete the HST inventory. The locked CAOM snapshot still excludes eighteen unsupported-frame rows. MAST provides current products and source access policy. |
 
 These are bounded, evidence-backed scopes rather than complete inventories of
 the five archives. Coverage MOCs, native-unit mappings, source directories and

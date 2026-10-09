@@ -30,6 +30,14 @@ Dev Helm revision **363** 使用镜像 `0.1.0-20261009-180957-foundation-data`�
 
 `npm run build`、`npm test`（458 项，456 通过、2 跳过）、`npm run test:python`（68 项）、`npm run test:homepage`、Dev 首页轮播 Playwright 回归、Helm lint 和 `git diff --check` 通过。Dev rollout 通过，两个 Pod 0 重启；首页、health、assets 和 coverage API 返回 HTTP 200。公开目录统计为 67 个 release、159 个产品（107 acquired、11 overview-only、41 awaiting geometry）、132 个 coverage layers。此次没有生成新的 MOC、原生索引版本或 public bundle。活动 native generation 仍为 13；五个重点巡天的证据/库存缺口尚未补齐，因此**不要创建 `v0.0.1` release tag 或将其描述为数据完成版本**。下一步继续按原生分块管理流程补证据、构建候选、审核、归档、激活并验证；独立备份和存储迁移按用户决定暂缓。
 
+## 2026-10-09 HST Dev 有界元数据补充
+
+只在 Assets Dev 的受管 HST 原生索引中补入 MAST 公开观测 `26442812` 的一行元数据；没有下载科学像素，也没有更改生产站点、公开 MOC 或 public bundle。来源、输入哈希、候选审核和精度边界见[研究记录](docs/research/hst-bounded-supplement-20261009.md)。
+
+归档任务 `native-mv0u73mc-a8612ad6` 完成，1,387/1,387 个元数据与索引依赖通过远端验证；激活任务 `native-mv0xf4kd-2d6b046a` 完成，包含站点 HTTP 原生反查验证。Dev 当前 native generation **14**，活动 group `78b08dee26fbeb01ff26036c8033e0ce50aac9820015e5a7a23f940829782b92`；控制快照 generation **5629** 状态为 `synced`。定向反查 HTTP 200 返回 observation `26442812`，O8 NESTED cell `436132`，precision=`estimated`。该响应仍标记 `truncated=true` / `queryExhausted=false`，只证明这条观测可被索引反查，不证明 HST 库存完整。
+
+Dev `/healthz` 为 HTTP 200、版本 `0.0.1`、603 files；公开 bundle 仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`。`hst-partial-refresh`、`hst-unsupported-frames` 仍是开放缺口，18 条 `GSC1` / `OTHER` 坐标框架记录继续排除。五个重点巡天的数据范围仍未完整，因此不要创建 `v0.0.1` release tag。
+
 ## 当前目标与状态
 
 **第一阶段 MVP 已结束**（用户于 2026-10-04 确认）。Phase 1 覆盖 Euclid、DESI、Legacy
