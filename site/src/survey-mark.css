@@ -1,0 +1,46 @@
+.survey-mark {
+  display: block;
+  width: 46px;
+  height: 46px;
+  overflow: visible;
+}
+
+.survey-mark-frame {
+  fill: var(--public-surface, var(--bright));
+  stroke: color-mix(in srgb, var(--brand-indigo-strong) 45%, var(--public-line, var(--line-strong)));
+  stroke-width: 1;
+}
+
+.survey-mark-grid {
+  fill: none;
+  stroke: var(--brand-indigo-strong);
+  stroke-opacity: .28;
+  stroke-width: .8;
+}
+
+.survey-mark-track {
+  fill: none;
+  stroke: var(--brand-indigo-strong);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.35;
+}
+
+.survey-mark-node { fill: var(--brand-indigo-strong); }
+
+.survey-mark-focus {
+  fill: var(--brand-magenta);
+  stroke: var(--public-surface, var(--bright));
+  stroke-width: 1.1;
+}
+
+.survey-mark-code {
+  fill: var(--public-text, var(--ink));
+  stroke: var(--public-surface, var(--bright));
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+  paint-order: stroke fill;
+  font: 700 8px/1 var(--font-mono), monospace;
+  letter-spacing: 0;
+  text-anchor: middle;
+}

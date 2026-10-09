@@ -25,8 +25,10 @@ import {
 } from "lucide";
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { mountSiteChrome } from "./site-chrome.js";
+import { surveyMarkMarkup } from "./survey-mark.js";
 import "./public.css";
 import "./homepage.css";
+import "./survey-mark.css";
 
 interface SurveyProduct {
   modality?: string;
@@ -123,12 +125,10 @@ function renderFeaturedSurveys(surveys: SurveyRecord[]): void {
     position.className = "home-survey-index";
     position.textContent = String(index + 1).padStart(2, "0");
 
-    const logo = document.createElement("img");
+    const logo = document.createElement("span");
     logo.className = "home-survey-logo";
-    logo.src = `/surveys/${encodeURIComponent(survey.id)}.png`;
-    logo.alt = "";
-    logo.loading = "lazy";
-    logo.addEventListener("error", () => { logo.style.visibility = "hidden"; }, { once: true });
+    logo.setAttribute("aria-hidden", "true");
+    logo.innerHTML = surveyMarkMarkup(survey.id);
 
     const identity = document.createElement("span");
     identity.className = "home-survey-identity";

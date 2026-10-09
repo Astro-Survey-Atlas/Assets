@@ -33,7 +33,7 @@ body.homepage {
 }
 
 body.homepage .site-header {
-  height: 86px;
+  height: 64px;
   padding-top: 0;
   padding-bottom: 0;
   border-color: var(--home-line);
@@ -41,7 +41,7 @@ body.homepage .site-header {
   box-shadow: none;
 }
 
-body.homepage .brand-logo { width: 88px; height: 34px; opacity: 1; }
+body.homepage .brand-logo { width: 72px; height: 28px; opacity: 1; }
 body.homepage .brand strong { font-size: 13px; }
 body.homepage .brand small { color: var(--home-muted); }
 
@@ -292,7 +292,8 @@ body.homepage .brand small { color: var(--home-muted); }
   text-decoration: none;
 }
 .home-survey-index { color: var(--home-soft); font-size: 10px; }
-.home-survey-logo { display: block; width: 52px; height: 46px; object-fit: contain; }
+.home-survey-logo { display: grid; width: 48px; height: 48px; place-items: center; }
+.home-survey-logo .survey-mark { width: 46px; height: 46px; }
 .home-survey-identity { display: grid; min-width: 0; gap: 5px; }
 .home-survey-identity strong { overflow: hidden; color: var(--home-ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .home-survey-identity small { overflow: hidden; color: var(--home-soft); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -418,7 +419,8 @@ body.homepage .brand small { color: var(--home-muted); }
   .home-section-heading > .home-mono { display: none; }
   .home-section-lead { margin-bottom: 15px; font-size: 11px; }
   .home-survey-row { grid-template-columns: 22px 40px minmax(0, 1fr) 44px 14px; min-height: 72px; gap: 8px; padding: 8px 5px; }
-  .home-survey-logo { width: 38px; height: 38px; }
+  .home-survey-logo { width: 40px; height: 40px; }
+  .home-survey-logo .survey-mark { width: 40px; height: 40px; }
   .home-survey-identity strong { font-size: 12px; }
   .home-survey-identity small { font-size: 9px; }
   .home-survey-modalities { display: none; }
@@ -448,7 +450,8 @@ body.homepage .brand small { color: var(--home-muted); }
   .home-section-heading { gap: 8px; }
   .home-section-heading h2 { font-size: 20px; }
   .home-survey-row { grid-template-columns: 18px 34px minmax(0, 1fr) 38px 12px; gap: 6px; }
-  .home-survey-logo { width: 32px; height: 34px; }
+  .home-survey-logo { width: 34px; height: 34px; }
+  .home-survey-logo .survey-mark { width: 34px; height: 34px; }
   .home-survey-identity strong { font-size: 11px; }
   .home-survey-identity small { font-size: 8px; }
   .home-survey-counts { font-size: 8px; }
