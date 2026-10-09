@@ -22,7 +22,7 @@ Dev Helm revision **360** 已部署镜像 `0.1.0-20261009-143026-homepage-brand`
 
 ## 2026-10-09 基础数据、CI 与 Dev 留存
 
-实现分支 `feat/foundation-data-0.0.1` 基于 `origin/main` `173f4cf`，并包含首页 v4 的四个既有提交。此次代码加入 PR/main CI（Node、Python 和首页 Chromium 回归），将 Node 测试默认并发固定为 4，并把包、Chart、API 与 health 版本统一为 `0.0.1`。首页暂停图标不再在每次状态同步时重建；语言切换更新首页目录、统计、说明和轮播控制。CASDC 来源入口增加 Euclid Q1 Tile 的 VIS/NISP 目录及 DESI DR1 iron zcatalog，并在中英文 README 明确已捕获范围、逐文件校验限制和目录检查边界。
+实现分支 `feat/foundation-data-0.0.1` 基于 `origin/main` `173f4cf`，并包含首页 v4 的四个既有提交。此次代码加入 PR/main CI（Node、Python 和首页 Chromium 回归），将 Node 测试默认并发固定为 4，并把包、Chart、API 与 health 版本统一为 `0.0.1`。首页暂停图标不再在每次状态同步时重建；语言切换更新首页目录、统计、说明和轮播控制。CASDC 来源入口增加 Euclid Q1 Tile 的 VIS/NISP 目录及 DESI DR1 iron zcatalog；Euclid Tile 身份仍取自锁定的 ESA 元数据，CASDC 目录只作访问入口，不用于判定 Tile 成员、覆盖或库存完整性。中英文 README 分别记录历史 HTTP 200、最新探测超时和当前可达性未知。
 
 Dev Helm revision **363** 使用镜像 `0.1.0-20261009-180957-foundation-data`；site/backend 均 1/1 Ready、重启数为 0。NodePort `/healthz` 返回 HTTP 200，版本 `0.0.1`，public bundle 仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，603 项。Helm release 已设 `objectStore.retainReleases=3`、`cleanup=true`。
 
@@ -37,6 +37,12 @@ Dev Helm revision **363** 使用镜像 `0.1.0-20261009-180957-foundation-data`�
 归档任务 `native-mv0u73mc-a8612ad6` 完成，1,387/1,387 个元数据与索引依赖通过远端验证；激活任务 `native-mv0xf4kd-2d6b046a` 完成，包含站点 HTTP 原生反查验证。Dev 当前 native generation **14**，活动 group `78b08dee26fbeb01ff26036c8033e0ce50aac9820015e5a7a23f940829782b92`；控制快照 generation **5629** 状态为 `synced`。定向反查 HTTP 200 返回 observation `26442812`，O8 NESTED cell `436132`，precision=`estimated`。该响应仍标记 `truncated=true` / `queryExhausted=false`，只证明这条观测可被索引反查，不证明 HST 库存完整。
 
 Dev `/healthz` 为 HTTP 200、版本 `0.0.1`、603 files；公开 bundle 仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`。`hst-partial-refresh`、`hst-unsupported-frames` 仍是开放缺口，18 条 `GSC1` / `OTHER` 坐标框架记录继续排除。五个重点巡天的数据范围仍未完整，因此不要创建 `v0.0.1` release tag。
+
+## 2026-10-09 CASDC 镜像入口有界核对
+
+CASDC 根目录、Euclid Q1 Tile `102018211` 的相关目录以及 DESI DR1 iron 目录共十个 HTTPS 请求均连接超时；根目录和 VIS 子目录的 IPv4 重试也超时。历史检查曾记录这些入口 HTTP 200，因此当前可达性应记为未知，不能把本次没有 HTTP 响应解释为 404 或源站停机。本地实现将这些入口标为 `entrypoint-only`，移除过期的 HTTP 200 字段，并在说明中同时保留历史成功与最新超时；这项状态修正尚未部署到 Dev。Gaia/GALEX 子目录不在这十个请求内，保留 2026-10-07 的历史检查日期并说明本轮未复测。
+
+ESA 对 Tile `102018211` 的八条官方记录与锁定输入中 Tile ID、文件名、波段、`stc_s` 和内部路径五个字段一致；这只核对一个 Tile 的官方元数据，不证明 CASDC 镜像清单或完整库存。没有复现 Tile 身份、文件路径或空间覆盖差异，因此没有修改活动原生索引。完整请求结果和范围见[研究记录](docs/research/casdc-mirror-index-audit-20261009.md)。
 
 ## 当前目标与状态
 

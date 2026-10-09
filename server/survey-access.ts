@@ -10,6 +10,7 @@ const CHECKED = {
   galexHead: "2026-10-04T03:41:41Z",
   sdssHead: "2026-10-04T03:38:52Z",
   casdc: "2026-10-09",
+  casdcGaiaGalex: "2026-10-07",
   skymapperCutout: "2026-10-04T16:58:37Z",
   twomassAtlasHead: "2026-10-05",
 } as const;
@@ -183,16 +184,24 @@ export function casdcProviderStatuses(
   if (!dataset) return [];
   const root = "https://casdc.china-vo.org/mirror/";
   const common = { provider: "CASDC mirror catalog · NAOC/CASDC", providerCountryCode: "CN", providerLocation: "National Astronomical Observatories of China / CASDC", servingRegion: "Download node location unknown" };
+  const boundedProbeTimedOut = surveyId === "euclid" || surveyId === "desi";
   const statuses = [
-    alternative(root, { ...common, accessType: "entrypoint", relationship: "regional-repository", status: "entrypoint-only", checkedAt: CHECKED.casdc, httpStatus: 200,
-      note: "The mirror index is reachable and lists this survey; the target directory is checked separately below." }),
-    alternative(new URL(`${dataset}/`, root).toString(), { ...common, accessType: "directory", relationship: "regional-repository", status: "verified", checkedAt: CHECKED.casdc, httpStatus: 200,
-      note: "The target directory returned HTTP 200 and exposed a directory listing. Individual file URLs and scientific bytes were not checked." }),
+    alternative(root, { ...common, accessType: "entrypoint", relationship: "regional-repository", status: "entrypoint-only", checkedAt: CHECKED.casdc,
+      note: "The CASDC catalog returned HTTP 200 on 2026-10-07. The latest bounded probe batch beginning 2026-10-09T12:31:19Z timed out without an HTTP response, so current reachability is unknown. This catalog is an access index only; it does not establish native-unit identities, footprints or inventory completeness." }),
+    alternative(new URL(`${dataset}/`, root).toString(), { ...common, accessType: "directory", relationship: "regional-repository",
+      status: boundedProbeTimedOut ? "entrypoint-only" : "verified",
+      checkedAt: boundedProbeTimedOut ? CHECKED.casdc : CHECKED.casdcGaiaGalex,
+      ...(!boundedProbeTimedOut ? { httpStatus: 200 } : {}),
+      note: surveyId === "euclid"
+        ? "An earlier 2026-10-09 check recorded HTTP 200 for the Euclid-Q1 mirror directory. The latest bounded probe timed out without an HTTP response, so current reachability is unknown. Tile identities and footprints come from locked ESA metadata; CASDC listing contents are not used to determine Tile membership or coverage, and individual files were not checked."
+        : surveyId === "desi"
+          ? "An earlier 2026-10-09 check recorded HTTP 200 for the DESI-DR1 directory. The latest bounded probe timed out without an HTTP response, so current reachability is unknown. Individual file URLs and scientific bytes were not checked."
+          : `The ${dataset} directory returned HTTP 200 and exposed a directory listing on 2026-10-07. This directory was not included in the 2026-10-09 bounded probe batch, so its current reachability is unknown. Individual file URLs and scientific bytes were not checked.` }),
   ];
   if (surveyId === "desi" && releaseId === "desi-dr1") {
     statuses.push(alternative(new URL("DESI-DR1/spectro/redux/iron/zcatalog/", root).toString(), {
-      ...common, accessType: "directory", relationship: "directory-entrypoint", status: "verified", checkedAt: CHECKED.casdc, httpStatus: 200,
-      note: "The DR1 iron zcatalog directory returned HTTP 200. It does not establish a tile-specific mirror path or verify individual files.",
+      ...common, accessType: "directory", relationship: "directory-entrypoint", status: "entrypoint-only", checkedAt: CHECKED.casdc,
+      note: "An earlier 2026-10-09 check recorded HTTP 200 for the DR1 iron zcatalog directory. The latest bounded probe timed out without an HTTP response, so current reachability is unknown. It does not establish a tile-specific mirror path or verify individual files.",
     }));
   }
   if (surveyId === "euclid" && releaseId === "euclid-q1" && unitId) {
@@ -209,11 +218,11 @@ export function casdcProviderStatuses(
         const uri = new URL(`Euclid-Q1/MER/${tileId}/${folder ? `${folder}/` : ""}`, root).toString();
         const checked = tileId === "102018211";
         statuses.push(alternative(uri, {
-          ...common, accessType: "directory", relationship: "directory-entrypoint", status: checked ? "verified" : "rule-derived",
-          ...(checked ? { checkedAt: CHECKED.casdc, httpStatus: 200 } : {}),
+          ...common, accessType: "directory", relationship: "directory-entrypoint", status: "entrypoint-only",
+          ...(checked ? { checkedAt: CHECKED.casdc } : {}),
           note: checked
-            ? "The Tile directory and listed VIS/NISP child directories returned HTTP 200. The directory lists products for this Tile; individual file bodies were not checked."
-            : "The path follows the checked CASDC Euclid-Q1 MER Tile layout. This Tile directory and its files have not been individually checked.",
+            ? "An earlier 2026-10-09 check recorded HTTP 200 for this mirror path and its VIS/NISP child directories. The latest bounded probes timed out without an HTTP response, so current reachability is unknown. Tile identity comes from locked ESA metadata; CASDC listing contents are not used to determine Tile membership or coverage, and individual files were not checked."
+            : "This path follows the checked CASDC Euclid-Q1 MER layout but was not individually checked. It is an access hint only; CASDC listing contents are not used to determine Tile membership or coverage.",
         }));
       }
     }

@@ -1239,21 +1239,41 @@ test("SPHEREx QR2 binds one header-derived detector observation without claiming
   assert.throws(() => nativeMetadataUrl("https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/qr2/level2/", src.adapter), /AWS metadata listing/);
 });
 
-test("CASDC provider status records reachable survey directories with canonical URLs", () => {
+test("CASDC provider status separates historical checks from latest probe timeouts", () => {
   const cases = [
     ["gaia", "gaia-dr3", "Gaia"],
     ["galex", "galex-gr6-gr7", "GALEX"],
     ["euclid", "euclid-q1", "Euclid-Q1"],
+    ["desi", "desi-dr1", "DESI-DR1"],
   ] as const;
   for (const [surveyId, releaseId, directory] of cases) {
     const providers = casdcProviderStatuses(surveyId, releaseId);
-    assert.deepEqual(providers.map(item => [item.providerCountryCode, item.accessType, item.status, item.httpStatus]), [
-      ["CN", "entrypoint", "entrypoint-only", 200],
-      ["CN", "directory", "verified", 200],
-    ]);
+    assert.equal(providers[0]!.providerCountryCode, "CN");
+    assert.equal(providers[0]!.accessType, "entrypoint");
+    assert.equal(providers[0]!.status, "entrypoint-only");
+    assert.equal(providers[0]!.httpStatus, undefined);
+    assert.match(providers[0]!.note ?? "", /returned HTTP 200 on 2026-10-07/i);
+    assert.match(providers[0]!.note ?? "", /timed out without an HTTP response.*current reachability is unknown/i);
     assert.equal(providers[1]!.uri, `https://casdc.china-vo.org/mirror/${directory}/`);
-    assert.match(providers[1]!.note ?? "", /directory listing/i);
-    assert.match(providers[1]!.note ?? "", /individual file URLs and scientific bytes were not checked/i);
+    if (surveyId === "euclid") {
+      assert.equal(providers[1]!.status, "entrypoint-only");
+      assert.equal(providers[1]!.httpStatus, undefined);
+      assert.match(providers[1]!.note ?? "", /earlier 2026-10-09 check recorded HTTP 200/i);
+      assert.match(providers[1]!.note ?? "", /timed out without an HTTP response.*current reachability is unknown/i);
+      assert.match(providers[1]!.note ?? "", /listing contents are not used to determine Tile membership or coverage/i);
+    } else if (surveyId === "desi") {
+      assert.equal(providers[1]!.status, "entrypoint-only");
+      assert.equal(providers[1]!.httpStatus, undefined);
+      assert.match(providers[1]!.note ?? "", /earlier 2026-10-09 check recorded HTTP 200/i);
+      assert.match(providers[1]!.note ?? "", /timed out without an HTTP response.*current reachability is unknown/i);
+    } else {
+      assert.equal(providers[1]!.status, "verified");
+      assert.equal(providers[1]!.httpStatus, 200);
+      assert.equal(providers[1]!.checkedAt, "2026-10-07");
+      assert.match(providers[1]!.note ?? "", /not included in the 2026-10-09 bounded probe batch.*current reachability is unknown/i);
+      assert.match(providers[1]!.note ?? "", /directory listing/i);
+      assert.match(providers[1]!.note ?? "", /individual file URLs and scientific bytes were not checked/i);
+    }
   }
 });
 
@@ -1272,15 +1292,20 @@ test("CASDC Euclid reverse lookup links to the matching Tile and checked product
     "https://casdc.china-vo.org/mirror/Euclid-Q1/MER/102018211/VIS/",
     "https://casdc.china-vo.org/mirror/Euclid-Q1/MER/102018211/NISP/",
   ]);
-  assert.ok(mirrorDirectories.every(item => item.status === "verified" && item.httpStatus === 200));
-  assert.ok(mirrorDirectories.every(item => /individual file bodies were not checked/i.test(item.note ?? "")));
+  assert.ok(mirrorDirectories.every(item => item.status === "entrypoint-only" && item.httpStatus === undefined));
+  assert.ok(mirrorDirectories.every(item => /earlier 2026-10-09 check recorded HTTP 200/i.test(item.note ?? "")));
+  assert.ok(mirrorDirectories.every(item => /current reachability is unknown/i.test(item.note ?? "")));
+  assert.ok(mirrorDirectories.every(item => /listing contents are not used to determine Tile membership or coverage/i.test(item.note ?? "")));
 });
 
-test("CASDC DESI records the verified iron zcatalog entrypoint without claiming tile files", () => {
+test("CASDC DESI preserves the historical zcatalog result without claiming current reachability or tile files", () => {
   const providers = casdcProviderStatuses("desi", "desi-dr1");
   const zcatalog = providers.find(item => item.uri.endsWith("/DESI-DR1/spectro/redux/iron/zcatalog/"));
   assert.equal(zcatalog?.accessType, "directory");
-  assert.equal(zcatalog?.status, "verified");
+  assert.equal(zcatalog?.status, "entrypoint-only");
+  assert.equal(zcatalog?.httpStatus, undefined);
+  assert.match(zcatalog?.note ?? "", /earlier 2026-10-09 check recorded HTTP 200/i);
+  assert.match(zcatalog?.note ?? "", /timed out without an HTTP response.*current reachability is unknown/i);
   assert.match(zcatalog?.note ?? "", /does not establish a tile-specific mirror path/i);
 });
 
