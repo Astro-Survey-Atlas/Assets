@@ -24,11 +24,11 @@ Dev Helm revision **360** 已部署镜像 `0.1.0-20261009-143026-homepage-brand`
 
 实现分支 `feat/foundation-data-0.0.1` 基于 `origin/main` `173f4cf`，并包含首页 v4 的四个既有提交。此次代码加入 PR/main CI（Node、Python 和首页 Chromium 回归），将 Node 测试默认并发固定为 4，并把包、Chart、API 与 health 版本统一为 `0.0.1`。首页暂停图标不再在每次状态同步时重建；语言切换更新首页目录、统计、说明和轮播控制。CASDC 来源入口增加 Euclid Q1 Tile 的 VIS/NISP 目录及 DESI DR1 iron zcatalog，并在中英文 README 明确已捕获范围、逐文件校验限制和目录检查边界。
 
-Dev Helm revision **362** 使用镜像 `0.1.0-20261009-173805-foundation-data`；site/backend 均 1/1 Ready、重启数为 0。NodePort `/healthz` 返回 HTTP 200，版本 `0.0.1`，public bundle 仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，603 项。Helm release 已设 `objectStore.retainReleases=3`、`cleanup=true`。
+Dev Helm revision **363** 使用镜像 `0.1.0-20261009-180957-foundation-data`；site/backend 均 1/1 Ready、重启数为 0。NodePort `/healthz` 返回 HTTP 200，版本 `0.0.1`，public bundle 仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，603 项。Helm release 已设 `objectStore.retainReleases=3`、`cleanup=true`。
 
 按目录 mtime 预览后，经 `cleanupReleaseHistory("/data", 3)` 删除 Dev `assets` PVC 中 38 个历史 public release 缓存目录。活动版 `0e49b04b…` 与最近两个回滚版 `0e23aca2…`、`c66125a8…` 保留；`/data/releases` 从 41 个目录、5,248,560,917 bytes 降至 3 个目录、约 657 MB，释放约 4.56 GB。evidence PVC、原生索引依赖、源快照和对象存储内容没有清理。
 
-`npm run build`、`npm test`（458 项，456 通过、2 跳过）、`npm run test:python`（68 项）、`npm run test:homepage`、Helm lint 和 `git diff --check` 通过。Dev rollout 通过，两个 Pod 0 重启。此次没有生成新的 MOC、原生索引版本或 public bundle。活动 native generation 仍为 13；五个重点巡天的证据/库存缺口尚未补齐，因此**不要创建 `v0.0.1` release tag 或将其描述为数据完成版本**。下一步继续按原生分块管理流程补证据、构建候选、审核、归档、激活并验证；独立备份和存储迁移按用户决定暂缓。
+`npm run build`、`npm test`（458 项，456 通过、2 跳过）、`npm run test:python`（68 项）、`npm run test:homepage`、Dev 首页轮播 Playwright 回归、Helm lint 和 `git diff --check` 通过。Dev rollout 通过，两个 Pod 0 重启；首页、health、assets 和 coverage API 返回 HTTP 200。公开目录统计为 67 个 release、159 个产品（107 acquired、11 overview-only、41 awaiting geometry）、132 个 coverage layers。此次没有生成新的 MOC、原生索引版本或 public bundle。活动 native generation 仍为 13；五个重点巡天的证据/库存缺口尚未补齐，因此**不要创建 `v0.0.1` release tag 或将其描述为数据完成版本**。下一步继续按原生分块管理流程补证据、构建候选、审核、归档、激活并验证；独立备份和存储迁移按用户决定暂缓。
 
 ## 当前目标与状态
 
@@ -38,8 +38,8 @@ Surveys、HST 与 Workspace 的公开覆盖、原生分块反查、来源链接�
 2026-10-08 用户另行授权恢复 **Workspace Dev 的 503**；该维护例外仅涉及 Workspace 的
 Elasticsearch 内存配置，不扩大巡天补数据或公开发布的范围。
 
-Dev 当前 Helm revision **362**，site/backend 均 1/1 Ready、重启数为 0，镜像 tag
-`0.1.0-20261009-173805-foundation-data`。public release cache 保留活动版和最近两版；Helm 值为
+Dev 当前 Helm revision **363**，site/backend 均 1/1 Ready、重启数为 0，镜像 tag
+`0.1.0-20261009-180957-foundation-data`。public release cache 保留活动版和最近两版；Helm 值为
 `retainReleases=3`、`cleanup=true`。当前 public bundle SHA-256 为
 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，release manifest 共 603 项。此前 revision 354 部署的
 防积压修复 commit `d776e48` 已推送并保留在当前版本中。

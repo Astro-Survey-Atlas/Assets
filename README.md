@@ -49,6 +49,10 @@ These are bounded, evidence-backed scopes rather than complete inventories of
 the five archives. Coverage MOCs, native-unit mappings, source directories and
 verified scientific file bytes are separate evidence; the directory checks
 above establish only that the listed entrypoints responded at the time checked.
+In public bundle `reviewed-mupsxe2v-c91be91f`, the catalog records 67 releases
+and 159 products: 107 acquired, 11 overview-only and 41 awaiting geometry; the
+coverage catalog has 132 layers. These are catalog status counts, not evidence
+that each archive's full inventory or every listed file has been verified.
 
 HSC-SSP's existing PDR2/PDR3 tract/patch adapter links to the corresponding
 DAS Search, which requires an account; a match does not prove a file exists.
