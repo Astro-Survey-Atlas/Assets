@@ -27,7 +27,23 @@ O8 NESTED cell `587500` 的 HST 反查 HTTP 200 返回新增两条观测；精�
 `verified=true`；`/healthz` 返回 HTTP 200，public bundle 保持原 SHA 和 603 项。
 激活时曾有一次短暂 readiness timeout/HTTP 503，随后状态、健康检查和激活任务验证恢复；
 site/backend Pod 均 Ready 且零重启。没有修改生产、公开 MOC 或 public bundle。五个重点巡天
-仍有范围和精度缺口，**不要创建 `v0.0.1` release tag**。
+仍有范围和精度缺口；`v0.0.1` tag 已推送，但 GitHub Release 工作流失败，不能称为已发布。
+
+## 2026-10-10 `v0.0.1` 发布尝试
+
+按用户此前要求，将 tag `v0.0.1` 推送到提交 `c06182d00552fb98adf653c7b281e2a8ca271430`
+（分支 `feat/foundation-data-0.0.1`）。工作流
+[Release run 38036416256](https://github.com/Astro-Survey-Atlas/Assets/actions/runs/38036416256)
+在 **Hydrate release data from production S3** 步骤失败；版本坐标解析与依赖安装通过，之后的
+证据恢复、构建、镜像推送、Helm Chart 和 GitHub Release 步骤均被跳过。当前没有 GitHub
+Release、镜像或 Chart 制品，不要把 tag 推送当作发布成功。匿名 API 被限流，当前本地 GitHub
+凭据也不能读取工作流日志，因此 S3 失败的底层错误尚未确认。
+
+继续前应在 GitHub Actions 中检查该步骤日志，修复 production S3 hydrate 所需的端点、对象或
+凭据问题，然后重跑**现有** tag 对应的失败工作流；不要强制删除或改写 tag。发布成功后再核验
+GitHub Release、校验和、镜像 digest 与 Helm OCI 制品。这个应用代码发布使用现有 production
+public bundle；Dev HST 增补没有进入 public bundle，发布不能被描述为五个重点巡天库存完整。
+本次没有执行 WCS 解算。
 
 ## 2026-10-09 首页 v4 前端实现
 
