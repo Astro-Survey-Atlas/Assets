@@ -155,3 +155,70 @@ Tile/processing/product 的原生身份及目标级空间证据。现有目录�
 
 本轮没有更新 Dev/生产、公开 MOC、public bundle 或原生 generation；没有完成全镜像
 盘点、逐文件 HEAD、文件 SHA 对比、有效像素覆盖或全巡天完整性验证。
+
+
+## 2026-10-10：代理恢复后的目录复测
+
+此前 2026-10-09 的连接超时记录保留为历史观察；本节是代理恢复后的新一次检查。
+首批 14 个 GET 请求开始于 **2026-10-10T02:19:20.910537Z**，即
+**2026-10-10 10:19:20.910537 CST（UTC+8）**。根据 Gaia 入口实际链接追加的
+两个路径请求开始于 **2026-10-10T02:20:52.459789Z**，即
+**2026-10-10 10:20:52.459789 CST**。最后响应于 `02:20:52.701602Z` 完成。
+
+全部请求显式使用 HTTP 代理 `http://127.0.0.1:7890`，并用空 `--noproxy` 禁用
+环境中的代理绕过规则；没有使用直连重试、关闭 TLS 校验或 `HEAD`。每个请求采用
+GET、正常 TLS 校验、15 秒连接超时、45 秒总超时、最多 5 次重定向和 8 MiB
+响应上限。实际全部 `curl exit=0`，没有重定向，表中的最终 URL 与请求 URL 相同。
+
+**16 个请求中，13 个返回 HTTP 200 的 HTML 目录，3 个返回明确的 HTTP 404；
+没有超时或缺失 HTTP 响应。** 这些是本机通过此代理在上述时刻观察到的目录响应。
+与此前无 HTTP 响应的超时不同，下面的 404 是已经收到的服务端错误状态，不能扩写为
+整个巡天不存在、文件库存完整性结论或空间覆盖错误。
+
+| 最终 URL（亦为请求 URL） | HTTP 状态 | Content-Type | 响应正文 bytes | 成功目录正文 SHA-256 |
+| --- | ---: | --- | ---: | --- |
+| <https://casdc.china-vo.org/mirror/> | 200 | text/html | 3,882 | `47cba7cf3187390bdbefa701bc0708ebc573e5b90fe104ef66f4ee66a965b7b0` |
+| <https://casdc.china-vo.org/mirror/Euclid-Q1/> | 200 | text/html | 1,172 | `c9ca516a4043d612c22022af94184e5421a262ef51af5d1dd0447fb73aff3755` |
+| <https://casdc.china-vo.org/mirror/Euclid-Q1/MER/> | 200 | text/html | 40,657 | `d84e6709c3932a4123e47cb1b980b448ebedae526cf19843d4c6597b7dc367b2` |
+| <https://casdc.china-vo.org/mirror/Euclid-Q1/MER/102018211/> | 200 | text/html | 527 | `6fcdf3ff078b04a96ed1080ae64e30a7c1ad9dc66211a18bdecbeea0dd2cf35e` |
+| <https://casdc.china-vo.org/mirror/Euclid-Q1/MER/102018211/VIS/> | 200 | text/html | 1,317 | `848292d378b09b8756be71ddf7d7659c56e3416eb0f84eca793a29a88903a2fb` |
+| <https://casdc.china-vo.org/mirror/Euclid-Q1/MER/102018211/NISP/> | 200 | text/html | 3,581 | `5f46178fd70762e404a6f6a9a481b6d7141f852232c9209b6c53a462fae76437` |
+| <https://casdc.china-vo.org/mirror/DESI-DR1/> | 200 | text/html | 512 | `8e0b8530a5864c5681d8f40f6b030e35f305d68dbcd0ee31b16316ed2c8c208f` |
+| <https://casdc.china-vo.org/mirror/DESI-DR1/spectro/redux/iron/> | 200 | text/html | 319 | `88e36e550e6fc9e08c8627280ed0b361be4d69546a73a3cd19f6542ed6448ab6` |
+| <https://casdc.china-vo.org/mirror/DESI-DR1/spectro/redux/iron/zcatalog/> | 200 | text/html | 331 | `81e63b065feb6b9ac0b77df114891579a7e2337a77fa78081459ea161aa65bbc` |
+| <https://casdc.china-vo.org/mirror/DESI-DR1/spectro/redux/iron/tiles/> | 404 | text/html | 146 | —（HTTP 错误正文未计算 SHA） |
+| <https://casdc.china-vo.org/mirror/Gaia/> | 200 | text/html | 596 | `531a83590622f21aab02fa669e37aaa33121b4981cd700c038c99bd634d0bd6d` |
+| <https://casdc.china-vo.org/mirror/GALEX/> | 200 | text/html | 270 | `bc78ab7cb34b04525b6019aee55625934a7a75a60b2d464b4823bf3c73e8f937` |
+| <https://casdc.china-vo.org/mirror/Gaia/gdr3/> | 404 | text/html | 146 | —（HTTP 错误正文未计算 SHA） |
+| <https://casdc.china-vo.org/mirror/GALEX/GR6/> | 200 | text/html | 279 | `f14975cfb1ab5c219a49f53dadb9ef03bf346aff59fa259ba1a10c843f925b95` |
+| <https://casdc.china-vo.org/mirror/Gaia/dr3/> | 200 | text/html | 2,311 | `d3c78d89ac24fae7bf0cb9f47ef9b27a8ed21c1c87bc8855533bfbf24e1547c9` |
+| <https://casdc.china-vo.org/Gaia/gdr3/> | 404 | text/html | 146 | —（HTTP 错误正文未计算 SHA） |
+
+Gaia 路径由实际入口列表核对：`/mirror/Gaia/` 链接为 `dr3/`，其对应的
+`/mirror/Gaia/dr3/` 返回 200，并列出 `gaia_source/` 等目录。该页面的 HTML
+标题仍写 `Index of /Gaia/gdr3/`，与实际请求路径不同，不能据标题构造公开 URL。
+历史临时 HTML `/tmp/casdc-gaia-dr3-index.html` 也有这一标题；原
+[来源研究](survey-download-sources-20261004.md) 只写 Gaia DR3 子目录可达，未给出
+子目录的精确 URL。因此本轮同时记录了两个根据标题尝试的 `gdr3` 路径的 404，
+并以入口实际链接、最终 URL 和本次响应指纹为准。GALEX 入口链接为 `GR6/`，
+`/mirror/GALEX/GR6/` 本次返回 200，并列出 `pipe/`。
+
+Euclid 的 `MER/102018211/` 实际列表包含 `DECAM/`、`NISP/` 和 `VIS/`。
+VIS/NISP 的响应是包含文件名的目录页；没有跟随目录内科学文件链接、执行文件 HEAD
+或下载 FITS 正文。DESI 的 `iron/` 本次只列出 `zcatalog/`，`zcatalog/` 列出
+`v1/`，而 `iron/tiles/` 返回 404。这项观测支持把已响应的目录入口与不存在于本次
+检查路径的 Tile 入口分开记录，不能把 zcatalog 的可达性当作 Tile 级光谱库存验证。
+
+此次已复测 Gaia/GALEX，因而“Gaia/GALEX 本轮未复测”只适用于前一节
+2026-10-09 的检查。Euclid/DESI 的“最新探测超时／当前可达性未知”也只描述此前
+批次；本次已取得上表具体路径的当前响应。依然不能把 `verified`（目录响应及列表
+已观察到）解释为科学数据、逐文件存在性、文件 SHA、Tile 成员或精确覆盖已验证。
+本轮没有修改活动原生索引、输入锁、公开 MOC、public bundle 或部署状态；ESA 单 Tile
+八条记录的核对仍是前述 2026-10-09 的有界官方元数据结果，本次没有重取 ESA 表。
+
+全部目录正文、响应头和无凭据逐请求回执保存于仓库外
+`/tmp/asa-casdc-proxy-recheck-20261010T021920Z/`。其中 `batch.json` 保存首批参数，
+`receipts.json` 保存首批 14 项，`followup-receipts.json` 保存 Gaia 的两个追加请求；
+逐请求回执包含 UTC/CST 开始时间、完成时间、HTTP 状态、最终 URL、Content-Type、
+字节数、成功响应 SHA 和 curl 退出码。它们是临时审计记录，未声明为已纳管的快照或
+发布依赖；没有把目录完整清单或科学文件写入 Git。

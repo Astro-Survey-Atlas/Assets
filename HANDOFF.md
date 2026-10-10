@@ -1,6 +1,6 @@
 # Assets 项目交接
 
-交接日期：2026-10-09（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-10（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
@@ -38,6 +38,40 @@ Dev Helm revision **363** 使用镜像 `0.1.0-20261009-180957-foundation-data`�
 
 Dev `/healthz` 为 HTTP 200、版本 `0.0.1`、603 files；公开 bundle 仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`。`hst-partial-refresh`、`hst-unsupported-frames` 仍是开放缺口，18 条 `GSC1` / `OTHER` 坐标框架记录继续排除。五个重点巡天的数据范围仍未完整，因此不要创建 `v0.0.1` release tag。
 
+## 2026-10-10 CASDC 代理复测
+
+用户修复本机代理后，明确要求重测此前超时的 CASDC 入口并补测 Gaia/GALEX 子目录。
+通过 `http://127.0.0.1:7890` 使用正常 TLS 校验发出 16 个 GET：13 个目录返回 HTTP 200，
+3 个路径返回明确 HTTP 404，没有超时或缺少 HTTP 响应。此前 2026-10-09 的超时继续作为
+历史观察保留，不再代表当前可达性。
+
+Euclid Q1 的根目录、MER、Tile `102018211` 及 VIS/NISP 均返回 200 并列出目录内容。
+DESI DR1、iron 和 zcatalog 返回 200；`iron/tiles/` 返回 404，zcatalog 子目录列出 `v1/`。
+Gaia `/Gaia/` 与入口实际链接的 `/Gaia/dr3/` 返回 200；页面标题写作 `/Gaia/gdr3/`，
+但该拼写请求返回 404，不能从标题推导 URL。GALEX `/GALEX/` 与 `/GALEX/GR6/` 返回 200。
+复测没有请求目录中的科学文件，没有核验逐文件字节、完整库存或空间覆盖。详细状态、正文
+SHA-256 和请求时间见[研究记录](docs/research/casdc-mirror-index-audit-20261009.md)。
+
+后端来源状态、README 中英文范围说明及回归测试已按本次目录响应更新；`verified` 仅表示
+目录响应及列表可见。ESA 对单 Tile 八条锁定记录的一致性结论没有改变，未修改活动原生索引、
+任何锁定输入、公开 MOC 或 public bundle。
+
+来源 API 现在也将实际核验的 `/Gaia/dr3/` 与 `/GALEX/GR6/` 作为独立目录入口返回，
+不再只在父目录备注中提及子路径。CASDC MER 目录的完整 Tile ID 对照见[单独审计](docs/research/casdc-euclid-q1-tile-directory-join-20261010.md)。
+
+Dev 初次升级 revision 365 在 180 秒等待窗口内遇到 backend 冷启动超时；新 Pod 随后 Ready、
+重启数为 0。同一镜像和 values 重试后，Helm revision **366** 部署成功，使用镜像 tag
+`0.1.0-20261010-111406`。
+`/healthz`、assets、coverage 和 release API 均返回 HTTP 200。health 的 603 项与安装清单的
+602 个文件加 1 个 retained package 一致，public bundle 仍为
+`reviewed-mupsxe2v-c91be91f` / SHA-256
+`0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`。Euclid、DESI、Gaia、
+GALEX 反查样例返回本次来源状态；Gaia O8 cell `163327` 返回文件分区
+`GaiaSource_161703-163359` 和 `/Gaia/dr3/`，GALEX O8 cell `163327` 返回三个 observation
+和 `/GALEX/GR6/`。2MASS FITS 的 16-byte Range 返回 HTTP 206，SHA 与清单一致。
+`npm run build` 与 `npm test`（458 项，456 通过、2 跳过）、定向原生索引测试（30/30）、
+Helm lint 和 `git diff --check` 均通过。目录响应验证不覆盖逐文件可用性、全库存或空间覆盖。
+
 ## 2026-10-09 CASDC 镜像入口有界核对
 
 CASDC 根目录、Euclid Q1 Tile `102018211` 的相关目录以及 DESI DR1 iron 目录共十个 HTTPS 请求均连接超时；根目录和 VIS 子目录的 IPv4 重试也超时。历史检查曾记录这些入口 HTTP 200，因此当前可达性应记为未知，不能把本次没有 HTTP 响应解释为 404 或源站停机。本地实现将这些入口标为 `entrypoint-only`，移除过期的 HTTP 200 字段，并在说明中同时保留历史成功与最新超时；这项状态修正尚未部署到 Dev。Gaia/GALEX 子目录不在这十个请求内，保留 2026-10-07 的历史检查日期并说明本轮未复测。
@@ -52,8 +86,8 @@ Surveys、HST 与 Workspace 的公开覆盖、原生分块反查、来源链接�
 2026-10-08 用户另行授权恢复 **Workspace Dev 的 503**；该维护例外仅涉及 Workspace 的
 Elasticsearch 内存配置，不扩大巡天补数据或公开发布的范围。
 
-Dev 当前 Helm revision **363**，site/backend 均 1/1 Ready、重启数为 0，镜像 tag
-`0.1.0-20261009-180957-foundation-data`。public release cache 保留活动版和最近两版；Helm 值为
+Dev 当前 Helm revision **366**，site/backend 均 1/1 Ready、重启数为 0，镜像 tag
+`0.1.0-20261010-111406`。public release cache 保留活动版和最近两版；Helm 值为
 `retainReleases=3`、`cleanup=true`。当前 public bundle SHA-256 为
 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，release manifest 共 603 项。此前 revision 354 部署的
 防积压修复 commit `d776e48` 已推送并保留在当前版本中。
@@ -950,13 +984,14 @@ Workspace 首批 4.692 s / 完整查询 33.495 s，geometry 冷 12.376 s /
 | --- | --- |
 | Euclid Q1 | 仅锁定 BGSUB 清单 2,908 行、352 Tiles；不是完整 Q1。72602 的 ERO 17-target 映射已补齐，仍无核实的 Tile/有效像素库存；Q1 不能替代 ERO。 |
 | DESI | DR1/EDR Tile 是 estimated 候选，不是目标级光谱覆盖。用户部分 OSS 中 904 redrock 已扫描；约 904 spectra 压缩文件和 12,855 coadd 未扫描，也不代表完整 BGS/DR1。扫描走 Assets → Warehouse 标准任务。 |
-| Legacy | DR10 South 366,912 个成员、Coadd 363,328 个正曝光候选；DR9 North roster 93,548 bricks。没有权威 DR10 North roster/产品树，不能从 all-sky grid、合并 Tractor 或 PSC 推断。DR5–DR9 URI 规则与所有代的逐文件存在性未全部核验。 |
+| Legacy | DR10 South 366,912 个成员、Coadd 363,328 个正曝光候选；DR9 North roster 93,548 bricks。2026-10-10 复查官方说明、发布目录、NERSC 与 NOIRLab TAP，仍未找到 DR10 North 成像 roster；官方继续将 North 归属 DR9。不能从 all-sky grid、合并 Tractor 或 PSC 推断。DR5–DR9 URI 规则与所有代的逐文件存在性未全部核验。见[DR10 North 审计](docs/research/legacy-dr10-north-roster-audit-20261010.md)。 |
 | HST | 72602 保留旧 1,201,094 行输入并补 20 页/39,187 行，923,382 observations，排除 19 行，属于有界补充而非完整当前刷新；Dev 仍为 916,116/排除 18。复杂 footprint 使用保守候选，precision=estimated，原始 s_region 和两批来源保留；Products API 链接不等于本地逐文件库存。 |
 | HSC | 保留 tract/patch 和需登录 DAS Search，文件存在性/直链尚未确认；不扩入第一阶段四巡天范围。 |
 
 HST 与 Legacy 来源补查结论见 [HST footprint 审计](docs/research/hst-unindexed-footprints-20261001.md)、
 [HST 补查](docs/research/hst-footprint-supplement-20261001.md)、
-[Legacy North 补查](docs/research/legacy-north-source-supplement-20261001.md)
+[Legacy North 补查](docs/research/legacy-north-source-supplement-20261001.md)、
+[DR10 North roster 审计](docs/research/legacy-dr10-north-roster-audit-20261010.md)
 及 [原生 URI 调研](docs/research/native-block-access-uris.md)。
 
 ## 历史存储盘点与暂缓事项（2026-10-01）

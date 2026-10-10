@@ -25,16 +25,18 @@ Assets 绝不代替用户下载科学数据。可下载的 JSON/CSV **下载计�
 
 | 巡天 | 天区单位与来源 | 已捕获范围及限制 |
 | --- | --- | --- |
-| Euclid | Q1 Tile 与 ESA 产品 URI；ERO target/package | Q1 锁定 BGSUB 清单有 2,908 行、352 个 Tile。此前在 2026-10-09 检查时，CASDC 上 Tile `102018211` 的 VIS/NISP 目录返回 HTTP 200；最新一轮有界探测连接超时、未收到 HTTP 响应，因此当前可达性未知。镜像列表只作访问入口；Tile 成员身份和范围取自锁定的 ESA 元数据，不用 CASDC 列表推导。其他镜像路径未核验。ERO target 范围为估算，尚无已核验 Tile roster。[核对记录](docs/research/casdc-mirror-index-audit-20261009.md)。 |
-| DESI DR1/EDR | 估算 Tile 候选与官方目录 | 此前在 2026-10-09 检查时，CASDC DR1 iron zcatalog 目录返回 HTTP 200；最新一轮有界探测连接超时、未收到 HTTP 响应，因此当前可达性未知。这不证明有 Tile 专属镜像路径或逐文件可用。圆形焦平面近似不等于目标级光谱覆盖或完整科学文件清单。[核对记录](docs/research/casdc-mirror-index-audit-20261009.md)。 |
+| Euclid | Q1 Tile 与 ESA 产品 URI；ERO target/package | Q1 锁定 BGSUB 清单有 2,908 行、352 个 Tile。2026-10-10 经代理 GET 检查，Tile `102018211` 的 VIS/NISP 目录均返回 HTTP 200 并展示目录列表。列表只作访问入口；Tile 成员身份和范围取自锁定的 ESA 元数据，不用 CASDC 列表推导，也未核验科学文件。其他镜像路径未核验。ERO target 范围为估算，尚无已核验 Tile roster。[核对记录](docs/research/casdc-mirror-index-audit-20261009.md)。 |
+| DESI DR1/EDR | 估算 Tile 候选与官方目录 | 2026-10-10 经代理 GET 检查，CASDC DR1、iron 与 zcatalog 目录返回 HTTP 200；同级 `iron/tiles/` 路径返回 HTTP 404。这不证明存在 Tile 专属镜像路径，也未核验逐文件可用性。圆形焦平面近似不等于目标级光谱覆盖或完整科学文件清单。[核对记录](docs/research/casdc-mirror-index-audit-20261009.md)。 |
 | Legacy Surveys | 按 release 区分的 brick 与候选产品 URI | 当前目录登记 DR1-DR10。DR10 South 对应官方 366,912 个成员；北区成像保留 DR9 North 身份。候选 URI 尚未逐文件核验，DR10 roster 不代表后续 release。 |
 | Gaia DR3 | `gaia_source` HEALPix 文件分区 | 锁定的 ICRS/NESTED O8 范围描述 source-ID 分区，不证明实际天体占据或文件内容；其他 Gaia DR3 产品不在此绑定中。 |
 | HST | Observation ID、原始 `s_region` 和 MAST 入口 | Assets Dev 原生索引增补了一条公开观测，但未进入当前 public bundle，也不代表完整 HST 清单；锁定的 CAOM 快照仍排除 18 条不支持的坐标框架记录。MAST 仍负责实时产品与访问政策。 |
 
 以上是有边界、基于证据的范围，不是五个档案的完整产品清单。MOC 覆盖、原生分块、
-来源目录和已校验科学文件字节是不同证据；目录检查只说明入口在所列历史检查时响应。
-最近一轮覆盖 CASDC 根目录及 Euclid/DESI 路径的有界探测超时，这些路径当前可达性未知；
-Gaia/GALEX 子目录不在这十个请求中，仍按 2026-10-07 的历史检查记录。
+来源目录和已校验科学文件字节是不同证据。2026-10-10 经代理复测 CASDC 根目录及
+本次检查的 Euclid、DESI、Gaia、GALEX 目录均有 HTTP 响应；DESI `iron/tiles/` 和
+猜测的 Gaia `gdr3/` 路径返回 HTTP 404，实际由 Gaia 入口链接的 `/Gaia/dr3/` 返回
+HTTP 200。目录响应只说明检查时入口可达，不代表文件字节、档案完整库存或空间覆盖已验证。
+此前 2026-10-09 的超时仍作为历史结果保留，详见[核对记录](docs/research/casdc-mirror-index-audit-20261009.md)。
 公开 bundle `reviewed-mupsxe2v-c91be91f` 的目录记录了 67 个 release、159 个产品：
 107 项 acquired、11 项仅有 overview、41 项等待 geometry；coverage catalog 有 132 层。
 这些是目录状态计数，不代表档案完整库存或每个来源文件都已核验。
