@@ -4,6 +4,31 @@
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
+## 2026-10-10 HST Dev 有界补充与激活
+
+在 Assets Dev 受管 HST 索引中增补 MAST 公开观测元数据：一页三行，包括保留的
+`26442812` 和新增观测 `454130303`、`454130304`。候选索引现有 916,119 个观测，
+18 条 `GSC1` / `OTHER` 坐标框架记录仍排除；`hst-partial-refresh` 与
+`hst-unsupported-frames` 缺口继续保留。该更新只使用公开 CAOM 字段和原始 `s_region`，
+没有进行 WCS 解算或获取科学像素。输入、审核、归档和反查范围见[研究记录](docs/research/hst-bounded-supplement-20261010.md)。
+
+候选组 `943d3246d3fe8b83153c1e442edc4f29cca2093f014486a3fb09172c35dc624b` 的
+review digest 为 `4306f0c0f2834c602f6955934d627f3850eb71a06ef1929bc4a2947701d18b6b`；
+243 项检查全部通过，没有 unavailable binding。归档任务 `native-mv1ydj3i-499edc19`
+完成 1,387/1,387 项远端校验；激活任务 `native-mv21vtfp-6b15e7ca` 完成站点 HTTP 查询
+验证。Dev native generation 为 **15**，活动 group 为上述候选；控制快照 generation
+**5780** / SHA-256 `406de9b622574c607c7ab0d7fb44b9d9f03e5fa106ac445762ebb628fe390a0c`
+状态为 `synced`。
+
+O8 NESTED cell `587500` 的 HST 反查 HTTP 200 返回新增两条观测；精确查询旧 observation
+`26442812` 的 cell `436132` 也仍可命中，precision=`estimated`。返回仍为
+`truncated=true` / `queryExhausted=false` / `inventoryComplete=false`，且没有科学文件，
+只确认这些观测可经活动索引定位。Dev `/api/v1/status` 的 native index 为
+`verified=true`；`/healthz` 返回 HTTP 200，public bundle 保持原 SHA 和 603 项。
+激活时曾有一次短暂 readiness timeout/HTTP 503，随后状态、健康检查和激活任务验证恢复；
+site/backend Pod 均 Ready 且零重启。没有修改生产、公开 MOC 或 public bundle。五个重点巡天
+仍有范围和精度缺口，**不要创建 `v0.0.1` release tag**。
+
 ## 2026-10-09 首页 v4 前端实现
 
 实现分支 `feat/homepage-v4` 基于最新 `main` `173f4cf`。本次只调整公开首页的标记、样式、双语文案和浏览器交互；复用现有 `/api/v1/surveys`、导航、主题、语言与目录路由，没有修改后端、数据或天球页面。
@@ -985,7 +1010,7 @@ Workspace 首批 4.692 s / 完整查询 33.495 s，geometry 冷 12.376 s /
 | Euclid Q1 | 仅锁定 BGSUB 清单 2,908 行、352 Tiles；不是完整 Q1。72602 的 ERO 17-target 映射已补齐，仍无核实的 Tile/有效像素库存；Q1 不能替代 ERO。 |
 | DESI | DR1/EDR Tile 是 estimated 候选，不是目标级光谱覆盖。用户部分 OSS 中 904 redrock 已扫描；约 904 spectra 压缩文件和 12,855 coadd 未扫描，也不代表完整 BGS/DR1。扫描走 Assets → Warehouse 标准任务。 |
 | Legacy | DR10 South 366,912 个成员、Coadd 363,328 个正曝光候选；DR9 North roster 93,548 bricks。2026-10-10 复查官方说明、发布目录、NERSC 与 NOIRLab TAP，仍未找到 DR10 North 成像 roster；官方继续将 North 归属 DR9。不能从 all-sky grid、合并 Tractor 或 PSC 推断。DR5–DR9 URI 规则与所有代的逐文件存在性未全部核验。见[DR10 North 审计](docs/research/legacy-dr10-north-roster-audit-20261010.md)。 |
-| HST | 72602 保留旧 1,201,094 行输入并补 20 页/39,187 行，923,382 observations，排除 19 行，属于有界补充而非完整当前刷新；Dev 仍为 916,116/排除 18。复杂 footprint 使用保守候选，precision=estimated，原始 s_region 和两批来源保留；Products API 链接不等于本地逐文件库存。 |
+| HST | 72602 保留旧 1,201,094 行输入并补 20 页/39,187 行，923,382 observations，排除 19 行，属于有界补充而非完整当前刷新；Dev 为 916,119/排除 18，并在 2026-10-10 新增两个公开 observation。复杂 footprint 使用保守候选，precision=estimated，原始 s_region 和来源保留；Products API 链接不等于本地逐文件库存。见[Dev 增补记录](docs/research/hst-bounded-supplement-20261010.md)。 |
 | HSC | 保留 tract/patch 和需登录 DAS Search，文件存在性/直链尚未确认；不扩入第一阶段四巡天范围。 |
 
 HST 与 Legacy 来源补查结论见 [HST footprint 审计](docs/research/hst-unindexed-footprints-20261001.md)、

@@ -29,7 +29,7 @@ Assets 绝不代替用户下载科学数据。可下载的 JSON/CSV **下载计�
 | DESI DR1/EDR | 估算 Tile 候选与官方目录 | 2026-10-10 经代理 GET 检查，CASDC DR1、iron 与 zcatalog 目录返回 HTTP 200；同级 `iron/tiles/` 路径返回 HTTP 404。这不证明存在 Tile 专属镜像路径，也未核验逐文件可用性。圆形焦平面近似不等于目标级光谱覆盖或完整科学文件清单。[核对记录](docs/research/casdc-mirror-index-audit-20261009.md)。 |
 | Legacy Surveys | 按 release 区分的 brick 与候选产品 URI | 当前目录登记 DR1-DR10。DR10 South 对应官方 366,912 个成员；北区成像保留 DR9 North 身份。候选 URI 尚未逐文件核验，DR10 roster 不代表后续 release。 |
 | Gaia DR3 | `gaia_source` HEALPix 文件分区 | 锁定的 ICRS/NESTED O8 范围描述 source-ID 分区，不证明实际天体占据或文件内容；其他 Gaia DR3 产品不在此绑定中。 |
-| HST | Observation ID、原始 `s_region` 和 MAST 入口 | Assets Dev 原生索引增补了一条公开观测，但未进入当前 public bundle，也不代表完整 HST 清单；锁定的 CAOM 快照仍排除 18 条不支持的坐标框架记录。MAST 仍负责实时产品与访问政策。 |
+| HST | Observation ID、原始 `s_region` 和 MAST 入口 | Assets Dev 原生索引新增两条公开观测 `454130303`、`454130304`，并保留 `26442812` 的元数据；目前索引有 916,119 个观测，仍排除 18 条不支持坐标框架的记录。这是有界补充，未进入当前 public bundle，也不代表完整 HST 清单；MAST 仍负责实时产品与访问政策。见[Dev 补充记录](docs/research/hst-bounded-supplement-20261010.md)。 |
 
 以上是有边界、基于证据的范围，不是五个档案的完整产品清单。MOC 覆盖、原生分块、
 来源目录和已校验科学文件字节是不同证据。2026-10-10 经代理复测 CASDC 根目录及
