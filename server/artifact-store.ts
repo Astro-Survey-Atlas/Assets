@@ -7,6 +7,8 @@ import path from "node:path";
 
 import { AbortMultipartUploadCommand, CompleteMultipartUploadCommand, CreateMultipartUploadCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client, UploadPartCommand, type CompletedPart } from "@aws-sdk/client-s3";
 
+export const S3_MULTIPART_PART_SIZE_BYTES = 5 * 1024 * 1024;
+
 export interface ArtifactObject {
   key: string;
   sizeBytes: number;
@@ -418,7 +420,7 @@ export class S3ArtifactStore implements ArtifactStore {
     const existing = await this.head(logical);
     if (existing) return this.reconcileExisting(logical, existing, Buffer.alloc(0), details.sha256, details.sizeBytes);
     try {
-      const result = options.multipart && details.sizeBytes >= 5 * 1024 * 1024
+      const result = options.multipart && details.sizeBytes >= S3_MULTIPART_PART_SIZE_BYTES
         ? await this.#uploadFileMultipart(logical, filePath, details, options)
         : await this.#client.send(new PutObjectCommand({
         Bucket: this.bucket,
@@ -455,7 +457,7 @@ export class S3ArtifactStore implements ArtifactStore {
     let handle: Awaited<ReturnType<typeof open>> | undefined;
     try {
       handle = await open(filePath, "r");
-      const partSize = 5 * 1024 * 1024;
+      const partSize = S3_MULTIPART_PART_SIZE_BYTES;
       for (let start = 0; start < details.sizeBytes; start += partSize) {
         const bytes = Buffer.alloc(Math.min(partSize, details.sizeBytes - start));
         let offset = 0;
