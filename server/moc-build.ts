@@ -798,7 +798,9 @@ export class MocPublicationStore {
     const copyOutput = async (sourceRef: { ref: string; sha256?: string; sizeBytes?: number }, targetName: string, mediaType: string): Promise<MocPublicationFile> => {
       const sourceName = path.basename(sourceRef.ref);
       if (!sourceName || sourceName === "." || sourceName === ".." || sourceName.includes("\0")) throw new AdminHttpError(409, "staged MOC output has an invalid filename");
-      const source = immutableRef(sourceRoot, path.join(sourceRoot, sourceName));
+      let source: string;
+      try { source = immutableRef(sourceRoot, path.resolve(this.evidenceRoot, sourceRef.ref)); }
+      catch { throw new AdminHttpError(409, `staged MOC output ${sourceName} has an invalid path`); }
       const destination = immutableRef(destinationRoot, path.join(destinationRoot, targetName));
       let sourceBody: Buffer;
       try { sourceBody = await readFile(source); }

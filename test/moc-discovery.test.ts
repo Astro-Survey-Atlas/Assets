@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { AdminHttpError } from "../server/admin.js";
 import { FilesystemArtifactStore, type ArtifactObject, type ArtifactObjectWithBody, type ArtifactPutOptions, type ArtifactStore } from "../server/artifact-store.js";
-import { MocBuildService, MocBuildStore, MocPublicationStore } from "../server/moc-build.js";
+import { MocBuildService, MocBuildStore, MocPublicationStore, type MocBuildRequest } from "../server/moc-build.js";
 import { resolveMocDiscoveryCandidate } from "../server/moc-discovery.js";
 import { StateSnapshotCoordinator, stateSnapshotFileKey } from "../server/state-snapshot.js";
 import { UploadSpool } from "../server/upload-spool.js";
@@ -195,6 +195,56 @@ test("staged MOC outputs publish immutably and can be restored", async () => {
   const restored = new MocPublicationStore(content, evidence);
   await restored.initialize();
   assert.equal(restored.forBuild(build.name)?.id, publication.id);
+});
+
+test("MOC publication resolves nested Core output references inside the build directory", async () => {
+  const content = await mkdtemp(path.join(os.tmpdir(), "atlas-moc-nested-content-"));
+  const evidence = await mkdtemp(path.join(os.tmpdir(), "atlas-moc-nested-evidence-"));
+  try {
+    const buildName = "euclid-ero-20261012-vis";
+    const mocBytes = Buffer.from("native-moc-output");
+    const mocRef = `moc-build/${buildName}/core/euclid-ero-vis-frames.moc.fits`;
+    const mocPath = path.join(evidence, mocRef);
+    await mkdir(path.dirname(mocPath), { recursive: true });
+    await writeFile(mocPath, mocBytes);
+
+    const staged: MocBuildRequest = {
+      schemaVersion: 1,
+      kind: "MocBuildRequest",
+      name: buildName,
+      createdAt: "2026-10-12T00:00:00.000Z",
+      updatedAt: "2026-10-12T00:00:00.000Z",
+      discoveryRequestName: "euclid-ero-targets",
+      provider: "evidence",
+      candidateId: "euclid-ero-targets:VIS",
+      productId: "euclid-ero-vis",
+      surveyId: "euclid",
+      releaseId: "euclid-ero",
+      source: { url: "https://www.euclid-ec.org/" },
+      progress: { phase: "STAGED", step: 7, totalSteps: 7, percent: 100 },
+      phase: "STAGED",
+      outputs: {
+        moc: {
+          ref: mocRef,
+          sha256: createHash("sha256").update(mocBytes).digest("hex"),
+          sizeBytes: mocBytes.length,
+        },
+      },
+    };
+    const publications = new MocPublicationStore(content, evidence);
+    const publication = await publications.publish(staged, {
+      productId: "euclid-ero-vis",
+      surveyId: "euclid",
+      releaseId: "euclid-ero",
+      name: "ERO VIS image frames",
+    });
+
+    assert.deepEqual(await publications.verify(publication), { valid: true });
+    assert.deepEqual(await readFile(publications.absolutePath(publication.files.moc)), mocBytes);
+  } finally {
+    await rm(content, { recursive: true, force: true });
+    await rm(evidence, { recursive: true, force: true });
+  }
 });
 
 test("publication integrity verification rejects tampered content-volume files", async () => {
