@@ -1,6 +1,6 @@
 {
   "name": "astro-survey-atlas-assets",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -35,6 +35,7 @@
     "test:admin-browser": "python3 scripts/admin-browser-smoke.py",
     "start": "node dist/server/server.js",
     "test:node": "tsx --test --test-concurrency=4 test/*.test.ts",
+    "test:node:code": "tsx --test --test-concurrency=4 test/archive-native-units.test.ts test/euclid-native-metadata.test.ts test/native-task-lease.test.ts test/native-unit-comparison.test.ts test/native-unit-management.test.ts test/publication-task-store.test.ts",
     "test:python": "python3 -m unittest discover -s test -p 'test_*.py'",
     "test:homepage": "npm run build:site && python3 scripts/homepage-carousel-smoke.py",
     "test:core": "python3 scripts/verify_core_wheel.py",

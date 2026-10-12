@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing immutable code tag, for example code-v0.0.1
+        description: Existing immutable code tag, for example code-v0.0.2
         required: true
         type: string
 
@@ -35,6 +35,12 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements/requirements.lock
 
       - name: Resolve code release coordinates
         id: version
@@ -63,12 +69,18 @@ jobs:
           echo "chart=oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts/astro-survey-atlas-assets" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          python -m pip install -r requirements/requirements.lock
+          python -m pip install --no-deps vendor/moc-core/astro_survey_moc_core-1.2.0-py3-none-any.whl
 
       - name: Validate code without public data storage
         run: |
-          npm run test:node
+          npm run build:server
+          npm run build:site
           npm run test:core
+          npm run test:node:code
+          npm run test:python
           npx tsc -p tsconfig.server.json --noEmit
           npx tsc --noEmit -p tsconfig.site.json
           npx vite build

@@ -18,8 +18,8 @@ COPY scripts ./scripts
 COPY site ./site
 COPY test ./test
 COPY requirements ./requirements
-COPY artifacts/public-survey-footprints/moc-core/${MOC_CORE_WHEEL} /tmp/${MOC_CORE_WHEEL}
-COPY artifacts/public-survey-footprints/moc-core/${MOC_CORE_SOURCE_SNAPSHOT} /tmp/${MOC_CORE_SOURCE_SNAPSHOT}
+COPY vendor/moc-core/${MOC_CORE_WHEEL} /tmp/${MOC_CORE_WHEEL}
+COPY vendor/moc-core/${MOC_CORE_SOURCE_SNAPSHOT} /tmp/${MOC_CORE_SOURCE_SNAPSHOT}
 RUN if [ "$FRONTEND_ONLY" = "true" ]; then \
       echo "FRONTEND_ONLY=true is incompatible with the archive-only runtime image (dist/server is required)" >&2; \
       exit 1; \

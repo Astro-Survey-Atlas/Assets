@@ -29,9 +29,15 @@ jobs:
           cache: pip
           cache-dependency-path: requirements/requirements.lock
 
-      - run: python -m pip install -r requirements/requirements.lock
       - run: npm ci
-      - run: npm run test:node
+      - name: Install MOC Core runtime dependency
+        run: |
+          python -m pip install -r requirements/requirements.lock
+          python -m pip install --no-deps vendor/moc-core/astro_survey_moc_core-1.2.0-py3-none-any.whl
+      - run: npm run build:server
+      - run: npm run build:site
+      - run: npm run test:core
+      - run: npm run test:node:code
       - run: npm run test:python
 
       - name: Install Chromium test browser

@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WHEEL_DIR = ROOT / "artifacts/public-survey-footprints/moc-core"
+WHEEL_DIR = ROOT / "vendor/moc-core"
 SOURCE = ROOT / "requirements/moc-core-source.json"
 
 
