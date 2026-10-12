@@ -208,6 +208,18 @@ Current evidence limits are:
   These frame bounds do not establish valid-pixel masks or catalogue-object
   coverage. Preserve matching Stack/Catalog package URIs and the source
   snapshot hash; never infer an ERO Tile ID or retrieve scientific pixels.
+- Euclid Q1 calibrated-frame metadata is a separate source from the Q1 MER Tile
+  roster. Its 2,449 `q1.calibrated_frame` rows are selected by official
+  `Q1_R1` identity and include source-listed `stc_s` per frame. The pagination
+  receipts and archive count are locked; the declared query is complete while
+  the wider Q1 science inventory remains incomplete. VIS and NISP Y/J/H frame
+  extents are estimated, valid-pixel masks and individual science files are
+  not checked, and access remains at the ESA archive entrypoint.
+- Euclid Q2 EGBS-v1 uses the source-listed VIS SCI quadrant identities from
+  observation `067070`: 144 science exposures and 20,736 detector quadrants.
+  FITS TPV headers describe estimated image-frame bounds; PSF calibration
+  observations and valid-pixel masks are excluded. This is a bounded public
+  product inventory, not all Euclid Q2 imagery.
 - Gaia DR3 uses the actual official `gaia_source` file roster with inclusive
   ICRS/NESTED order-8 ranges. Range intersection is exact; scientific source
   presence remains estimated because source-ID positions are approximate and

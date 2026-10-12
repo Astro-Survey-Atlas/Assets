@@ -13,7 +13,7 @@ import { hstSnapshotRows, loadHstSnapshot } from "./hst-snapshot.js";
 import { cellsForStcs } from "./hst-image-lookup.js";
 import { inspectSourceUnitInput, legacyDr5CoaddFallbackAlias, SourceUnitStore } from "./source-units.js";
 import { SOURCE_UNIT_DISK_INDEX_VERSION } from "./source-unit-disk-index.js";
-import { importSurveySnapshot, isSurveyNativeAdapter, SurveyNativeIndex } from "./survey-native-index.js";
+import { importSurveySnapshot, isSurveyNativeAdapter, nativeBindingIndexRoute, SurveyNativeIndex } from "./survey-native-index.js";
 import { getNativeSlot, setNativeSlot } from "./native-unit-sources.js";
 import { acquireEroTargetSnapshot, eroFramesForProduct, parseEroTargetSnapshot } from "./ero-target-index.js";
 import { metadataFetch } from "./metadata-fetch.js";
@@ -167,7 +167,7 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
     try {
       report.counts.nativeMemberships = Number((db.prepare("SELECT count(*) AS total FROM source_layer_units").get() as { total: number }).total);
       report.counts.nativeGeometries = Number((db.prepare("SELECT count(*) AS total FROM source_geometries").get() as { total: number }).total);
-      for (const binding of group.bindings.filter(binding => binding.surveyId !== "hst" && !SURVEY_NATIVE_SURVEYS.has(binding.surveyId) && binding.unitKind !== "target")) {
+      for (const binding of group.bindings.filter(binding => binding.surveyId !== "hst" && !(SURVEY_NATIVE_SURVEYS.has(binding.surveyId) || nativeBindingIndexRoute(binding) === "survey") && binding.unitKind !== "target")) {
         const identity = `identity:${[binding.surveyId, binding.releaseId, binding.product].map(encodeURIComponent).join("/")}`;
         const aliases = [...new Set([binding.layerId, identity, legacyDr5CoaddFallbackAlias(binding.layerId, binding)].filter((alias): alias is string => Boolean(alias)))];
         const aliasSlots = aliases.map(() => "?").join(",");
@@ -215,7 +215,7 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
         }
         report.checks.push({ id: `survey-source:${summary.sourceId}`, passed: true, detail: `${summary.unitCount} native identities in ${summary.indexedRows} supported metadata rows; ICRS/NESTED; ${summary.excludedRows} excluded rows` });
       }
-      for (const binding of group.bindings.filter(binding => SURVEY_NATIVE_SURVEYS.has(binding.surveyId))) {
+      for (const binding of group.bindings.filter(binding => (SURVEY_NATIVE_SURVEYS.has(binding.surveyId) || nativeBindingIndexRoute(binding) === "survey"))) {
         const cells = index.sampleCells(binding);
         if (!cells.length) throw new Error(`No release/product-scoped native metadata exists for ${binding.layerId}`);
         const result = index.lookup(binding, 4, cells.slice(0, 1), 3);
@@ -225,7 +225,7 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
         report.samples.push({ layerId: binding.layerId, unitKind: sample.unitKind, unitId: sample.unitId, order: 4, cells: sample.matchingCells, precision: sample.precision, uris: sample.accessUris?.map(access => access.uri) ?? [], sRegion: sample.sRegion });
       }
     } finally { index.close(); }
-  } else if (group.bindings.some(binding => SURVEY_NATIVE_SURVEYS.has(binding.surveyId))) throw new Error("New survey bindings require their locked native index");
+  } else if (group.bindings.some(binding => (SURVEY_NATIVE_SURVEYS.has(binding.surveyId) || nativeBindingIndexRoute(binding) === "survey"))) throw new Error("New survey bindings require their locked native index");
   if (group.hst) {
     await nativeFile(request.evidenceRoot, group.hst.file.ref, group.hst.file);
     const root = group.hst.root ? nativeEvidencePath(request.evidenceRoot, group.hst.root) : request.evidenceRoot;

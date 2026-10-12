@@ -119,6 +119,12 @@ S3 保存；真实 CSST 私有数据、预览和配方由 Workspace 持有，不
 校验并激活的 `/data/current`，不在每次请求时访问 S3。请按[存储契约](docs/public-artifact-storage.md)
 配置 endpoint、bucket 和 credential Secret。
 
+代码与公共数据通过两条独立流程发布。推送 `code-vX.Y.Z` 代码 tag 会构建镜像、Helm Chart
+和代码 release 说明，不读取对象存储。手动运行 Data Package Release 时，必须指定公共
+bundle 的预期 SHA-256；流程只从 S3 获取并校验该公共 bundle，再以单独的
+`data-vX.Y.Z` tag 发布资源包和目录清单。推送数据 tag 时，注释中须有
+`public-bundle-sha256=<hex>`；流程只读取公共 bundle，不恢复 evidence。已有 `v0.0.1` 标签保持不变。
+
 ## 存储权威
 
 [S3 唯一权威实施计划](docs/s3-authority-implementation-plan.md) 记录：生产 S3

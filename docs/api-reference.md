@@ -786,6 +786,7 @@ POST /api/v1/admin/moc-discovery/{name}/resubmit
 GET  /api/v1/admin/moc-builds
 POST /api/v1/admin/moc-builds
 POST /api/v1/admin/moc-builds/from-evidence
+POST /api/v1/admin/moc-builds/from-native-units
 GET  /api/v1/admin/moc-builds/{name}
 POST /api/v1/admin/moc-builds/{name}/retry
 POST /api/v1/admin/moc-builds/{name}/register-product
@@ -831,6 +832,12 @@ MAST CAOM 快照、锁定的观测清单、DS9 区域、recipe/provenance 和 MO
 原生 NUNIQ order 与投影后，创建未发布产品和 `STAGED` build。产品明确保留 estimated
 footprint、not-scanned science files 和不完整归档范围；它仍须经过正常产品审核和发布，
 不会修改 Warehouse 索引或静态 layer registry。
+
+`POST /api/v1/admin/moc-builds/from-native-units` 从活动且已审核的 Euclid ERO、Q1 或 Q2
+原生快照构建一个估算影像框架 MOC。请求只能选择注册的 `sourceId`、`band`、安全的
+`buildName`，并提交当前 `expectedActive`；服务端从已归档快照读取几何，不接受浏览器上传
+几何或科学文件。Q1 `band` 可为 `VIS/Y/J/H/all`，Q2 仅为 `VIS/all`。接口会创建未发布的
+产品草稿和 `STAGED` build，仍须完成产品审核及正常公开发布；它不会更改活动原生索引。
 
 `POST /api/v1/admin/moc-builds/from-path-healpix-evidence` 导入已完成的文件路径分区扫描，
 当前仅接受登记的 DESI DR1 bright redrock 产品。请求包含公开来源说明、evidence-root 下的

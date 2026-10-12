@@ -65,6 +65,7 @@ import { isDeniedPackageId, isDeniedSurvey } from "./publication-policy.js";
 import { ContentArchiveError } from "./content-archive.js";
 import { buildPublicProductEvidence } from "./public-product-evidence.js";
 import { registerEvidenceMoc } from "./evidence-moc-import.js";
+import { buildEuclidGeometry } from "./euclid-geometry-build.js";
 import { registerPathHealpixMoc } from "./path-healpix-moc-import.js";
 import { mergeWarehouseSourceFiles, warehouseLogicalLayersForSource } from "./reverse-observations.js";
 import { StateSnapshotCoordinator, STATE_SNAPSHOT_NAMESPACES, type StateSnapshotSink, type StateSnapshotSyncStatus } from "./state-snapshot.js";
@@ -3128,6 +3129,13 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         }
       }
       return json(response, 201, { request: await createMocBuild(body), syncStatus: await apiSyncStatus("moc-build") });
+    }
+    if (pathname === "/api/v1/admin/moc-builds/from-native-units" && request.method === "POST") {
+      const imported = await buildEuclidGeometry({ evidenceRoot, sourceRoot: sourceUnitEvidenceRoot,
+        active: nativeUnits?.active, sources: nativeUnits?.sources ?? [], products, builds: mocBuildStore,
+        buildService: mocBuildService }, await requestJsonBody(request));
+      await editorial.sync(adminInventoryIndex(runtimeSurveyIndex, products.list()).surveys);
+      return json(response, 201, { request: adminMocBuildView(imported.request), product: adminProductView(imported.product), syncStatus: await apiSyncStatus("products") });
     }
     if (pathname === "/api/v1/admin/moc-builds/from-evidence" && request.method === "POST") {
       const imported = await registerEvidenceMoc({ evidenceRoot, products, builds: mocBuildStore, buildService: mocBuildService }, await requestJsonBody(request));

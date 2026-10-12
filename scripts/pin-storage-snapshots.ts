@@ -19,7 +19,7 @@ export interface StorageSnapshotLock {
   schemaVersion: 1;
   createdAt: string;
   public: { key: string; sha256: string; bundleId: string; bundleSha256: string };
-  authorityEvidence: { key: string; sha256: string; snapshot: string; files: number; bytes: number };
+  authorityEvidence?: { key: string; sha256: string; snapshot: string; files: number; bytes: number };
 }
 
 function sha256(bytes: Uint8Array): string {
@@ -42,38 +42,46 @@ async function readObject(store: ArtifactStore, key: string): Promise<{ body: Bu
   return { body: object.body, sha256: digest };
 }
 
-export async function pinStorageSnapshots(outputDir: string, environment: NodeJS.ProcessEnv = process.env): Promise<StorageSnapshotLock> {
+export async function pinStorageSnapshots(outputDir: string, environment: NodeJS.ProcessEnv = process.env, publicOnly = false): Promise<StorageSnapshotLock> {
   const scopedEnvironment = { ...environment, ASSETS_OBJECT_STORE_REQUIRED: "1" };
   const store = createArtifactStoreFromProcess(scopedEnvironment);
   if (store.kind !== "s3") throw new Error("Snapshot pinning requires an S3-compatible object store");
   const publicKey = environment.ASSETS_PUBLIC_OBJECT_STORE_CURRENT_KEY?.trim() || "public/current.json";
-  const authorityKey = environment.ASSETS_AUTHORITY_EVIDENCE_CURRENT_KEY?.trim() || "authority/evidence/current.json";
-  const [publicObject, authorityObject] = await Promise.all([readObject(store, publicKey), readObject(store, authorityKey)]);
+  const publicObject = await readObject(store, publicKey);
   const publicPointer = parseCurrentPointer(publicObject.body);
-  const authorityPointer = parseEvidence(authorityObject.body);
+  let authorityPointerBody: Buffer | undefined;
   const lock: StorageSnapshotLock = {
     schemaVersion: 1,
     createdAt: new Date().toISOString(),
     public: { key: publicKey, sha256: publicObject.sha256, bundleId: publicPointer.bundle.id, bundleSha256: publicPointer.bundle.sha256 },
-    authorityEvidence: { key: authorityKey, sha256: authorityObject.sha256, snapshot: authorityPointer.snapshot, files: authorityPointer.files, bytes: authorityPointer.bytes },
   };
+  if (!publicOnly) {
+    const authorityKey = environment.ASSETS_AUTHORITY_EVIDENCE_CURRENT_KEY?.trim() || "authority/evidence/current.json";
+    const authorityObject = await readObject(store, authorityKey);
+    const authorityPointer = parseEvidence(authorityObject.body);
+    authorityPointerBody = authorityObject.body;
+    lock.authorityEvidence = { key: authorityKey, sha256: authorityObject.sha256, snapshot: authorityPointer.snapshot, files: authorityPointer.files, bytes: authorityPointer.bytes };
+  }
   await mkdir(outputDir, { recursive: true });
-  await Promise.all([
-    writeFile(path.join(outputDir, "public-current.json"), publicObject.body, { mode: 0o600 }),
-    writeFile(path.join(outputDir, "authority-evidence-current.json"), authorityObject.body, { mode: 0o600 }),
-    writeFile(path.join(outputDir, "lock.json"), `${JSON.stringify(lock, null, 2)}\n`, { mode: 0o600 }),
-  ]);
+  const files = [writeFile(path.join(outputDir, "public-current.json"), publicObject.body, { mode: 0o600 }),
+    writeFile(path.join(outputDir, "lock.json"), `${JSON.stringify(lock, null, 2)}\n`, { mode: 0o600 })];
+  if (authorityPointerBody) files.push(writeFile(path.join(outputDir, "authority-evidence-current.json"), authorityPointerBody, { mode: 0o600 }));
+  await Promise.all(files);
   return lock;
 }
 
 if (process.argv[1] && path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1])) {
-  const outputDir = process.argv[2];
+  const args = process.argv.slice(2);
+  const publicOnly = args.includes("--public-only");
+  const outputDir = args.find(argument => argument !== "--public-only");
   if (!outputDir || outputDir.startsWith("-")) {
-    console.error("Usage: pin-storage-snapshots.ts <output-dir>");
+    console.error("Usage: pin-storage-snapshots.ts <output-dir> [--public-only]");
     process.exitCode = 2;
   } else {
-    await pinStorageSnapshots(path.resolve(outputDir)).then((lock) => {
-      console.log(`Pinned public bundle ${lock.public.bundleId} (${lock.public.bundleSha256}) and authority evidence snapshot ${lock.authorityEvidence.snapshot}`);
+    await pinStorageSnapshots(path.resolve(outputDir), process.env, publicOnly).then((lock) => {
+      console.log(publicOnly
+        ? `Pinned public bundle ${lock.public.bundleId} (${lock.public.bundleSha256})`
+        : `Pinned public bundle ${lock.public.bundleId} (${lock.public.bundleSha256}) and authority evidence snapshot ${lock.authorityEvidence!.snapshot}`);
     }).catch((error) => {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;

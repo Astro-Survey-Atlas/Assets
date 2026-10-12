@@ -3,7 +3,7 @@ import path from "node:path";
 import { isDeniedSurvey } from "./publication-policy.js";
 import { AdminHttpError } from "./admin-error.js";
 
-export type NativeAdapter = "legacy-roster" | "legacy-geometry" | "desi-tile" | "euclid-tap" | "hst-caom" | "hsc-patch" | "entrypoint" | "gaia-healpix-range" | "sdss-field" | "mast-observation" | "eso-obscore-vvv" | "eso-obscore-fds" | "eso-obscore-kids" | "eso-obscore-vphas" | "eso-obscore-viking" | "skymapper-dr4-ccd" | "twomass-6x-atlas" | "allwise-ibe-atlas" | "noirlab-des-tap" | "noirlab-decaps-tap" | "spherex-qr2-s3-observation" | "cadc-caom-cfhtls" | "act-dr5-whole-map" | "panstarrs-dr1-skycell" | "iphas-dr2-pipeline" | "rubin-firstlook-avm" | "irsa-akari-fis-map" | "cds-ztf-progenitor-o3" | "skyview-radio-maps";
+export type NativeAdapter = "legacy-roster" | "legacy-geometry" | "desi-tile" | "euclid-tap" | "hst-caom" | "hsc-patch" | "entrypoint" | "gaia-healpix-range" | "sdss-field" | "mast-observation" | "eso-obscore-vvv" | "eso-obscore-fds" | "eso-obscore-kids" | "eso-obscore-vphas" | "eso-obscore-viking" | "skymapper-dr4-ccd" | "twomass-6x-atlas" | "allwise-ibe-atlas" | "noirlab-des-tap" | "noirlab-decaps-tap" | "spherex-qr2-s3-observation" | "cadc-caom-cfhtls" | "act-dr5-whole-map" | "panstarrs-dr1-skycell" | "iphas-dr2-pipeline" | "rubin-firstlook-avm" | "irsa-akari-fis-map" | "cds-ztf-progenitor-o3" | "skyview-radio-maps" | "euclid-image-metadata";
 export type NativeTaskKind = "baseline" | "discover" | "acquire" | "import" | "build" | "verify" | "archive" | "activate" | "restore";
 export interface NativeFile {
   ref: string; sha256: string; sizeBytes: number; objectKey?: string; sourceUrl?: string;
@@ -11,7 +11,7 @@ export interface NativeFile {
 }
 export interface NativeSource {
   id: string; revision: number; surveyId: string; releaseId: string; title: string;
-  adapter: NativeAdapter; unitKind: "tile" | "brick" | "observation" | "tract/patch" | "target" | "healpix-range" | "field" | "ccd" | "image";
+  adapter: NativeAdapter; unitKind: "tile" | "brick" | "observation" | "tract/patch" | "target" | "healpix-range" | "field" | "ccd" | "image" | "quadrant";
   scope: string; sourceUrl: string; files: Array<NativeFile & { slot?: string }>;
   slot: string; query?: string; updatedAt: string;
 }
@@ -79,7 +79,7 @@ export function nativeMetadataUrl(value: string, adapter: NativeAdapter): URL {
   const url = new URL(value);
   const hosts: Record<NativeAdapter, string[]> = {
     "legacy-roster": ["portal.nersc.gov"], "legacy-geometry": ["portal.nersc.gov"],
-    "desi-tile": ["data.desi.lbl.gov", "data.desi.lbl.gov:443"], "euclid-tap": ["eas.esac.esa.int"],
+    "desi-tile": ["data.desi.lbl.gov", "data.desi.lbl.gov:443"], "euclid-tap": ["eas.esac.esa.int"], "euclid-image-metadata": ["eas.esac.esa.int", "www.cosmos.esa.int"],
     "hst-caom": ["mast.stsci.edu"], "hsc-patch": ["hsc-release.mtk.nao.ac.jp"],
     "gaia-healpix-range": ["gaia.eu-1.cdn77-storage.com"], "sdss-field": ["data.sdss.org"], "mast-observation": ["mast.stsci.edu"],
     "eso-obscore-vvv": ["archive.eso.org"],

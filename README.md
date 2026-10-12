@@ -182,6 +182,14 @@ not fall back to source-tree artifacts or hidden local release data. HTTP serves
 the verified `/data/current` release without reading S3 per request. Configure
 the endpoint, bucket and credential Secret as described in the storage contract.
 
+Code and public data use separate release workflows. A `code-vX.Y.Z` tag builds
+and publishes the container image, Helm chart and code release metadata without
+object-store credentials. The manual Data Package Release pins a public bundle
+by its expected SHA-256, reads only that immutable public bundle from S3, and
+publishes it under a separate `data-vX.Y.Z` tag. A pushed data tag records that
+SHA-256 in its annotation as `public-bundle-sha256=<hex>`. It does not restore
+evidence. The older `v0.0.1` tag remains unchanged.
+
 ## Storage authority
 
 The [S3 authority implementation plan](docs/s3-authority-implementation-plan.md)

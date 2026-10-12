@@ -31,6 +31,7 @@ export class NativeUnitController {
   constructor(options: NativeControllerOptions) { this.#options = options; }
   attachQueue(queue: PublicationTaskStore): void { this.#queue = queue; }
   get active(): NativeGroup | undefined { return this.#state.groups.find(group => group.id === this.#state.active); }
+  get sources(): readonly NativeSource[] { return this.#state.sources; }
   get generation(): number { return this.#state.generation; }
   get version(): string { return this.#state.active ?? "imported-baseline"; }
   async initialize(): Promise<void> {
