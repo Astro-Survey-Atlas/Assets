@@ -47,9 +47,10 @@ jobs:
             EXPECTED_BUNDLE_SHA256="$REQUESTED_BUNDLE_SHA256"
           else
             DATA_TAG="$GITHUB_REF_NAME"
+            git fetch --force --no-tags origin "refs/tags/$DATA_TAG:refs/tags/$DATA_TAG"
             TAG_MESSAGE="$(git for-each-ref --format='%(contents)' "refs/tags/$DATA_TAG")"
             mapfile -t BUNDLE_LINES < <(printf '%s\n' "$TAG_MESSAGE" | sed -n 's/^public-bundle-sha256=//p')
-            [ "${#BUNDLE_LINES[@]}" -eq 1 ] || { echo "annotated tag must contain one public-bundle-sha256=<hex> line" >&2; exit 1; }
+            [ "${#BUNDLE_LINES[@]}" -eq 1 ] || { echo "annotated tag $DATA_TAG must contain exactly one public-bundle-sha256=<hex> line (found ${#BUNDLE_LINES[@]})" >&2; exit 1; }
             EXPECTED_BUNDLE_SHA256="${BUNDLE_LINES[0]}"
           fi
           if [[ ! "$DATA_TAG" =~ ^data-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then

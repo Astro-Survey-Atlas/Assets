@@ -68,8 +68,19 @@ Control snapshot generation 6076, SHA-256
 advanced to `synced` at 2026-10-13 01:56:20 UTC. The remote object was confirmed
 at 26,655,301 bytes with the same SHA-256 as the local upload manifest. This
 control-state sync is separate from the already completed public-bundle and
-native-index activation checks. Publication-task snapshot generation 16530 was
-still pending during that check and is tracked separately in the handoff.
+native-index activation checks. Publication-task snapshot generation 16530,
+SHA-256 `31ccbebde08f8f9b84702f732c0c48a0a3229e338e55c9706dd6c579b5edf702`,
+also advanced to `synced` at 2026-10-13 02:12:32 UTC; remote size and SHA matched
+the pointer and local manifest.
+
+The independent data tag `data-v0.0.1` was pushed with this bundle SHA pinned.
+GitHub Actions run 38335509877 failed during tag-coordinate resolution before
+the public bundle was pinned or staged. No data-release assets were created.
+The branch now explicitly fetches the annotated tag ref before reading its
+message; the tag is preserved. The workflow is not yet on the default branch,
+so recovery requires merging the branch and dispatching the workflow with the
+same tag and bundle SHA. This publication state is separate from the successful
+Dev bundle publication and native-index activation.
 
 All eight published MOC asset HEAD requests returned HTTP 200, with SHA-256 and
 byte counts matching the public asset catalog. `/api/v1/status` reported

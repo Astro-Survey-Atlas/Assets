@@ -32,8 +32,9 @@
 URI。控制快照 generation **6076** / SHA-256
 `8a6d758c83b718337e955fb8c9f075f62aceeb4311f9307d0a2a9684899d1c84` 已于
 2026-10-13 01:56:20 UTC 同步；远端对象大小 26,655,301 bytes、SHA 与本地 manifest 一致，
-`native-units` 状态为 `synced`。`publication-tasks` generation **16530** 当时仍为 `pending`，
-继续等待其独立同步。
+`native-units` 状态为 `synced`。`publication-tasks` generation **16530** 已于
+2026-10-13 02:12:32 UTC 同步；远端对象大小 78,365,648 bytes、SHA-256
+`31ccbebde08f8f9b84702f732c0c48a0a3229e338e55c9706dd6c579b5edf702` 与指针一致。
 
 Dev 当前使用 revision **371** / 镜像 tag
 `0.1.0-20261012-165105-nested-moc-output`。本地访问 NodePort 时必须绕过配置的 HTTP 代理；
@@ -42,8 +43,16 @@ Dev 当前使用 revision **371** / 镜像 tag
 
 数据 Release 独立于代码镜像和 Helm Chart：使用 `.github/workflows/data-release.yml` 的
 `data-v0.0.1` tag，仅打包经 SHA 固定的 public bundle、资源包集合、catalog、release history
-与校验和；不包含输入证据或科学像素。代码 Release 使用单独的 `code-v*` 流程，不改写已有
-`v0.0.1` / `code-v0.0.x` tags。数据 tag 与 GitHub Release 的最终状态在本节后续补记。
+与校验和；不包含输入证据或科学像素。注释 tag `data-v0.0.1` 已推送到 commit
+`8c23e0f628c888c1f5e3cebae62508c071ad778c`，注释中固定了上述 bundle SHA。GitHub Actions
+run [38335509877](https://github.com/Astro-Survey-Atlas/Assets/actions/runs/38335509877)
+在 `Resolve data tag and pinned bundle` 步骤失败，后续 bundle pin、hydrate 和 GitHub Release
+步骤未运行；数据 Release 尚未完成，不要把 tag 推送视为 Release 成功。公开 run 页面没有详细
+错误正文，匿名 REST 查询受 GitHub API rate limit 限制。当前分支已修复 tag 事件的显式 ref fetch
+并增强缺失 SHA 行数的诊断，已在浅克隆中验证解析成功。该 workflow 尚未存在于 `origin/main`；
+需将实现分支合入默认分支后，使用 `workflow_dispatch` 输入 `data-v0.0.1` 和上述 SHA 完成恢复。
+保留现有 tag，不删除或改写。代码 Release 使用单独的 `code-v*` 流程，不改写已有
+`v0.0.1` / `code-v0.0.x` tags。
 本轮本地验证：`npm run build` 通过（资源校验 160 个产品和 80 个 offline Core 层，服务器
 TypeScript 与站点构建通过）；`npm test` 为 463 项，461 通过、2 跳过、0 失败；
 `git diff --check` 通过。
@@ -179,8 +188,8 @@ Dev 当前 Helm revision **371**，site/backend 均 1/1 Ready、重启数为 0�
 公开目录有 67 个 release、159 个产品、28 个资源包，coverage API 有 140 层。原生索引
 generation **17**、活动 group `14d6885aa39300ecb8041f822c3b9357a0f116dfc6d8911852583361b99ebcdf`
 已通过运行时和站点验证。控制快照 generation 6076 已于 2026-10-13 01:56:20 UTC 同步；
-`publication-tasks` generation 16530 仍待确认。此前 revision 354 部署的
-防积压修复 commit `d776e48` 已推送并保留在当前版本中。
+`publication-tasks` generation 16530 已于 2026-10-13 02:12:32 UTC 同步。此前 revision 354
+部署的防积压修复 commit `d776e48` 已推送并保留在当前版本中。
 
 ### 2026-10-08 Workspace Dev 503 恢复
 
