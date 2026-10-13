@@ -78,7 +78,7 @@ export async function nativeSourceRecipes(root: string): Promise<NativeSource[]>
   return sources;
 }
 
-export function sourceIdsForBinding(binding: Pick<NativeBinding, "surveyId" | "releaseId">): string[] {
+export function sourceIdsForBinding(binding: Pick<NativeBinding, "surveyId" | "releaseId"> & Partial<Pick<NativeBinding, "product">>): string[] {
   if (binding.surveyId === "legacy-surveys") return [ `${binding.releaseId}-bricks`, ...(["legacy-dr1", "legacy-dr2"].includes(binding.releaseId) ? [] : ["legacy-brick-geometry"]) ];
   if (binding.surveyId === "decals" && binding.releaseId === "decals-dr5") return ["legacy-dr5-bricks", "legacy-brick-geometry"];
   if (binding.surveyId === "desi") return [`${binding.releaseId}-tiles`];
@@ -88,7 +88,12 @@ export function sourceIdsForBinding(binding: Pick<NativeBinding, "surveyId" | "r
   if (binding.surveyId === "wenss" && binding.releaseId === "wenss-final") return ["wenss-final-native-maps"];
   if (binding.surveyId === "des" && binding.releaseId === "des-dr2") return ["des-dr2-coadd-tiles"];
   if (binding.surveyId === "decaps" && binding.releaseId === "decaps-dr2") return ["decaps-dr2-native-ccds"];
-  if (binding.surveyId === "euclid") return [binding.releaseId === "euclid-ero" ? "euclid-ero-targets" : "euclid-q1-bgsub-tiles"];
+  if (binding.surveyId === "euclid") {
+    if (binding.releaseId === "euclid-ero") return ["euclid-ero-targets"];
+    if (binding.releaseId === "euclid-q2") return ["euclid-q2-egbs-quadrants"];
+    if (binding.releaseId === "euclid-q1" && /calibrated frames/i.test((binding as NativeBinding).product ?? "")) return ["euclid-q1-calibrated-frames"];
+    return binding.releaseId === "euclid-q1" ? ["euclid-q1-bgsub-tiles"] : [];
+  }
   if (binding.surveyId === "hst") return ["hst-public-images"];
   if (binding.surveyId === "hsc-ssp") return [`${binding.releaseId}-patches`];
   if (binding.surveyId === "gaia" && binding.releaseId === "gaia-dr3") return ["gaia-dr3-file-partitions"];

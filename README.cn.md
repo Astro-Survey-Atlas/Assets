@@ -14,9 +14,35 @@ Assets 绝不代替用户下载科学数据。可下载的 JSON/CSV **下载计�
 
 | 项目 | 职责 | 入口 |
 | --- | --- | --- |
-| [Assets](https://github.com/Astro-Survey-Atlas/Assets) | 公共巡天目录、覆盖天球、MOC、重合查询和发布制品 | [在线目录](https://astro.assets.dev.72602.space:32443/surveys/) |
+| [Assets](https://github.com/Astro-Survey-Atlas/Assets) | 公共巡天目录、覆盖天球、MOC、重合查询和发布制品 | [在线目录](https://astro.assets.72602.space/surveys/) |
 | [Warehouse](https://github.com/Astro-Survey-Atlas/Warehouse) | Scanner、ScanPlan/ScanRequest 执行、当前文件/覆盖索引和 evidence | [Warehouse README](https://github.com/Astro-Survey-Atlas/Warehouse) |
 | [Workspace](https://github.com/Astro-Survey-Atlas/Workspace) | 用户资产、Connector、本地工作流、用户 MOC 和私有探索 | [Workspace README](https://github.com/Astro-Survey-Atlas/Workspace) |
+
+## 巡天数据范围
+
+已登记的产品不代表档案中的每个公开产品或科学文件都已纳入索引。来源文件仍由
+原档案按其访问政策提供；目录入口可用也不等于逐文件校验。
+
+| 巡天 | 天区单位与来源 | 已捕获范围及限制 |
+| --- | --- | --- |
+| Euclid | Q1 MER Tile 与校准图像；ERO target 和图像范围入口 | Q1 锁定的 BGSUB 清单有 2,908 行 / 352 个 Tile。另有独立的 Q1_R1 校准帧快照，共 2,449 行（VIS 836、NISP.H 537、NISP.J 538、NISP.Y 538）；这些是 image 单位，不是 MER Tile。ERO 纳入 17 个具名 target 和 85 条有界 FITS 头记录；已发布 VIS、NISP Y/J/H 四个 frame 图层，每层 17 帧。八个 ERO/Q1 frame MOC 的最高原生阶为 O10，范围精度为 estimated；未验证有效像素掩膜、档案完整库存或单个科学文件，ERO 仍没有已核验的 Tile 清单。本次未下载科学像素。见[范围记录](docs/research/euclid-ero-q1-frame-coverage-20261012.md)和[镜像审计](docs/research/casdc-mirror-index-audit-20261009.md)。 |
+| DESI DR1/EDR | 估算 Tile 候选与官方目录 | 2026-10-10 经代理 GET 检查，CASDC DR1、iron 与 zcatalog 目录返回 HTTP 200；同级 `iron/tiles/` 路径返回 HTTP 404。这不证明存在 Tile 专属镜像路径，也未核验逐文件可用性。圆形焦平面近似不等于目标级光谱覆盖或完整科学文件清单。[核对记录](docs/research/casdc-mirror-index-audit-20261009.md)。 |
+| Legacy Surveys | 按 release 区分的 brick 与候选产品 URI | 当前目录登记 DR1-DR10。DR10 South 对应官方 366,912 个成员；北区成像保留 DR9 North 身份。候选 URI 尚未逐文件核验，DR10 roster 不代表后续 release。 |
+| Gaia DR3 | `gaia_source` HEALPix 文件分区 | 锁定的 ICRS/NESTED O8 范围描述 source-ID 分区，不证明实际天体占据或文件内容；其他 Gaia DR3 产品不在此绑定中。 |
+| HST | Observation ID、原始 `s_region` 和 MAST 入口 | Assets Dev 原生索引新增两条公开观测 `454130303`、`454130304`，并保留 `26442812` 的元数据；目前索引有 916,119 个观测，仍排除 18 条不支持坐标框架的记录。这是有界补充，未进入当前 public bundle，也不代表完整 HST 清单；MAST 仍负责实时产品与访问政策。见[Dev 补充记录](docs/research/hst-bounded-supplement-20261010.md)。 |
+
+以上是有边界、基于证据的范围，不是五个档案的完整产品清单。MOC 覆盖、原生分块、
+来源目录和已校验科学文件字节是不同证据。2026-10-10 经代理复测 CASDC 根目录及
+本次检查的 Euclid、DESI、Gaia、GALEX 目录均有 HTTP 响应；DESI `iron/tiles/` 和
+猜测的 Gaia `gdr3/` 路径返回 HTTP 404，实际由 Gaia 入口链接的 `/Gaia/dr3/` 返回
+HTTP 200。目录响应只说明检查时入口可达，不代表文件字节、档案完整库存或空间覆盖已验证。
+此前 2026-10-09 的超时仍作为历史结果保留，详见[核对记录](docs/research/casdc-mirror-index-audit-20261009.md)。
+公开 bundle `reviewed-mv51kku3-a4f8d8e6`（SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`）包含
+611 个文件和 28 个资源包。目录记录 67 个 release、159 个产品：107 项 acquired、
+11 项仅有 overview、41 项等待 geometry。公开 coverage API 有 140 个图层，其中
+113 个已发布 MOC；该发布任务记录 162 份 coverage documents。这些是目录状态计数，
+不代表档案完整库存或每个来源文件都已核验。
 
 ## 当前实现
 
@@ -95,6 +121,12 @@ S3 保存；真实 CSST 私有数据、预览和配方由 Workspace 持有，不
 会失败关闭，不会使用源码目录或隐藏的本地 release 兜底。HTTP 请求继续读取已经
 校验并激活的 `/data/current`，不在每次请求时访问 S3。请按[存储契约](docs/public-artifact-storage.md)
 配置 endpoint、bucket 和 credential Secret。
+
+代码与公共数据通过两条独立流程发布。推送 `code-vX.Y.Z` 代码 tag 会构建镜像、Helm Chart
+和代码 release 说明，不读取对象存储。手动运行 Data Package Release 时，必须指定公共
+bundle 的预期 SHA-256；流程只从 S3 获取并校验该公共 bundle，再以单独的
+`data-vX.Y.Z` tag 发布资源包和目录清单。推送数据 tag 时，注释中须有
+`public-bundle-sha256=<hex>`；流程只读取公共 bundle，不恢复 evidence。已有 `v0.0.1` 标签保持不变。
 
 ## 存储权威
 

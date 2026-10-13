@@ -6,6 +6,7 @@ import { withLocalFileLock } from "./local-file-lock.js";
 
 import {
   ArtifactStoreConflictError,
+  S3_MULTIPART_PART_SIZE_BYTES,
   type ArtifactPutOptions,
   type ArtifactStore,
 } from "./artifact-store.js";
@@ -595,6 +596,7 @@ export class UploadSpool {
     return {
       ...(manifest.contentType ? { contentType: manifest.contentType } : {}),
       ...(manifest.metadata ? { metadata: manifest.metadata } : {}),
+      ...(manifest.sizeBytes >= S3_MULTIPART_PART_SIZE_BYTES ? { multipart: true } : {}),
     };
   }
 }

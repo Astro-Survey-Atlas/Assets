@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, truncate, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -44,6 +44,15 @@ class FailingKeyAdapter extends LocalS3Adapter {
 
   override async putFileImmutable(key: string, filePath: string, options?: ArtifactPutOptions): Promise<ArtifactObject> {
     if (key === this.failedKey) throw new Error("temporary object-store outage");
+    return super.putFileImmutable(key, filePath, options);
+  }
+}
+
+class RecordingOptionsAdapter extends LocalS3Adapter {
+  readonly optionsByKey = new Map<string, ArtifactPutOptions | undefined>();
+
+  override putFileImmutable(key: string, filePath: string, options?: ArtifactPutOptions): Promise<ArtifactObject> {
+    this.optionsByKey.set(key, options);
     return super.putFileImmutable(key, filePath, options);
   }
 }
@@ -96,6 +105,25 @@ test("upload spool enqueues atomically and uploads an idempotent job", async () 
     assert.equal((await spool.processPending()).skipped.includes("job-a"), true);
     assert.ok(await store.head("evidence/objects/test-a"));
     assert.equal((await readFile(path.join(jobRoot, "receipt.json"), "utf8")).includes('"sha256"'), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("upload spool selects multipart for files at least 5 MiB", async () => {
+  const { root, spoolRoot, source } = await fixture("upload-spool-multipart-");
+  try {
+    const sizeBytes = 5 * 1024 * 1024 + 1;
+    await truncate(source, sizeBytes);
+    const store = new RecordingOptionsAdapter(new FilesystemArtifactStore(path.join(root, "objects")));
+    const spool = new UploadSpool({ root: spoolRoot, store });
+    await spool.enqueueFile({ kind: "state-snapshot", sourcePath: source, objectKey: "state/test/snapshots/large", uploadId: "large-snapshot" });
+
+    const result = await spool.processPending();
+
+    assert.deepEqual(result.uploaded, ["large-snapshot"]);
+    assert.equal(store.optionsByKey.get("state/test/snapshots/large")?.multipart, true);
+    assert.equal((await store.head("state/test/snapshots/large"))?.sizeBytes, sizeBytes);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

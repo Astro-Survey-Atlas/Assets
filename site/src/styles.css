@@ -149,7 +149,7 @@ svg { width: 17px; height: 17px; stroke-width: 1.8; }
   top: 0;
   right: 0;
   left: 0;
-  height: 68px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1226,7 +1226,7 @@ footer > span:last-child { margin-left: auto; color: var(--teal); text-shadow: v
 }
 
 @media (max-width: 540px) {
-  .site-header { height: 62px; padding: 0 10px; }
+  .site-header { height: 60px; padding: 0 10px; }
   .brand-mark { width: 26px; height: 26px; }
   .brand > span:last-child { display: none; }
   .release-state { display: none; }

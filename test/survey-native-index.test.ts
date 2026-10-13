@@ -10,7 +10,7 @@ import { assertNativeSurvey, nativeMetadataUrl, type NativeBinding, type NativeS
 import { cellsForStcs } from "../server/hst-image-lookup.js";
 import { importSurveySnapshot, loadSurveyManifest, matchesPanstarrsListingEvidence, normalizedRow, parsePanstarrsListing, SurveyNativeIndex, surveyNativeBinding } from "../server/survey-native-index.js";
 import { sourceIdsForBinding } from "../server/native-unit-sources.js";
-import { alternativesForAccessUri, casdcProviderStatuses } from "../server/survey-access.js";
+import { alternativesForAccessUri, casdcProviderStatuses, withSurveyProviderStatuses } from "../server/survey-access.js";
 import { OVERLAP_DOWNLOAD_HEADER, overlapCsvRows } from "../site/src/overlap-download.js";
 
 const capturedAt = "2026-10-03T08:00:00Z";
@@ -1239,22 +1239,81 @@ test("SPHEREx QR2 binds one header-derived detector observation without claiming
   assert.throws(() => nativeMetadataUrl("https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/qr2/level2/", src.adapter), /AWS metadata listing/);
 });
 
-test("CASDC provider status records reachable survey directories with canonical URLs", () => {
+test("CASDC provider status reflects current directory probes and preserves evidence limits", () => {
   const cases = [
     ["gaia", "gaia-dr3", "Gaia"],
     ["galex", "galex-gr6-gr7", "GALEX"],
     ["euclid", "euclid-q1", "Euclid-Q1"],
+    ["desi", "desi-dr1", "DESI-DR1"],
   ] as const;
   for (const [surveyId, releaseId, directory] of cases) {
     const providers = casdcProviderStatuses(surveyId, releaseId);
-    assert.deepEqual(providers.map(item => [item.providerCountryCode, item.accessType, item.status, item.httpStatus]), [
-      ["CN", "entrypoint", "entrypoint-only", 200],
-      ["CN", "directory", "verified", 200],
-    ]);
+    assert.equal(providers[0]!.providerCountryCode, "CN");
+    assert.equal(providers[0]!.accessType, "entrypoint");
+    assert.equal(providers[0]!.status, "entrypoint-only");
+    assert.equal(providers[0]!.httpStatus, 200);
+    assert.equal(providers[0]!.checkedAt, "2026-10-10");
+    assert.match(providers[0]!.note ?? "", /returned HTTP 200 and exposed survey directories on 2026-10-10/i);
     assert.equal(providers[1]!.uri, `https://casdc.china-vo.org/mirror/${directory}/`);
-    assert.match(providers[1]!.note ?? "", /directory listing/i);
-    assert.match(providers[1]!.note ?? "", /individual file URLs and scientific bytes were not checked/i);
+    assert.equal(providers[1]!.status, "verified");
+    assert.equal(providers[1]!.httpStatus, 200);
+    assert.equal(providers[1]!.checkedAt, "2026-10-10");
+    if (surveyId === "euclid") {
+      assert.match(providers[1]!.note ?? "", /returned HTTP 200 and exposed a listing on 2026-10-10/i);
+      assert.match(providers[1]!.note ?? "", /listing contents are not used to determine Tile membership or coverage/i);
+    } else if (surveyId === "desi") {
+      assert.match(providers[1]!.note ?? "", /iron\/tiles\/ path returned HTTP 404/i);
+      assert.match(providers[1]!.note ?? "", /individual file URLs and scientific bytes were not checked/i);
+    } else if (surveyId === "gaia") {
+      assert.match(providers[1]!.note ?? "", /\/Gaia\/dr3\/ child also returned HTTP 200/i);
+      assert.match(providers[1]!.note ?? "", /guessed path returned HTTP 404/i);
+      const dr3 = providers.find(item => item.uri.endsWith("/Gaia/dr3/"));
+      assert.equal(dr3?.status, "verified");
+      assert.equal(dr3?.httpStatus, 200);
+      assert.equal(dr3?.checkedAt, "2026-10-10");
+      assert.match(dr3?.note ?? "", /exact \/Gaia\/dr3\/ path.*HTTP 200/i);
+    } else {
+      assert.match(providers[1]!.note ?? "", /\/GALEX\/GR6\/ child also returned HTTP 200/i);
+      assert.match(providers[1]!.note ?? "", /individual file URLs and scientific bytes were not checked/i);
+      const gr6 = providers.find(item => item.uri.endsWith("/GALEX/GR6/"));
+      assert.equal(gr6?.status, "verified");
+      assert.equal(gr6?.httpStatus, 200);
+      assert.equal(gr6?.checkedAt, "2026-10-10");
+      assert.match(gr6?.note ?? "", /exact GR6 directory.*HTTP 200/i);
+    }
   }
+});
+
+test("CASDC Euclid reverse lookup links to the matching Tile and checked product directories", () => {
+  const unit = withSurveyProviderStatuses({
+    layerId: "euclid-q1-vis", productId: "euclid-q1-vis", surveyId: "euclid", releaseId: "euclid-q1",
+    product: "Euclid Q1 VIS", modality: "imaging", unitKind: "tile", unitId: "102018211",
+    order: 8, nside: 256, matchingCells: [1], precision: "exact",
+    accessUris: [
+      { uri: "https://eas.esac.esa.int/sas-dd/vis.fits", fileName: "EUC_MER_BGSUB-MOSAIC-VIS_TILE102018211.fits", band: "VIS" },
+      { uri: "https://eas.esac.esa.int/sas-dd/h.fits", fileName: "EUC_MER_BGSUB-MOSAIC-NIR-H_TILE102018211.fits", band: "H" },
+    ],
+  });
+  const mirrorDirectories = unit.sourceMetadata!.providerStatuses!.filter(item => item.relationship === "directory-entrypoint");
+  assert.deepEqual(mirrorDirectories.map(item => item.uri), [
+    "https://casdc.china-vo.org/mirror/Euclid-Q1/MER/102018211/VIS/",
+    "https://casdc.china-vo.org/mirror/Euclid-Q1/MER/102018211/NISP/",
+  ]);
+  assert.ok(mirrorDirectories.every(item => item.status === "verified" && item.httpStatus === 200 && item.checkedAt === "2026-10-10"));
+  assert.ok(mirrorDirectories.every(item => /returned HTTP 200 and exposed a listing on 2026-10-10/i.test(item.note ?? "")));
+  assert.ok(mirrorDirectories.every(item => /listing contents are not used to determine Tile membership or coverage/i.test(item.note ?? "")));
+});
+
+test("CASDC DESI verifies zcatalog reachability without claiming a Tile mirror or files", () => {
+  const providers = casdcProviderStatuses("desi", "desi-dr1");
+  const zcatalog = providers.find(item => item.uri.endsWith("/DESI-DR1/spectro/redux/iron/zcatalog/"));
+  assert.equal(zcatalog?.accessType, "directory");
+  assert.equal(zcatalog?.status, "verified");
+  assert.equal(zcatalog?.httpStatus, 200);
+  assert.equal(zcatalog?.checkedAt, "2026-10-10");
+  assert.match(zcatalog?.note ?? "", /returned HTTP 200 and exposed a v1\/ listing on 2026-10-10/i);
+  assert.match(zcatalog?.note ?? "", /iron\/tiles\/ path returned HTTP 404/i);
+  assert.match(zcatalog?.note ?? "", /does not establish a Tile-specific mirror path or verify individual files/i);
 });
 
 test("DECaLS DR5 binds to the locked DR5 brick sources with a mixed-program scope", () => {

@@ -5,14 +5,15 @@ import { discoveryResultMarkup, onlyLeads } from "./moc-result.js";
 import type { DiscoveryFailure } from "../../server/discovery-failure.js";
 import { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Trash2, Unlock, Upload, X, Sun, createIcons } from "lucide";
 import "./styles.css";
+import "../src/survey-mark.css";
 import { UploadCloud } from "lucide";
 import { mountLocaleControls, t } from "../src/i18n.js";
+import { surveyMarkMarkup } from "../src/survey-mark.js";
 import { reconcileMarkup } from "./stable-dom.js";
 import { aggregateWorkAttempts } from "./work-items.js";
 import { parseAdminRoute, routePath, type AdminStep } from "./navigation.js";
 import { WorkspaceRequests, workspaceResources, businessSignature, type Resource } from "./workspaces.js";
 import { capabilityNames, gapGuidance, discoveryProgress, discoveryObservationLabel, type DiscoveryObservation } from "./readiness-copy.js";
-import { surveyPresentationImage, surveyPresentationAttribution } from "./presentation.js";
 import { mountRecordTabs, mountTaskTabs } from "./task-tabs.js";
 import { connectorIconMarkup, mountConnectorIconEditor } from "./connector-icons.js";
 
@@ -20,15 +21,6 @@ mountLocaleControls();
 mountApiSettings();
 const taskTabs = mountTaskTabs(document.getElementById("admin-step-tasks")!);
 const publicationTabs = mountRecordTabs(document.getElementById("admin-step-releases")!, "publication", ["plan", "runs"] as const, "assets-admin-publication-tab");
-
-document.addEventListener("error", event => {
-  const image = event.target;
-  if (!(image instanceof HTMLImageElement) || !image.classList.contains("survey-card-image")) return;
-  const placeholder = document.createElement("span");
-  placeholder.className = "survey-card-image survey-card-placeholder";
-  placeholder.textContent = image.alt.replace(/ 项目图片$/, "");
-  image.replaceWith(placeholder);
-}, true);
 
 type ConnectorType = "s3" | "oss" | "local";
 interface AdminConfig { mocDiscovery?: { cdsUrl: string; llmAvailable: boolean }; enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; modalities?: string[]; connectorTypes: ConnectorType[]; backends: string[]; scanRequestApiVersion?: string } }
@@ -413,7 +405,7 @@ function renderEditorialCanvas(): void {
   const snapshot = activeEditorial.document.draft;
   const surveyColor = surveyColorAttribute(snapshot.survey.color);
   const surveyFields = new Map(editorialFieldDescriptors(snapshot).map((field) => [field.path, field]));
-  const image = snapshot.survey.imageUrl ? `<img class="editorial-survey-image" src="${escapeText(snapshot.survey.imageUrl)}" alt="" loading="lazy" />` : "";
+  const mark = `<span class="editorial-survey-mark" aria-hidden="true">${surveyMarkMarkup(snapshot.survey.id)}</span>`;
   const releases = snapshot.releases.map((release, releaseIndex) => {
     const releaseField = surveyFields.get(`releases.${releaseIndex}.label`)!;
     const products = release.products.map((product, productIndex) => {
@@ -427,7 +419,7 @@ function renderEditorialCanvas(): void {
     }).join("");
     return `<section class="editorial-release"><header class="editorial-release-header"><div><span class="section-index">RELEASE</span>${editorialEditable(releaseField)}</div><div class="editorial-release-locks">${editorialReadOnly("RELEASE ID", release.id)}${editorialReadOnly("KIND", release.kind ?? "--")}${editorialReadOnly("YEAR", release.releasedYear ?? "--", "calendar-days")}</div></header><div class="editorial-product-list">${products || `<p class="resource-empty">该 Release 没有产品</p>`}</div></section>`;
   }).join("");
-  canvas.innerHTML = `<div class="editorial-preview-kicker"><span><i data-lucide="eye"></i> PUBLIC SURVEY DIRECTORY PREVIEW</span><span><i data-lucide="lock-keyhole"></i> IDs / data facts locked</span></div><article class="editorial-survey-preview"${surveyColor}><header class="editorial-survey-header"><span class="editorial-survey-swatch"${surveyColor} aria-hidden="true"></span><div class="editorial-survey-heading"><div class="editorial-edit-label">SURVEY NAME</div>${editorialEditable(surveyFields.get("survey.name")!)}<div class="editorial-edit-label">MISSION</div>${editorialEditable(surveyFields.get("survey.mission")!)}</div>${image}</header><div class="editorial-survey-description"><div class="editorial-edit-label">PUBLIC DESCRIPTION</div>${editorialEditable(surveyFields.get("survey.description")!)}</div><div class="editorial-survey-readonly"><div class="editorial-stat-strip">${editorialStatMarkup(snapshot.survey.statistics)}</div>${editorialReadOnly("SURVEY ID", snapshot.survey.id)}${editorialReadOnly("MODALITIES", (snapshot.survey.modalities ?? []).join(" · "), "layers-3")}</div></article><div class="editorial-releases-heading"><span class="section-index">SURVEY → RELEASE → PRODUCT</span><span>${snapshot.releases.length} release${snapshot.releases.length === 1 ? "" : "s"}</span></div>${releases}`;
+  canvas.innerHTML = `<div class="editorial-preview-kicker"><span><i data-lucide="eye"></i> PUBLIC SURVEY DIRECTORY PREVIEW</span><span><i data-lucide="lock-keyhole"></i> IDs / data facts locked</span></div><article class="editorial-survey-preview"${surveyColor}><header class="editorial-survey-header"><span class="editorial-survey-swatch"${surveyColor} aria-hidden="true"></span><div class="editorial-survey-heading"><div class="editorial-edit-label">SURVEY NAME</div>${editorialEditable(surveyFields.get("survey.name")!)}<div class="editorial-edit-label">MISSION</div>${editorialEditable(surveyFields.get("survey.mission")!)}</div>${mark}</header><div class="editorial-survey-description"><div class="editorial-edit-label">PUBLIC DESCRIPTION</div>${editorialEditable(surveyFields.get("survey.description")!)}</div><div class="editorial-survey-readonly"><div class="editorial-stat-strip">${editorialStatMarkup(snapshot.survey.statistics)}</div>${editorialReadOnly("SURVEY ID", snapshot.survey.id)}${editorialReadOnly("MODALITIES", (snapshot.survey.modalities ?? []).join(" · "), "layers-3")}</div></article><div class="editorial-releases-heading"><span class="section-index">SURVEY → RELEASE → PRODUCT</span><span>${snapshot.releases.length} release${snapshot.releases.length === 1 ? "" : "s"}</span></div>${releases}`;
   canvas.hidden = false;
   canvas.querySelectorAll<HTMLButtonElement>("[data-editorial-field]").forEach((button) => button.addEventListener("click", () => startEditorialInlineEdit(button)));
   renderIcons();
@@ -885,14 +877,8 @@ function renderOverview(overview: AdminOverview): void {
     reconcileMarkup(list, `<div class="survey-card-grid">${surveys.map((survey) => {
       const count = survey.releases.reduce((sum, release) => sum + release.products.length, 0);
       const summary = survey.readiness?.[overviewVersion];
-      const image = surveyPresentationImage(survey.id);
-      return `<button type="button" class="survey-data-card" data-survey-card="${escapeText(survey.id)}" data-row-key="${escapeText(survey.id)}">${image ? `<img class="survey-card-image" src="${escapeText(image)}" alt="${escapeText(survey.name)} 项目图片" loading="lazy" />` : `<span class="survey-card-image survey-card-placeholder">${escapeText(survey.name)}</span>`}<span class="survey-card-copy"><strong>${escapeText(survey.name)}</strong><small>${escapeText(survey.mission)}</small></span><span class="survey-card-metrics">${taskMetric("layers-3", "集合", survey.releases.length)}${taskMetric("boxes", "产品", count)}${taskMetric("scan-line", "有覆盖", summary?.capabilityCounts.coverage ?? "—")}${taskMetric("file-check-2", "可定位文件", summary?.capabilityCounts.file ?? "—")}${taskMetric("package-check", "已发布", survey.readiness?.published.productCount ?? "—")}</span><span class="survey-card-open"><i data-lucide="chevron-down"></i><span>查看产品</span></span></button>`;
+      return `<button type="button" class="survey-data-card" data-survey-card="${escapeText(survey.id)}" data-row-key="${escapeText(survey.id)}"><span class="survey-card-image survey-card-mark" aria-hidden="true">${surveyMarkMarkup(survey.id)}</span><span class="survey-card-copy"><strong>${escapeText(survey.name)}</strong><small>${escapeText(survey.mission)}</small></span><span class="survey-card-metrics">${taskMetric("layers-3", "集合", survey.releases.length)}${taskMetric("boxes", "产品", count)}${taskMetric("scan-line", "有覆盖", summary?.capabilityCounts.coverage ?? "—")}${taskMetric("file-check-2", "可定位文件", summary?.capabilityCounts.file ?? "—")}${taskMetric("package-check", "已发布", survey.readiness?.published.productCount ?? "—")}</span><span class="survey-card-open"><i data-lucide="chevron-down"></i><span>查看产品</span></span></button>`;
     }).join("")}</div>`);
-    list.querySelectorAll<HTMLImageElement>(".survey-card-image").forEach(image => {
-      const surveyId = image.closest<HTMLElement>("[data-survey-card]")?.dataset.surveyCard ?? "";
-      image.title = surveyPresentationAttribution(surveyId) ?? "项目展示图片";
-      image.dataset.fit = ["euclid", "gaia"].includes(surveyId) ? "contain" : "cover";
-    });
     renderIcons();
     return;
   }

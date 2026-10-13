@@ -320,7 +320,7 @@ function packageProvenance(layerBytes: readonly LayerBytes[], packageId: string,
       overviewOrder,
     },
   })).sort((left, right) => left.layerId.localeCompare(right.layerId));
-  return Buffer.from(`${JSON.stringify({ schemaVersion: 1, packageId, packageVersion, generatedAt, coordinateFrame: "ICRS", ordering: "NESTED", generator: { name: "astro-survey-atlas-assets", version: "1.0.0" }, layers }, null, 2)}\n`, "utf8");
+  return Buffer.from(`${JSON.stringify({ schemaVersion: 1, packageId, packageVersion, generatedAt, coordinateFrame: "ICRS", ordering: "NESTED", generator: { name: "astro-survey-atlas-assets", version: "0.0.1" }, layers }, null, 2)}\n`, "utf8");
 }
 
 async function zipEntries(entries: ReadonlyMap<string, Buffer>, destination: string): Promise<void> {

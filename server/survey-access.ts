@@ -9,7 +9,8 @@ const CHECKED = {
   mastHead: "2026-10-04T03:41:42Z",
   galexHead: "2026-10-04T03:41:41Z",
   sdssHead: "2026-10-04T03:38:52Z",
-  casdc: "2026-10-07T12:22:24Z",
+  casdc: "2026-10-10",
+  casdcGaiaGalex: "2026-10-10",
   skymapperCutout: "2026-10-04T16:58:37Z",
   twomassAtlasHead: "2026-10-05",
 } as const;
@@ -170,23 +171,80 @@ export function verifiedDirectoryAlternative(uri: string, provider: string, prov
     status: "verified", checkedAt, httpStatus: 200, note });
 }
 
-export function casdcProviderStatuses(surveyId: string, releaseId: string): SourceAccessAlternative[] {
+export function casdcProviderStatuses(
+  surveyId: string,
+  releaseId: string,
+  unitId?: string,
+  accessUris?: SourceAccessUri[],
+): SourceAccessAlternative[] {
   const dataset = surveyId === "gaia" && releaseId === "gaia-dr3" ? "Gaia"
     : surveyId === "galex" && releaseId.startsWith("galex-") ? "GALEX"
-      : surveyId === "euclid" && releaseId === "euclid-q1" ? "Euclid-Q1" : undefined;
+      : surveyId === "euclid" && releaseId === "euclid-q1" ? "Euclid-Q1"
+        : surveyId === "desi" && releaseId === "desi-dr1" ? "DESI-DR1" : undefined;
   if (!dataset) return [];
   const root = "https://casdc.china-vo.org/mirror/";
   const common = { provider: "CASDC mirror catalog · NAOC/CASDC", providerCountryCode: "CN", providerLocation: "National Astronomical Observatories of China / CASDC", servingRegion: "Download node location unknown" };
-  return [
+  const statuses = [
     alternative(root, { ...common, accessType: "entrypoint", relationship: "regional-repository", status: "entrypoint-only", checkedAt: CHECKED.casdc, httpStatus: 200,
-      note: "The mirror index is reachable and lists this survey; the target directory is checked separately below." }),
-    alternative(new URL(`${dataset}/`, root).toString(), { ...common, accessType: "directory", relationship: "regional-repository", status: "verified", checkedAt: CHECKED.casdc, httpStatus: 200,
-      note: "The target directory returned HTTP 200 and exposed a directory listing. Individual file URLs and scientific bytes were not checked." }),
+      note: "The CASDC catalog index returned HTTP 200 and exposed survey directories on 2026-10-10. It is an access index only; it does not establish native-unit identities, footprints or inventory completeness." }),
+    alternative(new URL(`${dataset}/`, root).toString(), { ...common, accessType: "directory", relationship: "regional-repository",
+      status: "verified", checkedAt: CHECKED.casdcGaiaGalex, httpStatus: 200,
+      note: surveyId === "euclid"
+        ? "The Euclid-Q1 directory returned HTTP 200 and exposed a listing on 2026-10-10. Tile identities and footprints come from locked ESA metadata; CASDC listing contents are not used to determine Tile membership or coverage, and individual files were not checked."
+        : surveyId === "desi"
+          ? "The DESI-DR1, iron and zcatalog directory GETs returned HTTP 200 on 2026-10-10; zcatalog lists v1/. The sibling iron/tiles/ path returned HTTP 404. This does not establish a Tile-specific mirror path; individual file URLs and scientific bytes were not checked."
+          : surveyId === "gaia"
+            ? "The /Gaia/ directory returned HTTP 200 on 2026-10-10 and links to dr3/. The exact /Gaia/dr3/ child also returned HTTP 200; its page title says /Gaia/gdr3/, but that guessed path returned HTTP 404. Individual file URLs and scientific bytes were not checked."
+            : "The /GALEX/ directory returned HTTP 200 on 2026-10-10 and links to GR6/. The /GALEX/GR6/ child also returned HTTP 200 and lists pipe/. Individual file URLs and scientific bytes were not checked." }),
   ];
+  if (surveyId === "gaia" && releaseId === "gaia-dr3") {
+    statuses.push(alternative(new URL("Gaia/dr3/", root).toString(), {
+      ...common, accessType: "directory", relationship: "directory-entrypoint", status: "verified",
+      checkedAt: CHECKED.casdcGaiaGalex, httpStatus: 200,
+      note: "The Gaia index links to this exact /Gaia/dr3/ path, which returned HTTP 200 and exposed a directory listing on 2026-10-10. The guessed /Gaia/gdr3/ path returned HTTP 404. Individual file URLs and scientific bytes were not checked.",
+    }));
+  }
+  if (surveyId === "galex" && releaseId.startsWith("galex-")) {
+    statuses.push(alternative(new URL("GALEX/GR6/", root).toString(), {
+      ...common, accessType: "directory", relationship: "directory-entrypoint", status: "verified",
+      checkedAt: CHECKED.casdcGaiaGalex, httpStatus: 200,
+      note: "The /GALEX/ index links to this exact GR6 directory, which returned HTTP 200 and listed pipe/ on 2026-10-10. Individual file URLs and scientific bytes were not checked.",
+    }));
+  }
+  if (surveyId === "desi" && releaseId === "desi-dr1") {
+    statuses.push(alternative(new URL("DESI-DR1/spectro/redux/iron/zcatalog/", root).toString(), {
+      ...common, accessType: "directory", relationship: "directory-entrypoint", status: "verified", checkedAt: CHECKED.casdc, httpStatus: 200,
+      note: "The DR1 iron zcatalog directory returned HTTP 200 and exposed a v1/ listing on 2026-10-10. Its sibling iron/tiles/ path returned HTTP 404; this does not establish a Tile-specific mirror path or verify individual files.",
+    }));
+  }
+  if (surveyId === "euclid" && releaseId === "euclid-q1" && unitId) {
+    const tileId = /^\d{8,12}$/.test(unitId) ? unitId : undefined;
+    if (tileId) {
+      const kinds = new Set((accessUris ?? []).map((entry) => {
+        const name = `${entry.fileName ?? ""} ${entry.band ?? ""}`.toUpperCase();
+        if (/VIS/.test(name)) return "VIS";
+        if (/NISP|NIR-[YJH]/.test(name)) return "NISP";
+        return undefined;
+      }).filter((kind): kind is "VIS" | "NISP" => kind !== undefined));
+      const folders = kinds.size ? [...kinds] : [""];
+      for (const folder of folders) {
+        const uri = new URL(`Euclid-Q1/MER/${tileId}/${folder ? `${folder}/` : ""}`, root).toString();
+        const checked = tileId === "102018211";
+        statuses.push(alternative(uri, {
+          ...common, accessType: "directory", relationship: "directory-entrypoint", status: checked ? "verified" : "entrypoint-only",
+          ...(checked ? { checkedAt: CHECKED.casdc, httpStatus: 200 } : {}),
+          note: checked
+            ? `The ${folder} directory for Tile ${tileId} returned HTTP 200 and exposed a listing on 2026-10-10. Tile identity comes from locked ESA metadata; CASDC listing contents are not used to determine Tile membership or coverage, and individual files were not checked.`
+            : "This path follows the checked CASDC Euclid-Q1 MER layout but was not individually checked. It is an access hint only; CASDC listing contents are not used to determine Tile membership or coverage.",
+        }));
+      }
+    }
+  }
+  return statuses;
 }
 
 export function withSurveyProviderStatuses(unit: DownloadPlanSpatialUnit): DownloadPlanSpatialUnit {
-  const statuses = casdcProviderStatuses(unit.surveyId, unit.releaseId);
+  const statuses = casdcProviderStatuses(unit.surveyId, unit.releaseId, unit.unitId, unit.accessUris);
   if (!statuses.length) return unit;
   const sourceMetadata = unit.sourceMetadata ?? {};
   const old = Array.isArray(sourceMetadata.providerStatuses) ? sourceMetadata.providerStatuses as SourceAccessAlternative[] : [];

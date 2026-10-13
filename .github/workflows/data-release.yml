@@ -1,0 +1,133 @@
+# Copyright 2026 Astro Survey Atlas contributors.
+# Licensed under the Apache License, Version 2.0 (the "License");
+
+name: Data Package Release
+
+on:
+  push:
+    tags:
+      - 'data-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      data_tag:
+        description: Immutable data release tag, for example data-v0.0.1
+        required: true
+        type: string
+      bundle_sha256:
+        description: Expected public bundle SHA-256 from the reviewed data publication
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-release-${{ inputs.data_tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Resolve data tag and pinned bundle
+        id: coordinates
+        env:
+          REQUESTED_DATA_TAG: ${{ inputs.data_tag }}
+          REQUESTED_BUNDLE_SHA256: ${{ inputs.bundle_sha256 }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            DATA_TAG="$REQUESTED_DATA_TAG"
+            EXPECTED_BUNDLE_SHA256="$REQUESTED_BUNDLE_SHA256"
+          else
+            DATA_TAG="$GITHUB_REF_NAME"
+            git fetch --force --no-tags origin "refs/tags/$DATA_TAG:refs/tags/$DATA_TAG"
+            TAG_MESSAGE="$(git for-each-ref --format='%(contents)' "refs/tags/$DATA_TAG")"
+            mapfile -t BUNDLE_LINES < <(printf '%s\n' "$TAG_MESSAGE" | sed -n 's/^public-bundle-sha256=//p')
+            [ "${#BUNDLE_LINES[@]}" -eq 1 ] || { echo "annotated tag $DATA_TAG must contain exactly one public-bundle-sha256=<hex> line (found ${#BUNDLE_LINES[@]})" >&2; exit 1; }
+            EXPECTED_BUNDLE_SHA256="${BUNDLE_LINES[0]}"
+          fi
+          if [[ ! "$DATA_TAG" =~ ^data-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "tag must use data-vX.Y.Z" >&2
+            exit 1
+          fi
+          if [[ ! "$EXPECTED_BUNDLE_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
+            echo "bundle_sha256 must contain 64 lowercase hexadecimal characters" >&2
+            exit 1
+          fi
+          echo "tag=$DATA_TAG" >> "$GITHUB_OUTPUT"
+          echo "bundle_sha256=$EXPECTED_BUNDLE_SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pin the public bundle only
+        id: pin
+        env:
+          ASSETS_OBJECT_STORE_ENDPOINT: ${{ secrets.ASSETS_OBJECT_STORE_ENDPOINT }}
+          ASSETS_OBJECT_STORE_BUCKET: ${{ secrets.ASSETS_OBJECT_STORE_BUCKET }}
+          ASSETS_OBJECT_STORE_ACCESS_KEY_ID: ${{ secrets.ASSETS_OBJECT_STORE_ACCESS_KEY_ID }}
+          ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY: ${{ secrets.ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY }}
+          ASSETS_OBJECT_STORE_PREFIX: ""
+          ASSETS_PUBLIC_OBJECT_STORE_CURRENT_KEY: public/current.json
+          ASSETS_OBJECT_STORE_FORCE_PATH_STYLE: "true"
+          EXPECTED_BUNDLE_SHA256: ${{ steps.coordinates.outputs.bundle_sha256 }}
+        run: |
+          npm run storage:pin -- "$RUNNER_TEMP/public-snapshot-lock" --public-only
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const lock = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            if (lock.public.bundleSha256 !== process.env.EXPECTED_BUNDLE_SHA256) {
+              throw new Error(`public pointer changed: expected ${process.env.EXPECTED_BUNDLE_SHA256}, found ${lock.public.bundleSha256}`);
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `bundle_id=${lock.public.bundleId}\nbundle_sha256=${lock.public.bundleSha256}\n`);
+          ' "$RUNNER_TEMP/public-snapshot-lock/lock.json"
+
+      - name: Hydrate the pinned public bundle
+        env:
+          ASSETS_OBJECT_STORE_ENDPOINT: ${{ secrets.ASSETS_OBJECT_STORE_ENDPOINT }}
+          ASSETS_OBJECT_STORE_BUCKET: ${{ secrets.ASSETS_OBJECT_STORE_BUCKET }}
+          ASSETS_OBJECT_STORE_ACCESS_KEY_ID: ${{ secrets.ASSETS_OBJECT_STORE_ACCESS_KEY_ID }}
+          ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY: ${{ secrets.ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY }}
+          ASSETS_OBJECT_STORE_PREFIX: ""
+          ASSETS_OBJECT_STORE_CURRENT_KEY: public/current.json
+          ASSETS_OBJECT_STORE_FORCE_PATH_STYLE: "true"
+          ASSETS_LOCAL_ROOT: ${{ runner.temp }}/assets-data-release
+        run: |
+          npm run hydrate -- --root "$ASSETS_LOCAL_ROOT" \
+            --pointer-file "$RUNNER_TEMP/public-snapshot-lock/public-current.json" \
+            --retain 1
+
+      - name: Stage the independent data package
+        env:
+          ASSET_WORKTREE_ROOT: ${{ runner.temp }}/assets-data-release/cache/current
+          DATA_RELEASE_TAG: ${{ steps.coordinates.outputs.tag }}
+          DATA_RELEASE_BUNDLE_ID: ${{ steps.pin.outputs.bundle_id }}
+          DATA_RELEASE_BUNDLE_SHA256: ${{ steps.pin.outputs.bundle_sha256 }}
+          DATA_RELEASE_ASSET_OUTPUT_ROOT: ${{ github.workspace }}/dist/data-assets
+          DATA_RELEASE_NOTES_PATH: ${{ github.workspace }}/dist/DATA-RELEASE-NOTES.md
+        run: node --import tsx scripts/stage-data-release.ts
+
+      - name: Checksums
+        run: |
+          cd dist/data-assets
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create data GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DATA_RELEASE_TAG: ${{ steps.coordinates.outputs.tag }}
+          DATA_RELEASE_BUNDLE_ID: ${{ steps.pin.outputs.bundle_id }}
+        run: |
+          gh release create "$DATA_RELEASE_TAG" \
+            --target "$GITHUB_SHA" \
+            --title "Astro Survey Atlas Data $DATA_RELEASE_BUNDLE_ID" \
+            --notes-file dist/DATA-RELEASE-NOTES.md \
+            dist/data-assets/*

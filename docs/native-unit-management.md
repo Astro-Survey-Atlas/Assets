@@ -29,8 +29,8 @@ flowchart LR
 | 审核 | 验证及绑定 digest、审核者/时间、逐项接受的缺口 | 内容变化使审核失效 |
 | 任务/历史 | 操作、冻结输入、attempt、进度、错误、取消/恢复和激活记录 | 复用持久发布队列，单 backend 执行 |
 
-现有固定适配器覆盖 Legacy 发布成员表及共享几何、DESI Tile 表、Euclid Q1 TAP、
-Euclid ERO target 元数据、HSC tract/patch 表、HST public-image CAOM 快照、
+现有固定适配器覆盖 Legacy 发布成员表及共享几何、DESI Tile 表、Euclid Q1 TAP 与
+calibrated-frame 元数据、Euclid ERO target 元数据、HSC tract/patch 表、HST public-image CAOM 快照、
 Gaia 原生文件分区、SDSS field 表、GALEX/JWST public-image CAOM 元数据，以及
 VISTA VVV、SkyMapper DR4、2MASS 6X、NOIRLab DES DR2/DECaPS DR2、ACT DR5 和 ESO FDS DR1 的原生影像元数据。
 适配器还覆盖 Pan-STARRS DR1、IPHAS DR2、Rubin First Look、ZTF DR7、AKARI FIS，

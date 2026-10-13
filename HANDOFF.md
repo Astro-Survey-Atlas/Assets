@@ -1,22 +1,195 @@
 # Assets 项目交接
 
-交接日期：2026-10-08（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-13（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
+
+## 2026-10-13 Euclid ERO/Q1 补充、数据发布与索引激活
+
+按“先补数据，再独立发布代码与数据包”的计划，将 Dev 公共 bundle
+`reviewed-mv51kku3-a4f8d8e6` 更新为 SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`。发布任务
+`mv51kku3-a4f8d8e6` 状态为 `published`；candidate、authority、site 校验均通过，
+站点确认同一 SHA，并检查 115 个产品。Bundle 含 611 个文件、28 个资源包；发布记录
+包含 162 份 coverage documents。公开 coverage catalog 有 140 层（113 个已发布 MOC）。
+目录总计 67 个 release、159 个产品：107 acquired、11 overview-only、41 awaiting geometry。
+
+新增并发布八个原生 O10 frame-extent MOC：ERO VIS/NISP.H/J/Y 四层和 Q1 VIS/NISP.H/J/Y
+四层。ERO 锁定快照有 17 个 target、34 个包和 85 份 FITS 头；四个已发布波段层各有 17
+份 frame 记录。Q1 校准帧锁定快照有 2,449 行（VIS 836、NISP.H 537、NISP.J 538、NISP.Y
+538），与 2,908 行 / 352 Tile 的 BGSUB MER 清单分开。所有新 MOC 的 frame 范围均为
+`estimated`；没有下载科学像素或验证有效像素掩膜、完整档案库存、逐文件可用性。ERO
+仍无可验证 Tile roster；Q1 校准帧是 `image` 原生单位，样例无文件级 URI。
+输入哈希、精度和其他限制见[研究记录](docs/research/euclid-ero-q1-frame-coverage-20261012.md)。
+
+原生索引从 generation **16** 激活为 **17**，保留原 128 项并新增八项，活动组为
+`14d6885aa39300ecb8041f822c3b9357a0f116dfc6d8911852583361b99ebcdf`，digest
+`4a0073155999d344a132b49147c02623bebe365195e3ac64dc7d72cd92b19fee`。验证 252/252 通过，
+无 unavailable binding；109 项限制与上个已审核版本完全相同，沿用其逐项接受记录。
+归档任务 `native-mv609zti-e736b49f` 完成 1,396/1,396 依赖验证；激活任务
+`native-mv60duzp-c0b8179f` 完成运行时和站点 HTTP 查询验证。八个图层的 native O4 样例
+均命中；ERO 返回 target 与包 URI，Q1 返回 image identity、精度 `estimated`，不提供文件级
+URI。控制快照 generation **6076** / SHA-256
+`8a6d758c83b718337e955fb8c9f075f62aceeb4311f9307d0a2a9684899d1c84` 已于
+2026-10-13 01:56:20 UTC 同步；远端对象大小 26,655,301 bytes、SHA 与本地 manifest 一致，
+`native-units` 状态为 `synced`。`publication-tasks` generation **16530** 已于
+2026-10-13 02:12:32 UTC 同步；远端对象大小 78,365,648 bytes、SHA-256
+`31ccbebde08f8f9b84702f732c0c48a0a3229e338e55c9706dd6c579b5edf702` 与指针一致。
+
+Dev 当前使用 revision **371** / 镜像 tag
+`0.1.0-20261012-165105-nested-moc-output`。本地访问 NodePort 时必须绕过配置的 HTTP 代理；
+未绕过代理的 502 是代理返回，不是 Dev Pod 故障。site/backend 均 1/1 Ready、零重启；绕过代理后
+`/healthz`、assets、coverage catalog 及八个新 MOC 的 HEAD/SHA 校验均为 HTTP 200。
+
+数据 Release 独立于代码镜像和 Helm Chart：使用 `.github/workflows/data-release.yml` 的
+`data-v0.0.1` tag，仅打包经 SHA 固定的 public bundle、资源包集合、catalog、release history
+与校验和；不包含输入证据或科学像素。注释 tag `data-v0.0.1` 已推送到 commit
+`8c23e0f628c888c1f5e3cebae62508c071ad778c`，注释中固定了上述 bundle SHA。GitHub Actions
+run [38335509877](https://github.com/Astro-Survey-Atlas/Assets/actions/runs/38335509877)
+在 `Resolve data tag and pinned bundle` 步骤失败，后续 bundle pin、hydrate 和 GitHub Release
+步骤未运行；数据 Release 尚未完成，不要把 tag 推送视为 Release 成功。公开 run 页面没有详细
+错误正文，匿名 REST 查询受 GitHub API rate limit 限制。当前分支已修复 tag 事件的显式 ref fetch
+并增强缺失 SHA 行数的诊断，已在浅克隆中验证解析成功。该 workflow 尚未存在于 `origin/main`；
+需将实现分支合入默认分支后，使用 `workflow_dispatch` 输入 `data-v0.0.1` 和上述 SHA 完成恢复。
+保留现有 tag，不删除或改写。代码 Release 使用单独的 `code-v*` 流程，不改写已有
+`v0.0.1` / `code-v0.0.x` tags。
+本轮本地验证：`npm run build` 通过（资源校验 160 个产品和 80 个 offline Core 层，服务器
+TypeScript 与站点构建通过）；`npm test` 为 463 项，461 通过、2 跳过、0 失败；
+`git diff --check` 通过。
+
+## 2026-10-10 HST Dev 有界补充与激活
+
+在 Assets Dev 受管 HST 索引中增补 MAST 公开观测元数据：一页三行，包括保留的
+`26442812` 和新增观测 `454130303`、`454130304`。候选索引现有 916,119 个观测，
+18 条 `GSC1` / `OTHER` 坐标框架记录仍排除；`hst-partial-refresh` 与
+`hst-unsupported-frames` 缺口继续保留。该更新只使用公开 CAOM 字段和原始 `s_region`，
+没有进行 WCS 解算或获取科学像素。输入、审核、归档和反查范围见[研究记录](docs/research/hst-bounded-supplement-20261010.md)。
+
+候选组 `943d3246d3fe8b83153c1e442edc4f29cca2093f014486a3fb09172c35dc624b` 的
+review digest 为 `4306f0c0f2834c602f6955934d627f3850eb71a06ef1929bc4a2947701d18b6b`；
+243 项检查全部通过，没有 unavailable binding。归档任务 `native-mv1ydj3i-499edc19`
+完成 1,387/1,387 项远端校验；激活任务 `native-mv21vtfp-6b15e7ca` 完成站点 HTTP 查询
+验证。Dev native generation 为 **15**，活动 group 为上述候选；控制快照 generation
+**5780** / SHA-256 `406de9b622574c607c7ab0d7fb44b9d9f03e5fa106ac445762ebb628fe390a0c`
+状态为 `synced`。
+
+O8 NESTED cell `587500` 的 HST 反查 HTTP 200 返回新增两条观测；精确查询旧 observation
+`26442812` 的 cell `436132` 也仍可命中，precision=`estimated`。返回仍为
+`truncated=true` / `queryExhausted=false` / `inventoryComplete=false`，且没有科学文件，
+只确认这些观测可经活动索引定位。Dev `/api/v1/status` 的 native index 为
+`verified=true`；`/healthz` 返回 HTTP 200，public bundle 保持原 SHA 和 603 项。
+激活时曾有一次短暂 readiness timeout/HTTP 503，随后状态、健康检查和激活任务验证恢复；
+site/backend Pod 均 Ready 且零重启。没有修改生产、公开 MOC 或 public bundle。五个重点巡天
+仍有范围和精度缺口；`v0.0.1` tag 已推送，但 GitHub Release 工作流失败，不能称为已发布。
+
+## 2026-10-10 `v0.0.1` 发布尝试
+
+按用户此前要求，将 tag `v0.0.1` 推送到提交 `c06182d00552fb98adf653c7b281e2a8ca271430`
+（分支 `feat/foundation-data-0.0.1`）。工作流
+[Release run 38036416256](https://github.com/Astro-Survey-Atlas/Assets/actions/runs/38036416256)
+在 **Hydrate release data from production S3** 步骤失败；版本坐标解析与依赖安装通过，之后的
+证据恢复、构建、镜像推送、Helm Chart 和 GitHub Release 步骤均被跳过。当前没有 GitHub
+Release、镜像或 Chart 制品，不要把 tag 推送当作发布成功。匿名 API 被限流，当前本地 GitHub
+凭据也不能读取工作流日志，因此 S3 失败的底层错误尚未确认。
+
+继续前应在 GitHub Actions 中检查该步骤日志，修复 production S3 hydrate 所需的端点、对象或
+凭据问题，然后重跑**现有** tag 对应的失败工作流；不要强制删除或改写 tag。发布成功后再核验
+GitHub Release、校验和、镜像 digest 与 Helm OCI 制品。这个应用代码发布使用现有 production
+public bundle；Dev HST 增补没有进入 public bundle，发布不能被描述为五个重点巡天库存完整。
+本次没有执行 WCS 解算。
+
+## 2026-10-09 首页 v4 前端实现
+
+实现分支 `feat/homepage-v4` 基于最新 `main` `173f4cf`。本次只调整公开首页的标记、样式、双语文案和浏览器交互；复用现有 `/api/v1/surveys`、导航、主题、语言与目录路由，没有修改后端、数据或天球页面。
+
+首页已按 v4 设计呈现炭黑/浅色主题、透明双主题 Logo、横排标题、概念空间示意、三组同步 Tab、真实四巡天目录行、统计和资源入口。Tab 每 5 秒循环；手动选择重计时，悬停、键盘焦点、隐藏页面暂停；减少动态效果默认暂停。来源清单与科学数据获取分别说明。
+
+验收：`npm run build:site`、`npx tsc -p tsconfig.site.json` 和 `git diff --check` 通过。Playwright/Chromium 使用公开目录 fixture 检查 1440、1024、390、320px，主题、语言、导航、统计、目录失败提示、Tab 联动、轮播计时、悬停/焦点/隐藏暂停和减少动态效果；无横向溢出或浏览器错误。后续文案、标记和 Dev 部署见下节。未启动 Warehouse/Elasticsearch。浏览器截图在 `/tmp/asa-homepage-v4/`。
+
+## 2026-10-09 首页文案与品牌统一 / Dev revision 360
+
+首页标题明确为“按天区查巡天覆盖，再定位数据来源”，说明比较巡天重叠、追到档案来源，并区分 JSON/CSV 来源清单和科学数据。四个首页巡天行、管理台巡天卡片和目录预览共用同一套天区网格、轨迹、红色定位点及巡天简称标记；管理台不再使用风格各异的巡天展示图。页头复用透明双主题站点 Logo。公开首页、天球、目录和管理页页头统一为桌面 64px、手机 60px。仅改文案与前端表现，没有更改路由、API、后端、数据或天球主体。
+
+代码提交 `1598ea7` 已推送到 `feat/homepage-v4`。`npm run build`、`npm test`（456 项，454 通过、2 跳过）、站点 TypeScript 检查、`git diff --check` 和 Helm lint 通过。浏览器验证了 1440、390、320px，中文深浅主题、巡天目录标记、各页页头高度和手动选择后自动轮播；没有横向溢出或浏览器异常。
+
+Dev Helm revision **360** 已部署镜像 `0.1.0-20261009-143026-homepage-brand`；site/backend 均 1/1 Ready、重启数为 0。NodePort `http://10.15.51.75:32083/` 首页、health、assets、coverage 和静态 CSS 返回 HTTP 200。health 的 bundle SHA 为 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，发布清单 602 files 加 1 个 retained package，共 603 项，与 health 计数一致。FITS 资产 16-byte Range 返回 HTTP 206，`X-Content-SHA256` 与清单一致。当前机器无法连接 Ingress `astro.assets.dev.72602.space`，因此使用 NodePort 验收。未启动或修改 Warehouse/Elasticsearch。
+
+## 2026-10-09 基础数据、CI 与 Dev 留存
+
+实现分支 `feat/foundation-data-0.0.1` 基于 `origin/main` `173f4cf`，并包含首页 v4 的四个既有提交。此次代码加入 PR/main CI（Node、Python 和首页 Chromium 回归），将 Node 测试默认并发固定为 4，并把包、Chart、API 与 health 版本统一为 `0.0.1`。首页暂停图标不再在每次状态同步时重建；语言切换更新首页目录、统计、说明和轮播控制。CASDC 来源入口增加 Euclid Q1 Tile 的 VIS/NISP 目录及 DESI DR1 iron zcatalog；Euclid Tile 身份仍取自锁定的 ESA 元数据，CASDC 目录只作访问入口，不用于判定 Tile 成员、覆盖或库存完整性。中英文 README 分别记录历史 HTTP 200、最新探测超时和当前可达性未知。
+
+Dev Helm revision **363** 使用镜像 `0.1.0-20261009-180957-foundation-data`；site/backend 均 1/1 Ready、重启数为 0。NodePort `/healthz` 返回 HTTP 200，版本 `0.0.1`，public bundle 仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，603 项。Helm release 已设 `objectStore.retainReleases=3`、`cleanup=true`。
+
+按目录 mtime 预览后，经 `cleanupReleaseHistory("/data", 3)` 删除 Dev `assets` PVC 中 38 个历史 public release 缓存目录。活动版 `0e49b04b…` 与最近两个回滚版 `0e23aca2…`、`c66125a8…` 保留；`/data/releases` 从 41 个目录、5,248,560,917 bytes 降至 3 个目录、约 657 MB，释放约 4.56 GB。evidence PVC、原生索引依赖、源快照和对象存储内容没有清理。
+
+`npm run build`、`npm test`（458 项，456 通过、2 跳过）、`npm run test:python`（68 项）、`npm run test:homepage`、Dev 首页轮播 Playwright 回归、Helm lint 和 `git diff --check` 通过。Dev rollout 通过，两个 Pod 0 重启；首页、health、assets 和 coverage API 返回 HTTP 200。公开目录统计为 67 个 release、159 个产品（107 acquired、11 overview-only、41 awaiting geometry）、132 个 coverage layers。此次没有生成新的 MOC、原生索引版本或 public bundle。活动 native generation 仍为 13；五个重点巡天的证据/库存缺口尚未补齐，因此**不要创建 `v0.0.1` release tag 或将其描述为数据完成版本**。下一步继续按原生分块管理流程补证据、构建候选、审核、归档、激活并验证；独立备份和存储迁移按用户决定暂缓。
+
+## 2026-10-09 HST Dev 有界元数据补充
+
+只在 Assets Dev 的受管 HST 原生索引中补入 MAST 公开观测 `26442812` 的一行元数据；没有下载科学像素，也没有更改生产站点、公开 MOC 或 public bundle。来源、输入哈希、候选审核和精度边界见[研究记录](docs/research/hst-bounded-supplement-20261009.md)。
+
+归档任务 `native-mv0u73mc-a8612ad6` 完成，1,387/1,387 个元数据与索引依赖通过远端验证；激活任务 `native-mv0xf4kd-2d6b046a` 完成，包含站点 HTTP 原生反查验证。Dev 当前 native generation **14**，活动 group `78b08dee26fbeb01ff26036c8033e0ce50aac9820015e5a7a23f940829782b92`；控制快照 generation **5629** 状态为 `synced`。定向反查 HTTP 200 返回 observation `26442812`，O8 NESTED cell `436132`，precision=`estimated`。该响应仍标记 `truncated=true` / `queryExhausted=false`，只证明这条观测可被索引反查，不证明 HST 库存完整。
+
+Dev `/healthz` 为 HTTP 200、版本 `0.0.1`、603 files；公开 bundle 仍为 `reviewed-mupsxe2v-c91be91f` / SHA-256 `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`。`hst-partial-refresh`、`hst-unsupported-frames` 仍是开放缺口，18 条 `GSC1` / `OTHER` 坐标框架记录继续排除。五个重点巡天的数据范围仍未完整，因此不要创建 `v0.0.1` release tag。
+
+## 2026-10-10 CASDC 代理复测
+
+用户修复本机代理后，明确要求重测此前超时的 CASDC 入口并补测 Gaia/GALEX 子目录。
+通过 `http://127.0.0.1:7890` 使用正常 TLS 校验发出 16 个 GET：13 个目录返回 HTTP 200，
+3 个路径返回明确 HTTP 404，没有超时或缺少 HTTP 响应。此前 2026-10-09 的超时继续作为
+历史观察保留，不再代表当前可达性。
+
+Euclid Q1 的根目录、MER、Tile `102018211` 及 VIS/NISP 均返回 200 并列出目录内容。
+DESI DR1、iron 和 zcatalog 返回 200；`iron/tiles/` 返回 404，zcatalog 子目录列出 `v1/`。
+Gaia `/Gaia/` 与入口实际链接的 `/Gaia/dr3/` 返回 200；页面标题写作 `/Gaia/gdr3/`，
+但该拼写请求返回 404，不能从标题推导 URL。GALEX `/GALEX/` 与 `/GALEX/GR6/` 返回 200。
+复测没有请求目录中的科学文件，没有核验逐文件字节、完整库存或空间覆盖。详细状态、正文
+SHA-256 和请求时间见[研究记录](docs/research/casdc-mirror-index-audit-20261009.md)。
+
+后端来源状态、README 中英文范围说明及回归测试已按本次目录响应更新；`verified` 仅表示
+目录响应及列表可见。ESA 对单 Tile 八条锁定记录的一致性结论没有改变，未修改活动原生索引、
+任何锁定输入、公开 MOC 或 public bundle。
+
+来源 API 现在也将实际核验的 `/Gaia/dr3/` 与 `/GALEX/GR6/` 作为独立目录入口返回，
+不再只在父目录备注中提及子路径。CASDC MER 目录的完整 Tile ID 对照见[单独审计](docs/research/casdc-euclid-q1-tile-directory-join-20261010.md)。
+
+Dev 初次升级 revision 365 在 180 秒等待窗口内遇到 backend 冷启动超时；新 Pod 随后 Ready、
+重启数为 0。同一镜像和 values 重试后，Helm revision **366** 部署成功，使用镜像 tag
+`0.1.0-20261010-111406`。
+`/healthz`、assets、coverage 和 release API 均返回 HTTP 200。health 的 603 项与安装清单的
+602 个文件加 1 个 retained package 一致，public bundle 仍为
+`reviewed-mupsxe2v-c91be91f` / SHA-256
+`0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`。Euclid、DESI、Gaia、
+GALEX 反查样例返回本次来源状态；Gaia O8 cell `163327` 返回文件分区
+`GaiaSource_161703-163359` 和 `/Gaia/dr3/`，GALEX O8 cell `163327` 返回三个 observation
+和 `/GALEX/GR6/`。2MASS FITS 的 16-byte Range 返回 HTTP 206，SHA 与清单一致。
+`npm run build` 与 `npm test`（458 项，456 通过、2 跳过）、定向原生索引测试（30/30）、
+Helm lint 和 `git diff --check` 均通过。目录响应验证不覆盖逐文件可用性、全库存或空间覆盖。
+
+## 2026-10-09 CASDC 镜像入口有界核对
+
+CASDC 根目录、Euclid Q1 Tile `102018211` 的相关目录以及 DESI DR1 iron 目录共十个 HTTPS 请求均连接超时；根目录和 VIS 子目录的 IPv4 重试也超时。历史检查曾记录这些入口 HTTP 200，因此当前可达性应记为未知，不能把本次没有 HTTP 响应解释为 404 或源站停机。本地实现将这些入口标为 `entrypoint-only`，移除过期的 HTTP 200 字段，并在说明中同时保留历史成功与最新超时；这项状态修正尚未部署到 Dev。Gaia/GALEX 子目录不在这十个请求内，保留 2026-10-07 的历史检查日期并说明本轮未复测。
+
+ESA 对 Tile `102018211` 的八条官方记录与锁定输入中 Tile ID、文件名、波段、`stc_s` 和内部路径五个字段一致；这只核对一个 Tile 的官方元数据，不证明 CASDC 镜像清单或完整库存。没有复现 Tile 身份、文件路径或空间覆盖差异，因此没有修改活动原生索引。完整请求结果和范围见[研究记录](docs/research/casdc-mirror-index-audit-20261009.md)。
 
 ## 当前目标与状态
 
 **第一阶段 MVP 已结束**（用户于 2026-10-04 确认）。Phase 1 覆盖 Euclid、DESI、Legacy
 Surveys、HST 与 Workspace 的公开覆盖、原生分块反查、来源链接及 JSON/CSV 下载计划。后续 Phase 2
-只更新 **Assets Dev**，不修改 72602、Workspace、公开 MOC 或 public bundle，也不下载科学像素。
-2026-10-08 用户另行授权恢复 **Workspace Dev 的 503**；该维护例外仅涉及 Workspace 的
-Elasticsearch 内存配置，不扩大巡天补数据或公开发布的范围。
+按用户 2026-10-12 的新指示补充基础巡天数据，优先 Euclid ERO/Q1，再按既定范围处理其他巡天；
+当前更新限于 **Assets Dev** 和独立的数据 Release，不修改 72602 / Workspace，也不下载科学像素。
+独立备份和存储迁移仍暂缓。2026-10-08 用户另行授权恢复 **Workspace Dev 的 503**；该维护
+例外仅涉及 Workspace 的 Elasticsearch 内存配置，与本轮 Assets 数据发布无关。
 
-Dev 当前 Helm revision **358**，site/backend 均 1/1 Ready，镜像 tag
-`0.1.0-20261008-070003-native-review-fix`。本机构建 image ID 为
-`46145c5c34ccdf38f92ee907b13c9b5dd535260171c28d2b505a9fc70701e351`，registry manifest digest 为
-`sha256:904a5f576a7986fe32637a0e13cd9392adf98c853b2b5407627eeab4e5890510`。此前 revision 354 部署的
-防积压修复 commit `d776e48` 已推送并保留在当前版本中。
+Dev 当前 Helm revision **371**，site/backend 均 1/1 Ready、重启数为 0，镜像 tag
+`0.1.0-20261012-165105-nested-moc-output`。当前 public bundle 为
+`reviewed-mv51kku3-a4f8d8e6` / SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`，共 611 files；
+公开目录有 67 个 release、159 个产品、28 个资源包，coverage API 有 140 层。原生索引
+generation **17**、活动 group `14d6885aa39300ecb8041f822c3b9357a0f116dfc6d8911852583361b99ebcdf`
+已通过运行时和站点验证。控制快照 generation 6076 已于 2026-10-13 01:56:20 UTC 同步；
+`publication-tasks` generation 16530 已于 2026-10-13 02:12:32 UTC 同步。此前 revision 354
+部署的防积压修复 commit `d776e48` 已推送并保留在当前版本中。
 
 ### 2026-10-08 Workspace Dev 503 恢复
 
@@ -52,19 +225,18 @@ ES PVC `data-asa-elasticsearch-master-0` 继续绑定原 PV，UID 为
 `d156eaf2-7e3c-40c1-9423-1ed0f5f2e959`。没有删除或重建 PVC、重置索引或下载科学数据；
 Workspace 私有响应正文、文件身份和 HEALPix cells 未写入 Assets 文档或验证记录。
 
-### 待做清单（2026-10-08）
+### 2026-10-08 待做快照
 
-以下事项仅登记待做，本次不启动新的补数据、审核、清理或迁移。存储事项应先于下一批可选
-巡天归档完成。第一阶段 MVP、防积压修复部署、审核界面部署、Wiki 中英文发布与 CASDC 状态
-更新已完成，不再作为待办。
+以下表格保留 2026-10-08 的待做快照，后续状态以本文件顶部更新为准。它与 Dev public release
+缓存留存不是同一存储层；evidence 归档版本的引用盘点和留存策略尚未完成。
 
 | 优先级 | 待做 | 当前状态与完成标准 |
 | --- | --- | --- |
-| P1 | 审核功能代码提交、推送 | Dev revision 358 已部署并通过完整校验；代码已暂存但尚未提交、推送。检查并保留既有工作树修改，提交后登记 commit 与镜像的对应关系。 |
+| P1 | 审核功能代码提交、推送 | 已包含在 `main` `173f4cf`；此旧待办关闭。 |
 | P1（下次归档前） | 最多保留三个已完成版本 | 每条逻辑内容版本线包含活动版在内最多保留 3 个已完成版本。现仅盘点部分引用；需覆盖所有保留版本、控制状态和进行中任务依赖，完成引用感知 dry-run，再实施清理与自动留存。共享对象仍有引用时必须保留。 |
 | P1（下次归档前） | 独立备份与存储迁移 | 目标尚未选定。确认独立于 `10.15.49.212` 的故障域、所有权和配额；冻结权威依赖清单，逐对象核对 size/SHA，完成恢复演练和 Dev 切换验证。见 [Dev 存储规划](docs/storage-plan-dev-20261007.md)。 |
 | P1 | 容量报警与硬配额 | 桶 75%/85%、spool 750/900 MiB 仍为建议阈值，实际报警未落地。核实 NFS/local-path 的硬配额能力，落地容量预警；PVC 声明容量和 1 GiB spool 入队预算不能视为文件系统硬限制。 |
-| P2 | 剩余巡天证据与库存缺口 | IPHAS pinned QC 尚待受管导入，保留重复 field/QC 关联；ZTF DR7 仍缺冻结的历史处理清单，不能以当前 IRSA 内容替代。29 个巡天已绑定不代表库存完整；继续按来源核验候选 URI 的实际可用性。ERO 17-target 映射已纳入 Dev，后续精度仍依赖官方有效像素 footprint/MOC 或真实 Tile roster。见 [残余来源复查](docs/research/phase2-residual-native-surveys-followup-20261007.md)。 |
+| P2 | 剩余巡天证据与库存缺口 | IPHAS pinned QC 尚待受管导入，保留重复 field/QC 关联；ZTF DR7 仍缺冻结的历史处理清单，不能以当前 IRSA 内容替代。29 个巡天已绑定不代表库存完整；继续按来源核验候选 URI 的实际可用性。ERO 的 17-target / 85-header frame MOC 已发布，但有效像素和真实 Tile roster 仍未验证；Q1 校准帧和 BGSUB 均是有界库存，不代表完整 Q1。见 [残余来源复查](docs/research/phase2-residual-native-surveys-followup-20261007.md)。 |
 | P2 | 实际产品审核与模态复核 | 审核界面改进已完成，业务审核尚未完成。SDSS 的 25 个产品中 19 个待审项因缺少可验证 MOC 证据而 blocked，6 个已发布；先补足证据再审核，逐产品复核 imaging/catalog/spectroscopy 等身份。DR10 color imaging 已纠正。 |
 | P2 | 性能与更广回归 | 测冷/热启动、geometry/native 查询、分页和完整 JSON/CSV 导出；检查更多 component 与中文字体冷缓存首屏。每项记录产品、order/cells、活动版本和实际验收范围，不能把已有局部 smoke 扩写为全局完成。 |
 | P2（Workspace 另行安排） | 历史覆盖制品失败 | 本次 503 已恢复，索引查询正常；另有一个维护前已失败的覆盖制品，需在 Workspace 自身的管理流程核对失败原因与恢复办法。Assets 只记录服务状态汇总，不保存私有制品或扫描正文。 |
@@ -911,13 +1083,14 @@ Workspace 首批 4.692 s / 完整查询 33.495 s，geometry 冷 12.376 s /
 | --- | --- |
 | Euclid Q1 | 仅锁定 BGSUB 清单 2,908 行、352 Tiles；不是完整 Q1。72602 的 ERO 17-target 映射已补齐，仍无核实的 Tile/有效像素库存；Q1 不能替代 ERO。 |
 | DESI | DR1/EDR Tile 是 estimated 候选，不是目标级光谱覆盖。用户部分 OSS 中 904 redrock 已扫描；约 904 spectra 压缩文件和 12,855 coadd 未扫描，也不代表完整 BGS/DR1。扫描走 Assets → Warehouse 标准任务。 |
-| Legacy | DR10 South 366,912 个成员、Coadd 363,328 个正曝光候选；DR9 North roster 93,548 bricks。没有权威 DR10 North roster/产品树，不能从 all-sky grid、合并 Tractor 或 PSC 推断。DR5–DR9 URI 规则与所有代的逐文件存在性未全部核验。 |
-| HST | 72602 保留旧 1,201,094 行输入并补 20 页/39,187 行，923,382 observations，排除 19 行，属于有界补充而非完整当前刷新；Dev 仍为 916,116/排除 18。复杂 footprint 使用保守候选，precision=estimated，原始 s_region 和两批来源保留；Products API 链接不等于本地逐文件库存。 |
+| Legacy | DR10 South 366,912 个成员、Coadd 363,328 个正曝光候选；DR9 North roster 93,548 bricks。2026-10-10 复查官方说明、发布目录、NERSC 与 NOIRLab TAP，仍未找到 DR10 North 成像 roster；官方继续将 North 归属 DR9。不能从 all-sky grid、合并 Tractor 或 PSC 推断。DR5–DR9 URI 规则与所有代的逐文件存在性未全部核验。见[DR10 North 审计](docs/research/legacy-dr10-north-roster-audit-20261010.md)。 |
+| HST | 72602 保留旧 1,201,094 行输入并补 20 页/39,187 行，923,382 observations，排除 19 行，属于有界补充而非完整当前刷新；Dev 为 916,119/排除 18，并在 2026-10-10 新增两个公开 observation。复杂 footprint 使用保守候选，precision=estimated，原始 s_region 和来源保留；Products API 链接不等于本地逐文件库存。见[Dev 增补记录](docs/research/hst-bounded-supplement-20261010.md)。 |
 | HSC | 保留 tract/patch 和需登录 DAS Search，文件存在性/直链尚未确认；不扩入第一阶段四巡天范围。 |
 
 HST 与 Legacy 来源补查结论见 [HST footprint 审计](docs/research/hst-unindexed-footprints-20261001.md)、
 [HST 补查](docs/research/hst-footprint-supplement-20261001.md)、
-[Legacy North 补查](docs/research/legacy-north-source-supplement-20261001.md)
+[Legacy North 补查](docs/research/legacy-north-source-supplement-20261001.md)、
+[DR10 North roster 审计](docs/research/legacy-dr10-north-roster-audit-20261010.md)
 及 [原生 URI 调研](docs/research/native-block-access-uris.md)。
 
 ## 历史存储盘点与暂缓事项（2026-10-01）

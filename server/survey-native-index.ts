@@ -1,3 +1,4 @@
+import { validateEuclidManifest, validateEuclidRow, verifyEuclidRawRows } from "./euclid-native-metadata.js";
 import { constants, createReadStream } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -17,7 +18,7 @@ import { alternativesForAccessUri, mastScienceFile, metadataEntrypoint } from ".
 const SCHEMA = "1";
 const COARSE_ORDER = 4;
 const MAX_UNITS = 50_000;
-const ADAPTERS = new Set<NativeAdapter>(["gaia-healpix-range", "sdss-field", "mast-observation", "eso-obscore-vvv", "eso-obscore-fds", "eso-obscore-kids", "eso-obscore-vphas", "eso-obscore-viking", "skymapper-dr4-ccd", "twomass-6x-atlas", "allwise-ibe-atlas", "noirlab-des-tap", "noirlab-decaps-tap", "spherex-qr2-s3-observation", "cadc-caom-cfhtls", "act-dr5-whole-map", "panstarrs-dr1-skycell", "iphas-dr2-pipeline", "rubin-firstlook-avm", "irsa-akari-fis-map", "cds-ztf-progenitor-o3", "skyview-radio-maps"]);
+const ADAPTERS = new Set<NativeAdapter>(["gaia-healpix-range", "sdss-field", "mast-observation", "eso-obscore-vvv", "eso-obscore-fds", "eso-obscore-kids", "eso-obscore-vphas", "eso-obscore-viking", "skymapper-dr4-ccd", "twomass-6x-atlas", "allwise-ibe-atlas", "noirlab-des-tap", "noirlab-decaps-tap", "spherex-qr2-s3-observation", "cadc-caom-cfhtls", "act-dr5-whole-map", "panstarrs-dr1-skycell", "iphas-dr2-pipeline", "rubin-firstlook-avm", "irsa-akari-fis-map", "cds-ztf-progenitor-o3", "skyview-radio-maps", "euclid-image-metadata"]);
 const SKYVIEW_RADIO_HEADER_REF = "metadata/map-headers.ndjson.gz";
 const SKYVIEW_RADIO_SPECS: Record<string, { sourceId: string; releaseId: string; expectedRows: number; xmlName: string; mapRoot: string; band: string; nativeFrame: string; producer: string; producerCountry: string }> = {
   nvss: { sourceId: "nvss-final-native-maps", releaseId: "nvss-final", expectedRows: 2326, xmlName: "nvss", mapRoot: "https://skyview.gsfc.nasa.gov/surveys/nvss/", band: "1400 MHZ", nativeFrame: "FK5(J2000)", producer: "National Radio Astronomy Observatory", producerCountry: "US" },
@@ -142,6 +143,12 @@ interface IndexedRow {
 
 /** Binding selectors are release/product contracts, independent of the displayed MOC. */
 export function surveyNativeBinding(layer: Pick<NativeBinding, "layerId" | "surveyId" | "releaseId" | "product">): Pick<NativeBinding, "unitKind" | "sourceIds" | "selector"> | undefined {
+  if (layer.surveyId === "euclid" && layer.releaseId === "euclid-q1" && /calibrated frames/i.test(layer.product)) {
+    if (/\bVIS and NISP\b/i.test(layer.product)) return { unitKind: "image", sourceIds: ["euclid-q1-calibrated-frames"], selector: { bands: ["VIS", "Y", "J", "H"] } };
+    const band = /\bVIS\b/i.test(layer.product) ? "VIS" : /NISP[.\s_-]+([YJH])\b/i.exec(layer.product)?.[1]?.toUpperCase();
+    return { unitKind: "image", sourceIds: ["euclid-q1-calibrated-frames"], ...(band ? { selector: { bands: [band] } } : {}) };
+  }
+  if (layer.surveyId === "euclid" && layer.releaseId === "euclid-q2") return { unitKind: "quadrant", sourceIds: ["euclid-q2-egbs-quadrants"], selector: { bands: ["VIS"] } };
   if (layer.surveyId === "decals" && layer.releaseId === "decals-dr5" && layer.layerId === "decals-dr5-color-footprint") {
     return { unitKind: "brick", sourceIds: ["legacy-dr5-bricks", "legacy-brick-geometry"], selector: { bands: ["G", "R", "Z"] } };
   }
@@ -334,6 +341,7 @@ export async function loadSurveyManifest(root: string, ref: string, source: Nati
   if (manifest.schemaVersion !== 1 || manifest.adapter !== source.adapter || manifest.surveyId !== source.surveyId || manifest.releaseId !== source.releaseId
     || manifest.coordinateFrame !== "ICRS" || manifest.ordering !== "NESTED" || !Number.isFinite(Date.parse(manifest.capturedAt))
     || !Array.isArray(manifest.metadataDocuments) || !manifest.metadataDocuments.length || manifest.metadataDocuments.length + (manifest.rowFiles?.length ?? 0) > 4096) throw new Error("Survey manifest identity, coordinate contract or provenance is invalid");
+  if (source.adapter === "euclid-image-metadata") validateEuclidManifest(manifest, source);
   if (source.adapter === "gaia-healpix-range") {
     if (manifest.nativeOrder !== 8 || !Array.isArray(manifest.files) || !manifest.files.length || manifest.listing?.complete !== true || manifest.scope?.fileRosterComplete !== true) throw new Error("Gaia import requires the complete official order-8 file roster");
     let end = -1;
@@ -1021,6 +1029,7 @@ async function validateZtfPageEvidence(root: string, manifestRef: string, manife
 
 export async function importSurveySnapshot(root: string, file: NativeFile, source: NativeSource): Promise<NativeSnapshot> {
   const { manifest, files } = await loadSurveyManifest(root, file.ref, source, file);
+  if (source.adapter === "euclid-image-metadata") await verifyEuclidRawRows(root, file.ref, manifest);
   const metadataByRef = new Map(manifest.metadataDocuments.map((document: Document) => [document.ref, document.sha256]));
   const radioHeaderEvidence = new Map<string, Document>();
   const radioMapReceipts = new Map<string, Document>();
@@ -1554,6 +1563,7 @@ export function normalizedRow(row: Document, source: NativeSource): Document | u
   const unitId = String(row.unitId ?? "");
   if (!unitId || unitId.length > 160 || /[\x00-\x1f]/.test(unitId)) throw new Error("Invalid native unit identity");
   if (source.adapter === "gaia-healpix-range") return row;
+  if (source.adapter === "euclid-image-metadata") validateEuclidRow(row, source);
   if (source.adapter === "skyview-radio-maps") {
     const spec = SKYVIEW_RADIO_SPECS[source.surveyId];
     const metadata = row.sourceMetadata as Document | undefined;
@@ -2474,6 +2484,12 @@ export class SurveyNativeIndex {
           if (dataLinkUrl) {
             const entrypoints = new Map((unit.sourceMetadata!.entrypoints ?? []).map(item => [item.uri, item]));
             entrypoints.set(dataLinkUrl, metadataEntrypoint(dataLinkUrl, binding.surveyId, binding.releaseId));
+            unit.sourceMetadata!.entrypoints = [...entrypoints.values()];
+          }
+          if (rowSummary.adapter === "euclid-image-metadata" && publicUri(payload.sourceMetadata?.entrypoint)) {
+            const entrypoint = publicUri(payload.sourceMetadata.entrypoint)!;
+            const entrypoints = new Map((unit.sourceMetadata!.entrypoints ?? []).map(item => [item.uri, item]));
+            entrypoints.set(entrypoint, metadataEntrypoint(entrypoint, binding.surveyId, binding.releaseId));
             unit.sourceMetadata!.entrypoints = [...entrypoints.values()];
           }
           (unit.sourceMetadata!.records as unknown[]).push({ ...payload.sourceMetadata, ...(payload.dataURL ? { dataURL: payload.dataURL } : {}),

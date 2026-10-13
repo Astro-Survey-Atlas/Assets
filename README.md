@@ -2,10 +2,10 @@
 
 ## Find survey data for your patch of sky
 
-Load Euclid, DESI, Legacy Surveys and HST on one sky. Compare releases and
-modalities, inspect overlap, find the native Tile, brick, target or observation
-links, and export the same results as a JSON/CSV source manifest. HSC-SSP also
-provides its existing tract/patch adapter.
+Load Euclid, DESI, Legacy Surveys, Gaia DR3 and HST on one sky. Compare releases
+and modalities, inspect overlap, find the native Tile, brick, partition, target
+or observation links, and export the same results as a JSON/CSV source manifest.
+HSC-SSP also provides its existing tract/patch adapter.
 
 **[Open Sky Atlas](https://astro.assets.72602.space/atlas/)** ·
 [Browse surveys](https://astro.assets.72602.space/surveys/) ·
@@ -33,14 +33,35 @@ contains no scientific data. Users obtain that data from the source. Known
 source evidence remains useful without a download link. See the
 [coverage workflow](docs/coverage-workflow.md) for the scope and precision rules.
 
-The current native mappings have explicit source limits:
+The current product and native-unit mappings have explicit source limits. A
+listed product is not proof that every file or public archive product has been
+indexed; source files remain at their archive under its access policy.
 
 | Survey | Native units and access | Captured scope |
 | --- | --- | --- |
-| Euclid | Q1 Tile IDs and ESA product URIs; ERO target/package links | Q1 contains 2,908 BGSUB metadata rows / 352 Tiles. ERO target extents are estimated and have no verified Tile roster. |
-| DESI DR1/EDR | Estimated Tile candidates and official directories | Circular focal-plane matches do not establish target-level spectral coverage or a complete science-file inventory. |
-| Legacy Surveys | Release-specific bricks and candidate product URIs | DR10 South covers the official 366,912-member roster; northern imaging retains DR9 North identity. Candidate URIs still require per-file verification. |
-| HST | Observation IDs, original `s_region` and MAST entrypoints | A locked local CAOM snapshot supplies the mapping. Eighteen unresolved-frame rows remain excluded; MAST provides current products and source access policy. |
+| Euclid | Q1 MER Tile IDs and calibrated image frames; ERO target and image-frame links | Q1's locked BGSUB roster contains 2,908 rows / 352 Tiles. A separate Q1_R1 calibrated-frame snapshot contains 2,449 rows (836 VIS, 537 NISP.H, 538 NISP.J, 538 NISP.Y); these are image units, not MER Tiles. ERO contains 17 named targets and 85 bounded FITS-header records; four published ERO frame layers cover VIS and NISP Y/J/H (17 frames per layer). Eight ERO/Q1 frame MOCs have native O10, with estimated bounds. They do not verify valid-pixel masks, complete archive inventories, or individual science files; ERO still has no verified Tile roster. No scientific pixels were downloaded. See the [frame coverage record](docs/research/euclid-ero-q1-frame-coverage-20261012.md) and the [mirror audit](docs/research/casdc-mirror-index-audit-20261009.md). |
+| DESI DR1/EDR | Estimated Tile candidates and official directories | Proxied GETs on 2026-10-10 returned HTTP 200 for the CASDC DR1, iron and zcatalog directories; the sibling `iron/tiles/` path returned HTTP 404. This does not verify a Tile-specific mirror path or individual files. Circular focal-plane matches do not establish target-level spectral coverage or a complete science-file inventory. See the [bounded audit](docs/research/casdc-mirror-index-audit-20261009.md). |
+| Legacy Surveys | Release-specific bricks and candidate product URIs | The catalog spans DR1-DR10. DR10 South covers the official 366,912-member roster; northern imaging retains DR9 North identity. Candidate URIs still require per-file verification, and later releases are not implied by the DR10 roster. |
+| Gaia DR3 | `gaia_source` HEALPix file partitions | The locked ICRS/NESTED order-8 ranges describe source-ID file partitions, not actual source occupancy or verified file contents. Other Gaia DR3 products are not represented by this binding. |
+| HST | Observation IDs, original `s_region` and MAST entrypoints | The Assets Dev-only native index now includes two new public observations, `454130303` and `454130304`, alongside retained metadata for `26442812`; it has 916,119 indexed observations and still excludes eighteen unsupported-frame rows. This bounded supplement is not in the current public bundle and does not complete the HST inventory. MAST provides current products and source access policy. See the [Dev supplement record](docs/research/hst-bounded-supplement-20261010.md). |
+
+These are bounded, evidence-backed scopes rather than complete inventories of
+the five archives. Coverage MOCs, native-unit mappings, source directories and
+verified scientific file bytes are separate evidence. The 2026-10-10 proxied
+CASDC recheck returned HTTP 200 for its index and the probed Euclid/DESI, Gaia
+and GALEX directories; it returned HTTP 404 for DESI `iron/tiles/` and the guessed
+Gaia `gdr3/` path. Gaia's linked `/Gaia/dr3/` and GALEX `/GALEX/GR6/` paths
+returned HTTP 200. These responses establish only directory reachability at the
+stated check time, not file bytes, survey inventory completeness or spatial
+coverage. See the [bounded audit](docs/research/casdc-mirror-index-audit-20261009.md).
+Public bundle `reviewed-mv51kku3-a4f8d8e6` (SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`) contains
+611 files and 28 resource packages. Its catalog records 67 releases and 159
+products: 107 acquired, 11 overview-only and 41 awaiting geometry. The public
+coverage API reports 140 layers, including 113 published MOC layers; the
+publication record contains 162 coverage documents. These are catalog status
+counts, not evidence that each archive's full inventory or every listed file
+has been verified.
 
 HSC-SSP's existing PDR2/PDR3 tract/patch adapter links to the corresponding
 DAS Search, which requires an account; a match does not prove a file exists.
@@ -164,6 +185,14 @@ object store. A fresh environment fails closed when S3 is unavailable; it does
 not fall back to source-tree artifacts or hidden local release data. HTTP serves
 the verified `/data/current` release without reading S3 per request. Configure
 the endpoint, bucket and credential Secret as described in the storage contract.
+
+Code and public data use separate release workflows. A `code-vX.Y.Z` tag builds
+and publishes the container image, Helm chart and code release metadata without
+object-store credentials. The manual Data Package Release pins a public bundle
+by its expected SHA-256, reads only that immutable public bundle from S3, and
+publishes it under a separate `data-vX.Y.Z` tag. A pushed data tag records that
+SHA-256 in its annotation as `public-bundle-sha256=<hex>`. It does not restore
+evidence. The older `v0.0.1` tag remains unchanged.
 
 ## Storage authority
 

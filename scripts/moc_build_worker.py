@@ -94,9 +94,17 @@ def build_regions(spec_path: Path, output: Path) -> dict[str, Any]:
         recipe.get("precision") != "estimated"
         or recipe.get("completeness") != "incomplete"
         or recipe.get("scienceFileScan") != "not-scanned"
-        or not recipe.get("observationId")
+        or not recipe.get("observationId") and recipe.get("geometryKind") != "managed-native-unit"
     ):
         raise ValueError("Region recipe must identify one estimated, incomplete, not-scanned MAST observation")
+    if recipe.get("geometryKind") == "managed-native-unit" and (
+        spec.survey_id != "euclid"
+        or recipe.get("sourceId") not in ("euclid-ero-targets", "euclid-q1-calibrated-frames", "euclid-q2-egbs-quadrants")
+        or not re.fullmatch(r"[a-f0-9]{64}", str(recipe.get("sourceSnapshotSha256", "")))
+        or not re.fullmatch(r"[a-f0-9]{64}", str(recipe.get("nativeVersion", "")))
+        or not isinstance(recipe.get("frameCount"), int) or recipe["frameCount"] < 1
+    ):
+        raise ValueError("Native region recipe must identify its reviewed Euclid input snapshot and frames")
     input_ref = spec.input
     if not isinstance(input_ref, str) or not input_ref or "\\" in input_ref:
         raise ValueError("Region recipe input must be a safe relative local path")
