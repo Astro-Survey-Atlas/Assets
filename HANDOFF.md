@@ -1,8 +1,52 @@
 # Assets 项目交接
 
-交接日期：2026-10-10（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-13（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
+
+## 2026-10-13 Euclid ERO/Q1 补充、数据发布与索引激活
+
+按“先补数据，再独立发布代码与数据包”的计划，将 Dev 公共 bundle
+`reviewed-mv51kku3-a4f8d8e6` 更新为 SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`。发布任务
+`mv51kku3-a4f8d8e6` 状态为 `published`；candidate、authority、site 校验均通过，
+站点确认同一 SHA，并检查 115 个产品。Bundle 含 611 个文件、28 个资源包；发布记录
+包含 162 份 coverage documents。公开 coverage catalog 有 140 层（113 个已发布 MOC）。
+目录总计 67 个 release、159 个产品：107 acquired、11 overview-only、41 awaiting geometry。
+
+新增并发布八个原生 O10 frame-extent MOC：ERO VIS/NISP.H/J/Y 四层和 Q1 VIS/NISP.H/J/Y
+四层。ERO 锁定快照有 17 个 target、34 个包和 85 份 FITS 头；四个已发布波段层各有 17
+份 frame 记录。Q1 校准帧锁定快照有 2,449 行（VIS 836、NISP.H 537、NISP.J 538、NISP.Y
+538），与 2,908 行 / 352 Tile 的 BGSUB MER 清单分开。所有新 MOC 的 frame 范围均为
+`estimated`；没有下载科学像素或验证有效像素掩膜、完整档案库存、逐文件可用性。ERO
+仍无可验证 Tile roster；Q1 校准帧是 `image` 原生单位，样例无文件级 URI。
+输入哈希、精度和其他限制见[研究记录](docs/research/euclid-ero-q1-frame-coverage-20261012.md)。
+
+原生索引从 generation **16** 激活为 **17**，保留原 128 项并新增八项，活动组为
+`14d6885aa39300ecb8041f822c3b9357a0f116dfc6d8911852583361b99ebcdf`，digest
+`4a0073155999d344a132b49147c02623bebe365195e3ac64dc7d72cd92b19fee`。验证 252/252 通过，
+无 unavailable binding；109 项限制与上个已审核版本完全相同，沿用其逐项接受记录。
+归档任务 `native-mv609zti-e736b49f` 完成 1,396/1,396 依赖验证；激活任务
+`native-mv60duzp-c0b8179f` 完成运行时和站点 HTTP 查询验证。八个图层的 native O4 样例
+均命中；ERO 返回 target 与包 URI，Q1 返回 image identity、精度 `estimated`，不提供文件级
+URI。控制快照 generation **6076** / SHA-256
+`8a6d758c83b718337e955fb8c9f075f62aceeb4311f9307d0a2a9684899d1c84` 已于
+2026-10-13 01:56:20 UTC 同步；远端对象大小 26,655,301 bytes、SHA 与本地 manifest 一致，
+`native-units` 状态为 `synced`。`publication-tasks` generation **16530** 当时仍为 `pending`，
+继续等待其独立同步。
+
+Dev 当前使用 revision **371** / 镜像 tag
+`0.1.0-20261012-165105-nested-moc-output`。本地访问 NodePort 时必须绕过配置的 HTTP 代理；
+未绕过代理的 502 是代理返回，不是 Dev Pod 故障。site/backend 均 1/1 Ready、零重启；绕过代理后
+`/healthz`、assets、coverage catalog 及八个新 MOC 的 HEAD/SHA 校验均为 HTTP 200。
+
+数据 Release 独立于代码镜像和 Helm Chart：使用 `.github/workflows/data-release.yml` 的
+`data-v0.0.1` tag，仅打包经 SHA 固定的 public bundle、资源包集合、catalog、release history
+与校验和；不包含输入证据或科学像素。代码 Release 使用单独的 `code-v*` 流程，不改写已有
+`v0.0.1` / `code-v0.0.x` tags。数据 tag 与 GitHub Release 的最终状态在本节后续补记。
+本轮本地验证：`npm run build` 通过（资源校验 160 个产品和 80 个 offline Core 层，服务器
+TypeScript 与站点构建通过）；`npm test` 为 463 项，461 通过、2 跳过、0 失败；
+`git diff --check` 通过。
 
 ## 2026-10-10 HST Dev 有界补充与激活
 
@@ -123,14 +167,19 @@ ESA 对 Tile `102018211` 的八条官方记录与锁定输入中 Tile ID、文�
 
 **第一阶段 MVP 已结束**（用户于 2026-10-04 确认）。Phase 1 覆盖 Euclid、DESI、Legacy
 Surveys、HST 与 Workspace 的公开覆盖、原生分块反查、来源链接及 JSON/CSV 下载计划。后续 Phase 2
-只更新 **Assets Dev**，不修改 72602、Workspace、公开 MOC 或 public bundle，也不下载科学像素。
-2026-10-08 用户另行授权恢复 **Workspace Dev 的 503**；该维护例外仅涉及 Workspace 的
-Elasticsearch 内存配置，不扩大巡天补数据或公开发布的范围。
+按用户 2026-10-12 的新指示补充基础巡天数据，优先 Euclid ERO/Q1，再按既定范围处理其他巡天；
+当前更新限于 **Assets Dev** 和独立的数据 Release，不修改 72602 / Workspace，也不下载科学像素。
+独立备份和存储迁移仍暂缓。2026-10-08 用户另行授权恢复 **Workspace Dev 的 503**；该维护
+例外仅涉及 Workspace 的 Elasticsearch 内存配置，与本轮 Assets 数据发布无关。
 
-Dev 当前 Helm revision **366**，site/backend 均 1/1 Ready、重启数为 0，镜像 tag
-`0.1.0-20261010-111406`。public release cache 保留活动版和最近两版；Helm 值为
-`retainReleases=3`、`cleanup=true`。当前 public bundle SHA-256 为
-`0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`，release manifest 共 603 项。此前 revision 354 部署的
+Dev 当前 Helm revision **371**，site/backend 均 1/1 Ready、重启数为 0，镜像 tag
+`0.1.0-20261012-165105-nested-moc-output`。当前 public bundle 为
+`reviewed-mv51kku3-a4f8d8e6` / SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`，共 611 files；
+公开目录有 67 个 release、159 个产品、28 个资源包，coverage API 有 140 层。原生索引
+generation **17**、活动 group `14d6885aa39300ecb8041f822c3b9357a0f116dfc6d8911852583361b99ebcdf`
+已通过运行时和站点验证。控制快照 generation 6076 已于 2026-10-13 01:56:20 UTC 同步；
+`publication-tasks` generation 16530 仍待确认。此前 revision 354 部署的
 防积压修复 commit `d776e48` 已推送并保留在当前版本中。
 
 ### 2026-10-08 Workspace Dev 503 恢复
@@ -178,7 +227,7 @@ Workspace 私有响应正文、文件身份和 HEALPix cells 未写入 Assets �
 | P1（下次归档前） | 最多保留三个已完成版本 | 每条逻辑内容版本线包含活动版在内最多保留 3 个已完成版本。现仅盘点部分引用；需覆盖所有保留版本、控制状态和进行中任务依赖，完成引用感知 dry-run，再实施清理与自动留存。共享对象仍有引用时必须保留。 |
 | P1（下次归档前） | 独立备份与存储迁移 | 目标尚未选定。确认独立于 `10.15.49.212` 的故障域、所有权和配额；冻结权威依赖清单，逐对象核对 size/SHA，完成恢复演练和 Dev 切换验证。见 [Dev 存储规划](docs/storage-plan-dev-20261007.md)。 |
 | P1 | 容量报警与硬配额 | 桶 75%/85%、spool 750/900 MiB 仍为建议阈值，实际报警未落地。核实 NFS/local-path 的硬配额能力，落地容量预警；PVC 声明容量和 1 GiB spool 入队预算不能视为文件系统硬限制。 |
-| P2 | 剩余巡天证据与库存缺口 | IPHAS pinned QC 尚待受管导入，保留重复 field/QC 关联；ZTF DR7 仍缺冻结的历史处理清单，不能以当前 IRSA 内容替代。29 个巡天已绑定不代表库存完整；继续按来源核验候选 URI 的实际可用性。ERO 17-target 映射已纳入 Dev，后续精度仍依赖官方有效像素 footprint/MOC 或真实 Tile roster。见 [残余来源复查](docs/research/phase2-residual-native-surveys-followup-20261007.md)。 |
+| P2 | 剩余巡天证据与库存缺口 | IPHAS pinned QC 尚待受管导入，保留重复 field/QC 关联；ZTF DR7 仍缺冻结的历史处理清单，不能以当前 IRSA 内容替代。29 个巡天已绑定不代表库存完整；继续按来源核验候选 URI 的实际可用性。ERO 的 17-target / 85-header frame MOC 已发布，但有效像素和真实 Tile roster 仍未验证；Q1 校准帧和 BGSUB 均是有界库存，不代表完整 Q1。见 [残余来源复查](docs/research/phase2-residual-native-surveys-followup-20261007.md)。 |
 | P2 | 实际产品审核与模态复核 | 审核界面改进已完成，业务审核尚未完成。SDSS 的 25 个产品中 19 个待审项因缺少可验证 MOC 证据而 blocked，6 个已发布；先补足证据再审核，逐产品复核 imaging/catalog/spectroscopy 等身份。DR10 color imaging 已纠正。 |
 | P2 | 性能与更广回归 | 测冷/热启动、geometry/native 查询、分页和完整 JSON/CSV 导出；检查更多 component 与中文字体冷缓存首屏。每项记录产品、order/cells、活动版本和实际验收范围，不能把已有局部 smoke 扩写为全局完成。 |
 | P2（Workspace 另行安排） | 历史覆盖制品失败 | 本次 503 已恢复，索引查询正常；另有一个维护前已失败的覆盖制品，需在 Workspace 自身的管理流程核对失败原因与恢复办法。Assets 只记录服务状态汇总，不保存私有制品或扫描正文。 |

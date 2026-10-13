@@ -39,7 +39,7 @@ indexed; source files remain at their archive under its access policy.
 
 | Survey | Native units and access | Captured scope |
 | --- | --- | --- |
-| Euclid | Q1 Tile IDs and ESA product URIs; ERO target/package links | Q1 contains 2,908 BGSUB metadata rows / 352 Tiles. Proxied GETs on 2026-10-10 returned HTTP 200 and directory listings for the VIS/NISP paths of Tile `102018211`. The listing is only an access hint; Tile membership and footprints come from locked ESA metadata, and individual science files were not checked. Other mirror paths are unverified. ERO target extents are estimated and have no verified Tile roster. See the [bounded audit](docs/research/casdc-mirror-index-audit-20261009.md). |
+| Euclid | Q1 MER Tile IDs and calibrated image frames; ERO target and image-frame links | Q1's locked BGSUB roster contains 2,908 rows / 352 Tiles. A separate Q1_R1 calibrated-frame snapshot contains 2,449 rows (836 VIS, 537 NISP.H, 538 NISP.J, 538 NISP.Y); these are image units, not MER Tiles. ERO contains 17 named targets and 85 bounded FITS-header records; four published ERO frame layers cover VIS and NISP Y/J/H (17 frames per layer). Eight ERO/Q1 frame MOCs have native O10, with estimated bounds. They do not verify valid-pixel masks, complete archive inventories, or individual science files; ERO still has no verified Tile roster. No scientific pixels were downloaded. See the [frame coverage record](docs/research/euclid-ero-q1-frame-coverage-20261012.md) and the [mirror audit](docs/research/casdc-mirror-index-audit-20261009.md). |
 | DESI DR1/EDR | Estimated Tile candidates and official directories | Proxied GETs on 2026-10-10 returned HTTP 200 for the CASDC DR1, iron and zcatalog directories; the sibling `iron/tiles/` path returned HTTP 404. This does not verify a Tile-specific mirror path or individual files. Circular focal-plane matches do not establish target-level spectral coverage or a complete science-file inventory. See the [bounded audit](docs/research/casdc-mirror-index-audit-20261009.md). |
 | Legacy Surveys | Release-specific bricks and candidate product URIs | The catalog spans DR1-DR10. DR10 South covers the official 366,912-member roster; northern imaging retains DR9 North identity. Candidate URIs still require per-file verification, and later releases are not implied by the DR10 roster. |
 | Gaia DR3 | `gaia_source` HEALPix file partitions | The locked ICRS/NESTED order-8 ranges describe source-ID file partitions, not actual source occupancy or verified file contents. Other Gaia DR3 products are not represented by this binding. |
@@ -54,10 +54,14 @@ Gaia `gdr3/` path. Gaia's linked `/Gaia/dr3/` and GALEX `/GALEX/GR6/` paths
 returned HTTP 200. These responses establish only directory reachability at the
 stated check time, not file bytes, survey inventory completeness or spatial
 coverage. See the [bounded audit](docs/research/casdc-mirror-index-audit-20261009.md).
-In public bundle `reviewed-mupsxe2v-c91be91f`, the catalog records 67 releases
-and 159 products: 107 acquired, 11 overview-only and 41 awaiting geometry; the
-coverage catalog has 132 layers. These are catalog status counts, not evidence
-that each archive's full inventory or every listed file has been verified.
+Public bundle `reviewed-mv51kku3-a4f8d8e6` (SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`) contains
+611 files and 28 resource packages. Its catalog records 67 releases and 159
+products: 107 acquired, 11 overview-only and 41 awaiting geometry. The public
+coverage API reports 140 layers, including 113 published MOC layers; the
+publication record contains 162 coverage documents. These are catalog status
+counts, not evidence that each archive's full inventory or every listed file
+has been verified.
 
 HSC-SSP's existing PDR2/PDR3 tract/patch adapter links to the corresponding
 DAS Search, which requires an account; a match does not prove a file exists.
