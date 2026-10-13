@@ -52,17 +52,12 @@ async function rebuildCollection(
   artifactRoot: string,
   latest: DataReleaseHistoryEntry,
   catalogBytes: Buffer,
+  releaseManifest: ReleaseAssetManifest,
 ): Promise<Buffer> {
   if (latest.catalogSha256 && sha256(catalogBytes) !== latest.catalogSha256) {
     throw new Error("Cannot rebuild package collection: sanitized catalog hash differs from release history");
   }
 
-  const releaseManifest = JSON.parse(
-    await readFile(path.join(artifactRoot, "release-manifest.json"), "utf8"),
-  ) as ReleaseAssetManifest;
-  if (!Array.isArray(releaseManifest.files) || (releaseManifest.retainedPackages !== undefined && !Array.isArray(releaseManifest.retainedPackages))) {
-    throw new Error("Cannot rebuild package collection: public asset manifest is invalid");
-  }
   const packageAssets = [
     ...releaseManifest.files,
     ...(releaseManifest.retainedPackages ?? []),
@@ -113,18 +108,31 @@ async function verifiedCollection(
   artifactRoot: string,
   latest: DataReleaseHistoryEntry,
   catalogBytes: Buffer,
+  releaseManifest: ReleaseAssetManifest,
 ): Promise<{ bytes: Buffer; source: "bundle" | "reconstructed" }> {
   const collection = latest.collection;
   if (!collection?.fileName) throw new Error("Pinned public bundle has no downloadable package collection");
   if (!/^[A-Za-z0-9_.-]+$/.test(collection.fileName)) throw new Error("Collection archive filename is unsafe");
 
-  let bytes: Buffer | undefined;
-  try {
-    bytes = await readFile(path.join(artifactRoot, "collections", collection.fileName));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  const assets = releaseManifest.files.filter((record) => record.kind === "package-collection" && record.downloadName === collection.fileName);
+  if (assets.length > 1) throw new Error(`Public asset manifest contains duplicate collection archives: ${collection.fileName}`);
+  const asset = assets[0];
+  if (asset && (asset.sizeBytes !== collection.sizeBytes || asset.sha256 !== collection.sha256)) {
+    throw new Error("Collection asset metadata differs from release history");
   }
-  if (bytes) {
+
+  const candidatePaths = [
+    ...(asset ? [resolveAssetPath(root, asset.path)] : []),
+    path.join(artifactRoot, "collections", collection.fileName),
+  ];
+  for (const candidatePath of new Set(candidatePaths)) {
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(candidatePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
     if (bytes.length !== collection.sizeBytes || sha256(bytes) !== collection.sha256) {
       throw new Error("Collection archive size or SHA differs from release history");
     }
@@ -132,7 +140,7 @@ async function verifiedCollection(
   }
 
   return {
-    bytes: await rebuildCollection(root, artifactRoot, latest, catalogBytes),
+    bytes: await rebuildCollection(root, artifactRoot, latest, catalogBytes, releaseManifest),
     source: "reconstructed",
   };
 }
@@ -173,7 +181,14 @@ export async function stageDataRelease(environment: NodeJS.ProcessEnv = process.
     throw new Error("Public catalog is invalid or contains a denied package");
   }
 
-  const collection = await verifiedCollection(root, artifactRoot, latest, sanitizedCatalog);
+  const releaseManifest = JSON.parse(
+    await readFile(path.join(artifactRoot, "release-manifest.json"), "utf8"),
+  ) as ReleaseAssetManifest;
+  if (!Array.isArray(releaseManifest.files) || (releaseManifest.retainedPackages !== undefined && !Array.isArray(releaseManifest.retainedPackages))) {
+    throw new Error("Public asset manifest is invalid");
+  }
+
+  const collection = await verifiedCollection(root, artifactRoot, latest, sanitizedCatalog, releaseManifest);
   await mkdir(destination, { recursive: true });
   await writeFile(path.join(destination, latest.collection.fileName), collection.bytes);
   await writeFile(path.join(destination, "catalog.json"), sanitizedCatalog);

@@ -117,6 +117,35 @@ test("data release rebuilds a missing collection only when its recorded checksum
   }
 });
 
+test("data release stages a collection from its manifest path under packages", async () => {
+  const fixture = await makeFixture();
+  try {
+    const bundleCollectionPath = path.join(fixture.artifactRoot, "packages", fixture.release.collection!.fileName);
+    await writeFile(bundleCollectionPath, fixture.expectedCollection.bytes);
+    const manifestPath = path.join(fixture.artifactRoot, "release-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.files.push({
+      id: "package-collection-fixture",
+      kind: "package-collection",
+      path: `artifacts/public-survey-footprints/packages/${fixture.release.collection!.fileName}`,
+      downloadName: fixture.release.collection!.fileName,
+      sizeBytes: fixture.expectedCollection.sizeBytes,
+      sha256: fixture.expectedCollection.sha256,
+    });
+    await writeFile(manifestPath, JSON.stringify(manifest));
+
+    const outputRoot = path.join(fixture.root, "output");
+    await stageDataRelease(environment(fixture.root, outputRoot));
+
+    const collectionPath = path.join(outputRoot, fixture.release.collection!.fileName);
+    assert.deepEqual(await readFile(collectionPath), fixture.expectedCollection.bytes);
+    const info = JSON.parse(await readFile(path.join(outputRoot, "DATA-RELEASE-INFO.json"), "utf8"));
+    assert.equal(info.collectionArtifactSource, "bundle");
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("data release refuses a reconstructed collection that differs from release history", async () => {
   const fixture = await makeFixture("0".repeat(64));
   try {
