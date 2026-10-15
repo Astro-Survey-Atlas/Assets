@@ -925,7 +925,10 @@ function clampDisplayOrderToSelection(): void {
     if (state) state.textContent = t("coverage.noCommonOrder");
     return;
   }
-  if (options.includes(selectedDisplayOrder)) return;
+  if (options.includes(selectedDisplayOrder)) {
+    renderDisplayOrderOptions();
+    return;
+  }
   const next = [...options].reverse().find((order) => order <= selectedDisplayOrder) ?? options[0] ?? 4;
   if (next !== selectedDisplayOrder) {
     selectedDisplayOrder = next;
