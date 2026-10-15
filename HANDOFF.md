@@ -1,8 +1,29 @@
 # Assets 项目交接
 
-交接日期：2026-10-13（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-15（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
+
+## 2026-10-15 天球显示阶数与 Dev 部署
+
+天球新增显示阶数选择，默认 O4；可选阶数取所选图层共同支持范围，切换后常规覆盖请求与共同覆盖
+请求均使用该阶数。图层选择变化时即使当前阶数仍有效也会刷新菜单。实现分支
+`feat/atlas-display-orders`，修复提交 `492d1a1` 已推送；保留 `.codex/config.toml` 的用户本地修改。
+
+Dev Helm revision **374** 使用镜像
+`0.1.0-20261015-130605-atlas-orders`；site/backend 均 1/1 Ready、零重启。部署使用当前 Helm
+release values，仅覆盖 image tag。NodePort `http://10.15.51.75:32083/` 的 health、assets、coverage
+catalog 和 coverage API 均 HTTP 200。Bundle 未变化：`reviewed-mv51kku3-a4f8d8e6`，SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`，611 个文件；coverage
+catalog 为 140 层，其中 80 层支持 O10。
+
+线上 Chromium 验证选中 Euclid ERO VIS 与 Gaia DR3：默认 O4、O4–O10 可选，O10 图层请求 HTTP 200，
+严格 O10 共同覆盖请求 HTTP 200；390px 手机宽度无横向溢出，页面错误为 0。FITS Range `0–15`
+返回 HTTP 206 / 16 bytes，`X-Content-SHA256` 为
+`e3502bcc21f7ffac2b8493c631936d0a0fc29399b5d4aa00d50a1e0fc7e89164`。本地
+`npm run build`、`npm test`（475 项：473 通过、2 跳过、0 失败）、`npm run test:homepage`、
+`helm lint charts/astro-survey-atlas-assets` 与 `git diff --check` 均通过。未更改数据 bundle 或
+Warehouse/Elasticsearch 资源。
 
 ## 2026-10-13 Euclid ERO/Q1 补充、数据发布与索引激活
 
