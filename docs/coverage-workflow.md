@@ -37,6 +37,21 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   An O4-only product limits the union to O4 even alongside an O8 product; it
   must not disappear from the selected survey. An empty selected survey
   stays in the intersection. No preview is promoted to finer coverage.
+- The interactive sky defaults to O4. A user may choose another displayed
+  order through O13, but only orders supported by every selected product are
+  enabled. The catalog advertises the intersection of its prebuilt query orders
+  and projections from each layer's native MOC; a preview or requested order
+  alone never creates a capability. Higher-order display blocks are projected
+  on demand from the native MOC, fetched only for the visible sky, and bounded
+  by tile and cell budgets. A lower-order cell is an inclusive projection of
+  the native MOC, not a claim of finer source precision.
+- Ordinary coverage and overlap use the same selected display order. Strict
+  overlap intersects selected products at exactly that order and never falls
+  back to a coarser result when the intersection is empty. O4/O5 use a bounded
+  full-sky overlap seed; O6 and above may restrict seeds to visible HEALPix
+  parent cells, while each returned connected component retains its complete
+  region for inspection and reverse lookup. Requests for strict overlap identify
+  selected product layer IDs and are not shared-cache responses.
 - A recipe mode such as `tile-table` describes how an input is read, not the
   native unit type. `sourceUnitKind` declares the identity returned by lookup:
   DESI returns Tiles, while Legacy Surveys returns bricks even if both read a

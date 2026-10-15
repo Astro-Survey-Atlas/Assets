@@ -199,6 +199,13 @@ export interface SurveyLayerState {
   focusedSurveyId: string | null;
 }
 
+export interface SurveyLayerCameraPose {
+  position: [number, number, number];
+  target: [number, number, number];
+  up: [number, number, number];
+  fov: number;
+}
+
 interface CellRecord {
   pixel: number;
 }
@@ -646,6 +653,26 @@ export class SurveyLayerViewer {
 
   get webglVersion(): string {
     return this.#renderer.capabilities.isWebGL2 ? "WEBGL2" : "WEBGL1";
+  }
+
+  get cameraPose(): SurveyLayerCameraPose {
+    return {
+      position: [this.#camera.position.x, this.#camera.position.y, this.#camera.position.z],
+      target: [this.#controls.target.x, this.#controls.target.y, this.#controls.target.z],
+      up: [this.#camera.up.x, this.#camera.up.y, this.#camera.up.z],
+      fov: this.#camera.fov,
+    };
+  }
+
+  restoreCameraPose(pose: SurveyLayerCameraPose): void {
+    this.#camera.position.set(...pose.position);
+    this.#controls.target.set(...pose.target);
+    this.#camera.up.set(...pose.up);
+    this.#camera.fov = pose.fov;
+    this.#camera.updateProjectionMatrix();
+    this.#controls.update();
+    this.#emitState();
+    this.#requestRender();
   }
 
   setTheme(theme: "light" | "dark"): void {

@@ -13,6 +13,7 @@ import { sourceIdsForBinding } from "./native-unit-sources.js";
 import { nativeEvidencePath, type NativeBinding, type NativeGroup } from "./native-unit-model.js";
 import type { SourceUnitLoadOptions } from "./source-units.js";
 import { healpixList, type HealpixLayer } from "./healpix-list.js";
+import { DISPLAY_BLOCK_PIXELS, MAX_DISPLAY_TILE_RANGES, displayOrders, displayTileRanges, mocPixelRanges, pixelsInTile, type PixelRange } from "./display-coverage.js";
 import { pageCoverageFootprints } from "./coverage-footprint-pages.js";
 import { publicOpenApi } from "./public-openapi.js";
 import { ReverseStream } from "./reverse-stream.js";
@@ -33,7 +34,7 @@ import { assetPreviewMode, loadCatalog, publicManifest, type LoadedCatalog } fro
 import { projectRoot } from "./paths.js";
 import { loadSurveyIndex, type PublicSurveyIndex } from "./surveys.js";
 import { coverageBlock, coverageCatalogFromWarehouse, isWarehouseFilePartitionLayer, loadCoverageCatalog, updateCoverageNativeUnitState, withCoverageRevisions, type CoverageCatalog, type CoverageCellLayer, type WarehouseFileIndexSummary, type WarehouseGeometryLoadStatus } from "./coverage.js";
-import { layersForOverlapComponent, overlapForLayers } from "./overlap.js";
+import { layersForOverlapComponent, overlapForLayers, OverlapRenderBudgetError } from "./overlap.js";
 import { AccessGate, AccessError, queryRegion, validateRegion } from "./region-access.js";
 import { loadPublicState } from "./public-state.js";
 import { ProductStore, type MocProductRegistrationInput, type ProductExecutionRecord, type ProductRecord } from "./products.js";
@@ -3442,7 +3443,34 @@ function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, p
   const query = requestQuery(request);
   const order = Number(query.get("order"));
   const tile = Number(query.get("tile"));
-  if (!Number.isSafeInteger(order) || !Number.isSafeInteger(tile) || order < 0 || order > 29 || tile < 0) return json(response, 400, { error: "order and tile are required integers" });
+  if (!Number.isSafeInteger(order) || order < 0 || order > 29
+    || (query.get("tiles") !== "1" && (!Number.isSafeInteger(tile) || tile < 0))) return json(response, 400, { error: "order and a valid tile are required" });
+  const moc = publicState.geometry.get(record.layerId);
+  const displayRevision = displayLayerRevision(record);
+  const requestedDisplayRevision = query.get("displayRevision");
+  if (requestedDisplayRevision && requestedDisplayRevision !== displayRevision) {
+    return json(response, 409, { error: "Coverage geometry revision changed", layerId: record.layerId, revision: record.revision, displayRevision });
+  }
+  if (query.get("tiles") === "1") {
+    const supportedOrders = displayOrders(record.availableOrders, moc);
+    if (!supportedOrders.includes(order)) return json(response, 422, { error: "Display order is not supported by the selected layer", displayOrders: supportedOrders });
+    const ranges = displayTileRanges(displayRangesFor(record, order));
+    const totalTiles = ranges.reduce((total, range) => total + range.end - range.start, 0);
+    if (totalTiles > 250_000) return json(response, 413, { error: "The display tile index exceeds the bounded response size", totalTiles });
+    return compressedJson(request, response, 200, { layerId: record.layerId, order, tileSize: 4096, ranges, totalTiles, displayRevision }, "public, max-age=0, must-revalidate", "W/\"" + displayRevision + "-" + order + "\"");
+  }
+  if (moc && order >= 4 && order <= moc.maxOrder && !record.cells.has(order)) {
+    const totalTiles = Math.max(1, Math.ceil((12 * 4 ** order) / DISPLAY_BLOCK_PIXELS));
+    if (tile >= totalTiles) return json(response, 400, { error: "Coverage tile is outside the HEALPix order" });
+    try {
+      const cells = pixelsInTile(displayRangesFor(record, order), tile);
+      const sha256 = nativeSha256(JSON.stringify(cells));
+      const body = { layerId: record.layerId, order, tileId: tile, cells, sha256, revision: record.revision, displayRevision, nativeMaxOrder: moc.maxOrder, projection: order === moc.maxOrder ? "native-moc" : "inclusive-native-moc" };
+      return compressedJson(request, response, 200, body, requestedDisplayRevision ? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate", "\"sha256-" + sha256 + "\"");
+    } catch (error) {
+      return json(response, 422, { error: error instanceof Error ? error.message : "Coverage tile exceeds its cell budget" });
+    }
+  }
   const block = coverageBlock(record, order, tile);
   if (!block) return json(response, 404, { error: "Coverage block is unavailable" });
   const requestedRevision = query.get("revision");
@@ -3503,12 +3531,29 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
   const surveyIds = Array.isArray(body.surveyIds) ? body.surveyIds.filter((value): value is string => typeof value === "string") : [];
   const modalities = Array.isArray(body.modalities) ? body.modalities.filter((value): value is string => typeof value === "string") : [];
   const requestedOrder = typeof body.requestedOrder === "number" && Number.isInteger(body.requestedOrder) ? body.requestedOrder : undefined;
-  const eligibleLayers = filterByModalities([...publicCoverageCatalog().records.values()], modalities);
-  const result = overlapForLayers(eligibleLayers, surveyIds, requestedOrder);
+  const layerIds = Array.isArray(body.layerIds) ? body.layerIds.filter((value): value is string => typeof value === "string") : undefined;
+  const strictOrder = body.strictOrder === true;
+  if (strictOrder && (requestedOrder === undefined || requestedOrder < 4 || requestedOrder > 13)) {
+    return json(response, 400, { error: "A supported display order from O4 to O13 is required" });
+  }
+  const viewTiles = body.viewTiles && typeof body.viewTiles === "object" && !Array.isArray(body.viewTiles)
+    && Number.isSafeInteger((body.viewTiles as Record<string, unknown>).order)
+    && Array.isArray((body.viewTiles as Record<string, unknown>).tiles)
+    ? { order: (body.viewTiles as { order: number }).order, tiles: (body.viewTiles as { tiles: number[] }).tiles }
+    : undefined;
+  const eligibleLayers = filterByModalities([...publicCoverageCatalog().records.values()], modalities)
+    .filter((layer) => !layerIds || layerIds.includes(layer.layerId));
+  let result;
+  try {
+    result = overlapForLayers(eligibleLayers, surveyIds, requestedOrder, strictOrder ? { strictOrder: true, nativeGeometry: publicState.geometry, viewTiles } : undefined);
+  } catch (error) {
+    if (error instanceof OverlapRenderBudgetError) return json(response, 413, { error: error.message, cellCount: error.cellCount, renderLimit: error.limit, action: error.action });
+    throw error;
+  }
   if (!result) return json(response, 400, { error: "At least two surveys with a common HEALPix order are required" });
   const selectedLayers = eligibleLayers.filter((layer) => surveyIds.includes(layer.surveyId));
   const componentDetails = result.components.map((component) => {
-    const componentLayers = layersForOverlapComponent(selectedLayers, result, component);
+    const componentLayers = layersForOverlapComponent(selectedLayers, result, component, strictOrder ? publicState.geometry : undefined);
     return {
       ...component,
       evidenceLookup: {
@@ -3527,7 +3572,7 @@ async function sendCoverageOverlap(request: IncomingMessage, response: ServerRes
     };
   });
 
-  return compressedJson(request, response, 200, { ...result, components: componentDetails }, "public, max-age=60, stale-while-revalidate=120");
+  return compressedJson(request, response, 200, { ...result, components: componentDetails }, strictOrder ? "no-store" : "public, max-age=60, stale-while-revalidate=120");
 }
 
 async function sendCoverageOverlapDetails(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -3537,9 +3582,26 @@ async function sendCoverageOverlapDetails(request: IncomingMessage, response: Se
   const modalities = Array.isArray(body.modalities) ? body.modalities.filter((value): value is string => typeof value === "string") : [];
   const componentId = typeof body.componentId === "string" ? body.componentId : "";
   const requestedOrder = typeof body.requestedOrder === "number" && Number.isInteger(body.requestedOrder) ? body.requestedOrder : undefined;
+  const layerIds = Array.isArray(body.layerIds) ? body.layerIds.filter((value): value is string => typeof value === "string") : undefined;
+  const strictOrder = body.strictOrder === true;
+  if (strictOrder && (requestedOrder === undefined || requestedOrder < 4 || requestedOrder > 13)) {
+    return json(response, 400, { error: "A supported display order from O4 to O13 is required" });
+  }
+  const viewTiles = body.viewTiles && typeof body.viewTiles === "object" && !Array.isArray(body.viewTiles)
+    && Number.isSafeInteger((body.viewTiles as Record<string, unknown>).order)
+    && Array.isArray((body.viewTiles as Record<string, unknown>).tiles)
+    ? { order: (body.viewTiles as { order: number }).order, tiles: (body.viewTiles as { tiles: number[] }).tiles }
+    : undefined;
   if (surveyIds.length < 2 || !componentId) return json(response, 400, { error: "surveyIds and componentId are required" });
-  const eligibleLayers = filterByModalities([...publicCoverageCatalog().records.values()], modalities);
-  const result = overlapForLayers(eligibleLayers, surveyIds, requestedOrder);
+  const eligibleLayers = filterByModalities([...publicCoverageCatalog().records.values()], modalities)
+    .filter((layer) => !layerIds || layerIds.includes(layer.layerId));
+  let result;
+  try {
+    result = overlapForLayers(eligibleLayers, surveyIds, requestedOrder, strictOrder ? { strictOrder: true, nativeGeometry: publicState.geometry, viewTiles } : undefined);
+  } catch (error) {
+    if (error instanceof OverlapRenderBudgetError) return json(response, 413, { error: error.message, cellCount: error.cellCount, renderLimit: error.limit, action: error.action });
+    throw error;
+  }
   if (!result) return json(response, 400, { error: "No common coverage is available for the selected surveys" });
   const component = result.components.find((candidate) => candidate.id === componentId);
   if (!component) return json(response, 404, { error: "Overlap component not found for the current survey selection" });
@@ -3561,9 +3623,9 @@ async function sendCoverageOverlapDetails(request: IncomingMessage, response: Se
       coverageEvidence: content.coverageEvidence,
     }] as const];
   }));
-  const details = buildOverlapDetails({ result, component, layers: selectedLayers, surveyIndex: publicSurveyIndex(), sourceIndex: runtimeSurveyIndex, publishedSourcesByLayer, catalog:publicState.catalog, sourceUnitsByLayer:new Map(), warehouseGeometry, warehouseSnapshots: await currentWarehouseOverlapSnapshots() });
+  const details = buildOverlapDetails({ result, component, layers: selectedLayers, nativeGeometry: strictOrder ? publicState.geometry : undefined, surveyIndex: publicSurveyIndex(), sourceIndex: runtimeSurveyIndex, publishedSourcesByLayer, catalog:publicState.catalog, sourceUnitsByLayer:new Map(), warehouseGeometry, warehouseSnapshots: await currentWarehouseOverlapSnapshots() });
 
-  return compressedJson(request, response, 200, details, "public, max-age=60, stale-while-revalidate=120");
+  return compressedJson(request, response, 200, details, strictOrder ? "no-store" : "public, max-age=60, stale-while-revalidate=120");
 }
 
 function publicReverseEntrypoints(layerIds: readonly string[], order: number, cells: readonly number[]): Array<Record<string, unknown>> {
@@ -3574,7 +3636,9 @@ function publicReverseEntrypoints(layerIds: readonly string[], order: number, ce
     // catalog here to keep entrypoint-only products visible as well.
     const layer = publicCoverageCatalog().records.get(layerId);
     if (!layer) return [];
-    const matchedCells = (layer.cells.get(order) ?? []).filter((cell) => requested.has(cell));
+    const matchedCells = layer.cells.has(order)
+      ? (layer.cells.get(order) ?? []).filter((cell) => requested.has(cell))
+      : selectedPixelsInRanges([...requested], displayRangesFor(layer, order));
     if (!matchedCells.length) return [];
     const survey = runtimeSurveyIndex.surveys.find((entry) => entry.id === layer.surveyId);
     const release = survey?.releases.find((entry) => entry.id === layer.releaseId);
@@ -3664,6 +3728,53 @@ function normalizeReverseEntrypoints(entries: Array<Record<string, unknown>>): D
 const PUBLIC_REVERSE_PREVIEW_LIMIT = 6;
 const REVERSE_LOOKUP_BODY_MAX_BYTES = 1_310_720;
 const reverseCursorSecret = process.env.ASSETS_REVERSE_CURSOR_SECRET?.trim() || randomUUID();
+
+const nativeDisplayRangeCache = new Map<string, PixelRange[]>();
+let nativeDisplayCachedRangeCount = 0;
+
+function displayRangesFor(layer: CoverageCellLayer, order: number): PixelRange[] {
+  const moc = publicState.geometry.get(layer.layerId);
+  const key = `${layer.layerId}:${moc?.revision ?? layer.revision ?? "unknown"}:${order}`;
+  const cached = nativeDisplayRangeCache.get(key);
+  if (cached) {
+    nativeDisplayRangeCache.delete(key);
+    nativeDisplayRangeCache.set(key, cached);
+    return cached;
+  }
+  const ranges = layer.cells.has(order)
+    ? (layer.cells.get(order) ?? []).map((pixel) => ({ start: pixel, end: pixel + 1 }))
+    : moc
+      ? mocPixelRanges(moc, order)
+      : [];
+  if (ranges.length <= MAX_DISPLAY_TILE_RANGES) {
+    while (nativeDisplayRangeCache.size >= 128 || nativeDisplayCachedRangeCount + ranges.length > MAX_DISPLAY_TILE_RANGES) {
+      const oldestKey = nativeDisplayRangeCache.keys().next().value;
+      if (!oldestKey) break;
+      nativeDisplayCachedRangeCount -= nativeDisplayRangeCache.get(oldestKey)!.length;
+      nativeDisplayRangeCache.delete(oldestKey);
+    }
+    nativeDisplayRangeCache.set(key, ranges);
+    nativeDisplayCachedRangeCount += ranges.length;
+  }
+  return ranges;
+}
+
+function selectedPixelsInRanges(cells: readonly number[], ranges: readonly PixelRange[]): number[] {
+  return cells.filter((pixel) => {
+    let low = 0;
+    let high = ranges.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (ranges[middle]!.end <= pixel) low = middle + 1;
+      else high = middle;
+    }
+    return Boolean(ranges[low] && ranges[low]!.start <= pixel);
+  });
+}
+
+function displayLayerRevision(layer: Pick<CoverageCellLayer, "layerId" | "revision">): string {
+  return nativeSha256(JSON.stringify({ catalogRevision: layer.revision, nativeRevision: publicState.geometry.get(layer.layerId)?.revision ?? null })).slice(0, 32);
+}
 
 function reverseQueryFingerprint(layerIds: readonly string[], order: number, cells: readonly number[]): string {
   const revisions = [...new Set(layerIds)].sort().map((layerId) => ({ layerId, revision: publicCoverageCatalog().records.get(layerId)?.revision ?? "" }));
@@ -4607,7 +4718,9 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   const coverageEvidence: DownloadPlanCoverageEvidence[] = (body.layerIds as string[]).flatMap((layerId) => {
     const layer = publicCoverageCatalog().records.get(layerId);
     if (!layer) return [];
-    const matchedCells = (layer.cells.get(order) ?? []).filter((cell) => requestedCells.has(cell));
+    const matchedCells = layer.cells.has(order)
+      ? (layer.cells.get(order) ?? []).filter((cell) => requestedCells.has(cell))
+      : selectedPixelsInRanges([...requestedCells], displayRangesFor(layer, order));
     if (!matchedCells.length) return [];
     const product = publicState.records.get(layer.productId)?.draft;
     const sourceEvidence = layer.sourceEvidence ?? product?.coverageEvidence;
@@ -4997,6 +5110,9 @@ const server = http.createServer((request, response) => {
       const { records: _records, ...publicCoverage } = publicCoverageCatalog();
       publicCoverage.layers = publicCoverage.layers.map((layer) => ({
         ...layer,
+        displayOrders: displayOrders(layer.availableOrders, publicState.geometry.get(layer.layerId)),
+        displayRevision: displayLayerRevision(layer),
+        ...(publicState.geometry.get(layer.layerId) ? { nativeMaxOrder: publicState.geometry.get(layer.layerId)!.maxOrder } : {}),
         warehouseFileIndex: warehouseFileIndexSummary(layer.layerId),
       }));
       const body = { ...publicCoverage, schemaVersion: 2, generatedAt: coverageLoadedAt, warehouseGeometry, publicationPolicy: PUBLICATION_POLICY, publicReleaseId: approvedRelease.releaseId || null };
