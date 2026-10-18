@@ -786,6 +786,7 @@ body.public-site.atlas-page .coverage-scene {
 
 body.public-site.atlas-page .coverage-tools .icon-button,
 body.public-site.atlas-page .coverage-status,
+body.public-site.atlas-page .coverage-display-order-control,
 body.public-site.atlas-page .coverage-layers,
 body.public-site.atlas-page .coverage-empty-guide,
 body.public-site.atlas-page .coverage-help,
@@ -825,6 +826,30 @@ body.public-site.atlas-page .coverage-status {
   padding: 0 10px;
   border-radius: 6px;
   background: var(--public-surface);
+  color: var(--public-muted);
+}
+
+body.public-site.atlas-page .coverage-display-order-control {
+  border-color: var(--public-line-strong);
+  border-radius: 6px;
+  background: var(--public-surface);
+  color: var(--public-muted);
+  box-shadow: var(--public-shadow);
+}
+
+body.public-site.atlas-page .coverage-display-order-heading output {
+  color: var(--public-text);
+}
+
+body.public-site.atlas-page .coverage-display-order-control input[type="range"] {
+  accent-color: var(--brand-indigo);
+}
+
+body.public-site.atlas-page .coverage-display-order-control input[type="range"]:focus-visible {
+  outline-color: var(--brand-indigo);
+}
+
+body.public-site.atlas-page .coverage-display-order-limits {
   color: var(--public-muted);
 }
 

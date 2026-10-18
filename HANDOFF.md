@@ -6,26 +6,47 @@
 
 ## 2026-10-18 天球产品选择与高阶显示
 
-实现位于 `feat/atlas-display-orders`，基于 `e8e8d2e`；本节改动尚未部署 Dev。首页轮播默认开启，
+实现位于 `feat/atlas-display-orders`，基于 `e8e8d2e`；本轮更改已部署 Dev。首页轮播默认开启，
 包括系统偏好减少动态效果时；该偏好仍会关闭 workflow 转场动画。天球巡天行默认折叠，点击名称或
 展开按钮查看 DR；DR 勾选同步选择该版本产品，巡天总勾选显示全选/部分选择状态。搜索临时展开
 匹配巡天，清除后恢复先前展开状态；拖动把手不再误触展开。
 
-显示阶数默认 O4。高阶覆盖读取每个已选产品的真实显示图块索引，仅请求与当前视野相交的图块，
+本轮前端改动尚未提交，涉及 `site/atlas/index.html`、`site/src/i18n.ts`、`site/src/main.ts`、
+`site/src/public.css`、`site/src/styles.css` 和 `scripts/homepage-carousel-smoke.py`。
+`.codex/config.toml` 是用户本地修改，已保留。
+
+无图层选择及首次选层时均显示 O4。`.coverage-tools` 中的滑动条从 O4 调至所有已选图层共同
+支持的最高阶；保留当前值，直到新选择不再支持该阶数，此时降至仍受支持的最高阶。取消全部图层
+后重置为 O4。该设置同时控制常规覆盖与严格共同覆盖。高阶覆盖读取每个已选产品的真实显示图块
+索引，仅请求与当前视野相交的图块，
 并以所选阶数请求覆盖数据块。高阶共同覆盖先对每个巡天的已选产品图块取并集，再对巡天求交，
 把当前视野 tile 集合传给严格阶数查询。保留每次最多 192 个图块、O9+ 最多 32,768 个显示
-cell 的边界；超过预算会提示缩小视野或减少选择，不返回部分覆盖。
+cell 的边界；常规覆盖按所有选中产品在当前视野所需图块数合计检查 192 块请求上限。提示说明
+该合计及可通过放大天球或减少图层解决；超限时不返回部分覆盖。
 
 Dev 只读 API 已确认 Euclid ERO VIS 原生产品支持 O4–O11，共 9 个 O11 图块，逐块请求均为
 HTTP 200。同一 ERO 版本另有最高 O10 的产品，所以选择整个 ERO 时 O11 按共同显示阶数规则禁用；
 需取消选择 O10 产品才能显示 O11。以上只是现有发布图层/图块能力验证，不表示 ERO 库存完整，
 也没有修改数据包、MOC 或原生索引。
 
-验证：站点构建、`npx tsc -p tsconfig.site.json`、`npm run test:homepage`、`npm test`
-（478 项：476 通过、2 跳过）、Python 脚本编译和 `git diff --check` 均通过。首页 Playwright
-覆盖轮播（含减少动态效果）、主题、语言、暂停/隐藏/焦点行为；Atlas Playwright 覆盖巡天/DR
-折叠与勾选、搜索恢复、O11 图块实际请求、O10 产品对 O11 的限制、严格 O11 重合请求，以及
-390px 手机无横向溢出。没有启动或修改 Warehouse、Elasticsearch、后端、数据或 Dev 部署。
+Dev Helm revision **377** 使用镜像 `0.1.0-20261018-170931`；site/backend 均 1/1 Ready、零重启，
+NodePort `http://10.15.51.75:32083/atlas/` 可查看。health 的 bundle 为
+`reviewed-mv51kku3-a4f8d8e6` / SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`，611 个文件；assets API
+返回 144 个资源，coverage catalog 有 140 层、其中 80 层支持 O10。health、assets、catalog、
+分页 coverage 和静态页面均 HTTP 200；FITS Range `0–15` 返回 HTTP 206 / 16 bytes，SHA-256
+`e3502bcc21f7ffac2b8493c631936d0a0fc29399b5d4aa00d50a1e0fc7e89164` 与资源清单一致。
+
+Dev Chromium 使用真实 API 选中 Euclid ERO 的 11 个产品：选择后保持 O4，上限 O10；手动升到
+O10 后，当前视野合计 256 个高阶覆盖块，显示中英文预算提示并停止绘制部分结果。11 个图块索引
+请求均 HTTP 200。390px 手机布局无横向溢出，滑条可见，浏览器无页面错误。浏览器 fixture 回归
+还覆盖确定性的 200/192 超限提示和超限时不发覆盖块请求。本地与 Dev Chromium 回归、主题、
+语言及 Atlas 交互均通过。
+
+`npm run build`、`npm test`（478 项：476 通过、2 跳过）、站点 TypeScript 检查、
+`npm run test:homepage`（本地及 Dev）、Helm lint 和 `git diff --check` 均通过。backend 因
+Chart 共用镜像 tag 随 Helm 升级滚动；未更改 backend 源码、配置、路由或数据，也未修改 bundle、
+Warehouse 或 Elasticsearch。backend 首次启动约四分钟，日志为 3 个几何层加载、0 层失败。
 
 ## 2026-10-15 天球显示阶数与 Dev 部署
 

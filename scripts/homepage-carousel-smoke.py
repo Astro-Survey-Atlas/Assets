@@ -41,7 +41,8 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
         ("euclid-q1-vis", "euclid", "euclid-q1", "Q1 VIS", "#d95f59"),
         ("gaia-dr3-main", "gaia", "gaia-dr3", "Gaia DR3 main source presence", "#4f8fc8"),
     ]
-    display_orders = list(range(4, 12))
+    display_orders = [*range(4, 10), 11]
+    native_display_orders = list(range(4, 12))
     lower_order_display_orders = list(range(4, 11))
     layers = []
     surveys_by_id = {}
@@ -63,7 +64,7 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
             "modality": "imaging" if survey_id == "euclid" else "catalog",
             "color": color,
             "availableOrders": [4],
-            "displayOrders": lower_order_display_orders if suffix == "euclid-ero-vis" or suffix == "euclid-q1-vis" else display_orders,
+            "displayOrders": lower_order_display_orders if suffix == "euclid-ero-vis" or suffix == "euclid-q1-vis" else native_display_orders if suffix == "euclid-ero-native" else display_orders,
             "displayRevision": display_revision,
             "nativeMaxOrder": 10 if suffix == "euclid-ero-vis" or suffix == "euclid-q1-vis" else 11,
             "overviewOrder": 4,
@@ -118,6 +119,7 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
         "files": [],
     }
     overlap_requests = []
+    oversized_order_five_index = False
 
     def fulfill_json(route, value, status: int = 200) -> None:
         route.fulfill(status=status, content_type="application/json", body=json.dumps(value))
@@ -138,7 +140,8 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
             display_revision = display_revisions[layer_id]
             if query.get("tiles") == ["1"]:
                 tile_index_requests.append({"layerId": layer_id, "order": order})
-                fulfill_json(route, {"layerId": layer_id, "order": order, "tileSize": 4096, "ranges": order_11_tiles, "totalTiles": 2, "displayRevision": display_revision})
+                ranges = [{"start": 0, "end": 100}] if oversized_order_five_index and order == 5 else order_11_tiles
+                fulfill_json(route, {"layerId": layer_id, "order": order, "tileSize": 4096, "ranges": ranges, "totalTiles": sum(entry["end"] - entry["start"] for entry in ranges), "displayRevision": display_revision})
             else:
                 block_requests.append({"layerId": layer_id, "order": order, "tile": int(query.get("tile", ["0"])[0])})
                 fulfill_json(route, {"layerId": layer_id, "order": order, "tileId": int(query.get("tile", ["0"])[0]), "cells": [0], "sha256": "b" * 64, "revision": f"revision-{layer_id}", "displayRevision": display_revision, "nativeMaxOrder": 11, "projection": "native-moc"})
@@ -153,9 +156,27 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto(base_url.rstrip("/") + "/atlas/", wait_until="domcontentloaded")
+    slider = page.locator("#coverage-display-order")
+    assert slider.evaluate("input => input.closest('.coverage-tools') !== null"), "display-order slider must live with the sky tools"
+    assert page.locator("#coverage-layers #coverage-display-order").count() == 0, "display order must not be inside the survey list"
+    expect(slider).to_be_disabled()
+    expect(page.locator("#coverage-display-order-value")).to_have_text("O4")
+    expect(page.locator("#coverage-display-order-max")).to_have_text("O4")
+    order_label = page.locator('label[for="coverage-display-order"]')
+    locale_toggle = page.locator("[data-locale-toggle]").first
+    locale_toggle.click()
+    expect(order_label).to_have_text("显示阶数")
+    expect(slider).to_have_attribute("aria-label", "显示阶数")
+    locale_toggle.click()
+    expect(order_label).to_have_text("Display order")
+    control = page.locator(".coverage-display-order-control")
+    dark_surface = control.evaluate("element => getComputedStyle(element).backgroundColor")
+    theme_toggle = page.locator("[data-theme-toggle]").first
+    theme_toggle.click()
+    light_surface = control.evaluate("element => getComputedStyle(element).backgroundColor")
+    assert light_surface != dark_surface, "display-order control must follow the active theme"
+    theme_toggle.click()
     page.locator("#coverage-layers-toggle").click()
-    page.wait_for_selector("#coverage-display-order")
-    assert page.locator("#coverage-display-order").input_value() == "4", "Atlas must default to O4"
     euclid = page.locator("#coverage-survey-euclid")
     assert euclid.locator("[data-expand-survey]").get_attribute("aria-expanded") == "false", "DR list must start collapsed"
     assert euclid.locator(".coverage-release-list").is_hidden(), "DR rows must be hidden until expanded"
@@ -167,13 +188,16 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     ero_native_product = euclid.locator('input[data-product-layer-id="euclid-euclid-ero-native"]')
     q1_product = euclid.locator('input[data-product-layer-id="euclid-euclid-q1-vis"]')
     assert ero_product.is_checked() and ero_native_product.is_checked() and not q1_product.is_checked(), "a DR checkbox must select only that release"
+    expect(slider).to_have_attribute("aria-valuetext", "O4")
+    expect(page.locator("#coverage-display-order-value")).to_have_text("O4")
+    expect(page.locator("#coverage-display-order-max")).to_have_text("O10")
     survey_checkbox = euclid.locator('input[data-survey-id="euclid"]:not([data-release-id])')
     assert survey_checkbox.evaluate("input => input.indeterminate"), "survey state must reflect a partial DR selection"
     survey_checkbox.check(force=True)
     assert ero_product.is_checked() and ero_native_product.is_checked() and q1_product.is_checked(), "the survey checkbox must select every DR product"
-    expect(page.locator('#coverage-display-order option[value="11"]')).to_have_js_property("disabled", True)
     survey_checkbox.uncheck(force=True)
     assert not ero_product.is_checked() and not ero_native_product.is_checked() and not q1_product.is_checked(), "the survey checkbox must clear every DR product"
+    expect(slider).to_be_disabled()
 
     euclid.locator("[data-expand-survey]").click()
     assert euclid.locator(".coverage-release-list").is_hidden(), "the expander must collapse the DR list"
@@ -185,39 +209,96 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
 
     euclid.locator(".coverage-layer-name").click()
     euclid.locator('input[data-release-id="euclid-ero"]').check(force=True)
-    expect(page.locator('#coverage-display-order option[value="11"]')).to_have_js_property("disabled", True)
+    expect(slider).to_have_attribute("aria-valuetext", "O4")
+    expect(page.locator("#coverage-display-order-max")).to_have_text("O10")
+    tile_index_requests.clear()
+    block_requests.clear()
     ero_product.uncheck(force=True)
+    expect(slider).to_have_attribute("aria-valuetext", "O4")
+    expect(page.locator("#coverage-display-order-max")).to_have_text("O11")
     gaia = page.locator("#coverage-survey-gaia")
     gaia.locator(".coverage-layer-name").click()
     gaia.locator('input[data-release-id="gaia-dr3"]').check(force=True)
     assert gaia.locator('input[data-product-layer-id="gaia-gaia-dr3-main"]').is_checked(), "release selection must update its product control"
+    expect(slider).to_have_attribute("aria-valuetext", "O4")
+    expect(page.locator("#coverage-display-order-max")).to_have_text("O11")
+    assert tile_index_requests == [], f"O4 display should not fetch high-order tile indexes, got {tile_index_requests}"
+    slider.focus()
     expanded_before_handle = euclid.locator("[data-expand-survey]").get_attribute("aria-expanded")
     euclid.locator(".coverage-layer-handle").click()
     assert euclid.locator("[data-expand-survey]").get_attribute("aria-expanded") == expanded_before_handle, "the drag handle must not toggle the DR list"
-    enabled_orders = page.locator("#coverage-display-order option").evaluate_all("options => options.filter(option => !option.disabled).map(option => option.value)")
-    assert "11" in enabled_orders, f"native O11 should be selectable for both products, got {enabled_orders}"
+    expect(slider).to_have_attribute("aria-valuetext", "O4")
+    expect(page.locator("#coverage-display-order-max")).to_have_text("O11")
     tile_index_requests.clear()
     block_requests.clear()
-    with page.expect_response(lambda response: "/api/v1/coverage/blocks/" in response.url and "order=11" in response.url and "tiles=1" in response.url, timeout=30000) as display_response:
-        page.locator("#coverage-display-order").select_option("11")
-    assert display_response.value.status == 200
+    with page.expect_response(lambda response: "/api/v1/coverage/blocks/" in response.url and "order=11" in response.url and "tiles=1" in response.url, timeout=30000) as maximum_display_response:
+        slider.press("End")
+    assert maximum_display_response.value.status == 200
+    expect(slider).to_have_attribute("aria-valuetext", "O11")
     expect(page.locator("#coverage-state")).to_contain_text("O11", timeout=30000)
     assert {request["layerId"] for request in tile_index_requests if request["order"] == 11} == {
         "euclid-euclid-ero-native", "gaia-gaia-dr3-main"
-    }, f"O11 tile indexes must be requested for both selected products, got {tile_index_requests}"
-    assert block_requests and all(request["order"] == 11 for request in block_requests), f"O11 selection must fetch O11 blocks, got {block_requests}"
-    assert any(request["layerId"] == "euclid-euclid-ero-native" for request in block_requests), "ERO O11 block must be drawn"
+    }, f"O11 slider selection must request both selected product indexes, got {tile_index_requests}"
+    assert block_requests and all(request["order"] == 11 for request in block_requests), f"O11 slider selection must fetch O11 blocks, got {block_requests}"
+    tile_index_requests.clear()
+    block_requests.clear()
+    with page.expect_response(lambda response: "/api/v1/coverage/blocks/" in response.url and "order=9" in response.url and "tiles=1" in response.url, timeout=30000) as manual_display_response:
+        slider.press("ArrowLeft")
+    assert manual_display_response.value.status == 200
+    expect(slider).to_have_attribute("aria-valuetext", "O9")
+    expect(page.locator("#coverage-state")).to_contain_text("O9", timeout=30000)
+    assert block_requests and all(request["order"] == 9 for request in block_requests), f"manual O9 slider value must fetch O9 blocks, got {block_requests}"
+    locale_toggle.click()
+    expect(slider).to_have_attribute("aria-valuetext", "O9")
+    locale_toggle.click()
+    expect(slider).to_have_attribute("aria-valuetext", "O9")
+
+    oversized_order_five_index = True
+    tile_index_requests.clear()
+    block_requests.clear()
+    slider.press("Home")
+    with page.expect_response(lambda response: "/api/v1/coverage/blocks/" in response.url and "order=5" in response.url and "tiles=1" in response.url, timeout=30000) as budget_index_response:
+        slider.press("ArrowRight")
+    assert budget_index_response.value.status == 200
+    expect(slider).to_have_attribute("aria-valuetext", "O5")
+    expect(page.locator("#coverage-state")).to_contain_text("192", timeout=30000)
+    budget_message = page.locator("#coverage-state").inner_text()
+    assert "200" in budget_message and ("selected layers" in budget_message or "所有选中图层" in budget_message), f"budget warning should explain the aggregate block count, got {budget_message!r}"
+    assert tile_index_requests and all(request["order"] == 5 for request in tile_index_requests), f"O5 budget check must request the selected products' real tile indexes, got {tile_index_requests}"
+    assert not block_requests, f"over-budget coverage must not draw partial product blocks, got {block_requests}"
+
+    oversized_order_five_index = False
+    slider.press("End")
+    expect(slider).to_have_attribute("aria-valuetext", "O11")
+    expect(page.locator("#coverage-state")).to_contain_text("O11", timeout=30000)
+    slider.press("ArrowLeft")
+    expect(slider).to_have_attribute("aria-valuetext", "O9")
+    expect(page.locator("#coverage-state")).to_contain_text("O9", timeout=30000)
+
+    euclid.locator('input[data-release-id="euclid-q1"]').check(force=True)
+    expect(page.locator("#coverage-display-order-max")).to_have_text("O9")
+    expect(slider).to_have_attribute("aria-valuetext", "O9")
+    q1_product.uncheck(force=True)
+    expect(slider).to_have_attribute("aria-valuetext", "O9")
+    expect(page.locator("#coverage-display-order-max")).to_have_text("O11")
     page.evaluate("document.activeElement.blur()")
     with page.expect_response(lambda response: response.url.endswith("/api/v1/coverage/overlap"), timeout=30000) as overlap_response:
         page.keyboard.press("g")
     assert overlap_response.value.status == 200
-    assert overlap_requests and overlap_requests[-1]["requestedOrder"] == 11
+    assert overlap_requests and overlap_requests[-1]["requestedOrder"] == 9
     assert overlap_requests[-1]["strictOrder"] is True
     assert set(overlap_requests[-1]["layerIds"]) == {"euclid-euclid-ero-native", "gaia-gaia-dr3-main"}
-    assert overlap_requests[-1]["viewTiles"]["order"] == 5
+    assert overlap_requests[-1]["viewTiles"]["order"] == 3
     assert len(overlap_requests[-1]["viewTiles"]["tiles"]) <= 192
+    with page.expect_response(lambda response: response.url.endswith("/api/v1/coverage/overlap"), timeout=30000) as manual_overlap_response:
+        slider.press("ArrowLeft")
+    assert manual_overlap_response.value.status == 200
+    assert overlap_requests[-1]["requestedOrder"] == 8, "manual slider changes must update strict overlap order"
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1"), "Atlas mobile layout must not overflow horizontally"
+    assert page.locator("#coverage-display-order").is_visible(), "display-order slider must remain visible on mobile"
+    slider_box = slider.bounding_box()
+    assert slider_box and slider_box["x"] >= 0 and slider_box["x"] + slider_box["width"] <= 390, f"mobile display-order slider must fit the viewport, got {slider_box}"
     assert not errors, f"Atlas browser errors: {errors}"
     page.close()
 

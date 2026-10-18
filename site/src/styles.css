@@ -216,9 +216,15 @@ main { position: relative; z-index: 1; display: flow-root; }
 .coverage-empty-guide-action svg { width: 14px; height: 14px; }
 .coverage-layer-search { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 8px 9px; border-bottom: 1px solid rgba(70, 97, 107, .7); color: var(--muted); }
 .coverage-layer-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: 600 10px/1.2 var(--font-mono), monospace; }
-.coverage-display-order-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 10px; padding: 8px 9px; border-bottom: 1px solid rgba(70, 97, 107, .7); color: var(--muted); font: 700 10px/1.2 var(--font-mono), monospace; }
-.coverage-display-order-setting select { min-width: 76px; min-height: 32px; padding: 0 8px; border: 1px solid rgba(70, 97, 107, .85); border-radius: 3px; background: rgba(13, 24, 33, .92); color: var(--ink); font: 700 11px/1 var(--font-mono), monospace; }
-.coverage-display-order-setting select:focus-visible, .coverage-product-toggle input:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.coverage-display-order-control { box-sizing: border-box; display: grid; flex: 1 1 185px; gap: 2px; min-width: 145px; max-width: 235px; padding: 4px 9px 3px; border: 1px solid rgba(70, 97, 107, .65); background: rgba(5, 10, 16, .78); color: var(--muted); }
+.coverage-display-order-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; font: 700 8px/1.2 var(--font-mono), monospace; }
+.coverage-display-order-heading label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coverage-display-order-heading output { color: var(--ink); font: 700 9px/1 var(--font-mono), monospace; }
+.coverage-display-order-control input[type="range"] { display: block; width: 100%; min-width: 0; height: 13px; margin: 0; accent-color: var(--teal); cursor: pointer; }
+.coverage-display-order-control input[type="range"]:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.coverage-display-order-control input[type="range"]:disabled { cursor: default; opacity: .45; }
+.coverage-display-order-limits { display: flex; justify-content: space-between; color: var(--muted); font: 600 7px/1 var(--font-mono), monospace; }
+.coverage-product-toggle input:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .coverage-survey-group { padding-bottom: 8px; border-bottom: 1px solid rgba(70, 97, 107, .42); }
 .coverage-release-list { display: grid; gap: 5px; margin: 0 0 4px 34px; padding-left: 9px; border-left: 1px solid rgba(70, 97, 107, .5); }
 .coverage-release-list[hidden] { display: none; }

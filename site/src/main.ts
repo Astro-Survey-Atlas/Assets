@@ -943,69 +943,89 @@ function commitCoverageProductSelection(): void {
 
 function selectedLayerOrders(): number[] {
   const layers = visibleCoverageLayers();
-  if (!layers.length) return [4];
-  return Array.from({ length: 10 }, (_, index) => index + 4)
-    .filter((order) => layers.every((layer) => (layer.displayOrders ?? layer.availableOrders).includes(order)));
+  if (!layers.length) return [];
+  const orderSets = layers.map((layer) => new Set(layer.displayOrders ?? layer.availableOrders));
+  return [...orderSets[0]!]
+    .filter((order) => Number.isInteger(order) && order >= 4 && order <= 13 && orderSets.every((orders) => orders.has(order)))
+    .sort((left, right) => left - right);
 }
 
 function clampDisplayOrderToSelection(): void {
   const options = selectedLayerOrders();
-  if (visibleCoverageLayers().length && !options.length) {
-    renderDisplayOrderOptions();
+  const layers = visibleCoverageLayers();
+  if (!layers.length) {
+    if (isAtlasPage && selectedDisplayOrder !== 4) {
+      selectedDisplayOrder = 4;
+      coverageDots?.setDisplayOrder(4);
+    }
+    renderDisplayOrderControl();
+    return;
+  }
+  if (!options.length) {
+    renderDisplayOrderControl();
     const state = document.getElementById("coverage-state");
     if (state) state.textContent = t("coverage.noCommonOrder");
     return;
   }
-  if (options.includes(selectedDisplayOrder)) {
-    renderDisplayOrderOptions();
-    return;
-  }
-  const next = [...options].reverse().find((order) => order <= selectedDisplayOrder) ?? options[0] ?? 4;
+  const next = options.includes(selectedDisplayOrder)
+    ? selectedDisplayOrder
+    : [...options].reverse().find((order) => order <= selectedDisplayOrder) ?? options[0]!;
   if (next !== selectedDisplayOrder) {
     selectedDisplayOrder = next;
     coverageDots?.setDisplayOrder(next);
   }
-  renderDisplayOrderOptions();
+  renderDisplayOrderControl();
 }
 
-function renderDisplayOrderOptions(): void {
-  const select = document.getElementById("coverage-display-order") as HTMLSelectElement | null;
-  if (!select) return;
-  const enabled = selectedLayerOrders();
+function renderDisplayOrderControl(): void {
+  const slider = document.getElementById("coverage-display-order") as HTMLInputElement | null;
+  if (!slider) return;
+  const orders = selectedLayerOrders();
   const layers = visibleCoverageLayers();
-  select.replaceChildren();
-  if (!enabled.length) {
-    const unavailable = document.createElement("option");
-    unavailable.value = "";
-    unavailable.disabled = true;
-    unavailable.selected = true;
-    unavailable.textContent = "--";
-    select.append(unavailable);
-  }
-  for (let order = 4; order <= 13; order += 1) {
-    const option = document.createElement("option");
-    option.value = String(order);
-    option.textContent = `O${order}`;
-    option.disabled = !enabled.includes(order);
-    if (option.disabled && layers.length) {
-      const restricting = layers.filter((layer) => !(layer.displayOrders ?? layer.availableOrders).includes(order));
-      option.title = restricting.map((layer) => `${layer.surveyId}/${layer.product} (O${Math.max(...(layer.displayOrders ?? layer.availableOrders), 0)})`).join(", ");
-    }
-    select.append(option);
-  }
-  if (![...select.options].some((option) => option.value === String(selectedDisplayOrder) && !option.disabled)) {
-    if (enabled.length) selectedDisplayOrder = enabled[0]!;
-  }
-  select.value = enabled.length ? String(selectedDisplayOrder) : "";
-  select.setAttribute("aria-label", locale() === "zh" ? "显示阶数" : "Display order");
+  const currentIndex = orders.indexOf(selectedDisplayOrder);
+  slider.min = "0";
+  slider.max = String(Math.max(0, orders.length - 1));
+  slider.value = String(Math.max(0, currentIndex));
+  slider.disabled = orders.length === 0;
+  slider.setAttribute("aria-label", t("coverage.displayOrder"));
+  slider.setAttribute("aria-valuetext", orders.length ? `O${orders[currentIndex >= 0 ? currentIndex : 0]}` : layers.length ? "--" : "O4");
+  const value = document.getElementById("coverage-display-order-value");
+  if (value) value.textContent = orders.length ? `O${orders[currentIndex >= 0 ? currentIndex : 0]}` : layers.length ? "--" : "O4";
+  const minimum = document.getElementById("coverage-display-order-min");
+  if (minimum) minimum.textContent = orders.length ? `O${orders[0]}` : "O4";
+  const maximum = document.getElementById("coverage-display-order-max");
+  if (maximum) maximum.textContent = orders.length ? `O${orders[orders.length - 1]}` : layers.length ? "--" : "O4";
+}
+
+function previewDisplayOrderControlValue(): void {
+  const slider = document.getElementById("coverage-display-order") as HTMLInputElement | null;
+  const value = document.getElementById("coverage-display-order-value");
+  if (!slider || !value) return;
+  const order = selectedLayerOrders()[Number(slider.value)];
+  if (!Number.isInteger(order)) return;
+  value.textContent = `O${order}`;
+  slider.setAttribute("aria-valuetext", `O${order}`);
+}
+
+function setDisplayOrder(order: number): void {
+  if (!selectedLayerOrders().includes(order) || order === selectedDisplayOrder) return;
+  selectedDisplayOrder = order;
+  coverageDisplayViewKey = "";
+  coverageDots?.setDisplayOrder(order);
+  overlapEvidenceCache.clear();
+  overlapDetailsCache.clear();
+  activeOverlapComponents = [];
+  renderDisplayOrderControl();
+  if (overlapMode || overlapViewController) void activateOverlap(true);
+  else void loadCoverageDisplay(true);
 }
 
 function tileIdsIntersectingView(order: number, state: SurveyLayerState, ranges: readonly { start: number; end: number }[]): number[] {
   const tiles = coverageTilesInView(order, state, ranges);
   if (tiles.length > DISPLAY_TILE_BUDGET) {
     throw new Error(locale() === "zh"
-      ? `当前视野需要 ${tiles.length} 个高阶显示块，超过 ${DISPLAY_TILE_BUDGET} 块预算；请放大天球后重试`
-      : `The current view needs ${tiles.length} high-order display tiles, exceeding the ${DISPLAY_TILE_BUDGET}-tile limit. Zoom in and try again.`);
+      ? `单个图层在当前视野需要 ${tiles.length} 个高阶覆盖块，超过 ${DISPLAY_TILE_BUDGET} 块上限；请放大天球后重试`
+      : `One layer needs ${tiles.length} high-order coverage tiles in this view, exceeding the ${DISPLAY_TILE_BUDGET}-tile limit. Zoom in and try again.`);
   }
   return tiles;
 }
@@ -1103,8 +1123,8 @@ async function loadCoverageDisplay(force = false): Promise<void> {
     const totalRequests = tileSelection.reduce((sum, entry) => sum + entry.tiles.length, 0);
     if (totalRequests > DISPLAY_TILE_BUDGET) {
       throw new Error(locale() === "zh"
-        ? `当前视野需要 ${totalRequests} 个产品显示块，超过 ${DISPLAY_TILE_BUDGET} 块预算；请放大天球或减少产品`
-        : `The current view needs ${totalRequests} product display tiles, exceeding the ${DISPLAY_TILE_BUDGET}-tile limit. Zoom in or reduce the selected products.`);
+        ? `所有选中图层在当前视野合计需要 ${totalRequests} 个高阶覆盖块，超过 ${DISPLAY_TILE_BUDGET} 块上限；请放大天球或减少选中图层`
+        : `The selected layers need ${totalRequests} high-order coverage tiles in this view, exceeding the ${DISPLAY_TILE_BUDGET}-tile limit. Zoom in or deselect layers.`);
     }
     const requests = tileSelection.flatMap(({ layer, tiles }) => tiles.map((tile) => ({ layer, tile })));
     await mapWithConcurrency(requests, 6, async ({ layer, tile }) => {
@@ -3614,26 +3634,6 @@ function renderCoverageLayers(): void {
   host.replaceChildren();
   if (!coverageCatalog) return;
   bindLayerCloseTimer(host);
-  const orderLabel = document.createElement("label");
-  orderLabel.className = "coverage-display-order-setting";
-  orderLabel.append(Object.assign(document.createElement("span"), { textContent: locale() === "zh" ? "显示阶数" : "Display order" }));
-  const orderSelect = document.createElement("select");
-  orderSelect.id = "coverage-display-order";
-  orderSelect.addEventListener("change", () => {
-    const next = Number(orderSelect.value);
-    if (!Number.isInteger(next) || next === selectedDisplayOrder) return;
-    selectedDisplayOrder = next;
-    coverageDisplayViewKey = "";
-    coverageDots?.setDisplayOrder(next);
-    overlapEvidenceCache.clear();
-    overlapDetailsCache.clear();
-    activeOverlapComponents = [];
-    if (overlapMode || overlapViewController) void activateOverlap(true);
-    else void loadCoverageDisplay(true);
-  });
-  orderLabel.append(orderSelect);
-  host.append(orderLabel);
-  renderDisplayOrderOptions();
   const search = document.createElement("label");
   search.className = "coverage-layer-search";
   search.innerHTML = `<i data-lucide="search"></i><input id="coverage-layer-search" type="search" autocomplete="off" placeholder="筛选巡天图层" aria-label="筛选巡天图层" />`;
@@ -4421,6 +4421,12 @@ function resetCoverageExperience(updateUrl = true, preserveLayers = false): void
 byId("coverage-reset").addEventListener("click", () => {
   if (isAtlasInteractive()) resetCoverageExperience();
 });
+const displayOrderSlider = document.getElementById("coverage-display-order") as HTMLInputElement | null;
+displayOrderSlider?.addEventListener("input", previewDisplayOrderControlValue);
+displayOrderSlider?.addEventListener("change", () => {
+  const order = selectedLayerOrders()[Number(displayOrderSlider.value)];
+  if (Number.isInteger(order)) setDisplayOrder(order);
+});
 byId("overlap-expand").addEventListener("click", () => openOverlapDrawer());
 byId("overlap-drawer-close").addEventListener("click", () => closeOverlapDrawer());
 byId("coverage-layers-toggle").addEventListener("click", () => {
@@ -4573,6 +4579,7 @@ document.addEventListener("pointerdown", (event) => {
 
 window.addEventListener("atlas:locale-change", () => {
   if (coverageCatalog) void hydrateCoverageCatalog(coverageCatalog);
+  renderDisplayOrderControl();
   updateCoverageReadout(activeSurveyId);
   if (surveyIndex) renderSurveys();
   if (overlapMode && activeOverlapComponents.length) {

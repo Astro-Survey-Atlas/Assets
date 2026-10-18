@@ -42,6 +42,14 @@
           <span>FOV <output id="coverage-status-fov">--</output></span>
           <span>CAM <output id="coverage-status-camera">--</output></span>
         </div>
+        <div class="coverage-display-order-control">
+          <div class="coverage-display-order-heading">
+            <label for="coverage-display-order" data-i18n="coverage.displayOrder">Display order</label>
+            <output id="coverage-display-order-value">O4</output>
+          </div>
+          <input id="coverage-display-order" type="range" min="0" max="0" step="1" value="0" disabled data-i18n-aria-label="coverage.displayOrder" aria-valuetext="O4" />
+          <div class="coverage-display-order-limits" aria-hidden="true"><span id="coverage-display-order-min">O4</span><span id="coverage-display-order-max">O4</span></div>
+        </div>
         <button id="coverage-reset" class="icon-button" type="button" title="重置天球视角" aria-label="重置天球视角"><i data-lucide="rotate-ccw"></i></button>
         <button id="coverage-layers-toggle" class="icon-button" type="button" title="打开图层" aria-label="打开图层"><i data-lucide="layers-3"></i></button>
         <button id="coverage-help-toggle" class="icon-button" type="button" title="查看快捷键说明" aria-label="查看快捷键说明"><i data-lucide="circle-help"></i></button>
