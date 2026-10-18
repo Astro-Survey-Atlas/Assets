@@ -6,6 +6,7 @@ import { layersForOverlapComponent, overlapForLayers } from "../server/overlap.j
 import type { CoverageCellLayer } from "../server/coverage.js";
 import type { NativeMoc } from "../server/native-moc.js";
 import { overlapViewTileOrder } from "../site/src/atlas/coverage-orders.js";
+import { CoverageViewTileBudgetError, coverageTilesInView, overlapCoverageTilesInView } from "../site/src/atlas/coverage-view-tiles.js";
 import { coverageCatalogRevisionKey } from "../site/src/coverage-catalog-revision.js";
 
 function nativeMoc(order: number, pixels: number[], maxOrder = order): NativeMoc {
@@ -59,6 +60,43 @@ test("small display orders use a full-sky overlap seed while O6+ uses HEALPix pa
   assert.equal(overlapViewTileOrder(6), 0);
   assert.equal(overlapViewTileOrder(10), 4);
   assert.equal(overlapViewTileOrder(14), null);
+});
+
+test("high-order view clipping includes indexed ERO tiles visible on either side of the globe", () => {
+  const direction = [1.5745985198673105, -0.45021676894871193, -0.7447296563312263] as [number, number, number];
+  const length = Math.hypot(...direction);
+  const view = {
+    coverageViewDirection: direction.map((value) => value / length) as [number, number, number],
+    coverageViewRadiusRad: 73.37 * Math.PI / 180,
+  };
+  const ranges = [
+    { start: 419, end: 420 },
+    { start: 425, end: 426 },
+    { start: 876, end: 877 },
+    { start: 5712, end: 5714 },
+    { start: 7428, end: 7430 },
+    { start: 10518, end: 10520 },
+  ];
+
+  assert.deepEqual(coverageTilesInView(11, view, ranges), [419, 425, 876, 5712, 5713, 7428, 7429, 10518, 10519]);
+});
+
+test("high-order overlap seeds intersect survey unions at real display tiles", () => {
+  const view = { coverageViewDirection: [1, 0, 0] as [number, number, number], coverageViewRadiusRad: Math.PI / 2 };
+  const tiles = overlapCoverageTilesInView(11, view, [
+    { products: [[{ start: 10, end: 13 }, { start: 100, end: 102 }], [{ start: 12, end: 15 }]] },
+    { products: [[{ start: 12, end: 14 }, { start: 101, end: 103 }]] },
+  ], 192);
+  assert.deepEqual(tiles, [12, 13, 101]);
+});
+
+test("high-order overlap reports the shared-tile budget instead of returning a partial seed", () => {
+  const view = { coverageViewDirection: [1, 0, 0] as [number, number, number], coverageViewRadiusRad: Math.PI / 2 };
+  const fullSky = [{ start: 0, end: 193 }];
+  assert.throws(
+    () => overlapCoverageTilesInView(11, view, [{ products: [fullSky] }, { products: [fullSky] }], 192),
+    (error) => error instanceof CoverageViewTileBudgetError && error.tileCount === 193 && error.tileBudget === 192,
+  );
 });
 
 test("native MOC projection produces bounded display tiles without expanding the whole order", () => {

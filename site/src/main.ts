@@ -2,7 +2,7 @@ import { ensureDownloadAccess, hasDownloadAccess, resetDownloadAccess } from "./
 import { BadgeCheck, BookOpen, Box, ChevronLeft, ChevronRight, CircleHelp, Cloud, Copy, Database, Download, ExternalLink, Eye, FileArchive, FileCheck2, FileCode2, FileJson2, GitBranch, GripHorizontal, HardDrive, Home, Image, Info, Layers3, ListChecks, ListFilter, LoaderCircle, Lock, Maximize2, Minimize2, Moon, Menu, Plug, Radio, RotateCcw, ScanLine, Search, ShieldCheck, Sun, Telescope, X, createIcons } from "lucide";
 import { Healpix, Pointing } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
-import { sceneDirectionToHealpixVector } from "./atlas/spherical-cell-geometry.js";
+import { CoverageViewTileBudgetError, coverageTilesInView, overlapCoverageTilesInView } from "./atlas/coverage-view-tiles.js";
 import { surveyColorFor } from "./atlas/survey-colors.js";
 import type { SurveyLayerContextMenu, SurveyLayerInspection, SurveyLayerOverlapComponent, SurveyLayerState } from "./atlas/survey-layer-viewer.js";
 import { highestCommonCoverageOrder, overlapViewTileOrder } from "./atlas/coverage-orders.js";
@@ -206,7 +206,7 @@ let activeSurveyId: string | null = null;
 let coverageCatalog: CoverageCatalog | null = null;
 let activeOverlapModalities: string[] = [];
 const coverageBlockCache = new Map<string, number[]>();
-const coverageRequests = new Map<string, Promise<number[]>>();
+const coverageRequests = new Map<string, { promise: Promise<number[]>; signal?: AbortSignal }>();
 type CoverageLayerLoadState = "loading" | "ready" | "empty" | "error";
 const coverageLayerLoadStates = new Map<string, CoverageLayerLoadState>();
 const coverageLayerLoadErrors = new Map<string, string>();
@@ -218,8 +218,10 @@ let coverageStateFrame = 0;
 let overlapMode = false;
 let overlapRequestSequence = 0;
 let overlapEvidenceSequence = 0;
+let overlapViewSequence = 0;
 let overlapController: AbortController | null = null;
 let overlapEvidenceController: AbortController | null = null;
+let overlapViewController: AbortController | null = null;
 let overlapDetailsController: AbortController | null = null;
 let activeOverlapSurveyIds: string[] = [];
 let activeOverlapLayerIds: string[] = [];
@@ -251,12 +253,20 @@ let layerCloseDeadline = 0;
 let layerCloseRemaining = 0;
 let layerClosePaused = false;
 let coverageLayerTooltip: HTMLElement | null = null;
+const expandedCoverageSurveyIds = new Set<string>();
+let coverageSearchExpandedBefore: Set<string> | null = null;
+let coverageLayerSearchQuery = "";
 let coverageLayerTooltipRow: HTMLElement | null = null;
 
 function setOverlapMode(active: boolean): void {
   overlapMode = active;
   if (active) document.body.dataset.overlapMode = "active";
-  else document.body.removeAttribute("data-overlap-mode");
+  else {
+    overlapViewSequence += 1;
+    overlapViewController?.abort();
+    overlapViewController = null;
+    document.body.removeAttribute("data-overlap-mode");
+  }
 }
 
 function isSurveyIndex(value: unknown): value is SurveyIndex {
@@ -337,7 +347,8 @@ async function fetchCoverageBlock(layer: CoverageCatalog["layers"][number], orde
   const cached = coverageBlockCache.get(key);
   if (cached) return cached;
   const inFlight = coverageRequests.get(key);
-  if (inFlight) return inFlight;
+  if (inFlight && !inFlight.signal?.aborted) return inFlight.promise;
+  if (inFlight) coverageRequests.delete(key);
   const controller = new AbortController();
   const request = (async (): Promise<number[]> => {
     try {
@@ -358,10 +369,11 @@ async function fetchCoverageBlock(layer: CoverageCatalog["layers"][number], orde
       throw error;
     }
   })();
-  coverageRequests.set(key, request);
+  const flight = { promise: request, signal };
+  coverageRequests.set(key, flight);
   void request.then(
-    () => { if (coverageRequests.get(key) === request) coverageRequests.delete(key); },
-    () => { if (coverageRequests.get(key) === request) coverageRequests.delete(key); },
+    () => { if (coverageRequests.get(key) === flight) coverageRequests.delete(key); },
+    () => { if (coverageRequests.get(key) === flight) coverageRequests.delete(key); },
   );
   return request;
 }
@@ -517,19 +529,19 @@ function updateCoverageReadout(surveyId: string | null, product?: string): void 
     if (surveyId && layers.length) {
       scene.style.setProperty("--coverage-color", surveyColorFor(surveyId, layers[0]?.color));
       title.textContent = product ? `${surveyId.toUpperCase()} · ${product.toUpperCase()}` : surveyId.toUpperCase();
-      meta.textContent = orderText;
+      meta.textContent = `${orderText} · ${coverageDots?.state?.visibleCellCount ?? 0} VISIBLE O${selectedDisplayOrder} CELLS`;
       state.textContent = coverageStateText(`${layers.length} COVERAGE LAYERS · SELECTED`);
       return;
     }
     scene.style.removeProperty("--coverage-color");
     title.textContent = t("coverage.allSurveys");
-    meta.textContent = "NESTED HEALPIX · NSIDE 16";
+    meta.textContent = `NESTED HEALPIX · DISPLAY O${selectedDisplayOrder} · NSIDE ${2 ** selectedDisplayOrder}`;
     state.textContent = coverageStateText(coverageDots ? t("coverage.publicCells") : t("coverage.previewUnavailable"));
     return;
   }
   scene.style.setProperty("--coverage-color", surveyColorFor(survey.id, survey.color, layers[0]?.color));
   title.textContent = product ? `${survey.name.toUpperCase()} · ${product.toUpperCase()}` : survey.name.toUpperCase();
-  meta.textContent = `${orderText} · ${survey.statistics.footprintCells.toLocaleString("en-US")} CELLS`;
+  meta.textContent = `${orderText} · ${coverageDots?.state?.visibleCellCount ?? 0} VISIBLE O${selectedDisplayOrder} / ${survey.statistics.footprintCells.toLocaleString("en-US")} OVERVIEW CELLS`;
   state.textContent = coverageStateText(`${survey.statistics.acquired}/${survey.statistics.publicProducts} PRODUCTS · SELECTED`);
 }
 
@@ -544,6 +556,18 @@ function updateCoverageState(state: SurveyLayerState): void {
     byId("coverage-status-fov").textContent = `${next.effectiveFovDeg.toFixed(1)}°`;
     const [x, y, z] = next.cameraPosition;
     byId("coverage-status-camera").textContent = `${next.cameraDistance.toFixed(2)} / ${x.toFixed(1)},${y.toFixed(1)},${z.toFixed(1)}`;
+    if (activeSurveyId) {
+      const survey = surveyIndex?.surveys.find((entry) => entry.id === activeSurveyId);
+      const layers = visibleCoverageLayers().filter((layer) => layer.surveyId === activeSurveyId);
+      const queryOrders = [...new Set(layers.flatMap((layer) => layer.availableOrders))].sort((left, right) => left - right);
+      const commonOrders = selectedLayerOrders();
+      const orderText = layers.length
+        ? `DISPLAY O${selectedDisplayOrder} · COMMON O${commonOrders.join("/O")} · BLOCKS O${queryOrders.join("/O")}`
+        : `NESTED HEALPIX · DISPLAY O${selectedDisplayOrder}`;
+      const displayedCells = next.visibleCellCount.toLocaleString("en-US");
+      const overview = survey ? ` / ${survey.statistics.footprintCells.toLocaleString("en-US")} OVERVIEW CELLS` : "";
+      byId("coverage-selection-meta").textContent = `${orderText} · ${displayedCells} VISIBLE O${selectedDisplayOrder}${overview}`;
+    }
     if (selectedDisplayOrder >= 6 && !overlapMode) {
       if (coverageDisplayTimer !== null) window.clearTimeout(coverageDisplayTimer);
       coverageDisplayTimer = window.setTimeout(() => {
@@ -842,7 +866,7 @@ function updateOverlapPanelLayout(): void {
 }
 
 function visibleSurveyIdsFromControls(): string[] {
-  return [...byId("coverage-layers").querySelectorAll<HTMLInputElement>("input[data-survey-id]")]
+  return [...byId("coverage-layers").querySelectorAll<HTMLInputElement>("input[data-survey-id]:not([data-release-id])")]
     .filter((input) => input.checked || input.indeterminate)
     .map((input) => input.dataset.surveyId)
     .filter((value): value is string => Boolean(value));
@@ -876,7 +900,14 @@ function syncCoverageProductControls(): void {
   host.querySelectorAll<HTMLInputElement>("input[data-product-layer-id]").forEach((input) => {
     input.checked = selectedCoverageProductIds.has(input.dataset.productLayerId ?? "");
   });
-  host.querySelectorAll<HTMLInputElement>("input[data-survey-id]").forEach((input) => {
+  host.querySelectorAll<HTMLInputElement>("input[data-release-id]").forEach((input) => {
+    const layers = filterByModalities(coverageCatalog?.layers ?? [], selectedModalities)
+      .filter((layer) => layer.surveyId === input.dataset.surveyId && layer.releaseId === input.dataset.releaseId);
+    const selected = layers.filter((layer) => selectedCoverageProductIds.has(layer.layerId)).length;
+    input.checked = layers.length > 0 && selected === layers.length;
+    input.indeterminate = selected > 0 && selected < layers.length;
+  });
+  host.querySelectorAll<HTMLInputElement>("input[data-survey-id]:not([data-release-id])").forEach((input) => {
     const layers = filterByModalities(coverageCatalog?.layers ?? [], selectedModalities).filter((layer) => layer.surveyId === input.dataset.surveyId);
     const ids = layers.filter((layer) => selectedCoverageProductIds.has(layer.layerId));
     const total = layers.length;
@@ -905,8 +936,8 @@ function commitCoverageProductSelection(): void {
   coverageDots?.setVisibleSurveys(selectedSurveys);
   coverageDots?.setVisibleLayers(selectedCoverageProductIds);
   syncCoverageProductControls();
-    if (overlapMode) void activateOverlap(true);
-    else void loadCoverageDisplay();
+  if (overlapMode || overlapViewController) void activateOverlap(true);
+  else void loadCoverageDisplay();
   renderSelectionQueue();
 }
 
@@ -970,36 +1001,13 @@ function renderDisplayOrderOptions(): void {
 }
 
 function tileIdsIntersectingView(order: number, state: SurveyLayerState, ranges: readonly { start: number; end: number }[]): number[] {
-  if (order < 6) {
-    const tiles: number[] = [];
-    for (const range of ranges) for (let tile = range.start; tile < range.end; tile += 1) tiles.push(tile);
-    if (tiles.length > DISPLAY_TILE_BUDGET) throw new Error(`当前显示阶数需要超过 ${DISPLAY_TILE_BUDGET} 个数据块，请减少选择的产品`);
-    return tiles;
+  const tiles = coverageTilesInView(order, state, ranges);
+  if (tiles.length > DISPLAY_TILE_BUDGET) {
+    throw new Error(locale() === "zh"
+      ? `当前视野需要 ${tiles.length} 个高阶显示块，超过 ${DISPLAY_TILE_BUDGET} 块预算；请放大天球后重试`
+      : `The current view needs ${tiles.length} high-order display tiles, exceeding the ${DISPLAY_TILE_BUDGET}-tile limit. Zoom in and try again.`);
   }
-  const tileOrder = Math.max(0, order - 6);
-  const nside = 2 ** tileOrder;
-  const camera = state.cameraPosition;
-  const distance = Math.hypot(...camera) || 1;
-  const center = distance > state.outerRadius ? camera.map((value) => value / distance) : camera.map((value) => -value / distance);
-  const radius = distance > state.outerRadius
-    ? Math.asin(Math.min(1, state.outerRadius / distance))
-    : Math.PI / 2 + state.effectiveFovDeg * Math.PI / 360;
-  const query = new Healpix(nside).queryDiscInclusive(new Pointing(sceneDirectionToHealpixVector({ x: center[0]!, y: center[1]!, z: center[2]! })), Math.min(Math.PI, radius + new Healpix(nside).maxPixrad()), 4);
-  const visible: number[] = [];
-  let rangeIndex = 0;
-  for (let index = 0; index < query.sz; index += 2) {
-    const low = query.r[index]!;
-    const high = query.r[index + 1]!;
-    while (rangeIndex < ranges.length && ranges[rangeIndex]!.end <= low) rangeIndex += 1;
-    for (let tile = low; tile < high; tile += 1) {
-      while (rangeIndex < ranges.length && ranges[rangeIndex]!.end <= tile) rangeIndex += 1;
-      if (ranges[rangeIndex] && ranges[rangeIndex]!.start <= tile) {
-        visible.push(tile);
-        if (visible.length > DISPLAY_TILE_BUDGET) throw new Error(`当前视野包含超过 ${DISPLAY_TILE_BUDGET} 个显示块，请继续放大天球`);
-      }
-    }
-  }
-  return visible;
+  return tiles;
 }
 
 function displayCellBudget(order: number): number {
@@ -1008,12 +1016,31 @@ function displayCellBudget(order: number): number {
   return 32_768;
 }
 
-function overlapViewTiles(order: number): { order: number; tiles: number[] } | undefined {
-  const state = coverageDots?.state;
+async function overlapViewTiles(
+  order: number,
+  state: SurveyLayerState | null,
+  surveyIds: readonly string[],
+  layers: CoverageCatalog["layers"],
+  signal: AbortSignal,
+): Promise<{ order: number; tiles: number[] } | undefined> {
   const tileOrder = overlapViewTileOrder(order);
   if (tileOrder === null || !state) return undefined;
-  const tileCount = 12 * 4 ** tileOrder;
-  const tiles = tileIdsIntersectingView(order, state, [{ start: 0, end: tileCount }]);
+  const indexes = new Map<string, DisplayTileIndex>();
+  await mapWithConcurrency(layers, 6, async (layer) => {
+    indexes.set(layer.layerId, await fetchDisplayTileIndex(layer, order, signal));
+  });
+  const surveyRanges = surveyIds.map((surveyId) => ({
+    products: layers.filter((layer) => layer.surveyId === surveyId).map((layer) => indexes.get(layer.layerId)?.ranges ?? []),
+  }));
+  let tiles: number[];
+  try {
+    tiles = overlapCoverageTilesInView(order, state, surveyRanges, DISPLAY_TILE_BUDGET);
+  } catch (error) {
+    if (!(error instanceof CoverageViewTileBudgetError)) throw error;
+    throw new Error(locale() === "zh"
+      ? `当前视野有 ${error.tileCount} 个可能重合的高阶图块，超过 ${error.tileBudget} 块预算；请放大天球后重试`
+      : `The current view has ${error.tileCount} possible overlap tiles, exceeding the ${error.tileBudget}-tile limit. Zoom in and try again.`);
+  }
   return { order: tileOrder, tiles };
 }
 
@@ -1032,7 +1059,8 @@ async function mapWithConcurrency<T>(items: readonly T[], concurrency: number, r
 
 async function loadCoverageDisplay(force = false): Promise<void> {
   if (!coverageCatalog || !coverageDots || overlapMode) return;
-  const layers = visibleCoverageLayers().filter((layer) => (layer.displayOrders ?? layer.availableOrders).includes(selectedDisplayOrder));
+  const displayOrder = selectedDisplayOrder;
+  const layers = visibleCoverageLayers().filter((layer) => (layer.displayOrders ?? layer.availableOrders).includes(displayOrder));
   if (visibleCoverageLayers().length && !selectedLayerOrders().length) {
     coverageDisplayController?.abort();
     coverageDisplaySequence += 1;
@@ -1049,44 +1077,48 @@ async function loadCoverageDisplay(force = false): Promise<void> {
     coverageDots.updateBlocks(new Map());
     return;
   }
-  const viewKey = `${selectedDisplayOrder}:${layers.map((layer) => layer.layerId).sort().join(",")}:${state.cameraPosition.map((value) => value.toFixed(6)).join(",")}:${state.effectiveFovDeg.toFixed(3)}`;
+  const viewKey = `${displayOrder}:${layers.map((layer) => layer.layerId).sort().join(",")}:${state.cameraPosition.map((value) => value.toFixed(6)).join(",")}:${state.coverageViewDirection.map((value) => value.toFixed(6)).join(",")}:${state.coverageViewRadiusRad.toFixed(5)}`;
   if (!force && viewKey === coverageDisplayViewKey) return;
   coverageDisplayViewKey = viewKey;
   coverageDisplayController?.abort();
   const controller = new AbortController();
   coverageDisplayController = controller;
   const sequence = ++coverageDisplaySequence;
-  byId("coverage-state").textContent = `${locale() === "zh" ? "加载显示阶数" : "Loading display order"} O${selectedDisplayOrder}`;
+  byId("coverage-state").textContent = `${locale() === "zh" ? "加载显示阶数" : "Loading display order"} O${displayOrder}`;
   const blocks = new Map<string, number[]>();
   let renderedCells = 0;
   try {
     const indexes = new Map<string, DisplayTileIndex>();
-    if (selectedDisplayOrder > 4) {
+    if (displayOrder > 4) {
       await mapWithConcurrency(layers, 6, async (layer) => {
-        indexes.set(layer.layerId, await fetchDisplayTileIndex(layer, selectedDisplayOrder, controller.signal));
+        indexes.set(layer.layerId, await fetchDisplayTileIndex(layer, displayOrder, controller.signal));
       });
     }
     if (controller.signal.aborted || sequence !== coverageDisplaySequence) return;
     const tileSelection = layers.map((layer) => {
       const index = indexes.get(layer.layerId);
-      const ranges = index?.ranges ?? (layer.tileIdsByOrder?.[String(selectedDisplayOrder)] ?? [0]).map((tile) => ({ start: tile, end: tile + 1 }));
-      return { layer, tiles: tileIdsIntersectingView(selectedDisplayOrder, state, ranges) };
+      const ranges = index?.ranges ?? (layer.tileIdsByOrder?.[String(displayOrder)] ?? [0]).map((tile) => ({ start: tile, end: tile + 1 }));
+      return { layer, tiles: tileIdsIntersectingView(displayOrder, state, ranges) };
     });
     const totalRequests = tileSelection.reduce((sum, entry) => sum + entry.tiles.length, 0);
-    if (totalRequests > DISPLAY_TILE_BUDGET) throw new Error(`当前视野需要 ${totalRequests} 个显示块，超过预算 ${DISPLAY_TILE_BUDGET}；请继续放大天球或减少产品`);
+    if (totalRequests > DISPLAY_TILE_BUDGET) {
+      throw new Error(locale() === "zh"
+        ? `当前视野需要 ${totalRequests} 个产品显示块，超过 ${DISPLAY_TILE_BUDGET} 块预算；请放大天球或减少产品`
+        : `The current view needs ${totalRequests} product display tiles, exceeding the ${DISPLAY_TILE_BUDGET}-tile limit. Zoom in or reduce the selected products.`);
+    }
     const requests = tileSelection.flatMap(({ layer, tiles }) => tiles.map((tile) => ({ layer, tile })));
     await mapWithConcurrency(requests, 6, async ({ layer, tile }) => {
-      const cells = await fetchCoverageBlock(layer, selectedDisplayOrder, tile, controller.signal);
+      const cells = await fetchCoverageBlock(layer, displayOrder, tile, controller.signal);
       renderedCells += cells.length;
-      const renderLimit = displayCellBudget(selectedDisplayOrder);
+      const renderLimit = displayCellBudget(displayOrder);
       if (renderedCells > renderLimit) throw new Error(`当前视野覆盖超过 ${renderLimit.toLocaleString("en-US")} 个 HEALPix 单元；请缩小视野或减少产品`);
-      blocks.set(`${layer.layerId}:${selectedDisplayOrder}`, [...(blocks.get(`${layer.layerId}:${selectedDisplayOrder}`) ?? []), ...cells]);
+      blocks.set(`${layer.layerId}:${displayOrder}`, [...(blocks.get(`${layer.layerId}:${displayOrder}`) ?? []), ...cells]);
     });
     if (controller.signal.aborted || sequence !== coverageDisplaySequence) return;
     blocks.forEach((cells, key) => blocks.set(key, [...new Set(cells)].sort((a, b) => a - b)));
-    coverageDots.setDisplayOrder(selectedDisplayOrder);
+    coverageDots.setDisplayOrder(displayOrder);
     coverageDots.updateBlocks(blocks);
-    byId("coverage-state").textContent = `${t("coverage.publicCells")} · O${selectedDisplayOrder} · ${renderedCells.toLocaleString("en-US")} CELLS`;
+    byId("coverage-state").textContent = `${t("coverage.publicCells")} · O${displayOrder} · ${renderedCells.toLocaleString("en-US")} CELLS`;
   } catch (error) {
     if (controller.signal.aborted || sequence !== coverageDisplaySequence) return;
     controller.abort();
@@ -1468,7 +1500,7 @@ function renderOverlapLoadingPanel(surveyIds: string[], order: number): void {
   positionOverlapPanel();
 }
 
-function renderOverlapErrorPanel(surveyIds: string[]): void {
+function renderOverlapErrorPanel(surveyIds: string[], messageText = t("coverage.overlapFailed")): void {
   const panel = byId("coverage-detail-panel");
   const content = byId("coverage-detail-content");
   abortHstLookupsWithin(content);
@@ -1478,7 +1510,7 @@ function renderOverlapErrorPanel(surveyIds: string[]): void {
   byId("coverage-detail-title").textContent = `GLOBAL · ${surveyIds.length} SURVEYS`;
   const message = document.createElement("p");
   message.className = "overlap-error";
-  message.textContent = t("coverage.overlapFailed");
+  message.textContent = messageText;
   content.replaceChildren(message);
   setOverlapExpandVisible(false);
   positionOverlapPanel();
@@ -3277,8 +3309,12 @@ function closeOverlapDrawer(): void {
 
 async function activateOverlap(forceActive?: boolean, forceView = false): Promise<void> {
   if (!isAtlasInteractive()) return;
+  const hadPendingView = Boolean(overlapViewController);
+  const viewSequence = ++overlapViewSequence;
+  overlapViewController?.abort();
+  overlapViewController = null;
   const surveyIds = visibleSurveyIdsFromControls();
-  const activate = forceActive ?? !overlapMode;
+  const activate = forceActive ?? !(overlapMode || hadPendingView);
   if (activate && surveyIds.length < 2) {
     if (overlapMode) void activateOverlap(false);
     toast(t("coverage.needTwoSurveys"));
@@ -3295,7 +3331,43 @@ async function activateOverlap(forceActive?: boolean, forceView = false): Promis
     }
   }
   const selectedLayerIds = visibleCoverageLayers().map((layer) => layer.layerId).sort();
-  const requestedViewTiles = activate && order !== null ? overlapViewTiles(order) : undefined;
+  let requestedViewTiles: { order: number; tiles: number[] } | undefined;
+  const viewController = activate && order !== null ? new AbortController() : null;
+  if (viewController) {
+    overlapViewController = viewController;
+    try {
+      requestedViewTiles = await overlapViewTiles(order!, coverageDots?.state ?? null, surveyIds, visibleCoverageLayers(), viewController.signal);
+    } catch (error) {
+      if (viewController.signal.aborted || viewSequence !== overlapViewSequence) return;
+      if (overlapViewController === viewController) overlapViewController = null;
+      overlapController?.abort();
+      overlapController = null;
+      overlapRequestSequence += 1;
+      overlapEvidenceController?.abort();
+      overlapEvidenceController = null;
+      overlapEvidenceSequence += 1;
+      lastOverlapViewKey = "";
+      activeOverlapComponents = [];
+      activeOverlapSurveyIds = [...surveyIds];
+      activeOverlapLayerIds = selectedLayerIds;
+      activeOverlapViewTiles = undefined;
+      activeOverlapModalities = [...selectedModalities];
+      selectedQueueComponent = null;
+      renderedQueueComponentId = null;
+      overlapEvidenceCache.clear();
+      overlapDetailsCache.clear();
+      if (order !== null) coverageDots?.setOverlapCells(order, []);
+      coverageDots?.setOverlapComponents([]);
+      coverageDots?.setActiveOverlapComponent(null);
+      const message = error instanceof Error ? error.message : locale() === "zh" ? "重合视野超过显示预算" : "OVERLAP VIEW EXCEEDS DISPLAY BUDGET";
+      if (overlapDrawerOpen) closeOverlapDrawer();
+      if (overlapMode) renderOverlapErrorPanel(surveyIds, message);
+      byId("coverage-state").textContent = message;
+      return;
+    }
+    if (viewController.signal.aborted || viewSequence !== overlapViewSequence) return;
+    if (overlapViewController === viewController) overlapViewController = null;
+  }
   const viewKey = `${order}:${selectedLayerIds.join(",")}:${requestedViewTiles?.order}:${requestedViewTiles?.tiles.join(",")}`;
   if (activate && !forceView && overlapMode && viewKey === lastOverlapViewKey) return;
   if (activate) {
@@ -3440,6 +3512,48 @@ function modalityBadge(modality: string | undefined, className: string): HTMLSpa
   return badge;
 }
 
+function setCoverageSurveyExpanded(surveyId: string, expanded: boolean): void {
+  const group = document.getElementById(`coverage-survey-${surveyId}`);
+  const button = group?.querySelector<HTMLButtonElement>("[data-expand-survey]");
+  const list = group?.querySelector<HTMLElement>(".coverage-release-list");
+  if (!group || !button || !list) return;
+  const surveyName = group.querySelector<HTMLElement>(".coverage-layer-name")?.textContent ?? surveyId;
+  if (expanded) expandedCoverageSurveyIds.add(surveyId);
+  else expandedCoverageSurveyIds.delete(surveyId);
+  group.dataset.expanded = String(expanded);
+  button.setAttribute("aria-expanded", String(expanded));
+  button.setAttribute("aria-label", `${expanded ? (locale() === "zh" ? "收起" : "Collapse") : (locale() === "zh" ? "展开" : "Expand")} ${surveyName}`);
+  list.hidden = !expanded;
+}
+
+function filterCoverageSurveyGroups(): void {
+  const host = document.getElementById("coverage-layers");
+  if (!host) return;
+  const query = coverageLayerSearchQuery;
+  const rows = [...host.querySelectorAll<HTMLElement>(".coverage-survey-group")];
+  if (query && coverageSearchExpandedBefore === null) coverageSearchExpandedBefore = new Set(expandedCoverageSurveyIds);
+  if (!query && coverageSearchExpandedBefore) {
+    expandedCoverageSurveyIds.clear();
+    coverageSearchExpandedBefore.forEach((surveyId) => expandedCoverageSurveyIds.add(surveyId));
+    coverageSearchExpandedBefore = null;
+  }
+  if (query && coverageSearchExpandedBefore) {
+    expandedCoverageSurveyIds.clear();
+    coverageSearchExpandedBefore.forEach((surveyId) => expandedCoverageSurveyIds.add(surveyId));
+  }
+  rows.forEach((row) => {
+    const surveyId = row.dataset.surveyId;
+    const surveyMatch = row.querySelector<HTMLElement>(".coverage-layer-toggle")?.dataset.searchText?.includes(query) ?? false;
+    const productMatches = [...row.querySelectorAll<HTMLElement>(".coverage-product-toggle")]
+      .filter((product) => product.dataset.searchText?.includes(query));
+    row.hidden = Boolean(query) && !surveyMatch && !productMatches.length;
+    if (query && (surveyMatch || productMatches.length) && surveyId) expandedCoverageSurveyIds.add(surveyId);
+  });
+  rows.forEach((row) => {
+    if (row.dataset.surveyId) setCoverageSurveyExpanded(row.dataset.surveyId, expandedCoverageSurveyIds.has(row.dataset.surveyId));
+  });
+}
+
 function infoControl(description: string, className = "overlap-spatial-unit-info"): HTMLSpanElement {
   const info = icon("info");
   info.classList.add(className);
@@ -3514,7 +3628,7 @@ function renderCoverageLayers(): void {
     overlapEvidenceCache.clear();
     overlapDetailsCache.clear();
     activeOverlapComponents = [];
-    if (overlapMode) void activateOverlap(true);
+    if (overlapMode || overlapViewController) void activateOverlap(true);
     else void loadCoverageDisplay(true);
   });
   orderLabel.append(orderSelect);
@@ -3525,6 +3639,7 @@ function renderCoverageLayers(): void {
   search.innerHTML = `<i data-lucide="search"></i><input id="coverage-layer-search" type="search" autocomplete="off" placeholder="筛选巡天图层" aria-label="筛选巡天图层" />`;
   host.append(search);
   const filterInput = search.querySelector<HTMLInputElement>("input");
+  if (filterInput) filterInput.value = coverageLayerSearchQuery;
   const grouped = new Map<string, CoverageCatalog["layers"]>();
   for (const layer of filterByModalities(coverageCatalog.layers, selectedModalities)) grouped.set(layer.surveyId, [...(grouped.get(layer.surveyId) ?? []), layer]);
   const surveyIds = [...new Set([
@@ -3537,9 +3652,11 @@ function renderCoverageLayers(): void {
     const unavailable = layers.length === 0;
     const group = document.createElement("section");
     group.className = "coverage-survey-group";
+    group.id = `coverage-survey-${surveyId}`;
+    group.dataset.surveyId = surveyId;
     const label = document.createElement("div");
     label.className = `coverage-layer-toggle${unavailable ? " is-unavailable" : ""}`;
-    label.setAttribute("title", unavailable ? "暂无公开覆盖，暂不可在天球中显示" : "拖动三横线把手以调整图层顺序");
+    label.setAttribute("title", unavailable ? "暂无公开覆盖，暂不可在天球中显示" : "拖动把手可调整图层顺序");
     const input = document.createElement("input");
     input.type = "checkbox";
     const selectedProducts = layers.filter((layer) => selectedCoverageProductIds.has(layer.layerId)).length;
@@ -3573,9 +3690,27 @@ function renderCoverageLayers(): void {
     const handle = document.createElement("span");
     handle.className = "coverage-layer-handle";
     handle.innerHTML = `<i data-lucide="grip-horizontal"></i>`;
+    handle.draggable = !unavailable;
     handle.setAttribute("role", "img");
-    handle.setAttribute("aria-label", "拖动把手");
+    handle.setAttribute("aria-label", locale() === "zh" ? "拖动把手以排序" : "Drag handle to reorder");
     handle.title = "拖动排序";
+    const expanded = expandedCoverageSurveyIds.has(surveyId);
+    const expander = document.createElement("button");
+    expander.className = "coverage-survey-expander";
+    expander.type = "button";
+    expander.dataset.expandSurvey = surveyId;
+    expander.setAttribute("aria-controls", `coverage-releases-${surveyId}`);
+    expander.setAttribute("aria-expanded", String(expanded));
+    expander.setAttribute("aria-label", (expanded ? "收起 " : "展开 ") + (survey?.name ?? surveyId));
+    expander.title = expanded ? (locale() === "zh" ? "收起数据版本" : "Collapse releases") : (locale() === "zh" ? "展开数据版本" : "Expand releases");
+    expander.disabled = unavailable;
+    expander.innerHTML = `<i data-lucide="chevron-right"></i>`;
+    expander.addEventListener("click", () => setCoverageSurveyExpanded(surveyId, !expandedCoverageSurveyIds.has(surveyId)));
+    label.addEventListener("click", (event) => {
+      if (unavailable || !(event.target instanceof Element)) return;
+      if (event.target.closest("input, button, .coverage-layer-handle")) return;
+      setCoverageSurveyExpanded(surveyId, !expandedCoverageSurveyIds.has(surveyId));
+    });
     input.addEventListener("change", () => {
       if (overlapDrawerOpen) closeOverlapDrawer();
       for (const layer of layers) {
@@ -3586,15 +3721,14 @@ function renderCoverageLayers(): void {
       restartLayerCloseTimer();
     });
     if (!unavailable) {
-      label.draggable = true;
       label.dataset.layerKey = `public-survey:${surveyId}`;
-      label.addEventListener("dragstart", () => label.classList.add("is-dragging"));
+      handle.addEventListener("dragstart", () => label.classList.add("is-dragging"));
       label.addEventListener("dragend", () => { label.classList.remove("is-dragging"); host.querySelectorAll(".is-drop-target").forEach((node) => node.classList.remove("is-drop-target")); });
       label.addEventListener("dragover", (event) => { event.preventDefault(); label.classList.add("is-drop-target"); });
       label.addEventListener("dragleave", () => label.classList.remove("is-drop-target"));
       label.addEventListener("drop", (event) => {
         event.preventDefault();
-        const dragging = host.querySelector<HTMLElement>(".is-dragging")?.closest<HTMLElement>(".coverage-survey-group");
+        const dragging = host.querySelector<HTMLElement>(".coverage-layer-toggle.is-dragging")?.closest<HTMLElement>(".coverage-survey-group");
         const targetGroup = label.closest<HTMLElement>(".coverage-survey-group");
         if (!dragging || !targetGroup || dragging === targetGroup) return;
         const rect = label.getBoundingClientRect();
@@ -3602,19 +3736,38 @@ function renderCoverageLayers(): void {
         coverageDots?.setLayerOrder([...host.querySelectorAll<HTMLElement>("[data-layer-key]")].map((node) => node.dataset.layerKey!).filter(Boolean));
       });
     }
-    label.append(input, swatch, handle, name);
+    label.append(input, swatch, handle, expander, name);
     const common = document.createElement("span"); common.innerHTML = modalityIconsMarkup(commonModalities, `${survey?.name ?? surveyId} 共同覆盖模态`); label.append(common);
     if (unavailable) label.append(Object.assign(document.createElement("small"), { className: "coverage-layer-unavailable", textContent: "暂无公开覆盖" }));
     group.append(label);
     if (!unavailable) {
       const releaseList = document.createElement("div");
       releaseList.className = "coverage-release-list";
+      releaseList.id = `coverage-releases-${surveyId}`;
+      releaseList.hidden = !expanded;
       for (const [releaseId, products] of releaseGroups) {
         const release = document.createElement("section");
         release.className = "coverage-release-group";
         const releaseHeading = document.createElement("strong");
         releaseHeading.textContent = survey?.releases.find((entry) => entry.id === releaseId)?.label ?? releaseId;
-        release.append(releaseHeading);
+        const releaseToggle = document.createElement("label");
+        releaseToggle.className = "coverage-release-toggle";
+        const releaseInput = document.createElement("input");
+        releaseInput.type = "checkbox";
+        releaseInput.dataset.surveyId = surveyId;
+        releaseInput.dataset.releaseId = releaseId;
+        const selectedInRelease = products.filter((layer) => selectedCoverageProductIds.has(layer.layerId)).length;
+        releaseInput.checked = products.length > 0 && selectedInRelease === products.length;
+        releaseInput.indeterminate = selectedInRelease > 0 && selectedInRelease < products.length;
+        releaseInput.addEventListener("change", () => {
+          for (const layer of products) {
+            if (releaseInput.checked) selectedCoverageProductIds.add(layer.layerId);
+            else selectedCoverageProductIds.delete(layer.layerId);
+          }
+          commitCoverageProductSelection();
+        });
+        releaseToggle.append(releaseInput, releaseHeading);
+        release.append(releaseToggle);
         for (const layer of products) {
           const productRow = document.createElement("label");
           productRow.className = "coverage-product-toggle";
@@ -3647,9 +3800,10 @@ function renderCoverageLayers(): void {
     host.addEventListener("scroll", positionCoverageLayerTooltip, { passive: true });
   }
   filterInput?.addEventListener("input", () => {
-    const query = filterInput.value.trim().toLocaleLowerCase();
-    host.querySelectorAll<HTMLElement>(".coverage-survey-group").forEach((row) => { row.hidden = Boolean(query) && !row.querySelector<HTMLElement>(".coverage-layer-toggle")?.dataset.searchText?.includes(query) && ![...row.querySelectorAll<HTMLElement>(".coverage-product-toggle")].some((product) => product.dataset.searchText?.includes(query)); });
+    coverageLayerSearchQuery = filterInput.value.trim().toLocaleLowerCase();
+    filterCoverageSurveyGroups();
   });
+  filterCoverageSurveyGroups();
   renderIcons();
   renderSelectionQueue();
 }

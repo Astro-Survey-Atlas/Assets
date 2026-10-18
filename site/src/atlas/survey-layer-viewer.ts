@@ -177,6 +177,8 @@ export interface SurveyLayerState {
   cameraDistance: number;
   effectiveFovDeg: number;
   cameraPosition: [number, number, number];
+  coverageViewDirection: [number, number, number];
+  coverageViewRadiusRad: number;
   outerRadius: number;
   surveyCount: number;
   releaseCount: number;
@@ -723,6 +725,8 @@ export class SurveyLayerViewer {
       cameraDistance: this.#camera.position.length(),
       effectiveFovDeg: this.#effectiveSkyFovDeg(),
       cameraPosition: [this.#camera.position.x, this.#camera.position.y, this.#camera.position.z],
+      coverageViewDirection: this.#camera.position.clone().normalize().toArray() as [number, number, number],
+      coverageViewRadiusRad: this.#coverageViewRadiusRad(),
       outerRadius: this.#outerRadius,
       surveyCount: this.#model.slots.length,
       releaseCount: new Set(this.#manifest.footprints.map((footprint) => footprint.releaseId)).size,
@@ -938,6 +942,24 @@ export class SurveyLayerViewer {
     const distance = this.#camera.position.distanceTo(this.#controls.target);
     const halfSpan = Math.atan((distance * Math.tan(THREE.MathUtils.degToRad(this.#camera.fov) / 2)) / Math.max(0.001, this.#outerRadius));
     return Math.max(0.01, Math.min(180, THREE.MathUtils.radToDeg(halfSpan * 2)));
+  }
+
+  #coverageViewRadiusRad(): number {
+    const distance = this.#camera.position.length();
+    const radius = this.#outerRadius;
+    if (distance <= radius + 0.003) return Math.PI;
+
+    this.#camera.updateMatrixWorld(true);
+    const corners = [[-1, -1], [-1, 1], [1, -1], [1, 1]] as const;
+    const inward = this.#camera.position.clone().negate().normalize();
+    const maxRayOffset = Math.max(...corners.map(([x, y]) => {
+      const ray = new THREE.Vector3(x, y, 0.5).unproject(this.#camera).sub(this.#camera.position).normalize();
+      return inward.angleTo(ray);
+    }));
+    const shellRadius = radius + 0.003;
+    const apparentRadius = Math.asin(Math.min(1, shellRadius / distance));
+    if (maxRayOffset >= apparentRadius) return Math.PI / 2;
+    return Math.min(Math.PI / 2, Math.asin(Math.min(1, distance / shellRadius * Math.sin(maxRayOffset))) + 0.003);
   }
 
   setVisibleSurveys(surveyIds: Iterable<string>): void {

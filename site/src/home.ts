@@ -349,7 +349,7 @@ function renderTab(name: TabName): void {
 }
 
 function autoRequested(): boolean {
-  return autoIntent ?? !reducedMotion.matches;
+  return autoIntent ?? true;
 }
 
 function hasKeyboardFocus(): boolean {
@@ -464,7 +464,6 @@ rotationButton?.addEventListener("click", () => {
 });
 document.addEventListener("visibilitychange", scheduleRotation);
 reducedMotion.addEventListener("change", () => {
-  autoIntent = null;
   scheduleRotation();
 });
 window.addEventListener("resize", () => drawGraphic(byId<SVGElement>("home-diagram"), currentTab), { passive: true });
