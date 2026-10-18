@@ -516,7 +516,7 @@ function countLabelSprite(text: string, position: THREE.Vector3, depthTest = tru
 
 export class SurveyLayerViewer {
   readonly #canvas: HTMLCanvasElement;
-  readonly #manifest: SurveyFootprintManifest;
+  #manifest: SurveyFootprintManifest;
   readonly #scene = new THREE.Scene();
   readonly #camera = new THREE.PerspectiveCamera(48, 1, 0.015, 24);
   readonly #renderer: THREE.WebGLRenderer;
@@ -547,7 +547,7 @@ export class SurveyLayerViewer {
   readonly #onContextMenu: (menu: SurveyLayerContextMenu) => void;
   readonly #onObjectPoint?: (point: SurveyObjectPoint) => void;
   readonly #onOverlapComponent?: OverlapComponentChange;
-  readonly #model: SurveyLayerModel;
+  #model: SurveyLayerModel;
   readonly #colorBySurvey = new Map<string, THREE.Color>();
   readonly #selectedPixels = new Set<number>();
   readonly #visibleSurveyIds = new Set<string>();
@@ -657,6 +657,35 @@ export class SurveyLayerViewer {
     return this.#renderer.capabilities.isWebGL2 ? "WEBGL2" : "WEBGL1";
   }
 
+  /** Replace a complete coverage batch without resetting the renderer or camera. */
+  updateCoverage(manifest: SurveyFootprintManifest, surveys: readonly SurveyCard[], visibleSurveyIds: Iterable<string>): void {
+    const previousNside = this.#manifest.nside;
+    const selected = new Set(this.#selectedPixels);
+    this.#manifest = manifest;
+    this.#model = buildSurveyLayerModel(surveys, manifest);
+    this.#colorBySurvey.clear();
+    surveys.forEach((survey) => this.#colorBySurvey.set(survey.id, new THREE.Color(surveyColorFor(survey.id, survey.color))));
+    this.#visibleSurveyIds.clear();
+    for (const id of visibleSurveyIds) this.#visibleSurveyIds.add(id);
+    if (previousNside !== manifest.nside) {
+      this.#selectedPixels.clear();
+      // Preserve a selection only through cells present in the new geometry.
+      // In particular, never synthesize finer coverage from a selected parent.
+      const ratio = (manifest.nside / previousNside) ** 2;
+      const parents = ratio < 1 ? new Set([...selected].map((pixel) => Math.floor(pixel * ratio))) : selected;
+      for (const pixel of this.#model.coverageByPixel.keys()) {
+        if (parents.has(ratio > 1 ? Math.floor(pixel / ratio) : pixel)) this.#selectedPixels.add(pixel);
+      }
+      this.#drillCells.clear();
+      clearGroup(this.#drillGroup);
+      clearGroup(this.#objectPointGroup);
+      for (const [key, layer] of this.#workspaceLayers) if (layer.nside !== manifest.nside) this.#workspaceLayers.delete(key);
+      this.#onInspection(null);
+    }
+    this.#layerOrder = this.#normalizedLayerOrder();
+    this.#rebuildVisible(false);
+  }
+
   get cameraPose(): SurveyLayerCameraPose {
     return {
       position: [this.#camera.position.x, this.#camera.position.y, this.#camera.position.z],
@@ -721,7 +750,7 @@ export class SurveyLayerViewer {
       if (this.#workspaceLayerVisible(layer)) layer.pixels.forEach((pixel) => visibleCells.add(pixel));
     });
     return {
-      nside: this.#manifest.nside,
+      nside: this.#overlapMode ? this.#overlapNside ?? this.#manifest.nside : this.#manifest.nside,
       cameraDistance: this.#camera.position.length(),
       effectiveFovDeg: this.#effectiveSkyFovDeg(),
       cameraPosition: [this.#camera.position.x, this.#camera.position.y, this.#camera.position.z],
@@ -734,7 +763,7 @@ export class SurveyLayerViewer {
         ...this.#model.coverageByPixel.keys(),
         ...Array.from(this.#workspaceLayers.values()).filter((layer) => this.#workspaceLayerVisible(layer)).flatMap((layer) => layer.pixels),
       ]).size,
-      visibleCellCount: visibleCells.size,
+      visibleCellCount: this.#overlapMode ? this.#overlapPixels?.length ?? 0 : visibleCells.size,
       selectedCellCount: this.#selectedPixels.size,
       selectedPixels: [...this.#selectedPixels].sort((left, right) => left - right),
       selectionAnchor: this.#selectionAnchor(),
@@ -1021,6 +1050,17 @@ export class SurveyLayerViewer {
       .map((component) => ({ id: component.id, order: component.order, cells: [...new Set(component.cells)].sort((left, right) => left - right) }));
     if (!this.#overlapComponents.some((component) => component.id === this.#activeOverlapComponentId)) this.#activeOverlapComponentId = null;
     if (this.#overlapMode) this.#rebuildVisible(true);
+  }
+
+  setOverlapCoverage(nside: number, pixels: readonly number[], components: readonly SurveyLayerOverlapComponent[]): void {
+    this.#overlapNside = nside;
+    this.#overlapPixels = [...new Set(pixels)].sort((left, right) => left - right);
+    this.#overlapPixelSet = new Set(this.#overlapPixels);
+    this.#overlapComponents = components.map((component) => ({ ...component, cells: [...component.cells] }));
+    clearGroup(this.#overlapSelectionGroup);
+    this.#activeOverlapHighlight = null;
+    if (!components.some((component) => component.id === this.#activeOverlapComponentId)) this.#activeOverlapComponentId = null;
+    if (this.#overlapMode) this.#rebuildVisible(false);
   }
 
   setActiveOverlapComponent(componentId: string | null): void {
@@ -1329,6 +1369,9 @@ export class SurveyLayerViewer {
     const depthByKey = new Map(depths.map((depth) => [depth.key, depth]));
     depths.forEach((depth) => {
       if (!depth.key.startsWith("public-survey:")) return;
+      // An overlap can load independently of the individual survey blocks.
+      // Do not leave coarser source cells behind a finer strict result.
+      if (this.#overlapMode && this.#overlapNside !== null && this.#overlapNside !== this.#manifest.nside) return;
       this.#buildSurveyLayer(depth.key.slice("public-survey:".length), depth.radius, animated, depth.renderOrder);
     });
     if (this.#overlapMode) this.#buildOverlapLayer(animated);
@@ -1386,7 +1429,7 @@ export class SurveyLayerViewer {
 
   #buildOverlapLayer(animated: boolean): void {
     const counts = overlapCountByPixel(this.#model, this.#visibleSurveyIds);
-    const selectedSurveys = [...this.#visibleSurveyIds].filter((surveyId) => (this.#model.pixelsBySurvey.get(surveyId)?.length ?? 0) > 0);
+    const selectedSurveys = [...this.#visibleSurveyIds];
     if (selectedSurveys.length < 2) return;
     const nside = this.#overlapNside ?? this.#manifest.nside;
     const pixels = this.#overlapPixels ?? [...counts.entries()].filter(([, count]) => count === selectedSurveys.length).map(([pixel]) => pixel).sort((left, right) => left - right);
@@ -1725,7 +1768,7 @@ export class SurveyLayerViewer {
     // Angular picking keeps inset gaps selectable, while a rendered shell hit preserves
     // the actual asset or drill cell beneath the pointer.
     const unitPoint = this.#intersectUnitSphere(this.#raycaster.ray);
-    if (this.#overlapMode && this.#overlapNside !== null && this.#overlapPixelSet.size) {
+    if (this.#overlapMode && this.#overlapNside !== null && this.#overlapPixels !== null) {
       if (!unitPoint && !renderedHit) return null;
       const point = unitPoint ?? renderedHit!.point.clone().normalize();
       const pixel = healpixPixelFromSceneDirection(this.#overlapNside, point);

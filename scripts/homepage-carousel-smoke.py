@@ -35,6 +35,9 @@ def selected_tab(page) -> str | None:
 
 
 def atlas_display_order_smoke(browser, base_url: str) -> None:
+    screenshot_root = os.environ.get("ASSETS_ATLAS_SCREENSHOT_DIR")
+    if screenshot_root:
+        Path(screenshot_root).mkdir(parents=True, exist_ok=True)
     layer_specs = [
         ("euclid-ero-native", "euclid", "euclid-ero", "Early Release Observations", "#d95f59"),
         ("euclid-ero-vis", "euclid", "euclid-ero", "ERO VIS", "#d95f59"),
@@ -120,6 +123,14 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     }
     overlap_requests = []
     oversized_order_five_index = False
+    held_display_orders = set()
+    held_display_routes = []
+    overlap_has_components = False
+    held_overlap_orders = set()
+    held_overlap_routes = []
+
+    def overlap_component(order):
+        return {"id": "C01", "order": order, "cells": [0], "bounds": {"areaDeg2": 1, "raMin": 44, "raMax": 46, "decMin": 0, "decMax": 2}}
 
     def fulfill_json(route, value, status: int = 200) -> None:
         route.fulfill(status=status, content_type="application/json", body=json.dumps(value))
@@ -144,14 +155,37 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
                 fulfill_json(route, {"layerId": layer_id, "order": order, "tileSize": 4096, "ranges": ranges, "totalTiles": sum(entry["end"] - entry["start"] for entry in ranges), "displayRevision": display_revision})
             else:
                 block_requests.append({"layerId": layer_id, "order": order, "tile": int(query.get("tile", ["0"])[0])})
-                fulfill_json(route, {"layerId": layer_id, "order": order, "tileId": int(query.get("tile", ["0"])[0]), "cells": [0], "sha256": "b" * 64, "revision": f"revision-{layer_id}", "displayRevision": display_revision, "nativeMaxOrder": 11, "projection": "native-moc"})
+                block = {"layerId": layer_id, "order": order, "tileId": int(query.get("tile", ["0"])[0]), "cells": [0], "sha256": "b" * 64, "revision": f"revision-{layer_id}", "displayRevision": display_revision, "nativeMaxOrder": 11, "projection": "native-moc"}
+                if order in held_display_orders:
+                    held_display_routes.append((route, block))
+                else:
+                    fulfill_json(route, block)
         elif parsed.path == "/api/v1/coverage/overlap" and request.method == "POST":
-            overlap_requests.append(request.post_data_json)
-            fulfill_json(route, {"commonOrder": 11, "pixels": [], "components": []})
+            body = request.post_data_json
+            overlap_requests.append(body)
+            order = body["requestedOrder"]
+            result = {"commonOrder": order, "pixels": [0] if overlap_has_components else [], "components": [overlap_component(order)] if overlap_has_components else []}
+            if order in held_overlap_orders:
+                held_overlap_routes.append((route, result))
+            else:
+                fulfill_json(route, result)
+        elif parsed.path == "/api/v1/coverage/overlap/details":
+            order = request.post_data_json["requestedOrder"]
+            fulfill_json(route, {"schemaVersion": 1, "component": overlap_component(order), "publicSources": [], "assetsEvidence": [], "warehouseEvidence": [], "method": {"summary": "Browser test fixture"}, "reverseLookup": {"endpoint": "/api/v1/coverage/reverse-lookup", "layerIds": [], "order": order, "precision": "estimated", "deferred": False}})
+        elif parsed.path == "/api/v1/coverage/reverse-lookup":
+            fulfill_json(route, {"available": False, "precision": "estimated", "truncated": False, "edges": [], "files": []})
         else:
             fulfill_json(route, {})
 
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
+    page.add_init_script("""(() => {
+        window.atlasWebglContexts = 0;
+        const getContext = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function(kind, ...args) {
+            if (this.id === 'coverage-canvas' && kind.startsWith('webgl')) window.atlasWebglContexts++;
+            return getContext.call(this, kind, ...args);
+        };
+    })();""")
     page.route("**/api/v1/**", mock_api)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -170,6 +204,7 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     locale_toggle.click()
     expect(order_label).to_have_text("Display order")
     control = page.locator(".coverage-display-order-control")
+    assert control.bounding_box()["height"] == page.locator("#coverage-reset").bounding_box()["height"], "order control and adjacent buttons must have the same height"
     dark_surface = control.evaluate("element => getComputedStyle(element).backgroundColor")
     theme_toggle = page.locator("[data-theme-toggle]").first
     theme_toggle.click()
@@ -231,6 +266,67 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     expect(page.locator("#coverage-display-order-max")).to_have_text("O11")
     tile_index_requests.clear()
     block_requests.clear()
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
+    context_count = page.evaluate("window.atlasWebglContexts")
+    held_display_orders.add(8)
+    for _ in range(4):
+        slider.press("ArrowRight")
+    expect(slider).to_have_attribute("aria-valuetext", "O8")
+    page.wait_for_timeout(700)
+    assert tile_index_requests and all(request["order"] == 8 for request in tile_index_requests), f"rapid O4 to O8 adjustment must request only O8, got {tile_index_requests}"
+    assert len(held_display_routes) == 4, "wait for the whole selected-product batch"
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
+    assert page.evaluate("window.atlasWebglContexts") == context_count, "loading a new order must keep the current renderer and coverage"
+    for route, block in held_display_routes[:-1]:
+        fulfill_json(route, block)
+    page.wait_for_timeout(100)
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
+    fulfill_json(*held_display_routes[-1])
+    held_display_routes.clear()
+    held_display_orders.clear()
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O8")
+    assert page.evaluate("window.atlasWebglContexts") == context_count, "committing a complete order must reuse the renderer"
+
+    held_display_orders.update({6, 7})
+    slider.press("ArrowLeft")
+    slider.press("ArrowLeft")
+    page.wait_for_timeout(700)
+    assert len([block for _, block in held_display_routes if block["order"] == 6]) == 4
+    slider.press("ArrowRight")
+    page.wait_for_timeout(700)
+    assert len([block for _, block in held_display_routes if block["order"] == 7]) == 4
+    for route, block in held_display_routes:
+        if block["order"] == 7:
+            fulfill_json(route, block)
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O7")
+    for route, block in held_display_routes:
+        if block["order"] == 6:
+            fulfill_json(route, block)
+    held_display_routes.clear()
+    held_display_orders.clear()
+    page.wait_for_timeout(100)
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O7")
+    expect(page.locator("#coverage-state")).to_contain_text("O7")
+
+    slider.press("Home")
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
+    tile_index_requests.clear()
+    block_requests.clear()
+    box = slider.bounding_box()
+    left, right = box["x"] + 8, box["x"] + box["width"] - 8
+    y = box["y"] + box["height"] / 2
+    page.mouse.move(left, y)
+    page.mouse.down()
+    for index in range(1, 5):
+        page.mouse.move(left + (right - left) * index / 6, y, steps=3)
+        page.wait_for_timeout(100)
+    assert not tile_index_requests and not block_requests, "pointer dragging must only preview, even when held between steps"
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
+    page.mouse.up()
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O8")
+    assert not tile_index_requests and not block_requests, "returning to cached O8 should reuse its complete blocks"
+    slider.press("Home")
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
     with page.expect_response(lambda response: "/api/v1/coverage/blocks/" in response.url and "order=11" in response.url and "tiles=1" in response.url, timeout=30000) as maximum_display_response:
         slider.press("End")
     assert maximum_display_response.value.status == 200
@@ -266,6 +362,7 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     assert "200" in budget_message and ("selected layers" in budget_message or "所有选中图层" in budget_message), f"budget warning should explain the aggregate block count, got {budget_message!r}"
     assert tile_index_requests and all(request["order"] == 5 for request in tile_index_requests), f"O5 budget check must request the selected products' real tile indexes, got {tile_index_requests}"
     assert not block_requests, f"over-budget coverage must not draw partial product blocks, got {block_requests}"
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O9")
 
     oversized_order_five_index = False
     slider.press("End")
@@ -294,11 +391,66 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
         slider.press("ArrowLeft")
     assert manual_overlap_response.value.status == 200
     assert overlap_requests[-1]["requestedOrder"] == 8, "manual slider changes must update strict overlap order"
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("g")
+    slider.press("Home")
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
+    overlap_has_components = True
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("g")
+    expect(page.locator("#overlap-expand")).to_be_visible()
+    page.locator("#overlap-expand").click()
+    expect(page.locator("#overlap-drawer")).to_be_visible()
+    assert slider.evaluate("input => input.closest('#overlap-drawer-tools') !== null"), "the same order control must move into the open overlap drawer"
+    page.wait_for_timeout(1200)
+    overlap_requests.clear()
+    block_requests.clear()
+    held_overlap_orders.add(8)
+    camera_before_order_change = page.locator("#coverage-status-camera").inner_text()
+    box = slider.bounding_box()
+    left, right = box["x"] + 8, box["x"] + box["width"] - 8
+    y = box["y"] + box["height"] / 2
+    page.mouse.move(left, y)
+    page.mouse.down()
+    page.mouse.move(left + (right - left) * 4 / 6, y, steps=16)
+    assert not overlap_requests, "drawer pointer dragging must only preview the target order"
+    page.mouse.up()
+    page.wait_for_timeout(700)
+    assert [body["requestedOrder"] for body in overlap_requests] == [8], f"drawer slider must request only the final overlap order, got {overlap_requests}"
+    assert len(held_overlap_routes) == 1
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
+    expect(page.locator("#overlap-drawer-display-state")).to_contain_text("O8")
+    fulfill_json(*held_overlap_routes.pop())
+    held_overlap_orders.clear()
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O8")
+    expect(page.locator("#overlap-drawer-title")).to_contain_text("O8")
+    expect(slider).to_be_focused()
+    page.wait_for_timeout(1000)
+    assert len(overlap_requests) == 1, "refreshing overlap order must not focus the camera and trigger another query"
+    assert page.locator("#coverage-status-camera").inner_text() == camera_before_order_change, "order changes must preserve the focused camera"
+    assert not block_requests, "overlap mode must not request unrelated individual coverage blocks"
+    if screenshot_root:
+        page.screenshot(path=str(Path(screenshot_root) / "atlas-drawer-desktop.png"))
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1"), "Atlas mobile layout must not overflow horizontally"
     assert page.locator("#coverage-display-order").is_visible(), "display-order slider must remain visible on mobile"
     slider_box = slider.bounding_box()
     assert slider_box and slider_box["x"] >= 0 and slider_box["x"] + slider_box["width"] <= 390, f"mobile display-order slider must fit the viewport, got {slider_box}"
+    assert slider.evaluate("input => document.elementFromPoint(input.getBoundingClientRect().x + 20, input.getBoundingClientRect().y + 5) === input"), "the mobile drawer slider must be reachable above its content"
+    slider.press("ArrowLeft")
+    expect(page.locator("#overlap-drawer-title")).to_contain_text("O7")
+    mobile_menu = page.locator("[data-mobile-menu-toggle]")
+    mobile_menu.click()
+    theme_toggle.click()
+    locale_toggle.click()
+    mobile_menu.click()
+    expect(order_label).to_have_text("显示阶数")
+    assert page.locator("#overlap-drawer").is_visible()
+    if screenshot_root:
+        page.screenshot(path=str(Path(screenshot_root) / "atlas-drawer-mobile.png"))
+    page.locator("#overlap-drawer-close").click()
+    assert slider.evaluate("input => input.closest('.coverage-tools') !== null"), "closing the drawer must return the control to the sky toolbar"
+    expect(slider).to_have_attribute("aria-valuetext", "O7")
     assert not errors, f"Atlas browser errors: {errors}"
     page.close()
 

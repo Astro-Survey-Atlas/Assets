@@ -4,6 +4,45 @@
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
+## 2026-10-18 天球滑条请求与重合抽屉交互
+
+本轮修改位于 `feat/atlas-display-orders`。鼠标/触屏拖动显示阶数时只预览数值，松开后请求最终
+阶数；连续键盘调整等待 250ms 后提交。开始新调整立即取消旧请求，并用序号阻止迟到响应覆盖
+新结果。显示块按所选产品整批收齐后一次替换；加载或预算/网络失败时保留上次覆盖及实际阶数，
+不再提前清空天球或把旧几何标成新阶数。
+
+根因包括每次 change 立即请求、阶数与数据分开更新时反复销毁/创建 WebGL viewer，以及共同覆盖
+每次返回都聚焦首个连通区域。现在复用 renderer、controls 和相机；相同图块集合复用加载，严格
+共同覆盖刷新保留视角，初次进入或显式选区域时才聚焦。F 聚焦和 G 共同覆盖的高阶图块筛选排除
+背面方向；G 不再并行加载普通覆盖块，已有共同覆盖包含新视野时直接复用。O4/O5 仍使用小规模
+全天天区块。高阶共同覆盖后不显示阶数不匹配的旧产品底图，也不能点击空交集中的旧单元。
+
+阶数控件与工具按钮同为 34px 高；展开重合抽屉时将同一个控件移至抽屉顶部，关闭时放回工具栏，
+保留数值、可选上限、事件和键盘焦点。抽屉内容单独滚动，390px 手机宽度下滑条仍可触达。
+沿用现有 API、产品目录、真实 MOC 和预算；没有调整后端、数据包、原生索引或路由。
+
+本地 `npm run build`、站点 TypeScript、Helm lint、`npm test` 均通过；479 项 Node 测试中
+477 通过、2 跳过，Core wheel 校验通过。Chromium 完整首页/天球回归覆盖鼠标拖动、连续键盘、
+延迟整批返回、旧响应迟到、预算失败保留原阶数、抽屉 O4→O8、相机/焦点稳定、390px 手机、
+主题及中英文切换。回归通过 WebGL context 获取次数确认不再重建 renderer；截图存于
+`/tmp/asa-atlas-interaction/`。相同 Chromium 回归在 Dev 上也通过。
+
+Dev Helm revision **378** 使用镜像 `0.1.0-20261018-194553`；site/backend 均 1/1 Ready、
+零重启。`http://10.15.51.75:32083/atlas/` 的 HTML、JS、CSS 与本地构建哈希一致。
+真实 API 浏览器检查选择 Euclid ERO 原生 O11 产品，从 O4 直接拖至 O8：六个显示块请求均为
+O8，没有 O5/O6/O7 请求，WebGL context 获取次数保持不变。加入 Gaia DR3 后，在共同覆盖
+抽屉中调至 O10，仅发起一次严格 O10 查询，返回 536 cells；没有普通覆盖块请求，滑条保留
+焦点。桌面及 390px 手机检查无横向溢出，抽屉滑条可操作，页面错误和覆盖 HTTP 错误均为零。
+截图及汇总保存在 `/tmp/asa-atlas-dev/`。
+
+health、assets、coverage catalog 和分页 coverage 均 HTTP 200；目录仍为 144 个资源、140 个
+图层（80 层支持 O10）。公开 bundle 保持 `reviewed-mv51kku3-a4f8d8e6` / SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`、611 files。
+2MASS H-band MOC FITS Range `0–15` 返回 HTTP 206 / 16 bytes，资源 SHA 校验一致。
+没有启动或更改 Warehouse、Elasticsearch，也没有修改后端、数据包或索引。
+
+用户的 `.codex/config.toml` 本地修改保留，不纳入提交。
+
 ## 2026-10-18 天球产品选择与高阶显示
 
 实现位于 `feat/atlas-display-orders`，基于 `e8e8d2e`；本轮更改已部署 Dev。首页轮播默认开启，
@@ -11,8 +50,9 @@
 展开按钮查看 DR；DR 勾选同步选择该版本产品，巡天总勾选显示全选/部分选择状态。搜索临时展开
 匹配巡天，清除后恢复先前展开状态；拖动把手不再误触展开。
 
-本轮前端改动尚未提交，涉及 `site/atlas/index.html`、`site/src/i18n.ts`、`site/src/main.ts`、
-`site/src/public.css`、`site/src/styles.css` 和 `scripts/homepage-carousel-smoke.py`。
+本节前端改动已提交并推送，最新提交为 `3b76361`；涉及 `site/atlas/index.html`、
+`site/src/i18n.ts`、`site/src/main.ts`、`site/src/public.css`、`site/src/styles.css` 和
+`scripts/homepage-carousel-smoke.py`。
 `.codex/config.toml` 是用户本地修改，已保留。
 
 无图层选择及首次选层时均显示 O4。`.coverage-tools` 中的滑动条从 O4 调至所有已选图层共同

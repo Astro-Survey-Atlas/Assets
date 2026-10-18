@@ -45,6 +45,12 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   on demand from the native MOC, fetched only for the visible sky, and bounded
   by tile and cell budgets. A lower-order cell is an inclusive projection of
   the native MOC, not a claim of finer source precision.
+- Dragging the display-order slider previews its value locally. Release commits
+  the final target; consecutive keyboard changes settle before loading. An
+  order change cancels superseded requests and replaces geometry only after
+  the complete selected-product batch arrives, preserving the renderer and
+  camera. Loading and failures identify the order still displayed. The same
+  control moves into the expanded overlap drawer and returns on close.
 - Ordinary coverage and overlap use the same selected display order. Strict
   overlap intersects selected products at exactly that order and never falls
   back to a coarser result when the intersection is empty. O4/O5 use a bounded
@@ -52,6 +58,9 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   parent cells, while each returned connected component retains its complete
   region for inspection and reverse lookup. Requests for strict overlap identify
   selected product layer IDs and are not shared-cache responses.
+  Focused coverage and overlap seeds omit the far side of the sky. Refreshing
+  overlap resolution preserves the current camera; only an explicit component
+  selection or initial entry focuses a component.
 - A recipe mode such as `tile-table` describes how an input is read, not the
   native unit type. `sourceUnitKind` declares the identity returned by lookup:
   DESI returns Tiles, while Legacy Surveys returns bricks even if both read a

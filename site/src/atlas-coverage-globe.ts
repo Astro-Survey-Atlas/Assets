@@ -190,13 +190,11 @@ export class AtlasCoverageGlobe {
   #renderCatalog(): void {
     if (!this.#catalog) return;
     const manifest = footprintManifest(this.#catalog, this.#blocks, this.#visibleModalities, this.#displayOrder, this.#visibleLayerIds);
-    const selectedSurveyIds = new Set(this.#visibleSurveyIds);
-    const cameraPose = this.#viewer?.cameraPose;
-    // Rebuilding the scene reuses the canvas. Releasing the WebGL context here
-    // can trigger WEBGL_lose_context and leave the replacement renderer blank;
-    // the context is released only when the globe itself is finally disposed.
-    this.#viewer?.dispose({ releaseContext: false });
     const cards = this.#surveys.map(surveyCardFor);
+    if (this.#viewer) {
+      this.#viewer.updateCoverage(manifest, cards, this.#visibleSurveyIds);
+      return;
+    }
     this.#viewer = new SurveyLayerViewer(
       this.#canvas,
       manifest,
@@ -210,12 +208,9 @@ export class AtlasCoverageGlobe {
       (component) => this.#onOverlapComponent(component),
     );
     this.#viewer.setLayoutMode("layers");
-    this.#visibleSurveyIds = selectedSurveyIds;
     this.#viewer.setVisibleSurveys(this.#visibleSurveyIds);
-    // The viewer is constructed before coverage is known. Reframe once the
-    // loaded layers establish the actual outer radius of the globe.
-    if (cameraPose) this.#viewer.restoreCameraPose(cameraPose);
-    else this.#viewer.setHomePresentation();
+    // Only the first mount sets the starting pose; coverage updates retain it.
+    this.#viewer.setHomePresentation();
     this.#host.dataset.ready = "true";
   }
 
@@ -225,17 +220,14 @@ export class AtlasCoverageGlobe {
   }
 
   setVisibleLayers(layerIds: Iterable<string>): void {
-    this.#visibleLayerIds = new Set(layerIds);
+    const next = new Set(layerIds);
+    if (next.size === this.#visibleLayerIds.size && [...next].every((id) => this.#visibleLayerIds.has(id))) return;
+    this.#visibleLayerIds = next;
     if (this.#catalog) this.#renderCatalog();
   }
 
-  setDisplayOrder(order: number): void {
-    if (!Number.isInteger(order) || order < MIN_PUBLIC_COVERAGE_ORDER || order > 13 || order === this.#displayOrder) return;
+  updateBlocks(blocks: ReadonlyMap<string, number[]>, order = this.#displayOrder): void {
     this.#displayOrder = order;
-    if (this.#catalog) this.#renderCatalog();
-  }
-
-  updateBlocks(blocks: ReadonlyMap<string, number[]>): void {
     this.#blocks = new Map(blocks);
     if (this.#catalog) this.#renderCatalog();
   }
@@ -251,6 +243,10 @@ export class AtlasCoverageGlobe {
   setOverlapCells(order: number, pixels: readonly number[]): void { this.#viewer?.setOverlapCells(2 ** order, pixels); }
 
   setOverlapComponents(components: readonly SurveyLayerOverlapComponent[]): void { this.#viewer?.setOverlapComponents(components); }
+
+  setOverlapCoverage(order: number, pixels: readonly number[], components: readonly SurveyLayerOverlapComponent[]): void {
+    this.#viewer?.setOverlapCoverage(2 ** order, pixels, components);
+  }
 
   setActiveOverlapComponent(componentId: string | null): void { this.#viewer?.setActiveOverlapComponent(componentId); }
 

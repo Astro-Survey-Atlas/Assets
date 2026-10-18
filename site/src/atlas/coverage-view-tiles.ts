@@ -28,11 +28,12 @@ export function coverageTilesInView(
   order: number,
   view: CoverageViewGeometry,
   ranges: readonly CoverageTileRange[],
+  includeFarSide = true,
 ): number[] {
   if (order < 6) {
     return ranges.flatMap(({ start, end }) => Array.from({ length: end - start }, (_, index) => start + index));
   }
-  if (view.coverageViewRadiusRad >= Math.PI / 2) {
+  if (includeFarSide && view.coverageViewRadiusRad >= Math.PI / 2) {
     return ranges.flatMap(({ start, end }) => Array.from({ length: end - start }, (_, index) => start + index));
   }
 
@@ -41,7 +42,8 @@ export function coverageTilesInView(
   const center = { x: view.coverageViewDirection[0], y: view.coverageViewDirection[1], z: view.coverageViewDirection[2] };
   const queryRadius = Math.min(Math.PI, view.coverageViewRadiusRad + healpix.maxPixrad());
   const visible = new Set<number>();
-  for (const direction of [center, { x: -center.x, y: -center.y, z: -center.z }]) {
+  const directions = includeFarSide ? [center, { x: -center.x, y: -center.y, z: -center.z }] : [center];
+  for (const direction of directions) {
     const query = healpix.queryDiscInclusive(
       new Pointing(sceneDirectionToHealpixVector(direction)),
       queryRadius,
@@ -73,7 +75,7 @@ export function overlapCoverageTilesInView(
   for (const survey of surveys) {
     const union = new Set<number>();
     for (const ranges of survey.products) {
-      coverageTilesInView(order, view, ranges).forEach((tile) => union.add(tile));
+      coverageTilesInView(order, view, ranges, false).forEach((tile) => union.add(tile));
     }
     if (shared === null) shared = union;
     else for (const tile of shared) if (!union.has(tile)) shared.delete(tile);

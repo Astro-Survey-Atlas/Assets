@@ -8,6 +8,7 @@ import type { NativeMoc } from "../server/native-moc.js";
 import { overlapViewTileOrder } from "../site/src/atlas/coverage-orders.js";
 import { CoverageViewTileBudgetError, coverageTilesInView, overlapCoverageTilesInView } from "../site/src/atlas/coverage-view-tiles.js";
 import { coverageCatalogRevisionKey } from "../site/src/coverage-catalog-revision.js";
+import { healpixPixelFromSceneDirection } from "../site/src/atlas/spherical-cell-geometry.js";
 
 function nativeMoc(order: number, pixels: number[], maxOrder = order): NativeMoc {
   return {
@@ -82,7 +83,7 @@ test("high-order view clipping includes indexed ERO tiles visible on either side
 });
 
 test("high-order overlap seeds intersect survey unions at real display tiles", () => {
-  const view = { coverageViewDirection: [1, 0, 0] as [number, number, number], coverageViewRadiusRad: Math.PI / 2 };
+  const view = { coverageViewDirection: [1, 0, 0] as [number, number, number], coverageViewRadiusRad: Math.PI };
   const tiles = overlapCoverageTilesInView(11, view, [
     { products: [[{ start: 10, end: 13 }, { start: 100, end: 102 }], [{ start: 12, end: 15 }]] },
     { products: [[{ start: 12, end: 14 }, { start: 101, end: 103 }]] },
@@ -91,12 +92,22 @@ test("high-order overlap seeds intersect survey unions at real display tiles", (
 });
 
 test("high-order overlap reports the shared-tile budget instead of returning a partial seed", () => {
-  const view = { coverageViewDirection: [1, 0, 0] as [number, number, number], coverageViewRadiusRad: Math.PI / 2 };
+  const view = { coverageViewDirection: [1, 0, 0] as [number, number, number], coverageViewRadiusRad: Math.PI };
   const fullSky = [{ start: 0, end: 193 }];
   assert.throws(
     () => overlapCoverageTilesInView(11, view, [{ products: [fullSky] }, { products: [fullSky] }], 192),
     (error) => error instanceof CoverageViewTileBudgetError && error.tileCount === 193 && error.tileBudget === 192,
   );
+});
+
+test("focus and overlap omit indexed tiles on the far side of the sky", () => {
+  const front = healpixPixelFromSceneDirection(32, { x: 1, y: 0, z: 0 });
+  const back = healpixPixelFromSceneDirection(32, { x: -1, y: 0, z: 0 });
+  const ranges = [front, back].sort((a, b) => a - b).map((tile) => ({ start: tile, end: tile + 1 }));
+  const view = { coverageViewDirection: [1, 0, 0] as [number, number, number], coverageViewRadiusRad: 0.05 };
+  assert.deepEqual(coverageTilesInView(11, view, ranges), [front, back].sort((a, b) => a - b));
+  assert.deepEqual(coverageTilesInView(11, view, ranges, false), [front]);
+  assert.deepEqual(overlapCoverageTilesInView(11, view, [{ products: [ranges] }, { products: [ranges] }], 192), [front]);
 });
 
 test("native MOC projection produces bounded display tiles without expanding the whole order", () => {
