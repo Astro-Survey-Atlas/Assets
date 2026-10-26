@@ -26,10 +26,25 @@ O4 底图上。F 相机距离 1.17→1.08；390px 手机滑条可操作、无横
 
 Dev 的同镜像完整首页/Atlas Chromium 回归通过，截图在 `/tmp/asa-o4-background-dev-fixture/`。
 部署时发现原有启动过程逐项校验 1,396 个依赖文件（约 13.15 GB，含 8.27 GB 的巡天索引）；
-revision 380 首轮冷启动超过原 6 分钟窗口并重启。Dev 的 `startupProbeFailureThreshold`
-由 120 调为 240（12 分钟），不改变应用代码或数据。当前 Helm revision **381** / 镜像
-`0.1.0-20261026-162630`，等待启动及真实线上回归；后续应单独优化现有启动校验的耗时。
-本轮继续在 `feat/atlas-display-orders` 实现；`.codex/config.toml` 用户修改保留，不纳入提交。
+revision 380 的 backend 启动超过原 6 分钟窗口并重启。Dev 的
+`startupProbeFailureThreshold` 由 120 调为 240（12 分钟），revision 381 仍出现启动超时。
+随后仅将 backend 容器恢复为原已验证镜像 `0.1.0-20261026-153857`，该次启动约 3 分 22 秒完成，
+前端继续使用新镜像 `0.1.0-20261026-162630`。当前 site/backend 均 1/1 Ready、零重启。
+本轮未修改 backend 源码或数据；慢启动原因需要另行诊断，不能据此认定新镜像存在后端代码回归。
+
+当前 Helm revision **381**；backend 镜像通过 `kubectl set image` 恢复，与 Helm 的共享镜像 tag
+存在明确差异，init 容器仍使用新镜像。后续升级须保留该 backend 镜像选择，避免前端发布再次
+无意滚动 backend；独立配置两种角色镜像可作为单独的小改动处理。
+
+真实线上 Euclid ERO + Gaia 回归通过：常规 O4→O8 的六个请求均为 O8；G 抽屉升到 O10
+仅一次严格 O10 查询、零高阶源块请求，192 个交集 cells 叠加在 O4 底图上。F 相机距离
+1.17→1.08；390px 手机滑条可触达、无横向溢出，浏览器与覆盖 HTTP 错误均为零。
+截图及汇总在 `/tmp/asa-o4-background-dev/`。Dev HTML/JS/CSS 与本地构建逐字节一致；
+health、assets、coverage catalog 和分页 coverage 均 HTTP 200，FITS Range 仍为 206 / 16 bytes。
+公开 bundle 与上节记录一致：611 files、144 个资源、140 层（80 层支持 O10）；
+HTTP 验证汇总在 `/tmp/asa-o4-background-deploy-http.json`。
+
+实现 `0fdf645` 已推送至 `feat/atlas-display-orders`；`.codex/config.toml` 用户修改保留，不纳入提交。
 
 ## 2026-10-26 共同覆盖的源图层保留与 F 聚焦
 
