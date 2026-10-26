@@ -18,6 +18,7 @@ import {
 } from "./survey-layer-model.js";
 import type { SurveyFootprint, SurveyFootprintManifest } from "./survey-footprints.js";
 import type { SurveyCard } from "./survey-registry.js";
+import type { CoverageViewGeometry } from "./coverage-view-tiles.js";
 import { cartesianToRaDec, raDecToCartesian } from "./coordinates.js";
 import { normalizeLayerOrder, visibleLayerDepths, type LayerDepth } from "./layer-order.js";
 import { buildOverlapHighlight, setOverlapHighlightFlowOffset } from "./overlap-highlight.js";
@@ -90,6 +91,12 @@ export interface SurveyLayerOverlapComponent {
   id: string;
   order: number;
   cells: number[];
+}
+
+export interface SurveyLayerOverlapCoverage {
+  nside: number;
+  pixels: readonly number[];
+  components: readonly SurveyLayerOverlapComponent[];
 }
 
 /** Return the camera pose that keeps the celestial sphere at the orbit centre. */
@@ -658,7 +665,7 @@ export class SurveyLayerViewer {
   }
 
   /** Replace a complete coverage batch without resetting the renderer or camera. */
-  updateCoverage(manifest: SurveyFootprintManifest, surveys: readonly SurveyCard[], visibleSurveyIds: Iterable<string>): void {
+  updateCoverage(manifest: SurveyFootprintManifest, surveys: readonly SurveyCard[], visibleSurveyIds: Iterable<string>, overlap?: SurveyLayerOverlapCoverage): void {
     const previousNside = this.#manifest.nside;
     const selected = new Set(this.#selectedPixels);
     this.#manifest = manifest;
@@ -682,6 +689,7 @@ export class SurveyLayerViewer {
       for (const [key, layer] of this.#workspaceLayers) if (layer.nside !== manifest.nside) this.#workspaceLayers.delete(key);
       this.#onInspection(null);
     }
+    if (overlap) this.#assignOverlapCoverage(overlap.nside, overlap.pixels, overlap.components);
     this.#layerOrder = this.#normalizedLayerOrder();
     this.#rebuildVisible(false);
   }
@@ -909,6 +917,13 @@ export class SurveyLayerViewer {
   }
 
   focusSelection(): void {
+    if (this.#overlapMode) {
+      const component = this.#overlapComponents.find((entry) => entry.id === this.#activeOverlapComponentId)
+        ?? this.#overlapComponents[0];
+      if (component) this.focusPixels(2 ** component.order, component.cells);
+      else if (this.#overlapNside !== null) this.focusPixels(this.#overlapNside, this.#overlapPixels ?? []);
+      return;
+    }
     const pixels = [...this.#selectedPixels];
     if (!pixels.length) return;
     if (pixels.length === 1) {
@@ -937,13 +952,31 @@ export class SurveyLayerViewer {
 
   focusPixels(nside: number, pixels: readonly number[]): void {
     if (!pixels.length) return;
+    const pose = this.#pixelFocusPose(nside, pixels);
+    this.#startCameraTransition(pose.camera, pose.target, 720, cameraUpForDirection(pose.camera.clone().normalize()));
+  }
+
+  /** Plan the source context for the view that initial overlap focus will show. */
+  focusViewGeometry(nside: number, pixels: readonly number[]): CoverageViewGeometry | null {
+    if (!pixels.length) return null;
+    const pose = this.#pixelFocusPose(nside, pixels);
+    const camera = this.#camera.clone();
+    camera.position.copy(pose.camera);
+    camera.up.copy(cameraUpForDirection(pose.camera.clone().normalize()));
+    camera.lookAt(pose.target);
+    return {
+      coverageViewDirection: pose.camera.clone().normalize().toArray() as [number, number, number],
+      coverageViewRadiusRad: this.#coverageViewRadiusRad(camera),
+    };
+  }
+
+  #pixelFocusPose(nside: number, pixels: readonly number[]): CameraPose {
     const direction = this.#pixelDirectionAt(nside, pixels);
     let angularRadius = 0;
     for (const pixel of pixels) for (const corner of sphericalCellBoundary(nside, pixel, 1)) angularRadius = Math.max(angularRadius, direction.angleTo(corner));
     const outer = this.#outerRadius;
     const distance = cameraDistanceForAngularRadius(angularRadius, outer);
-    const pose = narrativeCameraPose(direction, distance, outer);
-    this.#startCameraTransition(pose.camera, pose.target, 720, cameraUpForDirection(direction));
+    return narrativeCameraPose(direction, distance, outer);
   }
 
   focusAsset(assetId: string): void {
@@ -973,22 +1006,28 @@ export class SurveyLayerViewer {
     return Math.max(0.01, Math.min(180, THREE.MathUtils.radToDeg(halfSpan * 2)));
   }
 
-  #coverageViewRadiusRad(): number {
-    const distance = this.#camera.position.length();
+  #coverageViewRadiusRad(camera = this.#camera): number {
+    const distance = camera.position.length();
     const radius = this.#outerRadius;
     if (distance <= radius + 0.003) return Math.PI;
 
-    this.#camera.updateMatrixWorld(true);
-    const corners = [[-1, -1], [-1, 1], [1, -1], [1, 1]] as const;
-    const inward = this.#camera.position.clone().negate().normalize();
+    camera.updateMatrixWorld(true);
+    // The projection shifts the sky into the pane beside the drawer. Exclude
+    // the covered canvas strip when computing the source-loading footprint.
+    const width = Math.max(1, this.#canvas.getBoundingClientRect().width);
+    const right = 1 - 2 * Math.min(this.#viewportRightInset, width) / width;
+    const corners = [[-1, -1], [-1, 1], [right, -1], [right, 1]] as const;
+    const inward = camera.position.clone().negate().normalize();
     const maxRayOffset = Math.max(...corners.map(([x, y]) => {
-      const ray = new THREE.Vector3(x, y, 0.5).unproject(this.#camera).sub(this.#camera.position).normalize();
+      const ray = new THREE.Vector3(x, y, 0.5).unproject(camera).sub(camera.position).normalize();
       return inward.angleTo(ray);
     }));
     const shellRadius = radius + 0.003;
     const apparentRadius = Math.asin(Math.min(1, shellRadius / distance));
-    if (maxRayOffset >= apparentRadius) return Math.PI / 2;
-    return Math.min(Math.PI / 2, Math.asin(Math.min(1, distance / shellRadius * Math.sin(maxRayOffset))) + 0.003);
+    if (maxRayOffset >= apparentRadius) return Math.min(Math.PI / 2, Math.acos(shellRadius / distance) + 0.003);
+    // The camera ray's angle is measured at the observer. Subtract it from
+    // the opposite sine-rule angle to obtain the cap on the sphere itself.
+    return Math.min(Math.PI / 2, Math.max(0, Math.asin(Math.min(1, distance / shellRadius * Math.sin(maxRayOffset))) - maxRayOffset) + 0.003);
   }
 
   setVisibleSurveys(surveyIds: Iterable<string>): void {
@@ -1053,6 +1092,11 @@ export class SurveyLayerViewer {
   }
 
   setOverlapCoverage(nside: number, pixels: readonly number[], components: readonly SurveyLayerOverlapComponent[]): void {
+    this.#assignOverlapCoverage(nside, pixels, components);
+    if (this.#overlapMode) this.#rebuildVisible(false);
+  }
+
+  #assignOverlapCoverage(nside: number, pixels: readonly number[], components: readonly SurveyLayerOverlapComponent[]): void {
     this.#overlapNside = nside;
     this.#overlapPixels = [...new Set(pixels)].sort((left, right) => left - right);
     this.#overlapPixelSet = new Set(this.#overlapPixels);
@@ -1060,7 +1104,6 @@ export class SurveyLayerViewer {
     clearGroup(this.#overlapSelectionGroup);
     this.#activeOverlapHighlight = null;
     if (!components.some((component) => component.id === this.#activeOverlapComponentId)) this.#activeOverlapComponentId = null;
-    if (this.#overlapMode) this.#rebuildVisible(false);
   }
 
   setActiveOverlapComponent(componentId: string | null): void {
@@ -1369,9 +1412,6 @@ export class SurveyLayerViewer {
     const depthByKey = new Map(depths.map((depth) => [depth.key, depth]));
     depths.forEach((depth) => {
       if (!depth.key.startsWith("public-survey:")) return;
-      // An overlap can load independently of the individual survey blocks.
-      // Do not leave coarser source cells behind a finer strict result.
-      if (this.#overlapMode && this.#overlapNside !== null && this.#overlapNside !== this.#manifest.nside) return;
       this.#buildSurveyLayer(depth.key.slice("public-survey:".length), depth.radius, animated, depth.renderOrder);
     });
     if (this.#overlapMode) this.#buildOverlapLayer(animated);

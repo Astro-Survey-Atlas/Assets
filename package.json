@@ -38,6 +38,7 @@
     "test:node:code": "tsx --test --test-concurrency=4 test/archive-native-units.test.ts test/display-coverage.test.ts test/euclid-native-metadata.test.ts test/native-task-lease.test.ts test/native-unit-comparison.test.ts test/native-unit-management.test.ts test/publication-task-store.test.ts",
     "test:python": "python3 -m unittest discover -s test -p 'test_*.py'",
     "test:homepage": "npm run build:site && python3 scripts/homepage-carousel-smoke.py",
+    "test:atlas-viewer": "python3 scripts/atlas-viewer-smoke.py",
     "test:core": "python3 scripts/verify_core_wheel.py",
     "test": "npm run test:node && npm run test:core",
     "validate": "npm run build && npm test"

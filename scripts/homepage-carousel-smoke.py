@@ -3,6 +3,7 @@
 
 import os
 import json
+import re
 import subprocess
 import time
 import urllib.error
@@ -128,6 +129,8 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     overlap_has_components = False
     held_overlap_orders = set()
     held_overlap_routes = []
+    context_fixture = False
+    wide_context_fixture = False
 
     def overlap_component(order):
         return {"id": "C01", "order": order, "cells": [0], "bounds": {"areaDeg2": 1, "raMin": 44, "raMax": 46, "decMin": 0, "decMax": 2}}
@@ -151,11 +154,17 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
             display_revision = display_revisions[layer_id]
             if query.get("tiles") == ["1"]:
                 tile_index_requests.append({"layerId": layer_id, "order": order})
-                ranges = [{"start": 0, "end": 100}] if oversized_order_five_index and order == 5 else order_11_tiles
+                ranges = [{"start": 0, "end": 100}] if oversized_order_five_index and order == 5 else order_11_tiles if order == 11 else [{"start": 0, "end": 1}]
+                if wide_context_fixture and layer_id.startswith("gaia-") and order >= 6:
+                    ranges = [{"start": 0, "end": 12 * 4 ** (order - 6)}]
                 fulfill_json(route, {"layerId": layer_id, "order": order, "tileSize": 4096, "ranges": ranges, "totalTiles": sum(entry["end"] - entry["start"] for entry in ranges), "displayRevision": display_revision})
             else:
                 block_requests.append({"layerId": layer_id, "order": order, "tile": int(query.get("tile", ["0"])[0])})
-                block = {"layerId": layer_id, "order": order, "tileId": int(query.get("tile", ["0"])[0]), "cells": [0], "sha256": "b" * 64, "revision": f"revision-{layer_id}", "displayRevision": display_revision, "nativeMaxOrder": 11, "projection": "native-moc"}
+                cells = [0, 1 if layer_id.startswith("euclid-") else 2] if context_fixture else [0]
+                if wide_context_fixture and layer_id.startswith("gaia-") and order == 8:
+                    start = int(query.get("tile", ["0"])[0]) * 4096
+                    cells = list(range(start, start + 4096))
+                block = {"layerId": layer_id, "order": order, "tileId": int(query.get("tile", ["0"])[0]), "cells": cells, "sha256": "b" * 64, "revision": f"revision-{layer_id}", "displayRevision": display_revision, "nativeMaxOrder": 11, "projection": "native-moc"}
                 if order in held_display_orders:
                     held_display_routes.append((route, block))
                 else:
@@ -274,7 +283,7 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     expect(slider).to_have_attribute("aria-valuetext", "O8")
     page.wait_for_timeout(700)
     assert tile_index_requests and all(request["order"] == 8 for request in tile_index_requests), f"rapid O4 to O8 adjustment must request only O8, got {tile_index_requests}"
-    assert len(held_display_routes) == 4, "wait for the whole selected-product batch"
+    assert len(held_display_routes) == 2, "wait for both selected products' complete batches"
     expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
     assert page.evaluate("window.atlasWebglContexts") == context_count, "loading a new order must keep the current renderer and coverage"
     for route, block in held_display_routes[:-1]:
@@ -291,10 +300,10 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     slider.press("ArrowLeft")
     slider.press("ArrowLeft")
     page.wait_for_timeout(700)
-    assert len([block for _, block in held_display_routes if block["order"] == 6]) == 4
+    assert len([block for _, block in held_display_routes if block["order"] == 6]) == 2
     slider.press("ArrowRight")
     page.wait_for_timeout(700)
-    assert len([block for _, block in held_display_routes if block["order"] == 7]) == 4
+    assert len([block for _, block in held_display_routes if block["order"] == 7]) == 2
     for route, block in held_display_routes:
         if block["order"] == 7:
             fulfill_json(route, block)
@@ -428,7 +437,7 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     page.wait_for_timeout(1000)
     assert len(overlap_requests) == 1, "refreshing overlap order must not focus the camera and trigger another query"
     assert page.locator("#coverage-status-camera").inner_text() == camera_before_order_change, "order changes must preserve the focused camera"
-    assert not block_requests, "overlap mode must not request unrelated individual coverage blocks"
+    assert all(request["order"] == 8 and request["tile"] == 0 for request in block_requests), "overlap mode must load only final-order source context tiles in the current view"
     if screenshot_root:
         page.screenshot(path=str(Path(screenshot_root) / "atlas-drawer-desktop.png"))
     page.set_viewport_size({"width": 390, "height": 844})
@@ -451,6 +460,104 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     page.locator("#overlap-drawer-close").click()
     assert slider.evaluate("input => input.closest('.coverage-tools') !== null"), "closing the drawer must return the control to the sky toolbar"
     expect(slider).to_have_attribute("aria-valuetext", "O7")
+    assert not errors, f"Atlas browser errors: {errors}"
+    page.close()
+
+    # Entering G at high order must load the view that its initial focus will
+    # show, rather than expanding an all-sky source before the camera moves.
+    wide_context_fixture = True
+    page = browser.new_page(viewport={"width": 1440, "height": 1000})
+    page.route("**/api/v1/**", mock_api)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(base_url.rstrip("/") + "/atlas/", wait_until="domcontentloaded")
+    expect(page.locator("#coverage-scene")).to_have_attribute("data-ready", "true")
+    page.locator("#coverage-layers-toggle").click()
+    for survey_id, layer_id in [("euclid", "euclid-euclid-ero-native"), ("gaia", "gaia-gaia-dr3-main")]:
+        group = page.locator("#coverage-survey-" + survey_id)
+        group.locator(".coverage-layer-name").click()
+        group.locator('input[data-product-layer-id="' + layer_id + '"]').check(force=True)
+    expect(page.locator("#coverage-state")).to_contain_text("O4")
+    slider = page.locator("#coverage-display-order")
+    for _ in range(4):
+        slider.press("ArrowRight")
+    expect(page.locator("#coverage-state")).to_contain_text(re.compile(r"192|65,536"), timeout=30000)
+    block_requests.clear()
+    overlap_requests.clear()
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("g")
+    expect(page.locator("#coverage-state")).to_contain_text("COMMON ORDER O8", timeout=30000)
+    expect(page.locator("#overlap-expand")).to_be_visible(timeout=30000)
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O8")
+    assert [body["requestedOrder"] for body in overlap_requests] == [8], overlap_requests
+    assert {request["layerId"] for request in block_requests} == {"euclid-euclid-ero-native", "gaia-gaia-dr3-main"}
+    assert len(block_requests) < 16 and all(request["order"] == 8 for request in block_requests), "Initial G source loading must fit the focused sky view, including non-overlap context"
+    assert not errors, f"Atlas browser errors: {errors}"
+    page.close()
+    wide_context_fixture = False
+
+    # A fresh page ensures the G-mode source batch is not already cached by
+    # the ordinary-order tests. Hold sources and overlap independently.
+    context_fixture = True
+    page = browser.new_page(viewport={"width": 1440, "height": 1000})
+    page.route("**/api/v1/**", mock_api)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(base_url.rstrip("/") + "/atlas/", wait_until="domcontentloaded")
+    expect(page.locator("#coverage-scene")).to_have_attribute("data-ready", "true")
+    page.locator("#coverage-layers-toggle").click()
+    for survey_id, layer_id in [("euclid", "euclid-euclid-ero-native"), ("gaia", "gaia-gaia-dr3-main")]:
+        group = page.locator("#coverage-survey-" + survey_id)
+        group.locator(".coverage-layer-name").click()
+        group.locator('input[data-product-layer-id="' + layer_id + '"]').check(force=True)
+    expect(page.locator("#coverage-state")).to_contain_text("O4")
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("g")
+    expect(page.locator("#overlap-expand")).to_be_visible()
+    page.wait_for_timeout(1200)
+    block_requests.clear()
+    overlap_requests.clear()
+    held_display_orders.add(6)
+    held_overlap_orders.add(6)
+    slider = page.locator("#coverage-display-order")
+    # This case isolates response ordering. Keyboard debounce is covered above;
+    # select O6 in one event turn so software WebGL cannot delay two key calls.
+    slider.evaluate("""input => {
+        input.value = '2';
+        input.dispatchEvent(new Event('input', {bubbles: true}));
+        input.dispatchEvent(new Event('change', {bubbles: true}));
+    }""")
+    deadline = time.monotonic() + 10
+    while (not overlap_requests or len(held_display_routes) < 2) and time.monotonic() < deadline:
+        page.wait_for_timeout(50)
+    assert [body["requestedOrder"] for body in overlap_requests] == [6], {
+        "overlap": overlap_requests, "blocks": block_requests,
+        "order": slider.get_attribute("aria-valuetext"), "state": page.locator("#coverage-state").inner_text(),
+    }
+    assert len(held_display_routes) == 2, "G must retain each selected survey's source coverage, including non-overlap cells"
+    assert all(request["order"] == 6 and request["tile"] == 0 for request in block_requests), block_requests
+    fulfill_json(*held_overlap_routes.pop())
+    held_overlap_orders.clear()
+    page.wait_for_timeout(100)
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
+    fulfill_json(*held_display_routes.pop())
+    page.wait_for_timeout(100)
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
+    fulfill_json(*held_display_routes.pop())
+    held_display_orders.clear()
+    expect(page.locator("#coverage-status-nside")).to_contain_text("O6")
+    page.wait_for_timeout(1000)
+    assert len(overlap_requests) == 1, "committing the complete G-mode batch must not refocus or repeat the query"
+    canvas = page.locator("#coverage-canvas").bounding_box()
+    page.mouse.move(canvas["x"] + 100, canvas["y"] + canvas["height"] / 2)
+    page.mouse.wheel(0, 1000)
+    page.wait_for_timeout(1000)
+    far = float(page.locator("#coverage-status-camera").inner_text().split(" / ")[0])
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("f")
+    page.wait_for_timeout(1000)
+    near = float(page.locator("#coverage-status-camera").inner_text().split(" / ")[0])
+    assert near < far * 0.95, f"F must advance the camera in G mode, got {far} -> {near}"
+    if screenshot_root:
+        page.screenshot(path=str(Path(screenshot_root) / "atlas-overlap-context-o6.png"))
     assert not errors, f"Atlas browser errors: {errors}"
     page.close()
 

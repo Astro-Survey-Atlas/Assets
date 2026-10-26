@@ -1,8 +1,52 @@
 # Assets 项目交接
 
-交接日期：2026-10-18（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-26（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
+
+## 2026-10-26 共同覆盖的源图层保留与 F 聚焦
+
+修复 `8c92799` 引入的回归：G 模式只更新交集且把阶数不同的源图层整层隐藏，升阶后非重合
+覆盖随之消失；F 聚焦只读取普通 cell selection，未使用当前共同覆盖区域。
+
+现在 G 模式按当前视野为所有已选产品规划真实阶数的源显示块，保留非重合部分；与严格交集
+共用索引、取消信号和请求序号，两者完整到达后由 viewer 一次更新，加载/失败时保留上一批。
+只加载视野内高阶图块，排除背面；视野已被源块及交集缓存覆盖时复用，视角刷新不自动聚焦。
+沿用每次 192 块及 O9+ 32,768 cells 的现有预算，没有把 O4 底图当作高阶覆盖。
+近距离视野改用正确的球面可见范围，排除被抽屉遮挡的 canvas。原始图块缓存保持完整，绘制前
+按当前视野筛选真实阶数的 cells，并保守保留边界；仅可见 cells 计入显示预算。同一图块内的
+视角变化也会重新筛选。首次进入 G 先按即将聚焦的区域规划源覆盖，再整批更新并聚焦，防止
+初次布局变化触发的视野刷新抢占源覆盖加载。
+本节取代 10-18 记录中的“G 不加载普通覆盖块／隐藏旧源图层”策略。
+
+G 模式下 F 使用当前选中的连通区域及其真实阶数推进镜头；未选区域时使用首个区域。
+空交集不会聚焦已失效的区域。普通模式的 F 行为保持原有 cell selection 语义。
+
+新增 `npm run test:atlas-viewer`，通过真实 Three.js 场景验证源网格及非重合单元仍存在、
+源覆盖/交集原子更新、选中第二个区域时的相机方向，以及空交集保留源图层且不触发旧聚焦。
+完整站点回归增加无缓存 G 模式的双向延迟检查和实际键盘 F 推进检查。
+`npm run build`、站点 TypeScript、Helm lint、viewer 专项和完整首页/Atlas Chromium 回归均通过。
+`npm test` 全量空闲重跑为 481 项：479 通过、2 跳过，Core wheel 校验通过；首轮与两个
+WebGL 浏览器并跑时三项 server-http 启动超过八秒，保留为资源竞争下的测试时限问题。
+真实 Dev API 配合本地新前端验证 Euclid ERO 原生 O11 产品 + Gaia DR3：常规 O4→O8 的六个
+块请求均为 O8；抽屉 O8→O10 仅一次严格 O10 查询，显示 192 个交集 cells，并保留源覆盖。
+G 模式实际键盘 F 将相机从 1.17 推进至 1.08；390px 手机滑条可操作，浏览器错误和覆盖 HTTP
+错误均为零。截图及汇总在 `/tmp/asa-context-interaction/` 与 `/tmp/asa-context-real/`。
+Dev Helm revision **379** / 镜像 `0.1.0-20261026-153857` 已部署；site/backend 均 1/1 Ready、
+零重启。`http://10.15.51.75:32083/atlas/` 的 HTML、JS、CSS 哈希与本地构建一致。
+相同完整首页/Atlas Chromium 回归在线上通过；真实线上 Euclid ERO + Gaia 的 O4→O8 请求均
+为 O8，抽屉升到 O10 仅一次严格 O10 查询，源覆盖保留。放大/缩放后按 F 的相机距离仍为
+1.17→1.08；390px 手机无横向溢出、滑条可触达，浏览器和覆盖 HTTP 错误均为零。
+线上截图与汇总在 `/tmp/asa-context-dev/` 和 `/tmp/asa-context-dev-fixture/`。
+
+health、assets、coverage catalog 及分页 coverage 均 HTTP 200；公开 bundle 仍为
+`reviewed-mv51kku3-a4f8d8e6` / SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`、611 files。
+assets API 为 144 个资源、coverage catalog 为 140 层（80 层支持 O10）。2MASS H-band MOC
+FITS Range `0–15` 返回 HTTP 206 / 16 bytes，SHA 与资源清单一致。
+
+实现分支仍为 `feat/atlas-display-orders`；`.codex/config.toml` 的用户修改保留，不纳入提交。
+未改后端、路由、公开 bundle、原生索引或 Warehouse/Elasticsearch 配置。
 
 ## 2026-10-18 天球滑条请求与重合抽屉交互
 

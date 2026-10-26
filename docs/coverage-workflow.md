@@ -59,8 +59,20 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   region for inspection and reverse lookup. Requests for strict overlap identify
   selected product layer IDs and are not shared-cache responses.
   Focused coverage and overlap seeds omit the far side of the sky. Refreshing
-  overlap resolution preserves the current camera; only an explicit component
-  selection or initial entry focuses a component.
+  overlap resolution preserves the current camera. Overlap mode also loads
+  the selected products' source coverage within the visible sky, including
+  their non-overlap cells. Source coverage and the strict intersection commit
+  together at the requested real order; a pending or failed source batch must
+  not erase the previous view. Initial entry plans source blocks for the
+  component's upcoming focused camera before committing the batch. View scope
+  uses the surface cap on the sphere and excludes canvas hidden by the drawer.
+  Loaded blocks retain their full cells in cache; rendering filters those real
+  cells to the view with a conservative cell-boundary margin before counting
+  the cell budget. A new view inside an already fetched tile is filtered again.
+  An explicit component selection, initial entry or the F focus shortcut can
+  move the camera. In overlap mode F focuses the
+  active component at its own order, falling back to the first component;
+  it does not require an ordinary cell selection or focus stale empty results.
 - A recipe mode such as `tile-table` describes how an input is read, not the
   native unit type. `sourceUnitKind` declares the identity returned by lookup:
   DESI returns Tiles, while Legacy Surveys returns bricks even if both read a

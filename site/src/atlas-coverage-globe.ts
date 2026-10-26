@@ -7,6 +7,7 @@ import {
   type SurveyLayerState,
   type SurveyLayerContextMenu,
   type SurveyLayerOverlapComponent,
+  type SurveyLayerOverlapCoverage,
 } from "./atlas/survey-layer-viewer.js";
 import type { SurveyFootprintManifest } from "./atlas/survey-footprints.js";
 import type { SurveyCard } from "./atlas/survey-registry.js";
@@ -187,12 +188,12 @@ export class AtlasCoverageGlobe {
     if (this.#catalog) this.#renderCatalog();
   }
 
-  #renderCatalog(): void {
+  #renderCatalog(overlap?: SurveyLayerOverlapCoverage): void {
     if (!this.#catalog) return;
     const manifest = footprintManifest(this.#catalog, this.#blocks, this.#visibleModalities, this.#displayOrder, this.#visibleLayerIds);
     const cards = this.#surveys.map(surveyCardFor);
     if (this.#viewer) {
-      this.#viewer.updateCoverage(manifest, cards, this.#visibleSurveyIds);
+      this.#viewer.updateCoverage(manifest, cards, this.#visibleSurveyIds, overlap);
       return;
     }
     this.#viewer = new SurveyLayerViewer(
@@ -226,10 +227,10 @@ export class AtlasCoverageGlobe {
     if (this.#catalog) this.#renderCatalog();
   }
 
-  updateBlocks(blocks: ReadonlyMap<string, number[]>, order = this.#displayOrder): void {
+  updateBlocks(blocks: ReadonlyMap<string, number[]>, order = this.#displayOrder, overlap?: Omit<SurveyLayerOverlapCoverage, "nside">): void {
     this.#displayOrder = order;
     this.#blocks = new Map(blocks);
-    if (this.#catalog) this.#renderCatalog();
+    if (this.#catalog) this.#renderCatalog(overlap ? { ...overlap, nside: 2 ** order } : undefined);
   }
 
   get state(): SurveyLayerState | null {
@@ -257,6 +258,8 @@ export class AtlasCoverageGlobe {
   focusSelection(): void { this.#viewer?.focusSelection(); }
 
   focusPixels(order: number, pixels: readonly number[]): void { this.#viewer?.focusPixels(2 ** order, pixels); }
+
+  focusViewGeometry(order: number, pixels: readonly number[]) { return this.#viewer?.focusViewGeometry(2 ** order, pixels) ?? null; }
 
   transitionToDataView(durationMs = 900): void { this.#viewer?.transitionToDataPresentation(durationMs); }
 

@@ -23,6 +23,26 @@ export class CoverageViewTileBudgetError extends Error {
   }
 }
 
+/** Clip supplied native-order cells, retaining a conservative boundary margin. */
+export function coverageCellsInView(
+  order: number,
+  view: CoverageViewGeometry,
+  cells: readonly number[],
+  includeFarSide = true,
+): number[] {
+  if (order < 6 || view.coverageViewRadiusRad >= Math.PI || (includeFarSide && view.coverageViewRadiusRad >= Math.PI / 2)) return [...cells];
+  const healpix = new Healpix(2 ** order);
+  const [x, y, z] = view.coverageViewDirection;
+  const center = sceneDirectionToHealpixVector({ x, y, z });
+  const radius = Math.min(Math.PI, view.coverageViewRadiusRad + healpix.maxPixrad());
+  const threshold = Math.cos(radius);
+  return cells.filter((pixel) => {
+    const direction = healpix.pix2vec(pixel);
+    const dot = center.x * direction.x + center.y * direction.y + center.z * direction.z;
+    return dot >= threshold || (includeFarSide && -dot >= threshold);
+  });
+}
+
 /** Return indexed NESTED tiles whose cells can intersect the current view. */
 export function coverageTilesInView(
   order: number,

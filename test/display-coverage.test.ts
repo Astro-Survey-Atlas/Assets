@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Healpix } from "healpixjs";
 
 import { displayOrders, displayTileRanges, mocPixelRanges, pixelsInTile } from "../server/display-coverage.js";
 import { layersForOverlapComponent, overlapForLayers } from "../server/overlap.js";
 import type { CoverageCellLayer } from "../server/coverage.js";
 import type { NativeMoc } from "../server/native-moc.js";
 import { overlapViewTileOrder } from "../site/src/atlas/coverage-orders.js";
-import { CoverageViewTileBudgetError, coverageTilesInView, overlapCoverageTilesInView } from "../site/src/atlas/coverage-view-tiles.js";
+import { CoverageViewTileBudgetError, coverageCellsInView, coverageTilesInView, overlapCoverageTilesInView } from "../site/src/atlas/coverage-view-tiles.js";
 import { coverageCatalogRevisionKey } from "../site/src/coverage-catalog-revision.js";
-import { healpixPixelFromSceneDirection } from "../site/src/atlas/spherical-cell-geometry.js";
+import { healpixPixelFromSceneDirection, sphericalCellCenter } from "../site/src/atlas/spherical-cell-geometry.js";
 
 function nativeMoc(order: number, pixels: number[], maxOrder = order): NativeMoc {
   return {
@@ -108,6 +109,35 @@ test("focus and overlap omit indexed tiles on the far side of the sky", () => {
   assert.deepEqual(coverageTilesInView(11, view, ranges), [front, back].sort((a, b) => a - b));
   assert.deepEqual(coverageTilesInView(11, view, ranges, false), [front]);
   assert.deepEqual(overlapCoverageTilesInView(11, view, [{ products: [ranges] }, { products: [ranges] }], 192), [front]);
+});
+
+test("source cell clipping keeps real cells at the view boundary and omits off-view tile contents", () => {
+  const order = 8;
+  const nside = 2 ** order;
+  const front = healpixPixelFromSceneDirection(nside, { x: 1, y: 0, z: 0 });
+  const center = sphericalCellCenter(nside, front, 1).normalize();
+  const back = healpixPixelFromSceneDirection(nside, center.clone().negate());
+  const edge = healpixPixelFromSceneDirection(nside, { x: Math.cos(0.04), y: Math.sin(0.04), z: 0 });
+  const outside = healpixPixelFromSceneDirection(nside, { x: 0, y: 1, z: 0 });
+  const view = {
+    coverageViewDirection: center.toArray() as [number, number, number],
+    coverageViewRadiusRad: center.angleTo(sphericalCellCenter(nside, edge, 1)) - new Healpix(nside).maxPixrad() / 2,
+  };
+  const cells = [front, back, edge, outside];
+  assert.deepEqual(coverageCellsInView(order, view, cells, false), [front, edge]);
+  assert.deepEqual(coverageCellsInView(order, view, cells, true), [front, back, edge]);
+  assert.deepEqual(coverageCellsInView(4, view, [0, 1, 2], false), [0, 1, 2], "O4 remains the full overview");
+});
+
+test("focused source rendering counts only the visible native-order cells of a fetched tile", () => {
+  const order = 10;
+  const front = healpixPixelFromSceneDirection(2 ** order, { x: 1, y: 0, z: 0 });
+  const cells = Array.from({ length: 4096 }, (_, index) => Math.floor(front / 4096) * 4096 + index);
+  const view = { coverageViewDirection: [1, 0, 0] as [number, number, number], coverageViewRadiusRad: 0.01 };
+  const visible = coverageCellsInView(order, view, cells, false);
+  assert.ok(visible.includes(front));
+  assert.ok(visible.length > 0 && visible.length < 1024, `${visible.length} cells from a 4096-cell source tile`);
+  assert.ok(visible.every((pixel) => cells.includes(pixel)), "clipping must never synthesize cells");
 });
 
 test("native MOC projection produces bounded display tiles without expanding the whole order", () => {
