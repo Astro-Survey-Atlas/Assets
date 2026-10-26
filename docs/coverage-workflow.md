@@ -51,24 +51,28 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   the complete selected-product batch arrives, preserving the renderer and
   camera. Loading and failures identify the order still displayed. The same
   control moves into the expanded overlap drawer and returns on close.
-- Ordinary coverage and overlap use the same selected display order. Strict
-  overlap intersects selected products at exactly that order and never falls
+- Ordinary coverage uses the selected display order. In overlap mode the
+  selected order controls only the intersection; source survey coverage stays
+  at its actual O4 overview. Strict overlap intersects selected products at
+  exactly the selected order and never falls
   back to a coarser result when the intersection is empty. O4/O5 use a bounded
   full-sky overlap seed; O6 and above may restrict seeds to visible HEALPix
   parent cells, while each returned connected component retains its complete
   region for inspection and reverse lookup. Requests for strict overlap identify
   selected product layer IDs and are not shared-cache responses.
   Focused coverage and overlap seeds omit the far side of the sky. Refreshing
-  overlap resolution preserves the current camera. Overlap mode also loads
-  the selected products' source coverage within the visible sky, including
-  their non-overlap cells. Source coverage and the strict intersection commit
-  together at the requested real order; a pending or failed source batch must
-  not erase the previous view. Initial entry plans source blocks for the
-  component's upcoming focused camera before committing the batch. View scope
-  uses the surface cap on the sphere and excludes canvas hidden by the drawer.
-  Loaded blocks retain their full cells in cache; rendering filters those real
-  cells to the view with a conservative cell-boundary margin before counting
-  the cell budget. A new view inside an already fetched tile is filtered again.
+  overlap resolution preserves the current camera. Overlap mode retains the
+  selected products' complete O4 coverage, including non-overlap regions and
+  empty finer intersections. Only overlap indexes and the strict query follow
+  the slider; source coverage does not request high-order blocks. The O4
+  background and intersection commit together and retain their separate real
+  orders, also shown in the UI. Pending or failed requests preserve the prior
+  view. Leaving overlap restores ordinary coverage at the selected order.
+  Ordinary focused source rendering uses the surface cap on the sphere and
+  excludes canvas hidden by the drawer. Loaded blocks retain their full cells
+  in cache; rendering filters those real cells to the view with a conservative
+  boundary margin before counting the cell budget. A new view inside an already
+  fetched tile is filtered again.
   An explicit component selection, initial entry or the F focus shortcut can
   move the camera. In overlap mode F focuses the
   active component at its own order, falling back to the first component;

@@ -18,7 +18,6 @@ import {
 } from "./survey-layer-model.js";
 import type { SurveyFootprint, SurveyFootprintManifest } from "./survey-footprints.js";
 import type { SurveyCard } from "./survey-registry.js";
-import type { CoverageViewGeometry } from "./coverage-view-tiles.js";
 import { cartesianToRaDec, raDecToCartesian } from "./coordinates.js";
 import { normalizeLayerOrder, visibleLayerDepths, type LayerDepth } from "./layer-order.js";
 import { buildOverlapHighlight, setOverlapHighlightFlowOffset } from "./overlap-highlight.js";
@@ -181,6 +180,7 @@ export interface SurveyObjectPoint {
 
 export interface SurveyLayerState {
   nside: number;
+  sourceNside: number;
   cameraDistance: number;
   effectiveFovDeg: number;
   cameraPosition: [number, number, number];
@@ -759,6 +759,7 @@ export class SurveyLayerViewer {
     });
     return {
       nside: this.#overlapMode ? this.#overlapNside ?? this.#manifest.nside : this.#manifest.nside,
+      sourceNside: this.#manifest.nside,
       cameraDistance: this.#camera.position.length(),
       effectiveFovDeg: this.#effectiveSkyFovDeg(),
       cameraPosition: [this.#camera.position.x, this.#camera.position.y, this.#camera.position.z],
@@ -954,20 +955,6 @@ export class SurveyLayerViewer {
     if (!pixels.length) return;
     const pose = this.#pixelFocusPose(nside, pixels);
     this.#startCameraTransition(pose.camera, pose.target, 720, cameraUpForDirection(pose.camera.clone().normalize()));
-  }
-
-  /** Plan the source context for the view that initial overlap focus will show. */
-  focusViewGeometry(nside: number, pixels: readonly number[]): CoverageViewGeometry | null {
-    if (!pixels.length) return null;
-    const pose = this.#pixelFocusPose(nside, pixels);
-    const camera = this.#camera.clone();
-    camera.position.copy(pose.camera);
-    camera.up.copy(cameraUpForDirection(pose.camera.clone().normalize()));
-    camera.lookAt(pose.target);
-    return {
-      coverageViewDirection: pose.camera.clone().normalize().toArray() as [number, number, number],
-      coverageViewRadiusRad: this.#coverageViewRadiusRad(camera),
-    };
   }
 
   #pixelFocusPose(nside: number, pixels: readonly number[]): CameraPose {

@@ -227,10 +227,10 @@ export class AtlasCoverageGlobe {
     if (this.#catalog) this.#renderCatalog();
   }
 
-  updateBlocks(blocks: ReadonlyMap<string, number[]>, order = this.#displayOrder, overlap?: Omit<SurveyLayerOverlapCoverage, "nside">): void {
+  updateBlocks(blocks: ReadonlyMap<string, number[]>, order = this.#displayOrder, overlap?: SurveyLayerOverlapCoverage): void {
     this.#displayOrder = order;
     this.#blocks = new Map(blocks);
-    if (this.#catalog) this.#renderCatalog(overlap ? { ...overlap, nside: 2 ** order } : undefined);
+    if (this.#catalog) this.#renderCatalog(overlap);
   }
 
   get state(): SurveyLayerState | null {
@@ -258,8 +258,6 @@ export class AtlasCoverageGlobe {
   focusSelection(): void { this.#viewer?.focusSelection(); }
 
   focusPixels(order: number, pixels: readonly number[]): void { this.#viewer?.focusPixels(2 ** order, pixels); }
-
-  focusViewGeometry(order: number, pixels: readonly number[]) { return this.#viewer?.focusViewGeometry(2 ** order, pixels) ?? null; }
 
   transitionToDataView(durationMs = 900): void { this.#viewer?.transitionToDataPresentation(durationMs); }
 

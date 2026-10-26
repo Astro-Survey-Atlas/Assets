@@ -89,21 +89,19 @@ def main() -> None:
                 const near = viewer.state.cameraDistance;
                 events.length = 0;
                 const components = [{id:'C01',order:8,cells:[0]},{id:'C02',order:8,cells:[8192]}];
-                viewer.updateCoverage(manifest(8),surveys,['euclid','gaia'],{nside:256,pixels:[0,8192],components});
-                const batch = {meshes:meshes(),nsides:events.map(state=>state.nside)};
+                viewer.updateCoverage(manifest(4),surveys,['euclid','gaia'],{nside:256,pixels:[0,8192],components});
+                const batch = {meshes:meshes(),nsides:events.map(state=>state.nside),sourceNsides:events.map(state=>state.sourceNside)};
                 viewer.setActiveOverlapComponent('C02');
                 viewer.setHomePresentation();
                 viewer.focusSelection();
                 await new Promise(resolve=>setTimeout(resolve,1000));
                 const selectedDirection = viewer.state.coverageViewDirection;
                 viewer.setHomePresentation();
-                const predictedView = viewer.focusViewGeometry(256,[8192]);
                 viewer.focusPixels(256,[8192]);
                 await new Promise(resolve=>setTimeout(resolve,1000));
                 const expectedDirection = viewer.state.coverageViewDirection;
                 const actualViewRadius = viewer.state.coverageViewRadiusRad;
                 viewer.setViewportRightInset(400);
-                const insetPrediction = viewer.focusViewGeometry(256,[8192]);
                 viewer.focusSelection();
                 await new Promise(resolve=>setTimeout(resolve,1000));
                 const insetViewRadius = viewer.state.coverageViewRadiusRad;
@@ -115,17 +113,15 @@ def main() -> None:
                 const emptyFocusDistance = viewer.state.cameraDistance;
                 viewer.dispose();
                 THREE.Scene.prototype.add = add;
-                return {before,after,far,near,batch,selectedDirection,expectedDirection,predictedView,actualViewRadius,insetPrediction,insetViewRadius,empty,emptyDistance,emptyFocusDistance};
+                return {before,after,far,near,batch,selectedDirection,expectedDirection,actualViewRadius,insetViewRadius,empty,emptyDistance,emptyFocusDistance};
             }""", three_url)
             assert result["before"] == {"euclid": [0, 1], "gaia": [0, 2]}, result
             assert result["after"] == result["before"], "Changing overlap order must preserve non-overlap source context"
             assert result["near"] < result["far"] * 0.95, "F must advance toward the active overlap region without an ordinary cell selection"
-            assert result["batch"] == {"meshes": result["before"], "nsides": [256]}, "Source context and overlap must commit at the same real order in one update"
+            assert result["batch"] == {"meshes": result["before"], "nsides": [256], "sourceNsides": [16]}, "O8 overlap must update atomically while source coverage stays at O4"
             assert all(abs(a-b) < 1e-5 for a,b in zip(result["selectedDirection"],result["expectedDirection"])), "F must focus the selected component, including a component outside the source context cells"
-            assert all(abs(a-b) < 1e-5 for a,b in zip(result["predictedView"]["coverageViewDirection"],result["expectedDirection"])) and abs(result["predictedView"]["coverageViewRadiusRad"] - result["actualViewRadius"]) < 1e-5, "Initial source loading must use the actual focused camera geometry"
             assert result["actualViewRadius"] < 0.2, "A close focus must load the small surface viewport rather than a distant-sky angular cone"
             assert result["insetViewRadius"] < result["actualViewRadius"], "The drawer's hidden canvas area must not enlarge the source viewport"
-            assert abs(result["insetPrediction"]["coverageViewRadiusRad"] - result["insetViewRadius"]) < 1e-5, "Initial focus planning must also respect the drawer inset"
             assert result["empty"] == result["before"], "An empty intersection must not remove selected source context"
             assert abs(result["emptyDistance"] - result["emptyFocusDistance"]) < 1e-5, "F must not focus a stale component after the intersection becomes empty"
             assert not errors, errors

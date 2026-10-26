@@ -4,6 +4,33 @@
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
+## 2026-10-26 O4 概览底图与独立重合阶数
+
+按用户最新要求，G 模式的巡天源覆盖固定为真实 O4 全天天区概览；只有严格交集按滑条升降阶。
+本节取代下节“源覆盖与交集同阶数加载”的策略。初次进入 G 时，O4 底图与目标交集完整后
+一起更新；拖动滑条和移动镜头复用 O4 缓存，不再加载普通高阶源覆盖块。空交集也保留 O4
+源覆盖。退出 G 后恢复所选阶数的常规覆盖显示。F 仍按当前连通区域的真实阶数聚焦。
+
+工具栏/抽屉的滑条在 G 中标为“重合阶数 / Overlap order”；状态同时标示概览 O4 与交集实际
+阶数。Viewer 状态分别保留 `sourceNside` 和交集 `nside`，不会把 O4 概览标成高阶覆盖。
+移除已不需要的首次聚焦预测及高阶源视野缓存比较代码，保留原有请求取消、最终阶数提交和
+预算约束。未改后端、路由、公开 bundle、原生索引或 Warehouse/Elasticsearch。
+
+本地 `npm run build`、站点 TypeScript、viewer 专项、完整首页/Atlas Chromium 回归、Helm lint
+及 `git diff --check` 通过；`npm test` 为 481 项：479 通过、2 跳过，Core wheel 校验通过。
+真实 Dev API 配合本地新前端验证 Euclid ERO 原生 O11 产品 + Gaia DR3：常规 O4→O8 的六个
+块请求均为 O8；G 抽屉升到 O10 仅一次严格 O10 查询、零高阶源块请求，192 个交集 cells 叠加在
+O4 底图上。F 相机距离 1.17→1.08；390px 手机滑条可操作、无横向溢出，浏览器和覆盖 HTTP
+错误均为零。截图及汇总在 `/tmp/asa-o4-background-real/`，浏览器 fixture 截图在
+`/tmp/asa-o4-background-fixture/`。
+
+Dev 的同镜像完整首页/Atlas Chromium 回归通过，截图在 `/tmp/asa-o4-background-dev-fixture/`。
+部署时发现原有启动过程逐项校验 1,396 个依赖文件（约 13.15 GB，含 8.27 GB 的巡天索引）；
+revision 380 首轮冷启动超过原 6 分钟窗口并重启。Dev 的 `startupProbeFailureThreshold`
+由 120 调为 240（12 分钟），不改变应用代码或数据。当前 Helm revision **381** / 镜像
+`0.1.0-20261026-162630`，等待启动及真实线上回归；后续应单独优化现有启动校验的耗时。
+本轮继续在 `feat/atlas-display-orders` 实现；`.codex/config.toml` 用户修改保留，不纳入提交。
+
 ## 2026-10-26 共同覆盖的源图层保留与 F 聚焦
 
 修复 `8c92799` 引入的回归：G 模式只更新交集且把阶数不同的源图层整层隐藏，升阶后非重合
