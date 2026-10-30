@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HEALPix 距离可行性原型</title></head>
+<body>
+  <header><span>ASTRO SURVEY ATLAS · 可行性原型</span><h1>让选中的天空展开纵深</h1><p id="data-origin">合成星系样本 · ICRS / NESTED · 数据仅存在浏览器内存</p></header>
+  <main>
+    <section class="controls" aria-label="选区与展示设置">
+      <label>载入本地 DESI 样本<input id="sample-file" type="file" accept=".json,application/json"></label>
+      <button id="restore-synthetic" type="button">恢复合成样本</button>
+      <label>合成样本总量<select id="rows"><option value="5000">5 千</option><option value="10000">1 万</option><option value="50000">5 万</option><option value="60000" selected>6 万</option><option value="100000">10 万</option></select></label>
+      <label>样区<select id="population"><option value="18000">密集样区</option><option value="19000">中等样区</option><option value="20000">稀疏样区</option><option value="multi">两个区块</option><option value="empty">无样本区块</option></select></label>
+      <label>选区阶数 S<select id="order"><option>4</option><option selected>6</option><option>8</option><option>10</option><option>12</option><option>13</option></select></label>
+      <label>内部聚合 A<select id="aggregation"><option value="auto">预算内最细</option><option value="0">S</option><option value="2">S + 2</option><option value="4">S + 4</option></select></label>
+      <label>展示<select id="mode"><option value="points">星系散点</option><option value="bars">星系细柱</option><option value="aggregate">聚合光点</option></select></label>
+      <label>径向轴<select id="axis"><option value="distance">红移推算的共动距离</option><option value="redshift">观测红移 z</option></select></label>
+      <label>径向分箱<select id="bins"><option>32</option><option selected>64</option><option>128</option></select></label>
+      <label>逐天体预算<select id="budget"><option value="4000">4 千（细柱建议）</option><option value="20000" selected>2 万</option><option value="50000">5 万</option><option value="100000">10 万</option></select></label>
+    </section>
+    <p id="sample-message" role="status"></p>
+    <div class="view"><canvas id="sky" aria-label="仅选中 HEALPix 内部的距离散点或细柱，可拖动旋转和滚轮缩放"></canvas><div class="view-label">拖动旋转 · 滚轮缩放 · 点击数据查看依据</div><div id="axis-label"></div></div>
+    <div class="status" id="status" role="status"></div>
+    <section class="details"><article><h2>这个“距离”根据什么判断？</h2><p id="basis">依据观测红移，使用 Astropy Planck18 模型推算视线共动距离（Mpc）。这是一种红移空间坐标估计，不是独立测量的真实距离。</p><p>未校正星系本动速度，也未从太阳系质心参考系转换到 CMB 参考系。显示的误差仅传播谱线红移测量误差，不含本动、参考系及模型系统误差。星系团可能沿视线被拉长。</p><p>原型把 z &lt; 0.02 排除在距离演示外；这是保守的展示策略，不是“超过它距离就可靠”的物理分界。Gaia 恒星需要视差或独立距离估计，不使用这套红移换算。</p></article><article><h2>选中数据</h2><p id="picked">点击发光点或细柱，查看原始红移、推算依据或聚合范围。</p><h2>精度与完整性</h2><p id="precision"></p><p>亮度与色彩为展示编码；疏密只反映这批输入样本，不能解释为已校正选择效应的宇宙物质密度。聚合光点代表多个星系，聚合位置不冒充单个星系坐标。</p></article></section>
+  </main>
+  <script type="module" src="/src/atlas/distance-prototype.ts"></script>
+</body></html>

@@ -1,8 +1,47 @@
 # Assets 项目交接
 
-交接日期：2026-10-26（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-10-30（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
+
+## 2026-10-30 本地 DESI Connector 与选区距离原型（原型未部署）
+
+已核实用户指出的 `/mnt/data/desi-dr1`：iron v1 `zall-pix-iron.fits` 有 28,425,963 行、
+22,371,272,640 bytes，坐标、Z/ZERR、分类、质量与全局 primary 列均存在。
+本地有足够输入，缺口是生产物理量提取/存储/按选区查询；此前仅核对在线五类严格索引，
+不能据其没有天体字段断言本地无数据。详见[可行性报告](docs/research/healpix-distance-feasibility-20261030.md)
+和[物理依据](docs/research/healpix-distance-science-and-sources-20261030.md)。
+
+通过认证管理 API 创建 `desi-dr1-local`（READY），引用新只读 PVC `atlas-source-desi-dr1`，
+basePath 为 `spectro/redux/iron`。PV/PVC 配置保存在 `docs/research/desi-dr1-local-source-20261030.yaml`；
+独立配置，未升级应用/Operator Helm。Warehouse 单文件访问任务
+`desi-dr1-local-catalog-check-20261030-r2` 在 eva7028 成功：1 file、519 有效坐标、16 O8 cells、零错误。
+首次任务失败并保留：Assets 仍固定旧 Scanner digest `415a731f…`，不识别当前 Operator 的
+`source.inventory`；r2 用标准 ScanRequest 显式选择 `0.2.0-20261029-fits-wcs-r2` 后成功。
+**后续管理台新扫描前须同步默认 Scanner 配置**，本轮没有滚动 backend。
+
+新增手动有界适配器 `scripts/extract-desi-distance-sample.py`，读取 FITS 固定行字节并保留
+64 位 ID 字符串、primary、质量、原始红移/误差和行号；不扩展 Warehouse 生产契约。
+32,768 行窗口 `[4700000,4732768)` 已写入 `atlas-evidence-smoke:/distance-prototype/desi-dr1-local-20261030.json`，
+receipt 同目录；宿主路径及 SHA 见报告。20,448 个有效星系；135 组真实聚合计数守恒。
+该窗口不是完整天区或随机样本，不能外推面密度/全巡天有效率；整文件 SHA 本轮未重新验证。
+
+`npm run prototype:distance` 打开 `/atlas/distance-prototype.html`，不进入生产构建路由。
+默认合成输入，可用文件控件载入上述真实 evidence JSON；有来源、行数、排除统计和完整性说明，
+不会在初始浏览器请求加载目录行。S/A/径向分箱独立，默认散点 20,000、细柱 4,000，
+超限用完整聚合（32,768 非空体元预算），不静默截断；真实高阶格只有少数对象时不造点。
+距离为完整 Astropy Planck18 的视线共动距离估计，保留 barycentric 与测量误差项，
+标明未校正本动速度/CMB 参考系和系统误差未知；可切观测红移轴。模型插值核验最大误差
+约 0.00105 Mpc，这是数值精度。原始行只在 evidence，不入 Git。
+
+当前 `npm run build`、站点 TypeScript、11 项距离测试、3 项 FITS 适配器测试、桌面/390px
+手机浏览器的合成及真实输入验证通过。此前合成阶段 `npm test` 为 491 项（489 通过、2 跳过），
+Core wheel 通过；后续追加导入/FITS 测试。Warehouse 静态 validation 全部通过；baseline/Asset
+的扫描均通过，MOC 因既有 CDS TLS 问题失败，整体在线门禁不能标全通过；Workspace local/remote
+caller 均 PASSED。日志与请求 ID 见报告。
+截图与浏览器记录在 `/tmp/asa-distance-feasibility-20261030/`；挂载/Scanner 验证日志在
+`/tmp/asa-desi-connector-validation/`。未发布公开包或激活原生索引；Dev 镜像差异仍见下节。
+用户 `.codex/config.toml` 修改保留，原型/适配器/报告尚未提交。
 
 ## 2026-10-26 O4 概览底图与独立重合阶数
 

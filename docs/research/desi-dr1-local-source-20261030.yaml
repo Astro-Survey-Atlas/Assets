@@ -1,0 +1,40 @@
+# Existing NFS export; no scientific data is copied or modified.
+# Provision separately from the Warehouse Infra release, as its source-volume
+# contract permits. Retain the source PV if this claim is ever removed.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: atlas-source-desi-dr1-pv
+  labels:
+    atlas.zhejianglab.org/scanner-source: "true"
+    app.kubernetes.io/part-of: astro-survey-atlas
+spec:
+  capacity:
+    storage: 1800Gi
+  accessModes: [ReadOnlyMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  mountOptions: [ro]
+  claimRef:
+    namespace: atlas-warehouse
+    name: atlas-source-desi-dr1
+  nfs:
+    server: 10.15.49.212
+    path: /mnt/data/desi-dr1
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: atlas-source-desi-dr1
+  namespace: atlas-warehouse
+  labels:
+    atlas.zhejianglab.org/scanner-source: "true"
+    app.kubernetes.io/part-of: astro-survey-atlas
+spec:
+  accessModes: [ReadOnlyMany]
+  resources:
+    requests:
+      storage: 1800Gi
+  storageClassName: ""
+  volumeName: atlas-source-desi-dr1-pv

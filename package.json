@@ -39,6 +39,10 @@
     "test:python": "python3 -m unittest discover -s test -p 'test_*.py'",
     "test:homepage": "npm run build:site && python3 scripts/homepage-carousel-smoke.py",
     "test:atlas-viewer": "python3 scripts/atlas-viewer-smoke.py",
+    "prototype:distance": "vite --host 127.0.0.1 --port 5175 --open /atlas/distance-prototype.html",
+    "research:distance": "tsx scripts/distance-feasibility.ts",
+    "research:distance:desi": "python3 scripts/extract-desi-distance-sample.py",
+    "test:distance-browser": "python3 scripts/distance-prototype-smoke.py",
     "test:core": "python3 scripts/verify_core_wheel.py",
     "test": "npm run test:node && npm run test:core",
     "validate": "npm run build && npm test"
