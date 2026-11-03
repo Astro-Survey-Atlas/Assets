@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing immutable code tag, for example code-v0.0.2
+        description: Existing immutable code tag, for example code-v0.0.3
         required: true
         type: string
 
@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -129,7 +129,8 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
           mkdir -p dist/chart
           helm package charts/astro-survey-atlas-assets --destination dist/chart
-          helm push dist/chart/*.tgz "$CHART"
+          helm push dist/chart/*.tgz "${CHART%/*}"
+          helm show chart "$CHART" --version "${{ steps.version.outputs.version }}"
 
       - name: Stage code release information
         env:

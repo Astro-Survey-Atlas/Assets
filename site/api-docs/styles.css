@@ -7,3 +7,67 @@
 #swagger-ui { border: 1px solid var(--public-line); border-radius: 6px; background:#fff; padding:1rem; color:#25333d; }
 #swagger-ui .swagger-ui .wrapper { padding:0 1rem; }
 #swagger-ui input, #swagger-ui textarea { color:#25333d; background:#fff; }
+
+.api-docs-page .api-status-row {
+  display: block;
+  margin-top: 28px;
+}
+.api-docs-page .api-status-panel {
+  min-width: 0;
+  padding: 14px 16px 8px;
+  border: 1px solid var(--public-line);
+  border-radius: 4px;
+  background: var(--public-surface);
+}
+.api-docs-page .api-status-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 32px;
+}
+.api-docs-page .api-status-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.api-docs-page .api-status-label { margin: 0; color: var(--public-subtle); font: 700 10px/1.2 var(--font-mono), monospace; text-transform: uppercase; }
+.api-docs-page .api-status-state,
+.api-docs-page .api-service-state { display: inline-flex; align-items: center; gap: 7px; color: var(--public-muted); font: 600 11px/1.2 var(--font-mono), monospace; }
+.api-docs-page .api-status-state { padding: 6px 9px; border: 1px solid color-mix(in srgb, #38a873 35%, var(--public-line)); border-radius: 999px; background: color-mix(in srgb, #38a873 9%, var(--public-surface)); color: var(--public-text); }
+.api-docs-page .api-status-state strong { color: var(--public-text); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.api-docs-page .api-status-indicator { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #38a873; box-shadow: 0 0 0 3px color-mix(in srgb, #38a873 15%, transparent); }
+.api-docs-page [data-status="configured"] .api-status-indicator { background: var(--brand-indigo-strong); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-indigo-strong) 15%, transparent); }
+.api-docs-page [data-status="empty"] .api-status-indicator,
+.api-docs-page [data-status="unconfigured"] .api-status-indicator,
+.api-docs-page [data-status="unavailable"] .api-status-indicator { background: #d99642; box-shadow: 0 0 0 3px color-mix(in srgb, #d99642 16%, transparent); }
+.api-docs-page [data-status="failed"] .api-status-indicator,
+.api-docs-page [data-status="error"] .api-status-indicator { background: var(--brand-magenta); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-magenta) 17%, transparent); }
+.api-docs-page [data-status="empty"] .api-status-state,
+.api-docs-page [data-status="unconfigured"] .api-status-state,
+.api-docs-page [data-status="unavailable"] .api-status-state { border-color: color-mix(in srgb, #d99642 36%, var(--public-line)); background: color-mix(in srgb, #d99642 8%, var(--public-surface)); }
+.api-docs-page [data-status="failed"] .api-status-state,
+.api-docs-page [data-status="error"] .api-status-state { border-color: color-mix(in srgb, var(--brand-magenta) 38%, var(--public-line)); background: color-mix(in srgb, var(--brand-magenta) 7%, var(--public-surface)); }
+.api-docs-page .api-status-release { display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.api-docs-page .api-status-layer-count { grid-column: 1; grid-row: 1; color: var(--public-text); font: 700 22px/1 var(--font-sans), sans-serif; text-align: right; }
+.api-docs-page .api-status-release > span:not(.api-status-release-label) { grid-column: 2; grid-row: 1; color: var(--public-muted); font-size: 11px; }
+.api-docs-page .api-status-release-label { grid-column: 1; grid-row: 2; color: var(--public-subtle); font: 700 8px/1.4 var(--font-mono), monospace; text-align: right; text-transform: uppercase; }
+.api-docs-page .api-status-release-id { grid-column: 2; grid-row: 2; max-width: min(100%, 380px); overflow-wrap: anywhere; color: var(--brand-indigo-strong); font: 600 10px/1.4 var(--font-mono), monospace; text-align: left; }
+.api-docs-page .api-native-index { display: grid; grid-template-columns: max-content minmax(100px, auto) minmax(0, 1fr); align-items: center; gap: 6px 14px; min-height: 40px; margin-top: 11px; padding: 8px 0; border-top: 1px solid var(--public-line); }
+.api-docs-page .api-native-index-label { color: var(--public-subtle); font: 700 9px/1.2 var(--font-mono), monospace; text-transform: uppercase; }
+.api-docs-page .api-native-index code { min-width: 0; color: var(--public-muted); font: 600 10px/1.4 var(--font-mono), monospace; overflow-wrap: anywhere; }
+.api-docs-page .api-native-index-state { justify-self: end; color: var(--public-subtle); font: 500 9px/1.4 var(--font-mono), monospace; overflow-wrap: anywhere; text-align: right; }
+.api-docs-page .api-service-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 24px; margin: 0; padding: 3px 0 0; border-top: 1px solid var(--public-line); list-style: none; }
+.api-docs-page .api-service { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; padding: 10px 0; border-bottom: 1px solid var(--public-line); }
+.api-docs-page .api-service-name { min-width: 0; overflow: hidden; color: var(--public-muted); font: 600 10px/1.4 var(--font-mono), monospace; text-overflow: ellipsis; white-space: nowrap; }
+.api-docs-page .api-service-state { gap: 6px; flex: none; font-size: 9px; }
+.api-docs-page .api-service-state .api-status-indicator { width: 5px; height: 5px; box-shadow: none; }
+.api-docs-page .api-status-loading,
+.api-docs-page .api-status-error { margin: 0; color: var(--public-muted); font-size: 12px; }
+.api-docs-page .api-status-panel.is-unavailable { border-color: color-mix(in srgb, var(--brand-magenta) 35%, var(--public-line)); }
+.api-docs-page .api-status-error { color: var(--brand-magenta-strong); }
+
+@media (max-width: 760px) {
+  .api-docs-page .api-status-overview { align-items: flex-start; flex-direction: column; gap: 9px; }
+  .api-docs-page .api-status-release { justify-content: flex-start; }
+  .api-docs-page .api-native-index { grid-template-columns: max-content minmax(0, 1fr); }
+  .api-docs-page .api-native-index-state { grid-column: 2; justify-self: start; text-align: left; }
+}
+@media (max-width: 560px) {
+  .api-docs-page .api-service-list { grid-template-columns: 1fr; gap: 0; }
+}

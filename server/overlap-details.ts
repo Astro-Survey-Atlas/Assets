@@ -4,6 +4,7 @@ import { layersForOverlapComponent, type OverlapComponent, type OverlapResult } 
 import type { PublicSurveyIndex } from "./surveys.js";
 import type { LoadedCatalog } from "./catalog.js";
 import type { ScanConnectorIdentity } from "../src/connector-icon.js";
+import type { NativeMoc } from "./native-moc.js";
 
 export type CoverageClaimKind = "moc" | "tile" | "raw-file" | "overview";
 export type DetailPrecision = "exact" | "estimated" | "entrypoint-only" | "truncated";
@@ -140,10 +141,11 @@ function publicSourcesFor(
   sourceUnitsByLayer: ReadonlyMap<string, unknown> = new Map(),
   sourceIndex?: PublicSurveyIndex,
   publishedSourcesByLayer: ReadonlyMap<string, PublishedOverlapSourceMetadata> = new Map(),
+  nativeGeometry?: ReadonlyMap<string, NativeMoc>,
 ): PublicOverlapSource[] {
   const seen = new Set<string>();
   const sources: PublicOverlapSource[] = [];
-  for (const layer of layersForOverlapComponent(layers, result, component)) {
+  for (const layer of layersForOverlapComponent(layers, result, component, nativeGeometry)) {
     const survey = surveyIndex.surveys.find((candidate) => candidate.id === layer.surveyId);
     const release = survey?.releases.find((candidate) => candidate.id === layer.releaseId);
     const product = release?.products.find((candidate) => candidate.name === layer.product);
@@ -187,11 +189,11 @@ function publicSourcesFor(
   return sources;
 }
 
-function assetsEvidenceFor(layers: readonly CoverageCellLayer[], surveyIndex: PublicSurveyIndex, result: OverlapResult, component: OverlapComponent, catalog: LoadedCatalog | undefined): AssetsOverlapEvidence[] {
+function assetsEvidenceFor(layers: readonly CoverageCellLayer[], surveyIndex: PublicSurveyIndex, result: OverlapResult, component: OverlapComponent, catalog: LoadedCatalog | undefined, nativeGeometry?: ReadonlyMap<string, NativeMoc>): AssetsOverlapEvidence[] {
   if (!catalog) return [];
   const manifestFiles = catalog.manifest.files;
   const seen = new Set<string>();
-  return layersForOverlapComponent(layers, result, component).flatMap((layer) => {
+  return layersForOverlapComponent(layers, result, component, nativeGeometry).flatMap((layer) => {
     const survey = surveyIndex.surveys.find((entry) => entry.id === layer.surveyId);
     const release = survey?.releases.find((entry) => entry.id === layer.releaseId);
     const product = release?.products.find((entry) => entry.name === layer.product);
@@ -215,9 +217,10 @@ function warehouseEvidenceFor(
   result: OverlapResult,
   component: OverlapComponent,
   snapshots: ReadonlyMap<string, WarehouseLayerSnapshot>,
+  nativeGeometry?: ReadonlyMap<string, NativeMoc>,
 ): WarehouseOverlapEvidence[] {
   const componentCells = new Set(component.cells);
-  return layersForOverlapComponent(layers, result, component)
+  return layersForOverlapComponent(layers, result, component, nativeGeometry)
     .map((layer): WarehouseOverlapEvidence | null => {
       const snapshot = snapshots.get(layer.layerId);
       if (!snapshot) return null;
@@ -267,9 +270,10 @@ export function buildOverlapDetails(input: {
   publishedSourcesByLayer?: ReadonlyMap<string, PublishedOverlapSourceMetadata>;
   warehouseSnapshots?: ReadonlyMap<string, WarehouseLayerSnapshot>;
   warehouseGeometry?: WarehouseGeometryLoadStatus;
+  nativeGeometry?: ReadonlyMap<string, NativeMoc>;
 }): OverlapDetails {
-  const componentLayers = layersForOverlapComponent(input.layers, input.result, input.component);
-  const warehouseEvidence = warehouseEvidenceFor(input.layers, input.result, input.component, input.warehouseSnapshots ?? new Map());
+  const componentLayers = layersForOverlapComponent(input.layers, input.result, input.component, input.nativeGeometry);
+  const warehouseEvidence = warehouseEvidenceFor(input.layers, input.result, input.component, input.warehouseSnapshots ?? new Map(), input.nativeGeometry);
   const warehousePrecision = new Map(warehouseEvidence.map((entry) => [entry.layerId, entry.precision]));
   const sourcePrecision = new Map(componentLayers.map((layer) => [
     layer.layerId,
@@ -291,8 +295,8 @@ export function buildOverlapDetails(input: {
   return {
     schemaVersion: 1,
     component: input.component,
-    publicSources: publicSourcesFor(input.layers, input.surveyIndex, input.result, input.component, input.sourceUnitsByLayer, input.sourceIndex, input.publishedSourcesByLayer),
-    assetsEvidence: assetsEvidenceFor(input.layers, input.surveyIndex, input.result, input.component, input.catalog),
+    publicSources: publicSourcesFor(input.layers, input.surveyIndex, input.result, input.component, input.sourceUnitsByLayer, input.sourceIndex, input.publishedSourcesByLayer, input.nativeGeometry),
+    assetsEvidence: assetsEvidenceFor(input.layers, input.surveyIndex, input.result, input.component, input.catalog, input.nativeGeometry),
     warehouseEvidence,
     ...(input.warehouseGeometry ? { warehouseGeometry: {
       ...input.warehouseGeometry,

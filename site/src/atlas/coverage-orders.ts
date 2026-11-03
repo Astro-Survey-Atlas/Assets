@@ -3,6 +3,12 @@ export interface CoverageOrderLayer {
   availableOrders: number[];
 }
 
+/** Below O6 the complete sky fits in a small bounded overlap response. */
+export function overlapViewTileOrder(order: number): number | null {
+  if (!Number.isSafeInteger(order) || order < 4 || order > 13 || order < 6) return null;
+  return order - 6;
+}
+
 /** Keep every selected product in its survey union at a real shared order. */
 export function highestCommonCoverageOrder(layers: CoverageOrderLayer[], surveyIds: Iterable<string>): number | null {
   const selectedIds = new Set(surveyIds);

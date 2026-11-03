@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   # Public mirrors: ghcr.io/astro-survey-atlas/assets (identical digest).
   repository: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/astro-survery-atlas/astro-survey-atlas-assets
-  tag: "0.0.2"
+  tag: "code-v0.0.3"
   pullPolicy: IfNotPresent
 
 backendNodeOptions: ""
@@ -171,6 +171,14 @@ splitRoles:
   backendReplicas: 1
   cacheStorageClass: local-path
   cacheSize: 8Gi
+  backendImage:
+    repository: ""
+    tag: ""
+
+skyDepth:
+  enabled: false
+  samplePath: ""
+  sampleSha256: ""
 
 # Optional Assets-only fallback after a confirmed empty CDS search.
 llm:

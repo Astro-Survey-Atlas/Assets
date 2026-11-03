@@ -1,8 +1,333 @@
 # Assets 项目交接
 
-交接日期：2026-10-13（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-11-03（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
+
+## 2026-11-03 代码版本 0.0.3 收尾
+
+本轮以 `code-v0.0.3` 为代码发布版本，包含本分支的真实阶数显示、共同覆盖交互、
+天球内可选 DESI 纵深和公开页面调整。发布说明见
+[code-v0.0.3](docs/releases/code-v0.0.3.md)；正式制品坐标见
+[GitHub Release](https://github.com/Astro-Survey-Atlas/Assets/releases/tag/code-v0.0.3)。
+用户决定 Assets 开发先在此收尾，后续开发等待新任务。
+
+最新 Dev 为 Helm revision **389** / site 镜像 `0.1.0-20261103-115035`；backend API
+镜像固定 `0.1.0-20261102-094933`，两者均 1/1 Ready、零重启。首页 Warehouse 区域、
+`/releases/` 发布流程和 `/api-docs/` 已调整布局；API 文档删除手动刷新按钮及三张说明卡，
+进入页面自动读取服务状态。build、npm test（508 通过、2 跳过）、Helm lint、diff check
+通过；Dev health、status、assets、coverage、页面 HTML/JS 和 FITS Range 206 已验证。
+
+发布版本同步 package/lockfile、Chart version/appVersion 和 health 版本；Chart 默认镜像
+使用真实发布 tag `code-v0.0.3`，OCI 上传目标为 `charts` 父目录，避免重复拼接 Chart 名。
+Checks 与 Code Release runner 固定 Ubuntu 24.04，与现有 Playwright 1.55 的 Chromium 依赖匹配；
+GitHub 的 `ubuntu-latest` 已迁移到该 Playwright 版本不支持的 Ubuntu 26.04。
+首页/Atlas 浏览器回归在长阶数交互后会重新打开已自动收起的图层选择器，再操作可见的
+Q1 控件，避免 CI 速度较慢时点击 10 秒自动关闭后的隐藏控件。
+抽屉拖动后的查询和 F 聚焦检查按真实请求/相机状态等待，避免以固定 700ms/1s 推断
+异步动作完成；临时 CI 诊断输出已清除。
+当前代码发布使用独立 Code Release 流程；公开数据仍按独立 Data Package Release 版本管理。
+DESI 原始行仍在 evidence，生产默认未接入纵深资料；样本与物理限制见发布说明及下节。
+
+## 2026-11-02 天球内真实 DESI 纵深（Dev 已部署）
+
+已按用户最新要求把纵深接入正式 `/atlas/` 的原天球：**选中 HEALPix 区块自动加载**，
+有资料才显示 aggregated points，加载/无数据/未接入/失败时静默隐藏可选纵深。
+移除 DESI 3D 工具栏按钮、Inspector 二次点击入口和独立 HEALPix/DEPTH HUD。
+Cell Inspector 下方新增独立透明 **DEPTH** 面板，标题与 `ORDER … · IPix …` 同为 14px/700，
+无底色/边框/阴影/毛玻璃；数量、轴、图例、点选区间和来源依据都在其中。
+巡天 readout、Cell Inspector、DEPTH 共用流式列，长标题换行不再覆盖后续内容；窄屏列可滚动，
+查看区块时隐藏重复来源队列。共享原天球 Scene、相机、画布和控制，不跳页、不另开画布。
+点的屏幕面积正比于对象数，直径正比于数量平方根；4 倍数量对应 2 倍直径，图例采用同一比例。
+真实 HEALPix 子格位置随径向箱沿选区法线平行位移，底面范围和区块数不随高度增加；
+径向独立缩放，不能当作等比例宇宙体积。点击光点显示数量、来源、聚合像元和径向区间，
+正常选择/加载不移动镜头；F 显式聚焦，ESC 沿用原天球清除选区与 Inspector，同时取消纵深。
+双端范围滑条按 Mpc/z 加权均值强调聚合点，范围内点保留原色，范围外点保留原色并以 50% alpha 与天球背景混合；不额外染灰或阻断后方聚合点。两道平行线框标出范围上下界。
+距离和红移各自记住范围，拖动不重新请求数据。Mpc 标注说明 1 Mpc 约 326 万光年及 Planck18 推算模型。
+选区、阶数和来源变化自动更新；失败或空结果后重新选择会再次读取。
+Dev 入口 <http://10.15.51.75:32083/atlas/?depth=desi>；Helm revision **386**。site 与
+`publish-assets` init 使用镜像 `0.1.0-20261102-163901`；backend 保留 API 镜像
+`0.1.0-20261102-094933`。site/backend 均 1/1 Ready、零重启；backend Pod 因 init 镜像更新而重建，API 容器镜像未变。
+本轮临时本地预览已关闭。
+启动命令、接口配置、全部范围与测试见 [真实场景说明](docs/sky-depth-demo.md)。
+
+复用前轮 `desi-dr1-local` 的真实 evidence，不复制原始行进 Git。窗口仍为
+`[4700000,4732768)`、SHA `f2b19da700f5dbb0576e7f5f807ef09ec06d8d6ef5f1f2834528f08132260413`。
+O4 #630 有 6,612 个源行，距离有效 4,198 个、红移有效 4,222 个；距离模式以
+O8 × 64 个径向箱完整聚合为 2,296 个非空单元，红移模式为 2,097 个，计数守恒。
+不是完整天区或随机样本，不能外推完整巡天密度。
+
+新增可选 `SkyDepthStore` 与 GET `/api/v1/sky-depth/example`、POST `/api/v1/sky-depth`，
+按需读取、固定哈希及 evidence 真实路径校验；接口和 OpenAPI 独立于 MOC/发布。
+生产默认未接入资料，启用须显式配置 `ASSETS_SKY_DEPTH_SAMPLE_PATH/SHA256` 及 evidence 根目录。
+Planck18 表已包含在 Dockerfile。预览共享该模块，其他公开天球读取代理到既有 Dev。
+原始红移与距离展示资格已分开；逐来源区分可用、仅红移、无适用测量、尚未接入、样本空、
+读取失败。界面明确 Planck18 共动距离推算、未作本动/CMB 校正和仅测量项误差；红移轴
+使用低/高 z 图例。25 秒超时、清除取消和过期结果隔离均可用；无可显示资料时不造点或显示零值。
+
+`site/src/atlas/sky-depth-layer.ts` 负责天球内几何、屏幕面积标度、遮挡和点选；
+`sky-depth-panel.ts` 仅负责 Inspector 下的透明面板与请求，不创建独立 renderer。原 viewer 管理其生命周期，
+纵深显示时弱化覆盖并以真实底面边界代替普通选区体，清除时恢复。只有选中区块才查询资料。
+`?depth=desi` 仅保留为预先选择 O4 #630 的开发链接，随后走普通自动加载路径。
+
+当前只接通 DESI DR1 行窗口，测量查询按 survey/release/角选区，不是产品逐文件目标清单。
+没有全量物理量索引、多巡天实测融合或交叉匹配。其他巡天只报告尚未接入，二维能力独立。
+完整构建、站点 TypeScript、21 项距离专项通过；全量 `npm test` 为 510 项：508 通过、
+2 跳过，Core wheel 验证通过；本轮常规 viewer 和首页/Atlas 回归通过。真实 Chromium 回归含单画布、
+无独立面板/入口按钮、仅聚合请求、真实点击自动加载、数量面积图例、z 轴、光点点选、
+不自动移动镜头、失败/无资料隐藏、清除取消请求和 390px 手机无溢出，页面错误为零。
+长标题/手机布局均检查 readout→Inspector→DEPTH 不重叠、背景透明和标题同级。
+Ctrl 选择能穿过光点操作底面区块；语言切换保留实际 Order/IPix 并更新纵深文案。
+内置 Browser 无连接，以本机 Chromium 验证。Dev 浏览器使用 `NO_PROXY` 直连以绕过 shell HTTP proxy；
+状态等待使用 locator，兼容站点严格 CSP。Dev 回归通过，记录与截图位于
+`/tmp/asa-sky-depth-opacity-dev-final/verification-auto-depth.json`、`auto-depth-*.png`；本地回归记录仍在
+`/tmp/asa-sky-depth-20261030/verification-auto-depth.json`。
+额外灰阶混色曾让同视角色度比降到 0.262，无法单独验证 alpha；移除该混色后，Dev 全范围与 `0–200 Mpc` 的 chroma ratio 为 0.545，与 50% alpha 的颜色混合相符，浏览器回归将该比例限定在 0.35–0.65。
+最终效果图在 `.tmp-screens/sky-depth-transparent-{inspector,panel,mobile}.png`（Git 忽略）。
+`npm run test:sky-depth-browser` 可复验运行中的预览；上一版 `on-globe-*` 是已替换的 HUD。
+首页回归本轮换到独立的 4178 端口运行同一脚本；4173 已有其他进程返回管理台页面，未停止它。
+
+Dev health、assets、coverage、coverage catalog、DESI 示例及参考来源 API 均已核对；
+FITS Range 返回 HTTP 206 / 16 bytes，SHA 与清单一致。health 报告公开 bundle
+`reviewed-mv51kku3-a4f8d8e6` / SHA-256 `d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`、
+611 files；coverage catalog 为 140 层。未改 Warehouse、未发布公开包或激活索引；下节旧 Scanner 默认配置仍需保留，backend 镜像与 site 有意分开。
+先前原型已由用户提交为 `4d02a89`；本节场景改动尚未提交。
+
+## 2026-10-30 本地 DESI Connector 与选区距离原型（原型未部署）
+
+已核实用户指出的 `/mnt/data/desi-dr1`：iron v1 `zall-pix-iron.fits` 有 28,425,963 行、
+22,371,272,640 bytes，坐标、Z/ZERR、分类、质量与全局 primary 列均存在。
+本地有足够输入，缺口是生产物理量提取/存储/按选区查询；此前仅核对在线五类严格索引，
+不能据其没有天体字段断言本地无数据。详见[可行性报告](docs/research/healpix-distance-feasibility-20261030.md)
+和[物理依据](docs/research/healpix-distance-science-and-sources-20261030.md)。
+
+通过认证管理 API 创建 `desi-dr1-local`（READY），引用新只读 PVC `atlas-source-desi-dr1`，
+basePath 为 `spectro/redux/iron`。PV/PVC 配置保存在 `docs/research/desi-dr1-local-source-20261030.yaml`；
+独立配置，未升级应用/Operator Helm。Warehouse 单文件访问任务
+`desi-dr1-local-catalog-check-20261030-r2` 在 eva7028 成功：1 file、519 有效坐标、16 O8 cells、零错误。
+首次任务失败并保留：Assets 仍固定旧 Scanner digest `415a731f…`，不识别当前 Operator 的
+`source.inventory`；r2 用标准 ScanRequest 显式选择 `0.2.0-20261029-fits-wcs-r2` 后成功。
+**后续管理台新扫描前须同步默认 Scanner 配置**，本轮没有滚动 backend。
+
+新增手动有界适配器 `scripts/extract-desi-distance-sample.py`，读取 FITS 固定行字节并保留
+64 位 ID 字符串、primary、质量、原始红移/误差和行号；不扩展 Warehouse 生产契约。
+32,768 行窗口 `[4700000,4732768)` 已写入 `atlas-evidence-smoke:/distance-prototype/desi-dr1-local-20261030.json`，
+receipt 同目录；宿主路径及 SHA 见报告。20,448 个有效星系；135 组真实聚合计数守恒。
+该窗口不是完整天区或随机样本，不能外推面密度/全巡天有效率；整文件 SHA 本轮未重新验证。
+
+`npm run prototype:distance` 打开 `/atlas/distance-prototype.html`，不进入生产构建路由。
+默认合成输入，可用文件控件载入上述真实 evidence JSON；有来源、行数、排除统计和完整性说明，
+不会在初始浏览器请求加载目录行。S/A/径向分箱独立，默认散点 20,000、细柱 4,000，
+超限用完整聚合（32,768 非空体元预算），不静默截断；真实高阶格只有少数对象时不造点。
+距离为完整 Astropy Planck18 的视线共动距离估计，保留 barycentric 与测量误差项，
+标明未校正本动速度/CMB 参考系和系统误差未知；可切观测红移轴。模型插值核验最大误差
+约 0.00105 Mpc，这是数值精度。原始行只在 evidence，不入 Git。
+
+当前 `npm run build`、站点 TypeScript、11 项距离测试、3 项 FITS 适配器测试、桌面/390px
+手机浏览器的合成及真实输入验证通过。此前合成阶段 `npm test` 为 491 项（489 通过、2 跳过），
+Core wheel 通过；后续追加导入/FITS 测试。Warehouse 静态 validation 全部通过；baseline/Asset
+的扫描均通过，MOC 因既有 CDS TLS 问题失败，整体在线门禁不能标全通过；Workspace local/remote
+caller 均 PASSED。日志与请求 ID 见报告。
+截图与浏览器记录在 `/tmp/asa-distance-feasibility-20261030/`；挂载/Scanner 验证日志在
+`/tmp/asa-desi-connector-validation/`。未发布公开包或激活原生索引；Dev 镜像差异仍见下节。
+用户 `.codex/config.toml` 修改保留，原型/适配器/报告尚未提交。
+
+用户进一步确认：纵深是可选增强，各巡天不保证有红移或可推算距离，无法展示可以正常接受。
+可行性报告已记录：区分距离可用、仅红移、已知无适用资料、尚未接入/未知、查询成功但无对象、
+读取失败；按来源独立展示，二维覆盖/发布/重合不依赖纵深成功。当前原型红移轴仍复用距离
+筛选，只覆盖同一批有效 DESI 星系的轴切换；正式接入需独立判断红移与距离展示资格，
+不能把目标状态视为已实现。此次仅补充设计记录，未改运行代码或部署。
+
+## 2026-10-26 O4 概览底图与独立重合阶数
+
+按用户最新要求，G 模式的巡天源覆盖固定为真实 O4 全天天区概览；只有严格交集按滑条升降阶。
+本节取代下节“源覆盖与交集同阶数加载”的策略。初次进入 G 时，O4 底图与目标交集完整后
+一起更新；拖动滑条和移动镜头复用 O4 缓存，不再加载普通高阶源覆盖块。空交集也保留 O4
+源覆盖。退出 G 后恢复所选阶数的常规覆盖显示。F 仍按当前连通区域的真实阶数聚焦。
+
+工具栏/抽屉的滑条在 G 中标为“重合阶数 / Overlap order”；状态同时标示概览 O4 与交集实际
+阶数。Viewer 状态分别保留 `sourceNside` 和交集 `nside`，不会把 O4 概览标成高阶覆盖。
+移除已不需要的首次聚焦预测及高阶源视野缓存比较代码，保留原有请求取消、最终阶数提交和
+预算约束。未改后端、路由、公开 bundle、原生索引或 Warehouse/Elasticsearch。
+
+本地 `npm run build`、站点 TypeScript、viewer 专项、完整首页/Atlas Chromium 回归、Helm lint
+及 `git diff --check` 通过；`npm test` 为 481 项：479 通过、2 跳过，Core wheel 校验通过。
+真实 Dev API 配合本地新前端验证 Euclid ERO 原生 O11 产品 + Gaia DR3：常规 O4→O8 的六个
+块请求均为 O8；G 抽屉升到 O10 仅一次严格 O10 查询、零高阶源块请求，192 个交集 cells 叠加在
+O4 底图上。F 相机距离 1.17→1.08；390px 手机滑条可操作、无横向溢出，浏览器和覆盖 HTTP
+错误均为零。截图及汇总在 `/tmp/asa-o4-background-real/`，浏览器 fixture 截图在
+`/tmp/asa-o4-background-fixture/`。
+
+Dev 的同镜像完整首页/Atlas Chromium 回归通过，截图在 `/tmp/asa-o4-background-dev-fixture/`。
+部署时发现原有启动过程逐项校验 1,396 个依赖文件（约 13.15 GB，含 8.27 GB 的巡天索引）；
+revision 380 的 backend 启动超过原 6 分钟窗口并重启。Dev 的
+`startupProbeFailureThreshold` 由 120 调为 240（12 分钟），revision 381 仍出现启动超时。
+随后仅将 backend 容器恢复为原已验证镜像 `0.1.0-20261026-153857`，该次启动约 3 分 22 秒完成，
+前端继续使用新镜像 `0.1.0-20261026-162630`。当前 site/backend 均 1/1 Ready、零重启。
+本轮未修改 backend 源码或数据；慢启动原因需要另行诊断，不能据此认定新镜像存在后端代码回归。
+
+当前 Helm revision **381**；backend 镜像通过 `kubectl set image` 恢复，与 Helm 的共享镜像 tag
+存在明确差异，init 容器仍使用新镜像。后续升级须保留该 backend 镜像选择，避免前端发布再次
+无意滚动 backend；独立配置两种角色镜像可作为单独的小改动处理。
+
+真实线上 Euclid ERO + Gaia 回归通过：常规 O4→O8 的六个请求均为 O8；G 抽屉升到 O10
+仅一次严格 O10 查询、零高阶源块请求，192 个交集 cells 叠加在 O4 底图上。F 相机距离
+1.17→1.08；390px 手机滑条可触达、无横向溢出，浏览器与覆盖 HTTP 错误均为零。
+截图及汇总在 `/tmp/asa-o4-background-dev/`。Dev HTML/JS/CSS 与本地构建逐字节一致；
+health、assets、coverage catalog 和分页 coverage 均 HTTP 200，FITS Range 仍为 206 / 16 bytes。
+公开 bundle 与上节记录一致：611 files、144 个资源、140 层（80 层支持 O10）；
+HTTP 验证汇总在 `/tmp/asa-o4-background-deploy-http.json`。
+
+实现 `0fdf645` 已推送至 `feat/atlas-display-orders`；`.codex/config.toml` 用户修改保留，不纳入提交。
+
+## 2026-10-26 共同覆盖的源图层保留与 F 聚焦
+
+修复 `8c92799` 引入的回归：G 模式只更新交集且把阶数不同的源图层整层隐藏，升阶后非重合
+覆盖随之消失；F 聚焦只读取普通 cell selection，未使用当前共同覆盖区域。
+
+现在 G 模式按当前视野为所有已选产品规划真实阶数的源显示块，保留非重合部分；与严格交集
+共用索引、取消信号和请求序号，两者完整到达后由 viewer 一次更新，加载/失败时保留上一批。
+只加载视野内高阶图块，排除背面；视野已被源块及交集缓存覆盖时复用，视角刷新不自动聚焦。
+沿用每次 192 块及 O9+ 32,768 cells 的现有预算，没有把 O4 底图当作高阶覆盖。
+近距离视野改用正确的球面可见范围，排除被抽屉遮挡的 canvas。原始图块缓存保持完整，绘制前
+按当前视野筛选真实阶数的 cells，并保守保留边界；仅可见 cells 计入显示预算。同一图块内的
+视角变化也会重新筛选。首次进入 G 先按即将聚焦的区域规划源覆盖，再整批更新并聚焦，防止
+初次布局变化触发的视野刷新抢占源覆盖加载。
+本节取代 10-18 记录中的“G 不加载普通覆盖块／隐藏旧源图层”策略。
+
+G 模式下 F 使用当前选中的连通区域及其真实阶数推进镜头；未选区域时使用首个区域。
+空交集不会聚焦已失效的区域。普通模式的 F 行为保持原有 cell selection 语义。
+
+新增 `npm run test:atlas-viewer`，通过真实 Three.js 场景验证源网格及非重合单元仍存在、
+源覆盖/交集原子更新、选中第二个区域时的相机方向，以及空交集保留源图层且不触发旧聚焦。
+完整站点回归增加无缓存 G 模式的双向延迟检查和实际键盘 F 推进检查。
+`npm run build`、站点 TypeScript、Helm lint、viewer 专项和完整首页/Atlas Chromium 回归均通过。
+`npm test` 全量空闲重跑为 481 项：479 通过、2 跳过，Core wheel 校验通过；首轮与两个
+WebGL 浏览器并跑时三项 server-http 启动超过八秒，保留为资源竞争下的测试时限问题。
+真实 Dev API 配合本地新前端验证 Euclid ERO 原生 O11 产品 + Gaia DR3：常规 O4→O8 的六个
+块请求均为 O8；抽屉 O8→O10 仅一次严格 O10 查询，显示 192 个交集 cells，并保留源覆盖。
+G 模式实际键盘 F 将相机从 1.17 推进至 1.08；390px 手机滑条可操作，浏览器错误和覆盖 HTTP
+错误均为零。截图及汇总在 `/tmp/asa-context-interaction/` 与 `/tmp/asa-context-real/`。
+Dev Helm revision **379** / 镜像 `0.1.0-20261026-153857` 已部署；site/backend 均 1/1 Ready、
+零重启。`http://10.15.51.75:32083/atlas/` 的 HTML、JS、CSS 哈希与本地构建一致。
+相同完整首页/Atlas Chromium 回归在线上通过；真实线上 Euclid ERO + Gaia 的 O4→O8 请求均
+为 O8，抽屉升到 O10 仅一次严格 O10 查询，源覆盖保留。放大/缩放后按 F 的相机距离仍为
+1.17→1.08；390px 手机无横向溢出、滑条可触达，浏览器和覆盖 HTTP 错误均为零。
+线上截图与汇总在 `/tmp/asa-context-dev/` 和 `/tmp/asa-context-dev-fixture/`。
+
+health、assets、coverage catalog 及分页 coverage 均 HTTP 200；公开 bundle 仍为
+`reviewed-mv51kku3-a4f8d8e6` / SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`、611 files。
+assets API 为 144 个资源、coverage catalog 为 140 层（80 层支持 O10）。2MASS H-band MOC
+FITS Range `0–15` 返回 HTTP 206 / 16 bytes，SHA 与资源清单一致。
+
+实现分支仍为 `feat/atlas-display-orders`；`.codex/config.toml` 的用户修改保留，不纳入提交。
+未改后端、路由、公开 bundle、原生索引或 Warehouse/Elasticsearch 配置。
+
+## 2026-10-18 天球滑条请求与重合抽屉交互
+
+本轮修改位于 `feat/atlas-display-orders`。鼠标/触屏拖动显示阶数时只预览数值，松开后请求最终
+阶数；连续键盘调整等待 250ms 后提交。开始新调整立即取消旧请求，并用序号阻止迟到响应覆盖
+新结果。显示块按所选产品整批收齐后一次替换；加载或预算/网络失败时保留上次覆盖及实际阶数，
+不再提前清空天球或把旧几何标成新阶数。
+
+根因包括每次 change 立即请求、阶数与数据分开更新时反复销毁/创建 WebGL viewer，以及共同覆盖
+每次返回都聚焦首个连通区域。现在复用 renderer、controls 和相机；相同图块集合复用加载，严格
+共同覆盖刷新保留视角，初次进入或显式选区域时才聚焦。F 聚焦和 G 共同覆盖的高阶图块筛选排除
+背面方向；G 不再并行加载普通覆盖块，已有共同覆盖包含新视野时直接复用。O4/O5 仍使用小规模
+全天天区块。高阶共同覆盖后不显示阶数不匹配的旧产品底图，也不能点击空交集中的旧单元。
+
+阶数控件与工具按钮同为 34px 高；展开重合抽屉时将同一个控件移至抽屉顶部，关闭时放回工具栏，
+保留数值、可选上限、事件和键盘焦点。抽屉内容单独滚动，390px 手机宽度下滑条仍可触达。
+沿用现有 API、产品目录、真实 MOC 和预算；没有调整后端、数据包、原生索引或路由。
+
+本地 `npm run build`、站点 TypeScript、Helm lint、`npm test` 均通过；479 项 Node 测试中
+477 通过、2 跳过，Core wheel 校验通过。Chromium 完整首页/天球回归覆盖鼠标拖动、连续键盘、
+延迟整批返回、旧响应迟到、预算失败保留原阶数、抽屉 O4→O8、相机/焦点稳定、390px 手机、
+主题及中英文切换。回归通过 WebGL context 获取次数确认不再重建 renderer；截图存于
+`/tmp/asa-atlas-interaction/`。相同 Chromium 回归在 Dev 上也通过。
+
+Dev Helm revision **378** 使用镜像 `0.1.0-20261018-194553`；site/backend 均 1/1 Ready、
+零重启。`http://10.15.51.75:32083/atlas/` 的 HTML、JS、CSS 与本地构建哈希一致。
+真实 API 浏览器检查选择 Euclid ERO 原生 O11 产品，从 O4 直接拖至 O8：六个显示块请求均为
+O8，没有 O5/O6/O7 请求，WebGL context 获取次数保持不变。加入 Gaia DR3 后，在共同覆盖
+抽屉中调至 O10，仅发起一次严格 O10 查询，返回 536 cells；没有普通覆盖块请求，滑条保留
+焦点。桌面及 390px 手机检查无横向溢出，抽屉滑条可操作，页面错误和覆盖 HTTP 错误均为零。
+截图及汇总保存在 `/tmp/asa-atlas-dev/`。
+
+health、assets、coverage catalog 和分页 coverage 均 HTTP 200；目录仍为 144 个资源、140 个
+图层（80 层支持 O10）。公开 bundle 保持 `reviewed-mv51kku3-a4f8d8e6` / SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`、611 files。
+2MASS H-band MOC FITS Range `0–15` 返回 HTTP 206 / 16 bytes，资源 SHA 校验一致。
+没有启动或更改 Warehouse、Elasticsearch，也没有修改后端、数据包或索引。
+
+用户的 `.codex/config.toml` 本地修改保留，不纳入提交。
+
+## 2026-10-18 天球产品选择与高阶显示
+
+实现位于 `feat/atlas-display-orders`，基于 `e8e8d2e`；本轮更改已部署 Dev。首页轮播默认开启，
+包括系统偏好减少动态效果时；该偏好仍会关闭 workflow 转场动画。天球巡天行默认折叠，点击名称或
+展开按钮查看 DR；DR 勾选同步选择该版本产品，巡天总勾选显示全选/部分选择状态。搜索临时展开
+匹配巡天，清除后恢复先前展开状态；拖动把手不再误触展开。
+
+本节前端改动已提交并推送，最新提交为 `3b76361`；涉及 `site/atlas/index.html`、
+`site/src/i18n.ts`、`site/src/main.ts`、`site/src/public.css`、`site/src/styles.css` 和
+`scripts/homepage-carousel-smoke.py`。
+`.codex/config.toml` 是用户本地修改，已保留。
+
+无图层选择及首次选层时均显示 O4。`.coverage-tools` 中的滑动条从 O4 调至所有已选图层共同
+支持的最高阶；保留当前值，直到新选择不再支持该阶数，此时降至仍受支持的最高阶。取消全部图层
+后重置为 O4。该设置同时控制常规覆盖与严格共同覆盖。高阶覆盖读取每个已选产品的真实显示图块
+索引，仅请求与当前视野相交的图块，
+并以所选阶数请求覆盖数据块。高阶共同覆盖先对每个巡天的已选产品图块取并集，再对巡天求交，
+把当前视野 tile 集合传给严格阶数查询。保留每次最多 192 个图块、O9+ 最多 32,768 个显示
+cell 的边界；常规覆盖按所有选中产品在当前视野所需图块数合计检查 192 块请求上限。提示说明
+该合计及可通过放大天球或减少图层解决；超限时不返回部分覆盖。
+
+Dev 只读 API 已确认 Euclid ERO VIS 原生产品支持 O4–O11，共 9 个 O11 图块，逐块请求均为
+HTTP 200。同一 ERO 版本另有最高 O10 的产品，所以选择整个 ERO 时 O11 按共同显示阶数规则禁用；
+需取消选择 O10 产品才能显示 O11。以上只是现有发布图层/图块能力验证，不表示 ERO 库存完整，
+也没有修改数据包、MOC 或原生索引。
+
+Dev Helm revision **377** 使用镜像 `0.1.0-20261018-170931`；site/backend 均 1/1 Ready、零重启，
+NodePort `http://10.15.51.75:32083/atlas/` 可查看。health 的 bundle 为
+`reviewed-mv51kku3-a4f8d8e6` / SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`，611 个文件；assets API
+返回 144 个资源，coverage catalog 有 140 层、其中 80 层支持 O10。health、assets、catalog、
+分页 coverage 和静态页面均 HTTP 200；FITS Range `0–15` 返回 HTTP 206 / 16 bytes，SHA-256
+`e3502bcc21f7ffac2b8493c631936d0a0fc29399b5d4aa00d50a1e0fc7e89164` 与资源清单一致。
+
+Dev Chromium 使用真实 API 选中 Euclid ERO 的 11 个产品：选择后保持 O4，上限 O10；手动升到
+O10 后，当前视野合计 256 个高阶覆盖块，显示中英文预算提示并停止绘制部分结果。11 个图块索引
+请求均 HTTP 200。390px 手机布局无横向溢出，滑条可见，浏览器无页面错误。浏览器 fixture 回归
+还覆盖确定性的 200/192 超限提示和超限时不发覆盖块请求。本地与 Dev Chromium 回归、主题、
+语言及 Atlas 交互均通过。
+
+`npm run build`、`npm test`（478 项：476 通过、2 跳过）、站点 TypeScript 检查、
+`npm run test:homepage`（本地及 Dev）、Helm lint 和 `git diff --check` 均通过。backend 因
+Chart 共用镜像 tag 随 Helm 升级滚动；未更改 backend 源码、配置、路由或数据，也未修改 bundle、
+Warehouse 或 Elasticsearch。backend 首次启动约四分钟，日志为 3 个几何层加载、0 层失败。
+
+## 2026-10-15 天球显示阶数与 Dev 部署
+
+天球新增显示阶数选择，默认 O4；可选阶数取所选图层共同支持范围，切换后常规覆盖请求与共同覆盖
+请求均使用该阶数。图层选择变化时即使当前阶数仍有效也会刷新菜单。实现分支
+`feat/atlas-display-orders`，修复提交 `492d1a1` 已推送；保留 `.codex/config.toml` 的用户本地修改。
+
+Dev Helm revision **374** 使用镜像
+`0.1.0-20261015-130605-atlas-orders`；site/backend 均 1/1 Ready、零重启。部署使用当前 Helm
+release values，仅覆盖 image tag。NodePort `http://10.15.51.75:32083/` 的 health、assets、coverage
+catalog 和 coverage API 均 HTTP 200。Bundle 未变化：`reviewed-mv51kku3-a4f8d8e6`，SHA-256
+`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`，611 个文件；coverage
+catalog 为 140 层，其中 80 层支持 O10。
+
+线上 Chromium 验证选中 Euclid ERO VIS 与 Gaia DR3：默认 O4、O4–O10 可选，O10 图层请求 HTTP 200，
+严格 O10 共同覆盖请求 HTTP 200；390px 手机宽度无横向溢出，页面错误为 0。FITS Range `0–15`
+返回 HTTP 206 / 16 bytes，`X-Content-SHA256` 为
+`e3502bcc21f7ffac2b8493c631936d0a0fc29399b5d4aa00d50a1e0fc7e89164`。本地
+`npm run build`、`npm test`（475 项：473 通过、2 跳过、0 失败）、`npm run test:homepage`、
+`helm lint charts/astro-survey-atlas-assets` 与 `git diff --check` 均通过。未更改数据 bundle 或
+Warehouse/Elasticsearch 资源。
 
 ## 2026-10-13 Euclid ERO/Q1 补充、数据发布与索引激活
 

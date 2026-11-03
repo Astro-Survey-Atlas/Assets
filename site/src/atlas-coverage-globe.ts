@@ -7,11 +7,14 @@ import {
   type SurveyLayerState,
   type SurveyLayerContextMenu,
   type SurveyLayerOverlapComponent,
+  type SurveyLayerOverlapCoverage,
 } from "./atlas/survey-layer-viewer.js";
 import type { SurveyFootprintManifest } from "./atlas/survey-footprints.js";
 import type { SurveyCard } from "./atlas/survey-registry.js";
 import { surveyColorFor } from "./atlas/survey-colors.js";
 import { filterByModalities } from "../../src/modality-filter.js";
+import type { SkyDepthResponse } from "../../src/sky-depth.js";
+import type { SkyDepthAggregate, SkyDepthLayout } from "./atlas/sky-depth-layer.js";
 
 export interface CoverageLayer {
   layerId: string;
@@ -22,6 +25,10 @@ export interface CoverageLayer {
   modality?: string;
   color: string;
   availableOrders: number[];
+  displayOrders?: number[];
+  displayRevision?: string;
+  nativeRevision?: string;
+  nativeMaxOrder?: number;
   overviewOrder: number;
   maxOrder: number;
   cellCount: number;
@@ -83,31 +90,49 @@ function projectPixelsToOrder(pixels: readonly number[], sourceOrder: number, ta
   return [...new Set(pixels.map((pixel) => Math.floor(pixel / divisor)))].sort((left, right) => left - right);
 }
 
-export function footprintManifest(catalog: CoverageCatalog, blocks: ReadonlyMap<string, number[]>, modalities: Iterable<string> = []): SurveyFootprintManifest {
+export function footprintManifest(
+  catalog: CoverageCatalog,
+  blocks: ReadonlyMap<string, number[]>,
+  modalities: Iterable<string> = [],
+  displayOrder?: number,
+  layerIds?: Iterable<string>,
+): SurveyFootprintManifest {
   // Older cached catalogs may predate the release precision gate. Never let
   // an ineligible layer lower the resolution of every other survey.
-  const layers = filterByModalities(catalog.layers, modalities).filter(layer => layer.overviewOrder >= MIN_PUBLIC_COVERAGE_ORDER && layer.maxOrder >= MIN_PUBLIC_COVERAGE_ORDER);
+  const selectedIds = layerIds ? new Set(layerIds) : undefined;
+  const layers = filterByModalities(catalog.layers, modalities).filter(layer => layer.overviewOrder >= MIN_PUBLIC_COVERAGE_ORDER
+    && layer.maxOrder >= MIN_PUBLIC_COVERAGE_ORDER && (!selectedIds || selectedIds.has(layer.layerId)));
   const overviewOrders = [...new Set(layers.map((layer) => layer.overviewOrder))];
-  const order = overviewOrders.length ? Math.min(...overviewOrders) : MIN_PUBLIC_COVERAGE_ORDER;
+  const order = displayOrder ?? (overviewOrders.length ? Math.min(...overviewOrders) : MIN_PUBLIC_COVERAGE_ORDER);
   const nside = 2 ** order;
   const generatedAt = new Date().toISOString();
   const footprints = layers
-    .map((layer) => ({
-      surveyId: layer.surveyId,
-      layerId: layer.layerId,
-      releaseId: layer.releaseId,
-      product: layer.product,
-      modality: layer.modality,
-      label: layer.product,
-      nside,
-      pixels: projectPixelsToOrder(blocks.get(`${layer.layerId}:${layer.overviewOrder}`) ?? [], layer.overviewOrder, order),
-      quality: "official_overview" as const,
-      sourceUrl: "https://assets.local/coverage/catalog",
-      retrievedAt: generatedAt,
-      notes: layer.overviewOrder === order
-        ? `Overview HEALPix order ${order} loaded from the public coverage catalog.`
-        : `Overview HEALPix order ${order} projected from explicit order ${layer.overviewOrder} coverage for the globe preview.`,
-    }))
+    .filter((layer) => layer.displayOrders
+      ? layer.displayOrders.includes(order)
+      : layer.availableOrders.includes(order) || layer.overviewOrder > order)
+    .map((layer) => {
+      const sourceOrder = layer.displayOrders?.includes(order) || layer.availableOrders.includes(order)
+        ? order
+        : layer.overviewOrder;
+      return {
+        surveyId: layer.surveyId,
+        layerId: layer.layerId,
+        releaseId: layer.releaseId,
+        product: layer.product,
+        modality: layer.modality,
+        label: layer.product,
+        nside,
+        pixels: projectPixelsToOrder(blocks.get(`${layer.layerId}:${sourceOrder}`) ?? [], sourceOrder, order),
+        quality: layer.nativeMaxOrder !== undefined ? "moc" as const : "official_overview" as const,
+        sourceUrl: "https://assets.local/coverage/catalog",
+        retrievedAt: generatedAt,
+        notes: layer.nativeMaxOrder !== undefined
+          ? `Public native MOC projected at display order ${order}; scientific precision follows the published evidence.`
+          : sourceOrder === order
+            ? `Published coverage cells loaded at their explicitly available order ${order}.`
+            : `Overview HEALPix order ${sourceOrder} projected to the coarser display order ${order}.`,
+      };
+    })
     .filter((footprint) => footprint.pixels.length > 0);
   return { schemaVersion: 1, generatedAt, coordinateFrame: "ICRS", nside, footprints };
 }
@@ -122,7 +147,9 @@ export class AtlasCoverageGlobe {
   readonly #onOverlapComponent: OverlapComponentChange;
   #viewer: SurveyLayerViewer | null = null;
   #visibleSurveyIds = new Set<string>();
+  #visibleLayerIds = new Set<string>();
   #visibleModalities = new Set<string>();
+  #displayOrder = MIN_PUBLIC_COVERAGE_ORDER;
   #surveys: CoverageSurvey[] = [];
   #catalog: CoverageCatalog | null = null;
   #blocks = new Map<string, number[]>();
@@ -163,20 +190,19 @@ export class AtlasCoverageGlobe {
     if (this.#catalog) this.#renderCatalog();
   }
 
-  #renderCatalog(): void {
+  #renderCatalog(overlap?: SurveyLayerOverlapCoverage): void {
     if (!this.#catalog) return;
-    const manifest = footprintManifest(this.#catalog, this.#blocks, this.#visibleModalities);
-    const selectedSurveyIds = new Set(this.#visibleSurveyIds);
-    // Rebuilding the scene reuses the canvas. Releasing the WebGL context here
-    // can trigger WEBGL_lose_context and leave the replacement renderer blank;
-    // the context is released only when the globe itself is finally disposed.
-    this.#viewer?.dispose({ releaseContext: false });
+    const manifest = footprintManifest(this.#catalog, this.#blocks, this.#visibleModalities, this.#displayOrder, this.#visibleLayerIds);
     const cards = this.#surveys.map(surveyCardFor);
+    if (this.#viewer) {
+      this.#viewer.updateCoverage(manifest, cards, this.#visibleSurveyIds, overlap);
+      return;
+    }
     this.#viewer = new SurveyLayerViewer(
       this.#canvas,
       manifest,
       cards,
-      () => undefined,
+      () => { if (this.#viewer) this.#onStateChange(this.#viewer.state); },
       (hover) => this.#handleHover(hover),
       (inspection) => this.#handleInspection(inspection),
       (menu) => this.#onContextMenu(menu),
@@ -185,10 +211,8 @@ export class AtlasCoverageGlobe {
       (component) => this.#onOverlapComponent(component),
     );
     this.#viewer.setLayoutMode("layers");
-    this.#visibleSurveyIds = selectedSurveyIds;
     this.#viewer.setVisibleSurveys(this.#visibleSurveyIds);
-    // The viewer is constructed before coverage is known. Reframe once the
-    // loaded layers establish the actual outer radius of the globe.
+    // Only the first mount sets the starting pose; coverage updates retain it.
     this.#viewer.setHomePresentation();
     this.#host.dataset.ready = "true";
   }
@@ -196,6 +220,23 @@ export class AtlasCoverageGlobe {
   setVisibleSurveys(surveyIds: Iterable<string>): void {
     this.#visibleSurveyIds = new Set(surveyIds);
     this.#viewer?.setVisibleSurveys(this.#visibleSurveyIds);
+  }
+
+  setVisibleLayers(layerIds: Iterable<string>): void {
+    const next = new Set(layerIds);
+    if (next.size === this.#visibleLayerIds.size && [...next].every((id) => this.#visibleLayerIds.has(id))) return;
+    this.#visibleLayerIds = next;
+    if (this.#catalog) this.#renderCatalog();
+  }
+
+  updateBlocks(blocks: ReadonlyMap<string, number[]>, order = this.#displayOrder, overlap?: SurveyLayerOverlapCoverage): void {
+    this.#displayOrder = order;
+    this.#blocks = new Map(blocks);
+    if (this.#catalog) this.#renderCatalog(overlap);
+  }
+
+  get state(): SurveyLayerState | null {
+    return this.#viewer?.state ?? null;
   }
 
   setOverlapMode(active: boolean): void { this.#viewer?.setOverlapMode(active); }
@@ -206,6 +247,10 @@ export class AtlasCoverageGlobe {
 
   setOverlapComponents(components: readonly SurveyLayerOverlapComponent[]): void { this.#viewer?.setOverlapComponents(components); }
 
+  setOverlapCoverage(order: number, pixels: readonly number[], components: readonly SurveyLayerOverlapComponent[]): void {
+    this.#viewer?.setOverlapCoverage(2 ** order, pixels, components);
+  }
+
   setActiveOverlapComponent(componentId: string | null): void { this.#viewer?.setActiveOverlapComponent(componentId); }
 
   setHighlightedSurvey(surveyId: string): void {
@@ -215,6 +260,16 @@ export class AtlasCoverageGlobe {
   focusSelection(): void { this.#viewer?.focusSelection(); }
 
   focusPixels(order: number, pixels: readonly number[]): void { this.#viewer?.focusPixels(2 ** order, pixels); }
+
+  setSkyDepth(data: SkyDepthResponse | null, onPick?: (item: SkyDepthAggregate) => void): SkyDepthLayout | null {
+    return this.#viewer?.setSkyDepth(data, onPick) ?? null;
+  }
+  setSkyDepthRange(range: readonly [number, number]) { return this.#viewer?.setSkyDepthRange(range) ?? null; }
+  focusSkyDepth(): void { this.#viewer?.focusSkyDepth(); }
+
+  selectPixels(order: number, pixels: readonly number[]): void {
+    if (this.state?.nside === 2 ** order) this.#viewer?.setRegionSelection(pixels);
+  }
 
   transitionToDataView(durationMs = 900): void { this.#viewer?.transitionToDataPresentation(durationMs); }
 

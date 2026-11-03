@@ -3,7 +3,7 @@ review_model = "gpt-6.1-sol"
 model_reasoning_effort = "max"
 sandbox_mode = "danger-full-access"
 approval_policy = "never"
-model_context_window = 272000
+model_context_window = 500000
 model_auto_compact_token_limit = 240000
 
 [agents]

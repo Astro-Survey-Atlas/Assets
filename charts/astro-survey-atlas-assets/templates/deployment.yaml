@@ -123,6 +123,12 @@ spec:
               value: /var/lib/assets-content
             - name: ASSETS_EVIDENCE_ROOT
               value: /var/lib/assets-evidence
+            {{- if and .Values.skyDepth.enabled (not .Values.splitRoles.enabled) }}
+            - name: ASSETS_SKY_DEPTH_SAMPLE_PATH
+              value: {{ required "skyDepth.samplePath is required when skyDepth.enabled" .Values.skyDepth.samplePath | quote }}
+            - name: ASSETS_SKY_DEPTH_SAMPLE_SHA256
+              value: {{ required "skyDepth.sampleSha256 is required when skyDepth.enabled" .Values.skyDepth.sampleSha256 | quote }}
+            {{- end }}
             - name: ASSETS_UPLOAD_SPOOL_ROOT
               value: {{ .Values.releasePublisher.uploadSpoolRoot | quote }}
             - name: ASSETS_OBJECT_STORE_REQUIRED

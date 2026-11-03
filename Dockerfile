@@ -17,6 +17,7 @@ COPY src ./src
 COPY scripts ./scripts
 COPY site ./site
 COPY test ./test
+COPY fixtures/distance-prototype/planck18-reference.json ./fixtures/distance-prototype/planck18-reference.json
 COPY requirements ./requirements
 COPY vendor/moc-core/${MOC_CORE_WHEEL} /tmp/${MOC_CORE_WHEEL}
 COPY vendor/moc-core/${MOC_CORE_SOURCE_SNAPSHOT} /tmp/${MOC_CORE_SOURCE_SNAPSHOT}
@@ -61,6 +62,7 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir --index-url="$
 COPY --from=build --chown=atlas:atlas /app/dist/server ./dist/server
 COPY --from=build --chown=atlas:atlas /app/dist/src ./dist/src
 COPY --from=build --chown=atlas:atlas /app/src ./src
+COPY --from=build --chown=atlas:atlas /app/fixtures/distance-prototype/planck18-reference.json ./fixtures/distance-prototype/planck18-reference.json
 COPY --from=build --chown=atlas:atlas /app/dist/scripts ./dist/scripts
 COPY --from=build --chown=atlas:atlas /app/dist/site ./site
 COPY --from=build --chown=atlas:atlas /app/scripts ./scripts

@@ -1,6 +1,8 @@
 import { Healpix } from "healpixjs";
 
 import type { CoverageCellLayer } from "./coverage.js";
+import type { NativeMoc } from "./native-moc.js";
+import { expandPixelRanges, intersectPixelRanges, mocPixelRanges, rangesForCells, type PixelRange } from "./display-coverage.js";
 
 export interface OverlapBounds {
   areaDeg2: number;
@@ -33,10 +35,18 @@ export function layersForOverlapComponent(
   layers: readonly CoverageCellLayer[],
   result: OverlapResult,
   component: OverlapComponent,
+  nativeGeometry?: ReadonlyMap<string, NativeMoc>,
 ): CoverageCellLayer[] {
   const componentCells = new Set(component.cells);
-  return layers.filter((layer) => result.surveyIds.includes(layer.surveyId)
-    && Boolean(layer.cells.get(component.order)?.some((cell) => componentCells.has(cell))));
+  return layers.filter((layer) => {
+    if (!result.surveyIds.includes(layer.surveyId)) return false;
+    const moc = nativeGeometry?.get(layer.layerId);
+    if (moc && component.order <= moc.maxOrder) {
+      const ranges = mocPixelRanges(moc, component.order);
+      return component.cells.some((pixel) => containsPixel(ranges, pixel));
+    }
+    return layer.cells.get(component.order)?.some((cell) => componentCells.has(cell)) ?? false;
+  });
 }
 
 const SIDE_NEIGHBOUR_INDICES = [0, 2, 4, 6] as const;
@@ -162,7 +172,127 @@ function commonOrders(layers: CoverageCellLayer[]): number[] {
     .sort((left, right) => left - right);
 }
 
-export function overlapForLayers(layers: CoverageCellLayer[], surveyIds: string[], requestedOrder?: number): OverlapResult | null {
+export class OverlapRenderBudgetError extends Error {
+  constructor(readonly cellCount: number, readonly limit: number, readonly action: "zoom-or-reduce-selection" | "reduce-selection") {
+    super(action === "zoom-or-reduce-selection"
+      ? `The visible overlap contains ${cellCount} cells and exceeds the ${limit}-cell budget; zoom further or reduce selected products`
+      : `A full connected overlap component contains more than ${limit} cells; reduce selected products to inspect it completely`);
+  }
+}
+
+function unionRanges(ranges: readonly PixelRange[]): PixelRange[] {
+  const sorted = [...ranges].sort((a, b) => a.start - b.start || a.end - b.end);
+  const union: PixelRange[] = [];
+  for (const range of sorted) {
+    const previous = union.at(-1);
+    if (previous && range.start <= previous.end) previous.end = Math.max(previous.end, range.end);
+    else union.push({ ...range });
+  }
+  return union;
+}
+
+function containsPixel(ranges: readonly PixelRange[], pixel: number): boolean {
+  let low = 0;
+  let high = ranges.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (ranges[middle]!.end <= pixel) low = middle + 1;
+    else high = middle;
+  }
+  return Boolean(ranges[low] && ranges[low]!.start <= pixel);
+}
+
+function strictOverlapForLayers(
+  layers: CoverageCellLayer[],
+  surveyIds: string[],
+  order: number,
+  nativeGeometry: ReadonlyMap<string, NativeMoc>,
+  maxCells: number,
+  viewTiles?: { order: number; tiles: readonly number[] },
+): OverlapResult | null {
+  const uniqueSurveyIds = [...new Set(surveyIds)];
+  if (uniqueSurveyIds.length < 2) return null;
+  const selected = layers.filter((layer) => uniqueSurveyIds.includes(layer.surveyId));
+  const bySurvey = new Map<string, PixelRange[]>();
+  const layerRanges = new Map<string, PixelRange[]>();
+  for (const surveyId of uniqueSurveyIds) {
+    const surveyLayers = selected.filter((layer) => layer.surveyId === surveyId);
+    if (!surveyLayers.length) return null;
+    for (const layer of surveyLayers) {
+      const moc = nativeGeometry.get(layer.layerId);
+      if (moc && order <= moc.maxOrder) layerRanges.set(layer.layerId, mocPixelRanges(moc, order));
+      else if (!moc && layer.availableOrders.includes(order)) layerRanges.set(layer.layerId, rangesForCells(layer.cells.get(order) ?? []));
+      else return null;
+    }
+    bySurvey.set(surveyId, unionRanges(surveyLayers.flatMap((layer) => layerRanges.get(layer.layerId) ?? [])));
+  }
+  const surveyRanges = [...bySurvey.values()];
+  let intersection = surveyRanges[0] ?? [];
+  for (const ranges of surveyRanges.slice(1)) intersection = intersectPixelRanges(intersection, ranges);
+  let viewRanges = intersection;
+  if (viewTiles) {
+    const expectedTileOrder = Math.max(0, order - 6);
+    if (viewTiles.order !== expectedTileOrder || viewTiles.tiles.length > 192
+      || viewTiles.tiles.some((tile) => !Number.isSafeInteger(tile) || tile < 0 || tile >= 12 * 4 ** expectedTileOrder)) return null;
+    const scale = 4 ** (order - expectedTileOrder);
+    const tiles = [...new Set(viewTiles.tiles)].sort((a, b) => a - b);
+    const clipped: PixelRange[] = [];
+    for (const tile of tiles) {
+      const range = { start: tile * scale, end: (tile + 1) * scale };
+      clipped.push(...intersectPixelRanges(intersection, [range]));
+    }
+    viewRanges = unionRanges(clipped);
+  }
+  const viewCellCount = viewRanges.reduce((sum, range) => sum + range.end - range.start, 0);
+  if (viewCellCount > maxCells) throw new OverlapRenderBudgetError(viewCellCount, maxCells, "zoom-or-reduce-selection");
+  const pixels = expandPixelRanges(viewRanges, maxCells);
+  const componentPixels: number[] = [];
+  const visited = new Set<number>();
+  let componentCellCount = 0;
+  for (const seed of pixels) {
+    if (visited.has(seed)) continue;
+    const pending = [seed];
+    const component: number[] = [];
+    visited.add(seed);
+    while (pending.length) {
+      const pixel = pending.pop()!;
+      component.push(pixel);
+      componentCellCount += 1;
+      if (componentCellCount > maxCells) throw new OverlapRenderBudgetError(componentCellCount, maxCells, "reduce-selection");
+      for (const index of SIDE_NEIGHBOUR_INDICES) {
+        const neighbour = healpix(order).neighbours(pixel)[index] ?? -1;
+        if (neighbour >= 0 && !visited.has(neighbour) && containsPixel(intersection, neighbour)) {
+          visited.add(neighbour);
+          pending.push(neighbour);
+        }
+      }
+    }
+    componentPixels.push(...component.sort((left, right) => left - right));
+  }
+  const prepared = selected.map((layer) => {
+    const ranges = layerRanges.get(layer.layerId) ?? [];
+    return { ...layer, availableOrders: [order], cells: new Map([[order, componentPixels.filter((pixel) => containsPixel(ranges, pixel))]]) };
+  });
+  const components = componentPixels.length ? overlapForLayers(prepared, uniqueSurveyIds, order)?.components ?? [] : [];
+  return {
+    schemaVersion: 1,
+    surveyIds: uniqueSurveyIds,
+    commonOrder: order,
+    limitingLayers: [],
+    pixels,
+    components,
+  };
+}
+
+export function overlapForLayers(
+  layers: CoverageCellLayer[],
+  surveyIds: string[],
+  requestedOrder?: number,
+  options: { strictOrder?: boolean; nativeGeometry?: ReadonlyMap<string, NativeMoc>; maxCells?: number; viewTiles?: { order: number; tiles: readonly number[] } } = {},
+): OverlapResult | null {
+  if (options.strictOrder && requestedOrder !== undefined) {
+    return strictOverlapForLayers(layers, surveyIds, requestedOrder, options.nativeGeometry ?? new Map(), options.maxCells ?? 32_768, options.viewTiles);
+  }
   const uniqueSurveyIds = [...new Set(surveyIds)];
   const selected = layers.filter((layer) => uniqueSurveyIds.includes(layer.surveyId));
   if (uniqueSurveyIds.length < 2 || selected.length < 2) return null;

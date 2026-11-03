@@ -37,6 +37,46 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   An O4-only product limits the union to O4 even alongside an O8 product; it
   must not disappear from the selected survey. An empty selected survey
   stays in the intersection. No preview is promoted to finer coverage.
+- The interactive sky defaults to O4. A user may choose another displayed
+  order through O13, but only orders supported by every selected product are
+  enabled. The catalog advertises the intersection of its prebuilt query orders
+  and projections from each layer's native MOC; a preview or requested order
+  alone never creates a capability. Higher-order display blocks are projected
+  on demand from the native MOC, fetched only for the visible sky, and bounded
+  by tile and cell budgets. A lower-order cell is an inclusive projection of
+  the native MOC, not a claim of finer source precision.
+- Dragging the display-order slider previews its value locally. Release commits
+  the final target; consecutive keyboard changes settle before loading. An
+  order change cancels superseded requests and replaces geometry only after
+  the complete selected-product batch arrives, preserving the renderer and
+  camera. Loading and failures identify the order still displayed. The same
+  control moves into the expanded overlap drawer and returns on close.
+- Ordinary coverage uses the selected display order. In overlap mode the
+  selected order controls only the intersection; source survey coverage stays
+  at its actual O4 overview. Strict overlap intersects selected products at
+  exactly the selected order and never falls
+  back to a coarser result when the intersection is empty. O4/O5 use a bounded
+  full-sky overlap seed; O6 and above may restrict seeds to visible HEALPix
+  parent cells, while each returned connected component retains its complete
+  region for inspection and reverse lookup. Requests for strict overlap identify
+  selected product layer IDs and are not shared-cache responses.
+  Focused coverage and overlap seeds omit the far side of the sky. Refreshing
+  overlap resolution preserves the current camera. Overlap mode retains the
+  selected products' complete O4 coverage, including non-overlap regions and
+  empty finer intersections. Only overlap indexes and the strict query follow
+  the slider; source coverage does not request high-order blocks. The O4
+  background and intersection commit together and retain their separate real
+  orders, also shown in the UI. Pending or failed requests preserve the prior
+  view. Leaving overlap restores ordinary coverage at the selected order.
+  Ordinary focused source rendering uses the surface cap on the sphere and
+  excludes canvas hidden by the drawer. Loaded blocks retain their full cells
+  in cache; rendering filters those real cells to the view with a conservative
+  boundary margin before counting the cell budget. A new view inside an already
+  fetched tile is filtered again.
+  An explicit component selection, initial entry or the F focus shortcut can
+  move the camera. In overlap mode F focuses the
+  active component at its own order, falling back to the first component;
+  it does not require an ordinary cell selection or focus stale empty results.
 - A recipe mode such as `tile-table` describes how an input is read, not the
   native unit type. `sourceUnitKind` declares the identity returned by lookup:
   DESI returns Tiles, while Legacy Surveys returns bricks even if both read a
