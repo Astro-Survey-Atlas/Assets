@@ -1,8 +1,27 @@
 # Assets 项目交接
 
-交接日期：2026-11-02（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-11-03（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
+
+## 2026-11-03 代码版本 0.0.3 收尾
+
+本轮以 `code-v0.0.3` 为代码发布版本，包含本分支的真实阶数显示、共同覆盖交互、
+天球内可选 DESI 纵深和公开页面调整。发布说明见
+[code-v0.0.3](docs/releases/code-v0.0.3.md)；正式制品坐标见
+[GitHub Release](https://github.com/Astro-Survey-Atlas/Assets/releases/tag/code-v0.0.3)。
+用户决定 Assets 开发先在此收尾，后续开发等待新任务。
+
+最新 Dev 为 Helm revision **389** / site 镜像 `0.1.0-20261103-115035`；backend API
+镜像固定 `0.1.0-20261102-094933`，两者均 1/1 Ready、零重启。首页 Warehouse 区域、
+`/releases/` 发布流程和 `/api-docs/` 已调整布局；API 文档删除手动刷新按钮及三张说明卡，
+进入页面自动读取服务状态。build、npm test（508 通过、2 跳过）、Helm lint、diff check
+通过；Dev health、status、assets、coverage、页面 HTML/JS 和 FITS Range 206 已验证。
+
+发布版本同步 package/lockfile、Chart version/appVersion 和 health 版本；Chart 默认镜像
+使用真实发布 tag `code-v0.0.3`，OCI 上传目标为 `charts` 父目录，避免重复拼接 Chart 名。
+当前代码发布使用独立 Code Release 流程；公开数据仍按独立 Data Package Release 版本管理。
+DESI 原始行仍在 evidence，生产默认未接入纵深资料；样本与物理限制见发布说明及下节。
 
 ## 2026-11-02 天球内真实 DESI 纵深（Dev 已部署）
 
