@@ -123,7 +123,7 @@ export function comovingDistance(z: number, table: DistanceReference): number {
   if (b === undefined) throw Error("Incomplete distance reference");
   return a + (b - a) * fraction;
 }
-export function prepareObjects(rows: readonly DistanceObject[], table: DistanceReference) {
+function measuredRows(rows: readonly DistanceObject[], table?: DistanceReference) {
   const excluded: Record<string, number> = {};
   const reject = (reason: string) => { excluded[reason] = (excluded[reason] ?? 0) + 1; };
   const unique = new Map<string, DistanceObject>();
@@ -132,10 +132,10 @@ export function prepareObjects(rows: readonly DistanceObject[], table: DistanceR
     if (!row.objectId || !row.surveyId || !row.releaseId) { reject("missingIdentity"); continue; }
     if (!Number.isFinite(row.raDeg) || row.raDeg < 0 || row.raDeg >= 360 || !Number.isFinite(row.decDeg) || Math.abs(row.decDeg) > 90) { reject("invalidCoordinate"); continue; }
     if (row.redshift === null || !Number.isFinite(row.redshift)) { reject("missingRedshift"); continue; }
-    if (row.redshift < DISTANCE_POLICY.minRedshift) { reject("lowOrNegativeRedshift"); continue; }
-    if (row.redshift > Math.min(table.zMax, DISTANCE_POLICY.maxRedshift)) { reject("outsideModelRange"); continue; }
+    if (table && row.redshift < DISTANCE_POLICY.minRedshift) { reject("lowOrNegativeRedshift"); continue; }
+    if (table && row.redshift > Math.min(table.zMax, DISTANCE_POLICY.maxRedshift)) { reject("outsideModelRange"); continue; }
     if (row.observingSurvey !== "main" || row.spectype !== "GALAXY" || row.zwarn !== 0 || row.zcatPrimary !== true || row.objtype !== "TGT" || !row.program || row.program === "other") { reject("qualityOrClass"); continue; }
-    if (row.redshiftFrame === "unknown" || !["barycentric", "heliocentric", "cmb"].includes(row.redshiftFrame)) { reject("unknownRedshiftFrame"); continue; }
+    if (table && (row.redshiftFrame === "unknown" || !["barycentric", "heliocentric", "cmb"].includes(row.redshiftFrame))) { reject("unknownRedshiftFrame"); continue; }
     const key = JSON.stringify([row.surveyId, row.releaseId, row.objectId]);
     if (ambiguous.has(key)) { reject("ambiguousPrimary"); continue; }
     const prior = unique.get(key);
@@ -146,7 +146,16 @@ export function prepareObjects(rows: readonly DistanceObject[], table: DistanceR
     }
     unique.set(key, row);
   }
-  const points: DistancePoint[] = [...unique.values()].map(row => {
+  return { rows: [...unique.values()], excluded, inputRows: rows.length };
+}
+export function prepareRedshiftObjects(rows: readonly DistanceObject[]) {
+  const prepared = measuredRows(rows);
+  const points = prepared.rows.map(row => ({ ...row, redshift: row.redshift!, pixel13: pixelAt(13, row.raDeg, row.decDeg) }));
+  return { points, excluded: prepared.excluded, inputRows: prepared.inputRows, accepted: points.length };
+}
+export function prepareObjects(rows: readonly DistanceObject[], table: DistanceReference) {
+  const prepared = measuredRows(rows, table);
+  const points: DistancePoint[] = prepared.rows.map(row => {
     const z = row.redshift!;
     const error = row.redshiftError;
     const validError = error !== null && Number.isFinite(error) && error >= 0 && z - error >= 0 && z + error <= table.zMax;
@@ -158,7 +167,7 @@ export function prepareObjects(rows: readonly DistanceObject[], table: DistanceR
         ...(row.redshiftFrame !== "cmb" ? [`${row.redshiftFrame}-not-cmb-corrected`] : []), ...(!validError ? ["measurement-error-unavailable"] : [])],
     };
   });
-  return { points, excluded, inputRows: rows.length, accepted: points.length };
+  return { points, excluded: prepared.excluded, inputRows: rows.length, accepted: points.length };
 }
 export function selectPoints(points: readonly DistancePoint[], selection: Selection): DistancePoint[] {
   validateSelection(selection);

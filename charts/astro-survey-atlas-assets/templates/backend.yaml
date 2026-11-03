@@ -1,4 +1,5 @@
 {{- if .Values.splitRoles.enabled }}
+{{- $backendImage := .Values.splitRoles.backendImage | default dict }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -91,7 +92,7 @@ spec:
               mountPath: /tmp
       containers:
         - name: backend
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ default .Values.image.repository $backendImage.repository }}:{{ default .Values.image.tag $backendImage.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -142,6 +143,12 @@ spec:
               value: /var/lib/assets-content
             - name: ASSETS_EVIDENCE_ROOT
               value: /var/lib/assets-evidence
+            {{- if .Values.skyDepth.enabled }}
+            - name: ASSETS_SKY_DEPTH_SAMPLE_PATH
+              value: {{ required "skyDepth.samplePath is required when skyDepth.enabled" .Values.skyDepth.samplePath | quote }}
+            - name: ASSETS_SKY_DEPTH_SAMPLE_SHA256
+              value: {{ required "skyDepth.sampleSha256 is required when skyDepth.enabled" .Values.skyDepth.sampleSha256 | quote }}
+            {{- end }}
             - name: ASSETS_UPLOAD_SPOOL_ROOT
               value: {{ .Values.releasePublisher.uploadSpoolRoot | quote }}
             - name: ASSETS_OBJECT_STORE_REQUIRED

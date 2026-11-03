@@ -13,6 +13,8 @@ import type { SurveyFootprintManifest } from "./atlas/survey-footprints.js";
 import type { SurveyCard } from "./atlas/survey-registry.js";
 import { surveyColorFor } from "./atlas/survey-colors.js";
 import { filterByModalities } from "../../src/modality-filter.js";
+import type { SkyDepthResponse } from "../../src/sky-depth.js";
+import type { SkyDepthAggregate, SkyDepthLayout } from "./atlas/sky-depth-layer.js";
 
 export interface CoverageLayer {
   layerId: string;
@@ -200,7 +202,7 @@ export class AtlasCoverageGlobe {
       this.#canvas,
       manifest,
       cards,
-      () => undefined,
+      () => { if (this.#viewer) this.#onStateChange(this.#viewer.state); },
       (hover) => this.#handleHover(hover),
       (inspection) => this.#handleInspection(inspection),
       (menu) => this.#onContextMenu(menu),
@@ -258,6 +260,16 @@ export class AtlasCoverageGlobe {
   focusSelection(): void { this.#viewer?.focusSelection(); }
 
   focusPixels(order: number, pixels: readonly number[]): void { this.#viewer?.focusPixels(2 ** order, pixels); }
+
+  setSkyDepth(data: SkyDepthResponse | null, onPick?: (item: SkyDepthAggregate) => void): SkyDepthLayout | null {
+    return this.#viewer?.setSkyDepth(data, onPick) ?? null;
+  }
+  setSkyDepthRange(range: readonly [number, number]) { return this.#viewer?.setSkyDepthRange(range) ?? null; }
+  focusSkyDepth(): void { this.#viewer?.focusSkyDepth(); }
+
+  selectPixels(order: number, pixels: readonly number[]): void {
+    if (this.state?.nside === 2 ** order) this.#viewer?.setRegionSelection(pixels);
+  }
 
   transitionToDataView(durationMs = 900): void { this.#viewer?.transitionToDataPresentation(durationMs); }
 

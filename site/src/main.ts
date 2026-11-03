@@ -18,6 +18,8 @@ import { canonicalModality, filterByModalities } from "../../src/modality-filter
 import type { WarehouseGeometryLoadStatus } from "../../server/coverage.js";
 import type { WarehouseOverlapEvidence } from "../../server/overlap-details.js";
 import { connectorDefaultIcon, type ScanConnectorIdentity } from "../../src/connector-icon.js";
+import type { SkyDepthExample } from "../../src/sky-depth.js";
+import type { SkyDepthControls, SkyDepthSelection } from "./atlas/sky-depth-panel.js";
 
 import "./styles.css";
 
@@ -202,6 +204,11 @@ const PUBLIC_REQUEST_RETRY_DELAYS_MS = [150, 400, 900] as const;
 const selectedModalities = new Set<Modality>();
 let modalityFilterInitialized = false;
 let coverageDots: AtlasCoverageGlobe | null = null;
+let skyDepthControls: SkyDepthControls | null = null;
+let skyDepthOpening = 0;
+let skyDepthSelectionKey = "";
+let skyDepthSelection: SkyDepthSelection | null = null;
+let skyDepthInspection: SurveyLayerInspection | null = null;
 let activeSurveyId: string | null = null;
 let coverageCatalog: CoverageCatalog | null = null;
 let activeOverlapModalities: string[] = [];
@@ -274,6 +281,7 @@ let coverageLayerSearchQuery = "";
 let coverageLayerTooltipRow: HTMLElement | null = null;
 
 function setOverlapMode(active: boolean): void {
+  if (overlapMode !== active) { closeSkyDepth(); skyDepthInspection = null; }
   overlapMode = active;
   overlapIntent = active;
   if (active) document.body.dataset.overlapMode = "active";
@@ -597,6 +605,12 @@ function updateCoverageState(state: SurveyLayerState): void {
     coverageStateFrame = 0;
     const next = pendingCoverageState;
     if (!next) return;
+    if (!overlapMode) {
+      const sources = skyDepthSources();
+      const inspection = skyDepthInspection?.nside !== next.nside ? skyDepthInspection : null;
+      if (next.selectedPixels.length && sources.length) void showSkyDepth({ order: Math.round(Math.log2(inspection?.nside ?? next.nside)), cells: inspection ? [inspection.pixel] : next.selectedPixels, sources });
+      else closeSkyDepth();
+    }
     const displayedOrder = Math.round(Math.log2(next.nside));
     const sourceOrder = Math.round(Math.log2(next.sourceNside));
     const nsideStatus = byId("coverage-status-nside");
@@ -642,8 +656,10 @@ function updateCoverageState(state: SurveyLayerState): void {
 }
 
 function updateCoverageInspector(inspection: SurveyLayerInspection | null): void {
+  skyDepthInspection = inspection;
   const panel = byId("coverage-detail-panel");
   if (!inspection) {
+    closeSkyDepth();
     if (!overlapMode) {
       abortHstLookupsWithin(byId("coverage-detail-content"));
       panel.hidden = true;
@@ -722,6 +738,12 @@ function updateCoverageInspector(inspection: SurveyLayerInspection | null): void
   } else sourceValue.textContent = inspection.workspaceAvailable ? "workspace layer" : "--";
   list.append(sourceLabel, sourceValue);
   content.replaceChildren(list);
+  const depthSources = withDesiReference(overlapMode ? [...new Map([...inspection.artifacts, ...cellSources]
+    .map(source => [`${source.surveyId}:${source.releaseId}`, { surveyId: source.surveyId, releaseId: source.releaseId }])).values()] : skyDepthSources());
+  if (depthSources.length && order >= 4) {
+    const state = coverageDots?.state;
+    void showSkyDepth({ order, cells: !overlapMode && state?.nside === inspection.nside && state.selectedPixels.length ? state.selectedPixels : [inspection.pixel], sources: depthSources }, true);
+  } else closeSkyDepth();
   if (overlapMode) {
     setOverlapExpandVisible(false);
     if (overlapCell?.evidenceLookup) {
@@ -918,6 +940,7 @@ function updateOverlapPanelLayout(): void {
     document.body.style.removeProperty("--overlap-panel-exit-transform");
   }
   setOverlapPanelInteraction(panel, crowded);
+  setOverlapPanelInteraction(byId("coverage-depth-panel"), crowded);
   setOverlapPanelInteraction(queue, crowded || layersOpen);
 }
 
@@ -1416,11 +1439,8 @@ function overlapComponents(pixels: number[], order: number): OverlapComponentVie
 
 function positionOverlapPanel(): void {
   const panel = byId("coverage-detail-panel");
-  if (!panel.classList.contains("is-overlap-panel")) return;
-  panel.style.left = "auto";
-  panel.style.right = window.innerWidth <= 820 ? "14px" : "28px";
-  panel.style.top = window.innerWidth <= 820 ? "150px" : "214px";
-  panel.style.width = "var(--coverage-panel-width)";
+  // The readout and inspectors flow together; wrapped titles cannot overlap.
+  for (const property of ["left", "right", "top", "width"]) panel.style.removeProperty(property);
 }
 
 function layersForSurvey(surveyId: string): CoverageCatalog["layers"] {
@@ -1646,6 +1666,7 @@ function bindLayerCloseTimer(host: HTMLElement): void {
 }
 
 function renderOverlapLoadingPanel(surveyIds: string[], order: number): void {
+  closeSkyDepth(); skyDepthInspection = null;
   const panel = byId("coverage-detail-panel");
   const content = byId("coverage-detail-content");
   abortHstLookupsWithin(content);
@@ -1669,6 +1690,7 @@ function renderOverlapLoadingPanel(surveyIds: string[], order: number): void {
 }
 
 function renderOverlapErrorPanel(surveyIds: string[], messageText = t("coverage.overlapFailed")): void {
+  closeSkyDepth(); skyDepthInspection = null;
   const panel = byId("coverage-detail-panel");
   const content = byId("coverage-detail-content");
   abortHstLookupsWithin(content);
@@ -1718,6 +1740,7 @@ function componentPageControls(total: number, page: number, onPageChange: (page:
 }
 
 function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number, scope = "GLOBAL", componentData?: OverlapComponentView[], focus = true): void {
+  closeSkyDepth(); skyDepthInspection = null;
   const panel = byId("coverage-detail-panel");
   const content = byId("coverage-detail-content");
   panel.classList.add("is-overlap-panel");
@@ -1770,6 +1793,7 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
 }
 
 function selectOverlapComponent(component: OverlapComponentView, surveyIds = activeOverlapSurveyIds, content = byId("coverage-detail-content"), focus = true): void {
+  closeSkyDepth(); skyDepthInspection = null;
   const componentIndex = activeOverlapComponents.findIndex((entry) => entry.id === component.id);
   if (componentIndex >= 0) {
     overlapComponentsPage = Math.floor(componentIndex / OVERLAP_COMPONENT_PAGE_SIZE);
@@ -4492,6 +4516,7 @@ async function initialize(): Promise<void> {
       coverageResult = await fetchCoverageCatalogDocument();
       await hydrateCoverageCatalog(coverageResult);
       applySkyDeepLink();
+      if (isAtlasPage && new URLSearchParams(location.search).get("depth") === "desi") void openDepthExample();
 
       // Setup a subtle auto-rotation for the background visual if we are on the homepage
       if (coverageDots && !homeEntered) {
@@ -4540,6 +4565,7 @@ byId<HTMLDialogElement>("survey-dialog").addEventListener("click", (event) => { 
 byId("preview-close").addEventListener("click", () => byId<HTMLDialogElement>("preview-dialog").close());
 byId<HTMLDialogElement>("preview-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("preview-dialog").close(); });
 function clearCoverageFocus(openLayers = true): void {
+  closeSkyDepth();
   cancelDisplayOrderInteraction();
   cancelCoverageDisplayRequest();
   coverageFocusActive = false;
@@ -4615,6 +4641,57 @@ function resetCoverageExperience(updateUrl = true, preserveLayers = false): void
 byId("coverage-reset").addEventListener("click", () => {
   if (isAtlasInteractive()) resetCoverageExperience();
 });
+function skyDepthSources(): SkyDepthSelection["sources"] {
+  return withDesiReference([...new Map(visibleCoverageLayers().map(layer => [`${layer.surveyId}:${layer.releaseId}`, { surveyId: layer.surveyId, releaseId: layer.releaseId }])).values()]);
+}
+function withDesiReference(sources: SkyDepthSelection["sources"]): SkyDepthSelection["sources"] {
+  const hasDesiDr1 = sources.some(source => source.surveyId === "desi" && source.releaseId === "desi-dr1");
+  const hasOtherSurvey = sources.some(source => source.surveyId !== "desi" || source.releaseId !== "desi-dr1");
+  return hasOtherSurvey && !hasDesiDr1 ? [...sources, { surveyId: "desi", releaseId: "desi-dr1", role: "reference" }] : sources;
+}
+function closeSkyDepth(): void {
+  skyDepthOpening++; skyDepthSelectionKey = ""; skyDepthSelection = null; skyDepthControls?.close(); skyDepthControls = null;
+}
+async function showSkyDepth(selection: SkyDepthSelection, retry = false): Promise<void> {
+  const host = document.getElementById("coverage-depth-panel");
+  if (!host || selection.order < 4 || !selection.cells.length || !selection.sources.length) { closeSkyDepth(); return; }
+  const key = JSON.stringify([selection.order, [...selection.cells].sort((a,b)=>a-b), selection.sources.map(source=>`${source.surveyId}:${source.releaseId}:${source.role ?? "survey"}`).sort()]);
+  if (key === skyDepthSelectionKey) { if (retry) skyDepthControls?.updateSelection(selection, true); return; }
+  skyDepthSelectionKey = key;
+  skyDepthSelection = selection;
+  if (skyDepthControls) { skyDepthControls.updateSelection(selection); return; }
+  const request = ++skyDepthOpening;
+  try {
+    const { openSkyDepth } = await import("./atlas/sky-depth-panel.js");
+    if (request !== skyDepthOpening || !coverageDots) return;
+    skyDepthControls = openSkyDepth(selection, coverageDots, host);
+  } catch {
+    if (request === skyDepthOpening) closeSkyDepth();
+  }
+}
+async function openDepthExample(): Promise<void> {
+  if (!coverageCatalog) return;
+  try {
+    const example = await fetchPublicJson<SkyDepthExample>("/api/v1/sky-depth/example");
+    if (!example.available || !example.selection) throw Error(locale() === "zh" ? "DESI 纵深示例暂时不可用" : "DESI depth example is unavailable");
+    const selection = example.selection;
+    resetCoverageExperience();
+    applyCoverageSelection(["desi"]);
+    for (const layer of coverageCatalog.layers) {
+      if (!selection.sources.some(source => source.surveyId === layer.surveyId && source.releaseId === layer.releaseId)) selectedCoverageProductIds.delete(layer.layerId);
+    }
+    selectedDisplayOrder = selection.order;
+    syncCoverageProductControls(); renderDisplayOrderControl();
+    coverageDots?.setVisibleLayers(selectedCoverageProductIds);
+    await loadCoverageDisplay(true);
+    coverageDots?.selectPixels(selection.order, selection.cells);
+    coverageDots?.focusPixels(selection.order, selection.cells);
+    updateCoverageReadout("desi");
+    // This developer preview selects a real cell; normal selection loads its depth.
+  } catch (error) {
+    byId("coverage-state").textContent = error instanceof Error ? error.message : "DEPTH EXAMPLE UNAVAILABLE";
+  }
+}
 const displayOrderSlider = document.getElementById("coverage-display-order") as HTMLInputElement | null;
 const displayOrderControl = displayOrderSlider?.closest<HTMLElement>(".coverage-display-order-control");
 const displayOrderHome = displayOrderControl?.parentElement;
@@ -4774,7 +4851,7 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     coverageFocusActive = true;
     coverageDisplayViewKey = "";
-    coverageDots?.focusSelection();
+    if (!skyDepthControls?.focus()) coverageDots?.focusSelection();
   }
   if (event.key.toLowerCase() === "g") {
     event.preventDefault();
@@ -4788,6 +4865,9 @@ document.addEventListener("pointerdown", (event) => {
 });
 
 window.addEventListener("atlas:locale-change", () => {
+  const depthSelection = skyDepthSelection;
+  closeSkyDepth();
+  if (depthSelection) void showSkyDepth(depthSelection);
   if (coverageCatalog) void hydrateCoverageCatalog(coverageCatalog);
   renderDisplayOrderControl();
   updateCoverageReadout(activeSurveyId);

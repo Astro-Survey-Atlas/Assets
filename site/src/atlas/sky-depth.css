@@ -1,0 +1,60 @@
+.coverage-depth-panel {
+  min-width: 0;
+  padding: 0 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: var(--ink);
+  font: 600 9px/1.5 var(--font-mono), monospace;
+  text-align: right;
+  pointer-events: auto;
+  transition: transform 240ms cubic-bezier(.22, .61, .36, 1), opacity 180ms ease;
+}
+.coverage-depth-panel .depth-facts {
+  display: grid;
+  grid-template-columns: minmax(96px, .42fr) minmax(0, 1fr);
+  gap: 7px 12px;
+  margin: 18px 0 12px;
+}
+.depth-facts dt { color: var(--muted); font-size: 8px; text-align: left; }
+.depth-facts dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.depth-selection-note { margin: 8px 0; color: var(--muted); font-size: 8px; }
+.depth-reference-note { margin: 8px 0; color: var(--teal); font-size: 8px; line-height: 1.7; text-align: left; overflow-wrap: anywhere; }
+.depth-axis-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 8px; }
+.depth-axis { min-width: 0; max-width: 72%; padding: 4px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--ink); font: inherit; font-size: 9px; cursor: pointer; text-align: right; }
+.depth-axis option { color: var(--ink); background: var(--paper); }
+.depth-axis:focus-visible { outline: 1px solid var(--teal); outline-offset: 3px; }
+.depth-range-control { min-width: 0; margin-top: 13px; }
+.depth-range-heading, .depth-range-domain { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 8px; font-variant-numeric: tabular-nums; }
+.depth-range-selection { color: var(--ink); font: inherit; text-align: right; }
+.depth-range-slider { position: relative; height: 22px; margin: 2px 6px 0; --range-start: 0%; --range-end: 100%; }
+.depth-range-track { position: absolute; top: 10px; right: 0; left: 0; height: 2px; background: linear-gradient(90deg,#ff745e,#ffd768,#3be3ca,#66baff); pointer-events: none; }
+.depth-range-track i { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--paper) 62%, transparent); }
+.depth-range-muted-left { left: 0; width: var(--range-start); }
+.depth-range-muted-right { right: 0; left: var(--range-end); }
+.depth-range-slider input { position: absolute; inset: 0; width: 100%; height: 22px; margin: 0; appearance: none; background: transparent; pointer-events: none; }
+.depth-range-lower { z-index: 2; }
+.depth-range-upper { z-index: 3; }
+.depth-range-slider input::-webkit-slider-runnable-track { height: 22px; background: transparent; }
+.depth-range-slider input::-webkit-slider-thumb { width: 10px; height: 10px; margin-top: 6px; appearance: none; border: 1px solid var(--paper); border-radius: 50%; background: #6debdc; box-shadow: 0 0 0 1px #6debdc; pointer-events: auto; cursor: ew-resize; }
+.depth-range-upper::-webkit-slider-thumb { background: #f6f6ff; box-shadow: 0 0 0 1px #f6f6ff; }
+.depth-range-slider input::-moz-range-track { height: 22px; background: transparent; }
+.depth-range-slider input::-moz-range-thumb { width: 8px; height: 8px; border: 1px solid var(--paper); border-radius: 50%; background: #6debdc; box-shadow: 0 0 0 1px #6debdc; pointer-events: auto; cursor: ew-resize; }
+.depth-range-upper::-moz-range-thumb { background: #f6f6ff; box-shadow: 0 0 0 1px #f6f6ff; }
+.depth-range-slider input:focus-visible { outline: none; }
+.depth-range-slider input:focus-visible::-webkit-slider-thumb, .depth-range-slider input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 45%, transparent); }
+.depth-range-domain { margin-top: -1px; }
+.depth-size-legend { display: flex; align-items: center; justify-content: flex-end; gap: 20px; min-height: 30px; margin-top: 6px; }
+.depth-size-legend span { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 9px; }
+.depth-size-legend i { display: inline-block; border-radius: 50%; background: var(--teal); }
+.depth-size-legend b { font-weight: 500; }
+.depth-size-note { margin: 0; color: var(--muted); font-size: 8px; }
+.depth-method { margin: 12px 0; color: var(--muted); font-size: 9px; }
+.depth-picked { margin: 12px 0; color: var(--ink); font-size: 9px; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; }
+.depth-explanation { font-size: 9px; line-height: 1.7; }
+.depth-explanation summary { color: var(--teal); cursor: pointer; }
+.depth-explanation p { margin: 10px 0; color: var(--muted); overflow-wrap: anywhere; }
+.depth-provenance { white-space: pre-line; }
+.depth-scope { margin: 12px 0 0; color: var(--muted); font-size: 8px; line-height: 1.7; }

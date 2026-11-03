@@ -71,9 +71,23 @@ export function publicOpenApi() {
   };
   return {
     openapi: "3.0.3", info: { title: "Astro Survey Atlas Assets API", version: "0.0.1", description: "Public survey coverage and source manifests. Coordinates are ICRS; HEALPix is NESTED. Download plans contain metadata and source links. Source access policies apply. Full region lookup uses an administrator-issued API Key; this service does not currently provide online billing." }, servers: [{ url: "/" }],
-    tags: [{ name: "Public coverage" }, { name: "Authenticated lookup" }],
+    tags: [{ name: "Public coverage" }, { name: "Authenticated lookup" }, { name: "Optional sky depth" }],
     components: { securitySchemes: { ApiKey: { type: "apiKey", in: "header", name: "X-Assets-API-Key" } }, schemas: {
       CoverageOverviewFootprint: overviewFootprint,
+      SkyDepthQuery: {
+        type: "object", required: ["order", "cells", "sources", "axis", "mode"],
+        description: "Optional ICRS/NESTED selected-region evidence, independent of MOC coverage. A source may be role=reference to label DESI DR1 as an independent coordinate reference for another survey; this does not assert object identity or perform cross-matching. An empty bounded sample is not empty sky.",
+        properties: {
+          order: { type: "integer", minimum: 4, maximum: 13 },
+          cells: { type: "array", minItems: 1, maxItems: 4096, items: { type: "integer", minimum: 0 }, description: "Actual NESTED cell IDs at order; each must be less than 12 × 4^order." },
+          sources: { type: "array", minItems: 1, maxItems: 16, items: { type: "object", required: ["surveyId", "releaseId"], properties: {
+            surveyId: { type: "string", pattern: "^[a-z0-9][a-z0-9-]{0,99}$" }, releaseId: { type: "string", pattern: "^[a-z0-9][a-z0-9-]{0,99}$" },
+            role: { type: "string", enum: ["survey", "reference"], description: "reference is currently supported only for DESI DR1." },
+          } } },
+          axis: { type: "string", enum: ["distance", "redshift"], description: "distance is Planck18 line-of-sight comoving distance inferred from eligible galaxy redshifts, without peculiar-velocity/CMB corrections; redshift retains suitable observed z independently of distance eligibility." },
+          mode: { type: "string", enum: ["points", "bars", "aggregate"], description: "20,000-point / 4,000-column budgets fall back to complete angular/radial aggregation, returning actual order, radial bin edges and counts without silent truncation." },
+        },
+      },
       CoverageOverviewPageInfo: overviewPage,
       CoverageOverviewResponse: {
         type: "object",
@@ -106,6 +120,10 @@ export function publicOpenApi() {
       },
     } },
     paths: {
+      "/api/v1/sky-depth/example": { get: { tags: ["Optional sky depth"], summary: "Find a real DESI example selection", description: "Explicitly requested metadata only. available=false when no configured evidence is usable; does not change coverage availability.", responses: { "200": json("Availability and optional order/cells/sources selection; no catalogue rows") } } },
+      "/api/v1/sky-depth": { post: { tags: ["Optional sky depth"], summary: "Explore selected HEALPix objects in depth", description: "On-demand optional evidence. Each source reports available, redshift-only, no-measurements, not-connected, empty, or unavailable independently. Aggregates include count-weighted radial means and per-cell maxima on a stable source-wide axis. Input scope and digest are retained. Distance uncertainty covers spectral measurement only; sky-region completeness is unverified. Responses are not stored in shared caches.",
+        requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/SkyDepthQuery" }, example: { order: 4, cells: [630], sources: [{ surveyId: "desi", releaseId: "desi-dr1" }], axis: "distance", mode: "points" } } } },
+        responses: { "200": json("Per-source availability, selected counts, stable radial scale, per-cell depth extents, actual points or complete aggregates, input scope and explicit distance basis"), "400": error, "413": error, "429": error } } },
       "/api/v1/status": { get: { tags: ["Public coverage"], summary: "Current coverage and query service status", responses: { "200": json("Current public versions and availability") } } },
       "/api/v1/surveys": { get: { tags: ["Public coverage"], summary: "Published surveys, releases and product modalities", responses: { "200": json("Public survey catalog") } } },
       "/api/v1/coverage": { get: { tags: ["Public coverage"], summary: "All-product O4 overview footprints (optional pagination)", description: "Legacy endpoint. With no query parameters, returns all published product-layer footprints at O4 (nside 16), including each layer's pixel array; this full response is kept for compatibility. For Swagger and bounded browsing, set pageSize (default 10, maximum 100) and continue with page.nextCursor. Paging is by whole product footprint, not by individual pixel. The returned cells are a coarse overview, not native Tile/brick/observation identities or a complete file inventory. / 旧版接口。无查询参数时返回全部已发布产品图层的 O4 footprint（nside 16）及每层像元数组；为保持兼容继续保留完整响应。Swagger 和分批浏览请设置 pageSize（默认 10、最大 100），并使用 page.nextCursor 续页。分页单位是完整产品 footprint，不是单个像元。返回的是粗略概览，不是原生 Tile/brick/observation 身份或完整文件库存。", parameters: [

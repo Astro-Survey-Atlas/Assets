@@ -19,6 +19,8 @@ import {
 import type { SurveyFootprint, SurveyFootprintManifest } from "./survey-footprints.js";
 import type { SurveyCard } from "./survey-registry.js";
 import { cartesianToRaDec, raDecToCartesian } from "./coordinates.js";
+import { SkyDepthLayer, type SkyDepthAggregate, type SkyDepthLayout } from "./sky-depth-layer.js";
+import type { SkyDepthResponse } from "../../../src/sky-depth.js";
 import { normalizeLayerOrder, visibleLayerDepths, type LayerDepth } from "./layer-order.js";
 import { buildOverlapHighlight, setOverlapHighlightFlowOffset } from "./overlap-highlight.js";
 import { surveyColorFor } from "./survey-colors.js";
@@ -26,7 +28,6 @@ import type { OverlapHighlight } from "./overlap-highlight.js";
 import {
   buildSphericalCellEdges,
   buildSphericalCellSourceSectorGeometry,
-  buildSphericalCellVolumeEdges,
   buildSphericalCellSheetGeometry,
   healpixPixelFromSceneDirection,
   sphericalCellBoundary,
@@ -298,8 +299,6 @@ const DIMMED_OPACITY = 0.2;
 const DIMMED_EDGE_OPACITY = 0.1;
 const EXPLODED_OPACITY = 0.58;
 const EXPLODED_LAYER_STEP = 0.18;
-const REGION_INNER_PADDING = 0.045;
-const REGION_OUTER_PADDING = 0.065;
 const DRILL_RENDER_ORDER = 10_000;
 const EXPLOSION_RENDER_ORDER = 11_000;
 const SELECTION_RENDER_ORDER = 12_000;
@@ -546,6 +545,9 @@ export class SurveyLayerViewer {
   readonly #overlapSelectionGroup = new THREE.Group();
   readonly #drillGroup = new THREE.Group();
   readonly #objectPointGroup = new THREE.Group();
+  readonly #skyDepth = new SkyDepthLayer();
+  #skyDepthData: SkyDepthResponse | null = null;
+  #onSkyDepthPick: ((item: SkyDepthAggregate) => void) | null = null;
   readonly #resizeObserver: ResizeObserver;
   readonly #onSelection: (selection: SurveyLayerSelection | null) => void;
   readonly #onHover: (hover: SurveyLayerHover | null) => void;
@@ -561,6 +563,7 @@ export class SurveyLayerViewer {
   readonly #visibleAssetIds = new Set<string>();
   readonly #layerMeshes: LayerMesh[] = [];
   readonly #coverageEdgeMaterials: THREE.LineBasicMaterial[] = [];
+  readonly #coverageSourceMaterials: THREE.MeshBasicMaterial[] = [];
   readonly #overlapDashMaterials: THREE.LineDashedMaterial[] = [];
   readonly #meshBySurvey = new Map<string, LayerMesh>();
   #workspaceLayers = new Map<string, WorkspaceCoverageLayer>();
@@ -576,7 +579,6 @@ export class SurveyLayerViewer {
   #interactionMesh: LayerMesh | null = null;
   #cameraTransition: CameraTransition | null = null;
   #selectionCoreMaterial: THREE.LineBasicMaterial | null = null;
-  #selectionEdgeMaterial: THREE.LineDashedMaterial | null = null;
   #selectionGlowMaterial: THREE.LineBasicMaterial | null = null;
   #explosionTransition: ExplosionTransition | null = null;
   #explodedFragments: ExplodedFragment[] = [];
@@ -645,7 +647,7 @@ export class SurveyLayerViewer {
     this.#controls.addEventListener("start", this.#handleControlsStart);
     this.#controls.addEventListener("end", this.#handleControlsEnd);
     this.#starField = this.#backgroundStars();
-    this.#scene.add(this.#starField, this.#coverageGroup, this.#workspaceCoverageGroup, this.#drillGroup, this.#objectPointGroup, this.#retiredGroup, this.#selectionGroup, this.#explosionGroup, this.#overlapSelectionGroup, this.#overlapLabelGroup);
+    this.#scene.add(this.#starField, this.#coverageGroup, this.#workspaceCoverageGroup, this.#drillGroup, this.#objectPointGroup, this.#retiredGroup, this.#selectionGroup, this.#explosionGroup, this.#overlapSelectionGroup, this.#overlapLabelGroup, this.#skyDepth.group);
     this.setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
     this.#canvas.addEventListener("pointerdown", this.#handlePointerDown);
     this.#canvas.addEventListener("pointerup", this.#handlePointerUp);
@@ -957,6 +959,44 @@ export class SurveyLayerViewer {
     this.#startCameraTransition(pose.camera, pose.target, 720, cameraUpForDirection(pose.camera.clone().normalize()));
   }
 
+  setSkyDepth(data: SkyDepthResponse | null, onPick?: (item: SkyDepthAggregate) => void): SkyDepthLayout | null {
+    this.#skyDepthData = data; this.#onSkyDepthPick = onPick ?? null;
+    this.#skyDepth.clear();
+    delete this.#canvas.dataset.depthPoints; delete this.#canvas.dataset.depthRepresented;
+    delete this.#canvas.dataset.depthFrames; delete this.#canvas.dataset.depthFrameHeights;
+    delete this.#canvas.dataset.depthRangeMin; delete this.#canvas.dataset.depthRangeMax;
+    delete this.#canvas.dataset.depthRangeIn; delete this.#canvas.dataset.depthRangeFaded; delete this.#canvas.dataset.depthRangeFrames;
+    const layout = data ? this.#skyDepth.setData(data, this.#outerRadius + .014) : null;
+    this.#skyDepth.setPixelRatio(this.#renderer.getPixelRatio());
+    this.#selectionGroup.visible = true;
+    if (layout) {
+      this.#canvas.dataset.depthPoints = String(layout.items.length);
+      this.#canvas.dataset.depthRepresented = String(layout.items.reduce((sum, item) => sum + item.voxel.count, 0));
+      this.#canvas.dataset.depthFrames = String(layout.frames.length);
+      this.#canvas.dataset.depthFrameHeights = JSON.stringify(layout.frames.map(frame => Number(frame.height.toFixed(6))));
+      this.#canvas.dataset.depthRangeFrames = "2";
+      this.setSkyDepthRange(layout.range);
+    }
+    this.#applyFocus(); this.#requestRender();
+    return layout;
+  }
+
+  setSkyDepthRange(range: readonly [number, number]) {
+    const result = this.#skyDepth.setRange(range);
+    if (!result) return null;
+    this.#canvas.dataset.depthRangeMin = String(result.range[0]);
+    this.#canvas.dataset.depthRangeMax = String(result.range[1]);
+    this.#canvas.dataset.depthRangeIn = String(result.inRange);
+    this.#canvas.dataset.depthRangeFaded = String(result.faded);
+    this.#requestRender();
+    return result;
+  }
+
+  focusSkyDepth(): void {
+    const pose = this.#skyDepth.focusPose();
+    if (pose) this.#startCameraTransition(pose.camera, pose.target, 720, pose.up);
+  }
+
   #pixelFocusPose(nside: number, pixels: readonly number[]): CameraPose {
     const direction = this.#pixelDirectionAt(nside, pixels);
     let angularRadius = 0;
@@ -1172,6 +1212,10 @@ export class SurveyLayerViewer {
     next.forEach((pixel) => this.#selectedPixels.add(pixel));
     this.#renderSelectionRegion();
     this.#emitSelection();
+    const pixel = next[0];
+    const membership = pixel === undefined ? undefined : visibleCoverageAtPixel(this.#model, pixel, this.#visibleSurveyIds);
+    if (pixel !== undefined && membership) this.#presentInspection(this.#manifest.nside, pixel, membership, this.#workspaceMembershipAt(pixel).layers.length > 0, this.#pixelDirectionAt(this.#manifest.nside, [pixel]), false);
+    else this.#onInspection(null);
   }
 
   soloSurvey(surveyId: string): void {
@@ -1231,7 +1275,6 @@ export class SurveyLayerViewer {
     this.#clearExplosion(false);
     clearGroup(this.#selectionGroup);
     this.#selectionCoreMaterial = null;
-    this.#selectionEdgeMaterial = null;
     this.#selectionGlowMaterial = null;
     clearGroup(this.#drillGroup);
     clearGroup(this.#objectPointGroup);
@@ -1383,6 +1426,7 @@ export class SurveyLayerViewer {
     this.#canvas.removeEventListener("pointermove", this.#handlePointerMove);
     this.#canvas.removeEventListener("pointerleave", this.#handlePointerLeave);
     this.#canvas.removeEventListener("pointercancel", this.#handlePointerCancel);
+    this.#skyDepth.clear();
     disposeObject(this.#scene);
     disposeRenderer(this.#renderer, options.releaseContext !== false);
   }
@@ -1407,6 +1451,7 @@ export class SurveyLayerViewer {
     this.#controls.minDistance = 0.002;
     this.#keepCameraOutside();
     this.#renderSelectionRegion();
+    if (this.#skyDepthData && Math.abs((this.#skyDepth.layout?.surfaceRadius ?? 0) - this.#outerRadius - .014) > .0001) this.setSkyDepth(this.#skyDepthData, this.#onSkyDepthPick ?? undefined);
     this.#applyFocus();
     this.#emitState();
     this.#requestRender();
@@ -1681,6 +1726,7 @@ export class SurveyLayerViewer {
       mesh.renderOrder = renderOrder;
       overlayMaterial = overlayGeometry ? fragmentMaterial() : null;
       if (overlayMaterial && overlayGeometry) {
+        this.#coverageSourceMaterials.push(overlayMaterial);
         overlayMaterial.opacity = animated ? 0 : meshOpacity;
         const overlay = new THREE.Mesh(overlayGeometry, overlayMaterial);
         overlay.renderOrder = renderOrder + 1;
@@ -1720,6 +1766,7 @@ export class SurveyLayerViewer {
   #retireCoverage(animated: boolean): void {
     this.#layerMeshes.length = 0;
     this.#coverageEdgeMaterials.length = 0;
+    this.#coverageSourceMaterials.length = 0;
     this.#overlapDashMaterials.length = 0;
     clearGroup(this.#overlapLabelGroup);
     this.#meshBySurvey.clear();
@@ -1751,7 +1798,7 @@ export class SurveyLayerViewer {
 
   #applyFocus(): void {
     for (const [surveyId, mesh] of this.#meshBySurvey) {
-      mesh.material.opacity = this.#overlapMode
+      mesh.material.opacity = this.#skyDepth.layout?.items.length ? .055 : this.#overlapMode
         ? OVERLAP_SURVEY_OPACITY
         : this.#focusedSurveyId === surveyId
         ? 0.52
@@ -1768,8 +1815,9 @@ export class SurveyLayerViewer {
         ? DIMMED_OPACITY
         : 0.14;
     });
-    const edgeOpacity = this.#overlapMode ? OVERLAP_EDGE_OPACITY : this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null ? DIMMED_EDGE_OPACITY : COVERAGE_EDGE_OPACITY;
+    const edgeOpacity = this.#skyDepth.layout?.items.length ? .065 : this.#overlapMode ? OVERLAP_EDGE_OPACITY : this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null ? DIMMED_EDGE_OPACITY : COVERAGE_EDGE_OPACITY;
     this.#coverageEdgeMaterials.forEach((material) => { material.opacity = edgeOpacity; });
+    this.#coverageSourceMaterials.forEach(material => { material.opacity = this.#skyDepth.layout?.items.length ? .055 : COVERAGE_OPACITY; });
     this.#requestRender();
   }
 
@@ -1911,7 +1959,6 @@ export class SurveyLayerViewer {
   #renderSelectionRegion(): void {
     clearGroup(this.#selectionGroup);
     this.#selectionCoreMaterial = null;
-    this.#selectionEdgeMaterial = null;
     this.#selectionGlowMaterial = null;
     delete this.#canvas.dataset.selectionVolume;
     delete this.#canvas.dataset.selectionDepthKeys;
@@ -1920,43 +1967,13 @@ export class SurveyLayerViewer {
     this.#applyFocus();
     if (!this.#selectedPixels.size) return;
     const selected = [...this.#selectedPixels];
-    const displayDepths = this.#displayDepths();
-    const coveredKeys = new Set<string>();
-    selected.forEach((pixel) => {
-      const membership = visibleCoverageAtPixel(this.#model, pixel, this.#visibleSurveyIds);
-      membership?.surveyIds.forEach((surveyId) => coveredKeys.add(`public-survey:${surveyId}`));
-      this.#workspaceLayers.forEach((layer) => {
-        if (this.#workspaceLayerVisible(layer) && layer.pixels.includes(pixel)) coveredKeys.add(this.#workspaceLayerKey(layer));
-      });
-    });
-    const selectionDepths = displayDepths.filter((depth) => coveredKeys.has(depth.key));
-    const depths = selectionDepths.length ? selectionDepths : displayDepths;
-    if (!depths.length) return;
-    const radii = depths.map((depth) => depth.radius);
-    const minimumRadius = Math.max(0.05, Math.min(...radii) - REGION_INNER_PADDING);
-    const maximumRadius = Math.max(...radii) + REGION_OUTER_PADDING;
     const edgeCells = selected.map((pixel) => ({
       nside: this.#manifest.nside,
       pixel,
-      innerRadius: minimumRadius,
-      outerRadius: maximumRadius,
+      radius: this.#outerRadius + .014,
       color: SELECTION_EDGE_COLOR,
-      inset: 0.012,
     }));
-    const edgeGeometry = buildSphericalCellVolumeEdges(edgeCells);
-    const volumeEdgeMaterial = new THREE.LineDashedMaterial({
-      color: SELECTION_EDGE_COLOR,
-      transparent: true,
-      opacity: 0.98,
-      depthTest: false,
-      depthWrite: false,
-      dashSize: 0.07,
-      gapSize: 0.035,
-      toneMapped: false,
-    });
-    const volumeEdges = new THREE.LineSegments(edgeGeometry, volumeEdgeMaterial);
-    volumeEdges.computeLineDistances();
-    volumeEdges.renderOrder = SELECTION_RENDER_ORDER + 1;
+    const edgeGeometry = buildSphericalCellEdges(edgeCells);
     const coreMaterial = new THREE.LineBasicMaterial({
       color: SELECTION_EDGE_COLOR,
       transparent: true,
@@ -1966,7 +1983,7 @@ export class SurveyLayerViewer {
       toneMapped: false,
     });
     const coreEdges = new THREE.LineSegments(edgeGeometry.clone(), coreMaterial);
-    coreEdges.renderOrder = SELECTION_RENDER_ORDER + 2;
+    coreEdges.renderOrder = SELECTION_RENDER_ORDER + 1;
     const glowMaterial = new THREE.LineBasicMaterial({
       color: SELECTION_COLOR,
       transparent: true,
@@ -1979,12 +1996,11 @@ export class SurveyLayerViewer {
     const glowEdges = new THREE.LineSegments(edgeGeometry.clone(), glowMaterial);
     glowEdges.renderOrder = SELECTION_RENDER_ORDER;
     this.#selectionCoreMaterial = coreMaterial;
-    this.#selectionEdgeMaterial = volumeEdgeMaterial;
     this.#selectionGlowMaterial = glowMaterial;
-    this.#selectionGroup.add(glowEdges, volumeEdges, coreEdges);
+    this.#selectionGroup.add(glowEdges, coreEdges);
     this.#canvas.dataset.selectionVolume = "outline";
-    this.#canvas.dataset.selectionDepthKeys = depths.map((depth) => depth.key).join(",");
-    this.#canvas.dataset.selectionDepthRadii = depths.map((depth) => depth.radius.toFixed(4)).join(",");
+    this.#canvas.dataset.selectionDepthKeys = "";
+    this.#canvas.dataset.selectionDepthRadii = "";
     this.#canvas.dataset.selectionEdgeLayers = "1";
 
     this.#requestRender();
@@ -2083,7 +2099,6 @@ export class SurveyLayerViewer {
     this.#selectedPixels.clear();
     clearGroup(this.#selectionGroup);
     this.#selectionCoreMaterial = null;
-    this.#selectionEdgeMaterial = null;
     this.#selectionGlowMaterial = null;
     this.#applyFocus();
     this.#onSelection(null);
@@ -2263,8 +2278,8 @@ export class SurveyLayerViewer {
       const opacity = transition.direction === "in" ? eased : 1 - eased;
       transition.root.scale.setScalar(transition.direction === "in" ? THREE.MathUtils.lerp(0.94, 1, eased) : THREE.MathUtils.lerp(1, 0.96, eased));
       const dimmed = this.#overlapMode || this.#selectedPixels.size > 0 || this.#explodedPixel != null;
-      const meshOpacity = dimmed && transition.meshOpacity < 0.5 ? DIMMED_OPACITY : transition.meshOpacity;
-      const lineOpacity = dimmed && transition.lineOpacity < 0.5 ? DIMMED_EDGE_OPACITY : transition.lineOpacity;
+      const meshOpacity = this.#skyDepth.layout?.items.length ? .055 : dimmed && transition.meshOpacity < 0.5 ? DIMMED_OPACITY : transition.meshOpacity;
+      const lineOpacity = this.#skyDepth.layout?.items.length ? .065 : dimmed && transition.lineOpacity < 0.5 ? DIMMED_EDGE_OPACITY : transition.lineOpacity;
       transition.meshMaterials.forEach((material) => { material.opacity = opacity * meshOpacity; });
       transition.lineMaterials.forEach((material) => { material.opacity = opacity * lineOpacity; });
       if (progress < 1) continue;
@@ -2309,11 +2324,8 @@ export class SurveyLayerViewer {
       dash.opacity = 0.9 + overlapPulse * 0.1;
       this.#activeOverlapHighlight.glowMaterial.opacity = 0.52 + overlapPulse * 0.36;
     }
-    if (!this.#selectionCoreMaterial || !this.#selectionEdgeMaterial || !this.#selectionGlowMaterial) return;
+    if (!this.#selectionCoreMaterial || !this.#selectionGlowMaterial) return;
     const pulse = 0.5 + 0.5 * Math.sin(now * 0.004);
-    this.#selectionEdgeMaterial.dashSize = 0.052 + pulse * 0.034;
-    this.#selectionEdgeMaterial.gapSize = 0.028 + (1 - pulse) * 0.018;
-    this.#selectionEdgeMaterial.opacity = 0.86 + pulse * 0.14;
     this.#selectionCoreMaterial.opacity = 0.88 + pulse * 0.12;
     this.#selectionGlowMaterial.opacity = 0.28 + pulse * 0.38;
   }
@@ -2342,6 +2354,7 @@ export class SurveyLayerViewer {
     this.#canvas.dataset.dragging = "true";
     this.#bloomPass.enabled = false;
     this.#renderer.setPixelRatio(Math.min(1, this.#basePixelRatio));
+    this.#skyDepth.setPixelRatio(this.#renderer.getPixelRatio());
     this.#composer.setSize(Math.max(1, Math.round(this.#canvas.clientWidth)), Math.max(1, Math.round(this.#canvas.clientHeight)));
   };
 
@@ -2351,6 +2364,7 @@ export class SurveyLayerViewer {
     this.#bloomPass.enabled = true;
     this.#renderer.setPixelRatio(this.#basePixelRatio);
     this.#composer.setSize(Math.max(1, Math.round(this.#canvas.clientWidth)), Math.max(1, Math.round(this.#canvas.clientHeight)));
+    this.#skyDepth.setPixelRatio(this.#renderer.getPixelRatio());
     this.#requestRender();
   };
 
@@ -2379,6 +2393,8 @@ export class SurveyLayerViewer {
       ctrlKey: event.ctrlKey,
       metaKey: event.metaKey,
     };
+    const aggregate = click.ctrlKey || click.metaKey ? null : this.#skyDepth.pick(click.clientX, click.clientY, this.#camera, this.#canvas.getBoundingClientRect());
+    if (aggregate) { this.#onSkyDepthPick?.(aggregate); return; }
     if (this.#overlapMode) {
       const component = this.#pickOverlapComponent(click);
       if (component) {
@@ -2410,6 +2426,7 @@ export class SurveyLayerViewer {
 
   readonly #handleDoubleClick = (event: MouseEvent): void => {
     if (event.button !== 0) return;
+    if (this.#skyDepth.pick(event.clientX, event.clientY, this.#camera, this.#canvas.getBoundingClientRect())) return;
     if (this.#overlapMode) return;
     if (this.#clickTimer) clearTimeout(this.#clickTimer);
     this.#clickTimer = null;
@@ -2506,6 +2523,7 @@ export class SurveyLayerViewer {
     this.#renderer.setSize(width, height, false);
     this.#basePixelRatio = Math.min(window.devicePixelRatio, 1.35);
     this.#renderer.setPixelRatio(this.#interactionQualityActive ? Math.min(1, this.#basePixelRatio) : this.#basePixelRatio);
+    this.#skyDepth.setPixelRatio(this.#renderer.getPixelRatio());
     this.#composer.setSize(width, height);
     this.#applyProjection(width, height);
     if (this.#homeScrollProgress < 1 && !this.#cameraTransition) this.#applyHomeScrollPose();
@@ -2537,7 +2555,7 @@ export class SurveyLayerViewer {
       const moving = this.#controls.enabled && this.#controls.update();
       this.#keepCameraOutside();
       this.#composer.render();
-      if (moving || this.#cameraTransition || this.#fragmentTransitions.length || this.#explosionTransition || this.#selectionEdgeMaterial || this.#overlapDashMaterials.length || this.#activeOverlapHighlight) this.#requestRender();
+      if (moving || this.#cameraTransition || this.#fragmentTransitions.length || this.#explosionTransition || this.#selectionGlowMaterial || this.#overlapDashMaterials.length || this.#activeOverlapHighlight) this.#requestRender();
     });
   }
 }

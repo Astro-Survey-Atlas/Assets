@@ -1,4 +1,5 @@
 import { ApiManagement, MANAGED_KEY_PREFIX } from "./api-management.js";
+import { SkyDepthInputError, SkyDepthStore } from "./sky-depth.js";
 import { LlmDiscovery, CDS_SEARCH_URL } from "./llm-discovery.js";
 import { adminInventoryIndex } from "./admin-survey-index.js";
 import { decodeNativeMoc, sha256 as nativeSha256 } from "./native-moc.js";
@@ -119,6 +120,10 @@ const evidenceStore = new CoverageEvidenceStore({
 const contentRoot = path.resolve(process.env.ASSETS_CONTENT_ROOT ?? path.join(releaseRoot, ".assets-content"));
 const releaseBackendOwnership = role === "backend" ? await acquireLocalFileLock(path.join(contentRoot, ".backend-owner.lock")) : undefined;
 const evidenceRoot = path.resolve(process.env.ASSETS_EVIDENCE_ROOT ?? "/var/lib/assets-evidence");
+const skyDepth = new SkyDepthStore({ evidenceRoot,
+  samplePath: process.env.ASSETS_SKY_DEPTH_SAMPLE_PATH,
+  sampleSha256: process.env.ASSETS_SKY_DEPTH_SAMPLE_SHA256,
+  referencePath: path.join(projectRoot, "fixtures/distance-prototype/planck18-reference.json") });
 const publicLookupStore = authorityStore ?? new FilesystemArtifactStore(path.join(evidenceRoot, "public-lookups"));
 const sourceUnitEvidenceRoot = path.resolve(process.env.ASSETS_SOURCE_UNIT_EVIDENCE_ROOT
   ?? (process.env.ASSETS_EVIDENCE_ROOT ? evidenceRoot : path.join(releaseRoot, "artifacts/public-survey-footprints/raw")));
@@ -4968,6 +4973,22 @@ const server = http.createServer((request, response) => {
     }
     if (pathname === "/api/v1/access/region-query" && request.method === "POST") return sendProtectedRegionQuery(request,response);
     if (pathname === "/api/v1/access/coverage-block" && request.method === "POST") return sendProtectedCoverageBlock(request, response);
+    if (pathname === "/api/v1/sky-depth/example" && request.method === "GET") {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      response.setHeader("Cache-Control", "no-store");
+      return json(response, 200, await skyDepth.example());
+    }
+    if (pathname === "/api/v1/sky-depth" && request.method === "POST") {
+      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      const quota = accessGate.begin(`sky-depth:${request.socket.remoteAddress ?? "unknown"}`);
+      try {
+        const result = await skyDepth.query(await requestJsonBody(request, 65536));
+        return compressedJson(request, response, 200, result, "no-store");
+      } catch (error) {
+        if (error instanceof SkyDepthInputError) return json(response, 400, { error: error.message });
+        throw error;
+      } finally { quota.finish(1); }
+    }
     if (pathname === "/api/v1/coverage/overlap" && request.method === "POST") {
       if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
       return sendCoverageOverlap(request, response);

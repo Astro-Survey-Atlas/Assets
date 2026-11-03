@@ -171,6 +171,14 @@ splitRoles:
   backendReplicas: 1
   cacheStorageClass: local-path
   cacheSize: 8Gi
+  backendImage:
+    repository: ""
+    tag: ""
+
+skyDepth:
+  enabled: false
+  samplePath: ""
+  sampleSha256: ""
 
 # Optional Assets-only fallback after a confirmed empty CDS search.
 llm:

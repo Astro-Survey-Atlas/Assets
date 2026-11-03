@@ -328,7 +328,7 @@ function surveyEntry(pkg: ReleaseHistoryPackage): HTMLElement {
 
 function releaseEntry(release: ReleaseHistoryEntry, index: number, isLatest: boolean): HTMLElement {
   const details = document.createElement("details");
-  details.className = "release-entry";
+  details.className = isLatest ? "release-entry is-latest" : "release-entry";
   if (index === 0) details.open = true;
 
   const summary = document.createElement("summary");

@@ -37,27 +37,8 @@
         <p class="eyebrow">COVERAGE / NATIVE UNITS / SOURCE MANIFESTS</p>
         <h1 data-i18n="api.title">Query the sky through the API.</h1>
         <p data-i18n="api.lead">Get a survey's published HEALPix list at an order, inspect service status, and use a Key for full native unit lookup and download plans.</p>
-        <div id="api-status" role="status" aria-live="polite"></div>
-        <button id="api-status-refresh" class="public-button-secondary" type="button" data-i18n="api.refresh">Refresh status</button>
-      </section>
-
-      <section class="public-section">
-        <div class="public-feature-grid">
-          <article class="public-feature">
-            <h3 data-i18n="api.publicTitle">Public coverage</h3>
-            <p data-i18n="api.publicBody">No Key is required for the published survey catalog or HEALPix lists. Default selection is the union of all published survey MOCs. Use releaseId or productId to narrow it.</p>
-            <code>/api/v1/coverage/surveys/euclid/healpix?order=4</code>
-          </article>
-          <article class="public-feature">
-            <h3 data-i18n="api.keyTitle">Full lookup with a Key</h3>
-            <p data-i18n="api.keyBody">An administrator issues a Key with region:query and a quota of up to 30 requests per minute. It enables full reverse lookup and frozen manifest pagination. Accounts and online payment are not currently available.</p>
-            <p data-i18n="api.keyPrivacy">Authorize below for this page session. Credentials are not saved to browser storage.</p>
-          </article>
-          <article class="public-feature">
-            <h3 data-i18n="api.sourceTitle">Preserve the evidence</h3>
-            <p data-i18n="api.sourceBody">Results retain actual orders, native unit identities, precision and inventory limits. JSON/CSV plans contain metadata and links; users retrieve scientific data from each source.</p>
-            <a href="/api/v1/openapi.json">OpenAPI JSON</a>
-          </article>
+        <div class="api-status-row">
+          <div id="api-status" class="api-status-panel" role="status" aria-live="polite"></div>
         </div>
       </section>
 

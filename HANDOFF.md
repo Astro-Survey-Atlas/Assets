@@ -1,8 +1,72 @@
 # Assets 项目交接
 
-交接日期：2026-10-30（Asia/Shanghai）。本文件是当前状态与待办入口；
+交接日期：2026-11-02（Asia/Shanghai）。本文件是当前状态与待办入口；
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
+
+## 2026-11-02 天球内真实 DESI 纵深（Dev 已部署）
+
+已按用户最新要求把纵深接入正式 `/atlas/` 的原天球：**选中 HEALPix 区块自动加载**，
+有资料才显示 aggregated points，加载/无数据/未接入/失败时静默隐藏可选纵深。
+移除 DESI 3D 工具栏按钮、Inspector 二次点击入口和独立 HEALPix/DEPTH HUD。
+Cell Inspector 下方新增独立透明 **DEPTH** 面板，标题与 `ORDER … · IPix …` 同为 14px/700，
+无底色/边框/阴影/毛玻璃；数量、轴、图例、点选区间和来源依据都在其中。
+巡天 readout、Cell Inspector、DEPTH 共用流式列，长标题换行不再覆盖后续内容；窄屏列可滚动，
+查看区块时隐藏重复来源队列。共享原天球 Scene、相机、画布和控制，不跳页、不另开画布。
+点的屏幕面积正比于对象数，直径正比于数量平方根；4 倍数量对应 2 倍直径，图例采用同一比例。
+真实 HEALPix 子格位置随径向箱沿选区法线平行位移，底面范围和区块数不随高度增加；
+径向独立缩放，不能当作等比例宇宙体积。点击光点显示数量、来源、聚合像元和径向区间，
+正常选择/加载不移动镜头；F 显式聚焦，ESC 沿用原天球清除选区与 Inspector，同时取消纵深。
+双端范围滑条按 Mpc/z 加权均值强调聚合点，范围内点保留原色，范围外点保留原色并以 50% alpha 与天球背景混合；不额外染灰或阻断后方聚合点。两道平行线框标出范围上下界。
+距离和红移各自记住范围，拖动不重新请求数据。Mpc 标注说明 1 Mpc 约 326 万光年及 Planck18 推算模型。
+选区、阶数和来源变化自动更新；失败或空结果后重新选择会再次读取。
+Dev 入口 <http://10.15.51.75:32083/atlas/?depth=desi>；Helm revision **386**。site 与
+`publish-assets` init 使用镜像 `0.1.0-20261102-163901`；backend 保留 API 镜像
+`0.1.0-20261102-094933`。site/backend 均 1/1 Ready、零重启；backend Pod 因 init 镜像更新而重建，API 容器镜像未变。
+本轮临时本地预览已关闭。
+启动命令、接口配置、全部范围与测试见 [真实场景说明](docs/sky-depth-demo.md)。
+
+复用前轮 `desi-dr1-local` 的真实 evidence，不复制原始行进 Git。窗口仍为
+`[4700000,4732768)`、SHA `f2b19da700f5dbb0576e7f5f807ef09ec06d8d6ef5f1f2834528f08132260413`。
+O4 #630 有 6,612 个源行，距离有效 4,198 个、红移有效 4,222 个；距离模式以
+O8 × 64 个径向箱完整聚合为 2,296 个非空单元，红移模式为 2,097 个，计数守恒。
+不是完整天区或随机样本，不能外推完整巡天密度。
+
+新增可选 `SkyDepthStore` 与 GET `/api/v1/sky-depth/example`、POST `/api/v1/sky-depth`，
+按需读取、固定哈希及 evidence 真实路径校验；接口和 OpenAPI 独立于 MOC/发布。
+生产默认未接入资料，启用须显式配置 `ASSETS_SKY_DEPTH_SAMPLE_PATH/SHA256` 及 evidence 根目录。
+Planck18 表已包含在 Dockerfile。预览共享该模块，其他公开天球读取代理到既有 Dev。
+原始红移与距离展示资格已分开；逐来源区分可用、仅红移、无适用测量、尚未接入、样本空、
+读取失败。界面明确 Planck18 共动距离推算、未作本动/CMB 校正和仅测量项误差；红移轴
+使用低/高 z 图例。25 秒超时、清除取消和过期结果隔离均可用；无可显示资料时不造点或显示零值。
+
+`site/src/atlas/sky-depth-layer.ts` 负责天球内几何、屏幕面积标度、遮挡和点选；
+`sky-depth-panel.ts` 仅负责 Inspector 下的透明面板与请求，不创建独立 renderer。原 viewer 管理其生命周期，
+纵深显示时弱化覆盖并以真实底面边界代替普通选区体，清除时恢复。只有选中区块才查询资料。
+`?depth=desi` 仅保留为预先选择 O4 #630 的开发链接，随后走普通自动加载路径。
+
+当前只接通 DESI DR1 行窗口，测量查询按 survey/release/角选区，不是产品逐文件目标清单。
+没有全量物理量索引、多巡天实测融合或交叉匹配。其他巡天只报告尚未接入，二维能力独立。
+完整构建、站点 TypeScript、21 项距离专项通过；全量 `npm test` 为 510 项：508 通过、
+2 跳过，Core wheel 验证通过；本轮常规 viewer 和首页/Atlas 回归通过。真实 Chromium 回归含单画布、
+无独立面板/入口按钮、仅聚合请求、真实点击自动加载、数量面积图例、z 轴、光点点选、
+不自动移动镜头、失败/无资料隐藏、清除取消请求和 390px 手机无溢出，页面错误为零。
+长标题/手机布局均检查 readout→Inspector→DEPTH 不重叠、背景透明和标题同级。
+Ctrl 选择能穿过光点操作底面区块；语言切换保留实际 Order/IPix 并更新纵深文案。
+内置 Browser 无连接，以本机 Chromium 验证。Dev 浏览器使用 `NO_PROXY` 直连以绕过 shell HTTP proxy；
+状态等待使用 locator，兼容站点严格 CSP。Dev 回归通过，记录与截图位于
+`/tmp/asa-sky-depth-opacity-dev-final/verification-auto-depth.json`、`auto-depth-*.png`；本地回归记录仍在
+`/tmp/asa-sky-depth-20261030/verification-auto-depth.json`。
+额外灰阶混色曾让同视角色度比降到 0.262，无法单独验证 alpha；移除该混色后，Dev 全范围与 `0–200 Mpc` 的 chroma ratio 为 0.545，与 50% alpha 的颜色混合相符，浏览器回归将该比例限定在 0.35–0.65。
+最终效果图在 `.tmp-screens/sky-depth-transparent-{inspector,panel,mobile}.png`（Git 忽略）。
+`npm run test:sky-depth-browser` 可复验运行中的预览；上一版 `on-globe-*` 是已替换的 HUD。
+首页回归本轮换到独立的 4178 端口运行同一脚本；4173 已有其他进程返回管理台页面，未停止它。
+
+Dev health、assets、coverage、coverage catalog、DESI 示例及参考来源 API 均已核对；
+FITS Range 返回 HTTP 206 / 16 bytes，SHA 与清单一致。health 报告公开 bundle
+`reviewed-mv51kku3-a4f8d8e6` / SHA-256 `d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`、
+611 files；coverage catalog 为 140 层。未改 Warehouse、未发布公开包或激活索引；下节旧 Scanner 默认配置仍需保留，backend 镜像与 site 有意分开。
+先前原型已由用户提交为 `4d02a89`；本节场景改动尚未提交。
 
 ## 2026-10-30 本地 DESI Connector 与选区距离原型（原型未部署）
 
@@ -42,6 +106,12 @@ caller 均 PASSED。日志与请求 ID 见报告。
 截图与浏览器记录在 `/tmp/asa-distance-feasibility-20261030/`；挂载/Scanner 验证日志在
 `/tmp/asa-desi-connector-validation/`。未发布公开包或激活原生索引；Dev 镜像差异仍见下节。
 用户 `.codex/config.toml` 修改保留，原型/适配器/报告尚未提交。
+
+用户进一步确认：纵深是可选增强，各巡天不保证有红移或可推算距离，无法展示可以正常接受。
+可行性报告已记录：区分距离可用、仅红移、已知无适用资料、尚未接入/未知、查询成功但无对象、
+读取失败；按来源独立展示，二维覆盖/发布/重合不依赖纵深成功。当前原型红移轴仍复用距离
+筛选，只覆盖同一批有效 DESI 星系的轴切换；正式接入需独立判断红移与距离展示资格，
+不能把目标状态视为已实现。此次仅补充设计记录，未改运行代码或部署。
 
 ## 2026-10-26 O4 概览底图与独立重合阶数
 
