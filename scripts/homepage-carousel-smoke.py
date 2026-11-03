@@ -381,10 +381,13 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     expect(slider).to_have_attribute("aria-valuetext", "O9")
     expect(page.locator("#coverage-state")).to_contain_text("O9", timeout=30000)
 
-    euclid.locator('input[data-release-id="euclid-q1"]').check(force=True)
+    if page.locator("#coverage-layers").is_hidden():
+        page.locator("#coverage-layers-toggle").click()
+    expect(euclid.locator(".coverage-release-list")).to_be_visible()
+    euclid.locator('input[data-release-id="euclid-q1"]').check()
     expect(page.locator("#coverage-display-order-max")).to_have_text("O9")
     expect(slider).to_have_attribute("aria-valuetext", "O9")
-    q1_product.uncheck(force=True)
+    q1_product.uncheck()
     expect(slider).to_have_attribute("aria-valuetext", "O9")
     expect(page.locator("#coverage-display-order-max")).to_have_text("O11")
     page.evaluate("document.activeElement.blur()")
