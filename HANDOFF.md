@@ -24,6 +24,8 @@ Checks 与 Code Release runner 固定 Ubuntu 24.04，与现有 Playwright 1.55 �
 GitHub 的 `ubuntu-latest` 已迁移到该 Playwright 版本不支持的 Ubuntu 26.04。
 首页/Atlas 浏览器回归在长阶数交互后会重新打开已自动收起的图层选择器，再操作可见的
 Q1 控件，避免 CI 速度较慢时点击 10 秒自动关闭后的隐藏控件。
+抽屉拖动后的查询和 F 聚焦检查按真实请求/相机状态等待，避免以固定 700ms/1s 推断
+异步动作完成；临时 CI 诊断输出已清除。
 当前代码发布使用独立 Code Release 流程；公开数据仍按独立 Data Package Release 版本管理。
 DESI 原始行仍在 evidence，生产默认未接入纵深资料；样本与物理限制见发布说明及下节。
 

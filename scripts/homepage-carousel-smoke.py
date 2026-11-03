@@ -430,11 +430,9 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     page.mouse.move(left + (right - left) * 4 / 6, y, steps=16)
     assert not overlap_requests, "drawer pointer dragging must only preview the target order"
     page.mouse.up()
-    page.wait_for_timeout(700)
-    if not overlap_requests:
-        print("[DEBUG-asa-003] drawer request state", json.dumps({"slider": slider.get_attribute("aria-valuetext"), "rawValue": slider.input_value(), "coverageState": page.locator("#coverage-state").inner_text(), "displayState": page.locator("#overlap-drawer-display-state").inner_text(), "camera": page.locator("#coverage-status-camera").inner_text(), "heldRoutes": len(held_overlap_routes)}), flush=True)
-        page.wait_for_timeout(3000)
-        print("[DEBUG-asa-003] after additional wait", json.dumps({"slider": slider.get_attribute("aria-valuetext"), "requestOrders": [body["requestedOrder"] for body in overlap_requests], "coverageState": page.locator("#coverage-state").inner_text(), "heldRoutes": len(held_overlap_routes)}), flush=True)
+    deadline = time.monotonic() + 10
+    while not held_overlap_routes and time.monotonic() < deadline:
+        page.wait_for_timeout(50)
     assert [body["requestedOrder"] for body in overlap_requests] == [8], f"drawer slider must request only the final overlap order, got {overlap_requests}"
     assert len(held_overlap_routes) == 1
     expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
@@ -560,8 +558,11 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     far = float(page.locator("#coverage-status-camera").inner_text().split(" / ")[0])
     page.evaluate("document.activeElement.blur()")
     page.keyboard.press("f")
-    page.wait_for_timeout(1000)
-    near = float(page.locator("#coverage-status-camera").inner_text().split(" / ")[0])
+    deadline = time.monotonic() + 10
+    near = far
+    while near >= far * 0.95 and time.monotonic() < deadline:
+        page.wait_for_timeout(50)
+        near = float(page.locator("#coverage-status-camera").inner_text().split(" / ")[0])
     assert near < far * 0.95, f"F must advance the camera in G mode, got {far} -> {near}"
     assert not block_requests, "Camera focus in G must not request finer source coverage"
     if screenshot_root:
