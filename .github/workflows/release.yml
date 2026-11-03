@@ -130,6 +130,7 @@ jobs:
           mkdir -p dist/chart
           helm package charts/astro-survey-atlas-assets --destination dist/chart
           helm push dist/chart/*.tgz "${CHART%/*}"
+          helm show chart "$CHART" --version "${{ steps.version.outputs.version }}"
 
       - name: Stage code release information
         env:
