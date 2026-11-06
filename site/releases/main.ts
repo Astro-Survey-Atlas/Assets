@@ -1,7 +1,6 @@
 import { Archive, Check, Copy, Download, Package, RefreshCw, Telescope, createIcons } from "lucide";
 import { locale, mountLocaleControls, t } from "../src/i18n.js";
 import { mountSiteChrome as mountChrome } from "../src/site-chrome.js";
-import "../src/public.css";
 import { surveyColorFor } from "../src/atlas/survey-colors.js";
 
 interface ReleaseHistoryRelease {

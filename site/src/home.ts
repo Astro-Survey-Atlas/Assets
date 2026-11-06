@@ -26,9 +26,6 @@ import {
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { mountSiteChrome } from "./site-chrome.js";
 import { surveyMarkMarkup } from "./survey-mark.js";
-import "./public.css";
-import "./homepage.css";
-import "./survey-mark.css";
 
 interface SurveyProduct {
   modality?: string;

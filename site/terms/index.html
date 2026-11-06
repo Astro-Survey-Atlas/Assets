@@ -6,7 +6,9 @@
     <meta name="theme-color" content="#eef0f2" />
     <meta name="description" content="Astro Survey Atlas terms for coverage, evidence and integration contracts" />
     <link rel="icon" type="image/svg+xml" href="/icon_without_name_lon_web.svg" />
-    <link rel="stylesheet" href="../src/public.css" />
+    <link rel="stylesheet" href="/src/public.css" />
+    <link rel="stylesheet" href="/src/hud.css" />
+    <link rel="stylesheet" href="/src/hud-pages.css" />
     <script src="/theme-bootstrap.js"></script>
     <title>Astro Survey Atlas · Terms</title>
   </head>
@@ -35,27 +37,25 @@
     <main class="resources-main terms-main">
       <section class="resources-hero terms-hero">
         <p class="eyebrow" data-i18n="page.terms.eyebrow">ASA VOCABULARY / DEVELOPER TERMS</p>
-        <h1 data-i18n="page.terms.title">The words ASA uses to make the sky searchable</h1>
+        <h1><span data-i18n="page.terms.titleLead">The words ASA uses to make the sky</span> <em data-i18n="page.terms.titleHot">searchable</em></h1>
         <p data-i18n="page.terms.lead">A shared glossary for coverage, evidence, execution and package contracts. Every definition is written for people integrating with Assets.</p>
-        <div class="terms-controls">
-          <label class="terms-search">
-            <i data-lucide="search"></i>
-            <span class="sr-only" data-i18n="page.terms.search">Search ASA terms</span>
-            <input id="terms-search" type="search" autocomplete="off" data-i18n-placeholder="page.terms.search" placeholder="Search ASA terms" />
-          </label>
-          <output id="terms-count" class="terms-count" aria-live="polite">--</output>
-        </div>
       </section>
-
-      <section class="terms-index-band" aria-labelledby="terms-index-title">
-        <div class="terms-index-heading">
-          <p class="public-kicker" data-i18n="page.terms.indexLabel">TERM INDEX</p>
-          <h2 id="terms-index-title" data-i18n="page.terms.bilingual">EN / 中文</h2>
-        </div>
-        <p data-i18n="page.terms.note">ASA terms are marked separately from astronomy standards. Search matches names, aliases and both language definitions.</p>
-      </section>
-
-      <div id="terms-groups" class="terms-groups" aria-live="polite"></div>
+      <label class="terms-command">
+        <b aria-hidden="true">›</b>
+        <span class="sr-only" data-i18n="page.terms.search">Search ASA terms</span>
+        <input id="terms-search" type="search" autocomplete="off" spellcheck="false" data-i18n-placeholder="page.terms.search" placeholder="Search ASA terms" />
+        <output id="terms-count" class="terms-count" aria-live="polite">--</output>
+        <small data-i18n="page.terms.bilingual">EN / 中文</small>
+      </label>
+      <div class="terms-group-filter" id="terms-group-filter" role="group" data-i18n-aria-label="page.terms.groupFilter" aria-label="Filter by group"></div>
+      <div class="terms-layout">
+        <nav class="terms-index-plate" aria-labelledby="terms-index-title">
+          <div class="terms-plate-head"><span id="terms-index-title" data-i18n="page.terms.indexLabel">TERM INDEX</span><small id="terms-total"></small></div>
+          <div id="terms-groups" class="terms-index" aria-live="polite"></div>
+        </nav>
+        <article class="terms-definition-plate" id="terms-definition" aria-live="polite"></article>
+      </div>
+      <p class="terms-legend" data-i18n="page.terms.note">ASA terms are marked separately from astronomy standards. Search matches names, aliases and both language definitions.</p>
     </main>
 
     <footer><span>ICRS / NESTED HEALPIX / SHA-256</span><span>ASTRO SURVEY ATLAS TERMS</span></footer>

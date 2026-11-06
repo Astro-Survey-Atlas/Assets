@@ -1,7 +1,4 @@
 import { Menu, Moon, Sun, X, createIcons } from "lucide";
-import "./public.css";
-import "./hud.css";
-import "./hud-pages.css";
 
 export type SiteTheme = "light" | "dark";
 

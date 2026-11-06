@@ -66,7 +66,6 @@ body.public-site.atlas-page .coverage-scene::after {
 
 /* ---------- Shared HUD plates ---------- */
 body.public-site.atlas-page .coverage-layers,
-body.public-site.atlas-page .coverage-empty-guide,
 body.public-site.atlas-page .coverage-help,
 body.public-site.atlas-page .coverage-layer-detail,
 body.public-site.atlas-page .selection-queue-entry,
@@ -232,41 +231,6 @@ body.public-site.atlas-page .coverage-layer-detail-kicker {
 }
 
 /* Empty roster prompt reads as a mission brief. */
-body.public-site.atlas-page .coverage-empty-guide {
-  border-left-color: var(--hud-hot);
-  box-shadow: var(--hud-hot-glow), var(--hud-shadow);
-}
-
-body.public-site.atlas-page .coverage-empty-guide-mark { color: var(--hud-hot); }
-
-body.public-site.atlas-page .coverage-empty-guide-copy strong {
-  color: var(--hud-ink);
-  font: 700 12px/1.2 var(--font-hud);
-  letter-spacing: .22em;
-}
-
-body.public-site.atlas-page .coverage-empty-guide-copy p {
-  color: var(--hud-dim);
-  font: 400 11px/1.6 var(--font-sans), sans-serif;
-}
-
-body.public-site.atlas-page .coverage-empty-guide-action {
-  min-height: 30px;
-  padding: 0 16px;
-  border: 0;
-  background: var(--hud-hot);
-  color: #fff;
-  font: 700 10px/1 var(--font-hud);
-  letter-spacing: .16em;
-  box-shadow: var(--hud-hot-glow);
-  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
-}
-
-body.public-site.atlas-page .coverage-empty-guide-action:hover,
-body.public-site.atlas-page .coverage-empty-guide-action:focus-visible {
-  background: #ff4f7b;
-  color: #fff;
-}
 
 /* ---------- Target lock rail (readout, inspector, depth) ---------- */
 body.public-site.atlas-page .coverage-inspector-rail {
@@ -838,48 +802,6 @@ body[data-home-state="entering"] .hud-overlay,
 .hud-layers-head b { color: var(--hud-ind); }
 .hud-layers-head output { margin-left: auto; color: var(--hud-dim); font: 400 11px/1 var(--font-hud); letter-spacing: .14em; }
 
-.hud-unit {
-  position: relative;
-  display: grid;
-  grid-template-columns: 6px minmax(0, 1fr) auto;
-  gap: 14px;
-  align-items: stretch;
-  width: 100%;
-  padding: 12px 14px 12px 0;
-  border: 0;
-  border-bottom: 1px solid var(--hud-line);
-  background: transparent;
-  color: var(--hud-ink);
-  text-align: left;
-  cursor: pointer;
-}
-
-.hud-unit:hover, .hud-unit:focus-visible { background: linear-gradient(90deg, var(--hud-ind-soft), transparent); outline: none; }
-.hud-unit.is-off { opacity: .4; }
-.hud-unit.is-off:hover, .hud-unit.is-off:focus-visible { opacity: .75; }
-
-.hud-unit-tag { background: var(--c); box-shadow: 0 0 12px var(--c); }
-:root[data-theme="light"] .hud-unit-tag { box-shadow: none; }
-
-.hud-unit-body { display: grid; min-width: 0; gap: 3px; }
-
-.hud-unit-body strong {
-  overflow: hidden;
-  font: 700 17px/1.15 var(--font-sans), sans-serif;
-  letter-spacing: .04em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hud-unit-body small {
-  overflow: hidden;
-  color: var(--hud-dim);
-  font: 400 10px/1.3 var(--font-hud);
-  letter-spacing: .16em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .hud-unit-segs { display: flex; gap: 3px; margin-top: 6px; }
 .hud-unit-segs i { width: 14px; height: 5px; background: var(--hud-line); transform: skewX(-20deg); }
 .hud-unit-segs i.is-filled { background: var(--c); box-shadow: 0 0 6px var(--c); }
@@ -892,12 +814,8 @@ body[data-home-state="entering"] .hud-overlay,
   text-align: right;
   text-shadow: 0 0 10px var(--c);
 }
-
-.hud-unit.is-off .hud-unit-pct { color: var(--hud-dim); text-shadow: none; }
 :root[data-theme="light"] .hud-unit-pct { text-shadow: none; }
 .hud-unit-pct small { display: block; color: var(--hud-dim); font: 400 9.5px/1.4 var(--font-hud); letter-spacing: .14em; text-shadow: none; }
-
-.hud-unit-key { position: absolute; top: 9px; right: 14px; color: var(--hud-faint); font: 700 9px/1 var(--font-hud); letter-spacing: .1em; }
 
 .hud-roster-all {
   display: block;
@@ -923,13 +841,6 @@ body.public-site.atlas-page .coverage-help {
   width: var(--hud-roster-width);
   max-height: calc(100vh - var(--hud-top) - 260px);
   max-height: calc(100dvh - var(--hud-top) - 260px);
-}
-
-body.public-site.atlas-page .coverage-empty-guide {
-  top: var(--hud-top);
-  left: 50%;
-  width: min(360px, calc(100vw - 2 * var(--hud-roster-width) - 140px));
-  transform: translateX(-50%);
 }
 
 /* ---------- Bottom-centre order gauge and telemetry ---------- */
@@ -1261,16 +1172,10 @@ body.public-site.atlas-page {
 body[data-hud-roster="collapsed"] .hud-roster-chevron { transform: translateY(1px) rotate(-135deg); }
 body[data-hud-roster="collapsed"] .coverage-layers > :not(.hud-layers-head) { display: none; }
 body[data-hud-roster="collapsed"] .hud-layers-head { border-bottom: 0; }
-
-.hud-unit { gap: 11px; padding: 8px 12px 8px 0; }
-.hud-unit-body { gap: 2px; }
-.hud-unit-body strong { font-size: 14px; }
-.hud-unit-body small { font-size: 9px; letter-spacing: .12em; }
 .hud-unit-segs { margin-top: 4px; }
 .hud-unit-segs i { width: 11px; height: 4px; }
 .hud-unit-pct { font-size: 16px; }
 .hud-unit-pct small { font-size: 8.5px; }
-.hud-unit-key { top: 7px; right: 12px; }
 .hud-roster-all { height: 26px; font-size: 9px; }
 
 /* Target lock: smaller type, fewer rows, readout trimmed to two lines. */
@@ -1306,7 +1211,15 @@ body.public-site.atlas-page .hud-lock-sources { gap: 4px; margin-top: 10px; }
 
 /* Overlays move with the narrower panels. */
 .hud-ra-tape { top: 78px; width: min(640px, calc(100vw - 2 * var(--hud-lock-width) - 120px)); }
-.hud-dec-ladder { right: calc(var(--hud-edge) + var(--hud-lock-width) + 26px); top: calc(50% - 200px); height: 400px; }
+/* Declination ladder hugs the right screen edge, between the target lock
+   card and the event log, instead of floating over the globe. */
+.hud-dec-ladder {
+  --hud-dec-h: min(400px, calc(100vh - 2 * var(--hud-top) - 120px));
+  right: calc(var(--hud-edge) + 10px);
+  top: max(calc(var(--hud-top) + 130px), calc(50% - var(--hud-dec-h) / 2));
+  height: var(--hud-dec-h);
+}
+@media (max-height: 760px) { .hud-dec-ladder { --hud-dec-h: 260px; } }
 .hud-minimap { left: 34px; bottom: 34px; width: 140px; height: 140px; }
 .hud-log { right: 34px; bottom: 34px; width: 380px; font-size: 9.5px; line-height: 1.8; }
 
@@ -1690,3 +1603,95 @@ body.public-site.atlas-page .hud-boot-note { color: var(--hud-hot); letter-spaci
 @media (prefers-reduced-motion: reduce) {
   body.public-site.atlas-page .hud-boot-bar::after { animation: none; }
 }
+
+/* ---------- Display-order loading feedback ---------- */
+body.public-site.atlas-page .coverage-order-ring { display: none; --hud-ring-size: 11px; margin-right: 6px; vertical-align: -1px; }
+body.public-site.atlas-page .coverage-display-order-control.is-loading .coverage-order-ring { display: inline-block; }
+body.public-site.atlas-page .coverage-display-order-control.is-loading .coverage-display-order-heading::after {
+  content: attr(data-loading-text);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  padding: 3px 10px;
+  border: 1px solid var(--hud-hot);
+  background: var(--hud-plate-solid);
+  color: var(--hud-ink);
+  font: 700 10px/1.4 var(--font-hud);
+  letter-spacing: .16em;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  box-shadow: var(--hud-hot-glow);
+}
+body.public-site.atlas-page .coverage-display-order-control.is-loading .coverage-order-seg.is-current { animation: hud-order-pulse 1s ease-in-out infinite; }
+#coverage-canvas { transition: opacity .25s ease, filter .25s ease; }
+#coverage-canvas.is-order-loading { opacity: .72; filter: saturate(.7); }
+@keyframes hud-order-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+  body.public-site.atlas-page .coverage-display-order-control.is-loading .coverage-order-seg.is-current { animation: none; }
+}
+
+/* ---------- First-visit guide (coach marks) ---------- */
+.hud-guide { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+.hud-guide-focus {
+  position: fixed;
+  left: var(--guide-fx, 0);
+  top: var(--guide-fy, 0);
+  width: var(--guide-fw, 0);
+  height: var(--guide-fh, 0);
+  border: 1px solid var(--hud-hot);
+  box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--hud-bg) 58%, transparent), var(--hud-hot-glow);
+  transition: left .28s ease, top .28s ease, width .28s ease, height .28s ease, border-radius .28s ease;
+}
+.hud-guide-focus.is-round { border-radius: 50%; }
+.hud-guide-focus[hidden] { display: none; }
+.hud-guide-plate {
+  position: fixed;
+  left: var(--guide-x, 16px);
+  top: var(--guide-y, 16px);
+  width: var(--guide-w, 360px);
+  padding: 0 18px 16px;
+  border-left: 2px solid var(--hud-hot);
+  background: var(--hud-plate-solid);
+  box-shadow: var(--hud-hot-glow), var(--hud-shadow);
+  color: var(--hud-ink);
+  pointer-events: auto;
+  transition: left .28s ease, top .28s ease;
+}
+.hud-guide-head { display: flex; align-items: center; height: 32px; margin: 0 -18px 12px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--hud-line); background: var(--hud-head-hot); }
+.hud-guide-step { font: 700 10.5px/1 var(--font-hud); letter-spacing: .22em; }
+.hud-guide-skip { margin-left: auto; border: 0; background: none; color: var(--hud-dim); cursor: pointer; font: 700 10px/1 var(--font-hud); letter-spacing: .18em; }
+.hud-guide-skip:hover, .hud-guide-skip:focus-visible { color: var(--hud-hot); outline: 0; }
+.hud-guide-plate h2 { margin: 0; font: 700 20px/1.25 var(--font-sans); letter-spacing: .02em; }
+.hud-guide-plate p { margin: 8px 0 0; color: var(--hud-dim); font: 400 13px/1.6 var(--font-sans); }
+.hud-guide-foot { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.hud-guide-dots { display: flex; gap: 4px; margin-right: auto; }
+.hud-guide-dots i { width: 14px; height: 4px; background: var(--hud-line-strong); transform: skewX(-20deg); }
+.hud-guide-dots i.is-on { background: var(--hud-hot); box-shadow: var(--hud-hot-glow); }
+.hud-guide-back, .hud-guide-next {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--hud-line-strong);
+  background: transparent;
+  color: var(--hud-ink);
+  cursor: pointer;
+  font: 700 10.5px/1 var(--font-hud);
+  letter-spacing: .14em;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.hud-guide-back[hidden] { display: none; }
+.hud-guide-next { border-color: var(--hud-hot); background: var(--hud-hot); color: #fff; }
+.hud-guide-back:hover, .hud-guide-back:focus-visible { border-color: var(--hud-ind); outline: 0; }
+.hud-guide-next:focus-visible { outline: 1px solid var(--hud-ink); outline-offset: 2px; }
+.coverage-guide-replay {
+  width: 100%;
+  height: 30px;
+  margin-top: 12px;
+  border: 1px solid var(--hud-line-strong);
+  background: transparent;
+  color: var(--hud-ink);
+  cursor: pointer;
+  font: 700 10.5px/1 var(--font-hud);
+  letter-spacing: .16em;
+}
+.coverage-guide-replay:hover, .coverage-guide-replay:focus-visible { border-color: var(--hud-hot); color: var(--hud-hot); outline: 0; }
+@media (prefers-reduced-motion: reduce) { .hud-guide-focus, .hud-guide-plate { transition: none; } }

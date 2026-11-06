@@ -21,9 +21,8 @@ import { connectorDefaultIcon, type ScanConnectorIdentity } from "../../src/conn
 import type { SkyDepthExample } from "../../src/sky-depth.js";
 import type { SkyDepthControls, SkyDepthSelection } from "./atlas/sky-depth-panel.js";
 
-import "./styles.css";
-import "./atlas/hud-atlas.css";
 import { bootActive, bootStage, bootTick, finishHudBoot, startHudBoot } from "./atlas/hud-boot.js";
+import { maybeStartAtlasGuide, openAtlasGuide } from "./atlas/hud-guide.js";
 import { buildLayerFacts, hudLog, setHudMinimapCells, setHudMode, setHudTarget, updateHudView, type HudRosterRow } from "./atlas/hud-overlay.js";
 
 type AssetKind = "package" | "moc" | "geometry" | "manifest" | "ledger" | "documentation" | "provenance" | "metadata";
@@ -1370,6 +1369,7 @@ function cancelDisplayOrderInteraction(): void {
 function scheduleDisplayOrderChange(): void {
   if (displayOrderTimer !== null) window.clearTimeout(displayOrderTimer);
   if (displayOrderDragging || pendingDisplayOrder === null) return;
+  if (pendingDisplayOrder !== selectedDisplayOrder) setDisplayOrderLoading(pendingDisplayOrder);
   displayOrderTimer = window.setTimeout(() => {
     const order = pendingDisplayOrder;
     displayOrderTimer = null;
@@ -1379,14 +1379,29 @@ function scheduleDisplayOrderChange(): void {
 }
 
 function setDisplayOrder(order: number): void {
-  if (!selectedLayerOrders().includes(order)) return;
+  if (!selectedLayerOrders().includes(order)) { setDisplayOrderLoading(null); return; }
   selectedDisplayOrder = order;
   coverageDisplayViewKey = "";
   overlapEvidenceCache.clear();
   overlapDetailsCache.clear();
   renderDisplayOrderControl();
-  if (overlapMode || overlapIntent || overlapViewController) void activateOverlap(true);
-  else void loadCoverageDisplay(true);
+  const token = ++displayOrderLoadToken;
+  setDisplayOrderLoading(order);
+  const load = overlapMode || overlapIntent || overlapViewController ? activateOverlap(true) : loadCoverageDisplay(true);
+  void load.finally(() => { if (token === displayOrderLoadToken && !coverageDisplayController && !coverageDisplayPlanningController) setDisplayOrderLoading(null); });
+}
+
+let displayOrderLoadToken = 0;
+
+/** Visible feedback while a new display order is fetched: ring + label on the gauge, dimmed sky. */
+function setDisplayOrderLoading(order: number | null): void {
+  const control = document.querySelector<HTMLElement>(".coverage-display-order-control");
+  const heading = control?.querySelector<HTMLElement>(".coverage-display-order-heading");
+  const loading = order !== null;
+  control?.classList.toggle("is-loading", loading);
+  control?.setAttribute("aria-busy", String(loading));
+  if (heading) heading.dataset.loadingText = loading ? (locale() === "zh" ? `正在加载 O${order} 覆盖…` : `LOADING O${order} COVERAGE…`) : "";
+  document.getElementById("coverage-canvas")?.classList.toggle("is-order-loading", loading);
 }
 
 function displayCellBudget(order: number): number {
@@ -1561,6 +1576,8 @@ async function loadCoverageDisplay(force = false): Promise<void> {
       coverageDisplayPendingViewKey = "";
     }
     if (coverageDisplayPlanningController === controller) coverageDisplayPlanningController = null;
+    // A superseded request must not clear the ring while a newer one is still in flight.
+    if (!coverageDisplayController && !coverageDisplayPlanningController && !displayOrderTimer) setDisplayOrderLoading(null);
   }
 }
 
@@ -4888,6 +4905,7 @@ async function initialize(): Promise<void> {
       if (booting) bootStage("catalog", "done");
       await hydrateCoverageCatalog(coverageResult);
       if (booting) { bootStage("scene", "done"); finishHudBoot(); }
+      if (isAtlasPage) maybeStartAtlasGuide();
       applySkyDeepLink();
       if (isAtlasPage && new URLSearchParams(location.search).get("depth") === "desi") void openDepthExample();
 
@@ -5106,6 +5124,7 @@ byId("coverage-help-toggle").addEventListener("click", () => {
   byId("coverage-help").hidden = !byId("coverage-help").hidden;
 });
 byId("coverage-help-close").addEventListener("click", () => { byId("coverage-help").hidden = true; });
+document.getElementById("coverage-guide-replay")?.addEventListener("click", () => { byId("coverage-help").hidden = true; openAtlasGuide(); });
 document.getElementById("hud-toggle")?.addEventListener("click", () => setHudHidden(document.body.dataset.hud !== "hidden"));
 applyHudPreferences();
 

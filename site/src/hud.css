@@ -240,3 +240,33 @@ body.resources-page .loading-row > span {
   body.public-site .loading-row > span,
   body.resources-page .loading-row > span { animation-duration: 2.4s; }
 }
+
+/* ---------- HUD scrollbars ----------
+   Inner scroll panes hide their bar until hovered or focused, then show a
+   4px indigo hairline thumb (magenta while dragged); no track, no arrows. */
+body.surveys-page .surveys-list,
+body.terms-page .terms-index,
+body.releases-page .release-survey-list {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color .2s ease;
+}
+body.surveys-page .surveys-list:hover, body.surveys-page .surveys-list:focus-within, body.terms-page .terms-index:hover, body.terms-page .terms-index:focus-within, body.releases-page .release-survey-list:hover {
+  scrollbar-color: color-mix(in srgb, var(--hud-ind) 70%, transparent) transparent;
+}
+body.surveys-page .surveys-list::-webkit-scrollbar,
+body.terms-page .terms-index::-webkit-scrollbar,
+body.releases-page .release-survey-list::-webkit-scrollbar { width: 4px; height: 4px; }
+body.surveys-page .surveys-list::-webkit-scrollbar-track,
+body.terms-page .terms-index::-webkit-scrollbar-track,
+body.releases-page .release-survey-list::-webkit-scrollbar-track { background: transparent; }
+body.surveys-page .surveys-list::-webkit-scrollbar-button,
+body.terms-page .terms-index::-webkit-scrollbar-button,
+body.releases-page .release-survey-list::-webkit-scrollbar-button { display: none; height: 0; }
+body.surveys-page .surveys-list::-webkit-scrollbar-thumb,
+body.terms-page .terms-index::-webkit-scrollbar-thumb,
+body.releases-page .release-survey-list::-webkit-scrollbar-thumb { border-radius: 0; background: transparent; }
+body.surveys-page .surveys-list:hover::-webkit-scrollbar-thumb,
+body.terms-page .terms-index:hover::-webkit-scrollbar-thumb,
+body.releases-page .release-survey-list:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--hud-ind) 70%, transparent); box-shadow: 0 0 6px color-mix(in srgb, var(--hud-ind) 60%, transparent); }
+body.surveys-page .surveys-list::-webkit-scrollbar-thumb:active { background: var(--hud-hot); }

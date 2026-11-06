@@ -7,6 +7,10 @@
     <meta name="description" content="Astro Survey Atlas Assets public sky coverage" />
     <link rel="icon" type="image/svg+xml" href="/icon_without_name_lon_web.svg" />
     <link rel="stylesheet" href="/src/public.css" />
+    <link rel="stylesheet" href="/src/hud.css" />
+    <link rel="stylesheet" href="/src/hud-pages.css" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="stylesheet" href="/src/atlas/hud-atlas.css" />
     <script src="/theme-bootstrap.js"></script>
     <title>Astro Survey Atlas Assets</title>
   </head>
@@ -66,7 +70,7 @@
         <div class="coverage-display-order-control">
           <div class="coverage-display-order-heading">
             <label for="coverage-display-order" data-i18n="coverage.displayOrder">Display order</label>
-            <output id="coverage-display-order-value">O4</output>
+            <span class="hud-ring coverage-order-ring" aria-hidden="true"></span><output id="coverage-display-order-value">O4</output>
           </div>
           <div id="coverage-display-order-segments" class="coverage-display-order-segments" aria-hidden="true"></div>
           <input id="coverage-display-order" type="range" min="0" max="0" step="1" value="0" disabled data-i18n-aria-label="coverage.displayOrder" aria-valuetext="O4" />
@@ -92,6 +96,7 @@
             <div><dt>R</dt><dd data-i18n="coverage.resetShortcut">Reset the sky and camera to the starting view.</dd></div>
             <div><dt>H</dt><dd data-i18n="coverage.hudShortcut">Hide or show the HUD panels. Keys 1–9 toggle the listed layers; E exports the selected cells.</dd></div>
           </dl>
+          <button id="coverage-guide-replay" class="coverage-guide-replay" type="button" data-i18n="coverage.guideReplay">REPLAY GUIDE</button>
         </aside>
         <div class="coverage-inspector-rail">
           <div class="coverage-readout" aria-live="polite">

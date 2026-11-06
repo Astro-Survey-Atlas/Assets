@@ -2,7 +2,6 @@ import { Search, createIcons } from "lucide";
 
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { mountSiteChrome as mountChrome } from "./site-chrome.js";
-import "./public.css";
 
 type Localized = { en: string; zh: string };
 type TermGroup = "asa" | "spatial" | "execution" | "surfaces";
@@ -245,6 +244,8 @@ const terms: readonly Term[] = [
 
 const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 let query = "";
+let activeGroup: TermGroup | null = null;
+let selectedId: string | null = new URLSearchParams(window.location.hash.slice(1)).get("term");
 
 function renderIcons(): void {
   createIcons({ icons: { Search }, attrs: { "aria-hidden": "true" }, root: document.querySelector("main") ?? document.body });
@@ -254,80 +255,128 @@ function localized(value: Localized): string {
   return value[locale()];
 }
 
+function searchText(term: Term): string {
+  return [term.name.en, term.name.zh, term.definition.en, term.definition.zh, term.detail.en, term.detail.zh, ...term.aliases].join(" ").toLocaleLowerCase();
+}
+
+function element<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function originTag(term: Term): HTMLElement {
+  const tag = element("span", "term-origin", term.origin);
+  tag.dataset.origin = term.origin.toLowerCase();
+  return tag;
+}
+
+/** Terms whose definitions mention each other, then same-group neighbours. */
+function relatedTerms(term: Term): Term[] {
+  const name = term.name.en.toLocaleLowerCase();
+  const own = searchText(term);
+  const mentioned = terms.filter((other) => other.id !== term.id && (own.includes(other.name.en.toLocaleLowerCase()) || searchText(other).includes(name)));
+  const sameGroup = terms.filter((other) => other.id !== term.id && other.group === term.group && !mentioned.includes(other));
+  return [...mentioned, ...sameGroup].slice(0, 3);
+}
+
+function selectTerm(id: string): void {
+  selectedId = id;
+  history.replaceState(null, "", `#term=${encodeURIComponent(id)}`);
+  render();
+  if (window.matchMedia("(max-width: 1180px)").matches) byId("terms-definition").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderGroupFilter(matching: readonly Term[]): void {
+  const host = byId("terms-group-filter");
+  host.replaceChildren();
+  const chip = (label: string, count: number, active: boolean, onClick: () => void): void => {
+    const button = element("button", "terms-group-chip");
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(active));
+    button.append(document.createTextNode(label), element("em", undefined, String(count)));
+    button.addEventListener("click", onClick);
+    host.append(button);
+  };
+  chip(t("page.terms.all"), matching.length, activeGroup === null, () => { activeGroup = null; render(); });
+  (Object.keys(groups) as TermGroup[]).forEach((groupId) => chip(localized(groups[groupId]), matching.filter((term) => term.group === groupId).length, activeGroup === groupId, () => { activeGroup = groupId; render(); }));
+}
+
+function renderDefinition(term: Term | undefined): void {
+  const host = byId("terms-definition");
+  host.replaceChildren();
+  const head = element("div", "terms-plate-head is-hot");
+  head.append(element("span", undefined, t("page.terms.definition")));
+  host.append(head);
+  if (!term) return;
+  head.append(element("small", undefined, term.id.toUpperCase()));
+  const body = element("div", "terms-definition-body");
+  const title = element("div", "terms-definition-title");
+  title.append(element("h2", undefined, localized(term.name)), originTag(term));
+  body.append(title);
+  const other = locale() === "zh" ? term.name.en : term.name.zh;
+  if (other !== localized(term.name)) body.append(element("p", "terms-definition-alt", other));
+  body.append(element("p", "terms-definition-lead", localized(term.definition)));
+  const secondary = locale() === "zh" ? term.definition.en : term.definition.zh;
+  body.append(element("p", "terms-definition-secondary", secondary));
+  body.append(element("p", "terms-definition-detail", localized(term.detail)));
+  const aliases = element("div", "terms-definition-aliases");
+  aliases.append(element("span", undefined, t("page.terms.aliases")));
+  term.aliases.forEach((alias) => aliases.append(element("code", undefined, alias)));
+  body.append(aliases);
+  const related = relatedTerms(term);
+  if (related.length) {
+    const list = element("div", "terms-definition-related");
+    related.forEach((entry) => {
+      const link = element("a");
+      link.href = `#term=${encodeURIComponent(entry.id)}`;
+      link.append(element("small", undefined, t("page.terms.related")), element("strong", undefined, localized(entry.name)));
+      link.addEventListener("click", (event) => { event.preventDefault(); activeGroup = null; query = ""; byId<HTMLInputElement>("terms-search").value = ""; selectTerm(entry.id); });
+      list.append(link);
+    });
+    body.append(list);
+  }
+  host.append(body);
+}
+
 function render(): void {
   const host = byId("terms-groups");
   const search = byId<HTMLInputElement>("terms-search");
-  const currentLocale = locale();
-  const normalized = query.toLocaleLowerCase();
   search.placeholder = t("page.terms.search");
-  const filtered = terms.filter((term) => {
-    if (!normalized) return true;
-    return [term.name.en, term.name.zh, term.definition.en, term.definition.zh, term.detail.en, term.detail.zh, ...term.aliases]
-      .join(" ")
-      .toLocaleLowerCase()
-      .includes(normalized);
-  });
-  byId("terms-count").textContent = `${filtered.length} ${currentLocale === "zh" ? "个术语" : "terms"}`;
+  const normalized = query.toLocaleLowerCase();
+  const matching = terms.filter((term) => !normalized || searchText(term).includes(normalized));
+  const filtered = matching.filter((term) => !activeGroup || term.group === activeGroup);
+  byId("terms-count").textContent = normalized ? `${matching.length} ${t("page.terms.matches")}` : `${terms.length} ${t("page.terms.termsUnit")}`;
+  byId("terms-total").textContent = `${filtered.length} ${t("page.terms.termsUnit")}`;
+  renderGroupFilter(matching);
   host.replaceChildren();
   if (!filtered.length) {
-    const empty = document.createElement("p");
-    empty.className = "terms-empty";
-    empty.textContent = t("page.terms.empty");
-    host.append(empty);
-    renderIcons();
+    host.append(element("p", "terms-empty", t("page.terms.empty")));
+    renderDefinition(undefined);
     return;
   }
-  (Object.keys(groups) as TermGroup[]).forEach((groupId, index) => {
+  if (!selectedId || !filtered.some((term) => term.id === selectedId)) selectedId = filtered[0].id;
+  (Object.keys(groups) as TermGroup[]).forEach((groupId) => {
     const groupTerms = filtered.filter((term) => term.group === groupId);
     if (!groupTerms.length) return;
-    const section = document.createElement("section");
-    section.className = "terms-group";
+    const section = element("section", "terms-group");
     section.id = `terms-${groupId}`;
-    const heading = document.createElement("div");
-    heading.className = "terms-group-heading";
-    const kicker = document.createElement("p");
-    kicker.className = "public-kicker";
-    kicker.textContent = localized(groups[groupId]);
-    const number = document.createElement("span");
-    number.textContent = String(index + 1).padStart(2, "0");
-    heading.append(kicker, number);
-    const grid = document.createElement("div");
-    grid.className = "terms-grid";
+    section.append(element("h3", "terms-group-heading", localized(groups[groupId])));
     groupTerms.forEach((term) => {
-      const card = document.createElement("article");
-      card.className = "term-card";
-      card.id = `term-${term.id}`;
-      const top = document.createElement("div");
-      top.className = "term-card-top";
-      const title = document.createElement("h3");
-      title.textContent = localized(term.name);
-      const origin = document.createElement("span");
-      origin.className = "term-origin";
-      origin.dataset.origin = term.origin.toLowerCase();
-      origin.textContent = term.origin;
-      top.append(title, origin);
-      const english = document.createElement("p");
-      english.className = "term-definition";
-      const enLabel = document.createElement("b");
-      enLabel.textContent = "EN";
-      english.append(enLabel, document.createTextNode(term.definition.en));
-      const chinese = document.createElement("p");
-      chinese.className = "term-definition term-definition-zh";
-      const zhLabel = document.createElement("b");
-      zhLabel.textContent = "中";
-      chinese.append(zhLabel, document.createTextNode(term.definition.zh));
-      const detail = document.createElement("p");
-      detail.className = "term-detail";
-      detail.textContent = localized(term.detail);
-      const aliases = document.createElement("div");
-      aliases.className = "term-aliases";
-      aliases.textContent = term.aliases.join(" · ");
-      card.append(top, english, chinese, detail, aliases);
-      grid.append(card);
+      const row = element("button", "term-row");
+      row.type = "button";
+      row.id = `term-${term.id}`;
+      row.setAttribute("aria-current", String(term.id === selectedId));
+      const name = element("span", "term-row-name");
+      name.append(element("strong", undefined, localized(term.name)), element("small", undefined, term.aliases.slice(0, 3).join(" · ")));
+      row.append(name, originTag(term));
+      row.addEventListener("click", () => selectTerm(term.id));
+      section.append(row);
     });
-    section.append(heading, grid);
     host.append(section);
   });
+  renderDefinition(filtered.find((term) => term.id === selectedId));
   renderIcons();
 }
 
@@ -338,4 +387,13 @@ byId<HTMLInputElement>("terms-search").addEventListener("input", (event) => {
   render();
 });
 window.addEventListener("atlas:locale-change", render);
+window.addEventListener("hashchange", () => {
+  const id = new URLSearchParams(window.location.hash.slice(1)).get("term");
+  if (!id || !terms.some((term) => term.id === id)) return;
+  activeGroup = null;
+  query = "";
+  byId<HTMLInputElement>("terms-search").value = "";
+  selectedId = id;
+  render();
+});
 render();

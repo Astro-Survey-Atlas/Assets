@@ -4,8 +4,7 @@ import { loadApiSettings, mountApiSettings } from "./api-settings.js";
 import { discoveryResultMarkup, onlyLeads } from "./moc-result.js";
 import type { DiscoveryFailure } from "../../server/discovery-failure.js";
 import { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Trash2, Unlock, Upload, X, Sun, createIcons } from "lucide";
-import "./styles.css";
-import "../src/survey-mark.css";
+import { mountPendingRings } from "./pending-ring.js";
 import { UploadCloud } from "lucide";
 import { mountLocaleControls, t } from "../src/i18n.js";
 import { surveyMarkMarkup } from "../src/survey-mark.js";
@@ -2785,6 +2784,7 @@ byId<HTMLFormElement>("login-form").addEventListener("submit", async (event) => 
 });
 byId("logout-button").addEventListener("click", () => { byId<HTMLDialogElement>("api-key-created").close(); byId("api-settings-content").replaceChildren(); token = ""; sessionStorage.removeItem(tokenKey); if (pollTimer !== undefined) window.clearTimeout(pollTimer); pollTimer = undefined; connectorProbeResults.clear(); connectorRecords = []; overviewRecord = null; showLogin(); });
 applyAdminTheme(storedAdminTheme() ?? adminSystemTheme());
+mountPendingRings();
 byId("theme-toggle").addEventListener("click", () => applyAdminTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark", true));
 window.matchMedia?.("(prefers-color-scheme: light)").addEventListener("change", () => { if (!storedAdminTheme()) applyAdminTheme(adminSystemTheme()); });
 byId("refresh-button").addEventListener("click", () => void refresh());
