@@ -35,7 +35,7 @@
     <main class="resources-main releases-main">
       <section class="resources-hero releases-hero">
         <p class="eyebrow" data-i18n="page.releases.eyebrow">RESOURCE PACKAGES / IMMUTABLE RELEASES</p>
-        <h1 data-i18n="page.releases.title">Every package version, published and downloadable</h1>
+        <h1><span data-i18n="page.releases.titleLead">Every package version, published and</span> <em data-i18n="page.releases.titleHot">downloadable</em></h1>
         <p data-i18n="page.releases.lead">Browse published Resource Packages release by release, like a changelog of the sky. Download archives directly or pin a version through the API with SHA-256 verification.</p>
       </section>
 
@@ -51,7 +51,7 @@
         <div class="release-flow-body">
           <div class="release-flow-sources">
             <section class="release-flow-source">
-              <header class="release-flow-source-heading"><span class="release-flow-source-index">01</span><h3 data-i18n="releaseFlow.moc">Existing MOC</h3></header>
+              <span class="release-flow-source-index">01</span><h3 data-i18n="releaseFlow.moc">Existing MOC</h3>
               <p class="release-flow-source-description" data-i18n="releaseFlow.mocSource">Search public coverage records in CDS MocServer.</p>
               <a class="release-flow-source-link" href="https://alasky.cds.unistra.fr/MocServer/query" target="_blank" rel="noopener noreferrer">https://alasky.cds.unistra.fr/MocServer/query</a>
               <ol class="release-flow-steps">
@@ -62,7 +62,7 @@
               </ol>
             </section>
             <section class="release-flow-source">
-              <header class="release-flow-source-heading"><span class="release-flow-source-index">02</span><h3 data-i18n="releaseFlow.scan">Source data scan</h3></header>
+              <span class="release-flow-source-index">02</span><h3 data-i18n="releaseFlow.scan">Source data scan</h3>
               <p class="release-flow-source-description" data-i18n="releaseFlow.scanSource">Scan explicitly selected source files through Warehouse, then build coverage from their normalized results.</p>
               <ol class="release-flow-steps">
                 <li><span data-i18n="releaseFlow.submit">Submit a bounded scan</span></li>
@@ -73,11 +73,9 @@
           </div>
           <div class="release-flow-merge-line" aria-hidden="true"><span></span><span></span></div>
           <section class="release-flow-output">
-            <header class="release-flow-output-heading">
-              <span class="release-flow-source-index">03</span>
-              <h3 data-i18n="releaseFlow.merge">Both paths → reviewed publication</h3>
-              <p data-i18n="releaseFlow.sourceNote">Source references and SHA-256 preserve identity; ICRS and actual HEALPix orders preserve spatial meaning. Scan completion does not publish coverage.</p>
-            </header>
+            <span class="release-flow-source-index">03</span>
+            <h3 data-i18n="releaseFlow.merge">Both paths → reviewed publication</h3>
+            <p data-i18n="releaseFlow.sourceNote">Source references and SHA-256 preserve identity; ICRS and actual HEALPix orders preserve spatial meaning. Scan completion does not publish coverage.</p>
             <ol class="release-flow-steps release-flow-publish-steps">
               <li><span data-i18n="releaseFlow.review">Review the product version</span></li>
               <li><span data-i18n="releaseFlow.publish">Explicitly select for publication</span></li>
@@ -104,6 +102,9 @@
         </div>
       </section>
 
+      <section class="release-integration" aria-labelledby="release-integration-title">
+        <header class="resource-heading"><div><p class="eyebrow" data-i18n="page.releases.integrationEyebrow">INTEGRATION</p><h2 id="release-integration-title" data-i18n="page.releases.integrationTitle">FAQ and API sync</h2></div></header>
+        <div class="release-integration-grid">
       <section class="resource-band release-faq" aria-labelledby="release-faq-title">
         <h2 id="release-faq-title" data-i18n="releaseFaq.title">FAQ</h2>
         <details id="frontend-package-faq">
@@ -176,6 +177,8 @@ echo "$SHA  $PKG-$VER.zip" | sha256sum -c -
             <span aria-hidden="true">·</span>
             <a class="release-example-link" href="/api/v1/assets/documentation-sync-example-java-pom/download">pom.xml</a>
           </p>
+        </div>
+      </section>
         </div>
       </section>
     </main>

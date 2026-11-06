@@ -33,6 +33,17 @@
       </nav>
     </header>
 
+    <div class="home-stage" data-home-stage aria-hidden="true">
+      <canvas class="home-stage-canvas"></canvas>
+      <div class="home-stage-tape"></div>
+      <aside class="home-stage-callout" hidden>
+        <p><i></i><span data-i18n="home.stageLive">LIVE COVERAGE</span></p>
+        <small data-i18n="home.stageOrder">PUBLISHED UNION · O4 CELLS</small>
+        <ul data-home-stage-legend></ul>
+      </aside>
+    </div>
+    <div class="home-stage-veil" aria-hidden="true"><span class="hud-ring is-lg"></span><b data-i18n="home.stageEntering">ENTERING SKY ATLAS</b></div>
+
     <main class="homepage-main">
       <section class="homepage-intro" aria-labelledby="home-title">
         <div class="homepage-intro-meta">
@@ -44,7 +55,7 @@
           <div class="homepage-intro-copy">
             <p data-i18n="home.lead">Explore public survey coverage, compare overlapping regions and follow source identities to the archive. Export a source manifest; retrieve scientific data from its source.</p>
             <div class="homepage-actions">
-              <a class="home-button home-button-primary" href="/atlas/"><span data-i18n="home.openAtlas">Open Sky Atlas</span><i data-lucide="arrow-up-right"></i></a>
+              <a class="home-button home-button-primary" href="/atlas/" data-home-launch><span data-i18n="home.openAtlas">Open Sky Atlas</span><i data-lucide="arrow-up-right"></i></a>
               <a class="home-button home-button-secondary" href="/surveys/"><span data-i18n="home.directory">Survey directory</span><i data-lucide="arrow-right"></i></a>
             </div>
           </div>
@@ -89,7 +100,7 @@
           <a class="home-text-link" href="/surveys/"><span data-i18n="home.viewDirectory">View full directory</span><i data-lucide="arrow-up-right"></i></a>
         </div>
         <p class="home-section-lead" data-i18n="home.surveysLead">Browse the published releases and products represented in the current public catalog.</p>
-        <div id="home-featured-surveys" class="home-survey-register" aria-live="polite"><div class="home-catalog-message" data-i18n="home.catalogLoading">Loading public survey catalog…</div></div>
+        <div id="home-featured-surveys" class="home-survey-register" aria-live="polite"><div class="home-catalog-message"><span class="hud-ring" aria-hidden="true"></span><span data-i18n="home.catalogLoading">Loading public survey catalog…</span></div></div>
       </section>
 
       <section class="home-section home-resources" id="resources" aria-labelledby="resources-title">

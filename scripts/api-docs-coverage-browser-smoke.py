@@ -43,7 +43,7 @@ with sync_playwright() as p:
     assert parse_qs(urlparse(requested).query).get("pageSize") == ["10"], requested
 
     response_text = operation.locator(".responses-wrapper").inner_text()
-    assert "Response body" in response_text, "Swagger did not render a response body"
+    assert "Response body" in response_text or "RESPONSE BODY" in response_text or "RESPONSE BODY" in response_text, "Swagger did not render a response body"
     assert "Could not render" not in response_text, response_text[:1000]
     assert not any("Maximum call stack size exceeded" in error for error in errors), errors
     assert not errors, errors

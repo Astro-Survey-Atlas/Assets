@@ -71,7 +71,7 @@ export const SCENE_THEMES: Record<SceneThemeName, SceneTheme> = {
     selectionEdge: 0xffffff,
     bracket: 0xffffff,
     label: { fill: "rgba(6,6,18,.82)", stroke: "rgba(255,46,99,.9)", text: "#f4f4ff", accent: "#ff2e63" },
-    bloom: { strength: 0.75, radius: 0.22, threshold: 0.6 },
+    bloom: { strength: 0.6, radius: 0.22, threshold: 0.62 },
     final: { vignette: 0.5, grain: 0.012, scanlines: 0.05 },
   },
   light: {

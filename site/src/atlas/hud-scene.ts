@@ -338,7 +338,20 @@ export const cellRimUniforms = {
   desaturate: { value: 0 },
   /** Alpha gain for HEALPix cell edge lines; paper needs stronger ink. */
   edgeGain: { value: 1 },
+  /** 1 while HEALPix cells are large on screen, 0 when they shrink to a few
+   * pixels: rims and per-cell edges then fade so dense orders read as one
+   * translucent shell instead of saturating towards white. */
+  cellDetail: { value: 1 },
+  /** Additive skies only: alpha share per layer, so several stacked surveys
+   * stay coloured instead of summing to white. */
+  stackGain: { value: 1 },
+  /** 1 fades rims and edges seen edge-on at the limb, where many cells
+   * project onto each pixel and additive lines would sum to a glare ring. */
+  limbFade: { value: 0 },
 };
+
+const FACING_VERTEX = "vec4 hudWorld = modelMatrix * vec4(transformed, 1.0);\nvHudFacing = abs(dot(normalize(hudWorld.xyz), normalize(cameraPosition - hudWorld.xyz)));";
+const FACING = "mix(1.0, smoothstep(0.02, 0.5, vHudFacing), limbFade)";
 
 /** Patch a cell fill material to read the `cellUv` attribute written by the
  * spherical cell builders: (0.5, 0.5) at the cell centre, the unit square's
@@ -349,21 +362,26 @@ export function applyCellRim<T extends THREE.Material>(material: T): T {
     shader.uniforms.rimGain = cellRimUniforms.rimGain;
     shader.uniforms.fillGain = cellRimUniforms.fillGain;
     shader.uniforms.desaturate = cellRimUniforms.desaturate;
+    shader.uniforms.cellDetail = cellRimUniforms.cellDetail;
+    shader.uniforms.stackGain = cellRimUniforms.stackGain;
+    shader.uniforms.limbFade = cellRimUniforms.limbFade;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nattribute vec2 cellUv;\nvarying vec2 vCellUv;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvCellUv = cellUv;");
+      .replace("#include <common>", "#include <common>\nattribute vec2 cellUv;\nvarying vec2 vCellUv;\nvarying float vHudFacing;")
+      .replace("#include <begin_vertex>", `#include <begin_vertex>\nvCellUv = cellUv;\n${FACING_VERTEX}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform float rimCore;\nuniform float rimGain;\nuniform float fillGain;\nuniform float desaturate;\nvarying vec2 vCellUv;")
+      .replace("#include <common>", "#include <common>\nuniform float rimCore;\nuniform float rimGain;\nuniform float fillGain;\nuniform float desaturate;\nuniform float cellDetail;\nuniform float stackGain;\nuniform float limbFade;\nvarying vec2 vCellUv;\nvarying float vHudFacing;")
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
         float cellRim = max(abs(vCellUv.x - 0.5), abs(vCellUv.y - 0.5)) * 2.0;
-        diffuseColor.a *= fillGain * mix(rimCore, 1.0, smoothstep(0.35, 1.0, cellRim));
-        diffuseColor.rgb *= mix(1.0, rimGain, smoothstep(0.72, 1.0, cellRim));
+        float cellFacing = ${FACING};
+        float cellCore = mix(max(rimCore, 0.45), rimCore, cellDetail);
+        diffuseColor.a *= fillGain * stackGain * mix(0.55, 1.0, cellFacing) * mix(cellCore, 1.0, smoothstep(0.35, 1.0, cellRim) * cellDetail * cellFacing);
+        diffuseColor.rgb *= mix(1.0, rimGain, smoothstep(0.72, 1.0, cellRim) * cellDetail * cellFacing);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))), desaturate);`,
       );
   };
-  material.customProgramCacheKey = () => "hud-cell-rim-v1";
+  material.customProgramCacheKey = () => "hud-cell-rim-v4";
   return material;
 }
 
@@ -372,13 +390,19 @@ export function applyNeutralDepth<T extends THREE.Material>(material: T): T {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.desaturate = cellRimUniforms.desaturate;
     shader.uniforms.edgeGain = cellRimUniforms.edgeGain;
+    shader.uniforms.cellDetail = cellRimUniforms.cellDetail;
+    shader.uniforms.stackGain = cellRimUniforms.stackGain;
+    shader.uniforms.limbFade = cellRimUniforms.limbFade;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying float vHudFacing;")
+      .replace("#include <begin_vertex>", `#include <begin_vertex>\n${FACING_VERTEX}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform float desaturate;\nuniform float edgeGain;")
+      .replace("#include <common>", "#include <common>\nuniform float desaturate;\nuniform float edgeGain;\nuniform float cellDetail;\nuniform float stackGain;\nuniform float limbFade;\nvarying float vHudFacing;")
       .replace(
         "#include <color_fragment>",
-        "#include <color_fragment>\n\tdiffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))), desaturate);\n\tdiffuseColor.a = min(1.0, diffuseColor.a * edgeGain);",
+        `#include <color_fragment>\n\tdiffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))), desaturate);\n\tdiffuseColor.a = min(1.0, diffuseColor.a * edgeGain) * mix(0.1, 1.0, cellDetail) * stackGain * mix(0.2, 1.0, ${FACING});`,
       );
   };
-  material.customProgramCacheKey = () => "hud-neutral-depth-v2";
+  material.customProgramCacheKey = () => "hud-neutral-depth-v5";
   return material;
 }

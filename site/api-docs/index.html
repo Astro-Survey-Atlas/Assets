@@ -35,17 +35,31 @@
     <main class="resources-main api-docs-main">
       <section class="resources-hero api-intro">
         <p class="eyebrow">COVERAGE / NATIVE UNITS / SOURCE MANIFESTS</p>
-        <h1 data-i18n="api.title">Query the sky through the API.</h1>
+        <h1><span data-i18n="api.titleLead">Query the sky</span> <em data-i18n="api.titleHot">through the API.</em></h1>
         <p data-i18n="api.lead">Get a survey's published HEALPix list at an order, inspect service status, and use a Key for full native unit lookup and download plans.</p>
-        <div class="api-status-row">
-          <div id="api-status" class="api-status-panel" role="status" aria-live="polite"></div>
-        </div>
+        <dl class="api-readouts" data-api-readouts hidden></dl>
       </section>
 
       <section class="public-section api-reference-section">
-        <h2 data-i18n="api.reference">Interactive API reference</h2>
-        <p data-i18n="api.instructions">Open an operation and choose Try it out. For lists, continue with page.nextCursor; restart if the server returns 409.</p>
-        <div id="swagger-ui"></div>
+        <div class="api-docs-layout">
+          <nav class="api-rail" data-i18n-aria-label="api.operations" aria-label="Operations">
+            <p class="api-rail-head" data-i18n="api.operations">OPERATIONS</p>
+            <div data-api-rail></div>
+          </nav>
+          <div class="api-docs-body">
+            <div class="resource-heading">
+              <div><p class="eyebrow" data-i18n="api.referenceEyebrow">INTERACTIVE API REFERENCE</p><h2 data-i18n="api.reference">Interactive API reference</h2></div>
+              <p data-i18n="api.instructions">Open an operation and choose Try it out. For lists, continue with page.nextCursor; restart if the server returns 409.</p>
+            </div>
+            <div id="swagger-ui"></div>
+          </div>
+          <aside class="api-docs-aside">
+            <div class="api-status-row">
+              <div id="api-status" class="api-status-panel" role="status" aria-live="polite"></div>
+            </div>
+            <p class="api-keybox"><b data-i18n="api.keyTitle">API KEY</b><span data-i18n="api.keyNote">Full region lookup uses an administrator-issued API Key; this service does not currently provide online billing.</span></p>
+          </aside>
+        </div>
       </section>
     </main>
 

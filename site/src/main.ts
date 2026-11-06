@@ -23,6 +23,7 @@ import type { SkyDepthControls, SkyDepthSelection } from "./atlas/sky-depth-pane
 
 import "./styles.css";
 import "./atlas/hud-atlas.css";
+import { bootActive, bootStage, bootTick, finishHudBoot, startHudBoot } from "./atlas/hud-boot.js";
 import { buildLayerFacts, hudLog, setHudMinimapCells, setHudMode, setHudTarget, updateHudView, type HudRosterRow } from "./atlas/hud-overlay.js";
 
 type AssetKind = "package" | "moc" | "geometry" | "manifest" | "ledger" | "documentation" | "provenance" | "metadata";
@@ -4713,10 +4714,17 @@ async function hydrateCoverageCatalogInternal(nextCatalog: CoverageCatalog): Pro
   coverageLayerLoadErrors.clear();
   const blocks = new Map<string, number[]>();
   if (coverageDots) {
+    const booting = bootActive();
+    if (booting) bootStage("layers", "run", 0, nextCatalog.layers.length);
     await Promise.all(nextCatalog.layers.map(async (layer) => {
-      const cells = await fetchCoverageOverview(layer);
-      if (cells.length) blocks.set(`${layer.layerId}:${layer.overviewOrder}`, cells);
+      try {
+        const cells = await fetchCoverageOverview(layer);
+        if (cells.length) blocks.set(`${layer.layerId}:${layer.overviewOrder}`, cells);
+      } finally {
+        if (booting) bootTick("layers");
+      }
     }));
+    if (booting) { bootStage("layers", "done"); bootStage("scene", "run"); }
     const availableSurveys = new Set(nextCatalog.layers.map((layer) => layer.surveyId));
     await coverageDots.loadCatalog(nextCatalog, blocks, surveyIndex?.surveys ?? []);
     if (coverageSelectionInitialized) {
@@ -4830,6 +4838,11 @@ function applySkyDeepLink(): void {
 }
 
 async function initialize(): Promise<void> {
+  const zh = locale() === "zh";
+  const booting = isAtlasPage && startHudBoot(zh
+    ? { surveys: "巡天目录 · SURVEY INDEX", catalog: "覆盖目录 · COVERAGE CATALOG", layers: "覆盖图层 · LAYER OVERVIEWS", scene: "天球场景 · SKY SCENE" }
+    : { surveys: "SURVEY INDEX", catalog: "COVERAGE CATALOG", layers: "LAYER OVERVIEWS", scene: "SKY SCENE" },
+  zh ? "正在初始化天球 · INITIALISING ATLAS" : "INITIALISING ATLAS");
   try {
     coverageDots = new AtlasCoverageGlobe(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"), updateCoverageReadout, updateCoverageInspector, updateCoverageState, openCoverageContextMenu, handleOverlapComponentLabel);
     // The low tactical camera reads best with survey shells packed close to one surface.
@@ -4850,6 +4863,7 @@ async function initialize(): Promise<void> {
   })();
 
   let surveysResult: SurveyIndex | null = null;
+  if (booting) bootStage("surveys", "run");
   try {
     const value = await fetchPublicJson<unknown>("/api/v1/surveys", { headers: { Accept: "application/json" } });
     if (!isSurveyIndex(value)) throw new Error("Public survey catalog response is invalid");
@@ -4857,7 +4871,9 @@ async function initialize(): Promise<void> {
     surveyIndex = value;
     initializeModalityFilter();
     renderSurveys();
+    if (booting) bootStage("surveys", "done");
   } catch (error) {
+    if (booting) bootStage("surveys", "fail");
     console.warn("Public survey catalog unavailable", error);
     byId("survey-list").replaceChildren(Object.assign(document.createElement("div"), { className: "error-row", textContent: t("coverage.catalogLoadFailed") }));
   }
@@ -4867,8 +4883,11 @@ async function initialize(): Promise<void> {
     // Keep the catalog and URL state usable even when the optional WebGL
     // viewer could not be created (for example, in a headless browser).
     try {
+      if (booting) bootStage("catalog", "run");
       coverageResult = await fetchCoverageCatalogDocument();
+      if (booting) bootStage("catalog", "done");
       await hydrateCoverageCatalog(coverageResult);
+      if (booting) { bootStage("scene", "done"); finishHudBoot(); }
       applySkyDeepLink();
       if (isAtlasPage && new URLSearchParams(location.search).get("depth") === "desi") void openDepthExample();
 
@@ -4879,9 +4898,11 @@ async function initialize(): Promise<void> {
     } catch (error) {
       console.warn("Public coverage catalog unavailable", error);
       byId("coverage-state").textContent = "COVERAGE CATALOG UNAVAILABLE";
+      if (booting) { bootStage("catalog", "fail"); finishHudBoot(zh ? "覆盖目录暂不可用，已进入离线视图" : "COVERAGE CATALOG UNAVAILABLE · OPENING WITHOUT LAYERS"); }
     }
   } else {
     byId("coverage-state").textContent = "COVERAGE CATALOG UNAVAILABLE";
+    if (booting) finishHudBoot(zh ? "巡天目录暂不可用，请稍后刷新" : "SURVEY INDEX UNAVAILABLE · PLEASE RETRY LATER");
   }
 
   const assetsResult = await assetsPromise;
@@ -5264,6 +5285,7 @@ window.addEventListener("atlas:theme-change", () => {
 renderIcons();
 void initialize().catch((error) => {
   console.error(error);
+  finishHudBoot(locale() === "zh" ? "初始化失败，请稍后刷新" : "INITIALISATION FAILED · PLEASE RETRY");
   byId("coverage-state").textContent = t("coverage.releaseUnavailable");
   if (!surveyIndex) byId("survey-list").replaceChildren(Object.assign(document.createElement("div"), { className: "error-row", textContent: t("coverage.catalogLoadFailed") }));
 });

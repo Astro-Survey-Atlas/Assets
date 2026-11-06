@@ -969,7 +969,8 @@ body.public-site.atlas-page .coverage-display-order-control {
   flex: 0 0 auto;
   box-sizing: border-box;
   width: auto;
-  min-width: 0;
+  /* The heading sits above the segments; keep room for it with one order. */
+  min-width: 168px;
   max-width: none;
   height: 34px;
   padding: 0;
@@ -1008,6 +1009,7 @@ body.public-site.atlas-page .coverage-display-order-heading output {
 
 body.public-site.atlas-page .coverage-display-order-segments {
   display: flex;
+  justify-content: center;
   gap: 0;
   height: 100%;
   padding: 0 6px;
@@ -1545,22 +1547,9 @@ body.public-site.atlas-page .coverage-layers .hud-roster-all { position: sticky;
 
 /* Query spinner, elapsed time and the slow-query hint. */
 body.public-site.atlas-page .hud-query-head { align-items: center; }
-body.public-site.atlas-page .hud-query-spinner {
-  flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--hud-line-strong);
-  border-top-color: var(--hud-hot);
-  border-right-color: var(--hud-hot);
-  animation: hud-query-spin .8s linear infinite;
-}
 body.public-site.atlas-page .hud-query-elapsed { color: var(--hud-dim); font: 400 10px/1 var(--font-hud); letter-spacing: .1em; }
 body.public-site.atlas-page .hud-query-hint:empty { display: none; }
 body.public-site.atlas-page .hud-query-hint { color: var(--hud-hot); font: 400 9.5px/1.4 var(--font-hud); letter-spacing: .06em; }
-@keyframes hud-query-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) {
-  body.public-site.atlas-page .hud-query-spinner { animation-duration: 2.4s; }
-}
 
 /* Callout: per-survey modalities of the locked cell. */
 .hud-callout-box { white-space: normal; max-width: 300px; }
@@ -1571,3 +1560,133 @@ body.public-site.atlas-page .hud-query-hint { color: var(--hud-hot); font: 400 9
 .hud-callout-box .hud-callout-modalities span { display: inline; margin: 0; color: var(--c); font: 400 9.5px/1.3 var(--font-hud); letter-spacing: .06em; }
 .hud-callout-modalities em { margin-left: auto; color: var(--hud-faint); font: 400 8px/1.3 var(--font-hud); font-style: normal; letter-spacing: .14em; }
 :root[data-theme="light"] .hud-callout-box .hud-callout-modalities span { color: color-mix(in srgb, var(--c) 55%, #15162e); }
+
+/* ── Boot sequence: covers the HUD until the catalogs and overviews load ── */
+body.public-site.atlas-page .hud-boot {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: var(--hud-bg-image, var(--hud-bg));
+  background-color: var(--hud-bg);
+  pointer-events: none;
+  transition: opacity .5s ease;
+}
+body.public-site.atlas-page .hud-boot[hidden] { display: none; }
+/* The site header stays above the boot screen, so navigation remains usable. */
+body.public-site.atlas-page:has(.hud-boot:not([hidden])) .site-header { z-index: 81; }
+body.public-site.atlas-page .hud-boot[data-state="leaving"] { opacity: 0; }
+body.public-site.atlas-page .hud-boot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent 0 3px, color-mix(in srgb, var(--hud-ind) 6%, transparent) 3px 4px);
+  pointer-events: none;
+}
+body.public-site.atlas-page .hud-boot-panel {
+  position: relative;
+  width: min(460px, calc(100vw - 48px));
+  padding: 26px 28px 22px;
+  border: 1px solid var(--hud-line-strong);
+  border-left: 2px solid var(--hud-hot);
+  background: var(--hud-plate-solid);
+  box-shadow: var(--hud-ind-glow), var(--hud-shadow);
+  color: var(--hud-ink);
+}
+body.public-site.atlas-page .hud-boot-logo { display: block; width: 96px; height: auto; margin-bottom: 12px; }
+body.public-site.atlas-page .hud-boot-title {
+  margin: 0 0 18px;
+  font: 600 17px/1.2 var(--font-hud);
+  letter-spacing: .14em;
+}
+body.public-site.atlas-page .hud-boot-title small {
+  display: block;
+  margin-top: 4px;
+  color: var(--hud-dim);
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: .26em;
+}
+body.public-site.atlas-page .hud-boot-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hud-line);
+  font: 600 10.5px/1 var(--font-hud);
+  letter-spacing: .16em;
+}
+body.public-site.atlas-page .hud-boot-head b { flex: 1; font-weight: 600; }
+/* The spinner is the shared .hud-ring (hud.css); once loaded it closes into a full ring. */
+body.public-site.atlas-page .hud-boot-spinner { --hud-ring-size: 13px; }
+body.public-site.atlas-page .hud-boot[data-state="done"] .hud-boot-spinner,
+body.public-site.atlas-page .hud-boot[data-state="leaving"] .hud-boot-spinner { background: var(--hud-ind); filter: none; animation: none; }
+body.public-site.atlas-page .hud-boot[data-state="fail"] .hud-boot-spinner { background: var(--hud-hot); animation: none; }
+body.public-site.atlas-page .hud-boot-elapsed { color: var(--hud-dim); font-weight: 400; letter-spacing: .1em; }
+body.public-site.atlas-page .hud-boot-stages {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0 14px;
+  padding: 0;
+  list-style: none;
+  font: 400 10.5px/1.2 var(--font-hud);
+  letter-spacing: .12em;
+}
+body.public-site.atlas-page .hud-boot-stages li {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--hud-faint);
+  transition: color .2s ease;
+}
+body.public-site.atlas-page .hud-boot-stages li > i {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+body.public-site.atlas-page .hud-boot-stages li output { font-variant-numeric: tabular-nums; }
+body.public-site.atlas-page .hud-boot-stages li[data-state="run"] { color: var(--hud-ink); }
+body.public-site.atlas-page .hud-boot-stages li[data-state="run"] > i { --hud-ring-size: 10px; --hud-ring-width: 1.5px; width: 10px; height: 10px; border: 0; }
+body.public-site.atlas-page .hud-boot-stages li[data-state="done"] { color: var(--hud-dim); }
+body.public-site.atlas-page .hud-boot-stages li[data-state="done"] > i { border-color: var(--hud-ind); background: var(--hud-ind); }
+body.public-site.atlas-page .hud-boot-stages li[data-state="done"] output { color: var(--hud-ind); }
+body.public-site.atlas-page .hud-boot-stages li[data-state="fail"],
+body.public-site.atlas-page .hud-boot-stages li[data-state="fail"] output { color: var(--hud-hot); }
+body.public-site.atlas-page .hud-boot-bar {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--hud-ind) 16%, transparent);
+}
+body.public-site.atlas-page .hud-boot-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: linear-gradient(90deg, var(--hud-ind), var(--hud-hot));
+  transition: width .3s ease;
+}
+body.public-site.atlas-page .hud-boot-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 30%;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 55%, transparent), transparent);
+  animation: hud-boot-scan 1.4s linear infinite;
+}
+body.public-site.atlas-page .hud-boot-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 8px;
+  font: 400 10px/1.4 var(--font-hud);
+  letter-spacing: .12em;
+}
+body.public-site.atlas-page .hud-boot-pct { color: var(--hud-hot); font-weight: 600; font-variant-numeric: tabular-nums; }
+body.public-site.atlas-page .hud-boot-note { color: var(--hud-hot); letter-spacing: .06em; }
+@keyframes hud-boot-scan { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) {
+  body.public-site.atlas-page .hud-boot-bar::after { animation: none; }
+}

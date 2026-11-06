@@ -2,6 +2,7 @@ import { Archive, Check, Copy, Download, Package, RefreshCw, Telescope, createIc
 import { locale, mountLocaleControls, t } from "../src/i18n.js";
 import { mountSiteChrome as mountChrome } from "../src/site-chrome.js";
 import "../src/public.css";
+import { surveyColorFor } from "../src/atlas/survey-colors.js";
 
 interface ReleaseHistoryRelease {
   id: string;
@@ -254,6 +255,8 @@ function sourceRow(source: ReleaseHistorySource): HTMLElement {
 function surveyEntry(pkg: ReleaseHistoryPackage): HTMLElement {
   const details = document.createElement("details");
   details.className = "release-survey";
+  // Each survey keeps its own colour, as in the Atlas.
+  details.style.setProperty("--release-survey-color", surveyColorFor(pkg.survey?.id ?? pkg.id));
 
   const summary = document.createElement("summary");
   summary.className = "release-survey-summary";
@@ -272,6 +275,10 @@ function surveyEntry(pkg: ReleaseHistoryPackage): HTMLElement {
     mission.textContent = pkg.survey.mission;
     title.append(mission);
   }
+  const packageId = document.createElement("small");
+  packageId.className = "release-survey-package";
+  packageId.textContent = pkg.id;
+  title.append(packageId);
 
   const meta = document.createElement("span");
   meta.className = "release-survey-meta";

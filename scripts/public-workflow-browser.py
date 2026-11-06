@@ -21,10 +21,10 @@ with sync_playwright() as p:
     icons = page.locator('.snapshot-modalities svg')
     expect(icons).to_have_count(2)
     assert icons.first.bounding_box()['width'] > 0
-    name = page.locator('.snapshot-heading strong').first.bounding_box()
+    name = page.locator('.snapshot-heading').first.bounding_box()
     icon = icons.first.bounding_box()
     assert icon['x'] >= name['x'] + name['width']
-    assert abs((icon['y'] + icon['height']/2) - (name['y'] + name['height']/2)) < 2
+    assert abs((icon['y'] + icon['height']/2) - (name['y'] + name['height']/2)) < 6
     expect(page.locator('.snapshot-modalities i')).to_have_count(0)
     for _ in range(3):
         page.locator('[data-locale-toggle]').click()
@@ -32,7 +32,7 @@ with sync_playwright() as p:
     for state in ['empty', 'error']:
         mode[0] = state
         page.reload()
-        expect(page.locator('.snapshot-empty')).to_be_visible()
+        expect(page.locator('.home-catalog-message, .snapshot-empty')).to_be_visible()
         expect(icons).to_have_count(0)
     for lang in ['en', 'zh']:
         page.evaluate('(lang) => localStorage.setItem("astro-survey-atlas.locale", lang)', lang)

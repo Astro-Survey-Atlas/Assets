@@ -903,10 +903,17 @@ export class SurveyLayerViewer {
     this.#hudOutlineGroup.children.forEach((root) => {
       const surveyId = root.userData.hudSurveyId as string;
       const focus = this.#focusedSurveyId && this.#focusedSurveyId !== surveyId ? 0.45 : 1;
+      const detail = cellRimUniforms.cellDetail.value;
       root.children.forEach((line, index) => {
         const material = (line as THREE.Mesh).material as LineMaterial;
-        const base = index === 0 && this.#palette.outlineGlowWidth > 0 ? this.#palette.outlineGlowOpacity : index === root.children.length - 1 && this.#palette.outlineCoreOpacity > 0 ? this.#palette.outlineCoreOpacity : 0.95;
-        material.opacity = base * scale * focus;
+        const glow = index === 0 && this.#palette.outlineGlowWidth > 0;
+        const core = index === root.children.length - 1 && this.#palette.outlineCoreOpacity > 0;
+        const base = glow ? this.#palette.outlineGlowOpacity : core ? this.#palette.outlineCoreOpacity : 0.95;
+        // Fixed-pixel outlines would merge into hot blobs once the globe is small.
+        const fade = glow || core ? 0.15 + 0.85 * detail : 0.55 + 0.45 * detail;
+        material.opacity = base * scale * focus * fade;
+        if (glow) material.linewidth = this.#palette.outlineGlowWidth * (0.4 + 0.6 * detail);
+        else if (!core) material.linewidth = this.#palette.outlineWidth * (0.6 + 0.4 * detail);
       });
     });
   }
@@ -2837,6 +2844,36 @@ export class SurveyLayerViewer {
     if (shiftY !== this.#appliedShiftY) this.#applyProjection(width, height);
   }
 
+  /** Fade rims, per-cell edges and dark-sky bloom once the displayed cells
+   * are only a few pixels wide, so a dense order seen from afar reads as a
+   * translucent shell rather than a saturated white globe. */
+  #syncCellDetail(): void {
+    let detail = 1;
+    if (!this.#depthActive()) {
+      const nside = this.#overlapMode ? this.#overlapNside ?? this.#manifest.nside : this.#manifest.nside;
+      const cellAngle = Math.sqrt(4 * Math.PI / (12 * nside * nside));
+      const surfaceDistance = Math.max(0.05, this.#camera.position.length() - this.#outerRadius);
+      const fov = THREE.MathUtils.degToRad(this.#camera.getEffectiveFOV());
+      const pixelsPerUnit = this.#projectionSize.height / (2 * Math.tan(fov / 2) * surfaceDistance);
+      const cellPixels = cellAngle * this.#outerRadius * pixelsPerUnit;
+      detail = THREE.MathUtils.smoothstep(cellPixels, 5, 22);
+    }
+    // Additive layers sum: give each one a shrinking share once several
+    // overlap so the stack stays coloured. Depth keeps its measured response.
+    let stacked = 0;
+    this.#visibleSurveyIds.forEach((surveyId) => { if (this.#model.pixelsBySurvey.get(surveyId)?.length) stacked += 1; });
+    const stackGain = this.#palette.additiveCoverage && !this.#depthActive() && stacked > 1 ? 1 / Math.sqrt(stacked) : 1;
+    if (Math.abs(cellRimUniforms.stackGain.value - stackGain) > 0.002) cellRimUniforms.stackGain.value = stackGain;
+    cellRimUniforms.limbFade.value = this.#palette.additiveCoverage && !this.#depthActive() ? 1 : 0;
+    if (Math.abs(cellRimUniforms.cellDetail.value - detail) > 0.002) {
+      cellRimUniforms.cellDetail.value = detail;
+      this.#applyHudOutlineOpacity();
+    }
+    if (this.#palette.additiveCoverage && !this.#depthActive()) {
+      this.#bloomPass.strength = this.#bloomStrength * (0.4 + 0.6 * detail) * (0.55 + 0.45 * stackGain);
+    }
+  }
+
   #requestRender(): void {
     if (this.#disposed) return;
     if (this.#renderQueued) return;
@@ -2852,6 +2889,7 @@ export class SurveyLayerViewer {
       const moving = this.#controls.enabled && this.#controls.update();
       this.#keepCameraOutside();
       this.#syncTacticalProjection();
+      this.#syncCellDetail();
       this.#composer.render();
       if (moving || this.#cameraTransition || this.#fragmentTransitions.length || this.#explosionTransition || this.#selectionGlowMaterial) this.#requestRender();
     });
