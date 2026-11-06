@@ -146,6 +146,7 @@ export class AtlasCoverageGlobe {
   readonly #onContextMenu: ContextMenuChange;
   readonly #onOverlapComponent: OverlapComponentChange;
   #viewer: SurveyLayerViewer | null = null;
+  #layerRadiusRange: { min: number; max: number } | null = null;
   #visibleSurveyIds = new Set<string>();
   #visibleLayerIds = new Set<string>();
   #visibleModalities = new Set<string>();
@@ -211,6 +212,7 @@ export class AtlasCoverageGlobe {
       (component) => this.#onOverlapComponent(component),
     );
     this.#viewer.setLayoutMode("layers");
+    if (this.#layerRadiusRange) this.#viewer.setLayerRadiusRange(this.#layerRadiusRange.min, this.#layerRadiusRange.max);
     this.#viewer.setVisibleSurveys(this.#visibleSurveyIds);
     // Only the first mount sets the starting pose; coverage updates retain it.
     this.#viewer.setHomePresentation();
@@ -259,6 +261,8 @@ export class AtlasCoverageGlobe {
 
   focusSelection(): void { this.#viewer?.focusSelection(); }
 
+  minimapCells(limit?: number): ReturnType<SurveyLayerViewer["minimapCells"]> { return this.#viewer?.minimapCells(limit) ?? []; }
+
   focusPixels(order: number, pixels: readonly number[]): void { this.#viewer?.focusPixels(2 ** order, pixels); }
 
   setSkyDepth(data: SkyDepthResponse | null, onPick?: (item: SkyDepthAggregate) => void): SkyDepthLayout | null {
@@ -283,6 +287,12 @@ export class AtlasCoverageGlobe {
   }
 
   setLayerOrder(keys: Iterable<string>): void { this.#viewer?.setLayerOrder(keys); }
+
+  /** Tighten the radial spacing between survey shells (the tactical atlas view). */
+  setLayerRadiusRange(min: number, max: number): void {
+    this.#layerRadiusRange = { min, max };
+    this.#viewer?.setLayerRadiusRange(min, max);
+  }
 
   setSelectedSurvey(surveyId: string): void {
     this.#visibleSurveyIds.add(surveyId);

@@ -22,6 +22,8 @@ import type { SkyDepthExample } from "../../src/sky-depth.js";
 import type { SkyDepthControls, SkyDepthSelection } from "./atlas/sky-depth-panel.js";
 
 import "./styles.css";
+import "./atlas/hud-atlas.css";
+import { buildLayerFacts, hudLog, setHudMinimapCells, setHudMode, setHudTarget, updateHudView, type HudRosterRow } from "./atlas/hud-overlay.js";
 
 type AssetKind = "package" | "moc" | "geometry" | "manifest" | "ledger" | "documentation" | "provenance" | "metadata";
 type ProductStatus = "acquired" | "overview_only" | "awaiting_geometry" | "not_applicable";
@@ -268,7 +270,7 @@ let selectedQueueComponent: OverlapComponentView | null = null;
 let renderedQueueComponentId: string | null = null;
 let overlapDrawerOpen = false;
 let overlapPanelResizeObserver: ResizeObserver | null = null;
-let overlapDrawerPreviousState: { layersHidden: boolean; queueHidden: boolean; panelHidden: boolean; helpHidden: boolean; guideHidden: boolean } | null = null;
+let overlapDrawerPreviousState: { layersHidden: boolean; queueHidden: boolean; panelHidden: boolean; helpHidden: boolean } | null = null;
 let overlapDrawerPreviousFocus: HTMLElement | null = null;
 let layerCloseTimer: number | null = null;
 let layerCloseDeadline = 0;
@@ -619,6 +621,7 @@ function updateCoverageState(state: SurveyLayerState): void {
     byId("coverage-status-fov").textContent = `${next.effectiveFovDeg.toFixed(1)}°`;
     const [x, y, z] = next.cameraPosition;
     byId("coverage-status-camera").textContent = `${next.cameraDistance.toFixed(2)} / ${x.toFixed(1)},${y.toFixed(1)},${z.toFixed(1)}`;
+    syncHud(next);
     if (activeSurveyId) {
       const survey = surveyIndex?.surveys.find((entry) => entry.id === activeSurveyId);
       const layers = visibleCoverageLayers().filter((layer) => layer.surveyId === activeSurveyId);
@@ -655,10 +658,50 @@ function updateCoverageState(state: SurveyLayerState): void {
   });
 }
 
+function setLockHeadline(prefix: string, value: string | null, sub = ""): void {
+  const host = document.getElementById("coverage-detail-headline");
+  if (!host) return;
+  host.hidden = value === null;
+  const em = document.createElement("em");
+  em.textContent = value ?? "";
+  host.replaceChildren(`${prefix} `, em, ...(sub ? [Object.assign(document.createElement("small"), { textContent: sub })] : []));
+}
+
+function lockActions(surveyIds: string[], pixels: number[], order: number): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "hud-lock-cta";
+  const action = (label: string, key: string, hot: boolean, run: () => void, disabled = false) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `hud-btn${hot ? " is-hot" : ""}`;
+    button.disabled = disabled;
+    button.append(label, Object.assign(document.createElement("kbd"), { textContent: key }));
+    button.addEventListener("click", run);
+    row.append(button);
+  };
+  const zh = locale() === "zh";
+  action(zh ? "展开重合" : "OVERLAP", "G", true, () => { void activateOverlap(); }, visibleSurveyIdsFromControls().length < 2);
+  action(zh ? "聚焦" : "FOCUS", "F", false, () => focusCoverageSelection());
+  action(zh ? "导出" : "EXPORT", "E", false, () => exportCoverageCells(surveyIds, pixels, order), !surveyIds.length);
+  return row;
+}
+
+function focusCoverageSelection(): void {
+  coverageFocusActive = true;
+  coverageDisplayViewKey = "";
+  if (!skyDepthControls?.focus()) coverageDots?.focusSelection();
+}
+
+function exportCoverageCells(surveyIds: string[], pixels: number[], order: number): void {
+  if (!surveyIds.length || !pixels.length) return;
+  renderOverlapPanel(surveyIds, pixels, order, "SELECTED CELL");
+}
+
 function updateCoverageInspector(inspection: SurveyLayerInspection | null): void {
   skyDepthInspection = inspection;
   const panel = byId("coverage-detail-panel");
   if (!inspection) {
+    setHudTarget(null);
     closeSkyDepth();
     if (!overlapMode) {
       abortHstLookupsWithin(byId("coverage-detail-content"));
@@ -688,56 +731,104 @@ function updateCoverageInspector(inspection: SurveyLayerInspection | null): void
   panel.hidden = false;
   byId("coverage-detail-kicker").textContent = overlapMode ? t("coverage.overlapResult") : t("coverage.cellInspector");
   byId("coverage-detail-title").textContent = `ORDER ${order} · IPix ${inspection.pixel}`;
+  setLockHeadline("IPIX", String(inspection.pixel), `NSIDE ${inspection.nside} · NESTED · ICRS`);
   const content = byId("coverage-detail-content");
   abortHstLookupsWithin(content);
   const cellSources = overlapParent?.surveys ?? [];
-  const releaseModes = [...new Set([
-    ...inspection.artifacts.map((artifact) => {
-      const surveyName = surveyIndex?.surveys.find((survey) => survey.id === artifact.surveyId)?.name ?? artifact.surveyId;
-      return `${surveyName} · ${artifact.releaseId} · ${artifact.modality ?? "modality unknown"}`;
-    }),
-    ...cellSources.map((source) => {
-      const surveyName = surveyIndex?.surveys.find((survey) => survey.id === source.surveyId)?.name ?? source.surveyId;
-      return `${surveyName} · ${source.releaseId} · ${source.modality ?? "modality unknown"}`;
-    }),
-  ])];
-  const rows: Array<[string, string]> = [
-    ["NSIDE", String(inspection.nside)],
-    ["RA / DEC", `${inspection.centerRaDeg.toFixed(4)}° / ${inspection.centerDecDeg.toFixed(4)}°`],
-    ["DR · MODE", releaseModes.length ? releaseModes.join("\n") : inspection.releaseIds.join(", ") || "--"],
-  ];
-  const list = document.createElement("dl");
-  list.className = "coverage-detail-list";
-  rows.forEach(([label, value]) => {
-    const dt = document.createElement("dt"); dt.textContent = label;
-    dt.title = label;
-    const dd = document.createElement("dd");
-    dd.textContent = value;
-    dd.title = value;
-    list.append(dt, dd);
+  const surveyName = (surveyId: string) => surveyIndex?.surveys.find((survey) => survey.id === surveyId)?.name ?? surveyId;
+  const stats = document.createElement("div");
+  stats.className = "hud-lock-stats";
+  const cellArea = SKY_AREA_DEG2 / (12 * inspection.nside ** 2);
+  for (const [label, value, title] of [
+    ["RA", `${inspection.centerRaDeg.toFixed(1)}°`, `${inspection.centerRaDeg.toFixed(4)}°`],
+    ["DEC", `${inspection.centerDecDeg >= 0 ? "+" : "−"}${Math.abs(inspection.centerDecDeg).toFixed(1)}°`, `${inspection.centerDecDeg.toFixed(4)}°`],
+    ["AREA", `${cellArea >= 10 ? cellArea.toFixed(1) : cellArea >= 0.1 ? cellArea.toFixed(2) : cellArea.toFixed(4)} deg²`, `${cellArea} deg²`],
+  ]) {
+    const cell = document.createElement("div");
+    cell.title = title!;
+    cell.append(Object.assign(document.createElement("small"), { textContent: label }), Object.assign(document.createElement("b"), { textContent: value }));
+    stats.append(cell);
+  }
+  const sourceRows = [...new Map([
+    ...inspection.artifacts.map((artifact) => ({ surveyId: artifact.surveyId, releaseId: artifact.releaseId, product: artifact.product, modality: artifact.modality })),
+    ...cellSources.map((source) => ({ surveyId: source.surveyId, releaseId: source.releaseId, product: source.product, modality: source.modality })),
+  ].map((source) => [`${source.surveyId}:${source.releaseId}:${source.product}`, source])).values()];
+  const sources = document.createElement("ul");
+  sources.className = "hud-lock-sources coverage-detail-source-list";
+  // One row per survey release; products of the same release share the row.
+  const releaseRows = [...sourceRows.reduce((groups, source) => {
+    const key = `${source.surveyId}:${source.releaseId}`;
+    const group = groups.get(key);
+    if (group) {
+      group.products.push(source.product);
+      if (source.modality && !group.modalities.includes(source.modality)) group.modalities.push(source.modality);
+    } else groups.set(key, { surveyId: source.surveyId, releaseId: source.releaseId, products: [source.product], modalities: source.modality ? [source.modality] : [] });
+    return groups;
+  }, new Map<string, { surveyId: string; releaseId: string; products: string[]; modalities: string[] }>()).values()];
+  const LOCK_SOURCE_ROWS = 4;
+  releaseRows.slice(0, LOCK_SOURCE_ROWS).map((group) => ({
+    surveyId: group.surveyId,
+    releaseId: group.releaseId,
+    product: group.products.length > 1 ? `${group.products[0]} +${group.products.length - 1}` : group.products[0]!,
+    modality: group.modalities.join("/") || undefined,
+    title: group.products.join("\n"),
+  })).forEach((source) => {
+    const row = document.createElement("li");
+    row.style.setProperty("--c", surveyColorFor(source.surveyId, surveyIndex?.surveys.find((survey) => survey.id === source.surveyId)?.color));
+    row.title = `${surveyName(source.surveyId)} · ${source.releaseId} · ${source.modality ?? "modality unknown"}\n${source.title}`;
+    row.append(
+      Object.assign(document.createElement("i"), { ariaHidden: "true" }),
+      Object.assign(document.createElement("b"), { textContent: `${surveyName(source.surveyId).toUpperCase()} ${shortReleaseLabel(source.surveyId, source.releaseId)}` }),
+      Object.assign(document.createElement("span"), { textContent: source.product }),
+      Object.assign(document.createElement("em"), { textContent: (source.modality ?? "--").toUpperCase() }),
+    );
+    sources.append(row);
   });
-  const sourceLabel = document.createElement("dt");
-  sourceLabel.textContent = "SOURCES";
-  const sourceValue = document.createElement("dd");
-  sourceValue.className = "coverage-detail-source-value";
-  if (inspection.artifacts.length || cellSources.length) {
-    const sources = document.createElement("ul");
-    sources.className = "coverage-detail-source-list";
-    const sourceRows = [
-      ...inspection.artifacts.map((artifact) => ({ surveyId: artifact.surveyId, releaseId: artifact.releaseId, product: artifact.product })),
-      ...cellSources.map((source) => ({ surveyId: source.surveyId, releaseId: source.releaseId, product: source.product })),
-    ];
-    [...new Map(sourceRows.map((source) => [`${source.surveyId}:${source.releaseId}:${source.product}`, source])).values()].forEach((artifact) => {
-      const surveyName = surveyIndex?.surveys.find((survey) => survey.id === artifact.surveyId)?.name ?? artifact.surveyId;
-      const source = document.createElement("li");
-      source.textContent = `${surveyName} · ${artifact.releaseId} · ${artifact.product}`;
-      source.title = source.textContent;
-      sources.append(source);
-    });
-    sourceValue.append(sources);
-  } else sourceValue.textContent = inspection.workspaceAvailable ? "workspace layer" : "--";
-  list.append(sourceLabel, sourceValue);
-  content.replaceChildren(list);
+  if (releaseRows.length > LOCK_SOURCE_ROWS) {
+    const more = document.createElement("li");
+    more.className = "is-empty";
+    more.textContent = `+${releaseRows.length - LOCK_SOURCE_ROWS} ${locale() === "zh" ? "个数据版本" : "MORE RELEASES"}`;
+    sources.append(more);
+  }
+  if (overlapParent) {
+    const row = document.createElement("li");
+    row.className = "is-overlap";
+    row.append(
+      Object.assign(document.createElement("i"), { ariaHidden: "true" }),
+      Object.assign(document.createElement("b"), { textContent: `OVERLAP ${overlapParent.id}` }),
+      Object.assign(document.createElement("span"), { textContent: t("coverage.overlapResult") }),
+      Object.assign(document.createElement("em"), { textContent: `${overlapParent.cells.length.toLocaleString("en-US")} CELLS` }),
+    );
+    sources.append(row);
+  }
+  if (!sources.childElementCount) {
+    const row = document.createElement("li");
+    row.className = "is-empty";
+    row.textContent = inspection.workspaceAvailable ? "workspace layer" : "--";
+    sources.append(row);
+  }
+  const selectedPixels = coverageDots?.state?.nside === inspection.nside && coverageDots.state.selectedPixels.length ? coverageDots.state.selectedPixels : [inspection.pixel];
+  const surveyIds = [...new Set([...inspection.surveyIds, ...cellSources.map((source) => source.surveyId)])];
+  content.replaceChildren(stats, sources, lockActions(surveyIds, selectedPixels, order));
+  setHudTarget({
+    order,
+    pixel: inspection.pixel,
+    cellCount: selectedPixels.length,
+    label: [surveyIds.map((id) => surveyName(id).toUpperCase()).join(" × ") || "NO PUBLIC LAYER", overlapParent?.id].filter(Boolean).join(" · "),
+    surveys: surveyIds.map((surveyId) => {
+      const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
+      // Modalities of the products covering this cell; otherwise what the survey declares.
+      const measured = [...new Set(sourceRows.filter((source) => source.surveyId === surveyId && source.modality).map((source) => canonicalModality(source.modality!)))];
+      const declared = [...new Set((survey?.modalities ?? []).map((modality) => canonicalModality(modality)))];
+      return {
+        name: surveyName(surveyId).toUpperCase(),
+        color: surveyColorFor(surveyId, survey?.color),
+        modalities: (measured.length ? measured : declared).filter(Boolean).map((modality) => modalityLabel(modality)),
+        declared: !measured.length && declared.length > 0,
+      };
+    }),
+  });
+  hudLog(["TARGET ACQUIRED · ", { text: `IPIX ${inspection.pixel}`, tone: "hot" }, ` · O${order}`]);
   const depthSources = withDesiReference(overlapMode ? [...new Map([...inspection.artifacts, ...cellSources]
     .map(source => [`${source.surveyId}:${source.releaseId}`, { surveyId: source.surveyId, releaseId: source.releaseId }])).values()] : skyDepthSources());
   if (depthSources.length && order >= 4) {
@@ -994,6 +1085,128 @@ function syncCoverageProductControls(): void {
     input.checked = total > 0 && ids.length === total;
     input.indeterminate = ids.length > 0 && ids.length < total;
   });
+  renderHudRosterNow();
+}
+
+const SKY_AREA_DEG2 = 129600 / Math.PI;
+let hudMinimapKey = "";
+
+function syncHud(state: SurveyLayerState): void {
+  if (!isAtlasPage) return;
+  setHudMode(overlapMode);
+  const minimapKey = `${state.sourceNside}:${state.occupiedCellCount}:${[...state.visibleSurveyIds].sort().join(",")}:${document.documentElement.dataset.theme ?? ""}`;
+  if (minimapKey !== hudMinimapKey && coverageDots) {
+    hudMinimapKey = minimapKey;
+    setHudMinimapCells(coverageDots.minimapCells());
+  }
+  updateHudView(state);
+}
+
+function shortReleaseLabel(surveyId: string, releaseId: string): string {
+  const trimmed = releaseId.toLowerCase().startsWith(`${surveyId.toLowerCase()}-`) ? releaseId.slice(surveyId.length + 1) : releaseId;
+  return trimmed.toUpperCase();
+}
+
+/** The atlas layer panel doubles as the HUD roster: every survey row carries
+ * its release line, sky bar and share. Compact mode keeps the active surveys
+ * plus the widest-covering inactive ones; full mode lists the whole catalogue. */
+function renderHudRosterNow(): void {
+  if (!isAtlasPage || !coverageCatalog) return;
+  const host = byId("coverage-layers");
+  const layers = filterByModalities(coverageCatalog.layers, selectedModalities);
+  const bySurvey = new Map<string, CoverageCatalog["layers"]>();
+  layers.forEach((layer) => bySurvey.set(layer.surveyId, [...(bySurvey.get(layer.surveyId) ?? []), layer]));
+  const rows: Array<HudRosterRow & { area: number }> = [...bySurvey].map(([surveyId, surveyLayers]) => {
+    const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
+    const selected = surveyLayers.filter((layer) => selectedCoverageProductIds.has(layer.layerId));
+    const shown = selected.length ? selected : surveyLayers;
+    const releases = [...new Set(shown.map((layer) => shortReleaseLabel(surveyId, layer.releaseId)))];
+    const modalities = [...new Set(shown.map((layer) => canonicalModality(layer.modality)).filter(Boolean))];
+    const maxOrder = Math.max(...shown.map((layer) => Math.max(layer.maxOrder ?? 0, ...(layer.displayOrders ?? layer.availableOrders))));
+    const area = Math.max(0, ...shown.map((layer) => layer.areaDeg2 || 0));
+    const releaseText = releases.length > 2 ? `${releases[0]} +${releases.length - 1}` : releases.join(" / ");
+    return {
+      surveyId,
+      name: (survey?.name ?? surveyId).toUpperCase(),
+      sub: [releaseText, modalities.map((modality) => modality.toUpperCase().slice(0, 8)).join("/") || null, Number.isFinite(maxOrder) && maxOrder > 0 ? `O${maxOrder}` : null].filter(Boolean).join(" · "),
+      color: surveyColorFor(surveyId, survey?.color, surveyLayers[0]?.color),
+      skyFraction: area > 0 ? Math.min(1, area / SKY_AREA_DEG2) : null,
+      on: selected.length > 0,
+      area,
+    };
+  });
+  const on = rows.filter((row) => row.on);
+  const off = rows.filter((row) => !row.on).sort((left, right) => right.area - left.area);
+  const compact = new Set([...on, ...off.slice(0, Math.max(on.length ? 1 : 4, 4 - on.length))].map((row) => row.surveyId));
+  const byId_ = new Map(rows.map((row) => [row.surveyId, row]));
+  let key = 0;
+  host.querySelectorAll<HTMLElement>(".coverage-survey-group").forEach((group) => {
+    const surveyId = group.dataset.surveyId ?? "";
+    const row = byId_.get(surveyId);
+    const label = group.querySelector<HTMLElement>(".coverage-layer-toggle");
+    group.classList.toggle("is-compact-hidden", !compact.has(surveyId));
+    group.classList.toggle("is-on", Boolean(row?.on));
+    if (!label) return;
+    label.querySelector(".hud-layer-facts")?.remove();
+    delete label.dataset.hudKey;
+    if (!row) return;
+    label.style.setProperty("--c", row.color);
+    label.append(buildLayerFacts(row));
+    const visible = !group.hidden && (document.body.dataset.layersPanel === "open" || compact.has(surveyId));
+    if (visible && key < 9) label.dataset.hudKey = String(++key);
+  });
+  const count = document.getElementById("hud-layers-count");
+  if (count) {
+    count.textContent = `${on.length} / ${rows.length}`;
+    count.title = `${on.length} of ${rows.length} surveys shown`;
+  }
+}
+
+const HUD_PREFERENCE_KEY = "asa-atlas-hud";
+
+function applyHudPreferences(): void {
+  if (!isAtlasPage) return;
+  let preference: { hidden?: boolean; rosterCollapsed?: boolean } = {};
+  try { preference = JSON.parse(localStorage.getItem(HUD_PREFERENCE_KEY) ?? "{}"); } catch { preference = {}; }
+  setHudHidden(Boolean(preference.hidden), false);
+  setRosterCollapsed(Boolean(preference.rosterCollapsed), false);
+}
+
+function storeHudPreferences(): void {
+  try {
+    localStorage.setItem(HUD_PREFERENCE_KEY, JSON.stringify({
+      hidden: document.body.dataset.hud === "hidden",
+      rosterCollapsed: document.body.dataset.hudRoster === "collapsed",
+    }));
+  } catch { /* storage may be unavailable */ }
+}
+
+function setHudHidden(hidden: boolean, store = true): void {
+  if (hidden) document.body.dataset.hud = "hidden";
+  else delete document.body.dataset.hud;
+  const button = document.getElementById("hud-toggle");
+  if (button) {
+    const label = locale() === "zh" ? (hidden ? "显示 HUD 面板 (H)" : "隐藏 HUD 面板 (H)") : (hidden ? "Show HUD panels (H)" : "Hide HUD panels (H)");
+    button.setAttribute("aria-pressed", String(hidden));
+    button.setAttribute("aria-label", label);
+    button.title = label;
+  }
+  if (store) storeHudPreferences();
+}
+
+function setRosterCollapsed(collapsed: boolean, store = true): void {
+  if (collapsed) document.body.dataset.hudRoster = "collapsed";
+  else delete document.body.dataset.hudRoster;
+  document.getElementById("hud-layers-head")?.setAttribute("aria-expanded", String(!collapsed));
+  if (store) storeHudPreferences();
+}
+
+function toggleRosterSurvey(surveyId: string): void {
+  const input = document.querySelector<HTMLInputElement>(`#coverage-survey-${CSS.escape(surveyId)} input[data-survey-id]:not([data-release-id])`);
+  if (!input || input.disabled) return;
+  input.checked = !input.checked;
+  input.indeterminate = false;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function setCoverageProductSelection(layerId: string, enabled: boolean): void {
@@ -1082,6 +1295,35 @@ function renderDisplayOrderControl(): void {
   if (minimum) minimum.textContent = orders.length ? `O${orders[0]}` : "O4";
   const maximum = document.getElementById("coverage-display-order-max");
   if (maximum) maximum.textContent = orders.length ? `O${orders[orders.length - 1]}` : layers.length ? "--" : "O4";
+  renderDisplayOrderSegments(orders, orders[currentIndex >= 0 ? currentIndex : 0] ?? null);
+}
+
+/** Skewed segment gauge drawn under the native range input; one segment per selectable order. */
+function renderDisplayOrderSegments(orders: readonly number[], current: number | null): void {
+  const host = document.getElementById("coverage-display-order-segments");
+  const control = host?.closest<HTMLElement>(".coverage-display-order-control");
+  if (!host || !control) return;
+  const layers = visibleCoverageLayers();
+  const partial = [...new Set(layers.flatMap((layer) => layer.displayOrders ?? layer.availableOrders))]
+    .filter((order) => Number.isInteger(order) && order >= 4 && order <= 13 && !orders.includes(order) && order > (orders[orders.length - 1] ?? 3))
+    .sort((left, right) => left - right);
+  const shown = orders.length ? orders : [4];
+  control.style.setProperty("--order-count", String(shown.length));
+  host.replaceChildren(
+    ...shown.map((order) => {
+      const segment = document.createElement("span");
+      segment.className = `coverage-order-seg${current !== null && order < current ? " is-filled" : ""}${order === current ? " is-current" : ""}`;
+      segment.append(Object.assign(document.createElement("span"), { textContent: `O${order}` }));
+      return segment;
+    }),
+    ...partial.map((order) => {
+      const segment = document.createElement("span");
+      segment.className = "coverage-order-seg is-unavailable";
+      segment.title = locale() === "zh" ? `O${order} 仅部分已选图层可用` : `O${order} is available for only some selected layers`;
+      segment.append(Object.assign(document.createElement("span"), { textContent: `O${order}` }));
+      return segment;
+    }),
+  );
 }
 
 function previewDisplayOrderControlValue(): void {
@@ -1102,6 +1344,7 @@ function previewDisplayOrderControlValue(): void {
   overlapRequestSequence += 1;
   value.textContent = `O${order}`;
   slider.setAttribute("aria-valuetext", `O${order}`);
+  renderDisplayOrderSegments(selectedLayerOrders(), order);
 }
 
 function cancelCoverageDisplayRequest(): void {
@@ -1546,18 +1789,25 @@ function showCoverageLayerTooltip(surveyId: string, row: HTMLElement): void {
   positionCoverageLayerTooltip();
 }
 
+/** On the wide atlas the panel stays docked: "open" means the full catalogue. */
+function layersPanelDocked(): boolean {
+  return isAtlasPage && window.innerWidth > 820;
+}
+
 function setCoverageLayersOpen(open: boolean): void {
   const layers = byId("coverage-layers");
   const queue = byId("selection-queue");
-  layers.hidden = !open;
+  layers.hidden = !open && !layersPanelDocked();
   if (open) document.body.dataset.layersPanel = "open";
   else document.body.removeAttribute("data-layers-panel");
   queue.inert = open;
+  const toggle = document.getElementById("hud-layers-all");
+  if (toggle) toggle.textContent = open ? "COMPACT ▴" : "ALL LAYERS ▸";
+  renderHudRosterNow();
   updateOverlapPanelLayout();
   hideCoverageLayerTooltip();
   positionSelectionQueue();
   positionOverlapPanel();
-  updateCoverageEmptyGuide();
 }
 
 function createSelectedComponentDetail(component: OverlapComponentView): HTMLElement {
@@ -1596,15 +1846,6 @@ function positionSelectionQueue(): void {
   queue.style.width = "min(330px, calc(100vw - 56px))";
 }
 
-function updateCoverageEmptyGuide(): void {
-  const guide = byId("coverage-empty-guide");
-  const layers = byId("coverage-layers");
-  const shouldShow = isAtlasInteractive()
-    && Boolean(coverageCatalog?.layers.length)
-    && queuedLayerIds.size === 0
-    && layers.hidden;
-  guide.hidden = !shouldShow;
-}
 
 function renderSelectionQueue(): void {
   const queue = byId("selection-queue");
@@ -1617,7 +1858,6 @@ function renderSelectionQueue(): void {
   renderedQueueComponentId = selectedQueueComponent?.id ?? null;
   queue.hidden = entries.length === 0 || !isAtlasInteractive();
   positionSelectionQueue();
-  updateCoverageEmptyGuide();
 }
 
 function clearLayerCloseTimer(): void {
@@ -1674,6 +1914,7 @@ function renderOverlapLoadingPanel(surveyIds: string[], order: number): void {
   panel.hidden = false;
   byId("coverage-detail-kicker").textContent = t("coverage.overlapResult");
   byId("coverage-detail-title").textContent = `GLOBAL · ${surveyIds.length} SURVEYS`;
+  setLockHeadline("OVERLAP", `O${order}`, "QUERYING");
   const summary = document.createElement("p");
   summary.className = "overlap-summary";
   summary.textContent = `${t("coverage.commonOrder")} O${order}`;
@@ -1698,6 +1939,7 @@ function renderOverlapErrorPanel(surveyIds: string[], messageText = t("coverage.
   panel.hidden = false;
   byId("coverage-detail-kicker").textContent = t("coverage.overlapResult");
   byId("coverage-detail-title").textContent = `GLOBAL · ${surveyIds.length} SURVEYS`;
+  setLockHeadline("OVERLAP", null);
   const message = document.createElement("p");
   message.className = "overlap-error";
   message.textContent = messageText;
@@ -1748,6 +1990,7 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
   setOverlapExpandVisible(Boolean(componentData?.length ?? activeOverlapComponents.length));
   byId("coverage-detail-kicker").textContent = t("coverage.overlapResult");
   byId("coverage-detail-title").textContent = `${scope} · ${surveyIds.length} SURVEYS`;
+  setLockHeadline(scope === "SELECTED CELL" ? "EXPORT" : "OVERLAP", `O${order}`, `${pixels.length.toLocaleString("en-US")} CELLS · ${surveyIds.map((id) => (surveyIndex?.surveys.find((survey) => survey.id === id)?.name ?? id).toUpperCase()).join(" × ")}`);
   abortHstLookupsWithin(content);
   content.replaceChildren();
   const summary = document.createElement("p");
@@ -2762,6 +3005,57 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
   renderIcons();
 }
 
+const EVIDENCE_STAGE_LABEL: Record<string, string> = { native: "coverage.progressNative", warehouse: "coverage.progressWarehouse", coverage: "coverage.progressCoverage" };
+
+/** Animated query status: a scanning bar, one summary line per stage and the
+ * blocks received so far, so a slow stream reads as data still arriving. */
+function evidenceProgress(): { root: HTMLElement; update: (stage: string, key: string, done: boolean, total?: number) => void; setBlocks: (count: number) => void } {
+  const root = document.createElement("div");
+  root.className = "hud-query-progress";
+  root.setAttribute("role", "status");
+  const head = document.createElement("div");
+  head.className = "hud-query-head";
+  const spinner = Object.assign(document.createElement("i"), { className: "hud-query-spinner" });
+  spinner.setAttribute("aria-hidden", "true");
+  const state = document.createElement("b");
+  state.textContent = locale() === "zh" ? "查询中" : "QUERYING";
+  const counter = document.createElement("span");
+  const elapsed = Object.assign(document.createElement("time"), { className: "hud-query-elapsed", textContent: "0s" });
+  const blocks = document.createElement("em");
+  head.append(spinner, state, counter, elapsed, blocks);
+  const hint = Object.assign(document.createElement("small"), { className: "hud-query-hint" });
+  const startedAt = Date.now();
+  const timer = window.setInterval(() => {
+    if (!root.isConnected && Date.now() - startedAt > 1000) { window.clearInterval(timer); return; }
+    const seconds = Math.floor((Date.now() - startedAt) / 1000);
+    elapsed.textContent = `${seconds}s`;
+    if (seconds >= 6) hint.textContent = locale() === "zh" ? "仍在查询原生分块与来源清单，大区域可能需要一分钟左右…" : "Still querying native sky blocks and the source manifest; large regions can take about a minute…";
+  }, 1000);
+  const bar = Object.assign(document.createElement("i"), { className: "hud-query-bar" });
+  bar.setAttribute("aria-hidden", "true");
+  const lines = Object.assign(document.createElement("small"), { className: "hud-query-stages", textContent: t("coverage.queryingPlan") });
+  root.append(head, bar, lines, hint);
+  const layers = new Map<string, { stage: string; done: boolean; total?: number }>();
+  const render = () => {
+    const entries = [...layers.values()];
+    const done = entries.filter((entry) => entry.done).length;
+    counter.textContent = entries.length ? `${done} / ${entries.length} ${locale() === "zh" ? "项" : "LAYERS"}` : "";
+    const byStage = new Map<string, { done: number; all: number }>();
+    entries.forEach((entry) => {
+      const value = byStage.get(entry.stage) ?? { done: 0, all: 0 };
+      value.all += 1; if (entry.done) value.done += 1;
+      byStage.set(entry.stage, value);
+    });
+    lines.textContent = [...byStage].map(([stage, value]) => `${t(EVIDENCE_STAGE_LABEL[stage] ?? "coverage.progressQuery")} ${value.done === value.all ? "✓" : `${value.done}/${value.all}`}`).join(" · ") || t("coverage.queryingPlan");
+    root.title = [...layers].map(([key, entry]) => `${key}: ${entry.done ? t("coverage.progressDone") : t("coverage.progressRunning")}${entry.total === undefined ? "" : ` ${entry.total}`}`).join("\n");
+  };
+  return {
+    root,
+    update(stage, key, done, total) { layers.set(key, { stage, done, total }); render(); },
+    setBlocks(count) { blocks.textContent = `${count.toLocaleString("en-US")} ${locale() === "zh" ? "个分块已返回" : "BLOCKS RECEIVED"}`; },
+  };
+}
+
 async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLElement): Promise<void> {
   const lookup = component.evidenceLookup;
   if (!lookup) return;
@@ -2773,21 +3067,18 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
   const controller = new AbortController();
   overlapEvidenceController = controller;
   const request = ++overlapEvidenceSequence;
-  node.replaceChildren(Object.assign(document.createElement("small"), { textContent: t("coverage.queryingPlan") }));
   try {
-    const stages = new Map<string, string>();
-    const status = document.createElement("small"); status.setAttribute("role", "status");
+    const progress = evidenceProgress();
     const batches = document.createElement("div"); batches.className = "overlap-evidence-files overlap-spatial-units";
+    for (let index = 0; index < 3; index += 1) batches.append(Object.assign(document.createElement("div"), { className: "hud-skeleton-row" }));
     const shown = new Set<string>();
-    node.replaceChildren(status, batches); status.textContent = t("coverage.queryingPlan");
+    node.replaceChildren(progress.root, batches);
     const access = hasDownloadAccess() ? "page" : "preview";
     const result = await fetchOverlapEvidence(component, controller.signal, access, undefined, event => {
       if (request !== overlapEvidenceSequence || controller.signal.aborted) return;
       const value = event.value;
       if (event.event === "progress") {
-        const stage = String(value.stage); const label = t(stage === "native" ? "coverage.progressNative" : stage === "warehouse" ? "coverage.progressWarehouse" : stage === "coverage" ? "coverage.progressCoverage" : "coverage.progressQuery");
-        stages.set(String(value.layerId ?? stage), `${label}: ${value.state === "completed" ? t("coverage.progressDone") : t("coverage.progressRunning")}${value.total === undefined ? "" : ` ${value.total}`}`);
-        status.textContent = [...stages.values()].join(" · ");
+        progress.update(String(value.stage), String(value.layerId ?? value.stage), value.state === "completed", typeof value.total === "number" ? value.total : undefined);
       } else if (event.event === "batch" && Array.isArray(value.units)) {
         for (const unit of value.units as NonNullable<DownloadPlan["spatialUnits"]>) {
           const key = JSON.stringify([unit.layerId, unit.unitKind, unit.unitId]);
@@ -2799,9 +3090,11 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
           const facts = document.createElement("div"); facts.className = "overlap-spatial-unit-facts";
           facts.append(modalityBadge(unit.modality, "overlap-spatial-unit-modality"), document.createTextNode(` O${unit.order} · ${unit.matchingCells.length} cells `), precisionIndicator(unit.precision)); row.append(facts);
           appendSpatialUnitAccess(row, unit);
+          batches.querySelectorAll(".hud-skeleton-row").forEach((skeleton) => skeleton.remove());
           batches.append(row);
         }
-        status.title = t("coverage.progressFrozenPending"); renderIcons();
+        progress.setBlocks(shown.size);
+        progress.root.title = `${progress.root.title.split("\n\n")[0]}\n\n${t("coverage.progressFrozenPending")}`; renderIcons();
       }
     });
     if (!result) return;
@@ -2848,8 +3141,11 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
     modalityIcon.append(icon(modalityIconName(modality || "unknown")));
     const title = document.createElement("span");
     title.className = "coverage-detail-product-title";
-    title.textContent = `${survey?.name ?? entry.surveyId} · ${entry.releaseId} · ${entry.product}`;
-    title.title = `${title.textContent} · ${modalityName}`;
+    title.title = `${survey?.name ?? entry.surveyId} · ${entry.releaseId} · ${entry.product} · ${modalityName}`;
+    title.append(
+      Object.assign(document.createElement("b"), { className: "coverage-detail-product-survey", textContent: survey?.name ?? entry.surveyId }),
+      Object.assign(document.createElement("span"), { className: "coverage-detail-product-sub", textContent: `${entry.releaseId} · ${entry.product}` }),
+    );
     row.style.setProperty("--product-color", surveyColorFor(entry.surveyId, survey?.color));
     row.append(modalityIcon, title);
     if (entry.sourceUnitIndex) row.append(Object.assign(document.createElement("small"), { textContent: `${entry.sourceUnitIndex.status.toUpperCase()}: ${entry.sourceUnitIndex.notes}` }));
@@ -3099,9 +3395,30 @@ function renderOverlapDrawerComponents(): void {
   renderIcons();
 }
 
+/** Name the intersecting surveys under the drawer title, each in its own colour. */
+function renderOverlapDrawerSurveys(component?: Pick<OverlapComponentView, "surveys">): void {
+  const host = document.getElementById("overlap-drawer-surveys");
+  if (!host) return;
+  const ids = [...new Set([...(component?.surveys?.map((survey) => survey.surveyId) ?? []), ...activeOverlapSurveyIds])]
+    .filter((id) => !component?.surveys?.length || component.surveys.some((survey) => survey.surveyId === id));
+  const nodes: Array<Node | string> = [];
+  ids.forEach((id, index) => {
+    const survey = surveyIndex?.surveys.find((entry) => entry.id === id);
+    if (index) nodes.push(Object.assign(document.createElement("i"), { textContent: "×", ariaHidden: "true" }));
+    const name = document.createElement("b");
+    name.textContent = (survey?.name ?? id).toUpperCase();
+    name.style.setProperty("--c", surveyColorFor(id, survey?.color));
+    nodes.push(name);
+  });
+  host.replaceChildren(...nodes);
+  host.hidden = !ids.length;
+  host.setAttribute("aria-label", ids.map((id) => surveyIndex?.surveys.find((entry) => entry.id === id)?.name ?? id).join(" × "));
+}
+
 function renderOverlapDrawerLoading(component: OverlapComponentView): void {
   const drawer = byId("overlap-drawer");
   byId("overlap-drawer-title").textContent = `${component.id} · O${component.order}`;
+  renderOverlapDrawerSurveys(component);
   const content = byId("overlap-drawer-content");
   abortHstLookupsWithin(content);
   const loading = document.createElement("div");
@@ -3130,6 +3447,7 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
   drawer.removeAttribute("aria-busy");
   const component: OverlapComponentView = { ...details.component, evidenceLookup: details.reverseLookup };
   byId("overlap-drawer-title").textContent = `${component.id} · O${component.order} · ${component.cells.length.toLocaleString("en-US")} cells`;
+  renderOverlapDrawerSurveys(component);
   const content = byId("overlap-drawer-content");
   abortHstLookupsWithin(content);
   content.replaceChildren();
@@ -3446,17 +3764,15 @@ function openOverlapDrawer(): void {
   const drawer = byId("overlap-drawer");
   if (!overlapDrawerPreviousState) {
     overlapDrawerPreviousState = {
-      layersHidden: Boolean(byId("coverage-layers").hidden),
+      layersHidden: document.body.dataset.layersPanel !== "open",
       queueHidden: Boolean(byId("selection-queue").hidden),
       panelHidden: Boolean(byId("coverage-detail-panel").hidden),
       helpHidden: Boolean(byId("coverage-help").hidden),
-      guideHidden: Boolean(byId("coverage-empty-guide").hidden),
     };
     overlapDrawerPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
   setCoverageLayersOpen(false);
   byId("coverage-help").hidden = true;
-  byId("coverage-empty-guide").hidden = true;
   overlapDrawerOpen = true;
   if (displayOrderControl) byId("overlap-drawer-tools").prepend(displayOrderControl);
   document.body.dataset.overlapDrawer = "open";
@@ -3490,7 +3806,6 @@ function closeOverlapDrawer(): void {
     byId("selection-queue").hidden = previous.queueHidden;
     byId("coverage-detail-panel").hidden = previous.panelHidden;
     byId("coverage-help").hidden = previous.helpHidden;
-    byId("coverage-empty-guide").hidden = previous.guideHidden;
     if (!previous.panelHidden && overlapMode && selectedQueueComponent) {
       renderOverlapPanel(activeOverlapSurveyIds, [...new Set(activeOverlapComponents.flatMap((entry) => entry.cells))], selectedQueueComponent.order, "GLOBAL", activeOverlapComponents, false);
     }
@@ -3663,6 +3978,13 @@ async function activateOverlap(forceActive?: boolean, forceView = false): Promis
     coverageDisplayViewKey = displayPlan.key;
     lastOverlapViewKey = viewKey;
     activeOverlapComponents = result.components ?? [];
+    {
+      const names = surveyIds.map((id) => (surveyIndex?.surveys.find((survey) => survey.id === id)?.name ?? id).toUpperCase()).join(" × ");
+      const first = activeOverlapComponents[0];
+      hudLog(first
+        ? [`OVERLAP ${first.id} · `, { text: names, tone: "ind" }, ` · ${first.cells.length.toLocaleString("en-US")} CELLS · ${activeOverlapComponents.length} REGIONS`]
+        : ["OVERLAP · ", { text: names, tone: "ind" }, ` · ${renderedPixels.length.toLocaleString("en-US")} CELLS`]);
+    }
     overlapEvidenceCache.clear();
     coverageDots?.updateBlocks(batch.blocks, 4, { nside: 2 ** renderedOrder, pixels: renderedPixels, components: activeOverlapComponents });
     renderOverlapPanel(surveyIds, renderedPixels, renderedOrder, "GLOBAL", activeOverlapComponents, !wasOverlapMode);
@@ -3675,6 +3997,7 @@ async function activateOverlap(forceActive?: boolean, forceView = false): Promis
       } else {
         updateOverlapHud(null);
         byId("overlap-drawer-title").textContent = `${t("coverage.commonOrder")} O${renderedOrder}`;
+        renderOverlapDrawerSurveys();
         renderOverlapDrawerError(t("coverage.noCommon"));
       }
     }
@@ -3846,6 +4169,21 @@ function renderCoverageLayers(): void {
   host.replaceChildren();
   if (!coverageCatalog) return;
   bindLayerCloseTimer(host);
+  if (isAtlasPage) {
+    const head = document.createElement("button");
+    head.type = "button";
+    head.id = "hud-layers-head";
+    head.className = "hud-layers-head";
+    head.setAttribute("aria-expanded", String(document.body.dataset.hudRoster !== "collapsed"));
+    head.append(
+      Object.assign(document.createElement("b"), { textContent: "◆" }),
+      Object.assign(document.createElement("span"), { textContent: "LAYERS · 覆盖图层" }),
+      Object.assign(document.createElement("output"), { id: "hud-layers-count", textContent: "-- / --" }),
+      Object.assign(document.createElement("i"), { className: "hud-roster-chevron" }),
+    );
+    head.addEventListener("click", () => setRosterCollapsed(document.body.dataset.hudRoster !== "collapsed"));
+    host.append(head);
+  }
   const search = document.createElement("label");
   search.className = "coverage-layer-search";
   search.innerHTML = `<i data-lucide="search"></i><input id="coverage-layer-search" type="search" autocomplete="off" placeholder="筛选巡天图层" aria-label="筛选巡天图层" />`;
@@ -3889,6 +4227,7 @@ function renderCoverageLayers(): void {
     const swatch = document.createElement("span");
     swatch.className = "coverage-layer-swatch";
     swatch.style.backgroundColor = surveyColorFor(surveyId, survey?.color, layers[0]?.color);
+    swatch.style.color = swatch.style.backgroundColor;
     swatch.setAttribute("aria-label", `图层颜色 ${swatch.style.backgroundColor}`);
     label.addEventListener("pointerenter", () => showCoverageLayerTooltip(surveyId, label));
     label.addEventListener("pointerleave", () => {
@@ -4016,6 +4355,17 @@ function renderCoverageLayers(): void {
     filterCoverageSurveyGroups();
   });
   filterCoverageSurveyGroups();
+  if (isAtlasPage) {
+    const all = document.createElement("button");
+    all.type = "button";
+    all.id = "hud-layers-all";
+    all.className = "hud-roster-all";
+    all.textContent = document.body.dataset.layersPanel === "open" ? "COMPACT ▴" : "ALL LAYERS ▸";
+    all.addEventListener("click", () => setCoverageLayersOpen(document.body.dataset.layersPanel !== "open"));
+    host.append(all);
+    if (layersPanelDocked()) host.hidden = false;
+  }
+  renderHudRosterNow();
   renderIcons();
   renderSelectionQueue();
 }
@@ -4399,6 +4749,8 @@ async function hydrateCoverageCatalogInternal(nextCatalog: CoverageCatalog): Pro
     if (homeEntered) coverageDots.transitionToDataView(1);
     else updateHomeScrollProgress();
     renderCoverageLayers();
+    renderHudRosterNow();
+    hudLog(["COVERAGE SYNC · ", { text: `${nextCatalog.layers.length} LAYERS`, tone: "ind" }, ...(nextCatalog.revision ? [` · REV ${nextCatalog.revision.slice(0, 8)}`] : [])]);
     updateCoverageReadout(activeSurveyId);
     renderCoverageLoadDiagnostics();
     if (revisionChanged && overlapMode && visibleSurveyIdsFromControls().length >= 2) void activateOverlap(true);
@@ -4480,6 +4832,8 @@ function applySkyDeepLink(): void {
 async function initialize(): Promise<void> {
   try {
     coverageDots = new AtlasCoverageGlobe(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"), updateCoverageReadout, updateCoverageInspector, updateCoverageState, openCoverageContextMenu, handleOverlapComponentLabel);
+    // The low tactical camera reads best with survey shells packed close to one surface.
+    if (isAtlasPage) coverageDots.setLayerRadiusRange(0.994, 1.006);
   } catch (error) {
     console.warn("HEALPix globe unavailable", error);
     byId("coverage-state").textContent = "COVERAGE PREVIEW UNAVAILABLE";
@@ -4720,17 +5074,19 @@ byId("coverage-layers-toggle").addEventListener("click", () => {
     closeOverlapDrawer();
     return;
   }
-  const layers = byId("coverage-layers");
-  setCoverageLayersOpen(Boolean(layers.hidden));
+  setCoverageLayersOpen(document.body.dataset.layersPanel !== "open");
 });
-byId("coverage-empty-guide-action").addEventListener("click", () => {
-  byId("coverage-layers-toggle").click();
+window.addEventListener("resize", () => {
+  const layers = document.getElementById("coverage-layers");
+  if (layers) layers.hidden = document.body.dataset.layersPanel !== "open" && !layersPanelDocked();
 });
 byId("coverage-help-toggle").addEventListener("click", () => {
   if (!isAtlasInteractive()) return;
   byId("coverage-help").hidden = !byId("coverage-help").hidden;
 });
 byId("coverage-help-close").addEventListener("click", () => { byId("coverage-help").hidden = true; });
+document.getElementById("hud-toggle")?.addEventListener("click", () => setHudHidden(document.body.dataset.hud !== "hidden"));
+applyHudPreferences();
 
 function enterAtlasExperience(surveyId?: string, productId?: string): void {
   const selectedSurveyId = surveyId ?? deepLinkTarget?.surveyId;
@@ -4746,7 +5102,6 @@ function enterAtlasExperience(surveyId?: string, productId?: string): void {
     coverageDots?.transitionToDataView(420);
     focus();
     renderSelectionQueue();
-    updateCoverageEmptyGuide();
     return;
   }
   const hero = byId("home-hero");
@@ -4766,7 +5121,6 @@ function enterAtlasExperience(surveyId?: string, productId?: string): void {
     document.body.dataset.homeState = "atlas";
     hero.setAttribute("aria-hidden", "true");
     renderSelectionQueue();
-    updateCoverageEmptyGuide();
     focus();
     byId("coverage-layers-toggle").focus();
   };
@@ -4849,9 +5203,26 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key.toLowerCase() === "f") {
     event.preventDefault();
-    coverageFocusActive = true;
-    coverageDisplayViewKey = "";
-    if (!skyDepthControls?.focus()) coverageDots?.focusSelection();
+    focusCoverageSelection();
+  }
+  if (event.key.toLowerCase() === "e" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    const state = coverageDots?.state;
+    const inspection = skyDepthInspection;
+    if (state?.selectedPixels.length && inspection) {
+      event.preventDefault();
+      exportCoverageCells(inspection.surveyIds, state.selectedPixels, Math.round(Math.log2(state.nside)));
+    }
+  }
+  if (event.key.toLowerCase() === "h" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    event.preventDefault();
+    setHudHidden(document.body.dataset.hud !== "hidden");
+  }
+  if (/^[1-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    const row = document.querySelector<HTMLElement>(`#coverage-layers [data-hud-key="${event.key}"]`)?.closest<HTMLElement>(".coverage-survey-group");
+    if (row?.dataset.surveyId) {
+      event.preventDefault();
+      toggleRosterSurvey(row.dataset.surveyId);
+    }
   }
   if (event.key.toLowerCase() === "g") {
     event.preventDefault();
@@ -4884,7 +5255,6 @@ window.addEventListener("atlas:locale-change", () => {
   }
   if (surveyIndex) renderSurveyFilterOptions();
   renderSelectionQueue();
-  updateCoverageEmptyGuide();
 });
 
 window.addEventListener("atlas:theme-change", () => {

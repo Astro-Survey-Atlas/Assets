@@ -40,15 +40,16 @@ export function visibleLayerDepths(
   order: readonly string[],
   visibleKeys: Iterable<string>,
   layout: LayerOrderLayout,
+  range: { min: number; max: number } = { min: LAYER_RADIUS_MIN, max: LAYER_RADIUS_MAX },
 ): LayerDepth[] {
   const visible = new Set(visibleKeys);
   const keys = order.filter((key) => visible.has(key));
-  const span = LAYER_RADIUS_MAX - LAYER_RADIUS_MIN;
+  const span = range.max - range.min;
   return keys.map((key, index) => ({
     key,
     // The first list item is the front-most layer.
     radius: layout === "layers"
-      ? keys.length <= 1 ? 1 : LAYER_RADIUS_MAX - (index / (keys.length - 1)) * span
+      ? keys.length <= 1 ? 1 : range.max - (index / (keys.length - 1)) * span
       : 1 + (keys.length - 1 - index) * OVERLAP_DEPTH_STEP,
     renderOrder: 2 + (keys.length - 1 - index) * 2,
   }));

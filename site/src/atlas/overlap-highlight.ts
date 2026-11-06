@@ -1,35 +1,41 @@
 import * as THREE from "three";
+import type { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 
 import {
-  buildSphericalCellEdges,
   buildSphericalCellSheetGeometry,
   type SphericalCellSheetGeometryInput,
 } from "./spherical-cell-geometry.js";
+import { fatLines, regionOutlinePositions } from "./hud-scene.js";
+
+export interface OverlapHighlightStyle {
+  /** Outline colour of the region boundary. */
+  color: THREE.ColorRepresentation;
+  /** Outline width in CSS pixels. */
+  width: number;
+  /** Optional wide additive halo under the outline (dark sky only). */
+  glowWidth: number;
+  glowOpacity: number;
+}
 
 export interface OverlapHighlight {
   root: THREE.Group;
+  /** Flat, faint, pickable fill; it never pulses. */
   mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   meshMaterial: THREE.MeshBasicMaterial;
-  glowEdges: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
-  glowMaterial: THREE.LineBasicMaterial;
-  dashEdges: THREE.LineSegments<THREE.BufferGeometry, THREE.LineDashedMaterial>;
-  dashMaterial: THREE.LineDashedMaterial;
+  /** Static boundary of the whole region: interior cell edges cancel out. */
+  outline: LineSegments2;
+  glow: LineSegments2 | null;
 }
 
-const dashOffsetUniforms = new WeakMap<THREE.LineDashedMaterial, { value: number }>();
+const DEFAULT_STYLE: OverlapHighlightStyle = { color: "#f01951", width: 2.4, glowWidth: 0, glowOpacity: 0 };
 
-export function setOverlapHighlightFlowOffset(material: THREE.LineDashedMaterial, offset: number): void {
-  const uniform = dashOffsetUniforms.get(material);
-  if (!uniform) return;
-  const period = material.dashSize + material.gapSize;
-  uniform.value = period > 0 ? ((offset % period) + period) % period : 0;
-}
-
-/** Build one co-registered overlap surface with an always-readable animated edge. */
+/** Build one co-registered overlap surface marked only by its outer edge. */
 export function buildOverlapHighlight(
   cells: readonly SphericalCellSheetGeometryInput[],
   renderOrder: number,
-  opacity = 0.9,
+  opacity: number,
+  resolution: THREE.Vector2,
+  style: OverlapHighlightStyle = DEFAULT_STYLE,
 ): OverlapHighlight {
   const root = new THREE.Group();
   const meshMaterial = new THREE.MeshBasicMaterial({
@@ -44,52 +50,23 @@ export function buildOverlapHighlight(
   });
   const mesh = new THREE.Mesh(buildSphericalCellSheetGeometry(cells), meshMaterial);
   mesh.renderOrder = renderOrder;
+  root.add(mesh);
 
-  const edgeGeometry = buildSphericalCellEdges(cells);
-  const glowMaterial = new THREE.LineBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.58,
-    depthTest: false,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    toneMapped: false,
-  });
-  const glowEdges = new THREE.LineSegments(edgeGeometry, glowMaterial);
-  glowEdges.renderOrder = renderOrder + 1;
+  const byNside = new Map<number, { radius: number; pixels: number[] }>();
+  for (const cell of cells) {
+    const entry = byNside.get(cell.nside) ?? { radius: cell.radius, pixels: [] };
+    entry.pixels.push(cell.pixel);
+    byNside.set(cell.nside, entry);
+  }
+  const positions: number[] = [];
+  for (const [nside, entry] of byNside) positions.push(...regionOutlinePositions(nside, entry.pixels, entry.radius + 0.002));
 
-  const dashMaterial = new THREE.LineDashedMaterial({
-    vertexColors: true,
-    transparent: true,
-    opacity: 1,
-    dashSize: 0.04,
-    gapSize: 0.022,
-    depthTest: false,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const dashOffset = { value: 0 };
-  dashOffsetUniforms.set(dashMaterial, dashOffset);
-  dashMaterial.onBeforeCompile = (shader) => {
-    shader.uniforms.overlapDashOffset = dashOffset;
-    shader.uniforms.overlapFlowColor = { value: new THREE.Color("#fff1b8") };
-    shader.fragmentShader = shader.fragmentShader
-      .replace("uniform float totalSize;", "uniform float totalSize;\nuniform float overlapDashOffset;\nuniform vec3 overlapFlowColor;")
-      .replace(
-        "if ( mod( vLineDistance, totalSize ) > dashSize ) {",
-        "float overlapDashDistance = mod(vLineDistance + overlapDashOffset, totalSize);\n\tif ( overlapDashDistance > dashSize ) {",
-      )
-      .replace(
-        "#include <color_fragment>",
-        "#include <color_fragment>\n\tfloat overlapFlow = 0.5 + 0.5 * cos((vLineDistance + overlapDashOffset) * 10.0);\n\tdiffuseColor.rgb = mix(diffuseColor.rgb, overlapFlowColor, overlapFlow * 0.78);",
-      );
-  };
-  dashMaterial.customProgramCacheKey = () => "overlap-highlight-flow-v1";
-  const dashEdges = new THREE.LineSegments(edgeGeometry.clone(), dashMaterial);
-  // computeLineDistances belongs to LineSegments, not BufferGeometry.
-  dashEdges.computeLineDistances();
-  dashEdges.renderOrder = renderOrder + 2;
-
-  root.add(mesh, glowEdges, dashEdges);
-  return { root, mesh, meshMaterial, glowEdges, glowMaterial, dashEdges, dashMaterial };
+  let glow: LineSegments2 | null = null;
+  if (style.glowWidth > 0 && style.glowOpacity > 0) {
+    glow = fatLines(positions, style.color, style.glowWidth, style.glowOpacity, resolution, { additive: true, depthTest: false, renderOrder: renderOrder + 1 });
+    root.add(glow);
+  }
+  const outline = fatLines(positions, style.color, style.width, 1, resolution, { depthTest: false, renderOrder: renderOrder + 2 });
+  root.add(outline);
+  return { root, mesh, meshMaterial, outline, glow };
 }

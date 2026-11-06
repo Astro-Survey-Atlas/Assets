@@ -91,6 +91,10 @@ export function buildSkyDepthLayout(data: SkyDepthResponse, surfaceRadius: numbe
 export type SkyDepthLayout = ReturnType<typeof buildSkyDepthLayout>;
 
 export class SkyDepthLayer {
+  /** Ink for the frame top, high marker, axis and labels. Near-white on the
+   * dark sky; a neutral (achromatic) ink on the light sky keeps it visible
+   * without adding chromatic pixels to depth range measurements. */
+  ink = { line: "#f6f6ff", axis: "#8fbbcd", label: "#d0e5ed" };
   readonly group = new THREE.Group();
   #layout: SkyDepthLayout | null = null;
   #material: THREE.ShaderMaterial | null = null;
@@ -140,11 +144,11 @@ export class SkyDepthLayer {
     const verticalEdges = new THREE.LineSegments(verticalGeometry, new THREE.LineBasicMaterial({ color: "#6debdc", transparent: true, opacity: .74, depthWrite: false }));
     verticalEdges.renderOrder = 15002; this.group.add(verticalEdges);
     const topGeometry = new THREE.BufferGeometry(); topGeometry.setAttribute("position", new THREE.Float32BufferAttribute(tops, 3));
-    const topEdges = new THREE.LineSegments(topGeometry, new THREE.LineBasicMaterial({ color: "#f6f6ff", transparent: true, opacity: .96, depthWrite: false }));
+    const topEdges = new THREE.LineSegments(topGeometry, new THREE.LineBasicMaterial({ color: this.ink.line, transparent: true, opacity: .96, depthWrite: false }));
     topEdges.renderOrder = 15003; this.group.add(topEdges);
     const rangeStyles = [
       { color: "#6debdc", opacity: .88, value: layout.range[0], name: "sky-depth-range-low" },
-      { color: "#f6f6ff", opacity: .96, value: layout.range[1], name: "sky-depth-range-high" },
+      { color: this.ink.line, opacity: .96, value: layout.range[1], name: "sky-depth-range-high" },
     ] as const;
     this.#rangeGeometries = rangeStyles.map(style => {
       const rangeGeometry = new THREE.BufferGeometry();
@@ -157,7 +161,7 @@ export class SkyDepthLayer {
     }) as [THREE.BufferGeometry, THREE.BufferGeometry];
     const axis = layout.boundary[0]![0]!.clone();
     const axisGeometry = new THREE.BufferGeometry().setFromPoints([axis, axis.clone().addScaledVector(layout.normal, layout.height)]);
-    const axisLine = new THREE.Line(axisGeometry, new THREE.LineBasicMaterial({ color: "#8fbbcd", transparent: true, opacity: .55 })); axisLine.renderOrder = 15002; this.group.add(axisLine);
+    const axisLine = new THREE.Line(axisGeometry, new THREE.LineBasicMaterial({ color: this.ink.axis, transparent: true, opacity: .55 })); axisLine.renderOrder = 15002; this.group.add(axisLine);
     for (const t of [0, .5, 1]) {
       const value = layout.range[0] + t * (layout.range[1] - layout.range[0]);
       const suffix = data.query.axis === "distance" ? " Mpc" : " z";
@@ -193,7 +197,7 @@ export class SkyDepthLayer {
   setPixelRatio(value: number) { if (this.#material) this.#material.uniforms.pixelRatio!.value = value; }
   #label(value: string, position: THREE.Vector3, width: number) {
     const canvas = document.createElement("canvas"); canvas.width = 256; canvas.height = 64;
-    const ctx = canvas.getContext("2d")!; ctx.font = "26px monospace"; ctx.fillStyle = "#d0e5ed"; ctx.fillText(value, 8, 42);
+    const ctx = canvas.getContext("2d")!; ctx.font = "26px monospace"; ctx.fillStyle = this.ink.label; ctx.fillText(value, 8, 42);
     const texture = new THREE.CanvasTexture(canvas);
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false }));
     sprite.position.copy(position); sprite.scale.set(width, width / 4, 1); sprite.center.set(1.1, .5); sprite.renderOrder = 15002; this.group.add(sprite);

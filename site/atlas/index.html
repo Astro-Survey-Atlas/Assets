@@ -14,8 +14,9 @@
     <header class="site-header public-header">
       <a class="brand" href="/" aria-label="Astro Survey Atlas Public Assets">
         <img class="brand-logo" src="/icon_without_name_lon_web.svg" alt="Astro Survey Atlas" width="72" height="28" />
-        <span class="brand-wordmark"><strong>Astro Survey Atlas</strong><small>SKY ATLAS WORKSPACE</small></span>
+        <span class="brand-wordmark"><strong>Astro Survey Atlas</strong><small>TACTICAL SKY VIEW</small></span>
       </a>
+      <span id="hud-mode" class="hud-mode-tag" role="status"><i aria-hidden="true"></i><output id="hud-mode-label">LAYER MODE</output></span>
       <button class="mobile-menu-toggle" type="button" data-mobile-menu-toggle aria-label="Open navigation" aria-expanded="false"><i data-lucide="menu"></i></button>
       <nav class="site-nav" data-site-nav aria-label="Site navigation">
         <a class="site-nav-link" href="/" data-i18n="nav.home">Home</a>
@@ -36,6 +37,20 @@
       <div id="coverage-scene" class="coverage-scene" aria-label="公开巡天 HEALPix 天球覆盖">
         <canvas id="coverage-canvas" role="img" aria-label="根据公开覆盖块绘制的 HEALPix 单元"></canvas>
       </div>
+      <div class="hud-overlay" aria-hidden="true">
+        <div id="hud-ra-tape" class="hud-ra-tape" hidden><div class="hud-ra-strip"></div><output class="hud-ra-current">RA --</output></div>
+        <div id="hud-dec-ladder" class="hud-dec-ladder" hidden><div class="hud-dec-strip"></div><output class="hud-dec-current">--</output></div>
+        <div id="hud-reticle" class="hud-reticle" hidden>
+          <svg viewBox="-90 -90 180 180" focusable="false">
+            <circle class="hud-reticle-ring-outer" r="78"></circle>
+            <path class="hud-reticle-ring" d="M -62 -18 A 64 64 0 0 1 -18 -62 M 18 -62 A 64 64 0 0 1 62 -18 M 62 18 A 64 64 0 0 1 18 62 M -18 62 A 64 64 0 0 1 -62 18"></path>
+            <path class="hud-reticle-tick" d="M0 -86V-72 M0 72V86 M-86 0H-72 M72 0H86"></path>
+          </svg>
+        </div>
+        <div id="hud-callout" class="hud-callout" hidden><span class="hud-callout-line"></span><div class="hud-callout-box"><small></small><b></b><span></span></div></div>
+        <div class="hud-minimap"><span class="hud-minimap-label">SKY · ALL</span><svg id="hud-minimap" viewBox="-100 -100 200 200" focusable="false"></svg></div>
+        <div id="hud-log" class="hud-log"></div>
+      </div>
       <div class="coverage-tools">
         <div id="coverage-status" class="coverage-status" aria-live="polite">
           <span>NSIDE <output id="coverage-status-nside">--</output></span>
@@ -47,22 +62,21 @@
             <label for="coverage-display-order" data-i18n="coverage.displayOrder">Display order</label>
             <output id="coverage-display-order-value">O4</output>
           </div>
+          <div id="coverage-display-order-segments" class="coverage-display-order-segments" aria-hidden="true"></div>
           <input id="coverage-display-order" type="range" min="0" max="0" step="1" value="0" disabled data-i18n-aria-label="coverage.displayOrder" aria-valuetext="O4" />
           <div class="coverage-display-order-limits" aria-hidden="true"><span id="coverage-display-order-min">O4</span><span id="coverage-display-order-max">O4</span></div>
         </div>
+        <div id="hud-telemetry" class="hud-telemetry" aria-live="off">
+          <span>ALT <output id="hud-telemetry-alt">--</output></span>
+          <span>TILT <output id="hud-telemetry-tilt">--</output></span>
+          <span>CELLS <output id="hud-telemetry-cells">--</output></span>
+        </div>
+        <button id="hud-toggle" class="icon-button" type="button" title="隐藏 HUD 面板 (H)" aria-label="隐藏 HUD 面板 (H)" aria-pressed="false"><i data-lucide="eye"></i></button>
         <button id="coverage-reset" class="icon-button" type="button" title="重置天球视角" aria-label="重置天球视角"><i data-lucide="rotate-ccw"></i></button>
         <button id="coverage-layers-toggle" class="icon-button" type="button" title="打开图层" aria-label="打开图层"><i data-lucide="layers-3"></i></button>
         <button id="coverage-help-toggle" class="icon-button" type="button" title="查看快捷键说明" aria-label="查看快捷键说明"><i data-lucide="circle-help"></i></button>
       </div>
         <div id="coverage-layers" class="coverage-layers" hidden aria-label="覆盖图层"></div>
-        <aside id="coverage-empty-guide" class="coverage-empty-guide" hidden aria-live="polite" aria-label="选择巡天引导">
-          <div class="coverage-empty-guide-mark" aria-hidden="true"><i data-lucide="layers-3"></i></div>
-          <div class="coverage-empty-guide-copy">
-            <strong data-i18n="coverage.emptyGuideTitle">NO SURVEY SELECTED</strong>
-            <p data-i18n="coverage.emptyGuideBody">Click the layers button to open the survey list, then try selecting one.</p>
-            <button id="coverage-empty-guide-action" class="coverage-empty-guide-action" type="button"><i data-lucide="layers-3"></i><span data-i18n="coverage.emptyGuideAction">Open survey layers</span></button>
-          </div>
-        </aside>
         <aside id="coverage-help" class="coverage-help" hidden aria-label="天球快捷键说明">
           <div class="coverage-help-heading"><strong data-i18n="coverage.shortcuts">SHORTCUTS</strong><button id="coverage-help-close" class="icon-button" type="button" data-i18n-title="common.close" data-i18n-aria-label="common.close"><i data-lucide="x"></i></button></div>
           <dl>
@@ -70,6 +84,7 @@
             <div><dt>G</dt><dd data-i18n="coverage.overlapShortcut">Toggle the selected surveys into a co-registered overlap view.</dd></div>
             <div><dt>ESC</dt><dd data-i18n="coverage.escape">Exit overlap and clear the current selection and inspector.</dd></div>
             <div><dt>R</dt><dd data-i18n="coverage.resetShortcut">Reset the sky and camera to the starting view.</dd></div>
+            <div><dt>H</dt><dd data-i18n="coverage.hudShortcut">Hide or show the HUD panels. Keys 1–9 toggle the listed layers; E exports the selected cells.</dd></div>
           </dl>
         </aside>
         <div class="coverage-inspector-rail">
@@ -82,6 +97,7 @@
           </div>
           <aside id="coverage-detail-panel" class="coverage-detail-panel" hidden aria-live="polite" aria-label="区块覆盖信息">
             <div id="coverage-detail-kicker" class="coverage-detail-kicker" data-i18n="coverage.cellInspector">CELL INSPECTOR</div>
+            <div id="coverage-detail-headline" class="hud-lock-headline" aria-hidden="true"></div>
             <strong id="coverage-detail-title" class="coverage-inspector-title">HEALPIX CELL</strong>
             <button id="overlap-expand" class="icon-button overlap-expand-button" type="button" data-i18n-title="coverage.overlapExpand" data-i18n-aria-label="coverage.overlapExpand" title="展开重合详情" aria-label="展开重合详情" hidden><i data-lucide="maximize-2"></i></button>
             <div id="coverage-detail-content"></div>
@@ -94,6 +110,7 @@
             <div class="overlap-drawer-heading">
               <span class="coverage-detail-kicker" data-i18n="coverage.overlapDrawer">OVERLAP DETAILS</span>
               <strong id="overlap-drawer-title">--</strong>
+              <span id="overlap-drawer-surveys" class="overlap-drawer-surveys"></span>
             </div>
             <button id="overlap-drawer-close" class="icon-button" type="button" data-i18n-title="coverage.overlapCollapse" data-i18n-aria-label="coverage.overlapCollapse" title="关闭重合详情" aria-label="关闭重合详情"><i data-lucide="x"></i></button>
           </div>

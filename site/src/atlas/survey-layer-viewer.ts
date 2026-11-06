@@ -4,6 +4,8 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import type { LineMaterial } from "three/addons/lines/LineMaterial.js";
 
 import {
   buildSurveyLayerModel,
@@ -21,10 +23,12 @@ import type { SurveyCard } from "./survey-registry.js";
 import { cartesianToRaDec, raDecToCartesian } from "./coordinates.js";
 import { SkyDepthLayer, type SkyDepthAggregate, type SkyDepthLayout } from "./sky-depth-layer.js";
 import type { SkyDepthResponse } from "../../../src/sky-depth.js";
-import { normalizeLayerOrder, visibleLayerDepths, type LayerDepth } from "./layer-order.js";
-import { buildOverlapHighlight, setOverlapHighlightFlowOffset } from "./overlap-highlight.js";
+import { LAYER_RADIUS_MAX, LAYER_RADIUS_MIN, normalizeLayerOrder, visibleLayerDepths, type LayerDepth } from "./layer-order.js";
+import { buildOverlapHighlight, type OverlapHighlightStyle } from "./overlap-highlight.js";
 import { surveyColorFor } from "./survey-colors.js";
 import type { OverlapHighlight } from "./overlap-highlight.js";
+import { applyCellRim, applyNeutralDepth, buildHudBackdrop, cellBracketPositions, cellRimUniforms, fatLines, HudFinalShader, regionOutlinePositions, type HudBackdrop } from "./hud-scene.js";
+import { DEPTH_BLOOM, sceneTheme, type SceneTheme, type SceneThemeName } from "./scene-theme.js";
 import {
   buildSphericalCellEdges,
   buildSphericalCellSourceSectorGeometry,
@@ -207,6 +211,12 @@ export interface SurveyLayerState {
   layoutMode: SurveyLayerLayoutMode;
   interactionMode: SurveyLayerInteractionMode;
   focusedSurveyId: string | null;
+  /** ICRS point under the centre of the rendered view, when it hits the sky. */
+  viewCenter: { raDeg: number; decDeg: number; raScreenSign: 1 | -1 } | null;
+  /** Angle between the centre view ray and the local sky normal at its hit point. */
+  viewTiltDeg: number | null;
+  /** Camera height above the outermost shell, in sphere radii. */
+  viewAltitude: number;
 }
 
 export interface SurveyLayerCameraPose {
@@ -281,9 +291,22 @@ interface CameraPose {
 }
 
 const BASE_COLOR = new THREE.Color("#2c3792");
-const OVERLAP_COLOR = new THREE.Color("#2c3792");
+// Overlap and selection colours follow the active scene theme.
+const OVERLAP_COLOR = new THREE.Color("#ff8fb0");
 const SELECTION_COLOR = new THREE.Color("#f01951");
 const SELECTION_EDGE_COLOR = new THREE.Color("#f6f6ff");
+// Additive blending turns the dark sky into a light table; paper uses normal.
+let additiveCoverage = true;
+const coverageBlending = (): THREE.Blending => additiveCoverage ? THREE.AdditiveBlending : THREE.NormalBlending;
+
+/** Keep each survey's hue, adjusting lightness so it reads as neon on the
+ * dark sky and as ink on the daytime paper. */
+export function hudSurveyColor(color: THREE.Color, theme: SceneThemeName): THREE.Color {
+  const hsl = { h: 0, s: 0, l: 0 };
+  color.getHSL(hsl);
+  if (theme === "dark") return new THREE.Color().setHSL(hsl.h, Math.max(hsl.s, 0.82), THREE.MathUtils.clamp(hsl.l, 0.6, 0.7));
+  return new THREE.Color().setHSL(hsl.h, Math.max(hsl.s, 0.8), THREE.MathUtils.clamp(hsl.l, 0.34, 0.46));
+}
 const WORKSPACE_COLOR = new THREE.Color("#8d97ff");
 // The opening shot is a close, cropped glimpse of the layered globe. The
 // tighter field keeps the shell geometry legible while the pose below moves
@@ -291,9 +314,9 @@ const WORKSPACE_COLOR = new THREE.Color("#8d97ff");
 const HOME_FOV_DEG = 24;
 const COVERAGE_OPACITY = 0.38;
 const COVERAGE_EDGE_OPACITY = 0.34;
-const OVERLAP_SURVEY_OPACITY = 0.22;
-const OVERLAP_FILL_OPACITY = 0.14;
-const OVERLAP_EDGE_OPACITY = 0.46;
+const OVERLAP_SURVEY_OPACITY = 0.12;
+const OVERLAP_FILL_OPACITY = 0.06;
+const OVERLAP_EDGE_OPACITY = 0.14;
 // Keep surrounding layers subdued while the selected region remains readable.
 const DIMMED_OPACITY = 0.2;
 const DIMMED_EDGE_OPACITY = 0.1;
@@ -305,6 +328,15 @@ const SELECTION_RENDER_ORDER = 12_000;
 const LABEL_RENDER_ORDER = 14_000;
 const OBJECT_RENDER_ORDER = 15_000;
 const DATA_VIEW_CAMERA_FOV_DEG = 48;
+// Tactical data view: the camera hovers low over the sphere and the projection
+// window is shifted upward, so the surface recedes toward a visible horizon
+// while the orbit still pivots on the globe centre.
+const TACTICAL_VIEW_SHIFT = 0.5;
+const TACTICAL_VIEW_DISTANCE = 1.68;
+const TACTICAL_VIEW_DIRECTION = (() => {
+  const point = raDecToCartesian(196, 23);
+  return new THREE.Vector3(point.x, point.y, point.z).normalize();
+})();
 
 /** The globe's centered data view is deliberately wide enough to show context. */
 export const CENTERED_DATA_FOV_DEG = 115;
@@ -468,16 +500,16 @@ function deterministicWorkspaceColor(key: string): THREE.Color {
 }
 
 function fragmentMaterial(opacity = COVERAGE_OPACITY): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({
+  return applyCellRim(new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
     opacity,
     side: THREE.DoubleSide,
     depthTest: true,
     depthWrite: false,
-    blending: THREE.NormalBlending,
+    blending: coverageBlending(),
     toneMapped: false,
-  });
+  }));
 }
 
 function compactCount(value: number): string {
@@ -498,19 +530,27 @@ function countLabelSprite(text: string, position: THREE.Vector3, depthTest = tru
   canvas.height = 64;
   const context = canvas.getContext("2d")!;
   context.clearRect(0, 0, canvas.width, canvas.height);
-  const lightTheme = document.documentElement.dataset.theme === "light";
-  context.fillStyle = lightTheme ? "rgba(21, 26, 33, 0.86)" : "rgba(4, 9, 12, 0.72)";
-  context.strokeStyle = lightTheme ? "rgba(141, 151, 255, 0.72)" : "rgba(255, 255, 255, 0.45)";
+  const palette = sceneTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark").label;
+  // Chamfered HUD plate: clipped top-right corner and an accent tick.
+  const plate = new Path2D();
+  plate.moveTo(10, 10);
+  plate.lineTo(166, 10);
+  plate.lineTo(182, 26);
+  plate.lineTo(182, 54);
+  plate.lineTo(10, 54);
+  plate.closePath();
+  context.fillStyle = palette.fill;
+  context.strokeStyle = palette.stroke;
   context.lineWidth = 2;
-  context.beginPath();
-  context.roundRect(10, 10, 172, 44, 18);
-  context.fill();
-  context.stroke();
-  context.fillStyle = lightTheme ? "#f4f5f6" : "#ffffff";
-  context.font = '700 24px "Atlas Sans CJK", "Atlas Sans", sans-serif';
+  context.fill(plate);
+  context.stroke(plate);
+  context.fillStyle = palette.accent;
+  context.fillRect(10, 10, 5, 44);
+  context.fillStyle = palette.text;
+  context.font = '700 23px "Atlas Mono", "Atlas Sans CJK", monospace';
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(text, canvas.width / 2, canvas.height / 2 + 1);
+  context.fillText(text, canvas.width / 2 + 2, canvas.height / 2 + 1);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest, depthWrite: false, toneMapped: false }));
@@ -525,11 +565,21 @@ export class SurveyLayerViewer {
   #manifest: SurveyFootprintManifest;
   readonly #scene = new THREE.Scene();
   readonly #camera = new THREE.PerspectiveCamera(48, 1, 0.015, 24);
+  #projectionSize = { width: 1, height: 1 };
+  #layerRadiusRange = { min: LAYER_RADIUS_MIN, max: LAYER_RADIUS_MAX };
+  #appliedShiftY = 0;
   readonly #renderer: THREE.WebGLRenderer;
   readonly #composer: EffectComposer;
   readonly #bloomPass: UnrealBloomPass;
+  readonly #finalPass: ShaderPass;
   readonly #starField: THREE.Points;
   readonly #controls: OrbitControls;
+  readonly #lineResolution = new THREE.Vector2(1, 1);
+  readonly #hudBackdrop: HudBackdrop;
+  readonly #hudOutlineGroup = new THREE.Group();
+  #hudOutlineKey = "";
+  #theme: SceneThemeName = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  #palette: SceneTheme = sceneTheme(this.#theme);
   #bloomStrength = 0.4;
   #interactionQualityActive = false;
   #basePixelRatio = 1;
@@ -542,6 +592,7 @@ export class SurveyLayerViewer {
   readonly #selectionGroup = new THREE.Group();
   readonly #explosionGroup = new THREE.Group();
   readonly #overlapLabelGroup = new THREE.Group();
+  #selectionBox: { height: number } | null = null;
   readonly #overlapSelectionGroup = new THREE.Group();
   readonly #drillGroup = new THREE.Group();
   readonly #objectPointGroup = new THREE.Group();
@@ -564,7 +615,6 @@ export class SurveyLayerViewer {
   readonly #layerMeshes: LayerMesh[] = [];
   readonly #coverageEdgeMaterials: THREE.LineBasicMaterial[] = [];
   readonly #coverageSourceMaterials: THREE.MeshBasicMaterial[] = [];
-  readonly #overlapDashMaterials: THREE.LineDashedMaterial[] = [];
   readonly #meshBySurvey = new Map<string, LayerMesh>();
   #workspaceLayers = new Map<string, WorkspaceCoverageLayer>();
   #layerOrder: string[] = [];
@@ -578,8 +628,9 @@ export class SurveyLayerViewer {
   #clickTimer: ReturnType<typeof setTimeout> | null = null;
   #interactionMesh: LayerMesh | null = null;
   #cameraTransition: CameraTransition | null = null;
-  #selectionCoreMaterial: THREE.LineBasicMaterial | null = null;
-  #selectionGlowMaterial: THREE.LineBasicMaterial | null = null;
+  #selectionCoreMaterial: THREE.Material | null = null;
+  #selectionGlowMaterial: THREE.Material | null = null;
+  #selectionBracketMaterial: THREE.Material | null = null;
   #explosionTransition: ExplosionTransition | null = null;
   #explodedFragments: ExplodedFragment[] = [];
   #explodedPixel: number | null = null;
@@ -635,6 +686,11 @@ export class SurveyLayerViewer {
     // The high threshold keeps bloom focused on the white selection core.
     this.#bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), this.#bloomStrength, 0.4, 0.85);
     this.#composer.addPass(this.#bloomPass);
+    // Vignette, grain and scanlines are achromatic, so measured chroma holds.
+    // They run before OutputPass: a screen-facing ShaderPass after it would
+    // encode sRGB a second time and lift the black sky into a haze.
+    this.#finalPass = new ShaderPass(HudFinalShader);
+    this.#composer.addPass(this.#finalPass);
     this.#composer.addPass(new OutputPass());
 
     this.#controls = new OrbitControls(this.#camera, canvas);
@@ -647,6 +703,9 @@ export class SurveyLayerViewer {
     this.#controls.addEventListener("start", this.#handleControlsStart);
     this.#controls.addEventListener("end", this.#handleControlsEnd);
     this.#starField = this.#backgroundStars();
+    this.#hudBackdrop = buildHudBackdrop(this.#lineResolution, this.#palette);
+    this.#hudOutlineGroup.name = "hud-outlines";
+    this.#scene.add(this.#hudBackdrop.group, this.#hudOutlineGroup);
     this.#scene.add(this.#starField, this.#coverageGroup, this.#workspaceCoverageGroup, this.#drillGroup, this.#objectPointGroup, this.#retiredGroup, this.#selectionGroup, this.#explosionGroup, this.#overlapSelectionGroup, this.#overlapLabelGroup, this.#skyDepth.group);
     this.setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
     this.#canvas.addEventListener("pointerdown", this.#handlePointerDown);
@@ -717,16 +776,139 @@ export class SurveyLayerViewer {
   }
 
   setTheme(theme: "light" | "dark"): void {
+    const changed = theme !== this.#theme;
     this.#canvas.dataset.theme = theme;
-    // Keep the daytime sky visibly separate from the light UI chrome. The
-    // matching CSS token is applied to the scene host as well.
-    this.#renderer.setClearColor(this.#backgroundColor ?? (theme === "light" ? 0x687078 : 0x25282d), 1);
-    (this.#starField.material as THREE.PointsMaterial).color.setHex(theme === "light" ? 0x5965c7 : 0x71808b);
-    (this.#starField.material as THREE.PointsMaterial).opacity = theme === "light" ? 0.16 : 0.18;
+    this.#theme = theme;
+    this.#palette = sceneTheme(theme);
+    additiveCoverage = this.#palette.additiveCoverage;
+    OVERLAP_COLOR.setHex(this.#palette.overlap);
+    SELECTION_COLOR.setHex(this.#palette.selection);
+    SELECTION_EDGE_COLOR.setHex(this.#palette.selectionEdge);
+    cellRimUniforms.rimCore.value = this.#palette.rimCore;
+    cellRimUniforms.rimGain.value = this.#palette.rimGain;
+    cellRimUniforms.fillGain.value = this.#palette.fillGain;
+    cellRimUniforms.edgeGain.value = this.#palette.edgeGain;
+    this.#renderer.setClearColor(this.#backgroundColor ?? this.#palette.background, 1);
+    (this.#starField.material as THREE.PointsMaterial).color.setHex(this.#palette.stars);
+    (this.#starField.material as THREE.PointsMaterial).opacity = this.#palette.starOpacity;
+    this.#hudBackdrop.setTheme(this.#palette);
+    this.#skyDepth.ink = theme === "light"
+      ? { line: "#3b3d48", axis: "#5c5e68", label: "#3b3d48" }
+      : { line: "#f6f6ff", axis: "#8fbbcd", label: "#d0e5ed" };
+    this.#applyPostTheme();
+    if (changed && this.#skyDepthData) this.setSkyDepth(this.#skyDepthData, this.#onSkyDepthPick ?? undefined);
+    if (changed) {
+      // Survey colours, blending and outline glows are baked per theme.
+      this.#hudOutlineKey = "";
+      this.#rebuildVisible(false);
+    }
     if (this.#overlapMode) this.#rebuildOverlapLabels();
     if (this.#drillCells.size) this.setDrillCells([...this.#drillCells.values()], this.#drillNside);
     if (this.#selectedPixels.size) this.#renderSelectionRegion();
     this.#requestRender();
+  }
+
+  /** Overlap regions are marked by a static boundary only: the common
+   * result outlines in the theme overlap colour, the active component in
+   * the selection colour with a halo on the dark sky. */
+  #overlapStyle(active: boolean): OverlapHighlightStyle {
+    const dark = this.#palette.additiveCoverage;
+    return {
+      color: active ? this.#palette.selection : this.#palette.overlap,
+      width: active ? 2.6 : 1.8,
+      glowWidth: dark ? (active ? 10 : 7) : 0,
+      glowOpacity: dark ? (active ? 0.28 : 0.16) : 0,
+    };
+  }
+
+  #surveyColor(surveyId: string): THREE.Color {
+    return hudSurveyColor(this.#colorBySurvey.get(surveyId) ?? BASE_COLOR, this.#theme);
+  }
+
+  #depthActive(): boolean {
+    return Boolean(this.#skyDepth.layout?.items.length);
+  }
+
+  /** Bloom and screen grade follow the theme; sky depth keeps the measured
+   * pre-HUD bloom response and a quiet backdrop. */
+  #applyPostTheme(): void {
+    const depth = this.#depthActive();
+    // The paper sky sits above any bloom threshold, so depth bloom is dark-only.
+    const bloom = depth && this.#palette.additiveCoverage ? DEPTH_BLOOM : this.#palette.bloom;
+    this.#bloomStrength = bloom.strength;
+    this.#bloomPass.strength = bloom.strength;
+    this.#bloomPass.radius = bloom.radius;
+    this.#bloomPass.threshold = bloom.threshold;
+    this.#bloomPass.enabled = !this.#interactionQualityActive && bloom.strength > 0;
+    const final = this.#finalPass.uniforms;
+    final.vignette!.value = depth ? 0 : this.#palette.final.vignette;
+    // Flat, neutral fills while depth is measured: on the black sky any
+    // tinted fill adds static chroma that masks the out-of-range fade.
+    cellRimUniforms.rimCore.value = depth ? 1 : this.#palette.rimCore;
+    cellRimUniforms.rimGain.value = depth ? 1 : this.#palette.rimGain;
+    cellRimUniforms.fillGain.value = depth ? 1 : this.#palette.fillGain;
+    cellRimUniforms.edgeGain.value = depth ? 1 : this.#palette.edgeGain;
+    cellRimUniforms.desaturate.value = depth ? 1 : 0;
+    final.grain!.value = depth ? 0 : this.#palette.final.grain;
+    final.scanlines!.value = depth ? 0 : this.#palette.final.scanlines;
+    this.#hudBackdrop.setQuiet(depth);
+    // Measured depth view matches the pre-HUD sky: no opaque body.
+    this.#hudBackdrop.group.visible = !(depth && this.#palette.additiveCoverage);
+    this.#renderer.setClearColor(this.#backgroundColor ?? (depth && this.#palette.additiveCoverage ? 0x25282d : this.#palette.background), 1);
+    // Tinted background stars would add static chroma to depth captures.
+    const stars = this.#starField.material as THREE.PointsMaterial;
+    stars.color.setHex(depth ? 0x71808b : this.#palette.stars);
+    stars.opacity = depth ? 0.18 : this.#palette.starOpacity;
+    // Depth contrast is measured on the canvas: keep the selection's chromatic
+    // glow as thin as the pre-HUD outline and drop its fill there.
+    const fill = this.#selectionGroup.getObjectByName("selection-fill");
+    if (fill) fill.visible = !depth;
+    for (const name of ["selection-box", "selection-box-glow"]) {
+      const part = this.#selectionGroup.getObjectByName(name);
+      if (part) part.visible = !depth;
+    }
+    const glow = this.#selectionGroup.getObjectByName("selection-glow") as (THREE.Object3D & { material: LineMaterial }) | undefined;
+    if (glow) glow.material.linewidth = depth ? 1 : this.#palette.additiveCoverage ? 14 : 6;
+  }
+
+  /** Region outlines: wide additive glow, a bright edge and a white core on
+   * the dark sky; a single ink edge on the daytime paper. */
+  #rebuildHudOutlines(depths: readonly LayerDepth[]): void {
+    const entries = depths
+      .filter((depth) => depth.key.startsWith("public-survey:"))
+      .map((depth) => ({ surveyId: depth.key.slice("public-survey:".length), radius: depth.radius }))
+      .filter(({ surveyId }) => (this.#model.pixelsBySurvey.get(surveyId)?.length ?? 0) > 0);
+    const key = `${this.#theme}:${this.#manifest.nside}:${entries.map(({ surveyId, radius }) => `${surveyId}@${radius.toFixed(4)}#${this.#model.pixelsBySurvey.get(surveyId)!.length}`).join(",")}`;
+    if (key === this.#hudOutlineKey) return;
+    this.#hudOutlineKey = key;
+    clearGroup(this.#hudOutlineGroup);
+    const palette = this.#palette;
+    entries.forEach(({ surveyId, radius }) => {
+      const positions = regionOutlinePositions(this.#manifest.nside, this.#model.pixelsBySurvey.get(surveyId)!, radius + 0.0025);
+      if (!positions.length) return;
+      const color = this.#surveyColor(surveyId);
+      const root = new THREE.Group();
+      root.userData.hudSurveyId = surveyId;
+      if (palette.outlineGlowWidth > 0) root.add(fatLines(positions, color, palette.outlineGlowWidth, palette.outlineGlowOpacity, this.#lineResolution, { additive: true, renderOrder: SELECTION_RENDER_ORDER - 4 }));
+      root.add(fatLines(positions, color, palette.outlineWidth, 0.95, this.#lineResolution, { additive: palette.additiveCoverage, renderOrder: SELECTION_RENDER_ORDER - 3 }));
+      if (palette.outlineCoreOpacity > 0) root.add(fatLines(positions, 0xffffff, 0.9, palette.outlineCoreOpacity, this.#lineResolution, { additive: true, renderOrder: SELECTION_RENDER_ORDER - 2 }));
+      this.#hudOutlineGroup.add(root);
+    });
+  }
+
+  #applyHudOutlineOpacity(): void {
+    const dimmed = this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null;
+    const scale = this.#overlapMode ? 0.45 : dimmed ? 0.55 : 1;
+    this.#hudOutlineGroup.visible = !this.#depthActive();
+    this.#hudOutlineGroup.children.forEach((root) => {
+      const surveyId = root.userData.hudSurveyId as string;
+      const focus = this.#focusedSurveyId && this.#focusedSurveyId !== surveyId ? 0.45 : 1;
+      root.children.forEach((line, index) => {
+        const material = (line as THREE.Mesh).material as LineMaterial;
+        const base = index === 0 && this.#palette.outlineGlowWidth > 0 ? this.#palette.outlineGlowOpacity : index === root.children.length - 1 && this.#palette.outlineCoreOpacity > 0 ? this.#palette.outlineCoreOpacity : 0.95;
+        material.opacity = base * scale * focus;
+      });
+    });
   }
 
   /** Shift the projection so focused sky remains centred beside a right drawer. */
@@ -785,6 +967,52 @@ export class SurveyLayerViewer {
       layoutMode: this.#layoutMode,
       interactionMode: this.#interactionMode,
       focusedSurveyId: this.#focusedSurveyId,
+      ...this.#viewCenterState(),
+    };
+  }
+
+  /** Downsampled visible coverage for the 2D overview map, nearest parent cells first. */
+  minimapCells(limit = 1800): Array<{ surveyId: string; color: string; direction: [number, number, number] }> {
+    const result: Array<{ surveyId: string; color: string; direction: [number, number, number] }> = [];
+    const nside = this.#manifest.nside;
+    const visible = [...this.#visibleSurveyIds];
+    const total = visible.reduce((sum, id) => sum + (this.#model.pixelsBySurvey.get(id)?.length ?? 0), 0);
+    let parentNside = nside;
+    while (parentNside > 1 && total / ((nside / parentNside) ** 2) > limit) parentNside /= 2;
+    const ratio = (nside / parentNside) ** 2;
+    for (const surveyId of visible) {
+      const color = `#${this.#surveyColor(surveyId).getHexString()}`;
+      const parents = new Set((this.#model.pixelsBySurvey.get(surveyId) ?? []).map((pixel) => Math.floor(pixel / ratio)));
+      for (const parent of parents) {
+        const direction = this.#pixelDirectionAt(parentNside, [parent]);
+        result.push({ surveyId, color, direction: [direction.x, direction.y, direction.z] });
+      }
+    }
+    return result;
+  }
+
+  #viewCenterState(): Pick<SurveyLayerState, "viewCenter" | "viewTiltDeg" | "viewAltitude"> {
+    const radius = this.#outerRadius;
+    const viewAltitude = Math.max(0, this.#camera.position.length() / radius - 1);
+    this.#camera.updateMatrixWorld(true);
+    const origin = this.#camera.position.clone();
+    const ray = new THREE.Vector3(0, 0, 0.5).unproject(this.#camera).sub(origin).normalize();
+    const b = origin.dot(ray);
+    const c = origin.lengthSq() - radius * radius;
+    const discriminant = b * b - c;
+    if (discriminant < 0) return { viewCenter: null, viewTiltDeg: null, viewAltitude };
+    const distance = -b - Math.sqrt(discriminant);
+    if (distance < 0) return { viewCenter: null, viewTiltDeg: null, viewAltitude };
+    const hit = origin.addScaledVector(ray, distance);
+    const normal = hit.clone().normalize();
+    const center = cartesianToRaDec(normal);
+    const east = raDecToCartesian(center.raDeg + 1, center.decDeg, radius);
+    const projectedEast = new THREE.Vector3(east.x, east.y, east.z).project(this.#camera);
+    const projectedCenter = hit.clone().project(this.#camera);
+    return {
+      viewCenter: { ...center, raScreenSign: projectedEast.x >= projectedCenter.x ? 1 : -1 },
+      viewTiltDeg: THREE.MathUtils.radToDeg(ray.clone().negate().angleTo(normal)),
+      viewAltitude,
     };
   }
 
@@ -808,15 +1036,16 @@ export class SurveyLayerViewer {
       color: this.#drillCellColor(cell),
       inset: nside === this.#manifest.nside ? 0.018 : 0.006,
     }));
-    const mesh = new THREE.Mesh(buildSphericalCellSheetGeometry(cellsInput), new THREE.MeshBasicMaterial({
+    const mesh = new THREE.Mesh(buildSphericalCellSheetGeometry(cellsInput), applyCellRim(new THREE.MeshBasicMaterial({
       vertexColors: true,
       transparent: true,
       opacity: nside === this.#manifest.nside ? 0.2 : 0.3,
       side: THREE.DoubleSide,
       depthTest: true,
       depthWrite: false,
+      blending: coverageBlending(),
       toneMapped: false,
-    })) as LayerMesh;
+    }))) as LayerMesh;
     mesh.userData = { layerKey: "__drill__", records: visible.map((cell) => ({ pixel: cell.pixel })), drill: true };
     mesh.renderOrder = DRILL_RENDER_ORDER;
     const edges = new THREE.LineSegments(buildSphericalCellEdges(cellsInput), new THREE.LineBasicMaterial({
@@ -1148,9 +1377,7 @@ export class SurveyLayerViewer {
           radius,
           color: SELECTION_COLOR,
           inset: nside === this.#manifest.nside ? 0.016 : 0.006,
-        })), SELECTION_RENDER_ORDER + 2, 0.42);
-        highlight.dashMaterial.dashSize = 0.065;
-        highlight.dashMaterial.gapSize = 0.03;
+        })), SELECTION_RENDER_ORDER + 2, 0.05, this.#lineResolution, this.#overlapStyle(true));
         this.#activeOverlapHighlight = highlight;
         this.#overlapSelectionGroup.add(highlight.root);
       }
@@ -1350,13 +1577,20 @@ export class SurveyLayerViewer {
   }
 
   #dataViewDirection(): THREE.Vector3 {
-    // Keep the complete layer stack inside the vertical FOV on desktop and
-    // portrait viewports while retaining a readable three-quarter angle.
-    return new THREE.Vector3(1.72, 1.48, 1.56).normalize();
+    return TACTICAL_VIEW_DIRECTION.clone();
   }
 
   #dataViewDistance(): number {
-    return cameraDistanceForEffectiveFov(this.#outerRadius, DATA_VIEW_CAMERA_FOV_DEG, CENTERED_DATA_FOV_DEG);
+    return this.#outerRadius * TACTICAL_VIEW_DISTANCE;
+  }
+
+  /** Fraction of the viewport height by which the tactical view looks above the globe centre. */
+  #tacticalShift(): number {
+    if (this.#homeScrollProgress < 1) return 0;
+    const radius = this.#outerRadius;
+    const centred = 1 - THREE.MathUtils.smoothstep(this.#controls.target.length(), radius * 0.02, radius * 0.3);
+    const close = 1 - THREE.MathUtils.smoothstep(this.#camera.position.length() / radius, 2.2, 4.2);
+    return TACTICAL_VIEW_SHIFT * centred * close;
   }
 
   #homePresentationPose(): CameraPose {
@@ -1447,6 +1681,8 @@ export class SurveyLayerViewer {
     });
     if (this.#overlapMode) this.#buildOverlapLayer(animated);
     this.#rebuildWorkspaceCoverage(depthByKey);
+    this.#rebuildHudOutlines(depths);
+    this.#fitBackdrop();
     this.#buildInteractionLayer();
     this.#controls.minDistance = 0.002;
     this.#keepCameraOutside();
@@ -1457,10 +1693,17 @@ export class SurveyLayerViewer {
     this.#requestRender();
   }
 
+  /** Keep the opaque sky body just beneath the innermost drawn surface. */
+  #fitBackdrop(): void {
+    const radii = [1, ...this.#displayDepths().map((depth) => depth.radius)];
+    this.#explodedFragments.forEach((fragment) => radii.push(fragment.root.userData.sourceRadius ?? 1, fragment.root.userData.targetRadius ?? 1));
+    this.#hudBackdrop.group.scale.setScalar(Math.max(0.05, Math.min(...radii) - 0.004));
+  }
+
   #buildSurveyLayer(surveyId: string, radius: number, animated: boolean, renderOrder = 4): void {
     const pixels = this.#model.pixelsBySurvey.get(surveyId) ?? [];
     if (!pixels.length) return;
-    const color = this.#colorBySurvey.get(surveyId) ?? BASE_COLOR;
+    const color = this.#surveyColor(surveyId);
     const visibleSurveyCount = [...this.#visibleSurveyIds]
       .filter((visibleSurveyId) => (this.#model.pixelsBySurvey.get(visibleSurveyId)?.length ?? 0) > 0)
       .length;
@@ -1509,7 +1752,7 @@ export class SurveyLayerViewer {
     // Lift the common cells above the co-registered survey surfaces so the
     // filled result remains visible without exposing the far hemisphere.
     const overlapRadius = Math.max(1.02, this.#outerRadius + 0.012);
-    const cells = pixels.map((pixel) => ({ nside, pixel, radius: overlapRadius, color: OVERLAP_COLOR, inset: nside === this.#manifest.nside ? 0.028 : 0.008 }));
+    const cells = pixels.map((pixel) => ({ nside, pixel, radius: overlapRadius, color: OVERLAP_COLOR, inset: 0 }));
     if (cells.length) this.#addFragmentLayer("__overlap__", pixels, cells, animated, SELECTION_RENDER_ORDER - 1);
     this.#rebuildOverlapLabels(nside, pixels, overlapRadius);
   }
@@ -1560,7 +1803,7 @@ export class SurveyLayerViewer {
     this.#workspaceDisplayLayers(depthByKey).forEach(({ layer, radius, color, renderOrder }) => {
       if (!layer.pixels.length) return;
       const cells = layer.pixels.map((pixel) => ({ nside: this.#manifest.nside, pixel, radius, color, inset: 0.018 }));
-      const mesh = new THREE.Mesh(buildSphericalCellSheetGeometry(cells), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthTest: true, depthWrite: false, toneMapped: false })) as LayerMesh;
+      const mesh = new THREE.Mesh(buildSphericalCellSheetGeometry(cells), applyCellRim(new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthTest: true, depthWrite: false, blending: coverageBlending(), toneMapped: false }))) as LayerMesh;
       mesh.userData = {
         layerKey: layer.key,
         assetId: this.#workspaceLayerAssetIds(layer)[0],
@@ -1620,7 +1863,15 @@ export class SurveyLayerViewer {
   #displayDepths(): LayerDepth[] {
     const order = this.#normalizedLayerOrder();
     const visible = this.#visibleLayerKeys();
-    return visibleLayerDepths(order, visible, this.#layoutMode);
+    return visibleLayerDepths(order, visible, this.#layoutMode, this.#layerRadiusRange);
+  }
+
+  /** Radial band used to separate survey shells in layer mode. */
+  setLayerRadiusRange(min: number, max: number): void {
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max < min) return;
+    if (this.#layerRadiusRange.min === min && this.#layerRadiusRange.max === max) return;
+    this.#layerRadiusRange = { min, max };
+    this.#rebuildVisible(false);
   }
 
   #visibleWorkspaceLayerAssetIds(layer: WorkspaceCoverageLayer): string[] {
@@ -1648,7 +1899,7 @@ export class SurveyLayerViewer {
     const dominant = [...cell.layers].sort((left, right) => right.count - left.count)[0];
     if (dominant?.color) return new THREE.Color(dominant.color);
     if (dominant?.assetId) return deterministicWorkspaceColor(dominant.assetId);
-    if (dominant?.surveyId) return this.#colorBySurvey.get(dominant.surveyId) ?? BASE_COLOR;
+    if (dominant?.surveyId) return this.#surveyColor(dominant.surveyId);
     const ratio = Math.min(1, cell.count / Math.max(1, ...[...this.#drillCells.values()].map((candidate) => candidate.count)));
     return BASE_COLOR.clone().lerp(OVERLAP_COLOR, ratio);
   }
@@ -1732,18 +1983,17 @@ export class SurveyLayerViewer {
         overlay.renderOrder = renderOrder + 1;
         root.add(overlay);
       }
-      const lineMaterial = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: animated ? 0 : lineOpacity, depthTest: false, depthWrite: false });
+      const lineMaterial = applyNeutralDepth(new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: animated ? 0 : lineOpacity, depthTest: true, depthWrite: false, blending: coverageBlending(), toneMapped: false }));
       this.#coverageEdgeMaterials.push(lineMaterial);
       const edges = new THREE.LineSegments(buildSphericalCellEdges(cells), lineMaterial);
       edges.renderOrder = renderOrder + 1;
       root.add(mesh, edges);
       transitionLineMaterials.push(lineMaterial);
     } else {
-      const highlight = buildOverlapHighlight(cells, renderOrder, animated ? 0 : meshOpacity);
+      const highlight = buildOverlapHighlight(cells, renderOrder, animated ? 0 : meshOpacity, this.#lineResolution, this.#overlapStyle(false));
       material = highlight.meshMaterial;
       mesh = highlight.mesh as LayerMesh;
       mesh.userData = { surveyId, records: pixels.map((pixel) => ({ pixel })) };
-      this.#overlapDashMaterials.push(highlight.dashMaterial);
       root.add(...highlight.root.children);
     }
     this.#coverageGroup.add(root);
@@ -1767,7 +2017,6 @@ export class SurveyLayerViewer {
     this.#layerMeshes.length = 0;
     this.#coverageEdgeMaterials.length = 0;
     this.#coverageSourceMaterials.length = 0;
-    this.#overlapDashMaterials.length = 0;
     clearGroup(this.#overlapLabelGroup);
     this.#meshBySurvey.clear();
     for (const root of [...this.#coverageGroup.children] as THREE.Group[]) {
@@ -1818,6 +2067,15 @@ export class SurveyLayerViewer {
     const edgeOpacity = this.#skyDepth.layout?.items.length ? .065 : this.#overlapMode ? OVERLAP_EDGE_OPACITY : this.#drillFocusActive || this.#selectedPixels.size > 0 || this.#explodedPixel != null ? DIMMED_EDGE_OPACITY : COVERAGE_EDGE_OPACITY;
     this.#coverageEdgeMaterials.forEach((material) => { material.opacity = edgeOpacity; });
     this.#coverageSourceMaterials.forEach(material => { material.opacity = this.#skyDepth.layout?.items.length ? .055 : COVERAGE_OPACITY; });
+    // Depth view reverts coverage to normal blending, as before the HUD, so
+    // the dimmed sky stays neutral behind the measured points.
+    const blending = this.#depthActive() ? THREE.NormalBlending : coverageBlending();
+    this.#coverageGroup.traverse((child) => {
+      const material = (child as THREE.Mesh).material as THREE.Material | undefined;
+      if (material && !Array.isArray(material) && material.blending !== blending && ((child as THREE.Mesh).isMesh || (child as THREE.LineSegments).isLineSegments)) material.blending = blending;
+    });
+    this.#applyHudOutlineOpacity();
+    this.#applyPostTheme();
     this.#requestRender();
   }
 
@@ -1960,6 +2218,8 @@ export class SurveyLayerViewer {
     clearGroup(this.#selectionGroup);
     this.#selectionCoreMaterial = null;
     this.#selectionGlowMaterial = null;
+    this.#selectionBracketMaterial = null;
+    this.#selectionBox = null;
     delete this.#canvas.dataset.selectionVolume;
     delete this.#canvas.dataset.selectionDepthKeys;
     delete this.#canvas.dataset.selectionDepthRadii;
@@ -1967,37 +2227,55 @@ export class SurveyLayerViewer {
     this.#applyFocus();
     if (!this.#selectedPixels.size) return;
     const selected = [...this.#selectedPixels];
-    const edgeCells = selected.map((pixel) => ({
-      nside: this.#manifest.nside,
-      pixel,
-      radius: this.#outerRadius + .014,
-      color: SELECTION_EDGE_COLOR,
-    }));
-    const edgeGeometry = buildSphericalCellEdges(edgeCells);
-    const coreMaterial = new THREE.LineBasicMaterial({
-      color: SELECTION_EDGE_COLOR,
-      transparent: true,
-      opacity: 0.96,
-      depthTest: false,
-      depthWrite: false,
-      toneMapped: false,
-    });
-    const coreEdges = new THREE.LineSegments(edgeGeometry.clone(), coreMaterial);
-    coreEdges.renderOrder = SELECTION_RENDER_ORDER + 1;
-    const glowMaterial = new THREE.LineBasicMaterial({
-      color: SELECTION_COLOR,
-      transparent: true,
-      opacity: 0.42,
-      depthTest: false,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      toneMapped: false,
-    });
-    const glowEdges = new THREE.LineSegments(edgeGeometry.clone(), glowMaterial);
-    glowEdges.renderOrder = SELECTION_RENDER_ORDER;
-    this.#selectionCoreMaterial = coreMaterial;
-    this.#selectionGlowMaterial = glowMaterial;
-    this.#selectionGroup.add(glowEdges, coreEdges);
+    const radius = this.#outerRadius + .014;
+    // Target lock: magenta glow and a crisp edge around the selected region,
+    // plus corner brackets on each cell while the selection stays small.
+    const outline = regionOutlinePositions(this.#manifest.nside, selected, radius);
+    const additive = this.#palette.additiveCoverage;
+    const glowEdges = fatLines(outline, SELECTION_COLOR, additive ? 14 : 6, 0.42, this.#lineResolution, { additive, depthTest: false, renderOrder: SELECTION_RENDER_ORDER });
+    const coreEdges = fatLines(outline, SELECTION_EDGE_COLOR, 2.2, 0.96, this.#lineResolution, { depthTest: false, renderOrder: SELECTION_RENDER_ORDER + 1 });
+    this.#selectionCoreMaterial = coreEdges.material;
+    this.#selectionGlowMaterial = glowEdges.material;
+    const fill = new THREE.Mesh(
+      buildSphericalCellSheetGeometry(selected.map((pixel) => ({ nside: this.#manifest.nside, pixel, radius: radius - 0.001, color: SELECTION_COLOR }))),
+      applyCellRim(new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: additive ? 0.9 : 0.32, side: THREE.DoubleSide, depthTest: false, depthWrite: false, blending: coverageBlending(), toneMapped: false })),
+    );
+    fill.renderOrder = SELECTION_RENDER_ORDER - 1;
+    fill.raycast = () => undefined;
+    fill.name = "selection-fill";
+    glowEdges.name = "selection-glow";
+    this.#selectionGroup.add(fill, glowEdges, coreEdges);
+    {
+      // Target box: the selected region as a prism standing on the sky,
+      // top outline, vertical edges at each boundary corner and a glow.
+      const height = Math.min(0.12, 1.4 / Math.sqrt(12 * this.#manifest.nside ** 2) + 0.02);
+      const top = regionOutlinePositions(this.#manifest.nside, selected, radius + height);
+      const posts: number[] = [];
+      const seen = new Set<string>();
+      for (let index = 0; index < outline.length; index += 3) {
+        const point = new THREE.Vector3(outline[index]!, outline[index + 1]!, outline[index + 2]!);
+        const key = `${point.x.toFixed(5)},${point.y.toFixed(5)},${point.z.toFixed(5)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (seen.size > 64) break;
+        const lifted = point.clone().multiplyScalar((radius + height) / radius);
+        posts.push(point.x, point.y, point.z, lifted.x, lifted.y, lifted.z);
+      }
+      const box = fatLines([...top, ...posts], SELECTION_EDGE_COLOR, 1.6, 0.9, this.#lineResolution, { depthTest: false, renderOrder: SELECTION_RENDER_ORDER + 2 });
+      const boxGlow = fatLines([...top, ...posts], SELECTION_COLOR, additive ? 8 : 4, 0.35, this.#lineResolution, { additive, depthTest: false, renderOrder: SELECTION_RENDER_ORDER + 1 });
+      boxGlow.name = "selection-box-glow";
+      box.name = "selection-box";
+      // Depth contrast is measured on the canvas; the box is chrome, not data.
+      boxGlow.visible = box.visible = !this.#depthActive();
+      this.#selectionGroup.add(boxGlow, box);
+      this.#selectionBox = { height };
+    }
+    if (selected.length <= 24) {
+      const brackets = selected.flatMap((pixel) => cellBracketPositions(this.#manifest.nside, pixel, radius + 0.001));
+      const bracketLines = fatLines(brackets, this.#palette.bracket, 3.4, 1, this.#lineResolution, { depthTest: false, renderOrder: SELECTION_RENDER_ORDER + 2 });
+      this.#selectionBracketMaterial = bracketLines.material;
+      this.#selectionGroup.add(bracketLines);
+    }
     this.#canvas.dataset.selectionVolume = "outline";
     this.#canvas.dataset.selectionDepthKeys = "";
     this.#canvas.dataset.selectionDepthRadii = "";
@@ -2008,14 +2286,16 @@ export class SurveyLayerViewer {
 
   #selectionAnchor(): SurveyLayerState["selectionAnchor"] {
     if (!this.#selectedPixels.size) return null;
-    const radius = this.#outerRadius + 0.045;
+    // Anchor on the sky surface itself; exploded fragments rise above it.
+    const surfaceRadius = this.#outerRadius + .014;
+    const radius = surfaceRadius + (this.#selectionBox?.height ?? 0);
     const world = this.#pixelDirection(this.#selectedPixels).multiplyScalar(radius);
     const projected = world.clone().project(this.#camera);
     const forward = new THREE.Vector3();
     this.#camera.getWorldDirection(forward);
     const boundaryDirections = [...this.#selectedPixels]
       .flatMap((pixel) => sphericalCellBoundary(this.#manifest.nside, pixel, 1));
-    const projectedBounds = [Math.max(0.05, this.#outerRadius - 0.18), radius]
+    const projectedBounds = [Math.max(0.05, surfaceRadius - 0.02), radius]
       .flatMap((sampleRadius) => boundaryDirections.map((point) => point.clone().multiplyScalar(sampleRadius).project(this.#camera)));
     const leftRatio = projectedBounds.length ? Math.min(...projectedBounds.map((point) => (point.x + 1) / 2)) : (projected.x + 1) / 2;
     const rightRatio = projectedBounds.length ? Math.max(...projectedBounds.map((point) => (point.x + 1) / 2)) : (projected.x + 1) / 2;
@@ -2100,6 +2380,7 @@ export class SurveyLayerViewer {
     clearGroup(this.#selectionGroup);
     this.#selectionCoreMaterial = null;
     this.#selectionGlowMaterial = null;
+    this.#selectionBracketMaterial = null;
     this.#applyFocus();
     this.#onSelection(null);
     this.#emitState();
@@ -2118,7 +2399,7 @@ export class SurveyLayerViewer {
         key: `survey:${surveyId}`,
         nside,
         pixel,
-        color: this.#colorBySurvey.get(surveyId) ?? BASE_COLOR,
+        color: this.#surveyColor(surveyId),
           sourceRadius: depths.get(`public-survey:${surveyId}`)?.radius ?? 1,
       });
     }
@@ -2151,6 +2432,8 @@ export class SurveyLayerViewer {
       const targetRadius = 1 + (index - midpoint) * EXPLODED_LAYER_STEP;
       const root = new THREE.Group();
       root.scale.setScalar(entry.sourceRadius / targetRadius);
+      root.userData.sourceRadius = entry.sourceRadius;
+      root.userData.targetRadius = targetRadius;
       const cell: SphericalCellSheetGeometryInput = {
         nside: entry.nside,
         pixel: entry.pixel,
@@ -2176,6 +2459,7 @@ export class SurveyLayerViewer {
       return { root, material, lineMaterial, fromScale: entry.sourceRadius / targetRadius };
     });
     this.#setCoverageOpacity(true);
+    this.#fitBackdrop();
     this.#explosionTransition = {
       startedAt: performance.now(),
       durationMs: 620,
@@ -2209,6 +2493,7 @@ export class SurveyLayerViewer {
       this.#explosionTransition = null;
       this.#explodedFragments = [];
       clearGroup(this.#explosionGroup);
+      this.#fitBackdrop();
     }
     this.#applyFocus();
     this.#requestRender();
@@ -2309,25 +2594,16 @@ export class SurveyLayerViewer {
     if (transition.direction === "out") {
       this.#explodedFragments = [];
       clearGroup(this.#explosionGroup);
+      this.#fitBackdrop();
     }
   }
 
   #advanceSelectionAnimation(now: number): void {
-    const overlapPulse = 0.5 + 0.5 * Math.sin(now * 0.003);
-    this.#overlapDashMaterials.forEach((material) => {
-      setOverlapHighlightFlowOffset(material, now * 0.000045);
-      material.opacity = 0.88 + overlapPulse * 0.12;
-    });
-    if (this.#activeOverlapHighlight) {
-      const dash = this.#activeOverlapHighlight.dashMaterial;
-      setOverlapHighlightFlowOffset(dash, now * 0.000045);
-      dash.opacity = 0.9 + overlapPulse * 0.1;
-      this.#activeOverlapHighlight.glowMaterial.opacity = 0.52 + overlapPulse * 0.36;
-    }
     if (!this.#selectionCoreMaterial || !this.#selectionGlowMaterial) return;
     const pulse = 0.5 + 0.5 * Math.sin(now * 0.004);
     this.#selectionCoreMaterial.opacity = 0.88 + pulse * 0.12;
     this.#selectionGlowMaterial.opacity = 0.28 + pulse * 0.38;
+    if (this.#selectionBracketMaterial) this.#selectionBracketMaterial.opacity = 0.62 + pulse * 0.38;
   }
 
   #backgroundStars(): THREE.Points {
@@ -2353,6 +2629,7 @@ export class SurveyLayerViewer {
     this.#interactionQualityActive = true;
     this.#canvas.dataset.dragging = "true";
     this.#bloomPass.enabled = false;
+    this.#finalPass.enabled = false;
     this.#renderer.setPixelRatio(Math.min(1, this.#basePixelRatio));
     this.#skyDepth.setPixelRatio(this.#renderer.getPixelRatio());
     this.#composer.setSize(Math.max(1, Math.round(this.#canvas.clientWidth)), Math.max(1, Math.round(this.#canvas.clientHeight)));
@@ -2361,7 +2638,8 @@ export class SurveyLayerViewer {
   readonly #handleControlsEnd = (): void => {
     this.#interactionQualityActive = false;
     delete this.#canvas.dataset.dragging;
-    this.#bloomPass.enabled = true;
+    this.#finalPass.enabled = true;
+    this.#applyPostTheme();
     this.#renderer.setPixelRatio(this.#basePixelRatio);
     this.#composer.setSize(Math.max(1, Math.round(this.#canvas.clientWidth)), Math.max(1, Math.round(this.#canvas.clientHeight)));
     this.#skyDepth.setPixelRatio(this.#renderer.getPixelRatio());
@@ -2403,6 +2681,13 @@ export class SurveyLayerViewer {
       }
       const hit = this.#pickCell(click);
       if (hit) {
+        // Lock the target box on the clicked cell; selection lives at display order.
+        if (hit.nside === this.#manifest.nside) {
+          this.#selectedPixels.clear();
+          this.#selectedPixels.add(hit.pixel);
+          this.#renderSelectionRegion();
+          this.#emitState();
+        }
         this.#presentInspection(hit.nside, hit.pixel, hit.membership ?? {
           surveyIds: [...this.#visibleSurveyIds],
           releaseIds: [],
@@ -2525,6 +2810,9 @@ export class SurveyLayerViewer {
     this.#renderer.setPixelRatio(this.#interactionQualityActive ? Math.min(1, this.#basePixelRatio) : this.#basePixelRatio);
     this.#skyDepth.setPixelRatio(this.#renderer.getPixelRatio());
     this.#composer.setSize(width, height);
+    const ratio = this.#renderer.getPixelRatio();
+    this.#lineResolution.set(width * ratio, height * ratio);
+    this.#finalPass.uniforms.resolution!.value.set(width * ratio, height * ratio);
     this.#applyProjection(width, height);
     if (this.#homeScrollProgress < 1 && !this.#cameraTransition) this.#applyHomeScrollPose();
     this.#requestRender();
@@ -2532,12 +2820,21 @@ export class SurveyLayerViewer {
 
   #applyProjection(width: number, height: number): void {
     this.#camera.aspect = width / height;
-    if (this.#viewportRightInset > 0) {
-      this.#camera.setViewOffset(width, height, this.#viewportRightInset / 2, 0, width, height);
+    this.#projectionSize = { width, height };
+    const shiftY = -Math.round(this.#tacticalShift() * height * 2) / 2;
+    this.#appliedShiftY = shiftY;
+    if (this.#viewportRightInset > 0 || shiftY !== 0) {
+      this.#camera.setViewOffset(width, height, this.#viewportRightInset / 2, shiftY, width, height);
     } else {
       this.#camera.clearViewOffset();
       this.#camera.updateProjectionMatrix();
     }
+  }
+
+  #syncTacticalProjection(): void {
+    const { width, height } = this.#projectionSize;
+    const shiftY = -Math.round(this.#tacticalShift() * height * 2) / 2;
+    if (shiftY !== this.#appliedShiftY) this.#applyProjection(width, height);
   }
 
   #requestRender(): void {
@@ -2554,8 +2851,9 @@ export class SurveyLayerViewer {
       this.#advanceSelectionAnimation(now);
       const moving = this.#controls.enabled && this.#controls.update();
       this.#keepCameraOutside();
+      this.#syncTacticalProjection();
       this.#composer.render();
-      if (moving || this.#cameraTransition || this.#fragmentTransitions.length || this.#explosionTransition || this.#selectionGlowMaterial || this.#overlapDashMaterials.length || this.#activeOverlapHighlight) this.#requestRender();
+      if (moving || this.#cameraTransition || this.#fragmentTransitions.length || this.#explosionTransition || this.#selectionGlowMaterial) this.#requestRender();
     });
   }
 }

@@ -117,6 +117,8 @@ function perimeterVertexFractions(boundary: readonly THREE.Vector3[]): number[] 
 export function buildSphericalCellSourceSectorGeometry(cells: readonly SphericalCellSourceSectorGeometryInput[]): THREE.BufferGeometry {
   const positions: number[] = [];
   const colors: number[] = [];
+  // Fan from the centre: the rim distance is the radial fraction.
+  const cellUvs: number[] = [];
   cells.forEach((cell) => {
     if (!cell.colors.length) return;
     const boundary = insetBoundary(sphericalCellBoundary(cell.nside, cell.pixel, cell.radius), cell.radius, cell.inset ?? 0);
@@ -125,9 +127,10 @@ export function buildSphericalCellSourceSectorGeometry(cells: readonly Spherical
     if (cell.colors.length === 1) {
       boundary.forEach((start, index) => {
         const end = boundary[(index + 1) % boundary.length]!;
-        [center, start, end].forEach((vertex) => {
+        [center, start, end].forEach((vertex, vertexIndex) => {
           positions.push(vertex.x, vertex.y, vertex.z);
           colors.push(cell.colors[0]!.r, cell.colors[0]!.g, cell.colors[0]!.b);
+          cellUvs.push(vertexIndex === 0 ? 0.5 : 1, 0.5);
         });
       });
       return;
@@ -144,9 +147,10 @@ export function buildSphericalCellSourceSectorGeometry(cells: readonly Spherical
         perimeterPoint(boundary, endFraction, cell.radius),
       ];
       for (let pointIndex = 0; pointIndex < perimeter.length - 1; pointIndex += 1) {
-        [center, perimeter[pointIndex]!, perimeter[pointIndex + 1]!].forEach((vertex) => {
+        [center, perimeter[pointIndex]!, perimeter[pointIndex + 1]!].forEach((vertex, vertexIndex) => {
           positions.push(vertex.x, vertex.y, vertex.z);
           colors.push(color.r, color.g, color.b);
+          cellUvs.push(vertexIndex === 0 ? 0.5 : 1, 0.5);
         });
       }
     });
@@ -154,6 +158,7 @@ export function buildSphericalCellSourceSectorGeometry(cells: readonly Spherical
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute("cellUv", new THREE.Float32BufferAttribute(cellUvs, 2));
   geometry.computeBoundingSphere();
   return geometry;
 }
@@ -190,9 +195,13 @@ export function buildSphericalCellGeometry(cells: readonly SphericalCellGeometry
   return geometry;
 }
 
+const SHEET_CORNER_UVS = [[0, 0], [1, 0], [1, 1], [0, 1]] as const;
+
 export function buildSphericalCellSheetGeometry(cells: readonly SphericalCellSheetGeometryInput[]): THREE.BufferGeometry {
   const positions: number[] = [];
   const colors: number[] = [];
+  // Unit-square coordinates per cell let materials draw a bright rim.
+  const cellUvs: number[] = [];
   const triangles = [[0, 1, 2], [0, 2, 3]] as const;
   cells.forEach((cell) => {
     const vertices = insetBoundary(sphericalCellBoundary(cell.nside, cell.pixel, cell.radius), cell.radius, cell.inset ?? 0);
@@ -202,12 +211,14 @@ export function buildSphericalCellSheetGeometry(cells: readonly SphericalCellShe
         const vertex = vertices[vertexIndex]!;
         positions.push(vertex.x, vertex.y, vertex.z);
         colors.push(cell.color.r, cell.color.g, cell.color.b);
+        cellUvs.push(...SHEET_CORNER_UVS[vertexIndex]!);
       });
     });
   });
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute("cellUv", new THREE.Float32BufferAttribute(cellUvs, 2));
   geometry.computeBoundingSphere();
   return geometry;
 }
