@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { metadataFetch } from "../server/metadata-fetch.js";
+import { sha256Hex as sha256 } from "../server/hash.js";
 
 const SOURCE_URL = "https://mast.stsci.edu/api/v0/invoke";
 const SERVICE = "Mast.Caom.Filtered";
@@ -27,10 +27,6 @@ interface LockedPage {
   sha256: string;
   sizeBytes: number;
   rows: number;
-}
-
-function sha256(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
 }
 
 export function parseHstMetadataRows(response: Record<string, unknown>): unknown[] {

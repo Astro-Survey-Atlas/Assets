@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256Hex } from "./hash.js";
 
 export class ScanBatchValidationError extends Error {
   constructor(message: string) {
@@ -16,7 +16,7 @@ export function batchEvidenceLayerId(productId: string): string {
   const normalized = text(productId, "productId", 128);
   const directToken = /^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$/.test(normalized) && normalized.length <= 50
     ? normalized
-    : createHash("sha256").update(normalized).digest("hex").slice(0, 24);
+    : sha256Hex(normalized).slice(0, 24);
   return `${BATCH_EVIDENCE_LAYER_PREFIX}${directToken}`;
 }
 

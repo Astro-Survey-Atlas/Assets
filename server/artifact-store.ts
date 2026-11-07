@@ -7,6 +7,7 @@ import { Readable } from "node:stream";
 import path from "node:path";
 
 import { AbortMultipartUploadCommand, CompleteMultipartUploadCommand, CreateMultipartUploadCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client, UploadPartCommand, type CompletedPart } from "@aws-sdk/client-s3";
+import { sha256FileDetails, sha256Hex as digest } from "./hash.js";
 
 export const S3_MULTIPART_PART_SIZE_BYTES = 5 * 1024 * 1024;
 
@@ -68,23 +69,11 @@ function bytesOf(body: Uint8Array | string): Buffer {
   return typeof body === "string" ? Buffer.from(body, "utf8") : Buffer.from(body);
 }
 
-function digest(body: Uint8Array): string {
-  return createHash("sha256").update(body).digest("hex");
-}
-
 function etagToken(value: string): string {
   return `"${value.replace(/^"|"$/g, "")}"`;
 }
 
-async function fileDigest(filePath: string): Promise<{ sizeBytes: number; sha256: string }> {
-  const hash = createHash("sha256");
-  let sizeBytes = 0;
-  for await (const chunk of createReadStream(filePath)) {
-    sizeBytes += chunk.length;
-    hash.update(chunk);
-  }
-  return { sizeBytes, sha256: hash.digest("hex") };
-}
+const fileDigest = sha256FileDetails;
 
 function cleanKey(key: string): string {
   if (!key || key.includes("\0") || key.startsWith("/")) throw new ArtifactStoreError(`Unsafe object key: ${key}`, 400);

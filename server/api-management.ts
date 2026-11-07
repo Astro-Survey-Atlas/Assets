@@ -2,17 +2,17 @@ import { providerFetch } from "./provider-fetch.js";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, chmodSync } from "node:fs";
 import path from "node:path";
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
 import { AdminHttpError } from "./admin.js";
 import type { StateSnapshotSink } from "./state-snapshot.js";
 import { publicSourceUrl } from "./public-source-fetch.js";
+import { sha256Hex as sha } from "./hash.js";
 
 export interface LlmSettings { baseUrl?: string; model?: string; key?: string }
 interface Provider { revision: number; baseUrl: string; model: string; enabled: boolean; encryptedKey?: string; updatedAt: string }
 interface KeyRecord { id: string; name: string; prefix: string; hash: string; scopes: string[]; createdAt: string; expiresAt: string; revokedAt?: string; perMinute: number; window: number; used: number; requests: number; errors: number; lastUsedAt?: string }
 interface Event { at: string; kind: "key" | "llm"; id: string; route: string; status: number; durationMs: number; model?: string; inputTokens?: number; outputTokens?: number }
 interface State { provider?: Provider; keys: KeyRecord[]; events: Event[]; llm: { requests: number; errors: number; inputTokens: number; outputTokens: number; unknownUsage: number }; startedAt: string }
-const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 const now = () => new Date().toISOString();
 export const MANAGED_KEY_PREFIX = "asa_live_";
 export const KEY_SCOPES = ["region:query"] as const;

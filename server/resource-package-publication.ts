@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { link } from "node:fs/promises";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -17,6 +16,7 @@ import type { ProductContent, ProductRecord } from "./products.js";
 import { readResourcePackageManifest, readZipEntry } from "./resource-package-inspection.js";
 import { buildResourcePackageHealpixFiles } from "./resource-package-healpix.js";
 import { queueStateSnapshot, queueStateSnapshotFile, stateSnapshotFileKey, type StateSnapshotSink } from "./state-snapshot.js";
+import { sha256Hex as hash } from "./hash.js";
 
 const PACKAGE_SCHEMA_VERSION = 3;
 /** Baseline package format; dynamic packages increment the minor version per release. */
@@ -85,10 +85,6 @@ interface LayerBytes {
   nativeMoc: NativeMoc;
   query?: { order: number; pixels: number[] };
   preview?: { order: number; pixels: number[] };
-}
-
-function hash(value: Uint8Array | string): string {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 function slug(value: string, fallback = "public"): string {

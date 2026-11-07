@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 
 import yazl from "yazl";
 
 import type { ProjectedResourcePackage } from "./resource-package-projection.js";
 import { isDeniedSurvey } from "./publication-policy.js";
+import { sha256Hex } from "./hash.js";
 
 const ZIP_EPOCH = new Date("1980-01-01T00:00:00.000Z");
 
@@ -94,7 +94,7 @@ export async function buildResourcePackageCollection(
   }
   zipFile.end();
   const bytes = await collectZipOutput(zipFile);
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const sha256 = sha256Hex(bytes);
   return {
     fileName: `${input.releaseId}-resource-packages.zip`,
     bytes,

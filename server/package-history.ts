@@ -1,14 +1,13 @@
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { readResourcePackageManifest, readZipEntry, type ResourcePackageLayerRecord } from "./resource-package-inspection.js";
 import { isDeniedPackageId, isDeniedSurvey } from "./publication-policy.js";
 import type { DynamicResourcePackageEntry } from "./resource-package-publication.js";
 import type { ReleaseHistoryDocument } from "./public-release-publication.js";
+import { sha256Hex as sha } from "./hash.js";
 
 export type PackageMetadata = Omit<DynamicResourcePackageEntry, "archivePath" | "objectKey" | "contentFingerprint">;
 export interface HistoricalPackage { entry: PackageMetadata; bytes: Buffer }
-const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 function verify(bytes: Buffer, record: { sizeBytes: number; sha256: string }, label: string): void {
   if (bytes.length !== record.sizeBytes || sha(bytes) !== record.sha256) throw new Error(`Historical package hash mismatch: ${label}`);
 }

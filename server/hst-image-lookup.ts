@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import { Healpix, Pointing, type RangeSet } from "healpixjs";
 import { AdminHttpError } from "./admin-error.js";
 import type { ArtifactStore } from "./artifact-store.js";
 import { metadataFetch } from "./metadata-fetch.js";
+import { sha256Hex } from "./hash.js";
 
 const MAST_URL = "https://mast.stsci.edu/api/v0/invoke";
 const MAX_CELLS = 256;
@@ -531,7 +531,7 @@ export async function lookupHstImages(input: unknown, store?: ArtifactStore, opt
   const generatedAt = new Date().toISOString();
   const evidence = Buffer.from(JSON.stringify({ schemaVersion: 1, generatedAt, query: { coordinateFrame: "ICRS", ordering: "NESTED", order, cells }, rawResponses, products: productResponses, errors }));
   if (evidence.length > MAX_RESPONSE_BYTES) throw new AdminHttpError(502, "MAST evidence snapshot exceeded its size limit");
-  const sourceSnapshotSha256 = createHash("sha256").update(evidence).digest("hex");
+  const sourceSnapshotSha256 = sha256Hex(evidence);
   if (store) {
     await store.putImmutable(`hst-image-lookups/${generatedAt.slice(0, 10)}/${sourceSnapshotSha256}.json`, evidence, {
       contentType: "application/json",

@@ -7,6 +7,7 @@ import { isMainThread, parentPort, Worker, workerData } from "node:worker_thread
 import { Healpix, Pointing } from "healpixjs";
 import { resolveEuclidQ1MerFile } from "./euclid-data-links.js";
 import { SOURCE_UNIT_DISK_INDEX_VERSION, SourceUnitDiskIndex, type SourceUnitDiskLayerInput } from "./source-unit-disk-index.js";
+import { sha256Hex } from "./hash.js";
 
 export interface SourceUnitAccessUri {
   url: string;
@@ -343,7 +344,7 @@ async function readLockedSnapshot(root: string, lock: SourceSnapshotLock): Promi
     }
   }
   if (!bytes) throw new Error(`Source-unit snapshot is missing: ${lock.path}`);
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const sha256 = sha256Hex(bytes);
   if (bytes.byteLength !== lock.sizeBytes || sha256 !== lock.sha256) {
     throw new Error(`Source-unit snapshot does not match its lock: ${lock.path}`);
   }
@@ -364,7 +365,7 @@ async function buildDesiLayer(root: string, evidenceRoot: string, input: { layer
     }
   }
   if (!buffer) throw new Error(`${input.layerId} evidence snapshot is missing`);
-  if ((recipe.snapshot.sizeBytes !== undefined && buffer.byteLength !== recipe.snapshot.sizeBytes) || createHash("sha256").update(buffer).digest("hex") !== recipe.snapshot.sha256) {
+  if ((recipe.snapshot.sizeBytes !== undefined && buffer.byteLength !== recipe.snapshot.sizeBytes) || sha256Hex(buffer) !== recipe.snapshot.sha256) {
     throw new Error(`${input.layerId} source snapshot does not match its recipe lock`);
   }
   const table = binaryTable(buffer, recipe.recipe.hdu);
@@ -942,7 +943,7 @@ export class SourceUnitStore {
           }
         }
         if (patches.size && snapshotReferences.length === hscLock.sourceFiles.length) {
-          const combinedSha = createHash("sha256").update(snapshotReferences.sort().join("\n")).digest("hex");
+          const combinedSha = sha256Hex(snapshotReferences.sort().join("\n"));
           const units = [...patches.values()].map((unit) => ({
             ...unit,
             downloadUrl: hscLock.dasSearchUrl,
@@ -1094,7 +1095,7 @@ export class SourceUnitStore {
         parsedReleaseRosters.set(releaseId, {
           scope: releaseLock.scope ?? "official release brick roster",
           regions,
-          snapshotSha256: createHash("sha256").update(references.join("\n")).digest("hex"),
+          snapshotSha256: sha256Hex(references.join("\n")),
           sourceUrls,
         });
       } catch (error) {

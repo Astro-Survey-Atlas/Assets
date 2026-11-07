@@ -1,7 +1,7 @@
 import { readApprovedRelease } from "./approved-release.js";
 import type { StateSnapshotSink } from "./state-snapshot.js";
 import { fork, type ChildProcess } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { PublicationTaskStore, type PublicationTask, type PublicationTaskSnapshot } from "./publication-task-store.js";
@@ -12,6 +12,7 @@ import type { MocPublication } from "./moc-build.js";
 import { PublicationConflictError, type PublicationRun, type PublicationRunRepository, type PublicationVerificationExpectation } from "./public-release-publication.js";
 import type { NativeUnitController } from "./native-unit-controller.js";
 import type { NativeWorkerRequest, NativeWorkerResult } from "./native-unit-model.js";
+import { sha256Hex } from "./hash.js";
 
 export interface FrozenPublication { products: ProductRecord[]; publications: MocPublication[] }
 export interface ExecutorRequest { run: PublicationRun; frozen: FrozenPublication; contentRoot: string; baselineRoot: string }
@@ -80,9 +81,9 @@ export class PublicationScheduler implements PublicationRunRepository {
     const snapshot = this.tasks.snapshot();
     // The local SQLite owns executor leases. Lease-only heartbeats do not change
     // recovery history and must not duplicate the entire frozen task inventory.
-    const digest = createHash("sha256").update(JSON.stringify({ ...snapshot,
+    const digest = sha256Hex(JSON.stringify({ ...snapshot,
       tasks: snapshot.tasks.map(task => ({ ...task, lease_until: null })),
-    })).digest("hex");
+    }));
     if (digest === this.#snapshotDigest) return;
     await this.#options.snapshotSink.enqueue("publication-tasks", snapshot);
     this.#snapshotDigest = digest;
@@ -142,7 +143,7 @@ export class PublicationScheduler implements PublicationRunRepository {
       frozen.products = frozen.products.filter(product => selected.some(value => value.productId === product.productId));
       selection = { mode: "products", products: selected };
     }
-    const key = createHash("sha256").update(JSON.stringify(selection)).digest("hex");
+    const key = sha256Hex(JSON.stringify(selection));
     const task = this.tasks.submit(run.runId, key, frozen, run);
     return (await this.get(task.id))!;
   }

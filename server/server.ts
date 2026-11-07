@@ -21,7 +21,7 @@ import { publicOpenApi } from "./public-openapi.js";
 import { ReverseStream } from "./reverse-stream.js";
 import { proxyAdmin } from "./admin-proxy.js";
 import { createReadStream } from "node:fs";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { lstat, open, readFile, realpath, stat } from "node:fs/promises";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
@@ -74,6 +74,7 @@ import { mergeWarehouseSourceFiles, warehouseLogicalLayersForSource } from "./re
 import { StateSnapshotCoordinator, STATE_SNAPSHOT_NAMESPACES, type StateSnapshotSink, type StateSnapshotSyncStatus } from "./state-snapshot.js";
 import { UploadSpool } from "./upload-spool.js";
 import type { PublicAssetRecord, PublicProductDossier, PublicProductLink, PublicProductReadiness, PublicProductVerificationStatus, PublicReadinessAggregate, PublicSurveyModality } from "./types.js";
+import { sha256Hex } from "./hash.js";
 
 const role = process.env.ASSETS_ROLE ?? "legacy";
 if (!["legacy", "site", "backend"].includes(role)) throw new Error("Invalid ASSETS_ROLE");
@@ -214,7 +215,7 @@ function sourceUnitCoverageRecord(source: SourceUnitCoverageLayer): CoverageCell
   const note = `${source.notes} ${coverageNote}`;
   return {
     layerId: source.layerId,
-    productId: createHash("sha256").update(`${source.surveyId}\n${source.releaseId}\n${source.product}`).digest("hex").slice(0, 20),
+    productId: sha256Hex(`${source.surveyId}\n${source.releaseId}\n${source.product}`).slice(0, 20),
     surveyId: source.surveyId,
     releaseId: source.releaseId,
     product: source.product,
@@ -4014,7 +4015,7 @@ interface ReverseBatchBuildOptions {
 interface ReverseBatchBuildResult { snapshot: ReverseSnapshot; snapshotId: string }
 
 function reversePlanKeyHash(key: string): string {
-  return createHash("sha256").update(key).digest("hex");
+  return sha256Hex(key);
 }
 
 function filterReversePlanForBatches(plan: DownloadPlan, priorKeys: readonly string[]): { plan: DownloadPlan; seenKeys: string[]; stoppedAtLimit: boolean } {
@@ -5119,7 +5120,7 @@ const server = http.createServer((request, response) => {
       }));
       const body = { ...publicCoverage, schemaVersion: 2, generatedAt: coverageLoadedAt, warehouseGeometry, publicationPolicy: PUBLICATION_POLICY, publicReleaseId: approvedRelease.releaseId || null };
       const bodyBytes = Buffer.from(`${JSON.stringify(body)}\n`);
-      const etag = `W/"catalog-${createHash("sha256").update(bodyBytes).digest("hex")}"`;
+      const etag = `W/"catalog-${sha256Hex(bodyBytes)}"`;
       return compressedJson(request, response, 200, body, "no-cache, must-revalidate", etag);
     }
     if (pathname.startsWith("/api/v1/coverage/blocks/")) {

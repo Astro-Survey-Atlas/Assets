@@ -1,9 +1,8 @@
-import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
 import { mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { ArtifactStore } from "./artifact-store.js";
+import { sha256File, sha256Hex } from "./hash.js";
 
 export type ContentArchiveNamespace = "content" | "evidence";
 
@@ -90,7 +89,7 @@ export class ContentArchiveSync {
   async snapshot(): Promise<ContentArchiveSnapshotResult> {
     const manifest = await this.#scan();
     const encoded = encodeManifest(manifest);
-    const snapshot = createHash("sha256").update(encoded).digest("hex");
+    const snapshot = sha256Hex(encoded);
     const files = manifest.files.length;
     const bytes = manifest.files.reduce((sum, record) => sum + record.sizeBytes, 0);
     const existingPointer = await this.#readPointerObject();
@@ -189,7 +188,7 @@ export class ContentArchiveSync {
       }
       const object = await this.#store.get(this.#objectKey(record.sha256));
       if (!object) throw new ContentArchiveError(`Content object is missing from the archive store: ${this.#objectKey(record.sha256)}`, 404);
-      if (object.body.length !== record.sizeBytes || createHash("sha256").update(object.body).digest("hex") !== record.sha256) {
+      if (object.body.length !== record.sizeBytes || sha256Hex(object.body) !== record.sha256) {
         throw new ContentArchiveError(`Content object failed checksum verification: ${record.path}`, 409);
       }
       await mkdir(path.dirname(target), { recursive: true });
@@ -267,9 +266,7 @@ export class ContentArchiveSync {
   }
 
   async #hashFile(filePath: string): Promise<string> {
-    const hash = createHash("sha256");
-    for await (const chunk of createReadStream(filePath)) hash.update(chunk);
-    return hash.digest("hex");
+    return sha256File(filePath);
   }
 }
 

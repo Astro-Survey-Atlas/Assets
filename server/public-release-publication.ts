@@ -1,5 +1,5 @@
 import { uploadObjectRelease, restoreObjectRelease, activateObjectRelease } from "./object-release.js";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { buildApprovedRelease, currentReview, productGeometry, readApprovedRelease } from "./approved-release.js";
 import { execFile as execFileCallback } from "node:child_process";
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -26,6 +26,7 @@ import { buildResourcePackageCollection } from "./resource-package-collection.js
 import type { ProductRecord } from "./products.js";
 import { queueStateSnapshot, type StateSnapshotSink } from "./state-snapshot.js";
 import { inferredPublicAssetDeliveryClass, type PublicAssetRecord } from "./types.js";
+import { sha256Hex } from "./hash.js";
 
 const MANIFEST_RELATIVE_PATH = "artifacts/public-survey-footprints/release-manifest.json";
 const PACKAGE_CATALOG_RELATIVE_PATH = "artifacts/public-survey-footprints/packages/catalog.json";
@@ -383,7 +384,7 @@ function slugifyReleaseId(releaseId: string): string {
 }
 
 function digest(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  return sha256Hex(JSON.stringify(value));
 }
 
 function isPublicationRun(value: unknown): value is PublicationRun {
@@ -569,7 +570,7 @@ export async function verifyUploadedReleaseArchive(uploaded: UploadedReleaseArch
       if (!details.isFile() || details.isSymbolicLink()) throw new PublicationConflictError(`Candidate release asset is not a regular file: ${relative}`, 500);
       if (details.size !== record.sizeBytes) throw new PublicationConflictError(`Candidate release asset size mismatch: ${record.id}`, 409);
       const bytes = await readFile(absolute);
-      if (createHash("sha256").update(bytes).digest("hex") !== record.sha256) throw new PublicationConflictError(`Candidate release asset checksum mismatch: ${record.id}`, 409);
+      if (sha256Hex(bytes) !== record.sha256) throw new PublicationConflictError(`Candidate release asset checksum mismatch: ${record.id}`, 409);
     }
     const actual = new Set((await regularFiles(extractRoot)).map(safeArchivePath));
     if (actual.size !== expected.size || [...expected].some((entry) => !actual.has(entry)) || [...actual].some((entry) => !expected.has(entry))) {

@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { readResourcePackageManifest, readZipEntry, type ResourcePackageLayerRecord } from "./resource-package-inspection.js";
 import { productId as stableProductId } from "./products.js";
+import { sha256Hex } from "./hash.js";
 
 export function assertReleaseContinuity(previous: readonly string[], next: readonly string[]): void {
   const missing = [...new Set(previous)].filter((id) => !next.includes(id));
@@ -25,20 +25,20 @@ export async function retainedPackageLayers(root: string | undefined, surveyId: 
   if (!previous) return { layers, entries, provenance, footprints, metadata };
   metadata = previous;
   const bytes = await readFile(path.join(base, "packages", `${previous.id}-${previous.version}.zip`));
-  if (bytes.length !== previous.sizeBytes || createHash("sha256").update(bytes).digest("hex") !== previous.sha256) throw new Error(`Baseline package hash mismatch: ${previous.id}`);
+  if (bytes.length !== previous.sizeBytes || sha256Hex(bytes) !== previous.sha256) throw new Error(`Baseline package hash mismatch: ${previous.id}`);
   const manifest = await readResourcePackageManifest(bytes);
   const retained = manifest.layers.filter((layer) => !replaced.includes(layer.layerId));
   const support = async (name: string) => {
     const record = manifest.files.find((file) => file.path === name);
     const data = await readZipEntry(bytes, name);
-    if (!record || data.length !== record.sizeBytes || createHash("sha256").update(data).digest("hex") !== record.sha256) throw new Error(`Baseline support hash mismatch: ${name}`);
+    if (!record || data.length !== record.sizeBytes || sha256Hex(data) !== record.sha256) throw new Error(`Baseline support hash mismatch: ${name}`);
     return JSON.parse(data.toString());
   };
   const originalProvenance = await support("provenance.json");
   const originalFootprints = await support("footprints/survey-footprints.json");
   for (const layer of retained) {
     const data = await readZipEntry(bytes, layer.path);
-    if (data.length !== layer.sizeBytes || createHash("sha256").update(data).digest("hex") !== layer.sha256) throw new Error(`Baseline MOC hash mismatch: ${layer.layerId}`);
+    if (data.length !== layer.sizeBytes || sha256Hex(data) !== layer.sha256) throw new Error(`Baseline MOC hash mismatch: ${layer.layerId}`);
     const source = originalProvenance.layers.find((item: { layerId: string }) => item.layerId === layer.layerId);
     if (!source) throw new Error(`Missing baseline provenance: ${layer.layerId}`);
     const sourceRecord = source as { product?: unknown; sourceId?: unknown };

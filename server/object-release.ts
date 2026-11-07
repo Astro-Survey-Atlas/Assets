@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ArtifactStore } from "./artifact-store.js";
 import { assertExactReleaseTree, loadCatalog } from "./catalog.js";
+import { sha256Hex as hash } from "./hash.js";
 
 export interface ObjectReleasePointer {
   schemaVersion: 3;
@@ -26,7 +26,6 @@ interface ObjectManifest {
   files: ObjectEntry[];
 }
 const manifestPath = "artifacts/public-survey-footprints/release-manifest.json";
-const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 function safe(value: string): boolean {
   return typeof value === "string" && !!value && !value.includes("\\") && !value.includes("\0") && !path.posix.isAbsolute(value) && value.split("/").every(p => p && p !== "." && p !== "..");
 }

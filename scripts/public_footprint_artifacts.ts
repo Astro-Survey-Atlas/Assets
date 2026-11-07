@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { isDeniedSurvey } from "../server/publication-policy.js";
+import { sha256Hex } from "../server/hash.js";
 
 const root = path.resolve(process.env.ASSET_WORKTREE_ROOT ?? process.cwd());
 const artifactRoot = path.resolve(process.env.ASSET_ARTIFACT_ROOT ?? path.join(root, "artifacts", "public-survey-footprints"));
@@ -35,7 +35,7 @@ async function json<T>(filePath: string): Promise<T> {
 }
 
 async function sha256(filePath: string): Promise<string> {
-  return createHash("sha256").update(await readFile(filePath)).digest("hex");
+  return sha256Hex(await readFile(filePath));
 }
 
 function validUrl(value: unknown): value is string {
@@ -115,7 +115,7 @@ function fitsCard(bytes: Buffer, keyword: string): string | undefined {
 
 async function validateFitsMoc(filePath: string, expectedSha256: string): Promise<void> {
   const bytes = await readFile(filePath);
-  if (createHash("sha256").update(bytes).digest("hex") !== expectedSha256) throw new Error(`Generated MOC SHA-256 mismatch: ${filePath}`);
+  if (sha256Hex(bytes) !== expectedSha256) throw new Error(`Generated MOC SHA-256 mismatch: ${filePath}`);
   if (bytes.toString("ascii", 0, 8) !== "SIMPLE  ") throw new Error(`Generated MOC is not FITS: ${filePath}`);
   const header = bytes.subarray(bytes.indexOf(Buffer.from("XTENSION")));
   if (fitsCard(header, "ORDERING") !== "NUNIQ" || fitsCard(header, "COORDSYS") !== "C" || fitsCard(header, "MOCVERS") !== "2.0" || fitsCard(header, "MOCDIM") !== "SPACE") {

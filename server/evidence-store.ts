@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import { BATCH_EVIDENCE_LAYER_PREFIX, batchEvidenceLayerId, isBatchEvidenceLayerId } from "./scan-batch.js";
 import { isExcludedWarehouseLayerId } from "./coverage.js";
 import { DENIED_SURVEY_IDS, isDeniedLayerId, isDeniedSurvey } from "./publication-policy.js";
 import type { ScanConnectorIdentity } from "../src/connector-icon.js";
+import { sha256Hex } from "./hash.js";
 
 export type ReversePrecision = "exact" | "estimated" | "entrypoint-only" | "truncated";
 
@@ -579,7 +579,7 @@ export function buildDownloadPlan(input: DownloadPlanInput): DownloadPlan {
 
 function stableEdgeId(source: Record<string, unknown>, fallback: string): string {
   const key = [source.layerId, source.layer_id, source.sourceFileId, source.source_file_id, source.order, source.ipix, source.tileId, source.tile_id].map((value) => String(value ?? "")).join("|");
-  return createHash("sha256").update(key || fallback).digest("hex").slice(0, 24);
+  return sha256Hex(key || fallback).slice(0, 24);
 }
 
 function normalizeEdge(hit: SearchHit, request: ReverseLookupRequest, storedOrder = request.order): CoverageEdge | undefined {
@@ -1102,13 +1102,13 @@ export class CoverageEvidenceStore {
 
   private async lookupFileObservations(edges: CoverageEdge[]): Promise<Array<Record<string, unknown>>> {
     const expected = new Map(edges.filter(edge => edge.observationLayerId && edge.sourceFileId).map(edge => [
-      createHash("sha256").update(`${edge.observationLayerId}\n${edge.sourceFileId}`).digest("hex"), edge,
+      sha256Hex(`${edge.observationLayerId}\n${edge.sourceFileId}`), edge,
     ]));
     if (!expected.size) return [];
     const response = await this.search(this.fileObservationIndex, { size: expected.size, query: { ids: { values: [...expected.keys()] } } });
     return (response.hits?.hits ?? []).flatMap(hit => {
       const source = hit._source ?? {};
-      const key = createHash("sha256").update(`${source.layer_id}\n${source.file_id}`).digest("hex");
+      const key = sha256Hex(`${source.layer_id}\n${source.file_id}`);
       const edge = expected.get(key);
       if (!edge || source.scan_run_id !== edge.scanRunId) throw new EvidenceStoreError("Warehouse file observation does not match committed partition");
       return [{ ...source, _id: hit._id }];

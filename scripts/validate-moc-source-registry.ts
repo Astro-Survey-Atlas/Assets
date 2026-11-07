@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { sha256Hex } from "../server/hash.js";
 
 type RegistryEntry = {
   id: string;
@@ -145,8 +145,8 @@ for (const entry of entries) {
     const record = await fetchWithRetry(entry.recordUrl);
     const moc = await fetchWithRetry(entry.mocUrl);
     const fits = validateFits(moc, entry);
-    item.recordSha256 = createHash("sha256").update(record).digest("hex");
-    item.sourceSnapshotSha256 = createHash("sha256").update(moc).digest("hex");
+    item.recordSha256 = sha256Hex(record);
+    item.sourceSnapshotSha256 = sha256Hex(moc);
     item.sourceSnapshotSizeBytes = moc.byteLength;
     item.validation = fits;
   }

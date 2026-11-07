@@ -1,0 +1,45 @@
+/* ---------- Loading ring ----------
+   One loading indicator for the public pages and /admin/: a thin ring with a
+   comet arc over a faint track. Geometry lives here; each palette supplies the
+   colours, so the public and admin token sets never have to share names:
+     --hud-ring-hot    arc colour
+     --hud-ring-track  track colour
+     --hud-ring-glow   filter (drop-shadow in the dark theme, none in light)
+   Size and stroke are tuned per host with --hud-ring-size / --hud-ring-width. */
+.hud-ring,
+body.public-site .hud-query-spinner,
+body.public-site .hud-boot-spinner,
+body.public-site .overlap-loading > span,
+body.public-site .overlap-drawer-loading > span,
+body.public-site .loading-row > span,
+body.resources-page .loading-row > span,
+body.admin-page .is-pending::before,
+body.admin-page .admin-spinner {
+  --hud-ring-size: 14px;
+  --hud-ring-width: 2px;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--hud-ring-size);
+  height: var(--hud-ring-size);
+  border: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 18%, color-mix(in srgb, var(--hud-ring-hot) 35%, transparent) 45%, var(--hud-ring-hot) 82%, transparent 82.5%);
+  box-shadow: inset 0 0 0 var(--hud-ring-width) var(--hud-ring-track);
+  filter: var(--hud-ring-glow, none);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--hud-ring-width) - .5px), #000 calc(100% - var(--hud-ring-width)));
+  mask: radial-gradient(farthest-side, transparent calc(100% - var(--hud-ring-width) - .5px), #000 calc(100% - var(--hud-ring-width)));
+  animation: hud-ring-spin .9s linear infinite;
+}
+.hud-ring.is-lg { --hud-ring-size: 28px; }
+@keyframes hud-ring-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .hud-ring,
+  body.public-site .hud-query-spinner,
+  body.public-site .hud-boot-spinner,
+  body.public-site .overlap-loading > span,
+  body.public-site .overlap-drawer-loading > span,
+  body.public-site .loading-row > span,
+  body.resources-page .loading-row > span,
+  body.admin-page .is-pending::before,
+  body.admin-page .admin-spinner { animation-duration: 2.4s; }
+}

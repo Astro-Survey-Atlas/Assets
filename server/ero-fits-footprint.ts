@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256Hex as sha } from "./hash.js";
 
 export interface EroFitsHeader {
   targetId: string; packageUrl: string; memberName: string; instrument: "VIS" | "NISP";
@@ -10,7 +10,6 @@ export interface EroFrameFootprint {
   sRegion: string; sourceUrl: string; memberName: string; sha256: string;
 }
 
-const sha = (bytes: string | Buffer): string => createHash("sha256").update(bytes).digest("hex");
 const failure = (): never => { throw new Error("Invalid ERO FITS-header metadata or unsupported ICRS TAN WCS"); };
 
 /** A bounded header is evidence for the image frame, not a valid-pixel mask. */

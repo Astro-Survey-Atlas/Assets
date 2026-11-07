@@ -1,10 +1,9 @@
-import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { inferredPublicAssetDeliveryClass, type PublicAssetManifest, type PublicAssetPreviewMode, type PublicAssetProjection, type PublicAssetRecord } from "./types.js";
 import { isSanitizableControlDocument, sanitizeReleaseControlDocument } from "./publication-policy.js";
+import { sha256File, sha256Hex } from "./hash.js";
 
 export interface LoadedCatalog {
   root: string;
@@ -18,13 +17,7 @@ const RELEASE_MANIFEST_PATH = "artifacts/public-survey-footprints/release-manife
 /** Bundle identity covers the complete manifest records so delivery/API metadata changes rotate the archive key. */
 export function publicReleaseBundleDigest(files: ReadonlyArray<PublicAssetRecord>, retainedPackages: ReadonlyArray<PublicAssetRecord> = []): string {
   const payload = retainedPackages.length ? JSON.stringify({ files, retainedPackages }) : JSON.stringify(files);
-  return createHash("sha256").update(payload).digest("hex");
-}
-
-async function sha256(filePath: string): Promise<string> {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
-  return hash.digest("hex");
+  return sha256Hex(payload);
 }
 
 function resolveInside(root: string, relativePath: string): string {
@@ -63,7 +56,7 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
         throw error;
       }
       if (!details.isFile()) throw new Error(`Public asset is not a regular file: ${record.id}`);
-      let verified = details.size === record.sizeBytes && (await sha256(absolutePath)) === record.sha256;
+      let verified = details.size === record.sizeBytes && (await sha256File(absolutePath)) === record.sha256;
       // Worktree equivalence: control documents keep denied-survey data on
       // disk while the release manifest records sanitized bytes. Accept the
       // on-disk document when its sanitized projection matches the record.
@@ -71,7 +64,7 @@ export async function loadCatalog(root: string, verifyFiles = true): Promise<Loa
         const sanitized = sanitizeReleaseControlDocument(record.path, await readFile(absolutePath));
         verified = sanitized !== null
           && sanitized.length === record.sizeBytes
-          && createHash("sha256").update(sanitized).digest("hex") === record.sha256;
+          && sha256Hex(sanitized) === record.sha256;
       }
       if (!verified) throw new Error(`Public asset SHA-256 mismatch: ${record.id}`);
     }

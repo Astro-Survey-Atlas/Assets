@@ -1,10 +1,10 @@
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { WarehouseCoverageCatalogSnapshot } from "./evidence-store.js";
 import { isDeniedLayerId, isDeniedSurvey } from "./publication-policy.js";
 import { isBatchEvidenceLayerId } from "./scan-batch.js";
+import { sha256Hex } from "./hash.js";
 
 export interface CoverageCellLayer {
   layerId: string;
@@ -142,7 +142,7 @@ function colorFor(id: string): string {
 }
 
 function hashCells(cells: number[]): string {
-  return createHash("sha256").update(JSON.stringify(cells)).digest("hex");
+  return sha256Hex(JSON.stringify(cells));
 }
 
 function revisionPayload(record: CoverageCellLayer): Record<string, unknown> {
@@ -167,7 +167,7 @@ function revisionPayload(record: CoverageCellLayer): Record<string, unknown> {
 }
 
 export function coverageLayerRevision(record: CoverageCellLayer): string {
-  return createHash("sha256").update(JSON.stringify(revisionPayload(record))).digest("hex").slice(0, 32);
+  return sha256Hex(JSON.stringify(revisionPayload(record))).slice(0, 32);
 }
 
 export function withCoverageRevisions(
@@ -182,12 +182,9 @@ export function withCoverageRevisions(
     tileIdsByOrder: Object.fromEntries([...cells.entries()]
       .map(([order, values]) => [String(order), [...new Set(values.map((cell) => Math.floor(cell / 4096)))].sort((left, right) => left - right)])),
   }));
-  const revision = createHash("sha256")
-    .update(JSON.stringify(layers
-      .map((layer) => [layer.layerId, layer.revision] as const)
-      .sort(([left], [right]) => left.localeCompare(right))))
-    .digest("hex")
-    .slice(0, 32);
+  const revision = sha256Hex(JSON.stringify(layers
+    .map((layer) => [layer.layerId, layer.revision] as const)
+    .sort(([left], [right]) => left.localeCompare(right)))).slice(0, 32);
   return { ...catalog, schemaVersion: 2, revision, layers, records };
 }
 
@@ -341,7 +338,7 @@ export async function loadCoverageCatalog(root: string, manifest: { footprints: 
       : { status: "entrypoint-only", notes: "当前 MOC 未保存可复核的原生分块反向索引，只提供 Release 官方入口。" };
     const record: CoverageCellLayer = {
       layerId,
-      productId: createHash("sha256").update(`${footprint.surveyId}\n${footprint.releaseId}\n${footprint.product}`).digest("hex").slice(0, 20),
+      productId: sha256Hex(`${footprint.surveyId}\n${footprint.releaseId}\n${footprint.product}`).slice(0, 20),
       surveyId: footprint.surveyId,
       releaseId: footprint.releaseId,
       product: footprint.product,

@@ -3134,7 +3134,7 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
   products.className = "overlap-products";
   products.open = true;
   const productsSummary = document.createElement("summary");
-  productsSummary.textContent = `参与覆盖产品 · ${entries.length}`;
+  productsSummary.textContent = `${t("coverage.overlapProducts")} · ${entries.length}`;
   products.append(productsSummary);
   const productsList = document.createElement("div");
   productsList.className = "overlap-products-list";

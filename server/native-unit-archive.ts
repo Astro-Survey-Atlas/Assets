@@ -1,19 +1,18 @@
 import { createReadStream, createWriteStream } from "node:fs";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { link, mkdir, open, realpath, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
 import type { ArtifactStore } from "./artifact-store.js";
 import { nativeEvidencePath, type NativeFile } from "./native-unit-model.js";
+import { sha256FileDetails } from "./hash.js";
 
 export async function nativeFile(root: string, ref: string, expected?: Pick<NativeFile, "sha256" | "sizeBytes">): Promise<NativeFile> {
   const file = await realpath(nativeEvidencePath(root, ref));
   const boundary = await realpath(root);
   if (!file.startsWith(boundary + path.sep)) throw new Error("Evidence reference leaves the configured storage root");
-  const hash = createHash("sha256"); let sizeBytes = 0;
-  for await (const chunk of createReadStream(file)) { hash.update(chunk); sizeBytes += chunk.length; }
-  const sha256 = hash.digest("hex");
+  const { sha256, sizeBytes } = await sha256FileDetails(file);
   if (expected && (expected.sha256 !== sha256 || (expected.sizeBytes > 0 && expected.sizeBytes !== sizeBytes))) throw new Error(`Metadata checksum mismatch: ${ref}`);
   return { ref, sha256, sizeBytes };
 }

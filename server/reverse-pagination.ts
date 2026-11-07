@@ -1,6 +1,7 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { DownloadPlan, DownloadPlanCoverageEvidence, DownloadPlanEntrypoint, DownloadPlanSpatialUnit } from "./evidence-store.js";
 import { AccessError } from "./region-access.js";
+import { sha256Hex } from "./hash.js";
 
 export const REVERSE_PAGE_SIZE_MAX = 100;
 export const REVERSE_CURSOR_MAX_BYTES = 1_048_576;
@@ -29,7 +30,7 @@ export function reversePlanFileKey(file: DownloadPlan["files"][number]): string 
 
 export function reversePlanSpatialUnitKey(unit: DownloadPlanSpatialUnit): string {
   const identity = `${unit.layerId}:${unit.unitKind}:${unit.unitId}`;
-  return `unit:${createHash("sha256").update(identity).digest("hex")}`;
+  return `unit:${sha256Hex(identity)}`;
 }
 
 export function reversePlanEntrypointKey(entry: DownloadPlanEntrypoint): string {
@@ -41,12 +42,12 @@ export function reversePlanEntrypointKey(entry: DownloadPlanEntrypoint): string 
     entry.url ?? entry.sourceUri ?? entry.sourceUrl ?? entry.mocUrl ?? "",
     entry.product ?? entry.productId ?? "",
   ];
-  return `entry:${createHash("sha256").update(JSON.stringify(identity)).digest("hex")}`;
+  return `entry:${sha256Hex(JSON.stringify(identity))}`;
 }
 
 export function reversePlanCoverageEvidenceKey(evidence: DownloadPlanCoverageEvidence): string {
   const identity = `${evidence.layerId}:${evidence.order}`;
-  return `coverage:${createHash("sha256").update(identity).digest("hex")}`;
+  return `coverage:${sha256Hex(identity)}`;
 }
 
 /** Keep every matched survey visible before filling a page with its next units. */

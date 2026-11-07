@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 
 export interface MocCell { order: number; pixel: number }
 export interface NativeMoc { cells: MocCell[]; availableOrders: number[]; maxOrder: number; revision: string; sha256: string }
-export const sha256 = (bytes: string | Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+import { sha256Hex as sha256 } from "./hash.js";
+export { sha256 };
 
 /** Decode the actual NUNIQ table, never the requested order in a source URL. */
 export function decodeNativeMoc(bytes: Buffer): NativeMoc {

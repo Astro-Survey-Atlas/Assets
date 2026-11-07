@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
@@ -8,6 +7,7 @@ import { createArtifactStoreFromProcess, publishReleaseArchive, type ReleaseArch
 import { publicReleaseBundleDigest } from "../server/catalog.js";
 import { isSanitizableControlDocument, sanitizeReleaseControlDocument } from "../server/publication-policy.js";
 import type { PublicAssetRecord } from "../server/types.js";
+import { sha256Hex as digest } from "../server/hash.js";
 
 const execFile = promisify(execFileCallback);
 const root = path.resolve(process.env.ASSET_WORKTREE_ROOT ?? process.cwd());
@@ -23,10 +23,6 @@ interface ReleaseManifest {
 
 export interface PackagedRelease extends ReleaseArchiveDescriptor {
   metadataPath: string;
-}
-
-function digest(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
 }
 
 async function fileDigest(filePath: string): Promise<{ sizeBytes: number; sha256: string }> {

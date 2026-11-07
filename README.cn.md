@@ -1,79 +1,83 @@
-# Astro Survey Atlas
+# Astro Survey Atlas · Assets
 
-Astro Survey Atlas 是面向公开天文巡天的数据基础设施，用来回答“天空哪里有
-覆盖、对应的官方数据从哪里获取”。`Assets` 仓库是面向公众的入口：发布经过
-审阅的巡天元数据、ICRS/NESTED HEALPix 覆盖、重合结果、provenance 和版本化
-Resource Package v3。
+**给定天区，找出覆盖它的公开巡天，比较重合区域，并把每个结果追溯到原始档案。**
 
-Assets 绝不代替用户下载科学数据。可下载的 JSON/CSV **下载计划文件**列出重合区域
-关联的巡天、Tile/block/文件、来源依据和可用链接，不包含科学数据本身；用户自行在
-来源系统获取数据。没有下载链接时，已有来源依据仍有价值。范围和精度规则见
-[覆盖工作流](docs/coverage-workflow.md)。
+[![天球图册](docs/images/home.jpg)](https://astro.assets.72602.space/atlas/)
 
-本仓库属于 [Astro Survey Atlas 组织](https://github.com/Astro-Survey-Atlas)：
+[**打开天球图册**](https://astro.assets.72602.space/atlas/) ·
+[巡天目录](https://astro.assets.72602.space/surveys/) ·
+[API 参考](https://astro.assets.72602.space/api-docs/) ·
+[发布版本](https://astro.assets.72602.space/releases/)
 
-| 项目 | 职责 | 入口 |
+[English](README.md) · Apache-2.0 · Node ≥ 22
+
+---
+
+## 它能做什么
+
+### 1 · 按天区查覆盖
+
+![天球图册](docs/images/atlas.jpg)
+
+在图层列表里勾选巡天，读取每个 HEALPix 单元的真实阶数、它背后的产品以及已发布的
+天区比例。覆盖来自原生 MOC，而不是把粗粒度概览上采样后冒充精细结果。
+
+### 2 · 巡天之间的重合
+
+![重合](docs/images/atlas-overlap.jpg)
+
+选中两个以上巡天后按 <kbd>G</kbd>。Assets 计算公共 HEALPix 阶数、在每个巡天内
+合并产品，返回可点击、可翻页、可导出的连通区域。
+
+### 3 · 追溯到原生单元
+
+![巡天目录](docs/images/surveys.png)
+
+每个结果都带 Tile、brick、partition、target 或 observation ID、来源快照哈希，
+以及 `exact` / `estimated` / `entrypoint-only` / `truncated` 之一的确切精度，
+并给出官方档案入口。
+
+导出的是**来源清单**（JSON/CSV）：列出该区域由什么覆盖、数据存放在哪里，而不是下载科学数据。
+
+## 快速开始
+
+```bash
+npm ci
+npm run build      # 构建 artifacts、后台与站点
+npm start          # 后台与站点，http://127.0.0.1:4180
+```
+
+开发时 `npm run dev` 监听 `:4180` 的后台，`npm run dev:site` 在 `:5174` 启动
+带 HMR 的 Vite（把 `/api/` 代理到后台）。`npm run validate` 执行完整构建与测试。
+Warehouse 反查额外需要 `ASSETS_WAREHOUSE_ES_URL`；没有该变量时，静态公共几何目录仍可使用。
+
+## 数据范围
+
+已登记 29 个巡天、45 个 release，已发布 MOC 图层超过 100 个。实时数字始终以
+`GET /api/v1/status` 和[巡天目录](https://astro.assets.72602.space/surveys/) 为准。
+其中原生单元绑定最完整的是：
+
+| 巡天 | 原生单元 | 实际情况 |
 | --- | --- | --- |
-| [Assets](https://github.com/Astro-Survey-Atlas/Assets) | 公共巡天目录、覆盖天球、MOC、重合查询和发布制品 | [在线目录](https://astro.assets.72602.space/surveys/) |
-| [Warehouse](https://github.com/Astro-Survey-Atlas/Warehouse) | Scanner、ScanPlan/ScanRequest 执行、当前文件/覆盖索引和 evidence | [Warehouse README](https://github.com/Astro-Survey-Atlas/Warehouse) |
-| [Workspace](https://github.com/Astro-Survey-Atlas/Workspace) | 用户资产、Connector、本地工作流、用户 MOC 和私有探索 | [Workspace README](https://github.com/Astro-Survey-Atlas/Workspace) |
+| Euclid | Q1 MER Tile、Q1_R1 校准帧、ERO target | Q1 锁定 BGSUB 清单 2,908 行 / 352 个 Tile，另有 2,449 行的校准帧快照；ERO frame MOC 最高原生阶为 10，精度为 estimated |
+| DESI | Tile 候选与官方目录 | 已记录目录可达性；Tile 级镜像路径尚未核验 |
+| Legacy Surveys | DR1–DR10 brick 与候选产品 URI | DR10 South 对应官方 366,912 个成员；北区保留 DR9 North 身份 |
+| Gaia DR3 | `gaia_source` HEALPix 分区 | O8 分区描述 source-ID 文件，不代表天体实际占据 |
+| HST | Observation ID、原始 `s_region`、MAST 入口 | 有界观测补充；实时产品与访问政策由 MAST 负责 |
 
-## 巡天数据范围
+这些是有边界、基于证据的范围，不是各档案的完整产品清单。每项数字、记录日期、
+CASDC 镜像核对与其余限制见 **[docs/data-scope.md](docs/data-scope.md)**。
 
-已登记的产品不代表档案中的每个公开产品或科学文件都已纳入索引。来源文件仍由
-原档案按其访问政策提供；目录入口可用也不等于逐文件校验。
-
-| 巡天 | 天区单位与来源 | 已捕获范围及限制 |
-| --- | --- | --- |
-| Euclid | Q1 MER Tile 与校准图像；ERO target 和图像范围入口 | Q1 锁定的 BGSUB 清单有 2,908 行 / 352 个 Tile。另有独立的 Q1_R1 校准帧快照，共 2,449 行（VIS 836、NISP.H 537、NISP.J 538、NISP.Y 538）；这些是 image 单位，不是 MER Tile。ERO 纳入 17 个具名 target 和 85 条有界 FITS 头记录；已发布 VIS、NISP Y/J/H 四个 frame 图层，每层 17 帧。八个 ERO/Q1 frame MOC 的最高原生阶为 O10，范围精度为 estimated；未验证有效像素掩膜、档案完整库存或单个科学文件，ERO 仍没有已核验的 Tile 清单。本次未下载科学像素。见[范围记录](docs/research/euclid-ero-q1-frame-coverage-20261012.md)和[镜像审计](docs/research/casdc-mirror-index-audit-20261009.md)。 |
-| DESI DR1/EDR | 估算 Tile 候选与官方目录 | 2026-10-10 经代理 GET 检查，CASDC DR1、iron 与 zcatalog 目录返回 HTTP 200；同级 `iron/tiles/` 路径返回 HTTP 404。这不证明存在 Tile 专属镜像路径，也未核验逐文件可用性。圆形焦平面近似不等于目标级光谱覆盖或完整科学文件清单。[核对记录](docs/research/casdc-mirror-index-audit-20261009.md)。 |
-| Legacy Surveys | 按 release 区分的 brick 与候选产品 URI | 当前目录登记 DR1-DR10。DR10 South 对应官方 366,912 个成员；北区成像保留 DR9 North 身份。候选 URI 尚未逐文件核验，DR10 roster 不代表后续 release。 |
-| Gaia DR3 | `gaia_source` HEALPix 文件分区 | 锁定的 ICRS/NESTED O8 范围描述 source-ID 分区，不证明实际天体占据或文件内容；其他 Gaia DR3 产品不在此绑定中。 |
-| HST | Observation ID、原始 `s_region` 和 MAST 入口 | Assets Dev 原生索引新增两条公开观测 `454130303`、`454130304`，并保留 `26442812` 的元数据；目前索引有 916,119 个观测，仍排除 18 条不支持坐标框架的记录。这是有界补充，未进入当前 public bundle，也不代表完整 HST 清单；MAST 仍负责实时产品与访问政策。见[Dev 补充记录](docs/research/hst-bounded-supplement-20261010.md)。 |
-
-以上是有边界、基于证据的范围，不是五个档案的完整产品清单。MOC 覆盖、原生分块、
-来源目录和已校验科学文件字节是不同证据。2026-10-10 经代理复测 CASDC 根目录及
-本次检查的 Euclid、DESI、Gaia、GALEX 目录均有 HTTP 响应；DESI `iron/tiles/` 和
-猜测的 Gaia `gdr3/` 路径返回 HTTP 404，实际由 Gaia 入口链接的 `/Gaia/dr3/` 返回
-HTTP 200。目录响应只说明检查时入口可达，不代表文件字节、档案完整库存或空间覆盖已验证。
-此前 2026-10-09 的超时仍作为历史结果保留，详见[核对记录](docs/research/casdc-mirror-index-audit-20261009.md)。
-公开 bundle `reviewed-mv51kku3-a4f8d8e6`（SHA-256
-`d197228230cfa34ce9a59f25de6991cb5875094f18278825eb8b5a856a113ae7`）包含
-611 个文件和 28 个资源包。目录记录 67 个 release、159 个产品：107 项 acquired、
-11 项仅有 overview、41 项等待 geometry。公开 coverage API 有 140 个图层，其中
-113 个已发布 MOC；该发布任务记录 162 份 coverage documents。这些是目录状态计数，
-不代表档案完整库存或每个来源文件都已核验。
-
-## 当前实现
-
-Assets 已拆分为公开网站与单写者后台，
-使用独立 release 缓存及持久化发布队列。审核后的具体产品版本走增量发布，网站
-核验通过后才完成发布；完整 release 归档用于导出或恢复。Warehouse 执行状态
-不会自动授予公开可见性。
-
-MOC 探索调用 CDS；Assets 已实现可选 LLM 增强，仅在显式开启且 CDS 完整返回零候选
-时触发，可用性取决于供应商配置。具体限制见增强说明。
-
-当前部署、验收和待办见 [交接文档](HANDOFF.md)。技术详情见
-[发布运行架构](docs/publication-runtime-split.md)、[当前探索](docs/deferred-moc-discovery-plan.md)
-及 [增强设计](docs/moc-discovery-enhancement-design.md)。
-
-## 三个项目如何协作
+## 架构
 
 ```mermaid
 flowchart TB
-  U[研究者和数据用户] --> A[Assets\n公共目录与天球 UI]
-  A -->|公共 coverage task\nScanPlan v2| W[Warehouse\n扫描与当前状态]
-  W -->|ACTIVE ast_*\n文件/覆盖 evidence| A
-  A -->|Resource Package v3\nMOC 与 provenance| X[Workspace\n用户数据工作区]
-  X -->|可选用户 ScanRequest\nnamespace-local| W
-  X -->|本地资产、MOC、\n工作流和历史| X
+  U[研究者和数据用户] --> A[Assets<br/>公共目录与天球 UI]
+  A -->|public coverage task<br/>ScanPlan v2| W[Warehouse<br/>扫描与当前状态]
+  W -->|ACTIVE ast_*<br/>文件/覆盖 evidence| A
+  A -->|Resource Package v3<br/>MOC 与 provenance| X[Workspace<br/>用户数据工作区]
+  X -->|可选用户 ScanRequest<br/>namespace-local| W
 ```
-
-边界是刻意设计的。Assets 决定哪些结果进入公共发布并负责面向用户的展示；
-Warehouse 枚举本地/S3/OSS 数据源，提取文件级空间信息并报告 `ast_*` 当前
-索引状态；Workspace 在自己的数据面保存用户数据和任务历史，可以消费经过校验
-的公共包，也可以选择 Warehouse 执行用户扫描，但不会把用户记录写回 Assets。
 
 ```mermaid
 flowchart LR
@@ -88,57 +92,58 @@ flowchart LR
   P -. 仅审计 .-> E[对象存储 evidence]
 ```
 
-Assets 不会把 preview 当成更高精度的测量。每个响应都会返回实际 order，并标记
-`exact`、`estimated`、`entrypoint-only` 或 `truncated`。在线反查有明确上限，
-只读取配置的 Warehouse endpoint（`ASSETS_WAREHOUSE_ES_URL`）。
+Assets 决定哪些结果进入公共发布并负责展示。[Warehouse](https://github.com/Astro-Survey-Atlas/Warehouse)
+枚举已配置的数据源并报告规范化的文件/覆盖证据；[Workspace](https://github.com/Astro-Survey-Atlas/Workspace)
+在自己的数据面保存用户数据，绝不把用户记录写回 Assets。
 
-## Assets 发布什么
+## API
 
-- `GET /api/v1/surveys` 和 `GET /api/v1/products`：已审阅的元数据和产品 dossier。
-- `GET /api/v1/coverage/catalog` 及不可变 coverage blocks：天球 UI 数据。
-- `POST /api/v1/coverage/overlap` 和 `/overlap/details`：公共 order 重合与连通区域。
-- `POST /api/v1/coverage/reverse-lookup`：有界的文件、tile 和下载入口反查。
-- Resource Package v3：MOC、公共 footprint 投影、provenance 和包说明。
+| 端点 | 返回 |
+| --- | --- |
+| `GET /api/v1/surveys`、`GET /api/v1/products` | 已审阅的元数据与产品 dossier |
+| `GET /api/v1/coverage/catalog` | 天球 UI 使用的图层、revision 与已发布 MOC 指针 |
+| `GET /api/v1/coverage/surveys/{surveyId}/healpix?order=4` | 由已发布原生 MOC 派生的分页公共像元 |
+| `POST /api/v1/coverage/overlap`、`/overlap/details` | 公共阶数的交集与连通区域 |
+| `POST /api/v1/coverage/reverse-lookup` | 有界的文件、tile 与入口反查，快照分页 |
+| `GET /api/v1/openapi.json`、`GET /api/v1/status` | OpenAPI 文档与服务可用性 |
 
-[覆盖工作流](docs/coverage-workflow.md)、[API 参考](docs/api-reference.md) 和
-[Resource Package 集成指南](docs/resource-package-integration.md) 定义稳定契约。
-[MOC Core 契约](docs/moc-core-contract.md) 记录现有的离线
-`astro-survey-moc-core` 实现；当前组织没有承诺一个通用在线 SDK。
+完整反查、继续翻页和完整导出需要 `region:query` API Key；匿名预览有限。
+交互式参考见 [/api-docs/](https://astro.assets.72602.space/api-docs/)。
 
-## 公共发布与 evidence 存储
+## 发布版本
 
-Git 保存小型、可审阅的发布元数据：survey/layer registry、recipe lock、schema、
-catalog 投影、provenance 摘要和 hash。版本化 MOC、资源包和大型 evidence 由生产
-S3 保存；真实 CSST 私有数据、预览和配方由 Workspace 持有，不进入 Assets Git、后台、证据存储或发布。当前 checkout 保留合成 conformance fixture、Core wheel 和
-`evidence-index.json`。生成的 release、layer、raw、content、probe 和 staging 副本
-已在独立 S3 恢复及 SHA-256/size 校验后删除。
+公共数据以版本化 **Resource Package v3** 归档发布（MOC、footprint 投影、provenance、
+包说明）外加目录清单。浏览入口：[/releases/](https://astro.assets.72602.space/releases/)。
+Git 只保存小型的可审阅元数据；大型 MOC、资源包和 evidence 存放在生产对象存储，
+HTTP 只提供已校验的 `/data/current` 目录。
 
-详见[公共制品存储与迁移](docs/public-artifact-storage.md)，其中定义 bucket 目录、
-不可变 URL/hash 契约、evidence 边界和切换流程。输入 manifest、normalized scan 等
-始终属于 evidence，不会进入浏览器初始请求或公共 release allowlist。
+代码与数据分开发布：`code-vX.Y.Z` 代码 tag 不需要对象存储凭据；`data-vX.Y.Z`
+数据 tag 按 SHA-256 固定一个不可变公共 bundle。
 
-发布同步任务和 hydrate 必须配置 S3-compatible 对象存储；新环境无法访问 S3 时
-会失败关闭，不会使用源码目录或隐藏的本地 release 兜底。HTTP 请求继续读取已经
-校验并激活的 `/data/current`，不在每次请求时访问 S3。请按[存储契约](docs/public-artifact-storage.md)
-配置 endpoint、bucket 和 credential Secret。
+## 边界声明
 
-代码与公共数据通过两条独立流程发布。推送 `code-vX.Y.Z` 代码 tag 会构建镜像、Helm Chart
-和代码 release 说明，不读取对象存储。手动运行 Data Package Release 时，必须指定公共
-bundle 的预期 SHA-256；流程只从 S3 获取并校验该公共 bundle，再以单独的
-`data-vX.Y.Z` tag 发布资源包和目录清单。推送数据 tag 时，注释中须有
-`public-bundle-sha256=<hex>`；流程只读取公共 bundle，不恢复 evidence。已有 `v0.0.1` 标签保持不变。
+- Assets **绝不代替用户下载科学数据**；用户按各档案的访问政策自行获取。
+- 即使没有下载链接，已知的来源身份与证据仍然可见；**绝不虚构文件或链接**。
+- 运行时只连接配置的 Warehouse Elasticsearch endpoint。
+- 输入 manifest、规范化扫描和任务快照属于 evidence，永不进入浏览器初始请求或
+  公共 release allowlist。
+- 公共 MOC 发布要求解码后的原生最大阶数 ≥ 4，绝不来自上采样预览或请求阶数。
+- CSST 私有扫描、输入、输出与预览属于 Workspace，不进入 Assets Git、存储、
+  evidence 归档或发布。
 
-## 存储权威
+## 文档
 
-[S3 唯一权威实施计划](docs/s3-authority-implementation-plan.md) 记录：生产 S3
-保存已上传业务数据和已同步控制状态，本地只保留可删除的恢复缓存、可重算
-scratch 和独立待上传目录。已确认的 authority 是 gitignored `.info` 描述的
-MinIO，不是已退役的 Helm 开发桶。P0-P6 迁移和线上消费者切换已完成；仍在使用的
-PVC 按迁移收据保留，待单独完成证据化退役评估。
+| 主题 | 文档 |
+| --- | --- |
+| 覆盖配方、精度与发布 | [docs/coverage-workflow.md](docs/coverage-workflow.md) |
+| API 契约 | [docs/api-reference.md](docs/api-reference.md) |
+| 原生单元来源、快照、审核与激活 | [docs/native-unit-management.md](docs/native-unit-management.md) |
+| 对象存储、evidence 边界与切换 | [docs/public-artifact-storage.md](docs/public-artifact-storage.md) |
+| Resource Package 集成 | [docs/resource-package-integration.md](docs/resource-package-integration.md) |
+| 项目边界 | [docs/architecture-boundary.md](docs/architecture-boundary.md) |
+| 当前实现状态 | [HANDOFF.md](HANDOFF.md) |
 
-## 部署
-
-服务只通过 Helm chart 部署：
+部署只使用 Helm chart：
 
 ```bash
 helm upgrade --install astro-survey-atlas-assets \
@@ -147,27 +152,20 @@ helm upgrade --install astro-survey-atlas-assets \
   --values <environment-values.yaml>
 ```
 
-真实环境 values 保存在仓库之外；脱敏模板见
-`charts/astro-survey-atlas-assets/examples/`。
+## 仓库结构
 
-## 本地开发
-
-```bash
-npm ci
-npm run validate
-npm start
 ```
-
-服务监听 `http://127.0.0.1:4180`。测试 Warehouse 反查时设置
-`ASSETS_WAREHOUSE_ES_URL`；没有该变量时，静态公共几何目录仍可使用。
-
-网站提供独立入口：[项目总览](/github/)、[巡天目录](/surveys/) 和
-[集成/SDK 状态](/sdk/)。
-
-English version: [README.md](README.md)。
+server/          HTTP API、发布流水线、原生单元管理
+site/            Vite MPA：首页、天球图册、巡天、发布、条款、api-docs、sdk、github、admin
+artifacts/       已审阅的公共注册表、catalog 投影与 evidence 索引
+charts/          所有部署使用的 Helm chart
+docs/            契约、证据记录与研究笔记
+scripts/         采集、构建、校验与浏览器测试
+test/            Node 与 Python 测试套件
+```
 
 ## 许可证
 
-本仓库采用 Apache License, Version 2.0。详见 [LICENSE](LICENSE) 和
-[NOTICE](NOTICE)。本项目属于 Astro Survey Atlas GitHub 组织，不是 Apache
+Apache License 2.0，详见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。本项目属于
+[Astro Survey Atlas](https://github.com/Astro-Survey-Atlas) 组织，不是 Apache
 Software Foundation 项目。

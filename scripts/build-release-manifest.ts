@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -9,6 +8,7 @@ import { assertRecordPublishable, isDeniedLayerId, isDeniedSurvey, sanitizeRelea
 import { loadSurveyLookups, projectResourcePackage, type ProjectedResourcePackage } from "../server/resource-package-projection.js";
 import { buildResourcePackageCollection } from "../server/resource-package-collection.js";
 import type { ReleaseHistoryDocument } from "../server/public-release-publication.js";
+import { sha256Hex, sha256Hex as sha256Bytes } from "../server/hash.js";
 
 const root = path.resolve(process.env.ASSET_WORKTREE_ROOT ?? process.cwd());
 const artifactRoot = path.join(root, "artifacts", "public-survey-footprints");
@@ -146,12 +146,8 @@ async function json<T>(filePath: string): Promise<T> {
   return JSON.parse(await readFile(filePath, "utf8")) as T;
 }
 
-function sha256Bytes(bytes: Buffer): string {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
 async function digest(filePath: string): Promise<string> {
-  return createHash("sha256").update(await readFile(filePath)).digest("hex");
+  return sha256Hex(await readFile(filePath));
 }
 
 interface EvidenceIndexObject { path: string; sizeBytes: number; sha256: string }
@@ -477,9 +473,9 @@ async function build(): Promise<PublicAssetManifest> {
   const lastPrior = priorHistory?.releases[priorHistory.releases.length - 1];
   validatePublicPackageContract(publicPackages);
   const rawCatalogBytesEarly = await readFile(packageCatalogPath);
-  const currentCatalogSha = createHash("sha256").update(
+  const currentCatalogSha = sha256Hex(
     sanitizeReleaseControlDocument(relative(packageCatalogPath), rawCatalogBytesEarly) ?? rawCatalogBytesEarly,
-  ).digest("hex");
+  );
   const packageFingerprint = (bundle: string, packages: Array<{ id: string; version: string; sha256: string }>) =>
     JSON.stringify([bundle, packages.slice().sort((left, right) => left.id.localeCompare(right.id)).map((entry) => [entry.id, entry.version, entry.sha256])]);
   const unchanged = lastPrior !== undefined

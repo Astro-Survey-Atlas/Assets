@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { AdminHttpError } from "./admin-error.js";
 import { queueStateSnapshot, type StateSnapshotSink } from "./state-snapshot.js";
+import { sha256Hex } from "./hash.js";
 
 export const CONNECTOR_ICON_MAX_BYTES = 64 * 1024;
 const ICON_PATH = "/api/v1/connector-icons/";
@@ -38,7 +38,7 @@ export class ConnectorPresentationStore {
       else {
         let iconUrl = icon.url;
         if (icon.content) {
-          const hash = createHash("sha256").update(Buffer.from(icon.content.base64, "base64")).digest("hex");
+          const hash = sha256Hex(Buffer.from(icon.content.base64, "base64"));
           state.icons[hash] = icon.content;
           iconUrl = `${ICON_PATH}${hash}`;
         }

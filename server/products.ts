@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isDeniedSurvey } from "./publication-policy.js";
@@ -6,6 +5,7 @@ import { AdminHttpError } from "./admin.js";
 import { queueStateSnapshot, type StateSnapshotSink } from "./state-snapshot.js";
 import { PUBLICATION_POLICY, type GeometryFacts } from "./approved-release.js";
 import type { CoverageSourceEvidence } from "./coverage.js";
+import { sha256Hex } from "./hash.js";
 
 export type { PublicProductDossier, PublicProductLink, PublicProductLinkKind, PublicProductVerificationStatus } from "./types.js";
 
@@ -81,7 +81,7 @@ export interface MocProductRegistrationInput {
 const configuredContentRoot = process.env.ASSETS_CONTENT_ROOT ? path.resolve(process.env.ASSETS_CONTENT_ROOT) : "/var/lib/assets-content";
 
 function productId(surveyId: string, releaseId: string, name: string): string {
-  return createHash("sha256").update(`${surveyId}\n${releaseId}\n${name}`).digest("hex").slice(0, 20);
+  return sha256Hex(`${surveyId}\n${releaseId}\n${name}`).slice(0, 20);
 }
 
 function defaultFlow(product: { name: string; modality: string }, mode = "catalog-radec", recipe: Record<string, unknown> = {}): ProductPresentation["flow"] {
@@ -116,7 +116,7 @@ function defaultFlow(product: { name: string; modality: string }, mode = "catalo
   return { nodes, edges: nodes.slice(1).map((node, index) => ({ from: nodes[index]!.id, to: node.id })) };
 }
 
-function hashContent(content: ProductContent): string { return createHash("sha256").update(JSON.stringify(content)).digest("hex"); }
+function hashContent(content: ProductContent): string { return sha256Hex(JSON.stringify(content)); }
 
 function boundedEvidenceText(value: unknown, field: string, maxLength: number, required = false): string | undefined {
   if (value === undefined || value === null || value === "") {
@@ -410,12 +410,12 @@ export class ProductStore {
           recipe = raw.recipe && typeof raw.recipe === "object" ? raw.recipe as Record<string, unknown> : {};
           for (const key of ["input", "sourceUrl", "maxOrder", "queryOrder", "previewOrder"]) if (raw[key] !== undefined) recipe[key] = raw[key];
           if (raw.snapshot && typeof raw.snapshot === "object") { const snapshot = raw.snapshot as Record<string, unknown>; recipe.snapshotSha256 = snapshot.sha256; recipe.snapshotSizeBytes = snapshot.sizeBytes; }
-          recipeHash = createHash("sha256").update(JSON.stringify(raw)).digest("hex");
+          recipeHash = sha256Hex(JSON.stringify(raw));
         } catch { /* recipe is optional for catalog-only products */ }
       }
       if (!recipeHash && coverageDefinition?.recipe) {
         recipeMode = coverageDefinition.recipe.mode;
-        recipeHash = createHash("sha256").update(JSON.stringify(coverageDefinition.recipe)).digest("hex");
+        recipeHash = sha256Hex(JSON.stringify(coverageDefinition.recipe));
       }
       const supportedMode = recipeMode && ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "path-healpix", "regions", "tile-table", "native-moc"].includes(recipeMode) ? recipeMode as ProductContent["mode"] : undefined;
       const flowMode = recipeMode && ["fits-wcs", "fits-header-position", "catalog-radec", "nested-healpix", "path-healpix", "regions", "tile-table", "native-moc"].includes(recipeMode) ? recipeMode : "catalog-radec";

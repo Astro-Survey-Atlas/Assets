@@ -1,7 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
-import { createHash } from "node:crypto";
 import { metadataFetch } from "./metadata-fetch.js";
 import { eroFitsFrame, type EroFitsHeader, type EroFrameFootprint } from "./ero-fits-footprint.js";
+import { sha256Hex } from "./hash.js";
 
 export const ERO_METADATA_URL = "https://euclid.esac.esa.int/dr/ero/";
 const geometryUrl = "https://sky.esa.int/esasky-tap/tap/sync";
@@ -103,7 +103,7 @@ export function parseEroTargetSnapshot(bytes: string, sha256: string): EroTarget
           || !["chain-and-hostname-verified", "chain-and-hostname-verified; certificate-time-check-disabled"].includes(item.tls)) throw new Error(`Invalid ERO header capture receipt: ${id}`);
         if (item.tls.endsWith("; certificate-time-check-disabled")) transportExceptions.add("euclid-ero-cdn-certificate-time-exception");
         for (const header of item.fitsHeaders) {
-          const tarSha = createHash("sha256").update(Buffer.from(header.tarHeaderBase64 ?? "", "base64")).digest("hex");
+          const tarSha = sha256Hex(Buffer.from(header.tarHeaderBase64 ?? "", "base64"));
           if (header.targetId !== id || header.packageUrl !== item.packageUrl
             || !item.ranges.some(range => range.start === header.tarOffset && range.sizeBytes === 512 && range.sha256 === tarSha)) throw new Error("ERO FITS header disagrees with its official target/package receipt");
           let cursor = header.tarOffset + 512;

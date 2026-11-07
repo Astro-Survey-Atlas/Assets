@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -10,6 +9,7 @@ import { registerEvidenceMoc } from "./evidence-moc-import.js";
 import { resolveMastHstObservation, verifyMastHstSnapshot, MAST_HST_MAX_SNAPSHOT_BYTES } from "./moc-discovery.js";
 import type { MocBuildService, MocBuildStore } from "./moc-build.js";
 import type { ProductStore } from "./products.js";
+import { sha256Hex as digest } from "./hash.js";
 
 const MAST_API_URL = "https://mast.stsci.edu/api/v0/invoke";
 const HST_ARCHIVE_URL = "https://archive.stsci.edu/missions-and-data/hst";
@@ -20,10 +20,6 @@ interface LockedFile {
   ref: string;
   sha256: string;
   sizeBytes: number;
-}
-
-function digest(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function object(value: unknown): Record<string, unknown> {

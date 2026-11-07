@@ -3,7 +3,7 @@ import { AdminHttpError } from "./admin-error.js";
 import { envFlag } from "./env.js";
 import { mastHstObservationSummaryView, MAST_HST_DISCOVERY_POLICY, type MastHstObservationQuery, type MastHstScopeRef } from "./moc-discovery.js";
 import { batchEvidenceLayerId, buildScanBatchResource, resolveScanBatchIncludePattern, ScanBatchValidationError, scanBatchView, type ScanBatchRequest, type ScanBatchRuleResource } from "./scan-batch.js";
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage, type RequestOptions as HttpRequestOptions } from "node:http";
 import { request as httpsRequest, type RequestOptions as HttpsRequestOptions } from "node:https";
@@ -12,6 +12,7 @@ import type { MocCandidateSummary, MocReviewSummary } from "./moc-discovery.js";
 import { ConnectorInventoryStateStore, ConnectorProbeStateStore, type ConnectorInventoryPhase, type ConnectorInventoryState } from "./connector-state.js";
 import { ConnectorPresentationStore, parseConnectorIcon } from "./connector-presentation.js";
 import { executorLogFinding, observeDiscovery, type DiscoveryObservation, type ExecutorObservation } from "./discovery-observation.js";
+import { sha256Hex } from "./hash.js";
 
 const API_GROUP = "/apis/atlas.zhejianglab.org/v1alpha1";
 const WAREHOUSE_DATA_SOURCE_GROUP = "/apis/org.zhejianglab.astro.metadata/v1alpha1";
@@ -678,7 +679,7 @@ function connectorConfigFingerprint(connector: ConnectorView, credentialVersion?
     localPath: connector.localPath,
     ...(credentialVersion ? { credentialVersion } : {}),
   };
-  return createHash("sha256").update(JSON.stringify(stable)).digest("hex").slice(0, 32);
+  return sha256Hex(JSON.stringify(stable)).slice(0, 32);
 }
 
 function statusView(status: Record<string, unknown> | undefined): TaskStatusView {

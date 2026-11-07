@@ -1,11 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { ArtifactStore } from "./artifact-store.js";
 import type { UploadJobManifest, UploadSpool } from "./upload-spool.js";
 import { withLocalFileLock } from "./local-file-lock.js";
+import { sha256FileDetails, sha256Hex as sha256 } from "./hash.js";
 
 export interface StateSnapshotPointer {
   schemaVersion: 1;
@@ -171,20 +171,10 @@ function canonicalJson(value: unknown): Buffer {
   return Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function sha256(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
 async function fileDetails(filePath: string): Promise<LocalFileDetails> {
   const details = await lstat(filePath);
   if (!details.isFile() || details.isSymbolicLink()) throw new Error(`State file must be a regular file: ${filePath}`);
-  const hash = createHash("sha256");
-  let sizeBytes = 0;
-  for await (const chunk of createReadStream(filePath)) {
-    sizeBytes += chunk.length;
-    hash.update(chunk);
-  }
-  return { sizeBytes, sha256: hash.digest("hex") };
+  return sha256FileDetails(filePath);
 }
 
 function safeObjectKey(value: string): string {

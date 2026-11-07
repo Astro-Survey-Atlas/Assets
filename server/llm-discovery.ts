@@ -1,18 +1,17 @@
 import { providerFetch } from "./provider-fetch.js";
-import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AdminHttpError, type MocDiscoveryView } from "./admin.js";
 import { type MocDiscoveryCandidate, type MocCandidateSummary } from "./moc-discovery.js";
 import { type StateSnapshotSink, queueStateSnapshot } from "./state-snapshot.js";
 import { fetchPublicSource, publicSourceUrl } from "./public-source-fetch.js";
+import { sha256Hex as hash } from "./hash.js";
 
 export const CDS_SEARCH_URL = "https://alasky.cds.unistra.fr/MocServer/query";
 type Phase = "waiting" | "running" | "complete" | "failed" | "interrupted" | "skipped";
 interface Entry { request: MocDiscoveryView; phase: Phase; updatedAt: string; candidates: MocCandidateSummary[]; message?: string; evidencePath?: string; evidenceFiles?: Array<{ objectKey: string; sha256: string; sizeBytes: number }>; usage?: unknown[]; partial?: boolean }
 export interface EnhancedDiscoveryView extends MocDiscoveryView { llmEnabled?: boolean; llmPhase?: Phase }
 interface Options { getSettings?: () => { key?: string; baseUrl?: string; model?: string }; onUsage?: (event: { requestId: string; model: string; success: boolean; durationMs: number; usage?: unknown }) => void; root: string; evidenceRoot: string; sink?: StateSnapshotSink; getRequest: (name: string) => Promise<MocDiscoveryView>; model?: string; baseUrl?: string; key?: string; modelFetch?: typeof fetch; sourceFetch?: typeof fetchPublicSource }
-const hash = (s: string | Buffer) => createHash("sha256").update(s).digest("hex");
 function jsonContent(s: string): Record<string, unknown> {
   try { const parsed = JSON.parse(s.trim().replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "")); if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(); return parsed; }
   catch { throw new Error("LLM 返回的结构化结果无效，无法生成可核实候选。"); }

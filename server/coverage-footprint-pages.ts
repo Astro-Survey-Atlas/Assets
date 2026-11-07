@@ -1,5 +1,6 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { AccessError } from "./region-access.js";
+import { sha256Hex } from "./hash.js";
 
 export interface CoverageOverviewFootprint {
   surveyId: string;
@@ -34,14 +35,14 @@ export function pageCoverageFootprints(options: {
     throw new AccessError(400, `pageSize must be from 1 to ${MAX_PAGE_SIZE}`);
   }
 
-  const revision = createHash("sha256").update(JSON.stringify({
+  const revision = sha256Hex(JSON.stringify({
     schemaVersion: 1,
     coordinateFrame: "ICRS",
     ordering: "NESTED",
     nside: options.nside,
     generatedAt: options.generatedAt,
     footprints: options.footprints,
-  })).digest("hex");
+  }));
 
   let offset = 0;
   if (options.cursor) {

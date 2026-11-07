@@ -1,5 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, open, readdir, readFile, lstat, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { withLocalFileLock } from "./local-file-lock.js";
@@ -10,6 +9,7 @@ import {
   type ArtifactPutOptions,
   type ArtifactStore,
 } from "./artifact-store.js";
+import { sha256FileDetails } from "./hash.js";
 
 export type UploadJobStatus = "pending" | "uploading" | "retryable-failed" | "uploaded" | "conflict";
 type UploadProcessOutcome = "uploaded" | "retryable-failed" | "conflict" | "skipped";
@@ -105,13 +105,7 @@ function errorText(error: unknown): string {
 async function fileDetails(filePath: string): Promise<{ sizeBytes: number; sha256: string }> {
   const details = await lstat(filePath);
   if (!details.isFile() || details.isSymbolicLink()) throw new Error(`Upload source must be a regular file: ${filePath}`);
-  const hash = createHash("sha256");
-  let sizeBytes = 0;
-  for await (const chunk of createReadStream(filePath)) {
-    sizeBytes += chunk.length;
-    hash.update(chunk);
-  }
-  return { sizeBytes, sha256: hash.digest("hex") };
+  return sha256FileDetails(filePath);
 }
 
 async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {

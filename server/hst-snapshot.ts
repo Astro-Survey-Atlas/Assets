@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import { parseHstMetadataRows } from "../scripts/acquire-hst-public-image-observations.js";
+import { sha256Hex as digest } from "./hash.js";
 
 const SOURCE_URL = "https://mast.stsci.edu/api/v0/invoke";
 type Document = Record<string, any>;
@@ -19,7 +19,6 @@ export interface HstSnapshotPlan {
   supplementRows: number;
 }
 
-function digest(bytes: Uint8Array): string { return createHash("sha256").update(bytes).digest("hex"); }
 function integer(value: unknown, minimum = 1): value is number { return Number.isSafeInteger(value) && Number(value) >= minimum; }
 function relative(value: unknown): string {
   if (typeof value !== "string" || !value || value.includes("\0") || path.isAbsolute(value)

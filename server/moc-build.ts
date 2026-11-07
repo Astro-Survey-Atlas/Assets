@@ -1,5 +1,4 @@
 import { fetchPublicSource, publicSourceUrl } from "./public-source-fetch.js";
-import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -9,6 +8,7 @@ import { AdminHttpError } from "./admin.js";
 import type { MocDiscoveryCandidate } from "./moc-discovery.js";
 import type { CoverageSourceEvidence } from "./coverage.js";
 import { queueStateSnapshot, queueStateSnapshotFile, stateSnapshotFileKey, type StateSnapshotSink } from "./state-snapshot.js";
+import { sha256Hex, sha256Hex as hash } from "./hash.js";
 
 export const MOC_BUILD_PHASES = [
   "QUEUED", "FETCHING", "SNAPSHOT_LOCKED", "VALIDATING", "BUILDING", "PROJECTING", "BUNDLING", "STAGED", "FAILED", "DUPLICATE",
@@ -156,7 +156,6 @@ function assertSourceUrl(value: string): string {
   return parsed.toString();
 }
 
-function hash(value: Uint8Array): string { return createHash("sha256").update(value).digest("hex"); }
 
 interface CdsProductSource {
   url: string;
@@ -787,9 +786,9 @@ export class MocPublicationStore {
       if (!integrity.valid) throw new AdminHttpError(409, `MOC publication ${existing.id} failed integrity verification: ${integrity.reason}`);
       return existing;
     }
-    const candidateDigest = createHash("sha256").update(`${request.provider}:${request.candidateId}`).digest("hex").slice(0, 12);
+    const candidateDigest = sha256Hex(`${request.provider}:${request.candidateId}`).slice(0, 12);
     const layerId = product.layerId ?? request.layerId ?? `moc-${safeMocName(product.surveyId).slice(0, 12)}-${safeMocName(product.releaseId).slice(0, 12)}-${candidateDigest}`.slice(0, 63).replace(/-+$/, "");
-    const id = `moc-publication-${createHash("sha256").update(request.name).digest("hex").slice(0, 16)}`;
+    const id = `moc-publication-${sha256Hex(request.name).slice(0, 16)}`;
     const sourceRoot = immutableRef(this.evidenceRoot, path.join(this.evidenceRoot, "moc-build", safeMocName(request.name)));
     const relativeRoot = path.posix.join("moc-releases", safeMocName(request.name));
     const destinationRoot = immutableRef(this.contentRoot, path.join(this.contentRoot, ...relativeRoot.split("/")));

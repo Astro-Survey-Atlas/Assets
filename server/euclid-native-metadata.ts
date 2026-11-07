@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
-import { createHash } from "node:crypto";
 import { nativeEvidencePath, type NativeSource } from "./native-unit-model.js";
+import { sha256Hex } from "./hash.js";
 
 type Document = Record<string, any>;
 
@@ -101,7 +101,7 @@ export async function verifyEuclidRawRows(root: string, ref: string, manifest: D
   const countDocument = manifest.metadataDocuments.find((document: Document) => document.ref === "metadata/count.csv");
   if (!countDocument) throw new Error("Q1 manifest omits the official archive row count");
   const countBytes = await readFile(nativeEvidencePath(root, path.posix.join(path.posix.dirname(ref), countDocument.ref)));
-  if (createHash("sha256").update(countBytes).digest("hex") !== countDocument.sha256) throw new Error("Q1 archive row count SHA changed");
+  if (sha256Hex(countBytes) !== countDocument.sha256) throw new Error("Q1 archive row count SHA changed");
   const countRows = csvRecords(countBytes.toString("utf8"));
   if (countRows.length !== 1 || !/^\d+$/.test(countRows[0]?.total ?? "") || Number(countRows[0]!.total) !== manifest.rowCount) {
     throw new Error("Q1 pages do not match the official archive row count");
@@ -111,7 +111,7 @@ export async function verifyEuclidRawRows(root: string, ref: string, manifest: D
   for (const page of manifest.sourcePagination.pages as Document[]) {
     const file = path.posix.join(path.posix.dirname(ref), page.ref);
     const body = await readFile(nativeEvidencePath(root, file));
-    if (createHash("sha256").update(body).digest("hex") !== page.sha256 || page.after !== previous) throw new Error("Q1 source page chain or SHA changed");
+    if (sha256Hex(body) !== page.sha256 || page.after !== previous) throw new Error("Q1 source page chain or SHA changed");
     const records = csvRecords(body.toString("utf8"));
     if (records.length !== page.rows) throw new Error("Q1 page receipt differs from raw archive rows");
     for (const row of records) {

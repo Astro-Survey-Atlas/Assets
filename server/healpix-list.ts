@@ -1,11 +1,12 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { NativeMoc } from "./native-moc.js";
 import { AccessError } from "./region-access.js";
+import { sha256Hex } from "./hash.js";
 
 export interface HealpixLayer { layerId: string; productId: string; releaseId: string; modality?: string; moc: NativeMoc }
 type Range = [number, number];
 interface Cursor { version: 1; revision: string; selector: string; nextPixel: number }
-const digest = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const digest = (value: unknown): string => sha256Hex(JSON.stringify(value));
 const cache = new Map<string, Range[]>();
 let cachedRanges = 0;
 

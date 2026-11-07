@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import type { NativeBinding, NativeGroup, NativeSnapshot } from "./native-unit-model.js";
+import { sha256Hex } from "./hash.js";
 
 export type NativeDiffState = "unchanged" | "modified" | "added" | "removed";
 
@@ -59,7 +59,7 @@ function canonical(value: unknown): unknown {
 }
 
 function digest(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify({ value: canonical(value) })).digest("hex");
+  return sha256Hex(JSON.stringify({ value: canonical(value) }));
 }
 
 function normalizedLock(value: string): unknown {

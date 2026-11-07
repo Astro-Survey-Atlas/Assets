@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { parentPixel, parseDistanceSample, pixelAt, prepareObjects, prepareRedshiftObjects, validateSelection,
   type DistanceReference } from "../src/distance-feasibility.js";
 import type { SkyDepthExample, SkyDepthPoint, SkyDepthQuery, SkyDepthResponse, SkyDepthSourceResult } from "../src/sky-depth.js";
+import { sha256Hex } from "./hash.js";
 
 export class SkyDepthInputError extends Error {}
 function stableRange(values: readonly number[], fallbackMax: number): [number, number] {
@@ -44,7 +44,7 @@ export class SkyDepthStore {
     if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw Error("Snapshot outside evidence root");
     if ((await stat(file)).size > 32 * 1024 ** 2) throw Error("Snapshot exceeds bounded input size");
     const bytes = await readFile(file);
-    const hash = createHash("sha256").update(bytes).digest("hex");
+    const hash = sha256Hex(bytes);
     if (hash !== this.config.sampleSha256) throw Error("Snapshot digest mismatch");
     const sample = parseDistanceSample(JSON.parse(bytes.toString("utf8")));
     const reference = JSON.parse(await readFile(this.config.referencePath, "utf8")) as DistanceReference;

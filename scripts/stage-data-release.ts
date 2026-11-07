@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +6,7 @@ import { buildResourcePackageCollection } from "../server/resource-package-colle
 import type { ProjectedResourcePackage } from "../server/resource-package-projection.js";
 import { sanitizeReleaseControlDocument } from "../server/publication-policy.js";
 import type { PublicAssetRecord } from "../server/types.js";
+import { sha256Hex as sha256 } from "../server/hash.js";
 
 interface DataReleaseCollection {
   fileName: string;
@@ -31,10 +31,6 @@ interface DataReleaseHistoryEntry {
 interface ReleaseAssetManifest {
   files: PublicAssetRecord[];
   retainedPackages?: PublicAssetRecord[];
-}
-
-function sha256(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function resolveAssetPath(root: string, relativePath: string): string {

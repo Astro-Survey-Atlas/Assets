@@ -1,10 +1,10 @@
-import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createArtifactStoreFromProcess, type ArtifactStore } from "../server/artifact-store.js";
 import { parseCurrentPointer } from "../server/sync-release.js";
+import { sha256Hex as sha256 } from "../server/hash.js";
 
 interface EvidencePointer {
   schemaVersion: 1;
@@ -20,10 +20,6 @@ export interface StorageSnapshotLock {
   createdAt: string;
   public: { key: string; sha256: string; bundleId: string; bundleSha256: string };
   authorityEvidence?: { key: string; sha256: string; snapshot: string; files: number; bytes: number };
-}
-
-function sha256(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function parseEvidence(bytes: Uint8Array): EvidencePointer {

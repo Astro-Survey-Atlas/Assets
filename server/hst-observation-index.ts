@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { copyFile, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
@@ -6,6 +6,7 @@ import { Healpix } from "healpixjs";
 
 import { candidateCellsForStcs, cellsForStcs } from "./hst-image-lookup.js";
 import { hstSnapshotRows, loadHstSnapshot } from "./hst-snapshot.js";
+import { sha256Hex as digest } from "./hash.js";
 
 const INDEX_SCHEMA_VERSION = "4";
 const COARSE_ORDER = 4;
@@ -53,10 +54,6 @@ export interface HstObservationLookup {
 interface RawObservation extends Record<string, unknown> {
   obsid: string | number;
   s_region: string;
-}
-
-function digest(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function text(value: unknown, maximumLength: number): string | undefined {

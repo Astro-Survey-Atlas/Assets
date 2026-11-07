@@ -1,9 +1,10 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { ArtifactStore } from "./artifact-store.js";
 import type { DownloadPlan } from "./evidence-store.js";
 import { AccessError } from "./region-access.js";
 import { reversePlanItems, type ReverseCursorScope } from "./reverse-pagination.js";
+import { sha256Hex } from "./hash.js";
 
 export interface ReverseSnapshot {
   schemaVersion: 1 | 2;
@@ -56,7 +57,7 @@ function retainSnapshot(store: ArtifactStore, id: string, snapshot: ReverseSnaps
 export async function writeReverseSnapshot(store: ArtifactStore, snapshot: ReverseSnapshot): Promise<string> {
   const bytes = Buffer.from(JSON.stringify(snapshot));
   if (bytes.length > MAX_SNAPSHOT_BYTES) throw new AccessError(413, "Reverse lookup snapshot is too large; select a smaller region");
-  const id = createHash("sha256").update(bytes).digest("hex");
+  const id = sha256Hex(bytes);
   await store.putImmutable(`${keyFor(id)}.gz`, gzipSync(bytes), {
     contentType: "application/gzip", metadata: { deliveryClass: "evidence", "snapshot-sha256": id },
   });
@@ -78,7 +79,7 @@ export async function readReverseSnapshot(store: ArtifactStore, id: unknown, ide
     if (!object) throw new AccessError(410, "Reverse lookup snapshot expired; repeat the region query");
     try {
       const bytes = compressed ? gunzipSync(object.body, { maxOutputLength: MAX_SNAPSHOT_BYTES }) : object.body;
-      if (bytes.length > MAX_SNAPSHOT_BYTES || createHash("sha256").update(bytes).digest("hex") !== id) throw new Error("Snapshot content changed");
+      if (bytes.length > MAX_SNAPSHOT_BYTES || sha256Hex(bytes) !== id) throw new Error("Snapshot content changed");
       snapshot = JSON.parse(bytes.toString("utf8")) as ReverseSnapshot;
       sizeBytes = bytes.length;
     } catch { throw new AccessError(409, "Reverse lookup snapshot is invalid; repeat the region query"); }

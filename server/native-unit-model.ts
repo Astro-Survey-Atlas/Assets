@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import path from "node:path";
 import { isDeniedSurvey } from "./publication-policy.js";
 import { AdminHttpError } from "./admin-error.js";
+import { sha256Hex } from "./hash.js";
 
 export type NativeAdapter = "legacy-roster" | "legacy-geometry" | "desi-tile" | "euclid-tap" | "hst-caom" | "hsc-patch" | "entrypoint" | "gaia-healpix-range" | "sdss-field" | "mast-observation" | "eso-obscore-vvv" | "eso-obscore-fds" | "eso-obscore-kids" | "eso-obscore-vphas" | "eso-obscore-viking" | "skymapper-dr4-ccd" | "twomass-6x-atlas" | "allwise-ibe-atlas" | "noirlab-des-tap" | "noirlab-decaps-tap" | "spherex-qr2-s3-observation" | "cadc-caom-cfhtls" | "act-dr5-whole-map" | "panstarrs-dr1-skycell" | "iphas-dr2-pipeline" | "rubin-firstlook-avm" | "irsa-akari-fis-map" | "cds-ztf-progenitor-o3" | "skyview-radio-maps" | "euclid-image-metadata";
 export type NativeTaskKind = "baseline" | "discover" | "acquire" | "import" | "build" | "verify" | "archive" | "activate" | "restore";
@@ -66,7 +66,7 @@ export interface NativeWorkerRequest {
 }
 export interface NativeWorkerResult { snapshot?: NativeSnapshot; group?: NativeGroup; report?: NativeReport; discovered?: { sourceUrl: string; reachable: boolean; sizeBytes?: number }; noChange?: boolean }
 
-export const nativeDigest = (value: unknown): string => createHash("sha256").update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex");
+export const nativeDigest = (value: unknown): string => sha256Hex(typeof value === "string" ? value : JSON.stringify(value));
 export const nativeNow = (): string => new Date().toISOString();
 export function nativeEvidencePath(root: string, ref: string): string {
   if (!ref || path.isAbsolute(ref) || ref.includes("\\") || ref.split("/").some(part => !part || part === "." || part === "..") || /[\x00-\x1f]/.test(ref)) throw new AdminHttpError(400, "Invalid evidence reference");

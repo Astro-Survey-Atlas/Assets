@@ -1,7 +1,6 @@
 import { validateEuclidManifest, validateEuclidRow, verifyEuclidRawRows } from "./euclid-native-metadata.js";
 import { constants, createReadStream } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat } from "node:fs/promises";
-import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -14,6 +13,7 @@ import { candidateCellsForStcs, cellsForStcs } from "./hst-image-lookup.js";
 import { nativeFile } from "./native-unit-archive.js";
 import { nativeDigest, nativeEvidencePath, nativeMetadataUrl, type NativeAdapter, type NativeBinding, type NativeFile, type NativeSnapshot, type NativeSource } from "./native-unit-model.js";
 import { alternativesForAccessUri, mastScienceFile, metadataEntrypoint } from "./survey-access.js";
+import { sha256Hex } from "./hash.js";
 
 const SCHEMA = "1";
 const COARSE_ORDER = 4;
@@ -995,7 +995,7 @@ async function validateZtfPageEvidence(root: string, manifestRef: string, manife
       } else if (item.status === 200) {
         const bodyBase64 = String(item.bodyBase64 ?? "");
         const body = Buffer.from(bodyBase64, "base64");
-        const hash = createHash("sha256").update(body).digest("hex");
+        const hash = sha256Hex(body);
         if (!body.length || body.toString("base64") !== bodyBase64 || body.length !== item.bytes || hash !== item.sha256
           || Number(result.headers?.["Content-Length"]) !== body.length) throw new Error("ZTF source page bytes differ from their locked receipt");
         const rows = parseZtfHpxFinderPage(body.toString("utf8"), band);
@@ -1047,7 +1047,7 @@ export async function importSurveySnapshot(root: string, file: NativeFile, sourc
       if (item.status === "captured") {
         const header = Buffer.from(String(item.headerBase64 ?? ""), "base64");
         if (!header.length || header.toString("base64") !== item.headerBase64
-          || createHash("sha256").update(header).digest("hex") !== item.headerSha256
+          || sha256Hex(header) !== item.headerSha256
           || item.headerBytes !== header.length || item.headerBytes % 2880 !== 0) throw new Error("SkyView radio FITS header evidence hash or padded size is invalid");
       } else if (typeof item.error !== "string" || !item.error) throw new Error("SkyView radio failed-header evidence has no reason");
       radioHeaderEvidence.set(item.unitId, item);
@@ -1104,7 +1104,7 @@ export async function importSurveySnapshot(root: string, file: NativeFile, sourc
       if (!line) continue;
       const item = JSON.parse(line) as Document;
       const body = Buffer.from(String(item.bodyBase64 ?? ""), "base64");
-      const hash = createHash("sha256").update(body).digest("hex");
+      const hash = sha256Hex(body);
       if (body.length === 0 || body.toString("base64") !== item.bodyBase64 || item.status !== 200
         || !/^ADP\.[A-Za-z0-9.:-]+$/.test(String(item.dpId)) || kidsDataLinkEvidence.has(item.dpId)
         || hash !== item.responseSha256 || item.url !== `https://archive.eso.org/datalink/links?ID=ivo://eso.org/ID?${item.dpId}`) throw new Error("KiDS raw DataLink evidence is invalid or duplicated");
@@ -1138,7 +1138,7 @@ export async function importSurveySnapshot(root: string, file: NativeFile, sourc
         const item = JSON.parse(line) as Document;
         const bodyBase64 = String(item.bodyBase64 ?? "");
         const body = Buffer.from(bodyBase64, "base64");
-        const hash = createHash("sha256").update(body).digest("hex");
+        const hash = sha256Hex(body);
         const dpId = String(item.dpId ?? "");
         const expectedUrl = `https://archive.eso.org/datalink/links?ID=ivo://eso.org/ID?${dpId}`;
         if (!body.length || body.toString("base64") !== bodyBase64 || item.status !== 200
@@ -1158,7 +1158,7 @@ export async function importSurveySnapshot(root: string, file: NativeFile, sourc
       if (!line) continue;
       const item = JSON.parse(line) as Document;
       const body = Buffer.from(String(item.bodyBase64 ?? ""), "base64");
-      const hash = createHash("sha256").update(body).digest("hex");
+      const hash = sha256Hex(body);
       const dpId = String(item.dpId ?? "");
       const expectedUrl = `https://archive.eso.org/datalink/links?ID=ivo://eso.org/ID?${dpId}`;
       if (!body.length || body.toString("base64") !== item.bodyBase64 || item.status !== 200
@@ -1185,7 +1185,7 @@ export async function importSurveySnapshot(root: string, file: NativeFile, sourc
       const item = JSON.parse(line) as Document;
       const bodyBase64 = String(item.bodyBase64 ?? "");
       const body = Buffer.from(bodyBase64, "base64");
-      const hash = createHash("sha256").update(body).digest("hex");
+      const hash = sha256Hex(body);
       const skycell = expectedSkycells[index]!;
       const query = new URL(source.sourceUrl);
       query.searchParams.set("skycell", skycell);
