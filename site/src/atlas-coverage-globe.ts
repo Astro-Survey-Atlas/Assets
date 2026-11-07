@@ -237,6 +237,11 @@ export class AtlasCoverageGlobe {
     if (this.#catalog) this.#renderCatalog(overlap);
   }
 
+  /** Redraw only the overlap highlight; the survey coverage keeps its blocks and order. */
+  updateOverlap(overlap: SurveyLayerOverlapCoverage): void {
+    if (this.#catalog) this.#renderCatalog(overlap);
+  }
+
   get state(): SurveyLayerState | null {
     return this.#viewer?.state ?? null;
   }
@@ -302,8 +307,13 @@ export class AtlasCoverageGlobe {
   }
 
   resetView(): void {
-    this.#viewer?.clearTransientState();
+    this.clearTransientState();
     this.#viewer?.reset();
+  }
+
+  /** Drop selection, focus and hover state without moving the camera. */
+  clearTransientState(): void {
+    this.#viewer?.clearTransientState();
     this.#onActiveChange(null);
   }
 

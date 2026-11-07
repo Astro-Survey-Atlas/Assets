@@ -220,7 +220,9 @@ const coverageRequests = new Map<string, { promise: Promise<number[]>; signal?: 
 type CoverageLayerLoadState = "loading" | "ready" | "empty" | "error";
 const coverageLayerLoadStates = new Map<string, CoverageLayerLoadState>();
 const coverageLayerLoadErrors = new Map<string, string>();
-const COVERAGE_CACHE_LIMIT = 128;
+// Two full views at the DISPLAY_TILE_BUDGET, so toggling G or panning back
+// within a view never evicts the blocks it is about to reuse.
+const COVERAGE_CACHE_LIMIT = 384;
 interface SkyDeepLinkTarget { surveyId?: string; productId?: string; layerId?: string; error?: string }
 let deepLinkTarget: SkyDeepLinkTarget | null = null;
 let pendingCoverageState: SurveyLayerState | null = null;
@@ -513,17 +515,24 @@ function setCoverageDisplayStatus(message: string): void {
   if (drawerStatus) drawerStatus.textContent = message;
 }
 
+/** Order of the survey coverage drawn under the overlap highlight. */
+function backgroundOrderText(): string {
+  const sourceNside = coverageDots?.state?.sourceNside;
+  return sourceNside ? `${t("coverage.overviewOrder")} O${Math.round(Math.log2(sourceNside))}` : "";
+}
+
 function retainedDisplayOrderText(): string {
   const nside = coverageDots?.state?.nside;
-  const overview = overlapMode && activeOverlapOrder !== null ? ` · ${t("coverage.overviewOrder")} O4` : "";
-  return nside ? `${locale() === "zh" ? "当前显示" : "Showing"} O${Math.round(Math.log2(nside))}${overview}` : "";
+  const background = overlapMode && activeOverlapOrder !== null ? backgroundOrderText() : "";
+  return nside ? `${locale() === "zh" ? "当前显示" : "Showing"} O${Math.round(Math.log2(nside))}${background ? ` · ${background}` : ""}` : "";
 }
 
 function overlapDisplayStatus(order: number, pixels: readonly number[]): string {
   const result = pixels.length
     ? `${t("coverage.commonOrder")} O${order} · ${pixels.length.toLocaleString("en-US")} CELLS`
     : `${t("coverage.noCommon")} · O${order}`;
-  return `${result} · ${t("coverage.overviewOrder")} O4`;
+  const background = backgroundOrderText();
+  return background ? `${result} · ${background}` : result;
 }
 
 function coverageOrderText(order: number, sourceOrder: number): string {
@@ -3866,9 +3875,9 @@ async function activateOverlap(forceActive?: boolean, forceView = false): Promis
       if (!state) throw new Error(t("coverage.previewUnavailable"));
       const intersectionPlan = await planCoverageDisplay(order!, visibleCoverageLayers(), state, viewController.signal, false);
       requestedViewTiles = overlapViewTiles(order!, state, surveyIds, intersectionPlan);
-      // Background survey coverage is always the complete real O4 overview.
-      // Higher-order indexes above only scope the strict intersection query.
-      displayPlan = await planCoverageDisplay(4, visibleCoverageLayers(), state, viewController.signal);
+      // The survey coverage under the overlap keeps the selected display
+      // order, planned exactly like the normal view so its blocks are shared.
+      displayPlan = await planCoverageDisplay(order!, visibleCoverageLayers(), state, viewController.signal);
     } catch (error) {
       if (viewController.signal.aborted || viewSequence !== overlapViewSequence) return;
       if (overlapViewController === viewController) overlapViewController = null;
@@ -3923,9 +3932,9 @@ async function activateOverlap(forceActive?: boolean, forceView = false): Promis
     overlapDetailsCache.clear();
     coverageDots?.setOverlapMode(false);
     coverageDots?.setActiveOverlapComponent(null);
-    // Leave overlap on the canonical centered data view. This also clears any
-    // stale component/cell focus without changing the checked layer set.
-    coverageDots?.resetView();
+    // Clear stale component/cell focus but keep the camera where the user
+    // left it, so the coverage already drawn for this view stays valid.
+    coverageDots?.clearTransientState();
     updateOverlapHud(null);
     const panel = byId("coverage-detail-panel");
     abortHstLookupsWithin(byId("coverage-detail-content"));
@@ -3938,7 +3947,8 @@ async function activateOverlap(forceActive?: boolean, forceView = false): Promis
     setOverlapExpandVisible(false);
     setCoverageLayersOpen(true);
     coverageFocusActive = false;
-    void loadCoverageDisplay(true);
+    // Not forced: when G drew the same plan, the coverage is already current.
+    void loadCoverageDisplay();
     return;
   }
   if (activate) {
@@ -3971,9 +3981,18 @@ async function activateOverlap(forceActive?: boolean, forceView = false): Promis
         }
         return response.json() as Promise<{ components?: OverlapComponentView[]; commonOrder?: number; pixels?: number[] }>;
       });
-    // Commit the complete O4 background and finer intersection together.
-    // Cached O4 blocks are reused for slider and camera changes in G mode.
-    const [batch, result] = await Promise.all([fetchCoverageDisplayBatch(displayPlan, controller.signal), resultPromise]);
+    // Commit the survey coverage and the intersection together. Blocks come
+    // from the shared cache, so entering or leaving G does not refetch them.
+    // A view whose coverage exceeds the display budget keeps the coverage
+    // already drawn; only the strict intersection must succeed.
+    const plan = displayPlan;
+    const [batch, result] = await Promise.all([
+      fetchCoverageDisplayBatch(plan, controller.signal).catch((error: unknown) => {
+        if (controller.signal.aborted) throw error;
+        return null;
+      }),
+      resultPromise,
+    ]);
     if (!overlapMode || requestSequence !== overlapRequestSequence || controller.signal.aborted) return;
     const renderedPixels = result.pixels ?? [];
     const renderedOrder = result.commonOrder ?? order;
@@ -3983,9 +4002,11 @@ async function activateOverlap(forceActive?: boolean, forceView = false): Promis
     if (!reuseOverlap) activeOverlapViewTiles = requestedViewTiles;
     activeOverlapModalities = modalities;
     activeOverlapOrder = renderedOrder;
-    activeOverlapOverviewKey = displayPlan.key;
     activeOverlapPixels = renderedPixels;
-    coverageDisplayViewKey = displayPlan.key;
+    if (batch) {
+      activeOverlapOverviewKey = plan.key;
+      coverageDisplayViewKey = plan.key;
+    }
     lastOverlapViewKey = viewKey;
     activeOverlapComponents = result.components ?? [];
     {
@@ -3996,7 +4017,9 @@ async function activateOverlap(forceActive?: boolean, forceView = false): Promis
         : ["OVERLAP · ", { text: names, tone: "ind" }, ` · ${renderedPixels.length.toLocaleString("en-US")} CELLS`]);
     }
     overlapEvidenceCache.clear();
-    coverageDots?.updateBlocks(batch.blocks, 4, { nside: 2 ** renderedOrder, pixels: renderedPixels, components: activeOverlapComponents });
+    const overlapCoverage = { nside: 2 ** renderedOrder, pixels: renderedPixels, components: activeOverlapComponents };
+    if (batch) coverageDots?.updateBlocks(batch.blocks, plan.order, overlapCoverage);
+    else coverageDots?.updateOverlap(overlapCoverage);
     renderOverlapPanel(surveyIds, renderedPixels, renderedOrder, "GLOBAL", activeOverlapComponents, !wasOverlapMode);
     if (overlapDrawerOpen) {
       renderOverlapDrawerComponents();

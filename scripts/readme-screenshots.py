@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Capture the README screenshots from a running Assets site.
+"""Capture a candidate README hero from a running Assets site.
 
     ASSETS_PUBLIC_URL=http://127.0.0.1:5180 python3 scripts/readme-screenshots.py
 
-Writes docs/images/ (captured at 2x, stored 1600 px wide; needs Pillow).
-Read-only: it only opens public pages and toggles client-side layers; it never
-calls a write endpoint.
+Opens the dark atlas with DESI and Euclid at order 6. Read-only: it only opens a
+public page and toggles client-side layers; it never calls a write endpoint.
+Writes docs/images/home.capture.png so the committed, hand-taken home.png is
+never overwritten; rename it yourself if you want to replace the hero.
 """
 from __future__ import annotations
 
@@ -18,99 +19,48 @@ from playwright.sync_api import Page, sync_playwright
 BASE = os.environ.get("ASSETS_PUBLIC_URL", "http://127.0.0.1:5180").rstrip("/")
 OUT = Path(__file__).resolve().parent.parent / "docs" / "images"
 VIEWPORT = {"width": 1440, "height": 900}
-# Surveys that make a clear overlap picture on the atlas (all public layers).
-ATLAS_SURVEYS = ["euclid", "desi", "legacy-surveys"]
-README_WIDTH = 1600
-PHOTO_SHOTS = {"home", "atlas", "atlas-overlap"}
+ATLAS_SURVEYS = ["desi", "euclid"]
+HERO_ORDER_STEPS = 2  # O4 -> O6
 
 
-def prime(page: Page, theme: str, locale: str = "en") -> None:
+def prime(page: Page) -> None:
     page.add_init_script(
-        f"""try {{
-          localStorage.setItem('asa-theme', '{theme}');
-          localStorage.setItem('astro-survey-atlas.locale', '{locale}');
+        """try {
+          localStorage.setItem('asa-theme', 'dark');
+          localStorage.setItem('astro-survey-atlas.locale', 'en');
           localStorage.setItem('asa-atlas-guide-v1', 'done');
-        }} catch (_) {{}}"""
+        } catch (_) {}"""
     )
 
 
-def settle(page: Page, ms: int = 1200) -> None:
-    page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(ms)
-
-
-def shoot(page: Page, name: str) -> Path:
-    """Capture at 2x, then store at README width.
-
-    Glow-heavy WebGL views (home, atlas) are saved as JPEG; flat UI pages as
-    palette-quantised PNG. Both stay well under 400 KiB.
-    """
-    from PIL import Image
-
-    OUT.mkdir(parents=True, exist_ok=True)
-    raw = OUT / f".{name}.raw.png"
-    page.screenshot(path=str(raw), animations="disabled")
-    with Image.open(raw) as image:
-        rgb = image.convert("RGB")
-        rgb = rgb.resize((README_WIDTH, round(rgb.height * README_WIDTH / rgb.width)), Image.Resampling.LANCZOS)
-        if name in PHOTO_SHOTS:
-            target = OUT / f"{name}.jpg"
-            rgb.save(target, quality=84, optimize=True, progressive=True, subsampling=0)
-        else:
-            target = OUT / f"{name}.png"
-            rgb.quantize(colors=160, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG).save(target, optimize=True)
-    raw.unlink()
-    return target
-
-
-def atlas(page: Page) -> list[Path]:
-    page.goto(f"{BASE}/atlas/?guide=0")
-    page.wait_for_selector("#coverage-canvas", state="visible")
-    settle(page, 2500)
-    page.locator("#coverage-layers-toggle").click()
-    page.wait_for_selector("#coverage-layers:not([hidden])")
-    for survey in ATLAS_SURVEYS:
-        toggle = page.locator(f'.coverage-survey-group[data-survey-id="{survey}"] .coverage-layer-toggle input[type="checkbox"]').first
-        if toggle.count() and not toggle.is_checked():
-            toggle.scroll_into_view_if_needed()
-            toggle.check()
-            page.wait_for_timeout(600)
-    # Back to the compact roster so the sphere stays the subject.
-    page.locator("#coverage-layers-toggle").click()
-    settle(page, 3000)
-    atlas_shot = shoot(page, "atlas")
-    # Overlap view: G toggles common-area mode once two or more surveys are selected.
-    page.locator("#coverage-canvas").click(position={"x": 40, "y": VIEWPORT["height"] - 40})
-    page.keyboard.press("g")
-    settle(page, 3000)
-    overlap = shoot(page, "atlas-overlap")
-    return [atlas_shot, overlap]
-
-
 def main() -> int:
-    written: list[Path] = []
+    OUT.mkdir(parents=True, exist_ok=True)
+    target = OUT / "home.capture.png"
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
-        for theme in ("dark", "light"):
-            context = browser.new_context(viewport=VIEWPORT, device_scale_factor=2, color_scheme=theme)
-            page = context.new_page()
-            prime(page, theme)
-            if theme == "dark":
-                page.goto(f"{BASE}/")
-                settle(page, 2500)
-                written.append(shoot(page, "home"))
-                written += atlas(page)
-                page.goto(f"{BASE}/surveys/")
-                settle(page)
-                written.append(shoot(page, "surveys"))
-            else:
-                page.goto(f"{BASE}/releases/")
-                settle(page)
-                written.append(shoot(page, "releases-light"))
-            context.close()
+        context = browser.new_context(viewport=VIEWPORT, color_scheme="dark")
+        page = context.new_page()
+        prime(page)
+        page.goto(f"{BASE}/atlas/?guide=0")
+        page.wait_for_selector("#coverage-scene[data-ready=true]", timeout=60000)
+        page.locator("#coverage-layers-toggle").click()
+        for survey in ATLAS_SURVEYS:
+            toggle = page.locator(f'.coverage-survey-group[data-survey-id="{survey}"] .coverage-layer-toggle input[type="checkbox"]').first
+            if toggle.count() and not toggle.is_checked():
+                toggle.check()
+                page.wait_for_timeout(600)
+        page.locator("#coverage-layers-toggle").click()
+        slider = page.locator("#coverage-display-order")
+        slider.focus()
+        for _ in range(HERO_ORDER_STEPS):
+            slider.press("ArrowRight")
+        page.evaluate("document.activeElement.blur()")
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(4000)
+        page.screenshot(path=str(target), animations="disabled")
+        context.close()
         browser.close()
-    for path in written:
-        print(f"{path.relative_to(OUT.parent.parent)}  {path.stat().st_size // 1024} KiB")
+    print(f"{target.relative_to(OUT.parent.parent)}  {target.stat().st_size // 1024} KiB")
     return 0
 
 

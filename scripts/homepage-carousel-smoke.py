@@ -399,7 +399,8 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     assert set(overlap_requests[-1]["layerIds"]) == {"euclid-euclid-ero-native", "gaia-gaia-dr3-main"}
     assert overlap_requests[-1]["viewTiles"]["order"] == 3
     assert len(overlap_requests[-1]["viewTiles"]["tiles"]) <= 192
-    expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "4")
+    # G keeps the survey coverage at the selected display order.
+    expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "9")
     expect(order_label).to_have_text("Overlap order")
     block_requests.clear()
     with page.expect_response(lambda response: response.url.endswith("/api/v1/coverage/overlap"), timeout=30000) as manual_overlap_response:
@@ -445,9 +446,9 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     page.wait_for_timeout(1000)
     assert len(overlap_requests) == 1, "refreshing overlap order must not focus the camera and trigger another query"
     assert page.locator("#coverage-status-camera").inner_text() == camera_before_order_change, "order changes must preserve the focused camera"
-    assert not block_requests, "changing overlap order must reuse the O4 background without high-order source requests"
-    expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "4")
-    expect(page.locator("#overlap-drawer-display-state")).to_contain_text("OVERVIEW O4")
+    assert all(request["order"] == 8 for request in block_requests), f"an overlap order change may only load coverage at that order, got {block_requests}"
+    expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "8")
+    expect(page.locator("#overlap-drawer-display-state")).to_contain_text("OVERVIEW O8")
     if screenshot_root:
         page.screenshot(path=str(Path(screenshot_root) / "atlas-drawer-desktop.png"))
     page.set_viewport_size({"width": 390, "height": 844})
@@ -474,8 +475,8 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     assert not errors, f"Atlas browser errors: {errors}"
     page.close()
 
-    # G keeps an O4 background even if the regular high-order source view
-    # exceeds its budget. Only the strict intersection uses the chosen order.
+    # When the high-order source view exceeds its budget, G keeps the coverage
+    # already drawn. Only the strict intersection uses the chosen order.
     wide_context_fixture = True
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
     page.route("**/api/v1/**", mock_api)
@@ -501,13 +502,13 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     expect(page.locator("#coverage-status-nside")).to_contain_text("O8")
     assert [body["requestedOrder"] for body in overlap_requests] == [8], overlap_requests
     expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "4")
-    assert not block_requests, "Entering G must reuse the O4 overview rather than request high-order source coverage"
+    assert all(request["order"] == 8 for request in block_requests), f"Entering G may only retry the selected order, got {block_requests}"
     assert not errors, f"Atlas browser errors: {errors}"
     page.close()
     wide_context_fixture = False
 
-    # A delayed intersection must retain the previous verified overlap and
-    # the complete O4 background; source coverage never follows the slider.
+    # A delayed intersection must retain the previous verified overlap and the
+    # coverage already drawn until both commit together at the new order.
     context_fixture = True
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
     page.route("**/api/v1/**", mock_api)
@@ -542,13 +543,14 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
         "overlap": overlap_requests, "blocks": block_requests,
         "order": slider.get_attribute("aria-valuetext"), "state": page.locator("#coverage-state").inner_text(),
     }
-    assert not block_requests, "G must keep the O4 source coverage when only the intersection order changes"
+    assert all(request["order"] == 6 for request in block_requests), f"G may only load coverage at the selected order, got {block_requests}"
     expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "4")
     expect(page.locator("#coverage-status-nside")).to_contain_text("O4")
     fulfill_json(*held_overlap_routes.pop())
     held_overlap_orders.clear()
     expect(page.locator("#coverage-status-nside")).to_contain_text("O6")
-    expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "4")
+    expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "6")
+    block_requests.clear()
     page.wait_for_timeout(1000)
     assert len(overlap_requests) == 1, "committing the complete G-mode batch must not refocus or repeat the query"
     canvas = page.locator("#coverage-canvas").bounding_box()
@@ -564,19 +566,24 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
         page.wait_for_timeout(50)
         near = float(page.locator("#coverage-status-camera").inner_text().split(" / ")[0])
     assert near < far * 0.95, f"F must advance the camera in G mode, got {far} -> {near}"
-    assert not block_requests, "Camera focus in G must not request finer source coverage"
+    assert not block_requests, "Camera focus in G must reuse the cached coverage blocks"
     if screenshot_root:
-        page.screenshot(path=str(Path(screenshot_root) / "atlas-overlap-o6-o4-overview.png"))
+        page.screenshot(path=str(Path(screenshot_root) / "atlas-overlap-o6.png"))
     overlap_has_components = False
     slider.press("ArrowRight")
     expect(page.locator("#coverage-status-nside")).to_contain_text("O7")
-    expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "4")
-    assert not block_requests, "An empty finer intersection must retain the O4 source overview"
+    expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "7")
+    assert all(request["order"] == 7 for request in block_requests), f"an empty finer intersection still draws coverage at the selected order, got {block_requests}"
+    page.wait_for_timeout(800)
+    block_requests.clear()
+    camera_before_exit = page.locator("#coverage-status-camera").inner_text()
     page.evaluate("document.activeElement.blur()")
     page.keyboard.press("g")
     expect(page.locator('label[for="coverage-display-order"]')).to_have_text("Display order")
     expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "7")
-    assert block_requests and all(request["order"] == 7 for request in block_requests), "Leaving G restores normal display at the selected order"
+    page.wait_for_timeout(1000)
+    assert not block_requests, f"Leaving G must keep the coverage already drawn, got {block_requests}"
+    assert page.locator("#coverage-status-camera").inner_text() == camera_before_exit, "Leaving G must not move the camera"
     assert not errors, f"Atlas browser errors: {errors}"
     page.close()
 
