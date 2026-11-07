@@ -19,6 +19,21 @@
    归档与激活校验不变。需单独立项：涉及 `site/admin/main.ts`（约 2,860 行）与后端任务状态机。
 5. ~~天球区块内外辉光、亮色球缘配色与 v3 设计图不一致~~（已修）
 
+## 2026-11-08 共享天球组件 阶段 C1/C2（Workspace 换球）
+
+- 包吸收了 Workspace 分叉里仍在使用的能力，全部可选、Assets 默认行为不变：
+  `SurveyLayerViewerOptions`（`sourceIdForFootprint`、`overlapContextMenu`）、`setVisibleWorkspaceLayerKeys`、
+  `focusOverlapComponent`、`preview` 图层、`moc:`/`workspace:` 图层键、状态里的 `explodedPixel`/`explodedLayerCount`、
+  `SurveyFootprint.sourceUrl` 改可选（取 Workspace 更严格的校验）。
+- 两处对两边都生效的修正：
+  - 拾取：单位球射线落空时，按每层实际半径再拾取一次（只补漏，不改原命中）。
+  - 炸开视图：按显示顺序排列（顺序第一的在最外层），内层半径不低于 0.05。
+  - 炸开碎片记录 `layerKey`，键名统一为 `public-survey:`。
+- Assets 复验：`test:node` 512/2 跳过、`test:homepage`、`test:atlas-viewer`、`test:sky-depth-browser` 通过；
+  6 张截图与阶段 A 前基线逐像素一致。
+- Workspace 侧见其 `HANDOFF.md`。**Workspace 暂以 `file:../Astro-Survey-Atlas-Assets/packages/sky-globe`
+  依赖本包，Docker/CI 构建在阶段 B 发布 git tag 前会失败。**
+
 ## 2026-11-07 共享天球组件 阶段 A（分支 `feat/sky-globe`，未提交）
 
 目标：天球抽成 Assets 与 Workspace 共用的组件，Workspace 再按 v3 HUD 重构并接 Aladin 下钻。
