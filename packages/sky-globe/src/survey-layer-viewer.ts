@@ -19,13 +19,18 @@ import {
   type SurveyLayerModel,
 } from "./survey-layer-model.js";
 import type { SurveyFootprint, SurveyFootprintManifest } from "./survey-footprints.js";
-import type { SurveyCard } from "./survey-registry.js";
 import { cartesianToRaDec, raDecToCartesian } from "./coordinates.js";
 import { SkyDepthLayer, type SkyDepthAggregate, type SkyDepthLayout } from "./sky-depth-layer.js";
-import type { SkyDepthResponse } from "../../../src/sky-depth.js";
+import type { SkyDepthResponse } from "./sky-depth-types.js";
 import { LAYER_RADIUS_MAX, LAYER_RADIUS_MIN, normalizeLayerOrder, visibleLayerDepths, type LayerDepth } from "./layer-order.js";
 import { buildOverlapHighlight, type OverlapHighlightStyle } from "./overlap-highlight.js";
 import { surveyColorFor } from "./survey-colors.js";
+
+/** The survey fields the globe reads; any richer survey record satisfies it. */
+export interface GlobeSurvey {
+  id: string;
+  color?: string;
+}
 import type { OverlapHighlight } from "./overlap-highlight.js";
 import { applyCellRim, applyNeutralDepth, buildHudBackdrop, cellBracketPositions, cellRimUniforms, fatLines, HudFinalShader, regionOutlinePositions, type HudBackdrop } from "./hud-scene.js";
 import { DEPTH_BLOOM, sceneTheme, type SceneTheme, type SceneThemeName } from "./scene-theme.js";
@@ -659,7 +664,7 @@ export class SurveyLayerViewer {
   constructor(
     canvas: HTMLCanvasElement,
     manifest: SurveyFootprintManifest,
-    surveys: readonly SurveyCard[],
+    surveys: readonly GlobeSurvey[],
     onSelection: (selection: SurveyLayerSelection | null) => void,
     onHover: (hover: SurveyLayerHover | null) => void,
     onInspection: (inspection: SurveyLayerInspection | null) => void,
@@ -732,7 +737,7 @@ export class SurveyLayerViewer {
   }
 
   /** Replace a complete coverage batch without resetting the renderer or camera. */
-  updateCoverage(manifest: SurveyFootprintManifest, surveys: readonly SurveyCard[], visibleSurveyIds: Iterable<string>, overlap?: SurveyLayerOverlapCoverage): void {
+  updateCoverage(manifest: SurveyFootprintManifest, surveys: readonly GlobeSurvey[], visibleSurveyIds: Iterable<string>, overlap?: SurveyLayerOverlapCoverage): void {
     const previousNside = this.#manifest.nside;
     const selected = new Set(this.#selectedPixels);
     this.#manifest = manifest;

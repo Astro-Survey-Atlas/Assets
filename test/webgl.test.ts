@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { disposeRenderer, rendererPrecision } from "../site/src/atlas/survey-layer-viewer.js";
+import { disposeRenderer, rendererPrecision } from "@astro-survey-atlas/sky-globe";
 
 function fakeRenderer() {
   let disposed = 0;

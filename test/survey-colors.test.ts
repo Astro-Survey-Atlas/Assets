@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { fallbackSurveyColor, surveyColorFor } from "../site/src/atlas/survey-colors.js";
+import { fallbackSurveyColor, surveyColorFor } from "@astro-survey-atlas/sky-globe";
 
 test("survey colors preserve valid catalog values", () => {
   assert.equal(surveyColorFor("euclid", "#3B82F6"), "#3b82f6");

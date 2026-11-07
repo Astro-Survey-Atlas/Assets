@@ -8,13 +8,14 @@ import {
   type SurveyLayerContextMenu,
   type SurveyLayerOverlapComponent,
   type SurveyLayerOverlapCoverage,
-} from "./atlas/survey-layer-viewer.js";
-import type { SurveyFootprintManifest } from "./atlas/survey-footprints.js";
+  type SurveyFootprintManifest,
+  surveyColorFor,
+  type SkyDepthAggregate,
+  type SkyDepthLayout,
+} from "@astro-survey-atlas/sky-globe";
 import type { SurveyCard } from "./atlas/survey-registry.js";
-import { surveyColorFor } from "./atlas/survey-colors.js";
 import { filterByModalities } from "../../src/modality-filter.js";
 import type { SkyDepthResponse } from "../../src/sky-depth.js";
-import type { SkyDepthAggregate, SkyDepthLayout } from "./atlas/sky-depth-layer.js";
 
 export interface CoverageLayer {
   layerId: string;

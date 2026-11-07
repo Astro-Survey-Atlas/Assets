@@ -9,12 +9,14 @@ ARG MOC_CORE_WHEEL
 ARG MOC_CORE_SOURCE_SNAPSHOT
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY packages/sky-globe/package.json ./packages/sky-globe/package.json
 RUN npm ci --registry=${NPM_REGISTRY}
 
 COPY tsconfig.server.json tsconfig.site.json vite.config.ts ./
 COPY server ./server
 COPY src ./src
 COPY scripts ./scripts
+COPY packages ./packages
 COPY site ./site
 COPY test ./test
 COPY fixtures/distance-prototype/planck18-reference.json ./fixtures/distance-prototype/planck18-reference.json

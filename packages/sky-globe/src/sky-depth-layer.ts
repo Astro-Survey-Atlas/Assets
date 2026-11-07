@@ -1,8 +1,17 @@
 import * as THREE from "three";
-import { pixelCenter } from "../../../src/distance-feasibility.js";
-import type { SkyDepthResponse, SkyDepthSourceResult, SkyDepthVoxel } from "../../../src/sky-depth.js";
+import { Healpix } from "healpixjs";
+import type { SkyDepthResponse, SkyDepthSourceResult, SkyDepthVoxel } from "./sky-depth-types.js";
 import { raDecToCartesian } from "./coordinates.js";
 import { sphericalCellBoundary } from "./spherical-cell-geometry.js";
+
+const healpixByOrder = new Map<number, Healpix>();
+/** Centre of a NESTED HEALPix cell in ICRS degrees. */
+export function pixelCenter(order: number, pixel: number): { raDeg: number; decDeg: number } {
+  let healpix = healpixByOrder.get(order);
+  if (!healpix) healpixByOrder.set(order, healpix = new Healpix(2 ** order));
+  const v = healpix.pix2vec(pixel);
+  return { raDeg: ((Math.atan2(v.y, v.x) * 180 / Math.PI) + 360) % 360, decDeg: Math.asin(v.z) * 180 / Math.PI };
+}
 
 export interface SkyDepthAggregate {
   voxel: SkyDepthVoxel;

@@ -2,7 +2,7 @@ import { Archive, Check, Copy, Download, Package, RefreshCw, Telescope, createIc
 import { formatBytes } from "../src/dom.js";
 import { locale, mountLocaleControls, t } from "../src/i18n.js";
 import { mountSiteChrome as mountChrome } from "../src/site-chrome.js";
-import { surveyColorFor } from "../src/atlas/survey-colors.js";
+import { surveyColorFor } from "@astro-survey-atlas/sky-globe";
 
 interface ReleaseHistoryRelease {
   id: string;

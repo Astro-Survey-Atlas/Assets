@@ -19,6 +19,27 @@
    归档与激活校验不变。需单独立项：涉及 `site/admin/main.ts`（约 2,860 行）与后端任务状态机。
 5. ~~天球区块内外辉光、亮色球缘配色与 v3 设计图不一致~~（已修）
 
+## 2026-11-07 共享天球组件 阶段 A（分支 `feat/sky-globe`，未提交）
+
+目标：天球抽成 Assets 与 Workspace 共用的组件，Workspace 再按 v3 HUD 重构并接 Aladin 下钻。
+计划四阶段：A 在 Assets 内建包 → B 拆独立仓库 `Astro-Survey-Atlas/sky-globe`（Apache-2.0，git tag 依赖）
+→ C Workspace 换球 + Aladin 下钻（按钮 + 双击）+ 许可改 Apache-2.0 → D Workspace HUD 壳层与天球模式。
+
+阶段 A 已完成：
+- 新建 npm workspace 包 `packages/sky-globe`（`@astro-survey-atlas/sky-globe`），`exports` 直接指向 TS 源码。
+- 迁入 12 个模块（git mv，名称不变）：`survey-layer-viewer`、`survey-layer-model`、`spherical-cell-geometry`、
+  `hud-scene`、`scene-theme`、`overlap-highlight`、`layer-order`、`coordinates`、`sky-depth-layer`、
+  `survey-colors`、`survey-footprints`、`sky-reference`。`hud-overlay`、`survey-registry`、面板与取数留在应用。
+- 断开的应用依赖：`SurveyCard` → 包内 `GlobeSurvey { id; color? }`；服务端 `pixelCenter` → 包内 healpixjs 实现；
+  `src/sky-depth.ts` 类型 → 包内 `sky-depth-types.ts` 副本。
+- `hud.css` 的两套 `:root` token 移到包内 `theme.css`，`hud.css` 用 `@import` 引入；`hud-ring.css` 暂留（选择器含应用类名，阶段 D 再拆）。
+- `test/sky-globe-boundary.test.ts`：包只能 import `three`/`healpixjs`/自身；sky-depth 类型与服务端双向一致（已验证改类型会编译失败）。
+- Dockerfile 在 `npm ci` 前复制包的 `package.json`，构建前复制 `packages/`。
+- `scripts/atlas-viewer-smoke.py` 改为经 `/@fs/` 加载包内 viewer。
+- 验证：`build:server`、站点 tsc、`test:node`（512 通过、2 跳过）、`build:site`、`test:homepage`、
+  `test:atlas-viewer`、`test:sky-depth-browser` 通过；/atlas/ 暗/亮、首页、两张夹具截图与迁移前逐像素一致，
+  移动端抽屉截图仅菜单按钮过渡帧不同（19×34 px，非天球）。
+
 ## 2026-11-07 天球交互修复与 README 收敛（未提交、未部署）
 
 - **重合模式保持显示阶数**：G 的源覆盖不再固定 O4，改为当前所选阶数并与普通视图共享

@@ -7,6 +7,9 @@
   "engines": {
     "node": ">=22"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "catalog:build": "tsx scripts/build-release-manifest.ts",
     "release:package": "tsx scripts/release-archive.ts package",

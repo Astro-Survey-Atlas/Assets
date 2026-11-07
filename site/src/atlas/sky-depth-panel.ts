@@ -1,6 +1,6 @@
 import type { AtlasCoverageGlobe } from "../atlas-coverage-globe.js";
 import type { SkyDepthAxis, SkyDepthQuery, SkyDepthResponse, SkyDepthSourceResult } from "../../../src/sky-depth.js";
-import type { SkyDepthAggregate } from "./sky-depth-layer.js";
+import type { SkyDepthAggregate } from "@astro-survey-atlas/sky-globe";
 import { locale } from "../i18n.js";
 import "./sky-depth.css";
 

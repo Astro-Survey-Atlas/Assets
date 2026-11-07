@@ -5,9 +5,13 @@ import { coverageCatalogFromWarehouse, isWarehouseFilePartitionLayer, updateCove
 import { batchEvidenceLayerId } from "../server/scan-batch.js";
 import type { WarehouseCoverageCatalogSnapshot } from "../server/evidence-store.js";
 import { footprintManifest, type CoverageCatalog } from "../site/src/atlas-coverage-globe.js";
-import { sourceVariantColor } from "../site/src/atlas/survey-layer-viewer.js";
-import { buildSurveyLayerModel, visibleCoverageAtPixel, visibleSurveySlots } from "../site/src/atlas/survey-layer-model.js";
-import { buildSphericalCellSourceSectorGeometry } from "../site/src/atlas/spherical-cell-geometry.js";
+import {
+  sourceVariantColor,
+  buildSurveyLayerModel,
+  visibleCoverageAtPixel,
+  visibleSurveySlots,
+  buildSphericalCellSourceSectorGeometry,
+} from "@astro-survey-atlas/sky-globe";
 import * as THREE from "three";
 
 function layer(layerId: string, surveyId: string, pixels: number[], product = layerId): CoverageCellLayer {

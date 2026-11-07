@@ -1,6 +1,6 @@
 import { Healpix, Pointing } from "healpixjs";
 
-import { sceneDirectionToHealpixVector } from "./spherical-cell-geometry.js";
+import { sceneDirectionToHealpixVector } from "@astro-survey-atlas/sky-globe";
 
 export interface CoverageViewGeometry {
   coverageViewDirection: [number, number, number];

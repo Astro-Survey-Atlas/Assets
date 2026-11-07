@@ -9,10 +9,20 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
-import { applyCellRim, applyNeutralDepth, buildHudBackdrop, cellRimUniforms, fatLines, HudFinalShader, regionOutlinePositions } from "./atlas/hud-scene.js";
-import { sceneTheme, type SceneTheme } from "./atlas/scene-theme.js";
-import { buildSphericalCellEdges, buildSphericalCellSheetGeometry } from "./atlas/spherical-cell-geometry.js";
-import { surveyColorFor } from "./atlas/survey-colors.js";
+import {
+  applyCellRim,
+  applyNeutralDepth,
+  buildHudBackdrop,
+  cellRimUniforms,
+  fatLines,
+  HudFinalShader,
+  regionOutlinePositions,
+  sceneTheme,
+  type SceneTheme,
+  buildSphericalCellEdges,
+  buildSphericalCellSheetGeometry,
+  surveyColorFor,
+} from "@astro-survey-atlas/sky-globe";
 
 export interface HomeGlobeLayer { surveyId: string; color?: string; nside: number; pixels: readonly number[] }
 

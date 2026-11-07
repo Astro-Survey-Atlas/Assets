@@ -4,8 +4,13 @@ import { BadgeCheck, BookOpen, Box, ChevronLeft, ChevronRight, CircleHelp, Cloud
 import { Healpix, Pointing } from "healpixjs";
 import { AtlasCoverageGlobe, type CoverageCatalog } from "./atlas-coverage-globe.js";
 import { CoverageViewTileBudgetError, coverageCellsInView, coverageTilesInView, overlapCoverageTilesInView, type CoverageViewGeometry } from "./atlas/coverage-view-tiles.js";
-import { surveyColorFor } from "./atlas/survey-colors.js";
-import type { SurveyLayerContextMenu, SurveyLayerInspection, SurveyLayerOverlapComponent, SurveyLayerState } from "./atlas/survey-layer-viewer.js";
+import {
+  surveyColorFor,
+  type SurveyLayerContextMenu,
+  type SurveyLayerInspection,
+  type SurveyLayerOverlapComponent,
+  type SurveyLayerState,
+} from "@astro-survey-atlas/sky-globe";
 import { highestCommonCoverageOrder, overlapViewTileOrder } from "./atlas/coverage-orders.js";
 import { coverageCatalogRevisionKey } from "./coverage-catalog-revision.js";
 import { coverageEscapeIntent } from "./atlas/coverage-interaction.js";

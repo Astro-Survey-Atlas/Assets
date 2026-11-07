@@ -1,5 +1,5 @@
 import { byIdOrNull } from "../dom.js";
-import type { SurveyLayerState } from "./survey-layer-viewer.js";
+import type { SurveyLayerState } from "@astro-survey-atlas/sky-globe";
 
 /**
  * Screen-space tactical HUD drawn over the single WebGL canvas: heading tape,

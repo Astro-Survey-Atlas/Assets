@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { buildSkyDepthLayout, buildSkyDepthRangeFramePositions, isSkyDepthValueInRange } from "../site/src/atlas/sky-depth-layer.js";
-import { raDecToCartesian } from "../site/src/atlas/coordinates.js";
+import {
+  buildSkyDepthLayout,
+  buildSkyDepthRangeFramePositions,
+  isSkyDepthValueInRange,
+  raDecToCartesian,
+} from "@astro-survey-atlas/sky-globe";
 import { pixelAt, pixelCenter } from "../src/distance-feasibility.js";
 import type { SkyDepthResponse, SkyDepthSourceResult } from "../src/sky-depth.js";
 

@@ -12,6 +12,8 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 URL = "http://127.0.0.1:4175"
+# The globe lives in the shared workspace package, outside Vite's site root.
+VIEWER_MODULE = "/@fs" + str(ROOT / "packages/sky-globe/src/survey-layer-viewer.ts")
 
 
 def main() -> None:
@@ -41,12 +43,12 @@ def main() -> None:
                 content_type="text/html", body='<html><body style="margin:0"><canvas id="test-canvas" style="width:1000px;height:800px"></canvas></body></html>',
             ))
             page.goto(URL + "/__atlas-viewer-test__")
-            with opener.open(URL + "/src/atlas/survey-layer-viewer.ts") as response:
+            with opener.open(URL + VIEWER_MODULE) as response:
                 module = response.read().decode()
             three_url = re.search(r'import \* as THREE from "([^"]+)"', module).group(1)
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
-            result = page.evaluate("""async (threeUrl) => {
+            result = page.evaluate("""async ([threeUrl, viewerModule]) => {
                 const THREE = await import(threeUrl);
                 // Observe the actual render scene without adding production test hooks.
                 let scene;
@@ -55,7 +57,7 @@ def main() -> None:
                     scene ??= this;
                     return add.apply(this, objects);
                 };
-                const {SurveyLayerViewer} = await import('/src/atlas/survey-layer-viewer.ts');
+                const {SurveyLayerViewer} = await import(viewerModule);
                 const surveys = [{id:'euclid',color:'#d95f59'},{id:'gaia',color:'#4f8fc8'}];
                 const manifest = (order) => ({
                     schemaVersion:1, generatedAt:'2026-10-26T00:00:00Z', coordinateFrame:'ICRS', nside:2**order,
@@ -114,7 +116,7 @@ def main() -> None:
                 viewer.dispose();
                 THREE.Scene.prototype.add = add;
                 return {before,after,far,near,batch,selectedDirection,expectedDirection,actualViewRadius,insetViewRadius,empty,emptyDistance,emptyFocusDistance};
-            }""", three_url)
+            }""", [three_url, VIEWER_MODULE])
             assert result["before"] == {"euclid": [0, 1], "gaia": [0, 2]}, result
             assert result["after"] == result["before"], "Changing overlap order must preserve non-overlap source context"
             assert result["near"] < result["far"] * 0.95, "F must advance toward the active overlap region without an ordinary cell selection"

@@ -6,9 +6,14 @@ import { filterByModalities } from "../src/modality-filter.js";
 import type { CoverageCellLayer } from "../server/coverage.js";
 import { highestCommonOrder, layersForOverlapComponent, overlapForLayers } from "../server/overlap.js";
 import { SourceUnitStore } from "../server/source-units.js";
-import { buildOverlapHighlight } from "../site/src/atlas/overlap-highlight.js";
-import { largestConnectedPixelComponent, recenteredOrbitPose } from "../site/src/atlas/survey-layer-viewer.js";
-import { cameraDistanceForAngularRadius, cameraDistanceForEffectiveFov, CENTERED_DATA_FOV_DEG } from "../site/src/atlas/survey-layer-viewer.js";
+import {
+  buildOverlapHighlight,
+  largestConnectedPixelComponent,
+  recenteredOrbitPose,
+  cameraDistanceForAngularRadius,
+  cameraDistanceForEffectiveFov,
+  CENTERED_DATA_FOV_DEG,
+} from "@astro-survey-atlas/sky-globe";
 import { coverageEscapeIntent } from "../site/src/atlas/coverage-interaction.js";
 import { testDataRoot } from "./test-data-root.js";
 import * as THREE from "three";

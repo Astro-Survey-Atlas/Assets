@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowRight, ExternalLink, FileCode2, GitBranch, Home, Search
 import { byId } from "../src/dom.js";
 import { locale, mountLocaleControls, t } from "../src/i18n.js";
 import { mountSiteChrome } from "../src/site-chrome.js";
-import { surveyColorFor } from "../src/atlas/survey-colors.js";
+import { surveyColorFor } from "@astro-survey-atlas/sky-globe";
 
 interface Asset { label: string; downloadName: string; downloadUrl: string; sha256: string; sizeBytes: number; releaseId?: string; product?: string; surveyId?: string }
 interface Readiness {

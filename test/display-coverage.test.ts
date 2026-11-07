@@ -9,7 +9,7 @@ import type { NativeMoc } from "../server/native-moc.js";
 import { overlapViewTileOrder } from "../site/src/atlas/coverage-orders.js";
 import { CoverageViewTileBudgetError, coverageCellsInView, coverageTilesInView, overlapCoverageTilesInView } from "../site/src/atlas/coverage-view-tiles.js";
 import { coverageCatalogRevisionKey } from "../site/src/coverage-catalog-revision.js";
-import { healpixPixelFromSceneDirection, sphericalCellCenter } from "../site/src/atlas/spherical-cell-geometry.js";
+import { healpixPixelFromSceneDirection, sphericalCellCenter } from "@astro-survey-atlas/sky-globe";
 
 function nativeMoc(order: number, pixels: number[], maxOrder = order): NativeMoc {
   return {
