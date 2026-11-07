@@ -283,6 +283,8 @@ interface CameraTransition {
   toCamera: THREE.Vector3;
   fromTarget: THREE.Vector3;
   toTarget: THREE.Vector3;
+  fromShift: number;
+  toShift: number;
 }
 
 interface CameraPose {
@@ -333,6 +335,7 @@ const DATA_VIEW_CAMERA_FOV_DEG = 48;
 // while the orbit still pivots on the globe centre.
 const TACTICAL_VIEW_SHIFT = 0.5;
 const TACTICAL_VIEW_DISTANCE = 1.68;
+const GLOBE_UP = new THREE.Vector3(0, 1, 0);
 const TACTICAL_VIEW_DIRECTION = (() => {
   const point = raDecToCartesian(196, 23);
   return new THREE.Vector3(point.x, point.y, point.z).normalize();
@@ -419,10 +422,10 @@ function cameraUpForDirection(direction: THREE.Vector3): THREE.Vector3 {
   return up.normalize();
 }
 
-function narrativeCameraPose(direction: THREE.Vector3, distance: number, outerRadius: number): CameraPose {
-  const camera = direction.clone().multiplyScalar(distance);
-  const target = direction.clone().multiplyScalar(outerRadius * 0.98);
-  return { camera, target };
+/** Look at a sky direction while the orbit pivot stays at the sphere centre,
+ * so dragging after a focus still rotates the whole globe freely. */
+function focusCameraPose(direction: THREE.Vector3, distance: number): CameraPose {
+  return { camera: direction.clone().multiplyScalar(distance), target: new THREE.Vector3() };
 }
 
 export function cameraDistanceForAngularRadius(angularRadius: number, outerRadius: number): number {
@@ -623,6 +626,9 @@ export class SurveyLayerViewer {
   #interactionMode: SurveyLayerInteractionMode = "inspect";
   #focusedSurveyId: string | null = null;
   #homeScrollProgress = 0;
+  /** 1 on the tactical data view; 0 after a focus so the focused cell sits
+   * at the viewport centre instead of below the shifted horizon. */
+  #viewShiftWeight = 1;
   #renderQueued = false;
   #pointerStart: { x: number; y: number } | null = null;
   #clickTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1146,13 +1152,8 @@ export class SurveyLayerViewer {
     const angularRadius = Math.max(...sphericalCellBoundary(nside, pixel, 1).map((corner) => direction.angleTo(corner)));
     const outer = this.#outerRadius;
     const distance = cameraDistanceForAngularRadius(angularRadius, outer);
-    const pose = narrativeCameraPose(direction, distance, outer);
-    this.#startCameraTransition(
-      pose.camera,
-      pose.target,
-      720,
-      cameraUpForDirection(direction),
-    );
+    const pose = focusCameraPose(direction, distance);
+    this.#startCameraTransition(pose.camera, pose.target, 720, GLOBE_UP, 0);
   }
 
   focusSelection(): void {
@@ -1180,19 +1181,14 @@ export class SurveyLayerViewer {
     const halfFov = Math.max(THREE.MathUtils.degToRad(4), angularRadius * 1.35);
     const fitDistance = outer / Math.tan(Math.min(Math.PI / 3, halfFov * 1.25));
     const distance = THREE.MathUtils.clamp(Math.max(outer * 1.55, fitDistance), outer * 1.55, outer * 2.8);
-    const pose = narrativeCameraPose(direction, distance, outer);
-    this.#startCameraTransition(
-      pose.camera,
-      pose.target,
-      720,
-      cameraUpForDirection(direction),
-    );
+    const pose = focusCameraPose(direction, distance);
+    this.#startCameraTransition(pose.camera, pose.target, 720, GLOBE_UP, 0);
   }
 
   focusPixels(nside: number, pixels: readonly number[]): void {
     if (!pixels.length) return;
     const pose = this.#pixelFocusPose(nside, pixels);
-    this.#startCameraTransition(pose.camera, pose.target, 720, cameraUpForDirection(pose.camera.clone().normalize()));
+    this.#startCameraTransition(pose.camera, pose.target, 720, GLOBE_UP, 0);
   }
 
   setSkyDepth(data: SkyDepthResponse | null, onPick?: (item: SkyDepthAggregate) => void): SkyDepthLayout | null {
@@ -1239,7 +1235,7 @@ export class SurveyLayerViewer {
     for (const pixel of pixels) for (const corner of sphericalCellBoundary(nside, pixel, 1)) angularRadius = Math.max(angularRadius, direction.angleTo(corner));
     const outer = this.#outerRadius;
     const distance = cameraDistanceForAngularRadius(angularRadius, outer);
-    return narrativeCameraPose(direction, distance, outer);
+    return focusCameraPose(direction, distance);
   }
 
   focusAsset(assetId: string): void {
@@ -1523,6 +1519,7 @@ export class SurveyLayerViewer {
   focusData(): void {
     this.#cameraTransition = null;
     this.#homeScrollProgress = 1;
+    this.#viewShiftWeight = 1;
     const viewDirection = this.#dataViewDirection();
     this.#camera.position.copy(viewDirection.multiplyScalar(this.#dataViewDistance()));
     this.#controls.target.set(0, 0, 0);
@@ -1537,7 +1534,10 @@ export class SurveyLayerViewer {
   }
 
   #restoreGlobeOrbitTarget(): void {
-    // A cell focus changes both camera and orbit target. Rebase the camera
+    // Overlap focus already pivots on the globe centre; keep the camera where
+    // the user left it so the coverage drawn for this view stays current.
+    if (this.#controls.target.lengthSq() < 1e-12) return;
+    // Older focus paths change both camera and orbit target. Rebase the camera
     // position around the old target before restoring the globe centre so the
     // next drag cannot keep orbiting the previously selected cell.
     this.#cameraTransition = null;
@@ -1557,6 +1557,7 @@ export class SurveyLayerViewer {
   setHomePresentation(): void {
     this.#cameraTransition = null;
     this.#homeScrollProgress = 0;
+    this.#viewShiftWeight = 1;
     this.#applyHomeScrollPose();
     this.#controls.minDistance = 0.002;
     this.#emitState();
@@ -1580,6 +1581,8 @@ export class SurveyLayerViewer {
       this.#dataViewDirection().multiplyScalar(this.#dataViewDistance()),
       new THREE.Vector3(),
       durationMs,
+      undefined,
+      1,
     );
   }
 
@@ -1597,7 +1600,7 @@ export class SurveyLayerViewer {
     const radius = this.#outerRadius;
     const centred = 1 - THREE.MathUtils.smoothstep(this.#controls.target.length(), radius * 0.02, radius * 0.3);
     const close = 1 - THREE.MathUtils.smoothstep(this.#camera.position.length() / radius, 2.2, 4.2);
-    return TACTICAL_VIEW_SHIFT * centred * close;
+    return TACTICAL_VIEW_SHIFT * this.#viewShiftWeight * centred * close;
   }
 
   #homePresentationPose(): CameraPose {
@@ -2533,7 +2536,7 @@ export class SurveyLayerViewer {
     return direction.lengthSq() > 0 ? direction.normalize() : new THREE.Vector3(1, 0, 0);
   }
 
-  #startCameraTransition(destination: THREE.Vector3, target: THREE.Vector3, durationMs: number, up?: THREE.Vector3): void {
+  #startCameraTransition(destination: THREE.Vector3, target: THREE.Vector3, durationMs: number, up?: THREE.Vector3, shiftWeight = this.#viewShiftWeight): void {
     this.#controls.enabled = false;
     if (up) this.#camera.up.copy(up);
     this.#cameraTransition = {
@@ -2543,6 +2546,8 @@ export class SurveyLayerViewer {
       toCamera: destination,
       fromTarget: this.#controls.target.clone(),
       toTarget: target,
+      fromShift: this.#viewShiftWeight,
+      toShift: shiftWeight,
     };
     this.#requestRender();
   }
@@ -2554,6 +2559,7 @@ export class SurveyLayerViewer {
     const eased = easeInOut(progress);
     this.#camera.position.lerpVectors(transition.fromCamera, transition.toCamera, eased);
     this.#controls.target.lerpVectors(transition.fromTarget, transition.toTarget, eased);
+    this.#viewShiftWeight = THREE.MathUtils.lerp(transition.fromShift, transition.toShift, eased);
     this.#keepCameraOutside();
     if (progress < 1) return;
     this.#cameraTransition = null;
