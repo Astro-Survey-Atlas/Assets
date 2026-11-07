@@ -1,5 +1,6 @@
 import { discoveryFailureView, type DiscoveryFailure } from "./discovery-failure.js";
 import { AdminHttpError } from "./admin-error.js";
+import { envFlag } from "./env.js";
 import { mastHstObservationSummaryView, MAST_HST_DISCOVERY_POLICY, type MastHstObservationQuery, type MastHstScopeRef } from "./moc-discovery.js";
 import { batchEvidenceLayerId, buildScanBatchResource, resolveScanBatchIncludePattern, ScanBatchValidationError, scanBatchView, type ScanBatchRequest, type ScanBatchRuleResource } from "./scan-batch.js";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
@@ -322,16 +323,11 @@ export class KubernetesApiError extends Error {
   }
 }
 
-function envBool(value: string | undefined, fallback: boolean): boolean {
-  if (value === undefined) return fallback;
-  return !["false", "0", "off", "no"].includes(value.trim().toLowerCase());
-}
-
 export function loadAdminConfig(environment: NodeJS.ProcessEnv = process.env): AdminConfig {
   const host = environment.KUBERNETES_SERVICE_HOST;
   const port = environment.KUBERNETES_SERVICE_PORT_HTTPS ?? environment.KUBERNETES_SERVICE_PORT ?? "443";
   return {
-    enabled: envBool(environment.ASSETS_ADMIN_ENABLED, true),
+    enabled: envFlag(environment.ASSETS_ADMIN_ENABLED, true),
     namespace: environment.ASSETS_WAREHOUSE_NAMESPACE?.trim() || "atlas-warehouse",
     discoveryObserverNamespace: environment.ASSETS_DISCOVERY_OBSERVER_NAMESPACE?.trim() || "atlas-system",
     discoveryObserverSelector: environment.ASSETS_DISCOVERY_OBSERVER_SELECTOR?.trim() || "app.kubernetes.io/name=astro-atlas-moc-discovery",

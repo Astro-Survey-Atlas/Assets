@@ -23,6 +23,7 @@ import {
   X,
   createIcons,
 } from "lucide";
+import { byId } from "./dom.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { mountSiteChrome } from "./site-chrome.js";
 import { surveyMarkMarkup } from "./survey-mark.js";
@@ -49,7 +50,6 @@ interface SurveyRecord {
 interface SurveyIndex { surveys: SurveyRecord[] }
 type TabName = "coverage" | "overlap" | "sources";
 
-const byId = <T extends Element = HTMLElement>(id: string): T => document.getElementById(id) as unknown as T;
 const tabNames: TabName[] = ["coverage", "overlap", "sources"];
 const featuredSurveyIds = ["euclid", "desi", "legacy-surveys", "hst"];
 const modalityLabels: Record<string, { en: string; zh: string }> = {

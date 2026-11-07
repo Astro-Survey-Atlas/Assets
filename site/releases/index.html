@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#eef0f2" />
-    <meta name="description" content="Astro Survey Atlas resource package releases: browse published versions, download archives or sync via API with SHA-256 verification" />
+    <meta name="description" content="Browse published Resource Packages, download version-pinned archives or sync through the API with SHA-256 verification" />
     <link rel="icon" type="image/svg+xml" href="/icon_without_name_lon_web.svg" />
     <link rel="stylesheet" href="/src/public.css" />
     <link rel="stylesheet" href="/src/hud.css" />
@@ -136,7 +136,7 @@ const downloadUrl = new URL(entry.archiveUrl, catalogUrl);
 
       <section class="resource-band release-api-band">
         <p class="public-kicker" data-i18n="page.releases.apiSyncTitle">API sync</p>
-        <p class="release-api-hint" data-i18n="page.releases.apiSyncHint">Every release exposes a collection ZIP plus version-pinned packages. Download and verify bytes end to end:</p>
+        <p class="release-api-hint" data-i18n="page.releases.apiSyncHint">Download version-pinned packages and verify their bytes. A collection ZIP is available only when the selected release declares one:</p>
         <div class="release-code-panel" id="release-example-panel">
           <div class="release-code-tabs" role="tablist" data-i18n-aria-label="page.releases.examplesTitle">
             <div class="release-code-tab-buttons">

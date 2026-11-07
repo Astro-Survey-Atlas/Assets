@@ -1,4 +1,5 @@
 import { ArrowLeft, ArrowRight, ExternalLink, FileCode2, GitBranch, Home, Search, Telescope, X, createIcons } from "lucide";
+import { byId } from "../src/dom.js";
 import { locale, mountLocaleControls, t } from "../src/i18n.js";
 import { mountSiteChrome } from "../src/site-chrome.js";
 import { surveyColorFor } from "../src/atlas/survey-colors.js";
@@ -42,7 +43,6 @@ interface ProductDossier {
   evidenceUrl: string;
 }
 
-const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 let surveys: Survey[] = [];
 let published = new Map<string, PublishedProduct>();
 let query = "";
@@ -130,7 +130,7 @@ function render(): void {
     renderDetail(null);
     return;
   }
-  if (!selectedSurveyId || !filtered.some((survey) => survey.id === selectedSurveyId)) selectedSurveyId = filtered[0].id;
+  if (!selectedSurveyId || !filtered.some((survey) => survey.id === selectedSurveyId)) selectedSurveyId = filtered[0]!.id;
   filtered.forEach((survey) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -296,7 +296,8 @@ function readinessLevelLabel(readiness?: Readiness): string {
     2: ["L2 单元可反查", "L2 unit reversible"],
     3: ["L3 文件可定位", "L3 file locatable"],
   };
-  return localized(labels[readiness.level][0], labels[readiness.level][1]);
+  const entry = labels[readiness.level] ?? labels[0]!;
+  return localized(entry[0], entry[1]);
 }
 
 function readinessPrecisionLabel(value: string): string {

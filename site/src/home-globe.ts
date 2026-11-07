@@ -164,9 +164,9 @@ export class HomeGlobe {
     this.#bloom.strength = palette.bloom.strength * 0.5;
     this.#bloom.radius = palette.bloom.radius;
     this.#bloom.threshold = palette.bloom.threshold;
-    this.#final.uniforms.vignette.value = palette.final.vignette * 0.6;
-    this.#final.uniforms.grain.value = palette.final.grain;
-    this.#final.uniforms.scanlines.value = palette.final.scanlines;
+    this.#final.uniforms.vignette!.value = palette.final.vignette * 0.6;
+    this.#final.uniforms.grain!.value = palette.final.grain;
+    this.#final.uniforms.scanlines!.value = palette.final.scanlines;
     this.#buildCoverage();
     this.#render();
   }
@@ -208,7 +208,7 @@ export class HomeGlobe {
     this.#composer.setSize(width, height);
     this.#bloom.setSize(width, height);
     this.#resolution.set(width, height);
-    this.#final.uniforms.resolution.value.set(width, height);
+    this.#final.uniforms.resolution!.value.set(width, height);
     this.#camera.aspect = width / height;
     this.#applyPose();
     this.#render();

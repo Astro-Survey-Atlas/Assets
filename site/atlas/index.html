@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#090b18" />
-    <meta name="description" content="Astro Survey Atlas Assets public sky coverage" />
+    <meta name="description" content="Explore public survey coverage on an interactive sky atlas, compare overlapping regions and trace each result to its source archive" />
     <link rel="icon" type="image/svg+xml" href="/icon_without_name_lon_web.svg" />
     <link rel="stylesheet" href="/src/public.css" />
     <link rel="stylesheet" href="/src/hud.css" />
@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="/src/styles.css" />
     <link rel="stylesheet" href="/src/atlas/hud-atlas.css" />
     <script src="/theme-bootstrap.js"></script>
-    <title>Astro Survey Atlas Assets</title>
+    <title>Astro Survey Atlas · Sky Atlas</title>
   </head>
   <body class="public-site atlas-page" data-home-state="atlas">
     <header class="site-header public-header">
@@ -44,8 +44,8 @@
           <p class="hud-boot-title">ASTRO SURVEY ATLAS<small>TACTICAL SKY VIEW · BOOT SEQUENCE</small></p>
         </div>
       </div>
-      <div id="coverage-scene" class="coverage-scene" aria-label="公开巡天 HEALPix 天球覆盖">
-        <canvas id="coverage-canvas" role="img" aria-label="根据公开覆盖块绘制的 HEALPix 单元"></canvas>
+      <div id="coverage-scene" class="coverage-scene" data-i18n-aria-label="coverage.sceneAria" aria-label="Public survey HEALPix coverage on the celestial sphere">
+        <canvas id="coverage-canvas" role="img" data-i18n-aria-label="coverage.canvasAria" aria-label="HEALPix cells drawn from published public coverage blocks"></canvas>
       </div>
       <div class="hud-overlay" aria-hidden="true">
         <div id="hud-ra-tape" class="hud-ra-tape" hidden><div class="hud-ra-strip"></div><output class="hud-ra-current">RA --</output></div>
@@ -81,13 +81,13 @@
           <span>TILT <output id="hud-telemetry-tilt">--</output></span>
           <span>CELLS <output id="hud-telemetry-cells">--</output></span>
         </div>
-        <button id="hud-toggle" class="icon-button" type="button" title="隐藏 HUD 面板 (H)" aria-label="隐藏 HUD 面板 (H)" aria-pressed="false"><i data-lucide="eye"></i></button>
-        <button id="coverage-reset" class="icon-button" type="button" title="重置天球视角" aria-label="重置天球视角"><i data-lucide="rotate-ccw"></i></button>
-        <button id="coverage-layers-toggle" class="icon-button" type="button" title="打开图层" aria-label="打开图层"><i data-lucide="layers-3"></i></button>
-        <button id="coverage-help-toggle" class="icon-button" type="button" title="查看快捷键说明" aria-label="查看快捷键说明"><i data-lucide="circle-help"></i></button>
+        <button id="hud-toggle" class="icon-button" type="button" data-i18n-title="coverage.toggleHud" data-i18n-aria-label="coverage.toggleHud" title="Hide HUD panels (H)" aria-label="Hide HUD panels (H)" aria-pressed="false"><i data-lucide="eye"></i></button>
+        <button id="coverage-reset" class="icon-button" type="button" data-i18n-title="coverage.resetView" data-i18n-aria-label="coverage.resetView" title="Reset the sky view" aria-label="Reset the sky view"><i data-lucide="rotate-ccw"></i></button>
+        <button id="coverage-layers-toggle" class="icon-button" type="button" data-i18n-title="coverage.openLayers" data-i18n-aria-label="coverage.openLayers" title="Open survey layers" aria-label="Open survey layers"><i data-lucide="layers-3"></i></button>
+        <button id="coverage-help-toggle" class="icon-button" type="button" data-i18n-title="coverage.shortcutsHelp" data-i18n-aria-label="coverage.shortcutsHelp" title="Show keyboard shortcuts" aria-label="Show keyboard shortcuts"><i data-lucide="circle-help"></i></button>
       </div>
-        <div id="coverage-layers" class="coverage-layers" hidden aria-label="覆盖图层"></div>
-        <aside id="coverage-help" class="coverage-help" hidden aria-label="天球快捷键说明">
+        <div id="coverage-layers" class="coverage-layers" hidden data-i18n-aria-label="coverage.layerListAria" aria-label="Coverage layers"></div>
+        <aside id="coverage-help" class="coverage-help" hidden data-i18n-aria-label="coverage.shortcutsAria" aria-label="Sky atlas keyboard shortcuts">
           <div class="coverage-help-heading"><strong data-i18n="coverage.shortcuts">SHORTCUTS</strong><button id="coverage-help-close" class="icon-button" type="button" data-i18n-title="common.close" data-i18n-aria-label="common.close"><i data-lucide="x"></i></button></div>
           <dl>
             <div><dt>F</dt><dd data-i18n="coverage.focus">Focus the selected region and narrow the field of view.</dd></div>
@@ -96,7 +96,7 @@
             <div><dt>R</dt><dd data-i18n="coverage.resetShortcut">Reset the sky and camera to the starting view.</dd></div>
             <div><dt>H</dt><dd data-i18n="coverage.hudShortcut">Hide or show the HUD panels. Keys 1–9 toggle the listed layers; E exports the selected cells.</dd></div>
           </dl>
-          <button id="coverage-guide-replay" class="coverage-guide-replay" type="button" data-i18n="coverage.guideReplay">REPLAY GUIDE</button>
+          <button id="coverage-guide-replay" class="coverage-guide-replay" type="button" data-i18n="coverage.guideReplay">◆ REPLAY GUIDE</button>
         </aside>
         <div class="coverage-inspector-rail">
           <div class="coverage-readout" aria-live="polite">
@@ -106,7 +106,7 @@
             <span class="coverage-readout-status"><span aria-hidden="true"></span><output id="coverage-state" data-i18n="coverage.loading">LOADING HEALPIX CELLS</output></span>
             <div id="warehouse-geometry-status" hidden></div>
           </div>
-          <aside id="coverage-detail-panel" class="coverage-detail-panel" hidden aria-live="polite" aria-label="区块覆盖信息">
+          <aside id="coverage-detail-panel" class="coverage-detail-panel" hidden aria-live="polite" data-i18n-aria-label="coverage.cellPanelAria" aria-label="Cell coverage details">
             <div id="coverage-detail-kicker" class="coverage-detail-kicker" data-i18n="coverage.cellInspector">CELL INSPECTOR</div>
             <div id="coverage-detail-headline" class="hud-lock-headline" aria-hidden="true"></div>
             <strong id="coverage-detail-title" class="coverage-inspector-title">HEALPIX CELL</strong>
@@ -115,8 +115,8 @@
           </aside>
           <aside id="coverage-depth-panel" class="coverage-depth-panel" hidden aria-labelledby="coverage-depth-title"></aside>
         </div>
-        <aside id="selection-queue" class="selection-queue" hidden aria-live="polite" aria-label="当前选择"></aside>
-        <aside id="overlap-drawer" class="overlap-drawer" hidden role="dialog" aria-modal="true" aria-labelledby="overlap-drawer-title" aria-label="重合详情">
+        <aside id="selection-queue" class="selection-queue" hidden aria-live="polite" data-i18n-aria-label="coverage.selectionAria" aria-label="Current selection"></aside>
+        <aside id="overlap-drawer" class="overlap-drawer" hidden role="dialog" aria-modal="true" aria-labelledby="overlap-drawer-title" data-i18n-aria-label="coverage.overlapDrawerAria" aria-label="Overlap details">
           <div class="overlap-drawer-header">
             <div class="overlap-drawer-heading">
               <span class="coverage-detail-kicker" data-i18n="coverage.overlapDrawer">OVERLAP DETAILS</span>
@@ -128,18 +128,18 @@
           <div id="overlap-drawer-tools" class="overlap-drawer-tools">
             <output id="overlap-drawer-display-state" role="status"></output>
           </div>
-          <div id="overlap-drawer-components" class="overlap-drawer-components" aria-label="连通区域"></div>
+          <div id="overlap-drawer-components" class="overlap-drawer-components" data-i18n-aria-label="coverage.connectedRegionsAria" aria-label="Connected regions"></div>
           <div id="overlap-drawer-content" class="overlap-drawer-content" aria-live="polite"></div>
         </aside>
-        <div id="coverage-context-menu" class="coverage-context-menu" hidden role="menu" aria-label="覆盖区域操作"></div>
+        <div id="coverage-context-menu" class="coverage-context-menu" hidden role="menu" data-i18n-aria-label="coverage.contextMenuAria" aria-label="Coverage region actions"></div>
       <section class="directory-intro" aria-labelledby="page-title">
         <div class="intro-copy">
-          <p class="eyebrow" data-i18n="directory.eyebrow">PUBLIC SKY COVERAGE CATALOG / 2026.08</p>
-          <h1 id="page-title" data-i18n="directory.title">Public Survey Footprints</h1>
+          <p class="eyebrow" data-i18n="directory.eyebrow">PUBLIC SKY COVERAGE CATALOG</p>
+          <h1 id="page-title" data-i18n="directory.title">Public survey footprints</h1>
           <p class="intro-lead" data-i18n="directory.lead">Readable, comparable, downloadable sky coverage for public surveys. Each record links to native FITS MOCs, geometry sources, release packages, and reviewable evidence.</p>
           <div class="intro-rule" aria-hidden="true"></div>
           <p class="intro-note"><strong data-i18n="directory.noteTitle">Directory notes</strong> <span data-i18n="directory.note">ICRS coordinates and NESTED HEALPix provide one spatial language for public releases. Survey colors map to the sky; focus or select a record to locate its coverage.</span></p>
-          <dl class="headline-stats" aria-label="发布统计">
+          <dl class="headline-stats" data-i18n-aria-label="coverage.releaseStatsAria" aria-label="Release statistics">
             <div><dt>RELEASES</dt><dd id="stat-releases">--</dd></div>
             <div><dt>EXACT MOC</dt><dd id="stat-acquired">--</dd></div>
             <div><dt>RAW FITS</dt><dd id="stat-moc">--</dd></div>
@@ -175,7 +175,7 @@
           <p class="integrity-copy" data-i18n="integrity.copy">Release manifests, source files, and provenance are preserved together. Verify every download independently with SHA-256.</p>
         </div>
         <dl>
-          <div><dt>BUNDLE SHA-256</dt><dd><code id="bundle-hash">--</code><button id="copy-bundle-hash" class="icon-button" type="button" title="复制 bundle SHA-256" aria-label="复制 bundle SHA-256"><i data-lucide="copy"></i></button></dd></div>
+          <div><dt>BUNDLE SHA-256</dt><dd><code id="bundle-hash">--</code><button id="copy-bundle-hash" class="icon-button" type="button" data-i18n-title="coverage.copyBundleHash" data-i18n-aria-label="coverage.copyBundleHash" title="Copy bundle SHA-256" aria-label="Copy bundle SHA-256"><i data-lucide="copy"></i></button></dd></div>
           <div><dt>GENERATED AT</dt><dd id="generated-at">--</dd></div>
         </dl>
         <a id="provenance-download" class="command-button" href="#"><i data-lucide="file-check-2"></i><span data-i18n="integrity.provenance">Download provenance</span></a>
@@ -188,12 +188,12 @@
     </footer>
 
     <dialog id="survey-dialog" class="survey-dialog">
-      <div class="dialog-bar"><span id="dialog-kind">SURVEY</span><button id="dialog-close" class="icon-button" type="button" aria-label="关闭详情" title="关闭"><i data-lucide="x"></i></button></div>
+      <div class="dialog-bar"><span id="dialog-kind">SURVEY</span><button id="dialog-close" class="icon-button" type="button" data-i18n-aria-label="common.closeDetails" data-i18n-title="common.close" aria-label="Close details" title="Close"><i data-lucide="x"></i></button></div>
       <div id="dialog-content" class="survey-dialog-content"></div>
     </dialog>
 
     <dialog id="preview-dialog" class="survey-dialog preview-dialog">
-      <div class="dialog-bar"><span id="preview-kind">FILE PREVIEW</span><button id="preview-close" class="icon-button" type="button" aria-label="关闭预览" title="关闭"><i data-lucide="x"></i></button></div>
+      <div class="dialog-bar"><span id="preview-kind">FILE PREVIEW</span><button id="preview-close" class="icon-button" type="button" data-i18n-aria-label="common.closePreview" data-i18n-title="common.close" aria-label="Close preview" title="Close"><i data-lucide="x"></i></button></div>
       <div id="preview-content" class="survey-dialog-content preview-content"></div>
     </dialog>
 

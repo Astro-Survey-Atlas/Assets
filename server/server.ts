@@ -1,4 +1,5 @@
 import { ApiManagement, MANAGED_KEY_PREFIX } from "./api-management.js";
+import { envFlag } from "./env.js";
 import { SkyDepthInputError, SkyDepthStore } from "./sky-depth.js";
 import { LlmDiscovery, CDS_SEARCH_URL } from "./llm-discovery.js";
 import { adminInventoryIndex } from "./admin-survey-index.js";
@@ -80,12 +81,17 @@ const managesContent = role !== "site";
 const requestRelease = new AsyncLocalStorage<{ catalog: LoadedCatalog; state: Awaited<ReturnType<typeof loadPublicState>>; nativeGroup?: NativeGroup; nativeVersion: string }>();
 const port = Number(process.env.PORT ?? "4180");
 const host = process.env.HOST ?? "0.0.0.0";
+const BACKEND_URL = process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181";
+/** The site role forwards every admin request to the management backend. */
+function proxyToBackend(request: IncomingMessage, response: ServerResponse): void {
+  proxyAdmin(request, response, BACKEND_URL, true);
+}
 const accessGate=new AccessGate();
 async function handleDownloadUnlock(request:IncomingMessage,response:ServerResponse):Promise<void> {
   const apiKey = request.headers["x-assets-api-key"];
   if (typeof apiKey !== "string" || !apiKey.startsWith(MANAGED_KEY_PREFIX)) throw new AccessError(401, "API Key required");
   accessGate.sameOrigin(request);
-  if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+  if (role === "site") return proxyToBackend(request, response);
   if (!apiManagement) throw new AccessError(503, "API management unavailable");
   const started = Date.now(), route = "/api/v1/access/unlock";
   let id: string | undefined;
@@ -129,7 +135,7 @@ const sourceUnitEvidenceRoot = path.resolve(process.env.ASSETS_SOURCE_UNIT_EVIDE
   ?? (process.env.ASSETS_EVIDENCE_ROOT ? evidenceRoot : path.join(releaseRoot, "artifacts/public-survey-footprints/raw")));
 const uploadSpoolRoot = path.resolve(process.env.ASSETS_UPLOAD_SPOOL_ROOT ?? "/var/lib/assets-upload-spool");
 let stateSnapshotSink: StateSnapshotSink | undefined;
-const objectStoreRequired = /^(1|true|yes|on)$/i.test(process.env.ASSETS_OBJECT_STORE_REQUIRED ?? "");
+const objectStoreRequired = envFlag(process.env.ASSETS_OBJECT_STORE_REQUIRED, false);
 let snapshotWorker: { spool: UploadSpool; snapshots: StateSnapshotCoordinator } | undefined;
 if (managesContent && (objectStoreRequired || process.env.ASSETS_OBJECT_STORE_ENDPOINT?.trim() || process.env.ASSETS_OBJECT_STORE_BUCKET?.trim())) {
   const objectStore = createArtifactStoreFromProcess(process.env);
@@ -1043,13 +1049,6 @@ function isRetiredLayer(layer: Pick<CoverageCellLayer, "layerId" | "surveyId" | 
 
 function publicCoverageCatalog(): typeof coverageCatalog { return publicState.coverage; }
 
-function isRetiredFootprint(footprint: { surveyId: string; releaseId: string; product: string }): boolean {
-  return products.list().some((record) => Boolean(record.retiredAt)
-    && record.draft.surveyId === footprint.surveyId
-    && record.draft.releaseId === footprint.releaseId
-    && record.draft.name === footprint.product);
-}
-
 function fullyRetiredSurveyIds(): Set<string> {
   const bySurvey = new Map<string, ProductRecord[]>();
   for (const product of products.list()) {
@@ -1527,19 +1526,6 @@ function assertReviewableProduct(record: ProductRecord, acceptedGaps: readonly s
   if (unknown.length) throw new AdminHttpError(400, `acceptedGaps contains gaps not present in the current revision: ${unknown.join(", ")}`);
   const blocked = readiness.gaps.filter((gap) => NON_ACCEPTABLE_PUBLICATION_GAPS.has(gap));
   if (blocked.length) throw new AdminHttpError(409, `Product cannot be reviewed for publication until evidence is fixed: ${blocked.join(", ")}`);
-}
-
-function assertPublishableProduct(record: ProductRecord): void {
-  const review = record.review;
-  if (!review || review.revision !== record.revision || review.contentSha256 !== record.contentSha256) {
-    throw new AdminHttpError(409, "Product revision must be reviewed before publication");
-  }
-  const readiness = productReadiness(record).draft;
-  const blocked = readiness.gaps.filter((gap) => NON_ACCEPTABLE_PUBLICATION_GAPS.has(gap));
-  if (blocked.length) throw new AdminHttpError(409, `Product publication is blocked by missing evidence: ${blocked.join(", ")}`);
-  const accepted = new Set(review.acceptedGaps);
-  const unaccepted = readiness.gaps.filter((gap) => !accepted.has(gap));
-  if (unaccepted.length) throw new AdminHttpError(409, `Product publication requires explicit acceptance of evidence gaps: ${unaccepted.join(", ")}`);
 }
 
 function adminMocBuildSummaryForBuild(build: ReturnType<MocBuildStore["get"]>): Record<string, unknown> {
@@ -2628,16 +2614,11 @@ async function requestJsonBody(request: IncomingMessage, maxBytes = 128 * 1024):
   return parsed as Record<string, unknown>;
 }
 
+/** If-Match (or body.revision) parsed once; a malformed value is rejected, never ignored. */
 function expectedRevision(request: IncomingMessage, body: Record<string, unknown>): number | undefined {
   const header = request.headers["if-match"];
-  const value = typeof header === "string" ? Number(header.replace(/^\"|\"$/g, "")) : body.revision;
-  return value === undefined || value === "" ? undefined : Number.isSafeInteger(Number(value)) ? Number(value) : undefined;
-}
-
-function editorialExpectedRevision(request: IncomingMessage, body: Record<string, unknown>): number | undefined {
-  const header = request.headers["if-match"];
-  const raw = typeof header === "string" ? header.replace(/^\"|\"$/g, "") : body.revision;
-  if (raw === undefined || raw === "") return undefined;
+  const raw = typeof header === "string" ? header.replace(/^"|"$/g, "") : body.revision;
+  if (raw === undefined || raw === null || raw === "") return undefined;
   if ((typeof raw !== "number" && typeof raw !== "string") || !Number.isSafeInteger(Number(raw))) throw new AdminHttpError(400, "revision must be a safe integer");
   return Number(raw);
 }
@@ -3205,12 +3186,12 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
         if (envelope && Object.keys(body).some((key) => !["content", "draft", "revision"].includes(key))) throw new AdminHttpError(400, "editorial draft request contains unsupported field");
         if ("content" in body && "draft" in body) throw new AdminHttpError(400, "editorial draft request cannot contain both content and draft");
         const content = body.content ?? body.draft ?? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "revision"));
-        return json(response, 200, { editorial: editorialApiRecord(await editorial.updateDraft(surveyId, content, editorialExpectedRevision(request, body))), syncStatus: await apiSyncStatus("editorial") });
+        return json(response, 200, { editorial: editorialApiRecord(await editorial.updateDraft(surveyId, content, expectedRevision(request, body))), syncStatus: await apiSyncStatus("editorial") });
       }
       if (action === "publish" && request.method === "POST") {
         const body = await requestJsonBody(request);
         if (Object.keys(body).some((key) => key !== "revision")) throw new AdminHttpError(400, "editorial publish request contains unsupported field");
-        const expected = editorialExpectedRevision(request, body);
+        const expected = expectedRevision(request, body);
         const pending = editorial.get(surveyId);
         if (expected !== undefined && pending.revision !== expected) throw new AdminHttpError(409,"Editorial revision conflict");
         await products.applyEditorial(pending.draft);
@@ -3487,7 +3468,7 @@ function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, p
 }
 
 async function sendProtectedCoverageBlock(request: IncomingMessage, response: ServerResponse): Promise<void> {
-  if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+  if (role === "site") return proxyToBackend(request, response);
   return withRegionAccess(request, response, async () => {
     const body = await requestJsonBody(request, 16 * 1024);
     const layerId = typeof body.layerId === "string" ? body.layerId.trim() : "";
@@ -3984,7 +3965,7 @@ async function withRegionAccess(request:IncomingMessage,response:ServerResponse,
   const managedCookie = /(?:^|;\s*)assets_download=managed\./.test(String(request.headers.cookie ?? ""));
   if (role === "site" && (managedHeader || managedCookie)) {
     if (!managedHeader) accessGate.sameOrigin(request);
-    return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+    return proxyToBackend(request, response);
   }
   const identity = managedHeader ? undefined : accessGate.identity(request);
   if (!managedHeader && !identity?.startsWith("managed-key:")) return action(identity!);
@@ -3998,7 +3979,7 @@ async function withRegionAccess(request:IncomingMessage,response:ServerResponse,
 }
 
 async function sendCoverageReverseLookup(request:IncomingMessage,response:ServerResponse):Promise<void> {
-  if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+  if (role === "site") return proxyToBackend(request, response);
   const body=await requestJsonBody(request,REVERSE_LOOKUP_BODY_MAX_BYTES);
   const preview=body.preview===true;
   const stream = new ReverseStream(request, response);
@@ -4923,7 +4904,7 @@ const server = http.createServer((request, response) => {
     const pathname = requestPath(request);
     const connectorIcon = /^\/api\/v1\/connector-icons\/([a-f0-9]{64})$/.exec(pathname);
     if (connectorIcon && (request.method === "GET" || request.method === "HEAD")) {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       const content = await connectorPresentations.readIcon(connectorIcon[1]!);
       if (!content) return json(response, 404, { error: "Connector icon not found" });
       const etag = `"${connectorIcon[1]}"`;
@@ -4936,13 +4917,13 @@ const server = http.createServer((request, response) => {
     }
     if (pathname === "/api/v1/openapi.json" && request.method === "GET") return json(response, 200, publicOpenApi());
     if (pathname === "/api/v1/status" && request.method === "GET") {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       const active = nativeUnits?.active;
       return json(response, 200, { schemaVersion: 1, generatedAt: new Date().toISOString(), status: "available", publicRelease: { id: publicState.snapshot.releaseId, generatedAt: publicState.snapshot.generatedAt, coverageRevision: publicCoverageCatalog().revision, publishedMocLayers: publicState.geometry.size }, warehouseGeometry, nativeIndex: { version: nativeUnits?.version ?? "unavailable", generation: nativeUnits?.generation ?? 0, managed: Boolean(active), verified: Boolean(active?.report.checks.length && active.report.checks.every(check => check.passed)) }, services: [{ id: "survey-healpix", status: publicState.geometry.size ? "available" : "empty", authentication: "public" }, { id: "reverse-lookup", status: nativeRuntime().state, authentication: "region:query", anonymousPreviewLimit: PUBLIC_REVERSE_PREVIEW_LIMIT }, { id: "warehouse-evidence", status: evidenceStore.configured ? "configured" : "unconfigured", authentication: "region:query" }], access: { keyIssuance: "administrator", scopes: ["region:query"], maximumRequestsPerMinute: 30, onlineBilling: false }, documentation: "/api-docs/" });
     }
     const surveyHealpix = /^\/api\/v1\/coverage\/surveys\/([a-z0-9-]+)\/healpix$/.exec(pathname);
     if (surveyHealpix && request.method === "GET") {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       const surveyId = surveyHealpix[1]!;
       if (isDeniedSurvey(surveyId) || !publicState.index.surveys.some(survey => survey.id === surveyId)) throw new AccessError(404, "Public survey not found");
       const query = requestQuery(request);
@@ -4965,7 +4946,7 @@ const server = http.createServer((request, response) => {
     }
     if (pathname === "/api/v1/access/unlock" && request.method==="POST") return handleDownloadUnlock(request,response);
     if (pathname.startsWith("/api/v1/admin/")) {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181");
+      if (role === "site") return proxyAdmin(request, response, BACKEND_URL);
       if (request.method === "GET" || request.method === "HEAD") return sendAdmin(request, response, pathname);
       const mutation = adminMutationTail.then(() => sendAdmin(request, response, pathname));
       adminMutationTail = mutation.catch(() => undefined);
@@ -4974,12 +4955,12 @@ const server = http.createServer((request, response) => {
     if (pathname === "/api/v1/access/region-query" && request.method === "POST") return sendProtectedRegionQuery(request,response);
     if (pathname === "/api/v1/access/coverage-block" && request.method === "POST") return sendProtectedCoverageBlock(request, response);
     if (pathname === "/api/v1/sky-depth/example" && request.method === "GET") {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       response.setHeader("Cache-Control", "no-store");
       return json(response, 200, await skyDepth.example());
     }
     if (pathname === "/api/v1/sky-depth" && request.method === "POST") {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       const quota = accessGate.begin(`sky-depth:${request.socket.remoteAddress ?? "unknown"}`);
       try {
         const result = await skyDepth.query(await requestJsonBody(request, 65536));
@@ -4990,11 +4971,11 @@ const server = http.createServer((request, response) => {
       } finally { quota.finish(1); }
     }
     if (pathname === "/api/v1/coverage/overlap" && request.method === "POST") {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       return sendCoverageOverlap(request, response);
     }
     if (pathname === "/api/v1/coverage/hst-images" && request.method === "POST") {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       const body = await requestJsonBody(request, 32 * 1024);
       const quota = accessGate.begin(`hst-images:${request.socket.remoteAddress ?? "unknown"}`);
       let cost = 1;
@@ -5032,7 +5013,7 @@ const server = http.createServer((request, response) => {
       // The site owns the read-only public geometry, but Warehouse evidence is
       // loaded only by the backend.  Proxy this read-only detail request so a
       // browser does not silently lose file/scan evidence at the site edge.
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       return sendCoverageOverlapDetails(request, response);
     }
     if (pathname === "/api/v1/coverage/reverse-lookup" && request.method === "POST") return sendCoverageReverseLookup(request, response);
@@ -5126,7 +5107,7 @@ const server = http.createServer((request, response) => {
       return sendDownload(request, response, catalog, match.record.id);
     }
     if (pathname === "/api/v1/coverage/catalog") {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       await awaitNativeSourceUnitCoverageLoad();
       const { records: _records, ...publicCoverage } = publicCoverageCatalog();
       publicCoverage.layers = publicCoverage.layers.map((layer) => ({
@@ -5142,12 +5123,12 @@ const server = http.createServer((request, response) => {
       return compressedJson(request, response, 200, body, "no-cache, must-revalidate", etag);
     }
     if (pathname.startsWith("/api/v1/coverage/blocks/")) {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       await awaitNativeSourceUnitCoverageLoad();
       return sendCoverageBlock(request, response, pathname);
     }
     if (pathname === "/api/v1/coverage") {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       await awaitNativeSourceUnitCoverageLoad();
       const query = requestQuery(request);
       if (query.has("pageSize") || query.has("cursor")) {
@@ -5164,7 +5145,7 @@ const server = http.createServer((request, response) => {
       return json(response, 200, { schemaVersion:1, coordinateFrame:"ICRS", ordering:"NESTED", nside:16, generatedAt:approvedRelease.generatedAt, footprints:publicState.footprints });
     }
     if (pathname === "/api/v1/surveys") {
-      if (role === "site") return proxyAdmin(request, response, process.env.ASSETS_BACKEND_URL ?? "http://127.0.0.1:4181", true);
+      if (role === "site") return proxyToBackend(request, response);
       await awaitNativeSourceUnitCoverageLoad();
       return json(response, 200, publicSurveyIndex());
     }

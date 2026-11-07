@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { envFlag } from "./env.js";
 import { createReadStream, createWriteStream, readFileSync as readFileSyncFromFs } from "node:fs";
 import { readFile, stat, mkdir, open, rename, writeFile, unlink } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
@@ -655,25 +656,20 @@ export function createArtifactStore(environment: ArtifactStoreEnvironment = {}, 
   return new FilesystemArtifactStore(fallbackRoot, optional(environment.prefix));
 }
 
-function environmentBoolean(value: string | undefined, fallback: boolean): boolean {
-  if (value === undefined || value.trim() === "") return fallback;
-  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
-}
-
 export function artifactStoreEnvironmentFromProcess(environment: NodeJS.ProcessEnv = process.env): ArtifactStoreEnvironment {
   return {
     endpoint: environment.ASSETS_OBJECT_STORE_ENDPOINT,
     bucket: environment.ASSETS_OBJECT_STORE_BUCKET,
     prefix: environment.ASSETS_OBJECT_STORE_PREFIX,
     region: environment.ASSETS_OBJECT_STORE_REGION,
-    forcePathStyle: environmentBoolean(environment.ASSETS_OBJECT_STORE_FORCE_PATH_STYLE, true),
+    forcePathStyle: envFlag(environment.ASSETS_OBJECT_STORE_FORCE_PATH_STYLE, true),
     publicBaseUrl: environment.ASSETS_OBJECT_STORE_PUBLIC_BASE_URL,
     accessKeyId: environment.ASSETS_OBJECT_STORE_ACCESS_KEY_ID,
     secretAccessKey: environment.ASSETS_OBJECT_STORE_SECRET_ACCESS_KEY,
     sessionToken: environment.ASSETS_OBJECT_STORE_SESSION_TOKEN,
     secretJson: environment.ASSETS_OBJECT_STORE_SECRET_JSON,
     secretFile: environment.ASSETS_OBJECT_STORE_SECRET_FILE,
-    requireS3: environmentBoolean(environment.ASSETS_OBJECT_STORE_REQUIRED, false),
+    requireS3: envFlag(environment.ASSETS_OBJECT_STORE_REQUIRED, false),
   };
 }
 

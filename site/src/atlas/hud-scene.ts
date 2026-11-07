@@ -28,7 +28,7 @@ export function fatLines(
     blending: options.additive ? THREE.AdditiveBlending : THREE.NormalBlending,
     toneMapped: false,
   });
-  material.uniforms.resolution.value = resolution;
+  material.uniforms.resolution!.value = resolution;
   const line = new LineSegments2(geometry, material);
   line.renderOrder = options.renderOrder ?? 0;
   // Decorative lines must never intercept cell picking.

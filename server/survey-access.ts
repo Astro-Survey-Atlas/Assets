@@ -277,6 +277,3 @@ export function mergeSourceMetadata(
   return merged as DownloadPlanSpatialUnit["sourceMetadata"];
 }
 
-export function accessTypeLabel(type: SourceAccessType): string {
-  return type === "file" ? "file" : type === "directory" ? "directory" : "source entrypoint";
-}

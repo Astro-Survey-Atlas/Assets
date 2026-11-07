@@ -1,3 +1,4 @@
+import { byIdOrNull } from "../dom.js";
 import type { SurveyLayerState } from "./survey-layer-viewer.js";
 
 /**

@@ -2,7 +2,6 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { DownloadPlan, DownloadPlanCoverageEvidence, DownloadPlanEntrypoint, DownloadPlanSpatialUnit } from "./evidence-store.js";
 import { AccessError } from "./region-access.js";
 
-export const REVERSE_PAGE_SIZE = 30;
 export const REVERSE_PAGE_SIZE_MAX = 100;
 export const REVERSE_CURSOR_MAX_BYTES = 1_048_576;
 export const REVERSE_CURSOR_MAX_KEYS = 10_000;

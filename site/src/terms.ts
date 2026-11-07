@@ -1,5 +1,6 @@
 import { Search, createIcons } from "lucide";
 
+import { byId } from "./dom.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { mountSiteChrome as mountChrome } from "./site-chrome.js";
 
@@ -242,7 +243,6 @@ const terms: readonly Term[] = [
   },
 ];
 
-const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 let query = "";
 let activeGroup: TermGroup | null = null;
 let selectedId: string | null = new URLSearchParams(window.location.hash.slice(1)).get("term");
@@ -356,7 +356,7 @@ function render(): void {
     renderDefinition(undefined);
     return;
   }
-  if (!selectedId || !filtered.some((term) => term.id === selectedId)) selectedId = filtered[0].id;
+  if (!selectedId || !filtered.some((term) => term.id === selectedId)) selectedId = filtered[0]!.id;
   (Object.keys(groups) as TermGroup[]).forEach((groupId) => {
     const groupTerms = filtered.filter((term) => term.group === groupId);
     if (!groupTerms.length) return;

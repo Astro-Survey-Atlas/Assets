@@ -488,8 +488,3 @@ export function coverageBlock(record: CoverageCellLayer, order: number, tileId: 
   return { layerId: record.layerId, order, tileId, cells: selected, sha256: hashCells(selected) };
 }
 
-export function coverageTiles(record: CoverageCellLayer, order: number): number[] {
-  const cells = record.cells.get(order) ?? [];
-  const tileSize = 4096;
-  return [...new Set(cells.map((cell) => Math.floor(cell / tileSize)))];
-}

@@ -5,6 +5,7 @@ import { discoveryResultMarkup, onlyLeads } from "./moc-result.js";
 import type { DiscoveryFailure } from "../../server/discovery-failure.js";
 import { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Trash2, Unlock, Upload, X, Sun, createIcons } from "lucide";
 import { mountPendingRings } from "./pending-ring.js";
+import { byId, escapeHtml, formatBytes, toast as showToast } from "../src/dom.js";
 import { UploadCloud } from "lucide";
 import { mountLocaleControls, t } from "../src/i18n.js";
 import { surveyMarkMarkup } from "../src/survey-mark.js";
@@ -113,12 +114,6 @@ interface EditorialDocument {
 const tokenKey = "astro-survey-atlas-assets.admin-token";
 let adminConfig: AdminConfig | null = null;
 let token = sessionStorage.getItem(tokenKey) ?? "";
-
-const byId = <T extends HTMLElement>(id: string): T => {
-  const element = document.getElementById(id);
-  if (!element) throw new Error(`Missing element: ${id}`);
-  return element as T;
-};
 
 function renderIcons(): void {
   document.querySelectorAll<HTMLElement>("i[data-lucide]").forEach(icon => icon.setAttribute("data-icon-pending", icon.dataset.lucide!));
@@ -608,9 +603,7 @@ function modalityMarkup(modality?: string, count?: number): string {
   return `<span class="product-modality" title="${escapeText(modality ?? "unknown")}"><i data-lucide="${modalityIcon(modality)}"></i><span>${escapeText(modalityLabel(modality))}</span>${count === undefined ? "" : `<strong>${count}</strong>`}</span>`;
 }
 
-function escapeText(value: unknown): string {
-  return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character] ?? character);
-}
+const escapeText = escapeHtml;
 
 function publicationFactMarkup(label: string, value: unknown): string {
   const text = String(value ?? "");
@@ -620,13 +613,7 @@ function publicationFactMarkup(label: string, value: unknown): string {
   return `<div class="is-long"><dt>${escapedLabel}</dt><dd><button type="button" class="admin-context-value" data-publication-detail="true" aria-expanded="false" title="${escapedValue}">${escapedValue}</button></dd></div>`;
 }
 
-function toast(message: string, error = false): void {
-  const element = byId("admin-toast");
-  element.textContent = message;
-  element.dataset.error = error ? "true" : "false";
-  element.dataset.visible = "true";
-  window.setTimeout(() => { element.dataset.visible = "false"; }, 2400);
-}
+function toast(message: string, error = false): void { showToast("admin-toast", message, { durationMs: 2400, error }); }
 
 function setMessage(kind: "connector" | "task" | "product" | "moc-discovery" | "moc-review" | "moc-registration", message: string, error = false): void {
   const element = document.querySelector<HTMLElement>(`[data-form-message="${kind}"]`);
@@ -690,20 +677,6 @@ function connectorLocation(connector: Connector): string {
     return connector.localPath ? `LEGACY ${connector.localPath}` : "受管本地存储";
   }
   return `${connector.endpoint ?? ""}${connector.region ? ` · ${connector.region}` : ""}${connector.bucket ? ` · ${connector.bucket}` : ""}${connector.prefix ? ` / ${connector.prefix}` : ""}`;
-}
-
-function formatBytes(value?: number): string {
-  if (value === undefined || !Number.isFinite(value)) return "未知";
-  if (value < 1024) return `${value} B`;
-  const units = ["KiB", "MiB", "GiB", "TiB"];
-  let size = value;
-  let unit = "B";
-  for (const candidate of units) {
-    size /= 1024;
-    unit = candidate;
-    if (size < 1024) break;
-  }
-  return `${size.toFixed(size >= 10 ? 0 : 1)} ${unit}`;
 }
 
 function connectorInventoryMarkup(connector: Connector, compact = false): string {
@@ -2614,12 +2587,12 @@ function renderPublicationRuns(): void {
 
 function openPublicationRun(run: PublicationRun): void {
   byId("publication-run-title").textContent = `${publicationIsWithdrawal(run) ? "撤下详情" : "发布详情"} · ${run.runId}`;
-  const facts = [
+  const facts: Array<[string, string]> = [
     ["状态", publicationRunStatusLabel(run)],
     ["巡天", run.surveyIds.join(", ")],
     ["Bundle", run.bundle ? `${run.bundle.id} / ${run.bundle.sha256}` : "—"],
     ["发布清单", run.manifestKey ?? run.archiveKey ?? "—"],
-    ...(run.archiveSha256 ? [["历史归档 SHA-256", run.archiveSha256]] : []),
+    ...(run.archiveSha256 ? [["历史归档 SHA-256", run.archiveSha256] as [string, string]] : []),
     ["文件 / 资源包", `${run.files ?? "--"} / ${run.packages ?? "--"}`],
     ["提交时间", formatDate(run.createdAt)],
     ["完成时间", formatDate(run.finishedAt)],

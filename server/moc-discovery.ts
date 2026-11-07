@@ -2,7 +2,6 @@ import { AdminHttpError } from "./admin-error.js";
 import { isDeepStrictEqual } from "node:util";
 
 /** The single discovery contract emitted by the Warehouse v2 controller. */
-export const MOC_DISCOVERY_POLICY = "cds-public-moc-v2" as const;
 export const MOC_DISCOVERY_PROVIDER = "cds" as const;
 export const MAST_HST_DISCOVERY_POLICY = "mast-hst-observations-v1" as const;
 export const MAST_HST_MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024;
@@ -334,15 +333,6 @@ export function resolveMocDiscoveryCandidate(request: MocDiscoveryRequestLike, c
     ...(mocUrl ? { mocUrl } : {}),
     ...(hipsUrl ? { hipsUrl } : {}),
   };
-}
-
-export function reviewSummaryFromDiscoveryStatus(value: unknown): MocReviewSummary | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  try {
-    return sourceSummary({ status: { reviewSummary: value } });
-  } catch {
-    return undefined;
-  }
 }
 
 function hipsMocUrl(value: string): string {
