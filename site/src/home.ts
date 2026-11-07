@@ -23,12 +23,10 @@ import {
   X,
   createIcons,
 } from "lucide";
+import { byId } from "./dom.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
 import { mountSiteChrome } from "./site-chrome.js";
 import { surveyMarkMarkup } from "./survey-mark.js";
-import "./public.css";
-import "./homepage.css";
-import "./survey-mark.css";
 
 interface SurveyProduct {
   modality?: string;
@@ -43,6 +41,7 @@ interface SurveyRecord {
   id: string;
   name: string;
   mission: string;
+  color?: string;
   modalities: string[];
   releases: SurveyRelease[];
   statistics?: { publicProducts?: number };
@@ -51,7 +50,6 @@ interface SurveyRecord {
 interface SurveyIndex { surveys: SurveyRecord[] }
 type TabName = "coverage" | "overlap" | "sources";
 
-const byId = <T extends Element = HTMLElement>(id: string): T => document.getElementById(id) as unknown as T;
 const tabNames: TabName[] = ["coverage", "overlap", "sources"];
 const featuredSurveyIds = ["euclid", "desi", "legacy-surveys", "hst"];
 const modalityLabels: Record<string, { en: string; zh: string }> = {
@@ -133,7 +131,8 @@ function renderFeaturedSurveys(surveys: SurveyRecord[]): void {
     const identity = document.createElement("span");
     identity.className = "home-survey-identity";
     const name = document.createElement("strong");
-    name.textContent = survey.name;
+    name.className = "snapshot-heading";
+    name.textContent = survey.name.toUpperCase();
     const mission = document.createElement("small");
     mission.textContent = survey.mission;
     identity.append(name, mission);
@@ -143,7 +142,7 @@ function renderFeaturedSurveys(surveys: SurveyRecord[]): void {
       ...survey.releases.flatMap((release) => release.products.flatMap((product) => product.modality ? [product.modality] : [])),
     ])];
     const modalityList = document.createElement("span");
-    modalityList.className = "home-survey-modalities";
+    modalityList.className = "home-survey-modalities snapshot-modalities";
     modalityList.setAttribute("aria-label", `${survey.name} ${locale() === "zh" ? "模态：" : "modalities: "}${modalities.map((modality) => modalityLabels[modality]?.[locale()] ?? modality).join("、")}`);
     modalities.slice(0, 5).forEach((modality) => {
       const icon = document.createElement("i");
@@ -422,6 +421,14 @@ async function loadCatalog(): Promise<void> {
     loadedSurveys = value.surveys;
     renderStats(loadedSurveys);
     renderFeaturedSurveys(loadedSurveys);
+    void heroReady.then((hero) => {
+      if (!hero || !loadedSurveys) return;
+      const bySurveyId = new Map(loadedSurveys.map((survey) => [survey.id, survey]));
+      void hero.showSurveys(featuredSurveyIds.flatMap((id) => {
+        const survey = bySurveyId.get(id);
+        return survey ? [{ id: survey.id, name: survey.name, color: survey.color }] : [];
+      }));
+    });
   } catch (error) {
     catalogFailed = true;
     renderCatalogFailure();
@@ -477,6 +484,15 @@ window.addEventListener("atlas:locale-change", () => {
   syncRotationControl();
   scheduleRotation();
 });
+
+/* The limb globe is desktop decoration: it loads after first paint and
+ * the page stays complete without it. */
+const heroReady: Promise<typeof import("./home-hero.js") | null> = window.matchMedia("(min-width: 900px)").matches
+  ? import("./home-hero.js").then((hero) => hero.mountHero() ? hero : null).catch((error: unknown) => {
+    console.warn("Home hero unavailable", error);
+    return null;
+  })
+  : Promise.resolve(null);
 
 chooseTab(new URLSearchParams(window.location.search).get("tab") ?? "overlap", false);
 void loadCatalog();

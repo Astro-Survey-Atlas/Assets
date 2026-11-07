@@ -1,7 +1,8 @@
 import { ArrowLeft, ArrowRight, ExternalLink, FileCode2, GitBranch, Home, Search, Telescope, X, createIcons } from "lucide";
-import "../src/public.css";
+import { byId } from "../src/dom.js";
 import { locale, mountLocaleControls, t } from "../src/i18n.js";
 import { mountSiteChrome } from "../src/site-chrome.js";
+import { surveyColorFor } from "../src/atlas/survey-colors.js";
 
 interface Asset { label: string; downloadName: string; downloadUrl: string; sha256: string; sizeBytes: number; releaseId?: string; product?: string; surveyId?: string }
 interface Readiness {
@@ -17,7 +18,7 @@ interface Product { productId?: string; name: string; modality: string; descript
 interface ProductLink { kind: string; label: string; url: string; description?: string; mediaType?: string; sizeBytes?: number; sha256?: string }
 interface EvidenceItem { kind: string; label: string; description: string; visibility: "public" | "evidence-only" | "unavailable"; url?: string; filename?: string; mediaType?: string; sizeBytes?: number; sha256?: string; reason?: string }
 interface Release { id: string; label: string; products: Product[]; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null } }
-interface Survey { id: string; name: string; mission: string; modalities: string[]; releases: Release[]; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; assets: Asset[] }
+interface Survey { id: string; name: string; color?: string; mission: string; modalities: string[]; releases: Release[]; coverageOrders?: { availableOrders: number[]; overviewOrders: number[]; maxOrder: number | null }; assets: Asset[] }
 interface SurveyIndex { surveys: Survey[] }
 interface FlowNode { id: string; kind: string; title: string; bodyMarkdown: string; order: number; implementationRef: string; evidenceRefs: string[] }
 interface FlowEdge { from: string; to: string; label?: string }
@@ -42,7 +43,6 @@ interface ProductDossier {
   evidenceUrl: string;
 }
 
-const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 let surveys: Survey[] = [];
 let published = new Map<string, PublishedProduct>();
 let query = "";
@@ -61,59 +61,187 @@ function appendText(parent: Element, tag: string, text: string, className?: stri
   return node;
 }
 
+let selectedSurveyId: string | null = null;
+const activeModalities = new Set<string>();
+const PRODUCT_PREVIEW_ROWS = 9;
+const expandedSurveys = new Set<string>();
+
+const surveyMaxOrder = (survey: Survey): number | null => {
+  const orders = survey.releases.flatMap((release) => release.products.flatMap((product) => typeof product.coverage?.maxOrder === "number" ? [product.coverage.maxOrder] : []));
+  return orders.length ? Math.max(...orders) : survey.coverageOrders?.maxOrder ?? null;
+};
+const productCount = (survey: Survey): number => survey.releases.reduce((count, release) => count + release.products.length, 0);
+const surveyColor = (survey: Survey & { color?: string }): string => surveyColorFor(survey.id, survey.color);
+
+function orderSegments(order: number | null | undefined): HTMLElement {
+  const segs = document.createElement("span");
+  segs.className = "surveys-order-segs";
+  segs.setAttribute("aria-hidden", "true");
+  for (let index = 0; index < 12; index += 1) {
+    const cell = document.createElement("i");
+    if (typeof order === "number" && index < order) cell.className = "is-filled";
+    segs.append(cell);
+  }
+  return segs;
+}
+
+function matchesQuery(survey: Survey): boolean {
+  if (!query) return true;
+  return `${survey.name} ${survey.mission} ${survey.modalities.join(" ")} ${survey.releases.flatMap((release) => [release.label, ...release.products.flatMap((product) => [product.name, product.modality])]).join(" ")}`.toLocaleLowerCase().includes(query);
+}
+function matchesModality(survey: Survey): boolean {
+  return !activeModalities.size || survey.modalities.some((modality) => activeModalities.has(modality));
+}
+
+function renderStats(): void {
+  byId("surveys-stat-surveys").textContent = String(surveys.length);
+  byId("surveys-stat-releases").textContent = String(surveys.reduce((count, survey) => count + survey.releases.length, 0));
+  byId("surveys-stat-products").textContent = String(surveys.reduce((count, survey) => count + productCount(survey), 0));
+}
+
+function renderModalityFilter(): void {
+  const host = byId("surveys-modalities");
+  host.replaceChildren();
+  const modalities = [...new Set(surveys.flatMap((survey) => survey.modalities))].sort();
+  const chip = (label: string, active: boolean, onClick: () => void): void => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "surveys-chip";
+    button.setAttribute("aria-pressed", String(active));
+    button.textContent = label;
+    button.addEventListener("click", onClick);
+    host.append(button);
+  };
+  chip(localized("全部", "ALL"), !activeModalities.size, () => { activeModalities.clear(); render(); });
+  modalities.forEach((modality) => chip(modality, activeModalities.has(modality), () => {
+    if (activeModalities.has(modality)) activeModalities.delete(modality); else activeModalities.add(modality);
+    render();
+  }));
+}
+
 function render(): void {
+  renderModalityFilter();
   const host = byId("resource-surveys");
   host.replaceChildren();
-  const filtered = surveys.filter((survey) => !query || `${survey.name} ${survey.mission} ${survey.modalities.join(" ")} ${survey.releases.flatMap((release) => [release.label, ...release.products.flatMap((product) => [product.name, product.modality])]).join(" ")}`.toLocaleLowerCase().includes(query));
-  if (!filtered.length) { appendText(host, "div", t("common.noMatch"), "resource-empty"); return; }
-
+  const filtered = surveys.filter((survey) => matchesQuery(survey) && matchesModality(survey));
+  byId("surveys-count").textContent = filtered.length === surveys.length ? `${surveys.length} · ${localized("全部", "ALL")}` : `${filtered.length} / ${surveys.length}`;
+  if (!filtered.length) {
+    appendText(host, "div", t("common.noMatch"), "resource-empty");
+    renderDetail(null);
+    return;
+  }
+  if (!selectedSurveyId || !filtered.some((survey) => survey.id === selectedSurveyId)) selectedSurveyId = filtered[0]!.id;
   filtered.forEach((survey) => {
-    const article = document.createElement("article");
-    article.className = "resource-survey";
-    const identity = document.createElement("div");
-    appendText(identity, "strong", survey.name);
-    appendText(identity, "span", survey.mission);
-    appendText(identity, "small", survey.modalities.join(" · "));
-    article.append(identity);
-
-    const metrics = document.createElement("div");
-    metrics.className = "resource-survey-orders";
-    appendText(metrics, "b", orderText(survey.coverageOrders?.availableOrders));
-    appendText(metrics, "small", `${survey.releases.length} ${localeWord("releases")} · ${survey.releases.reduce((count, release) => count + release.products.length, 0)} ${localeWord("products")}`);
-    article.append(metrics);
-
-    const releaseList = document.createElement("div");
-    releaseList.className = "resource-release-list";
-    survey.releases.forEach((release) => {
-      const releaseBlock = document.createElement("div");
-      releaseBlock.className = "resource-release-block";
-      const releaseHeader = document.createElement("div");
-      releaseHeader.className = "resource-release-heading";
-      appendText(releaseHeader, "span", release.label);
-      appendText(releaseHeader, "code", orderText(release.coverageOrders?.availableOrders));
-      releaseBlock.append(releaseHeader);
-      const productList = document.createElement("div");
-      productList.className = "resource-product-list";
-      release.products.forEach((product) => {
-        const id = productKey(survey.id, release.id, product);
-        const record = published.get(id);
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "resource-product-item";
-        button.dataset.productId = id;
-      button.title = `${localeWord("view")} ${survey.name} ${release.label} ${product.name}`;
-        appendText(button, "strong", product.name);
-        appendText(button, "span", `${record?.modality ?? product.modality} · ${orderText(record?.coverage?.availableOrders ?? product.coverage?.availableOrders)} · ${readinessLevelLabel(record?.readiness ?? product.readiness)} · ${record ? (locale() === "zh" ? "已发布" : "PUBLISHED") : (locale() === "zh" ? "目录" : "CATALOG")}`);
-        button.addEventListener("click", () => openProduct(survey, release, product, record));
-        productList.append(button);
-      });
-      releaseBlock.append(productList);
-      releaseList.append(releaseBlock);
-    });
-    article.append(releaseList);
-    host.append(article);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "surveys-unit";
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", String(survey.id === selectedSurveyId));
+    button.dataset.surveyId = survey.id;
+    button.style.setProperty("--survey-color", surveyColor(survey));
+    const identity = document.createElement("span");
+    identity.className = "surveys-unit-name";
+    appendText(identity, "strong", survey.name.toUpperCase());
+    appendText(identity, "small", `${survey.releases.length} REL · ${survey.modalities.join(" / ")}`);
+    const order = document.createElement("span");
+    order.className = "surveys-unit-order";
+    const max = surveyMaxOrder(survey);
+    appendText(order, "b", max === null ? "—" : `ORD ${max}`);
+    appendText(order, "small", localized("原生最高", "NATIVE MAX"));
+    button.append(identity, order);
+    button.addEventListener("click", () => { selectedSurveyId = survey.id; render(); });
+    host.append(button);
   });
+  renderDetail(filtered.find((survey) => survey.id === selectedSurveyId) ?? null);
   renderIcons();
+}
+
+function renderDetail(survey: Survey | null): void {
+  const host = byId("survey-detail");
+  host.replaceChildren();
+  const head = document.createElement("div");
+  head.className = "surveys-plate-head is-hot";
+  appendText(head, "span", localized("产品详情", "PRODUCT DETAIL"));
+  host.append(head);
+  if (!survey) return;
+  host.style.setProperty("--survey-color", surveyColor(survey));
+  appendText(head, "small", survey.id);
+
+  const title = document.createElement("div");
+  title.className = "surveys-detail-title";
+  appendText(title, "span", survey.name.slice(0, 2).toUpperCase(), "surveys-detail-badge").setAttribute("aria-hidden", "true");
+  const names = document.createElement("div");
+  appendText(names, "h3", survey.name.toUpperCase());
+  appendText(names, "small", [survey.mission.toUpperCase(), ...survey.releases.map((release) => release.label)].join(" · "));
+  title.append(names);
+  const atlas = document.createElement("a");
+  atlas.className = "command-button";
+  atlas.href = `/atlas/?survey=${encodeURIComponent(survey.id)}`;
+  atlas.textContent = localized("在星图中查看", "VIEW IN ATLAS");
+  title.append(atlas);
+  host.append(title);
+
+  const facts = document.createElement("dl");
+  facts.className = "surveys-detail-facts";
+  const fact = (label: string, value: string): void => {
+    const cell = document.createElement("div");
+    appendText(cell, "dt", label);
+    appendText(cell, "dd", value);
+    facts.append(cell);
+  };
+  fact(localized("模态", "MODALITIES"), survey.modalities.join(", ") || "--");
+  fact(localized("版本", "RELEASES"), String(survey.releases.length));
+  fact(localized("产品", "PRODUCTS"), String(productCount(survey)));
+  fact(localized("坐标", "FRAME"), "ICRS · NESTED");
+  host.append(facts);
+
+  appendText(host, "h4", localized("产品 · 名称 · 模态 · 状态 · 原生最高阶数", "PRODUCTS · NAME · MODALITY · STATUS · NATIVE MAX ORDER"), "surveys-detail-subhead");
+  const rows = survey.releases.flatMap((release) => release.products.map((product) => ({ release, product })));
+  const expanded = expandedSurveys.has(survey.id);
+  const visible = expanded ? rows : rows.slice(0, PRODUCT_PREVIEW_ROWS);
+  const table = document.createElement("table");
+  table.className = "surveys-product-table";
+  const headRow = table.createTHead().insertRow();
+  [localized("产品", "Product"), localized("模态", "Modality"), localized("状态", "Status"), localized("最高阶数", "Max order"), ""].forEach((label) => appendText(headRow, "th", label));
+  const body = table.createTBody();
+  visible.forEach(({ release, product }) => {
+    const id = productKey(survey.id, release.id, product);
+    const record = published.get(id);
+    const row = body.insertRow();
+    row.dataset.productId = id;
+    const name = row.insertCell();
+    appendText(name, "strong", product.name);
+    appendText(name, "small", release.label);
+    appendText(row.insertCell(), "span", record?.modality ?? product.modality, "surveys-tag");
+    const status = appendText(row.insertCell(), "span", (product.status ?? (record ? "published" : "catalog")).replace(/_/g, " "), "surveys-tag");
+    status.dataset.status = product.status ?? "";
+    const orderCell = row.insertCell();
+    const max = record?.coverage?.maxOrder ?? product.coverage?.maxOrder;
+    orderCell.className = "surveys-product-order";
+    orderCell.append(orderSegments(max));
+    appendText(orderCell, "b", typeof max === "number" ? `ORD ${max}` : "—");
+    const action = row.insertCell();
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "surveys-evidence-button";
+    button.textContent = localized("证据 →", "EVIDENCE →");
+    button.title = `${localeWord("view")} ${survey.name} ${release.label} ${product.name}`;
+    button.addEventListener("click", () => openProduct(survey, release, product, record));
+    action.append(button);
+  });
+  host.append(table);
+
+  const note = document.createElement("div");
+  note.className = "surveys-detail-note";
+  if (rows.length > PRODUCT_PREVIEW_ROWS) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.textContent = expanded ? localized("收起", "Show fewer") : localized(`另有 ${rows.length - PRODUCT_PREVIEW_ROWS} 个产品`, `${rows.length - PRODUCT_PREVIEW_ROWS} more products`);
+    more.addEventListener("click", () => { if (expanded) expandedSurveys.delete(survey.id); else expandedSurveys.add(survey.id); renderDetail(survey); });
+    note.append(more);
+  }
+  appendText(note, "span", localized("每个产品都保留目录中的来源引用、精度和档案链接；目录未记录的文件不会出现在这里。", "Every product row keeps its source reference, precision and archive link from the catalog. The directory never links a file that the catalog does not record."));
+  host.append(note);
 }
 
 function detailRow(parent: HTMLElement, label: string, value: string): void {
@@ -168,7 +296,8 @@ function readinessLevelLabel(readiness?: Readiness): string {
     2: ["L2 单元可反查", "L2 unit reversible"],
     3: ["L3 文件可定位", "L3 file locatable"],
   };
-  return localized(labels[readiness.level][0], labels[readiness.level][1]);
+  const entry = labels[readiness.level] ?? labels[0]!;
+  return localized(entry[0], entry[1]);
 }
 
 function readinessPrecisionLabel(value: string): string {
@@ -451,6 +580,7 @@ Promise.all([
 ]).then(([surveyIndex, productIndex]) => {
   surveys = surveyIndex.surveys ?? [];
   published = new Map((productIndex.products ?? []).map((product) => [product.productId, product]));
+  renderStats();
   render();
   openHashProduct();
 }).catch(() => {

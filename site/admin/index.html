@@ -5,22 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/icon_without_name_lon_web.svg" />
     <meta name="theme-color" content="#050a10" />
-    <title>Astro Survey Atlas Assets · Control Room</title>
+    <title>Astro Survey Atlas · Control Room</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+    <link rel="stylesheet" href="/admin/hud-admin.css" />
+    <link rel="stylesheet" href="/src/survey-mark.css" />
   </head>
   <body>
+    <i class="admin-frame-c is-tl" aria-hidden="true"></i><i class="admin-frame-c is-tr" aria-hidden="true"></i><i class="admin-frame-c is-bl" aria-hidden="true"></i><i class="admin-frame-c is-br" aria-hidden="true"></i>
     <header class="admin-header">
-      <a class="admin-brand" href="/" aria-label="返回 Assets 公共目录"><img class="admin-brand-logo" src="/icon_without_name_lon_web.svg" alt="Astro Survey Atlas" width="72" height="28" /><span><strong>ASTRO SURVEY ATLAS</strong><small>ASSETS CONTROL ROOM</small></span></a>
+      <a class="admin-brand" href="/" aria-label="返回 Assets 公共目录"><img class="admin-brand-logo" src="/icon_without_name_lon_web.svg" alt="Astro Survey Atlas" width="72" height="28" /><span><strong>ASTRO SURVEY ATLAS</strong><small>ASSETS CONTROL ROOM</small></span></a><span class="admin-mode" aria-hidden="true"><i></i>CONTROL ROOM</span>
       <div class="admin-header-actions"><a href="/" title="返回公共目录" data-i18n-title="admin.publicDirectory"><i data-lucide="arrow-left"></i><span data-i18n="admin.publicDirectory">Public directory</span></a><button id="theme-toggle" class="theme-toggle" type="button" title="切换明暗主题" aria-label="切换明暗主题"><i data-lucide="moon"></i></button><button class="locale-toggle" data-locale-toggle type="button"><span>EN</span><span aria-hidden="true">/</span><span>中</span></button><button id="logout-button" type="button" title="清除当前管理员会话"><i data-lucide="log-out"></i><span data-i18n="admin.logout">Log out</span></button></div>
     </header>
 
     <main class="admin-main">
       <section id="login-panel" class="admin-login" aria-labelledby="login-title">
-        <div><p class="admin-eyebrow">AUTHENTICATED ACCESS</p><h2 id="login-title">进入管理台</h2><p>管理员令牌只保存在当前浏览器会话中，并通过 Authorization header 提交。</p></div>
-        <form id="login-form" class="admin-inline-form"><label><span>管理员令牌</span><input id="admin-token" type="password" autocomplete="off" required placeholder="Bearer token" /></label><button class="admin-primary" type="submit"><i data-lucide="unlock"></i><span>验证并进入</span></button></form>
-        <p id="login-error" class="admin-error" role="alert" hidden></p>
+        <div class="admin-gate">
+          <div class="admin-plate-head is-hot"><span>AUTHENTICATED ACCESS</span><small>CONTROL ROOM</small></div>
+          <div class="admin-gate-body">
+            <p class="admin-eyebrow">CONTROL ROOM ACCESS</p><h2 id="login-title">进入管理台</h2><p>管理员令牌只保存在当前浏览器会话中，并通过 Authorization header 提交。</p>
+            <form id="login-form" class="admin-inline-form"><label><span>管理员令牌 / ADMIN TOKEN</span><input id="admin-token" type="password" autocomplete="off" required placeholder="Bearer token" /></label><button class="admin-primary" type="submit"><i data-lucide="unlock"></i><span>验证并进入</span></button></form>
+            <p id="login-error" class="admin-error" role="alert" hidden></p>
+            <div class="admin-gate-tags"><span>SESSION STORAGE ONLY</span><span>AUTHORIZATION HEADER</span></div>
+          </div>
+        </div>
       </section>
 
       <section id="admin-workspace" class="admin-workspace" hidden>
+        <aside class="admin-side">
         <div class="admin-toolbar"><div class="admin-toolbar-actions"><dl class="admin-toolbar-context"><div><dt>NAMESPACE</dt><dd id="admin-namespace">--</dd></div><div><dt>CAPABILITY</dt><dd id="admin-capability">CHECKING</dd></div></dl><button id="refresh-button" class="admin-quiet" type="button" title="刷新 Connector、任务和产品"><i data-lucide="refresh-cw"></i><span>刷新</span></button><button id="auto-update-toggle" class="admin-quiet" type="button">自动更新：开</button><output id="admin-status">尚未加载</output><small id="refresh-time"></small><span id="refresh-state" role="status"></span></div></div>
         <nav class="admin-step-nav" aria-label="管理步骤" role="tablist">
           <button id="admin-step-overview-tab" type="button" role="tab" data-admin-step="overview" aria-controls="admin-step-overview"><span class="step-index">00</span><i data-lucide="chart-no-axes-combined"></i><span>数据总览</span><output id="step-overview-count">--</output></button>
@@ -30,6 +41,8 @@
           <button id="admin-step-releases-tab" type="button" role="tab" data-admin-step="releases" aria-controls="admin-step-releases"><span class="step-index">04</span><i data-lucide="package-check"></i><span>发布与验证</span><output id="step-releases-count">--</output></button>
           <button id="admin-step-api-tab" type="button" role="tab" data-admin-step="api" aria-controls="admin-step-api"><span class="step-index">05</span><i data-lucide="lock-keyhole"></i><span>API 设置</span></button>
         </nav>
+        </aside>
+        <div class="admin-work">
 
         <section id="admin-step-api" class="admin-step-panel" data-admin-panel="api" role="tabpanel" aria-labelledby="admin-step-api-tab" hidden>
           <h2>API 设置</h2><p id="api-settings-message" role="status" aria-live="polite"></p><div id="api-settings-content"></div>
@@ -139,6 +152,7 @@
           </section>
           <dialog id="publication-run-dialog" class="admin-dialog"><div class="task-detail-heading"><div><span class="section-index">PUBLICATION</span><h4 id="publication-run-title">发布详情</h4></div><button id="publication-run-close" class="admin-quiet" type="button">关闭</button></div><div id="publication-run-detail" class="task-detail-content"></div></dialog>
         </section>
+      </div>
       </section>
     </main>
     <dialog id="moc-product-register-dialog" class="product-dialog">

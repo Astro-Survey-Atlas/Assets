@@ -1,0 +1,272 @@
+/* Tactical HUD design tokens and the shared site header.
+   One language, two palettes: the dark theme is a glowing tactical display,
+   the light theme reuses the same geometry on frosted paper without glow.
+   Brand colours come from the logo: indigo #2c3792 and magenta #f01951. */
+:root,
+:root[data-theme="dark"] {
+  --hud-bg: #010104;
+  --hud-bg-image: radial-gradient(ellipse at 50% 40%, #07071a 0%, #010104 70%);
+  --hud-ink: #f2f2ff;
+  --hud-dim: #8d90b8;
+  --hud-faint: #4a4d72;
+  --hud-line: rgba(160, 168, 255, .2);
+  --hud-line-strong: rgba(160, 168, 255, .45);
+  --hud-ind: #8592ff;
+  --hud-ind-soft: rgba(133, 146, 255, .16);
+  --hud-hot: #ff2e63;
+  --hud-hot-soft: rgba(255, 46, 99, .16);
+  --hud-plate: linear-gradient(90deg, rgba(8, 8, 22, .86), rgba(8, 8, 22, .58));
+  --hud-plate-solid: rgba(6, 6, 18, .9);
+  --hud-plate-base: rgba(6, 6, 18, .2);
+  --hud-head: linear-gradient(90deg, rgba(44, 55, 146, .6), rgba(44, 55, 146, 0));
+  --hud-head-hot: linear-gradient(90deg, rgba(240, 25, 81, .55), rgba(240, 25, 81, 0));
+  --hud-blur: blur(8px) saturate(1.2);
+  --hud-ind-glow: 0 0 14px rgba(133, 146, 255, .55);
+  --hud-hot-glow: 0 0 14px rgba(255, 46, 99, .8);
+  --hud-text-glow: 0 0 10px rgba(200, 205, 255, .45);
+  --hud-hot-text-glow: 0 0 12px rgba(255, 46, 99, .85);
+  --hud-shadow: 0 18px 40px rgba(0, 0, 0, .45);
+  --hud-chamfer: 10px;
+  --font-hud: "Atlas Mono", "Atlas Sans CJK", monospace;
+}
+
+:root[data-theme="light"] {
+  --hud-bg: #e9ebf3;
+  --hud-bg-image: radial-gradient(ellipse at 50% 40%, #f7f8fc 0%, #e4e7f1 75%);
+  --hud-ink: #15162e;
+  --hud-dim: #585b80;
+  --hud-faint: #a0a3c0;
+  --hud-line: rgba(44, 55, 146, .16);
+  --hud-line-strong: rgba(44, 55, 146, .42);
+  --hud-ind: #2c3792;
+  --hud-ind-soft: rgba(44, 55, 146, .09);
+  --hud-hot: #e0124b;
+  --hud-hot-soft: rgba(224, 18, 75, .09);
+  --hud-plate: linear-gradient(90deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .5));
+  --hud-plate-solid: rgba(255, 255, 255, .88);
+  --hud-plate-base: rgba(255, 255, 255, .2);
+  --hud-head: linear-gradient(90deg, rgba(44, 55, 146, .13), rgba(44, 55, 146, 0));
+  --hud-head-hot: linear-gradient(90deg, rgba(240, 25, 81, .14), rgba(240, 25, 81, 0));
+  --hud-blur: blur(22px) saturate(1.5);
+  --hud-ind-glow: 0 0 0 transparent;
+  --hud-hot-glow: 0 0 0 transparent;
+  --hud-text-glow: none;
+  --hud-hot-text-glow: none;
+  --hud-shadow: 0 18px 40px rgba(40, 44, 90, .12);
+}
+
+/* ---------- Header ---------- */
+body.public-site .site-header,
+body.resources-page .site-header {
+  border-bottom: 1px solid var(--hud-line);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--hud-bg) 92%, transparent), color-mix(in srgb, var(--hud-bg) 62%, transparent));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--hud-ind) 18%, transparent), 0 10px 30px color-mix(in srgb, var(--hud-bg) 40%, transparent);
+  backdrop-filter: var(--hud-blur);
+}
+
+body.public-site .site-header::after,
+body.resources-page .site-header::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--hud-hot) 18%, var(--hud-ind) 50%, var(--hud-hot) 82%, transparent);
+  opacity: .55;
+  content: "";
+  pointer-events: none;
+}
+
+.brand-wordmark strong,
+body.public-site .brand strong,
+body.resources-page .brand strong {
+  color: var(--hud-ink);
+  font: 700 13px/1.1 var(--font-sans), sans-serif;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-shadow: var(--hud-text-glow);
+}
+
+.brand-wordmark small,
+body.public-site .brand small,
+body.resources-page .brand small {
+  color: var(--hud-dim);
+  font: 400 9px/1.1 var(--font-hud);
+  letter-spacing: .3em;
+}
+
+body.public-site .site-nav-link,
+body.resources-page .site-nav-link {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--hud-dim);
+  font: 700 12px/1 var(--font-sans), sans-serif;
+  letter-spacing: .08em;
+}
+
+body.public-site .site-nav-link:hover,
+body.public-site .site-nav-link:focus-visible,
+body.resources-page .site-nav-link:hover,
+body.resources-page .site-nav-link:focus-visible,
+body.public-site .site-nav-link[aria-current="page"],
+body.resources-page .site-nav-link[aria-current="page"] {
+  border: 0;
+  background: transparent;
+  color: var(--hud-ink);
+  text-shadow: var(--hud-text-glow);
+}
+
+/* Active page: bracketed in magenta, like a locked menu item. */
+body.public-site .site-nav-link[aria-current="page"]::before,
+body.resources-page .site-nav-link[aria-current="page"]::before,
+body.public-site .site-nav-link[aria-current="page"]::after,
+body.resources-page .site-nav-link[aria-current="page"]::after {
+  position: absolute;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  left: 0;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  color: var(--hud-hot);
+  content: "[";
+  font: 700 13px/1 var(--font-hud);
+  text-shadow: var(--hud-hot-text-glow);
+  transform: translateY(-52%);
+  pointer-events: none;
+}
+
+body.public-site .site-nav-link[aria-current="page"]::after,
+body.resources-page .site-nav-link[aria-current="page"]::after {
+  right: 0;
+  left: auto;
+  content: "]";
+}
+
+.theme-toggle,
+body.public-site .locale-toggle,
+body.resources-page .locale-toggle {
+  border: 1px solid var(--hud-line-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--hud-ink);
+  clip-path: polygon(7px 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
+}
+
+body.public-site .locale-toggle,
+body.resources-page .locale-toggle {
+  padding: 0 14px;
+  font: 700 11px/1 var(--font-hud);
+  letter-spacing: .14em;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible,
+body.public-site .locale-toggle:hover,
+body.public-site .locale-toggle:focus-visible,
+body.resources-page .locale-toggle:hover,
+body.resources-page .locale-toggle:focus-visible {
+  border-color: var(--hud-ind);
+  background: var(--hud-ind-soft);
+  color: var(--hud-ink);
+}
+
+body.public-site .admin-entry,
+body.resources-page .admin-entry {
+  padding: 0 20px;
+  border: 0;
+  border-radius: 0;
+  background: #2c3792;
+  color: #fff;
+  font: 700 11px/1 var(--font-sans), sans-serif;
+  letter-spacing: .12em;
+  clip-path: polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%);
+}
+
+body.public-site .admin-entry:hover,
+body.public-site .admin-entry:focus-visible,
+body.resources-page .admin-entry:hover,
+body.resources-page .admin-entry:focus-visible {
+  background: #3d4bc4;
+  transform: none;
+}
+
+/* ---------- Loading ring ----------
+   One loading indicator for every public page: a thin ring with a magenta
+   comet arc over a faint track. Any element with .hud-ring (or one of the
+   legacy loading spinner selectors below) gets it. */
+.hud-ring,
+body.public-site .hud-query-spinner,
+body.public-site .hud-boot-spinner,
+body.public-site .overlap-loading > span,
+body.public-site .overlap-drawer-loading > span,
+body.public-site .loading-row > span,
+body.resources-page .loading-row > span {
+  --hud-ring-size: 14px;
+  --hud-ring-width: 2px;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--hud-ring-size);
+  height: var(--hud-ring-size);
+  border: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 18%, color-mix(in srgb, var(--hud-hot) 35%, transparent) 45%, var(--hud-hot) 82%, transparent 82.5%);
+  box-shadow: inset 0 0 0 var(--hud-ring-width) var(--hud-line);
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--hud-hot) 55%, transparent));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--hud-ring-width) - .5px), #000 calc(100% - var(--hud-ring-width)));
+  mask: radial-gradient(farthest-side, transparent calc(100% - var(--hud-ring-width) - .5px), #000 calc(100% - var(--hud-ring-width)));
+  animation: hud-ring-spin .9s linear infinite;
+}
+:root[data-theme="light"] .hud-ring,
+:root[data-theme="light"] body.public-site .hud-query-spinner,
+:root[data-theme="light"] body.public-site .hud-boot-spinner,
+:root[data-theme="light"] body.public-site .overlap-loading > span,
+:root[data-theme="light"] body.public-site .overlap-drawer-loading > span,
+:root[data-theme="light"] body.public-site .loading-row > span,
+:root[data-theme="light"] body.resources-page .loading-row > span { filter: none; }
+.hud-ring.is-lg { --hud-ring-size: 28px; --hud-ring-width: 2px; }
+@keyframes hud-ring-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .hud-ring,
+  body.public-site .hud-query-spinner,
+  body.public-site .hud-boot-spinner,
+  body.public-site .overlap-loading > span,
+  body.public-site .overlap-drawer-loading > span,
+  body.public-site .loading-row > span,
+  body.resources-page .loading-row > span { animation-duration: 2.4s; }
+}
+
+/* ---------- HUD scrollbars ----------
+   Inner scroll panes hide their bar until hovered or focused, then show a
+   4px indigo hairline thumb (magenta while dragged); no track, no arrows. */
+body.surveys-page .surveys-list,
+body.terms-page .terms-index,
+body.releases-page .release-survey-list {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color .2s ease;
+}
+body.surveys-page .surveys-list:hover, body.surveys-page .surveys-list:focus-within, body.terms-page .terms-index:hover, body.terms-page .terms-index:focus-within, body.releases-page .release-survey-list:hover {
+  scrollbar-color: color-mix(in srgb, var(--hud-ind) 70%, transparent) transparent;
+}
+body.surveys-page .surveys-list::-webkit-scrollbar,
+body.terms-page .terms-index::-webkit-scrollbar,
+body.releases-page .release-survey-list::-webkit-scrollbar { width: 4px; height: 4px; }
+body.surveys-page .surveys-list::-webkit-scrollbar-track,
+body.terms-page .terms-index::-webkit-scrollbar-track,
+body.releases-page .release-survey-list::-webkit-scrollbar-track { background: transparent; }
+body.surveys-page .surveys-list::-webkit-scrollbar-button,
+body.terms-page .terms-index::-webkit-scrollbar-button,
+body.releases-page .release-survey-list::-webkit-scrollbar-button { display: none; height: 0; }
+body.surveys-page .surveys-list::-webkit-scrollbar-thumb,
+body.terms-page .terms-index::-webkit-scrollbar-thumb,
+body.releases-page .release-survey-list::-webkit-scrollbar-thumb { border-radius: 0; background: transparent; }
+body.surveys-page .surveys-list:hover::-webkit-scrollbar-thumb,
+body.terms-page .terms-index:hover::-webkit-scrollbar-thumb,
+body.releases-page .release-survey-list:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--hud-ind) 70%, transparent); box-shadow: 0 0 6px color-mix(in srgb, var(--hud-ind) 60%, transparent); }
+body.surveys-page .surveys-list::-webkit-scrollbar-thumb:active { background: var(--hud-hot); }

@@ -130,19 +130,21 @@ test("Escape keeps the drawer dismissal, focus clear and double-reset intents di
   assert.equal(coverageEscapeIntent({ overlapDrawerOpen: false, now: 1_400, lastEscapeAt: 1_000 }), "reset-experience");
 });
 
-test("overlap highlight builds solid cells and flow edges without a runtime error", () => {
-  const highlight = buildOverlapHighlight([{ nside: 16, pixel: 1000, radius: 1.02, color: new THREE.Color("#ffd24a"), inset: 0.028 }], 11_999);
-  assert.equal(highlight.root.children.length, 3);
+test("overlap highlight is a faint static fill marked only by its outer boundary", () => {
+  const resolution = new THREE.Vector2(800, 600);
+  const highlight = buildOverlapHighlight([1000, 1001, 1002, 1003].map((pixel) => ({ nside: 16, pixel, radius: 1.02, color: new THREE.Color("#f01951") })), 11_999, 0.06, resolution);
   assert.equal(highlight.mesh.renderOrder, 11_999);
   assert.equal(highlight.meshMaterial.depthTest, true);
-  assert.equal(highlight.glowMaterial.depthTest, false);
-  assert.equal(highlight.dashMaterial.depthTest, false);
-  assert.equal(highlight.dashEdges.renderOrder, 12_001);
-  assert.ok(highlight.dashEdges.geometry.getAttribute("lineDistance"));
+  assert.equal(highlight.meshMaterial.opacity, 0.06);
+  assert.equal(highlight.glow, null);
+  assert.equal(highlight.outline.renderOrder, 12_001);
+  // Four nested children form one parent pixel: only its 4 outer edges remain, 2 segments each.
+  const start = highlight.outline.geometry.getAttribute("instanceStart");
+  assert.equal(start.count, 8);
   highlight.root.traverse((child) => {
-    if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
+    if (child instanceof THREE.Mesh) {
       child.geometry.dispose();
-      child.material.dispose();
+      (child.material as THREE.Material).dispose();
     }
   });
 });

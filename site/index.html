@@ -4,18 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#25282d" />
-    <meta name="description" content="Astro Survey Atlas public sky coverage and reproducible survey assets" />
+    <meta name="description" content="Explore public survey coverage, compare overlapping sky regions and trace each result to its source archive" />
     <link rel="icon" type="image/svg+xml" href="/icon_without_name_lon_web.svg" />
     <link rel="stylesheet" href="/src/public.css" />
+    <link rel="stylesheet" href="/src/hud.css" />
+    <link rel="stylesheet" href="/src/hud-pages.css" />
     <link rel="stylesheet" href="/src/homepage.css" />
+    <link rel="stylesheet" href="/src/survey-mark.css" />
     <script src="/theme-bootstrap.js"></script>
-    <title>Astro Survey Atlas · Public Sky Data</title>
+    <title>Astro Survey Atlas · Public Survey Coverage</title>
   </head>
   <body class="public-site homepage">
     <header class="site-header public-header">
       <a class="brand" href="/" data-i18n-aria-label="nav.home">
         <img class="brand-logo" src="/icon_without_name_lon_web.svg" alt="Astro Survey Atlas" width="72" height="28" />
-        <span class="brand-wordmark"><strong>Astro Survey Atlas</strong><small data-i18n="home.brandSubtitle">PUBLIC SKY DATA</small></span>
+        <span class="brand-wordmark"><strong>Astro Survey Atlas</strong><small data-i18n="home.brandSubtitle">COVERAGE &amp; SOURCE LOOKUP</small></span>
       </a>
       <button class="mobile-menu-toggle" type="button" data-mobile-menu-toggle data-i18n-aria-label="nav.open" aria-expanded="false"><i data-lucide="menu"></i></button>
       <nav class="site-nav" data-site-nav aria-label="Site navigation">
@@ -33,18 +36,29 @@
       </nav>
     </header>
 
+    <div class="home-stage" data-home-stage aria-hidden="true">
+      <canvas class="home-stage-canvas"></canvas>
+      <div class="home-stage-tape"></div>
+      <aside class="home-stage-callout" hidden>
+        <p><i></i><span data-i18n="home.stageLive">LIVE COVERAGE</span></p>
+        <small data-i18n="home.stageOrder">PUBLISHED UNION · O4 CELLS</small>
+        <ul data-home-stage-legend></ul>
+      </aside>
+    </div>
+    <div class="home-stage-veil" aria-hidden="true"><span class="hud-ring is-lg"></span><b data-i18n="home.stageEntering">ENTERING SKY ATLAS</b></div>
+
     <main class="homepage-main">
       <section class="homepage-intro" aria-labelledby="home-title">
         <div class="homepage-intro-meta">
-          <p class="home-eyebrow" data-i18n="home.eyebrow">PUBLIC SURVEY DATA / SPATIAL DISCOVERY</p>
+          <p class="home-eyebrow" data-i18n="home.eyebrow">PUBLIC SURVEY COVERAGE / SOURCE LOOKUP</p>
           <span class="home-mono">ICRS · NESTED HEALPIX · PUBLIC SOURCES</span>
         </div>
         <div class="homepage-headline-row">
-          <h1 id="home-title"><span data-i18n="home.titleLine1">Connect the sky.</span> <em data-i18n="home.titleLine2">Trace the data.</em></h1>
+          <h1 id="home-title"><span data-i18n="home.titleLine1">Find surveys for a sky region.</span> <em data-i18n="home.titleLine2">Trace each result to its source.</em></h1>
           <div class="homepage-intro-copy">
-            <p data-i18n="home.lead">Explore public survey coverage, compare overlapping regions and follow source identities to the archive. Export a source manifest; retrieve scientific data from its source.</p>
+            <p data-i18n="home.lead">Choose a sky region to see which public survey releases and products cover it, compare overlaps, and trace each coverage record to its source archive and observing unit. Export a JSON/CSV source manifest; obtain scientific files from each archive under its access policy.</p>
             <div class="homepage-actions">
-              <a class="home-button home-button-primary" href="/atlas/"><span data-i18n="home.openAtlas">Open Sky Atlas</span><i data-lucide="arrow-up-right"></i></a>
+              <a class="home-button home-button-primary" href="/atlas/" data-home-launch><span data-i18n="home.openAtlas">Open Sky Atlas</span><i data-lucide="arrow-up-right"></i></a>
               <a class="home-button home-button-secondary" href="/surveys/"><span data-i18n="home.directory">Survey directory</span><i data-lucide="arrow-right"></i></a>
             </div>
           </div>
@@ -55,7 +69,7 @@
         <div><span data-i18n="home.publicSurveys">PUBLIC SURVEYS</span><strong id="home-stat-surveys">--</strong></div>
         <div><span data-i18n="home.releasesMetric">RELEASES</span><strong id="home-stat-releases">--</strong></div>
         <div><span data-i18n="home.publishedProducts">PUBLISHED PRODUCTS</span><strong id="home-stat-products">--</strong></div>
-        <div><span data-i18n="home.coordinateContract">COORDINATE FRAME</span><strong>ICRS</strong></div>
+        <div><span data-i18n="home.coordinateContract">COORDINATE CONTRACT</span><strong>ICRS</strong></div>
       </section>
 
       <section class="home-workflow" aria-labelledby="workflow-title">
@@ -89,7 +103,7 @@
           <a class="home-text-link" href="/surveys/"><span data-i18n="home.viewDirectory">View full directory</span><i data-lucide="arrow-up-right"></i></a>
         </div>
         <p class="home-section-lead" data-i18n="home.surveysLead">Browse the published releases and products represented in the current public catalog.</p>
-        <div id="home-featured-surveys" class="home-survey-register" aria-live="polite"><div class="home-catalog-message" data-i18n="home.catalogLoading">Loading public survey catalog…</div></div>
+        <div id="home-featured-surveys" class="home-survey-register" aria-live="polite"><div class="home-catalog-message"><span class="hud-ring" aria-hidden="true"></span><span data-i18n="home.catalogLoading">Loading public survey catalog…</span></div></div>
       </section>
 
       <section class="home-section home-resources" id="resources" aria-labelledby="resources-title">

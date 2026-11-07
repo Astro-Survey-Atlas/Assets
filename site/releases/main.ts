@@ -1,7 +1,8 @@
 import { Archive, Check, Copy, Download, Package, RefreshCw, Telescope, createIcons } from "lucide";
+import { formatBytes } from "../src/dom.js";
 import { locale, mountLocaleControls, t } from "../src/i18n.js";
 import { mountSiteChrome as mountChrome } from "../src/site-chrome.js";
-import "../src/public.css";
+import { surveyColorFor } from "../src/atlas/survey-colors.js";
 
 interface ReleaseHistoryRelease {
   id: string;
@@ -58,18 +59,6 @@ interface ReleaseHistoryDocument {
 }
 
 const releaseList = document.querySelector<HTMLDivElement>("#release-list");
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KiB", "MiB", "GiB"];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
-}
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -254,6 +243,8 @@ function sourceRow(source: ReleaseHistorySource): HTMLElement {
 function surveyEntry(pkg: ReleaseHistoryPackage): HTMLElement {
   const details = document.createElement("details");
   details.className = "release-survey";
+  // Each survey keeps its own colour, as in the Atlas.
+  details.style.setProperty("--release-survey-color", surveyColorFor(pkg.survey?.id ?? pkg.id));
 
   const summary = document.createElement("summary");
   summary.className = "release-survey-summary";
@@ -272,6 +263,10 @@ function surveyEntry(pkg: ReleaseHistoryPackage): HTMLElement {
     mission.textContent = pkg.survey.mission;
     title.append(mission);
   }
+  const packageId = document.createElement("small");
+  packageId.className = "release-survey-package";
+  packageId.textContent = pkg.id;
+  title.append(packageId);
 
   const meta = document.createElement("span");
   meta.className = "release-survey-meta";

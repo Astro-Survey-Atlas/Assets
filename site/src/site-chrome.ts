@@ -1,5 +1,4 @@
 import { Menu, Moon, Sun, X, createIcons } from "lucide";
-import "./public.css";
 
 export type SiteTheme = "light" | "dark";
 

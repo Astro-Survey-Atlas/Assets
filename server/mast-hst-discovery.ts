@@ -169,6 +169,3 @@ export function decodeScopeMoc(bytes: Buffer, expectedSha256: string): NativeMoc
   }
 }
 
-export function isMastHstDiscoveryPolicy(value: unknown): value is typeof MAST_HST_DISCOVERY_POLICY {
-  return value === MAST_HST_DISCOVERY_POLICY;
-}
