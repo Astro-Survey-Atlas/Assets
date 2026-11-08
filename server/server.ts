@@ -3713,6 +3713,8 @@ function normalizeReverseEntrypoints(entries: Array<Record<string, unknown>>): D
 }
 
 const PUBLIC_REVERSE_PREVIEW_LIMIT = 6;
+/** Pages (1,000 rows each) a preview may read per layer before reporting truncation. */
+const REVERSE_PREVIEW_MAX_PAGES = 3;
 const REVERSE_LOOKUP_BODY_MAX_BYTES = 1_310_720;
 const reverseCursorSecret = process.env.ASSETS_REVERSE_CURSOR_SECRET?.trim() || randomUUID();
 
@@ -4395,7 +4397,9 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   }
   const excludeFileIds: string[] = [];
   const queryLimit = body.limit ?? 1000;
-  const sourceUnitLimit = 50_000;
+  // A preview shows only the first few rows; later pages are fetched on demand,
+  // so it must not exhaust the Warehouse continuation or the native index.
+  const sourceUnitLimit = preview ? REVERSE_PREVIEW_MAX_PAGES * 1000 : 50_000;
   const sourceDescriptors = (body.layerIds as string[]).map((layerId) => {
     const layer = publicCoverageCatalog().records.get(layerId);
     if (!layer) throw new AccessError(404, "Coverage layer not found");
@@ -4458,7 +4462,9 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
           const files = [...lookup.sourceFiles];
           const scopes = JSON.stringify(lookup.scanScopes ?? []);
           const cursors = new Set<string>();
-          while (lookup.truncated && lookup.nextSearchAfter && edges.length < 50_000) {
+          let pages = 1;
+          while (lookup.truncated && lookup.nextSearchAfter && edges.length < 50_000 && (!preview || pages < REVERSE_PREVIEW_MAX_PAGES)) {
+            pages += 1;
             const after = lookup.nextSearchAfter;
             const key = JSON.stringify(after);
             if (cursors.has(key)) break;
@@ -4469,9 +4475,11 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
             edges.push(...next.edges); files.push(...next.sourceFiles); lookup = next;
           }
           if (lookup.truncated) {
-            warehouseResultLimitNotes.push(edges.length >= 50_000
-              ? `${layerId}: Warehouse reverse lookup reached its 50,000-edge continuation limit; additional matching edges remain.`
-              : `${layerId}: Warehouse reverse lookup could not exhaust its continuation; matching evidence remains truncated.`);
+            warehouseResultLimitNotes.push(preview && pages >= REVERSE_PREVIEW_MAX_PAGES
+              ? `${layerId}: preview stopped after ${REVERSE_PREVIEW_MAX_PAGES} Warehouse pages; further matching evidence remains and is returned by the full lookup.`
+              : edges.length >= 50_000
+                ? `${layerId}: Warehouse reverse lookup reached its 50,000-edge continuation limit; additional matching edges remain.`
+                : `${layerId}: Warehouse reverse lookup could not exhaust its continuation; matching evidence remains truncated.`);
           }
           lookup = { ...lookup, edges, sourceFiles: files,
             notes: lookup.notes.filter((note) => !/^Result limited to/.test(note)),

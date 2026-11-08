@@ -351,6 +351,10 @@ async function fetchPublicJson<T>(url: string, init: RequestInit = {}): Promise<
 }
 
 const overlapEvidenceCache = new Map<string, OverlapEvidenceResult>();
+/** Failed automatic previews are not retried until `until`; avoids a 429 retry storm on every re-render. */
+const overlapEvidenceCooldown = new Map<string, { until: number; message: string }>();
+/** Selection and drawer renders fire within one tick; wait so only the last one queries. */
+const OVERLAP_EVIDENCE_DEBOUNCE_MS = 150;
 const overlapEvidenceHosts = new Map<string, HTMLElement>();
 const overlapDetailsCache = new Map<string, OverlapDetailsResponse>();
 let lastEscapeAt = -Infinity;
@@ -2195,7 +2199,11 @@ async function fetchOverlapEvidence(component: OverlapComponentView, signal?: Ab
     response = await fetch(lookup.endpoint, init);
   }
   if(response.status===401 && access !== "preview")resetDownloadAccess();
-  if (!response.ok) { const failure=await response.json().catch(()=>({})); throw new Error(failure.error??`reverse lookup HTTP ${response.status}`); }
+  if (!response.ok) {
+    const failure=await response.json().catch(()=>({}));
+    const retryAfter = Math.min(60, Math.max(1, Number(response.headers.get("Retry-After")) || 30));
+    throw Object.assign(new Error(failure.error??`reverse lookup HTTP ${response.status}`), { status: response.status, retryAfter });
+  }
   const result = await readJsonResponse<OverlapEvidenceResult>(response, update);
   if (access === "preview") overlapEvidenceCache.set(cacheKey, result);
   return result;
@@ -3098,6 +3106,19 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
     const shown = new Set<string>();
     node.replaceChildren(progress.root, batches);
     const access = hasDownloadAccess() ? "page" : "preview";
+    if (access === "preview") {
+      const key = overlapEvidenceKey(component);
+      const cooling = overlapEvidenceCooldown.get(key);
+      if (cooling && cooling.until > Date.now()) {
+        node.replaceChildren(Object.assign(document.createElement("small"), { textContent: `${t("coverage.reverseFailed")}: ${cooling.message}` }));
+        return;
+      }
+      if (!overlapEvidenceCache.has(key)) {
+        await new Promise<void>((resolve) => setTimeout(resolve, OVERLAP_EVIDENCE_DEBOUNCE_MS));
+        // A newer render superseded this one before it sent anything.
+        if (controller.signal.aborted || request !== overlapEvidenceSequence) return;
+      }
+    }
     const result = await fetchOverlapEvidence(component, controller.signal, access, undefined, event => {
       if (request !== overlapEvidenceSequence || controller.signal.aborted) return;
       const value = event.value;
@@ -3125,7 +3146,12 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
     if (request === overlapEvidenceSequence && !controller.signal.aborted) renderEvidencePlan(node, result, component);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") return;
-    if (request === overlapEvidenceSequence) node.replaceChildren(Object.assign(document.createElement("small"), { textContent: `${t("coverage.reverseFailed")}: ${error instanceof Error ? error.message : ""}` }));
+    const message = error instanceof Error ? error.message : "";
+    if (!hasDownloadAccess()) {
+      const retryAfter = (error as { retryAfter?: number }).retryAfter ?? 30;
+      overlapEvidenceCooldown.set(overlapEvidenceKey(component), { until: Date.now() + retryAfter * 1000, message });
+    }
+    if (request === overlapEvidenceSequence) node.replaceChildren(Object.assign(document.createElement("small"), { textContent: `${t("coverage.reverseFailed")}: ${message}` }));
   } finally {
     if (overlapEvidenceController === controller) overlapEvidenceController = null;
   }
@@ -4021,7 +4047,8 @@ async function activateOverlap(forceActive?: boolean, forceView = false): Promis
         ? [`OVERLAP ${first.id} · `, { text: names, tone: "ind" }, ` · ${first.cells.length.toLocaleString("en-US")} CELLS · ${activeOverlapComponents.length} REGIONS`]
         : ["OVERLAP · ", { text: names, tone: "ind" }, ` · ${renderedPixels.length.toLocaleString("en-US")} CELLS`]);
     }
-    overlapEvidenceCache.clear();
+    // The preview cache key already carries order, cells, layers and revisions,
+    // so a view refresh must not discard it and re-query unchanged regions.
     const overlapCoverage = { nside: 2 ** renderedOrder, pixels: renderedPixels, components: activeOverlapComponents };
     if (batch) coverageDots?.updateBlocks(batch.blocks, plan.order, overlapCoverage);
     else coverageDots?.updateOverlap(overlapCoverage);
