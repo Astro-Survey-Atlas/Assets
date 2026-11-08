@@ -20,6 +20,8 @@ export interface HudTarget {
   pixel: number | null;
   cellCount: number;
   label: string;
+  /** Overrides the default `IPIX n` / `n CELLS` headline, e.g. an overlap component id. */
+  title?: string;
   /** Per survey: modalities of the covering products, or the survey's declared ones. */
   surveys?: Array<{ name: string; color: string; modalities: string[]; declared: boolean }>;
 }
@@ -154,7 +156,7 @@ function renderReticle(state: SurveyLayerState, depthActive: boolean): void {
     box.style.top = `${dy - 26}px`;
     const [kicker, title, detail] = [box.querySelector("small"), box.querySelector("b"), box.querySelector("span")];
     if (kicker) kicker.textContent = `TARGET · O${target.order}`;
-    if (title) title.textContent = target.pixel !== null && target.cellCount <= 1 ? `IPIX ${target.pixel}` : `${target.cellCount.toLocaleString("en-US")} CELLS`;
+    if (title) title.textContent = target.title ?? (target.pixel !== null && target.cellCount <= 1 ? `IPIX ${target.pixel}` : `${target.cellCount.toLocaleString("en-US")} CELLS`);
     if (detail) detail.textContent = target.label;
     let list = box.querySelector<HTMLElement>(".hud-callout-modalities");
     if (!list) {

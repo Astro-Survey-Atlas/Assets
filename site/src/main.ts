@@ -1412,6 +1412,20 @@ function setDisplayOrderLoading(order: number | null): void {
   control?.setAttribute("aria-busy", String(loading));
   if (heading) heading.dataset.loadingText = loading ? (locale() === "zh" ? `正在加载 O${order} 覆盖…` : `LOADING O${order} COVERAGE…`) : "";
   document.getElementById("coverage-canvas")?.classList.toggle("is-order-loading", loading);
+  const banner = document.getElementById("hud-order-banner");
+  if (banner) {
+    // Rapid slider moves keep the order the sky was actually showing when loading began.
+    if (loading && !banner.classList.contains("is-active")) {
+      const nside = coverageDots?.state?.nside;
+      banner.dataset.from = String(nside ? Math.round(Math.log2(nside)) : selectedDisplayOrder);
+    }
+    if (loading) {
+      banner.querySelector(".hud-order-label")!.textContent = locale() === "zh" ? "加载阶数" : "LOADING ORDER";
+      banner.querySelector(".hud-order-from")!.textContent = `O${banner.dataset.from}`;
+      banner.querySelector(".hud-order-to")!.textContent = `O${order}`;
+    }
+    banner.classList.toggle("is-active", loading);
+  }
 }
 
 function displayCellBudget(order: number): number {
@@ -2093,13 +2107,44 @@ function updateOverlapHud(component: OverlapComponentView | null): void {
   if (!component || !overlapMode) {
     selectedQueueComponent = null;
     renderedQueueComponentId = null;
+    // The component no longer stands in as the target; a selected cell keeps its own.
+    if (!coverageDots?.state?.selectedPixels.length) setHudTarget(null);
     renderSelectionQueue();
     return;
   }
   renderedQueueComponentId = selectedQueueComponent?.id ?? null;
   selectedQueueComponent = component;
+  syncOverlapHudTarget(component);
   renderSelectionQueue();
   positionOverlapPanel();
+}
+
+/** The on-globe TARGET callout for a selected overlap region, as in the normal cell view. */
+function syncOverlapHudTarget(component: OverlapComponentView): void {
+  // A selected cell owns the callout; the component only stands in when none is selected.
+  if (coverageDots?.state?.selectedPixels.length) return;
+  const surveyName = (surveyId: string) => surveyIndex?.surveys.find((survey) => survey.id === surveyId)?.name ?? surveyId;
+  const entries = component.surveys ?? [];
+  const surveyIds = [...new Set(entries.length ? entries.map((entry) => entry.surveyId) : activeOverlapSurveyIds)];
+  setHudTarget({
+    order: component.order,
+    pixel: null,
+    cellCount: component.cells.length,
+    title: `${component.id} · ${component.cells.length.toLocaleString("en-US")} CELLS`,
+    label: surveyIds.map((id) => surveyName(id).toUpperCase()).join(" × ") || "OVERLAP",
+    surveys: surveyIds.map((surveyId) => {
+      const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
+      const measured = [...new Set(entries.filter((entry) => entry.surveyId === surveyId && entry.modality).map((entry) => canonicalModality(entry.modality!)))];
+      const declared = [...new Set((survey?.modalities ?? []).map((modality) => canonicalModality(modality)))];
+      return {
+        name: surveyName(surveyId).toUpperCase(),
+        color: surveyColorFor(surveyId, survey?.color),
+        modalities: (measured.length ? measured : declared).filter(Boolean).map((modality) => modalityLabel(modality)),
+        declared: !measured.length && declared.length > 0,
+      };
+    }),
+  });
+  hudLog(["TARGET ACQUIRED · ", { text: `OVERLAP ${component.id}`, tone: "hot" }, ` · O${component.order}`]);
 }
 
 function sourceValue(source: Record<string, unknown>, keys: string[]): string | undefined {
@@ -2164,7 +2209,9 @@ async function fetchOverlapEvidence(component: OverlapComponentView, signal?: Ab
   const lookup = component.evidenceLookup;
   if (!lookup) return null;
   const cacheKey = overlapEvidenceKey(component);
-  const cached = access === "preview" ? overlapEvidenceCache.get(cacheKey) : undefined;
+  // Only the first page is cacheable; continuation and export pages carry cursors.
+  const firstPage = access === "preview" || (access === "page" && !page);
+  const cached = firstPage ? cachedOverlapEvidence(component, access) : undefined;
   if (cached) return cached;
   const preview = access === "preview";
   const body: Record<string, unknown> = {
@@ -2205,8 +2252,14 @@ async function fetchOverlapEvidence(component: OverlapComponentView, signal?: Ab
     throw Object.assign(new Error(failure.error??`reverse lookup HTTP ${response.status}`), { status: response.status, retryAfter });
   }
   const result = await readJsonResponse<OverlapEvidenceResult>(response, update);
-  if (access === "preview") overlapEvidenceCache.set(cacheKey, result);
+  if (firstPage) overlapEvidenceCache.set(cacheKey, result);
   return result;
+}
+
+/** A preview result must never stand in for the full first page of an unlocked lookup. */
+function cachedOverlapEvidence(component: OverlapComponentView, access: OverlapEvidenceAccess): OverlapEvidenceResult | undefined {
+  const cached = overlapEvidenceCache.get(overlapEvidenceKey(component));
+  return cached && (access === "preview" || !cached.preview) ? cached : undefined;
 }
 
 function conservativePrecision(previous: unknown, next: unknown): string | undefined {
@@ -3039,9 +3092,10 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
 
 const EVIDENCE_STAGE_LABEL: Record<string, string> = { native: "coverage.progressNative", warehouse: "coverage.progressWarehouse", coverage: "coverage.progressCoverage" };
 
-/** Animated query status: a scanning bar, one summary line per stage and the
- * blocks received so far, so a slow stream reads as data still arriving. */
-function evidenceProgress(): { root: HTMLElement; update: (stage: string, key: string, done: boolean, total?: number) => void; setBlocks: (count: number) => void } {
+/** Animated query status. The denominator is fixed up front (one item per layer
+ * plus coverage and scan evidence) so the counter only ever moves forward; a
+ * region split into batches reports the batch actually being queried. */
+function evidenceProgress(layerIds: readonly string[]): { root: HTMLElement; event: (value: Record<string, unknown>) => void; setBlocks: (count: number) => void } {
   const root = document.createElement("div");
   root.className = "hud-query-progress";
   root.setAttribute("role", "status");
@@ -3059,32 +3113,56 @@ function evidenceProgress(): { root: HTMLElement; update: (stage: string, key: s
   const startedAt = Date.now();
   const timer = window.setInterval(() => {
     if (!root.isConnected && Date.now() - startedAt > 1000) { window.clearInterval(timer); return; }
-    const seconds = Math.floor((Date.now() - startedAt) / 1000);
-    elapsed.textContent = `${seconds}s`;
-    if (seconds >= 6) hint.textContent = locale() === "zh" ? "仍在查询原生分块与来源清单，大区域可能需要一分钟左右…" : "Still querying native sky blocks and the source manifest; large regions can take about a minute…";
+    elapsed.textContent = `${Math.floor((Date.now() - startedAt) / 1000)}s`;
   }, 1000);
   const bar = Object.assign(document.createElement("i"), { className: "hud-query-bar" });
   bar.setAttribute("aria-hidden", "true");
   const lines = Object.assign(document.createElement("small"), { className: "hud-query-stages", textContent: t("coverage.queryingPlan") });
   root.append(head, bar, lines, hint);
-  const layers = new Map<string, { stage: string; done: boolean; total?: number }>();
+  const zh = locale() === "zh";
+  const pending = () => new Map<string, { stage: string; done: boolean; total?: number }>([
+    ["coverage", { stage: "coverage", done: false }], ["warehouse", { stage: "warehouse", done: false }],
+    ...layerIds.map((id): [string, { stage: string; done: boolean; total?: number }] => [id, { stage: "native", done: false }]),
+  ]);
+  let items = pending();
+  let batch: { index: number; count: number } | undefined;
   const render = () => {
-    const entries = [...layers.values()];
+    const entries = [...items.values()];
     const done = entries.filter((entry) => entry.done).length;
-    counter.textContent = entries.length ? `${done} / ${entries.length} ${locale() === "zh" ? "项" : "LAYERS"}` : "";
+    counter.textContent = batch && batch.count > 1
+      ? `${zh ? "批次" : "BATCH"} ${batch.index + 1} / ${batch.count}`
+      : `${done} / ${entries.length} ${zh ? "项" : "ITEMS"}`;
     const byStage = new Map<string, { done: number; all: number }>();
     entries.forEach((entry) => {
       const value = byStage.get(entry.stage) ?? { done: 0, all: 0 };
       value.all += 1; if (entry.done) value.done += 1;
       byStage.set(entry.stage, value);
     });
-    lines.textContent = [...byStage].map(([stage, value]) => `${t(EVIDENCE_STAGE_LABEL[stage] ?? "coverage.progressQuery")} ${value.done === value.all ? "✓" : `${value.done}/${value.all}`}`).join(" · ") || t("coverage.queryingPlan");
-    root.title = [...layers].map(([key, entry]) => `${key}: ${entry.done ? t("coverage.progressDone") : t("coverage.progressRunning")}${entry.total === undefined ? "" : ` ${entry.total}`}`).join("\n");
+    lines.textContent = [...byStage].map(([stage, value]) => `${t(EVIDENCE_STAGE_LABEL[stage] ?? "coverage.progressQuery")} ${value.done === value.all ? "✓" : `${value.done}/${value.all}`}`).join(" · ");
+    hint.textContent = batch && batch.count > 1
+      ? (zh ? `所选区域较大，已分 ${batch.count} 批查询；先返回前几页，其余在继续加载时查询。` : `This region is split into ${batch.count} batches; the first pages return first and the rest load on demand.`)
+      : "";
+    root.title = [...items].map(([key, entry]) => `${key}: ${entry.done ? t("coverage.progressDone") : t("coverage.progressRunning")}${entry.total === undefined ? "" : ` ${entry.total}`}`).join("\n");
   };
+  render();
   return {
     root,
-    update(stage, key, done, total) { layers.set(key, { stage, done, total }); render(); },
-    setBlocks(count) { blocks.textContent = `${count.toLocaleString("en-US")} ${locale() === "zh" ? "个分块已返回" : "BLOCKS RECEIVED"}`; },
+    event(value) {
+      const stage = String(value.stage);
+      if (stage === "batch") {
+        const index = Number(value.index), count = Number(value.count);
+        if (Number.isFinite(index) && Number.isFinite(count)) {
+          if (!batch || batch.index !== index) items = pending();
+          batch = { index, count };
+        }
+      } else {
+        const key = stage === "native" ? String(value.layerId ?? "") : stage;
+        const item = items.get(key);
+        if (item) { item.done = value.state === "completed"; if (typeof value.total === "number") item.total = value.total; }
+      }
+      render();
+    },
+    setBlocks(count) { blocks.textContent = `${count.toLocaleString("en-US")} ${zh ? "个分块已返回" : "BLOCKS RECEIVED"}`; },
   };
 }
 
@@ -3100,20 +3178,20 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
   overlapEvidenceController = controller;
   const request = ++overlapEvidenceSequence;
   try {
-    const progress = evidenceProgress();
+    const progress = evidenceProgress(lookup.layerIds);
     const batches = document.createElement("div"); batches.className = "overlap-evidence-files overlap-spatial-units";
     for (let index = 0; index < 3; index += 1) batches.append(Object.assign(document.createElement("div"), { className: "hud-skeleton-row" }));
     const shown = new Set<string>();
     node.replaceChildren(progress.root, batches);
     const access = hasDownloadAccess() ? "page" : "preview";
-    if (access === "preview") {
+    {
       const key = overlapEvidenceKey(component);
       const cooling = overlapEvidenceCooldown.get(key);
       if (cooling && cooling.until > Date.now()) {
         node.replaceChildren(Object.assign(document.createElement("small"), { textContent: `${t("coverage.reverseFailed")}: ${cooling.message}` }));
         return;
       }
-      if (!overlapEvidenceCache.has(key)) {
+      if (!cachedOverlapEvidence(component, access)) {
         await new Promise<void>((resolve) => setTimeout(resolve, OVERLAP_EVIDENCE_DEBOUNCE_MS));
         // A newer render superseded this one before it sent anything.
         if (controller.signal.aborted || request !== overlapEvidenceSequence) return;
@@ -3123,7 +3201,7 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
       if (request !== overlapEvidenceSequence || controller.signal.aborted) return;
       const value = event.value;
       if (event.event === "progress") {
-        progress.update(String(value.stage), String(value.layerId ?? value.stage), value.state === "completed", typeof value.total === "number" ? value.total : undefined);
+        progress.event(value);
       } else if (event.event === "batch" && Array.isArray(value.units)) {
         for (const unit of value.units as NonNullable<DownloadPlan["spatialUnits"]>) {
           const key = JSON.stringify([unit.layerId, unit.unitKind, unit.unitId]);
@@ -3147,10 +3225,8 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") return;
     const message = error instanceof Error ? error.message : "";
-    if (!hasDownloadAccess()) {
-      const retryAfter = (error as { retryAfter?: number }).retryAfter ?? 30;
-      overlapEvidenceCooldown.set(overlapEvidenceKey(component), { until: Date.now() + retryAfter * 1000, message });
-    }
+    const retryAfter = (error as { retryAfter?: number }).retryAfter ?? 30;
+    overlapEvidenceCooldown.set(overlapEvidenceKey(component), { until: Date.now() + retryAfter * 1000, message });
     if (request === overlapEvidenceSequence) node.replaceChildren(Object.assign(document.createElement("small"), { textContent: `${t("coverage.reverseFailed")}: ${message}` }));
   } finally {
     if (overlapEvidenceController === controller) overlapEvidenceController = null;
@@ -3802,6 +3878,7 @@ function selectOverlapDrawerComponent(component: OverlapComponentView): void {
   }
   selectedQueueComponent = component;
   coverageDots?.setActiveOverlapComponent(component.id);
+  syncOverlapHudTarget(component);
   updateOverlapViewport();
   coverageDots?.focusPixels(component.order, component.cells);
   renderSelectionQueue();

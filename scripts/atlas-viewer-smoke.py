@@ -98,6 +98,7 @@ def main() -> None:
                 viewer.focusSelection();
                 await new Promise(resolve=>setTimeout(resolve,1000));
                 const selectedDirection = viewer.state.coverageViewDirection;
+                const componentAnchor = viewer.state.selectionAnchor;
                 viewer.setHomePresentation();
                 viewer.focusPixels(256,[8192]);
                 await new Promise(resolve=>setTimeout(resolve,1000));
@@ -107,6 +108,8 @@ def main() -> None:
                 viewer.focusSelection();
                 await new Promise(resolve=>setTimeout(resolve,1000));
                 const insetViewRadius = viewer.state.coverageViewRadiusRad;
+                viewer.setActiveOverlapComponent(null);
+                const clearedAnchor = viewer.state.selectionAnchor;
                 viewer.setOverlapCoverage(256,[],[]);
                 const empty = meshes();
                 const emptyDistance = viewer.state.cameraDistance;
@@ -115,13 +118,18 @@ def main() -> None:
                 const emptyFocusDistance = viewer.state.cameraDistance;
                 viewer.dispose();
                 THREE.Scene.prototype.add = add;
-                return {before,after,far,near,batch,selectedDirection,expectedDirection,actualViewRadius,insetViewRadius,empty,emptyDistance,emptyFocusDistance};
+                return {before,after,far,near,batch,selectedDirection,componentAnchor,clearedAnchor,expectedDirection,actualViewRadius,insetViewRadius,empty,emptyDistance,emptyFocusDistance};
             }""", [three_url, VIEWER_MODULE])
             assert result["before"] == {"euclid": [0, 1], "gaia": [0, 2]}, result
             assert result["after"] == result["before"], "Changing overlap order must preserve non-overlap source context"
             assert result["near"] < result["far"] * 0.95, "F must advance toward the active overlap region without an ordinary cell selection"
             assert result["batch"] == {"meshes": result["before"], "nsides": [256], "sourceNsides": [16]}, "O8 overlap must update atomically while source coverage stays at O4"
             assert all(abs(a-b) < 1e-5 for a,b in zip(result["selectedDirection"],result["expectedDirection"])), "F must focus the selected component, including a component outside the source context cells"
+            anchor = result["componentAnchor"]
+            assert anchor and anchor["visible"], "A focused overlap component must anchor the on-globe TARGET callout"
+            assert 0 <= anchor["xRatio"] <= 1 and 0 <= anchor["yRatio"] <= 1, anchor
+            assert anchor["bounds"]["rightRatio"] > anchor["bounds"]["leftRatio"] and anchor["bounds"]["bottomRatio"] > anchor["bounds"]["topRatio"], anchor
+            assert result["clearedAnchor"] is None, "Clearing the active component must remove its callout anchor"
             assert result["actualViewRadius"] < 0.2, "A close focus must load the small surface viewport rather than a distant-sky angular cone"
             assert result["insetViewRadius"] < result["actualViewRadius"], "The drawer's hidden canvas area must not enlarge the source viewport"
             assert result["empty"] == result["before"], "An empty intersection must not remove selected source context"

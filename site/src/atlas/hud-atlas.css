@@ -1607,25 +1607,54 @@ body.public-site.atlas-page .hud-boot-note { color: var(--hud-hot); letter-spaci
 /* ---------- Display-order loading feedback ---------- */
 body.public-site.atlas-page .coverage-order-ring { display: none; --hud-ring-size: 11px; margin-right: 6px; vertical-align: -1px; }
 body.public-site.atlas-page .coverage-display-order-control.is-loading .coverage-order-ring { display: inline-block; }
-body.public-site.atlas-page .coverage-display-order-control.is-loading .coverage-display-order-heading::after {
-  content: attr(data-loading-text);
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  padding: 3px 10px;
-  border: 1px solid var(--hud-hot);
-  background: var(--hud-plate-solid);
-  color: var(--hud-ink);
-  font: 700 10px/1.4 var(--font-hud);
-  letter-spacing: .16em;
-  white-space: nowrap;
-  transform: translateX(-50%);
-  box-shadow: var(--hud-hot-glow);
-}
 body.public-site.atlas-page .coverage-display-order-control.is-loading .coverage-order-seg.is-current { animation: hud-order-pulse 1s ease-in-out infinite; }
 #coverage-canvas { transition: opacity .25s ease, filter .25s ease; }
 #coverage-canvas.is-order-loading { opacity: .72; filter: saturate(.7); }
 @keyframes hud-order-pulse { 50% { opacity: .45; } }
+/* Order-switch status: sits under the RA tape, never takes pointer input. */
+.hud-order-banner {
+  position: absolute;
+  top: 128px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px 8px;
+  border: 1px solid var(--hud-hot);
+  background: var(--hud-plate-solid);
+  color: var(--hud-ink);
+  font: 700 12px/1.4 var(--font-hud);
+  letter-spacing: .16em;
+  white-space: nowrap;
+  box-shadow: var(--hud-hot-glow);
+  transform: translate(-50%, -6px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease, visibility 0s linear .2s;
+}
+.hud-order-banner.is-active { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition-delay: 0s; }
+.hud-order-from { opacity: .6; }
+.hud-order-to { color: var(--hud-hot); }
+.hud-order-ping { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--hud-hot); }
+.hud-order-ping::before, .hud-order-ping::after {
+  content: ""; position: absolute; inset: 0; border: 1px solid var(--hud-hot); border-radius: 50%;
+  animation: hud-order-ping 1.2s ease-out infinite;
+}
+.hud-order-ping::after { animation-delay: .6s; }
+.hud-order-chevrons { display: inline-flex; gap: 3px; }
+.hud-order-chevrons i { width: 6px; height: 6px; border-top: 2px solid var(--hud-hot); border-right: 2px solid var(--hud-hot); transform: rotate(45deg); opacity: .25; animation: hud-order-chevron 1s ease-in-out infinite; }
+.hud-order-chevrons i:nth-child(2) { animation-delay: .15s; }
+.hud-order-chevrons i:nth-child(3) { animation-delay: .3s; }
+.hud-order-scan { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; overflow: hidden; }
+.hud-order-scan::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 32%; background: var(--hud-hot); animation: hud-boot-scan 1.1s linear infinite; }
+@keyframes hud-order-ping { from { transform: scale(1); opacity: .9; } to { transform: scale(3.2); opacity: 0; } }
+@keyframes hud-order-chevron { 50% { opacity: 1; } }
+body[data-overlap-drawer="open"] .hud-order-banner { top: 84px; }
+@media (prefers-reduced-motion: reduce) {
+  .hud-order-ping::before, .hud-order-ping::after, .hud-order-chevrons i, .hud-order-scan::after { animation: none; }
+  .hud-order-chevrons i { opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) {
   body.public-site.atlas-page .coverage-display-order-control.is-loading .coverage-order-seg.is-current { animation: none; }
 }

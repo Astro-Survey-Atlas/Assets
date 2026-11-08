@@ -3998,6 +3998,8 @@ async function sendCoverageReverseLookup(request:IncomingMessage,response:Server
 }
 
 const REVERSE_BATCHES_PER_REQUEST = 32;
+/** A page returns what it has once this long has passed; the cursor continues with the remaining batches. */
+const REVERSE_PAGE_TIME_BUDGET_MS = 10_000;
 const REVERSE_BATCH_SEEN_KEY_LIMIT = 100_000;
 const REVERSE_SNAPSHOT_MAX_BYTES = 64 * 1024 * 1024;
 
@@ -4151,9 +4153,11 @@ async function buildBatchedCoverageReverseLookup(
   let lastSnapshotId: string | undefined;
   let executedBatches = 0;
 
+  const pageStartedAt = Date.now();
   while (batchIndex < cellBatches.length) {
     if (!currentSnapshot) {
-      if (executedBatches >= REVERSE_BATCHES_PER_REQUEST) break;
+      if (executedBatches >= REVERSE_BATCHES_PER_REQUEST || (executedBatches > 0 && Date.now() - pageStartedAt > REVERSE_PAGE_TIME_BUDGET_MS)) break;
+      stream.emit("progress", { stage: "batch", state: "running", index: batchIndex, count: cellBatches.length });
       const built = await buildCoverageReverseLookup(request, response, {
         ...body,
         cells: cellBatches[batchIndex],
@@ -4227,7 +4231,7 @@ async function buildBatchedCoverageReverseLookup(
     currentCursor = nextCursor;
     queryComplete = nextCursor.queryComplete ?? queryComplete;
     resultTruncated = nextCursor.resultTruncated ?? resultTruncated;
-    if (executedBatches >= REVERSE_BATCHES_PER_REQUEST) break;
+    if (executedBatches >= REVERSE_BATCHES_PER_REQUEST || Date.now() - pageStartedAt > REVERSE_PAGE_TIME_BUDGET_MS) break;
   }
 
   if (!lastPage || !lastSnapshot || !lastSnapshotId || !rootSnapshotId) throw new AccessError(410, "Reverse lookup snapshot is unavailable; repeat the region query");
@@ -4502,7 +4506,7 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     }));
     for (const lookup of lookups) if (lookup) warehouseResults.set(lookup[0], lookup[1]);
   } stream.emit("progress", { stage: "warehouse", state: "completed", layerCount: warehouseResults.size }); })();
-  const [result, sourceUnitResult] = await Promise.all([regionPromise, nativePromise, warehousePromise]);
+  const [result, sourceUnitResult] = await Promise.all([regionPromise, nativePromise.then((value) => { stream.emit("progress", { stage: "native", layerId: "*", state: "completed" }); return value; }), warehousePromise]);
 
   const warehouseEdges = [...warehouseResults.values()].flatMap(lookup => lookup.edges);
   const warehouseFiles: Array<Record<string, unknown>> = mergeWarehouseSourceFiles(warehouseResults)
@@ -5031,7 +5035,7 @@ const server = http.createServer((request, response) => {
       nativeUnitIndex: { version: nativeUnits?.version ?? "backend-proxy", generation: nativeUnits?.generation ?? null },
       status: "ok",
       service: "astro-survey-atlas-assets",
-      version: "0.0.5",
+      version: "0.0.6",
       bundle: catalog.manifest.bundle,
       files: catalog.files.size,
     });
