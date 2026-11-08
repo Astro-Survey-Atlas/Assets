@@ -4,6 +4,97 @@
 [实施历史](docs/handoff-history-through-20261002.md) 保留整理前的完整记录。
 历史中的“当前”“最新”“待办”按其日期理解，以本文件为续接依据。
 
+## 当前工作项（2026-11-08）
+
+三项任务，**第 1 项已完成，第 2、3 项未开始**。完整计划见
+`~/.claude/plans/1-claude-settings-json-token-opus-5-5-s-breezy-sparrow.md`。
+
+### 1. 降低 token 成本 —— 已完成
+
+改动在用户级 `~/.claude/settings.json`（备份 `settings.json.bak-20261108-133004`）：
+
+```jsonc
+{
+  "model": "opusplan",
+  "env": {
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
+  },
+  "modelSettings": {
+    "claude-opus-5-5":   { "effortLevel": "high" },
+    "claude-sonnet-5-5": { "effortLevel": "medium" }
+  },
+  "fallbackModel": ["sonnet"]
+}
+```
+
+`opusplan` = 规划阶段用 Opus、执行阶段自动切 Sonnet。项目的 `.claude/settings.json`
+已移除明文 `ANTHROPIC_AUTH_TOKEN`（凭据只留在用户级文件）。
+
+**实测结论（别重复踩）**：
+- 本网关 `token.72602.space` **没有 haiku**。`claude-haiku-5-5` 与 4-5 都返回
+  404 `Model "..." is not available for this group`。所以子代理只能降到 sonnet。
+- `sonnet`、`opus` 均可用（已用子代理实测返回成功）。
+- **Claude Code 官方不支持把任务派给非 Claude 模型**，`ANTHROPIC_BASE_URL` 只换地址不换模型；
+  gpt / grok / gemini 这些在这里做不到。
+- auto 模式的分类器调用无法关闭，只能退出 auto 模式（Shift+Tab）。
+
+### 2. 冗余审计与管理台流程 —— 未开始（只出报告，不改代码）
+
+产出 `docs/audit-redundancy-and-admin-flow-20261108.md`。已完成只读探查，结论已核实，
+直接据此落笔即可（报告里每条要带 file:line，落笔前抽检 20%）：
+
+**管理台**：六步 `overview | sources | tasks | review | releases | api`
+（`site/admin/navigation.ts:1`），tasks 下四面板（`site/admin/task-tabs.ts:4`）。重复点：
+- native-units 同一份数据渲染进 5 个步骤（`site/admin/native-units.ts:154-176`）
+- tasks 的 02A 面板重复 02B/02C（`main.ts:1466` vs `1124`/`1148`）
+- 一个 build 记录 4 个渲染器（`main.ts:1645/1409/1447/1417`）
+- 产品弹窗里 preflight 出现两遍（`main.ts:2015` 与 `:2041-2052`）
+- 一个产品行并存 4 套状态词汇（`main.ts:1659/1723/1766/804`）
+- 发布入口 3 个、建扫描入口 3 个、登记 build 入口 3 个
+- `/catalog/status` 每轮拉取但无人读取（`site/admin/workspaces.ts:16`）
+- 客户端重算服务端结论 6 处，含一条不可达分支（`main.ts:1663`）
+- `/overview` 内部重复调用 `/products?view=surveys` 的处理器（`server/server.ts:2118-2183`）
+
+**其他冗余**：5 份 `sha256Json` 包装、3 份 `writeJsonAtomic`、5 份 pretty-JSON 构造、
+9 份 `41252.96` 天空面积常数、4 份 CDS host 白名单、约 6 份「哪些 JSON 是控制文档」、
+16 处手写 `if (!response.ok) throw`、5 份 `escapeHtml`、7 处模态词表（其中
+`photometry → image` 只在一侧归一化）。死代码：`verifyUploadedReleaseArchive`（~50 行）、
+`readinessAggregateMarkup`、`runtimeLayerChip`、`locale()` 别名。
+
+**测试缺口**：`site/admin/main.ts`（2,860 行）零单测；`scripts/admin-browser-smoke.py`
+只验证「能渲染且不报错」，不断言数据正确性。
+
+### 3. 部署两套环境 —— 未开始
+
+版本号定为 **0.0.4**（`package.json` + `Chart.yaml` 的 version/appVersion 三处同步，
+CI 的 `release.yml:51-64` 要求 tag 与之相等）。
+
+| | zjlab dev | 72602 prod |
+| --- | --- | --- |
+| 访问 | 本机就是控制节点 `zjlab-ubuntu`，`kubectl` 可用 | `ssh aaron@72602-minipc-proxy` + **`bash -lc`** |
+| helm | `/home/aaron/bin/helm` v4.2.3 | `/home/aaron/bin/helm` v4.0.0，**只在登录 shell 的 PATH 里** |
+| 命名空间 | `astro-survey-atlas-assets` | `astro-survey-atlas-assets-72602` |
+| release | `astro-survey-atlas-assets` rev **389**，chart 0.0.2 | `astro-survey-atlas-assets-72602` rev **7**，chart **1.0.0** |
+| 现行镜像 | site `0.1.0-20261103-115035` / backend `0.1.0-20261102-094933`（**两个 tag**） | 两者均 `0.1.0-20261003-153818-hst-supplement` |
+| 入口 | `http://10.15.51.75:32083/`（NodePort） | `https://astro.assets.72602.space/`（cert-manager TLS） |
+| `objectStore.prefix` | `""` | `environments/72602` |
+| Warehouse | 有 | **无**（`warehouse.elasticsearchUrl: ""`） |
+
+外置 values 在 `~/.local/share/astro-assets-deployments/{dev,72602}/<时间戳>/`，
+延续「每次部署新建目录、存 values + helm 日志 + 回滚快照」的惯例。
+
+注意点：
+- **冷启动 3–4 分钟**（校验约 13 GB），chart 默认启动探针窗口只有 20×3s≈60s。
+  dev 已用 `startupProbeFailureThreshold: 240`，prod 必须显式设。
+- 镜像构建依赖 GitHub：`@astro-survey-atlas/sky-globe` 钉在 codeload URL 上，
+  `NPM_REGISTRY` 管不到。构建机若无外网会卡住。
+- prod 的 chart 版本（1.0.0）高于仓库（0.0.3），本次用 0.0.4 覆盖，`helm history` 看起来像回退，
+  部署前先 `helm get manifest` 存快照。
+- `feat/sky-globe` 有 2 个提交未推送到 origin。
+- 部署前留存 `helm get values` / `get manifest` / 当前 revision，回滚用 `helm rollback`。
+
 ## 待办（2026-11-07）
 
 用户实机反馈的 5 项，1/2/3/5 已在分支 `fix/atlas-interaction` 修复（见下节），4 留作下一轮。
