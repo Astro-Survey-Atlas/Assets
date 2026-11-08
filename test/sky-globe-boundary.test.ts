@@ -5,7 +5,7 @@ import test from "node:test";
 import type * as Globe from "@astro-survey-atlas/sky-globe";
 import type * as Server from "../src/sky-depth.js";
 
-const packageSource = path.resolve(import.meta.dirname, "../packages/sky-globe/src");
+const packageSource = path.resolve(import.meta.dirname, "../node_modules/@astro-survey-atlas/sky-globe/src");
 const ALLOWED_BARE = /^(three|three\/addons\/.+|healpixjs)$/;
 
 test("sky-globe imports only three, healpixjs and its own modules", async () => {

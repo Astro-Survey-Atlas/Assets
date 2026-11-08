@@ -7,9 +7,6 @@
   "engines": {
     "node": ">=22"
   },
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "catalog:build": "tsx scripts/build-release-manifest.ts",
     "release:package": "tsx scripts/release-archive.ts package",
@@ -62,6 +59,7 @@
     "yazl": "^3.3.1"
   },
   "devDependencies": {
+    "@astro-survey-atlas/sky-globe": "https://codeload.github.com/Astro-Survey-Atlas/sky-globe/tar.gz/refs/tags/v0.1.0",
     "@types/node": "^22.0.0",
     "@types/three": "^0.185.4",
     "@types/yauzl": "^3.4.0",

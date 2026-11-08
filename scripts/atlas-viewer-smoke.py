@@ -12,8 +12,8 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 URL = "http://127.0.0.1:4175"
-# The globe lives in the shared workspace package, outside Vite's site root.
-VIEWER_MODULE = "/@fs" + str(ROOT / "packages/sky-globe/src/survey-layer-viewer.ts")
+# The globe is the sky-globe dependency, outside Vite's site root.
+VIEWER_MODULE = "/@fs" + str(ROOT / "node_modules/@astro-survey-atlas/sky-globe/src/survey-layer-viewer.ts")
 
 
 def main() -> None:
