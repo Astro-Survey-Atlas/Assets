@@ -1,6 +1,6 @@
 {
   "name": "astro-survey-atlas-assets",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -59,7 +59,7 @@
     "yazl": "^3.3.1"
   },
   "devDependencies": {
-    "@astro-survey-atlas/sky-globe": "https://codeload.github.com/Astro-Survey-Atlas/sky-globe/tar.gz/refs/tags/v0.1.0",
+    "@astro-survey-atlas/sky-globe": "https://codeload.github.com/Astro-Survey-Atlas/sky-globe/tar.gz/refs/tags/v0.1.1",
     "@types/node": "^22.0.0",
     "@types/three": "^0.185.4",
     "@types/yauzl": "^3.4.0",
