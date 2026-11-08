@@ -6,7 +6,7 @@
 
 ## 当前工作项（2026-11-08）
 
-三项任务，**第 1 项已完成，第 2、3 项未开始**。完整计划见
+三项任务，**全部完成**。完整计划见
 `~/.claude/plans/1-claude-settings-json-token-opus-5-5-s-breezy-sparrow.md`。
 
 ### 1. 降低 token 成本 —— 已完成
@@ -44,10 +44,9 @@
   gpt / grok / gemini 这些在这里做不到。
 - auto 模式的分类器调用无法关闭，只能退出 auto 模式（Shift+Tab）。
 
-### 2. 冗余审计与管理台流程 —— 未开始（只出报告，不改代码）
+### 2. 冗余审计与管理台流程 —— 已完成
 
-产出 `docs/audit-redundancy-and-admin-flow-20261108.md`。已完成只读探查，结论已核实，
-直接据此落笔即可（报告里每条要带 file:line，落笔前抽检 20%）：
+产出 `docs/audit-redundancy-and-admin-flow-20261108.md`。
 
 **管理台**：六步 `overview | sources | tasks | review | releases | api`
 （`site/admin/navigation.ts:1`），tasks 下四面板（`site/admin/task-tabs.ts:4`）。重复点：
@@ -70,34 +69,35 @@
 **测试缺口**：`site/admin/main.ts`（2,860 行）零单测；`scripts/admin-browser-smoke.py`
 只验证「能渲染且不报错」，不断言数据正确性。
 
-### 3. 部署两套环境 —— 未开始
+### 3. 部署两套环境 —— 已完成（2026-11-08）
 
-版本号定为 **0.0.4**（`package.json` + `Chart.yaml` 的 version/appVersion 三处同步，
-CI 的 `release.yml:51-64` 要求 tag 与之相等）。
+版本 **0.0.4**，`package.json` + `Chart.yaml`（version/appVersion）+ `package-lock.json` 三处同步。
+`feat/sky-globe` rebase 到 main 后快进合并，tag `code-v0.0.4` 指向 `e211472`，CI（run #42459307942）构建通过。
+
+Dockerfile 修复：`tsconfig.test.json` 漏加 COPY 导致首次构建失败，已在 `e211472` 修复并强制移 tag。
 
 | | zjlab dev | 72602 prod |
 | --- | --- | --- |
-| 访问 | 本机就是控制节点 `zjlab-ubuntu`，`kubectl` 可用 | `ssh aaron@72602-minipc-proxy` + **`bash -lc`** |
-| helm | `/home/aaron/bin/helm` v4.2.3 | `/home/aaron/bin/helm` v4.0.0，**只在登录 shell 的 PATH 里** |
-| 命名空间 | `astro-survey-atlas-assets` | `astro-survey-atlas-assets-72602` |
-| release | `astro-survey-atlas-assets` rev **389**，chart 0.0.2 | `astro-survey-atlas-assets-72602` rev **7**，chart **1.0.0** |
-| 现行镜像 | site `0.1.0-20261103-115035` / backend `0.1.0-20261102-094933`（**两个 tag**） | 两者均 `0.1.0-20261003-153818-hst-supplement` |
-| 入口 | `http://10.15.51.75:32083/`（NodePort） | `https://astro.assets.72602.space/`（cert-manager TLS） |
-| `objectStore.prefix` | `""` | `environments/72602` |
-| Warehouse | 有 | **无**（`warehouse.elasticsearchUrl: ""`） |
+| Helm revision | **390**，chart 0.0.4 | **9**，chart 0.0.4 |
+| 镜像 | `astro-survery-atlas/astro-survey-atlas-assets:code-v0.0.4` | 同左 |
+| 镜像摘要 | `sha256:0bb458a3c4b55f17b52eac5b74b682fe36a3f75bd3bdbdb8fec889b8de842d95` | 同左 |
+| Pod 状态 | site/backend 各 1/1 Ready，零重启 | 同左 |
+| healthz | HTTP 200 | HTTP 200 |
+| bundle | `reviewed-mv51kku3-a4f8d8e6`（611 files） | `reviewed-mupsxe2v-c91be91f`（603 files） |
+| status | available，healpix available | available，healpix available |
+| 入口 | `http://10.15.51.75:32083/` | `https://astro.assets.72602.space/` |
 
-外置 values 在 `~/.local/share/astro-assets-deployments/{dev,72602}/<时间戳>/`，
-延续「每次部署新建目录、存 values + helm 日志 + 回滚快照」的惯例。
+升级 values（两环境均用 `--reuse-values` 叠加）：
+- `image.repository`：切到 `crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/astro-survery-atlas/astro-survey-atlas-assets`
+- `image.tag`：`code-v0.0.4`
+- `startupProbeFailureThreshold: 240`（prod 首次显式设，防冷启动超时）
+- `skyDepth.enabled: false`（prod 无此资料，chart 新增字段须显式声明）
+- dev 另加 `splitRoles.backendImage.tag: code-v0.0.4`（清空独立 backend tag 覆盖）
 
-注意点：
-- **冷启动 3–4 分钟**（校验约 13 GB），chart 默认启动探针窗口只有 20×3s≈60s。
-  dev 已用 `startupProbeFailureThreshold: 240`，prod 必须显式设。
-- 镜像构建依赖 GitHub：`@astro-survey-atlas/sky-globe` 钉在 codeload URL 上，
-  `NPM_REGISTRY` 管不到。构建机若无外网会卡住。
-- prod 的 chart 版本（1.0.0）高于仓库（0.0.3），本次用 0.0.4 覆盖，`helm history` 看起来像回退，
-  部署前先 `helm get manifest` 存快照。
-- `feat/sky-globe` 有 2 个提交未推送到 origin。
-- 部署前留存 `helm get values` / `get manifest` / 当前 revision，回滚用 `helm rollback`。
+快照目录：`~/.local/share/astro-assets-deployments/{dev/20261108-154431,72602/20261108-160000}/`
+回滚：`helm rollback astro-survey-atlas-assets[-72602] <revision> -n <namespace>`（dev rev 389、prod rev 7）
+
+**遗留小项**：`server/server.ts:5026` 的 `version: "0.0.3"` 是写死的静态字符串，不影响运行，下一轮顺手改。
 
 ## 待办（2026-11-07）
 
