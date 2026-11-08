@@ -11,7 +11,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --registry=${NPM_REGISTRY}
 
-COPY tsconfig.server.json tsconfig.site.json vite.config.ts ./
+COPY tsconfig.server.json tsconfig.site.json tsconfig.test.json vite.config.ts ./
 COPY server ./server
 COPY src ./src
 COPY scripts ./scripts
