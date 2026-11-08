@@ -29,8 +29,12 @@
 }
 ```
 
-`opusplan` = 规划阶段用 Opus、执行阶段自动切 Sonnet。项目的 `.claude/settings.json`
-已移除明文 `ANTHROPIC_AUTH_TOKEN`（凭据只留在用户级文件）。
+`opusplan` = 规划阶段用 Opus、执行阶段自动切 Sonnet。
+
+**凭据**：项目级 `.claude/settings.json` 的 `env` 块会注入 `ANTHROPIC_AUTH_TOKEN`，
+这就是本会话进程里那个变量的来源（不是 shell profile —— `.bashrc`/`.profile` 里都没有）。
+两份 token 不是同一个值，只有项目级那份有效；用户级那份曾返回 401，已同步为有效值。
+该文件被 `.gitignore` 忽略，凭据不会进 git。
 
 **实测结论（别重复踩）**：
 - 本网关 `token.72602.space` **没有 haiku**。`claude-haiku-5-5` 与 4-5 都返回
