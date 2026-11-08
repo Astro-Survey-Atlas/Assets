@@ -69,7 +69,24 @@
 **测试缺口**：`site/admin/main.ts`（2,860 行）零单测；`scripts/admin-browser-smoke.py`
 只验证「能渲染且不报错」，不断言数据正确性。
 
-### 3. 部署两套环境 —— 已完成（2026-11-08）
+### 0.0.5 热修（2026-11-08，仅 prod）—— 已部署
+
+**今后只维护 72602 prod，zjlab dev 不再部署**（停在 0.0.4 / rev 390）。
+
+反查预览闪烁并报 `Query quota exceeded` 的修复，tag `code-v0.0.5`（`c446aa7`），prod Helm **rev 10**，
+镜像 `astro-survery-atlas/astro-survey-atlas-assets:code-v0.0.5`，摘要
+`sha256:7bec711704453728f53ae36e081bd8a166ad4b1fc98a3802256270e9b4bcfe67`，两 Pod 1/1 Ready。
+- 根因：视图刷新清空预览缓存；面板与抽屉各发一次相同预览（服务端预览并发上限 2，`region-access.ts:54`）；失败不缓存而逐次重试；服务端预览还会续页拉到 50,000 条。
+- 服务端：预览每层最多 3 页（`REVERSE_PREVIEW_MAX_PAGES`），到限仍标 `truncated` 并写明原因。
+- 客户端：刷新不再清缓存、150ms 防抖合并重复加载、失败按 `Retry-After`（默认 30s，上限 60s）冷却。
+- 同时修了 `/healthz` 版本写死 0.0.3（`server.ts:5034`）与 chart 默认镜像 tag，今后发版共 **五处** 同步：
+  `package.json`、`package-lock.json`、`Chart.yaml` 的 version/appVersion、`values.yaml` 默认 tag、`server.ts` health 版本。
+- 验证：`test:node` 512 通过/2 跳过；线上原请求 HTTP 200、0.26s、6 条、`truncated=true`。**未做浏览器回归**，
+  闪烁是否消失待用户在 prod 确认。无新增自动化测试（逻辑内联在 `server.ts`，依赖 Warehouse）。
+- prod 升级沿用 `--reuse-values -f upgrade-values.yaml`，这次无需 `--force-conflicts`。
+  快照：`~/.local/share/astro-assets-deployments/72602/20261108-release-0.0.5/`；回滚 `helm rollback ... 9`。
+
+### 3. 部署两套环境 —— 已完成（2026-11-08，0.0.4）
 
 版本 **0.0.4**，`package.json` + `Chart.yaml`（version/appVersion）+ `package-lock.json` 三处同步。
 `feat/sky-globe` rebase 到 main 后快进合并，tag `code-v0.0.4` 指向 `e211472`，CI（run #42459307942）构建通过。
@@ -97,7 +114,7 @@ Dockerfile 修复：`tsconfig.test.json` 漏加 COPY 导致首次构建失败，
 快照目录：`~/.local/share/astro-assets-deployments/{dev/20261108-154431,72602/20261108-160000}/`
 回滚：`helm rollback astro-survey-atlas-assets[-72602] <revision> -n <namespace>`（dev rev 389、prod rev 7）
 
-**遗留小项**：`server/server.ts:5026` 的 `version: "0.0.3"` 是写死的静态字符串，不影响运行，下一轮顺手改。
+**遗留小项**：（已在 0.0.5 修复 health 版本写死）
 
 ## 待办（2026-11-07）
 
