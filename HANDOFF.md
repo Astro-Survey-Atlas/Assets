@@ -69,6 +69,28 @@
 **测试缺口**：`site/admin/main.ts`（2,860 行）零单测；`scripts/admin-browser-smoke.py`
 只验证「能渲染且不报错」，不断言数据正确性。
 
+### 0.0.6（2026-11-08，仅 prod）—— 已部署，待用户实测
+
+tag `code-v0.0.6`（`12281b0`），prod Helm **rev 11**，镜像摘要
+`sha256:a5e363c0b8de7e1f31cae5bf56aefd8d42def09b40d0cfd2d7a1d3f36b25f5e2`，两 Pod 1/1 Ready，`/healthz` 版本 0.0.6。
+依赖 **sky-globe v0.1.1**（`~/Repo/sky-globe`，已发布）；Workspace 同步升到 v0.1.1（`feat/hud-globe`，`1814cf4`，未部署）。
+
+0.0.5 没修干净的原因：缓存/防抖/冷却只对匿名预览生效，**解锁下载后的 `page` 模式每次重渲染都直接打 API**，
+最终撞限速。本次：
+- 首页缓存、防抖、失败冷却对解锁后的首页同样生效（`fetchOverlapEvidence` / `loadOverlapEvidence`）；缓存里的预览结果不会冒充完整首页。
+- 进度条分母固定（每层 1 项 + 覆盖依据 + 扫描证据），原来按已收到事件数当分母才会 4/5→5/6；大区域显示真实批次（服务端新增 `progress:batch` 事件）。
+- 服务端分批反查单次响应 10 秒时间预算（`REVERSE_PAGE_TIME_BUDGET_MS`），超时先返回已有页并给游标。
+- 重合区块选中后显示天球上的 TARGET callout（标题 `C03 · N CELLS`）：viewer 的 `selectionAnchor` 在无选中单元时回退到当前重合组件。
+- 切阶数状态条移到 RA 标尺下方（`#hud-order-banner`）：`Ox ››› Oy` + 脉冲；灰色遮罩 `is-order-loading` 保留；`pointer-events:none`。
+- 验证：`test:node` 512/2 跳过；首页回归、`test:atlas-viewer`（含新增锚点断言，需 v0.1.1）通过；Workspace 339 测试 + 视图构建 + 锚点 e2e 通过。
+  **未在 prod 真实大重合区域复现你的场景**，限速是否彻底消失待实测；状态条动画只有静态截图。
+- 顺手：`package-lock.json` 里 `packages[""]` 版本曾停在 0.0.3，`npm install` 已校正。
+
+**sky-globe 发版流程**（Assets 不再含包源码）：在 `~/Repo/sky-globe` 改 `src/`，`npm run check`，
+改 `package.json`/lock 版本，提交、打 `vX.Y.Z` tag 并推送；然后 Assets 与 Workspace 各自把
+`@astro-survey-atlas/sky-globe` 的 codeload tag 改到新版并 `npm install`，Assets 再按五处版本流程发版。
+本地验证未发布的 viewer 改动时，可临时覆盖 `node_modules/@astro-survey-atlas/sky-globe/src/` 下的文件，验证后必须恢复。
+
 ### 0.0.5 热修（2026-11-08，仅 prod）—— 已部署
 
 **今后只维护 72602 prod，zjlab dev 不再部署**（停在 0.0.4 / rev 390）。
