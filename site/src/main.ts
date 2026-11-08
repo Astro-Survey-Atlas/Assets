@@ -242,6 +242,7 @@ let overlapInitialController: AbortController | null = null;
 let overlapEvidenceController: AbortController | null = null;
 let overlapViewController: AbortController | null = null;
 let overlapDetailsController: AbortController | null = null;
+let overlapDetailsPendingKey = "";
 let activeOverlapSurveyIds: string[] = [];
 let activeOverlapLayerIds: string[] = [];
 let activeOverlapViewTiles: { order: number; tiles: number[] } | undefined;
@@ -357,6 +358,11 @@ const overlapEvidenceCooldown = new Map<string, { until: number; message: string
 const OVERLAP_EVIDENCE_DEBOUNCE_MS = 150;
 const overlapEvidenceHosts = new Map<string, HTMLElement>();
 const overlapDetailsCache = new Map<string, OverlapDetailsResponse>();
+/** One request per key; a repeat render joins it instead of aborting and re-sending. */
+const overlapDetailsInflight = new Map<string, Promise<OverlapDetailsResponse>>();
+const overlapDetailsCooldown = new Map<string, { until: number; message: string }>();
+/** Key of the details the open drawer currently shows, so an unchanged refresh leaves it alone. */
+let drawerDetailsShownKey = "";
 let lastEscapeAt = -Infinity;
 const isAtlasPage = window.location.pathname === "/atlas/" || window.location.pathname === "/atlas";
 let coverageSelectionInitialized = false;
@@ -3373,23 +3379,32 @@ function setOverlapExpandVisible(visible: boolean): void {
 }
 
 function overlapDetailsCacheKey(component: OverlapComponentView): string {
-  return `${activeOverlapSurveyIds.slice().sort().join(",")}:${activeOverlapLayerIds.join(",")}:${activeOverlapViewTiles?.tiles.join(",")}:${activeOverlapModalities.slice().sort().join(",")}:${component.id}:${component.order}`;
+  return `${activeOverlapSurveyIds.slice().sort().join(",")}:${activeOverlapLayerIds.join(",")}:${activeOverlapViewTiles?.tiles.join(",")}:${activeOverlapModalities.slice().sort().join(",")}:${component.id}:${component.order}:${component.cells.length}:${component.cells[0] ?? ""}:${component.cells[component.cells.length - 1] ?? ""}`;
 }
 
-async function fetchOverlapDetails(component: OverlapComponentView, signal?: AbortSignal): Promise<OverlapDetailsResponse> {
+async function fetchOverlapDetails(component: OverlapComponentView): Promise<OverlapDetailsResponse> {
   const key = overlapDetailsCacheKey(component);
   const cached = overlapDetailsCache.get(key);
   if (cached) return cached;
-  const response = await fetch("/api/v1/coverage/overlap/details", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ surveyIds: activeOverlapSurveyIds, layerIds: activeOverlapLayerIds, viewTiles: activeOverlapViewTiles, modalities: activeOverlapModalities, componentId: component.id, requestedOrder: component.order, strictOrder: true }),
-    signal,
-  });
-  if (!response.ok) throw new Error(`overlap details HTTP ${response.status}`);
-  const details = await response.json() as OverlapDetailsResponse;
-  overlapDetailsCache.set(key, details);
-  return details;
+  const pending = overlapDetailsInflight.get(key);
+  if (pending) return pending;
+  const request = (async () => {
+    const response = await fetch("/api/v1/coverage/overlap/details", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ surveyIds: activeOverlapSurveyIds, layerIds: activeOverlapLayerIds, viewTiles: activeOverlapViewTiles, modalities: activeOverlapModalities, componentId: component.id, requestedOrder: component.order, strictOrder: true }),
+      signal: AbortSignal.timeout(90_000),
+    });
+    if (!response.ok) {
+      const retryAfter = Math.min(60, Math.max(1, Number(response.headers.get("Retry-After")) || 30));
+      throw Object.assign(new Error(`overlap details HTTP ${response.status}`), { status: response.status, retryAfter });
+    }
+    const details = await response.json() as OverlapDetailsResponse;
+    overlapDetailsCache.set(key, details);
+    return details;
+  })().finally(() => overlapDetailsInflight.delete(key));
+  overlapDetailsInflight.set(key, request);
+  return request;
 }
 
 function drawerSection(title: string): HTMLElement {
@@ -3851,22 +3866,51 @@ function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
 
 function renderOverlapDrawerDetails(component: OverlapComponentView): void {
   if (reverseLookupRegionTooLarge(component)) {
+    drawerDetailsShownKey = "";
     renderOverlapDrawerError(t("coverage.overlapRegionTooLarge"));
     return;
   }
+  const key = overlapDetailsCacheKey(component);
+  // Same content already on screen (a camera refresh that changed nothing): leave it alone.
+  if (overlapDrawerOpen && drawerDetailsShownKey === key && overlapDetailsCache.has(key)) return;
+  const cooling = overlapDetailsCooldown.get(key);
+  if (cooling && cooling.until > Date.now()) {
+    drawerDetailsShownKey = "";
+    renderOverlapDrawerError(`${t("coverage.overlapFailed")} ${cooling.message}`);
+    return;
+  }
+  const cached = overlapDetailsCache.get(key);
+  if (cached) {
+    renderOverlapDrawerResponse(cached);
+    drawerDetailsShownKey = key;
+    return;
+  }
+  // A request for this very content is already running: keep showing it, do not restart.
+  if (overlapDetailsPendingKey === key && overlapDetailsController) return;
+  drawerDetailsShownKey = "";
   renderOverlapDrawerLoading(component);
   overlapDetailsController?.abort();
   const controller = new AbortController();
   overlapDetailsController = controller;
-  void fetchOverlapDetails(component, controller.signal).then((details) => {
-    if (!overlapDrawerOpen || controller.signal.aborted || selectedQueueComponent?.id !== component.id) return;
-    renderOverlapDrawerResponse(details);
-  }).catch((error: unknown) => {
-    if (error instanceof DOMException && error.name === "AbortError") return;
-    if (overlapDrawerOpen && !controller.signal.aborted && selectedQueueComponent?.id === component.id) renderOverlapDrawerError(t("coverage.overlapFailed"));
-  }).finally(() => {
-    if (overlapDetailsController === controller) overlapDetailsController = null;
-  });
+  overlapDetailsPendingKey = key;
+  const current = () => overlapDrawerOpen && !controller.signal.aborted && selectedQueueComponent?.id === component.id;
+  void new Promise<void>((resolve) => setTimeout(resolve, OVERLAP_EVIDENCE_DEBOUNCE_MS))
+    .then(() => {
+      // A newer render superseded this one before it sent anything.
+      if (controller.signal.aborted) return;
+      return fetchOverlapDetails(component).then((details) => {
+        if (!current()) return;
+        renderOverlapDrawerResponse(details);
+        drawerDetailsShownKey = key;
+      });
+    }).catch((error: unknown) => {
+      const retryAfter = (error as { retryAfter?: number }).retryAfter ?? 30;
+      const message = error instanceof Error ? error.message : "";
+      overlapDetailsCooldown.set(key, { until: Date.now() + retryAfter * 1000, message });
+      if (current()) renderOverlapDrawerError(`${t("coverage.overlapFailed")} ${message}`);
+    }).finally(() => {
+      if (overlapDetailsController === controller) { overlapDetailsController = null; overlapDetailsPendingKey = ""; }
+    });
 }
 
 function selectOverlapDrawerComponent(component: OverlapComponentView): void {
@@ -3916,6 +3960,8 @@ function closeOverlapDrawer(): void {
   if (!overlapDrawerOpen && !overlapDrawerPreviousState) return;
   overlapDetailsController?.abort();
   overlapDetailsController = null;
+  overlapDetailsPendingKey = "";
+  drawerDetailsShownKey = "";
   abortHstLookupsWithin(byId("overlap-drawer-content"));
   overlapDrawerOpen = false;
   if (displayOrderControl && displayOrderHome) displayOrderHome.insertBefore(displayOrderControl, displayOrderNextSibling ?? null);
@@ -4070,7 +4116,8 @@ async function activateOverlap(forceActive?: boolean, forceView = false): Promis
     overlapDrawerComponentsPage = 0;
     updateOverlapHud(null);
   }
-  overlapDetailsCache.clear();
+  // overlapDetailsCacheKey is content-addressed (surveys, layers, view tiles,
+  // modalities, component), so a view refresh must not discard what it still matches.
   overlapController?.abort();
   const controller = new AbortController();
   overlapController = controller;
@@ -5312,6 +5359,7 @@ window.addEventListener("atlas:locale-change", () => {
     if (component && overlapDrawerOpen) {
       selectedQueueComponent = component;
       renderOverlapDrawerComponents();
+      drawerDetailsShownKey = "";   // translated text must be rebuilt
       renderOverlapDrawerDetails(component);
     } else if (component) {
       renderOverlapPanel(activeOverlapSurveyIds, [...new Set(activeOverlapComponents.flatMap((entry) => entry.cells))], component.order, "GLOBAL", activeOverlapComponents, false);

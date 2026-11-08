@@ -123,6 +123,7 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
         "files": [],
     }
     overlap_requests = []
+    details_requests = []
     oversized_order_five_index = False
     held_display_orders = set()
     held_display_routes = []
@@ -180,6 +181,7 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
                 fulfill_json(route, result)
         elif parsed.path == "/api/v1/coverage/overlap/details":
             order = request.post_data_json["requestedOrder"]
+            details_requests.append(request.post_data_json)
             fulfill_json(route, {"schemaVersion": 1, "component": overlap_component(order), "publicSources": [], "assetsEvidence": [], "warehouseEvidence": [], "method": {"summary": "Browser test fixture"}, "reverseLookup": {"endpoint": "/api/v1/coverage/reverse-lookup", "layerIds": [], "order": order, "precision": "estimated", "deferred": False}})
         elif parsed.path == "/api/v1/coverage/reverse-lookup":
             fulfill_json(route, {"available": False, "precision": "estimated", "truncated": False, "edges": [], "files": []})
@@ -419,6 +421,16 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     expect(page.locator("#overlap-drawer")).to_be_visible()
     assert slider.evaluate("input => input.closest('#overlap-drawer-tools') !== null"), "the same order control must move into the open overlap drawer"
     page.wait_for_timeout(1200)
+    assert len(details_requests) == 1, f"opening the drawer must request the component details once, got {details_requests}"
+    # An unchanged refresh (same surveys, layers, view and component) must neither re-request
+    # the details nor swap the drawer content for a loading skeleton.
+    drawer_content = page.locator("#overlap-drawer-content")
+    drawer_content.evaluate("node => { window.drawerLoadingSeen = false; new MutationObserver(() => { if (node.querySelector('.overlap-drawer-loading')) window.drawerLoadingSeen = true; }).observe(node, { childList: true, subtree: true }); }")
+    page.evaluate("document.activeElement.blur()")
+    page.mouse.wheel(0, -1)
+    page.wait_for_timeout(1500)
+    assert len(details_requests) == 1, f"an unchanged overlap refresh must not re-request the details, got {len(details_requests)}"
+    assert not page.evaluate("window.drawerLoadingSeen"), "an unchanged overlap refresh must not flash the drawer loading state"
     overlap_requests.clear()
     block_requests.clear()
     held_overlap_orders.add(8)
