@@ -2040,6 +2040,10 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
   byId("coverage-detail-title").textContent = `${scope} · ${surveyIds.length} SURVEYS`;
   setLockHeadline(scope === "SELECTED CELL" ? "EXPORT" : "OVERLAP", `O${order}`, `${pixels.length.toLocaleString("en-US")} CELLS · ${surveyIds.map((id) => (surveyIndex?.surveys.find((survey) => survey.id === id)?.name ?? id).toUpperCase()).join(" × ")}`);
   abortHstLookupsWithin(content);
+  // Preserve the user's scroll position when the same component is re-rendered on a
+  // view refresh (camera pan, order drag). Only reset when the component actually changes.
+  const nextComponentId = (componentData?.find((c) => c.id === selectedQueueComponent?.id) ?? componentData?.[0])?.id ?? selectedQueueComponent?.id ?? "";
+  const savedScroll = (content.dataset.renderedComponentId && content.dataset.renderedComponentId === nextComponentId) ? content.scrollTop : 0;
   content.replaceChildren();
   const summary = document.createElement("p");
   summary.className = "overlap-summary";
@@ -2079,6 +2083,7 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
   content.append(componentNav);
   const initialComponent = components.find((component) => component.id === selectedQueueComponent?.id) ?? components[0]!;
   selectOverlapComponent(initialComponent, surveyIds, content, focus);
+  if (savedScroll > 0) requestAnimationFrame(() => { content.scrollTop = savedScroll; });
   renderIcons();
   positionOverlapPanel();
 }
@@ -2096,6 +2101,7 @@ function selectOverlapComponent(component: OverlapComponentView, surveyIds = act
   updateOverlapHud(component);
   updateOverlapViewport();
   if (focus) coverageDots?.focusPixels(component.order, component.cells);
+  content.dataset.renderedComponentId = component.id;
   renderOverlapComponent(component, surveyIds, content);
 }
 
