@@ -19,3 +19,15 @@
 真实大重合区域解锁/完整续页的用户场景仍须单独验收。
 
 生产升级继续使用原有经审核数据和恢复配置；本地文档 manifest 的更新不切换线上数据版本。
+
+## 部署结果（2026-11-09）
+
+- [正式发布 CI #42563933995](https://github.com/Astro-Survey-Atlas/Assets/actions/runs/42563933995) 成功；
+  tag `code-v0.0.9` 对应 `b34333492e2d2069202c6f8bbe35bc793f6f381c`，发布分支尚未合入 main。
+- 72602 prod 已由 0.0.8 / rev 13 升级至 **0.0.9 / Helm rev 14**；site/backend 各 1/1 Ready、零重启，
+  health 与公共目录 HTTP 检查通过。public bundle 和原生索引与升级前相同。
+- 运行时镜像索引 `sha256:dea4175a2158d05ca1c0b070575d519a880dd1ff705f268bb4457dfcccccdc97`
+  的唯一 amd64 子镜像为发布摘要 `sha256:2af2d099633878a5434ebac5a7ed1ad1e586e2642f29508b3caea17b306f1b87`。
+- **生产浏览器交互未完成**：生产域名的 Chromium API/字体请求停滞，独立 HTTP 正常，原因未定；
+  已授权的转发尝试因本地 5199 端口被占用而失败。未将 fixture 回归算作生产交互验收，未验收认证大区域分页/导出。
+- 本节为部署后补记，不改写已发布 tag 或线上 public bundle；详细验证边界与本地回执位置见 HANDOFF。

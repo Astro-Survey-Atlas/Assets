@@ -8,14 +8,27 @@
 
 - **仅维护 72602 prod**：<https://astro.assets.72602.space/>。
   自 2026-11-08 起，zjlab dev 不再跟进（当时停在 0.0.4 / Helm rev 390）。
-- 正在正式发布 **0.0.9**（`release/code-v0.0.9`）：悬浮卡/DR 对齐与文档清理；
-  用户已授权提交、推送 tag、CI 发版及 prod 升级。发布说明见
-  [code-v0.0.9](docs/releases/code-v0.0.9.md)，以部署后验证回执为准。
-- 2026-11-09 升级前已只读核验 prod 为 **0.0.8 / Helm rev 13**，site/backend 各 1/1。
-  `/healthz` 版本 0.0.8，bundle `reviewed-mupsxe2v-c91be91f` / 603 files /
-  SHA `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`。
-  升级前 values、manifest、workloads、health/status 已保存至
+- 已正式发布并部署 **0.0.9 / Helm rev 14**：悬浮卡/DR 对齐与文档清理。
+  `code-v0.0.9` 对应提交 `b34333492e2d2069202c6f8bbe35bc793f6f381c`；
+  [Release CI #42563933995](https://github.com/Astro-Survey-Atlas/Assets/actions/runs/42563933995)
+  成功，[GitHub Release](https://github.com/Astro-Survey-Atlas/Assets/releases/tag/code-v0.0.9)
+  已发布。代码在 `release/code-v0.0.9`，尚未合入 `main`；tag 不移动。
+- 升级后 site/backend 各 1/1 Ready、零重启，`/healthz` 为 0.0.9，公共目录 API 通过。
+  public bundle 保持 `reviewed-mupsxe2v-c91be91f` / 603 files /
+  SHA `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`；
+  native index 保持 `803023a36a8d489d951717214b92d0df4c3d4b7b36607a3634843bb0621d29d5`
+  / generation 4 / managed、verified。未发布数据或激活索引。
+- 镜像摘要已核对：运行时 `sha256:dea4175a2158d05ca1c0b070575d519a880dd1ff705f268bb4457dfcccccdc97`
+  是镜像索引；其中唯一 amd64 子镜像为发布回执的
+  `sha256:2af2d099633878a5434ebac5a7ed1ad1e586e2642f29508b3caea17b306f1b87`，不是版本错配。
+- 生产域名 Chromium 交互验收**未通过/未完成**：API/字体请求停滞，页面未 ready；
+  独立 HTTP 请求正常，原因未定，不能归因为已确认的本机问题。
+  经精确授权尝试 SSH 转发，但本地 5199 被既有 Python 进程占用，隧道启动失败；
+  未停止占用进程或另开端口，不把本地 fixture 回归算作生产交互验收。
+- 升级前基线为 **0.0.8 / Helm rev 13**；复用既有 values，保留存储、凭据与恢复配置。
+  升级前后 values/manifest/workloads/health/status 与验证回执保存在
   `~/.local/share/astro-assets-deployments/72602/20261109-release-0.0.9/`（不入 Git）。
+  发布说明见 [code-v0.0.9](docs/releases/code-v0.0.9.md)。
 - sky-globe 已拆到独立仓库 `~/Repo/sky-globe`；Assets 使用
   `@astro-survey-atlas/sky-globe` 的 **v0.1.1 codeload tag**，不再有本地 `packages/sky-globe`。
   修改共享组件先在该仓库检查/发 tag，再显式升级 Assets 与 Workspace 的依赖。
@@ -24,7 +37,7 @@
 
 ## 本次 0.0.9 UI 工作：悬浮卡与 DR 对齐
 
-2026-11-09 已本地完成并纳入本次正式发布，部署结果待核验；涉及 `site/src/main.ts`、
+2026-11-09 已完成并随 0.0.9 部署；生产 HTTP/运行状态通过，生产交互验收仍未完成。涉及 `site/src/main.ts`、
 `site/src/styles.css`、`scripts/homepage-carousel-smoke.py` 及本交接。
 
 - 悬浮卡离开巡天行/卡片 **2 秒**后关闭，移回或保留区域内键盘焦点可取消关闭。
@@ -42,8 +55,9 @@
 
 ## 待办与尚未核验
 
-1. **生产验收与发布记录**：确认实际线上代码版本；重测真实大重合区域解锁、续页、
-   限流冷却、滚动与阶数切换动画。0.0.6 时未复现用户完整场景，不能因后续代码修复便默认验收完成。
+1. **生产交互验收与分支整合**：线上 0.0.9 已确认，但浏览器初始化停滞待定位，悬浮卡生产交互尚未验收；
+   发布分支尚未合入 main。另须重测真实大重合区域解锁、续页、限流冷却、滚动与阶数切换动画。
+   0.0.6 时未复现用户完整场景，不能因后续代码修复便默认验收完成。
 2. **管理台流程重构（低优先级）**：当前六步导航与四个任务面板，未来收敛为
    「来源与发现 → 生成 → 审核与发布」。以
    [近期冗余审计](docs/audit-redundancy-and-admin-flow-20261108.md) 为线索，逐项对照代码；
