@@ -138,6 +138,12 @@ Dockerfile 修复：`tsconfig.test.json` 漏加 COPY 导致首次构建失败，
 
 **遗留小项**：（已在 0.0.5 修复 health 版本写死）
 
+## 近期待做（2026-11-09 backlog）
+
+1. **Coverage layer hover 延迟消失** — 用户 hover 巡天列表时弹出的 coverage layer 悬浮卡，鼠标移开后应等 2 秒再消失（用户可能正在阅读 DR 列表）。后续考虑在卡片里加入巡天简介和背景图。实现方向：给 `pointerleave` 绑一个 `setTimeout(close, 2000)`，`pointerenter` 时 `clearTimeout`，同时给卡片本身也绑 `pointerenter/leave`，让鼠标滑进卡片内部时能取消计时。相关文件：`site/src/main.ts`（hover card 渲染处）、`site/src/public.css`（`coverage-layer-detail` 样式）。
+
+2. **Coverage layer DR 列表对齐** — DR 列表格式不整齐，需对齐版本号与发布名称。优先级低。相关文件：`site/src/public.css` 及 `site/src/main.ts` 里渲染 DR 列表的部分。
+
 ## 待办（2026-11-07）
 
 用户实机反馈的 5 项，1/2/3/5 已在分支 `fix/atlas-interaction` 修复（见下节），4 留作下一轮。
