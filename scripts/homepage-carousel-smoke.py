@@ -35,6 +35,116 @@ def selected_tab(page) -> str | None:
     return page.locator('[role="tab"][aria-selected="true"]').get_attribute("data-home-tab")
 
 
+def atlas_layer_tooltip_smoke(browser, base_url: str, mock_api) -> None:
+    page = browser.new_page(viewport={"width": 1440, "height": 1000})
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.route("**/api/v1/**", mock_api)
+    page.goto(base_url.rstrip("/") + "/atlas/", wait_until="domcontentloaded")
+    expect(page.locator("#coverage-scene")).to_have_attribute("data-ready", "true")
+    page.locator("#coverage-layers-toggle").click()
+    for survey_id in ["euclid", "gaia"]:
+        page.locator(f'#coverage-survey-{survey_id} input[data-survey-id]:not([data-release-id])').check(force=True)
+    expect(page.locator("#coverage-state")).to_contain_text("O4")
+    page.wait_for_timeout(500)
+    page.evaluate("document.activeElement.blur()")
+    page.mouse.move(1200, 900)
+    page.clock.install(time=0)
+    page.clock.pause_at(100)
+    euclid = page.locator("#coverage-survey-euclid .coverage-layer-toggle")
+    gaia = page.locator("#coverage-survey-gaia .coverage-layer-toggle")
+    tooltip = page.locator("#coverage-layer-tooltip")
+
+    euclid.hover()
+    expect(tooltip).to_be_visible()
+    expect(tooltip.locator(".coverage-layer-detail-row")).to_have_count(3)
+    euclid.locator("input").uncheck(force=True)
+    expect(tooltip.locator(".coverage-layer-detail-row")).to_have_count(0)
+    euclid.locator("input").check(force=True)
+    expect(tooltip.locator(".coverage-layer-detail-row")).to_have_count(3)
+    page.evaluate("document.activeElement.blur()")
+    page.mouse.move(1200, 900)
+    page.clock.run_for(1999)
+    expect(tooltip).to_be_visible()
+    page.clock.run_for(1)
+    expect(tooltip).to_have_count(0)
+    assert euclid.get_attribute("aria-describedby") is None
+
+    euclid.hover()
+    page.mouse.move(1200, 900)
+    page.clock.run_for(1000)
+    euclid.hover()
+    tooltip.evaluate("element => element.dataset.retained = 'true'")
+    page.clock.run_for(2000)
+    expect(tooltip).to_have_attribute("data-retained", "true")
+    tooltip.hover()
+    page.clock.run_for(11000)
+    expect(tooltip).to_be_visible()
+    assert page.evaluate("document.body.dataset.layersPanel === 'open'"), "reading a card must pause roster auto-close"
+    tooltip.locator(".coverage-layer-detail-list").evaluate("element => element.scrollTop = element.scrollHeight")
+    page.mouse.move(1200, 900)
+    page.clock.run_for(1999)
+    expect(tooltip).to_be_visible()
+    page.clock.run_for(1)
+    expect(tooltip).to_have_count(0)
+
+    euclid.hover()
+    page.mouse.move(1200, 900)
+    page.clock.run_for(1000)
+    gaia.hover()
+    page.clock.run_for(2000)
+    expect(tooltip).to_have_attribute("data-survey-id", "gaia")
+    euclid.hover()
+    euclid.locator("input").focus()
+    page.mouse.move(1200, 900)
+    page.clock.run_for(2500)
+    expect(tooltip).to_have_attribute("data-survey-id", "euclid")
+    page.evaluate("document.activeElement.blur()")
+    page.clock.run_for(2000)
+    expect(tooltip).to_have_count(0)
+
+    euclid.hover()
+    rows = tooltip.locator(".coverage-layer-detail-row")
+    names = rows.locator(".coverage-layer-detail-product").evaluate_all("elements => elements.map(e => e.getBoundingClientRect().left)")
+    assert max(names) - min(names) < 1, "product columns must align across DR rows"
+    assert rows.locator(".coverage-layer-detail-version").all_text_contents() == ["euclid-ero", "euclid-ero", "euclid-q1"]
+    assert rows.locator(".coverage-layer-detail-orders").count() == 3
+    persistent_rows = page.locator(".coverage-layer-detail-persistent[data-survey-id='euclid'] .coverage-layer-detail-row")
+    expect(persistent_rows).to_have_count(3)
+    assert persistent_rows.locator(".coverage-layer-detail-version").all_text_contents() == ["euclid-ero", "euclid-ero", "euclid-q1"]
+    rows.locator(".coverage-layer-detail-product").first.evaluate("element => element.textContent = 'LongProductNameWithoutBreaks'.repeat(8)")
+    assert tooltip.evaluate("element => element.scrollWidth <= element.clientWidth"), "long product names must wrap inside the card"
+    for selector in ["[data-theme-toggle]", "[data-locale-toggle]"]:
+        page.locator(selector).first.click()
+        euclid.hover()
+        expect(tooltip).to_be_visible()
+        assert tooltip.evaluate("element => element.scrollWidth <= element.clientWidth")
+    page.mouse.move(1200, 900)
+    page.locator("#coverage-layer-search").fill("gaia")
+    assert page.locator("#coverage-survey-euclid").evaluate("element => element.hidden"), page.locator("#coverage-layers").inner_text()
+    expect(tooltip).to_have_count(0)
+    page.locator("#coverage-layer-search").fill("")
+    euclid.hover()
+    page.locator("#hud-layers-head").click()
+    expect(tooltip).to_have_count(0)
+    page.locator("#hud-layers-head").click()
+    euclid.hover()
+    page.evaluate("document.activeElement.blur()")
+    page.mouse.move(1200, 900)
+    page.clock.run_for(2000)
+    expect(tooltip).to_have_count(0)
+    page.clock.run_for(10000)
+    assert page.evaluate("document.body.dataset.layersPanel !== 'open'"), "roster auto-close must resume after reading"
+    page.locator("#coverage-layers-toggle").click()
+    euclid.hover()
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.clock.run_for(100)
+    expect(tooltip).to_have_count(0)
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "mobile layout must not overflow"
+    assert not errors, f"Tooltip browser errors: {errors}"
+    page.close()
+
+
 def atlas_display_order_smoke(browser, base_url: str) -> None:
     screenshot_root = os.environ.get("ASSETS_ATLAS_SCREENSHOT_DIR")
     if screenshot_root:
@@ -187,6 +297,10 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
             fulfill_json(route, {"available": False, "precision": "estimated", "truncated": False, "edges": [], "files": []})
         else:
             fulfill_json(route, {})
+
+    atlas_layer_tooltip_smoke(browser, base_url, mock_api)
+    tile_index_requests.clear()
+    block_requests.clear()
 
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
     page.add_init_script("""(() => {

@@ -31,6 +31,14 @@ legacy members may retain a schema-2 base archive reference; this compatibility
 does not require uploading a complete archive for every publication.
 `release-manifest.json` remains the public file-level integrity contract.
 
+Documentation included by `scripts/build-release-manifest.ts` is hash-pinned
+release content. After editing it, regenerate the local manifest with
+`npm run catalog:build` in a hydrated workspace and validate before a formal
+release. Do not claim the edited checkout is byte-identical to an older bundle.
+Rebuilding local metadata does not publish or activate a new public release.
+The completed authority cutover is retained as a [migration receipt](s3-authority-migration-receipt-20260912.json);
+never repeat it or restore an old snapshot over newer writes.
+
 Full `release.tar.gz` archives are export/restore artifacts. Resource-package
 collection ZIPs are optional historical/distribution exports: consumers must
 check whether the selected release declares `collection`. Individual package

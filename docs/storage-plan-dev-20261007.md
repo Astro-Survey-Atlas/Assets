@@ -1,4 +1,8 @@
-# Assets Dev Storage Plan
+# Assets Dev Storage Plan（历史快照）
+
+> 自 2026-11-08 起仅维护 72602 prod，Dev 不再部署。本文保留当时用量、引用保留
+> 条件及未完成治理项，不是现行部署、清理或迁移指令；需重新盘点并确定范围后才能执行。
+> 当前待办见 [HANDOFF](../HANDOFF.md)，不要把旧 Dev 数字或授权套用到 prod。
 
 Snapshot date: 2026-10-07, after native generation 13 activation. This plan
 covers Dev only. It does not change storage, delete objects, or move data.

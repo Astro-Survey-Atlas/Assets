@@ -107,6 +107,7 @@ in the object store.
 
 | Topic | Document |
 | --- | --- |
+| Documentation index and retention | [docs/README.md](docs/README.md) |
 | Coverage recipes and publication | [docs/coverage-workflow.md](docs/coverage-workflow.md) |
 | API contracts | [docs/api-reference.md](docs/api-reference.md) |
 | Native-unit management | [docs/native-unit-management.md](docs/native-unit-management.md) |
@@ -115,13 +116,11 @@ in the object store.
 | Project boundaries | [docs/architecture-boundary.md](docs/architecture-boundary.md) |
 | Current state and TODO | [HANDOFF.md](HANDOFF.md) |
 
-Deploy with the Helm chart:
-
-```bash
-helm upgrade --install astro-survey-atlas-assets charts/astro-survey-atlas-assets \
-  --namespace astro-survey-atlas-assets --create-namespace \
-  --values <environment-values.yaml>
-```
+Deploy with the Helm chart under `charts/astro-survey-atlas-assets`.
+Only 72602 prod is maintained; see [HANDOFF](HANDOFF.md) for the release/version
+checklist and environment boundary. Inspect the actual release values and
+site/backend image overrides before any authorized upgrade; do not reuse old
+Dev commands as production instructions.
 
 ## Repository map
 

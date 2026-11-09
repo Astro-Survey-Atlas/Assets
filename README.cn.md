@@ -100,6 +100,7 @@ provenance）并附目录清单，列在 [/releases/](https://astro.assets.72602
 
 | 主题 | 文档 |
 | --- | --- |
+| 文档索引与留存规则 | [docs/README.md](docs/README.md) |
 | 覆盖配方与发布 | [docs/coverage-workflow.md](docs/coverage-workflow.md) |
 | API 契约 | [docs/api-reference.md](docs/api-reference.md) |
 | 原生单元管理 | [docs/native-unit-management.md](docs/native-unit-management.md) |
@@ -108,13 +109,9 @@ provenance）并附目录清单，列在 [/releases/](https://astro.assets.72602
 | 项目边界 | [docs/architecture-boundary.md](docs/architecture-boundary.md) |
 | 当前状态与待办 | [HANDOFF.md](HANDOFF.md) |
 
-使用 Helm chart 部署：
-
-```bash
-helm upgrade --install astro-survey-atlas-assets charts/astro-survey-atlas-assets \
-  --namespace astro-survey-atlas-assets --create-namespace \
-  --values <environment-values.yaml>
-```
+部署使用 `charts/astro-survey-atlas-assets` 中的 Helm chart。目前仅维护 72602 prod，
+版本检查清单与环境边界见 [HANDOFF](HANDOFF.md)。经授权升级前先核对实际 release
+values 和 site/backend 镜像覆盖，不将旧 Dev 命令作为生产操作指令。
 
 ## 仓库结构
 

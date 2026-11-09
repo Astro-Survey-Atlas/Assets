@@ -286,6 +286,7 @@ let layerCloseDeadline = 0;
 let layerCloseRemaining = 0;
 let layerClosePaused = false;
 let coverageLayerTooltip: HTMLElement | null = null;
+let coverageLayerTooltipCloseTimer: number | null = null;
 const expandedCoverageSurveyIds = new Set<string>();
 let coverageSearchExpandedBefore: Set<string> | null = null;
 let coverageLayerSearchQuery = "";
@@ -1198,6 +1199,7 @@ function storeHudPreferences(): void {
 }
 
 function setHudHidden(hidden: boolean, store = true): void {
+  if (hidden) hideCoverageLayerTooltip();
   if (hidden) document.body.dataset.hud = "hidden";
   else delete document.body.dataset.hud;
   const button = document.getElementById("hud-toggle");
@@ -1211,6 +1213,7 @@ function setHudHidden(hidden: boolean, store = true): void {
 }
 
 function setRosterCollapsed(collapsed: boolean, store = true): void {
+  if (collapsed) hideCoverageLayerTooltip();
   if (collapsed) document.body.dataset.hudRoster = "collapsed";
   else delete document.body.dataset.hudRoster;
   document.getElementById("hud-layers-head")?.setAttribute("aria-expanded", String(!collapsed));
@@ -1249,6 +1252,9 @@ function commitCoverageProductSelection(): void {
   if (overlapMode || overlapIntent || overlapViewController) void activateOverlap(true);
   else void loadCoverageDisplay();
   renderSelectionQueue();
+  const tooltipRow = coverageLayerTooltipRow;
+  const tooltipSurveyId = coverageLayerTooltip?.dataset.surveyId;
+  if (tooltipRow && tooltipSurveyId) showCoverageLayerTooltip(tooltipSurveyId, tooltipRow, true);
 }
 
 function selectedLayerOrders(): number[] {
@@ -1772,7 +1778,16 @@ function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLEl
     const row = document.createElement("div");
     row.className = "coverage-layer-detail-row";
     const state = coverageLayerLoadStates.get(layer.layerId) ?? "loading";
-    row.textContent = `${layer.product || product?.name || "Coverage"} · ${layer.releaseId || release?.label || "--"} · 最高原生 O${layer.maxOrder} · ${layer.availableOrders.length ? `O${layer.availableOrders.join("/O")}` : "HEALPIX --"}`;
+    const version = document.createElement("span");
+    version.className = "coverage-layer-detail-version";
+    version.textContent = layer.releaseId || release?.label || "--";
+    const name = document.createElement("span");
+    name.className = "coverage-layer-detail-product";
+    name.textContent = layer.product || product?.name || "Coverage";
+    const orders = document.createElement("small");
+    orders.className = "coverage-layer-detail-orders";
+    orders.textContent = `${locale() === "zh" ? "最高原生" : "Native max"} O${layer.maxOrder} · ${layer.availableOrders.length ? `O${layer.availableOrders.join("/O")}` : "HEALPIX --"}`;
+    row.append(version, name, orders);
     if (state === "error") {
       const error = coverageLayerLoadErrors.get(layer.layerId);
       row.title = error ?? "Coverage block unavailable";
@@ -1791,18 +1806,40 @@ function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLEl
   return panel;
 }
 
+function cancelCoverageLayerTooltipClose(): void {
+  if (coverageLayerTooltipCloseTimer !== null) window.clearTimeout(coverageLayerTooltipCloseTimer);
+  coverageLayerTooltipCloseTimer = null;
+}
+
+function coverageLayerTooltipOccupied(): boolean {
+  return [coverageLayerTooltipRow, coverageLayerTooltip].some((element) =>
+    element && (element.matches(":hover") || element.contains(document.activeElement)));
+}
+
+function scheduleCoverageLayerTooltipClose(): void {
+  cancelCoverageLayerTooltipClose();
+  if (!coverageLayerTooltip || coverageLayerTooltipOccupied()) return;
+  const tooltip = coverageLayerTooltip;
+  coverageLayerTooltipCloseTimer = window.setTimeout(() => {
+    coverageLayerTooltipCloseTimer = null;
+    if (coverageLayerTooltip === tooltip && !coverageLayerTooltipOccupied()) hideCoverageLayerTooltip();
+  }, 2000);
+}
+
 function hideCoverageLayerTooltip(): void {
+  cancelCoverageLayerTooltipClose();
   coverageLayerTooltipRow?.removeAttribute("aria-describedby");
   coverageLayerTooltipRow = null;
   coverageLayerTooltip?.remove();
   coverageLayerTooltip = null;
+  resumeLayerCloseTimer();
 }
 
 function positionCoverageLayerTooltip(): void {
   const tooltip = coverageLayerTooltip;
   const row = coverageLayerTooltipRow;
   if (!tooltip || !row) return;
-  if (window.innerWidth <= 820) {
+  if (window.innerWidth <= 820 || !row.isConnected || row.closest("[hidden]") || !row.getClientRects().length) {
     hideCoverageLayerTooltip();
     return;
   }
@@ -1823,16 +1860,26 @@ function positionCoverageLayerTooltip(): void {
   tooltip.style.top = `${position.top}px`;
 }
 
-function showCoverageLayerTooltip(surveyId: string, row: HTMLElement): void {
+function showCoverageLayerTooltip(surveyId: string, row: HTMLElement, refresh = false): void {
   if (window.innerWidth <= 820) return;
+  cancelCoverageLayerTooltipClose();
+  if (!refresh && coverageLayerTooltip && coverageLayerTooltipRow === row) {
+    positionCoverageLayerTooltip();
+    return;
+  }
   hideCoverageLayerTooltip();
   const tooltip = createCoverageLayerDetail(surveyId);
   tooltip.classList.add("coverage-layer-tooltip");
   tooltip.id = "coverage-layer-tooltip";
   tooltip.setAttribute("role", "tooltip");
+  tooltip.addEventListener("pointerenter", cancelCoverageLayerTooltipClose);
+  tooltip.addEventListener("pointerleave", scheduleCoverageLayerTooltipClose);
+  tooltip.addEventListener("focusin", cancelCoverageLayerTooltipClose);
+  tooltip.addEventListener("focusout", () => queueMicrotask(scheduleCoverageLayerTooltipClose));
   document.body.append(tooltip);
   coverageLayerTooltip = tooltip;
   coverageLayerTooltipRow = row;
+  pauseLayerCloseTimer();
   row.setAttribute("aria-describedby", tooltip.id);
   positionCoverageLayerTooltip();
 }
@@ -1917,6 +1964,8 @@ function clearLayerCloseTimer(): void {
 }
 
 function scheduleLayerCloseTimer(): void {
+  const host = document.getElementById("coverage-layers");
+  if (coverageLayerTooltip || host?.matches(":hover") || host?.contains(document.activeElement)) layerClosePaused = true;
   if (layerClosePaused || layerCloseRemaining <= 0) return;
   layerCloseDeadline = Date.now() + layerCloseRemaining;
   layerCloseTimer = window.setTimeout(() => {
@@ -1928,6 +1977,7 @@ function scheduleLayerCloseTimer(): void {
 
 function restartLayerCloseTimer(): void {
   if (layerCloseTimer !== null) window.clearTimeout(layerCloseTimer);
+  layerCloseTimer = null;
   layerCloseRemaining = 10_000;
   scheduleLayerCloseTimer();
 }
@@ -1941,6 +1991,8 @@ function pauseLayerCloseTimer(): void {
 }
 
 function resumeLayerCloseTimer(): void {
+  const host = document.getElementById("coverage-layers");
+  if (coverageLayerTooltip || host?.matches(":hover") || host?.contains(document.activeElement)) return;
   if (!layerClosePaused) return;
   layerClosePaused = false;
   scheduleLayerCloseTimer();
@@ -1951,6 +2003,8 @@ function bindLayerCloseTimer(host: HTMLElement): void {
   host.dataset.timerBound = "true";
   host.addEventListener("pointerenter", pauseLayerCloseTimer);
   host.addEventListener("pointerleave", resumeLayerCloseTimer);
+  host.addEventListener("focusin", pauseLayerCloseTimer);
+  host.addEventListener("focusout", () => queueMicrotask(resumeLayerCloseTimer));
 }
 
 function renderOverlapLoadingPanel(surveyIds: string[], order: number): void {
@@ -4302,6 +4356,7 @@ function filterCoverageSurveyGroups(): void {
   rows.forEach((row) => {
     if (row.dataset.surveyId) setCoverageSurveyExpanded(row.dataset.surveyId, expandedCoverageSurveyIds.has(row.dataset.surveyId));
   });
+  positionCoverageLayerTooltip();
 }
 
 function infoControl(description: string, className = "overlap-spatial-unit-info"): HTMLSpanElement {
@@ -4425,12 +4480,13 @@ function renderCoverageLayers(): void {
     swatch.setAttribute("aria-label", `图层颜色 ${swatch.style.backgroundColor}`);
     label.addEventListener("pointerenter", () => showCoverageLayerTooltip(surveyId, label));
     label.addEventListener("pointerleave", () => {
-      if (coverageLayerTooltipRow === label) hideCoverageLayerTooltip();
+      if (coverageLayerTooltipRow === label) scheduleCoverageLayerTooltipClose();
     });
     label.addEventListener("focusin", () => showCoverageLayerTooltip(surveyId, label));
-    label.addEventListener("focusout", (event) => {
-      const related = event.relatedTarget;
-      if (!(related instanceof Node) || !label.contains(related)) hideCoverageLayerTooltip();
+    label.addEventListener("focusout", () => {
+      queueMicrotask(() => {
+        if (coverageLayerTooltipRow === label) scheduleCoverageLayerTooltipClose();
+      });
     });
     const handle = document.createElement("span");
     handle.className = "coverage-layer-handle";
@@ -5102,6 +5158,7 @@ byId<HTMLDialogElement>("survey-dialog").addEventListener("click", (event) => { 
 byId("preview-close").addEventListener("click", () => byId<HTMLDialogElement>("preview-dialog").close());
 byId<HTMLDialogElement>("preview-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("preview-dialog").close(); });
 function clearCoverageFocus(openLayers = true): void {
+  hideCoverageLayerTooltip();
   closeSkyDepth();
   cancelDisplayOrderInteraction();
   cancelCoverageDisplayRequest();
@@ -5284,6 +5341,8 @@ window.addEventListener("popstate", () => {
   }
   enterAtlasExperience(target.surveyId, target.productId);
 });
+
+window.addEventListener("pagehide", hideCoverageLayerTooltip);
 
 window.addEventListener("resize", () => {
   positionSelectionQueue();

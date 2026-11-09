@@ -99,25 +99,21 @@ Assets 管理页面
 必须定义 `depthMetric`、单位、波段、统计方法、HEALPix order/resolution、
 输入和算法版本，并记录 depth map SHA-256。没有科学定义前，validator 和
 发布流程不会接受虚假的深度文件。
-# Storage implementation handoff
+## Storage and recovery
 
-The [S3 authority implementation plan](s3-authority-implementation-plan.md)
-records the confirmed authority as the MinIO described by gitignored `.info`,
-not the currently deployed Helm `storage/minio` public bucket. Production S3 is
-the authority for uploaded business bytes and synced control state. `cache/`
-contains disposable verified restores, `scratch/` contains recomputable work,
-and `uploads/` contains explicit pending payloads that cleanup must not remove.
-Hydrate and Helm startup require S3 and fail closed in a fresh environment;
-HTTP still serves verified `/data/current` and the configured local content
-root without reading S3 per request.
+Production object storage is the authority for uploaded business bytes and synced
+control state. Verified caches are disposable; recomputable scratch and explicit
+pending uploads have different retention requirements. Never delete a unique
+pending payload as though it were a cache. Fresh hydrate/startup fails closed
+without the required authority; HTTP serves verified local content rather than
+reading object storage per request.
 
-P2/P3 durability work (atomic spool enqueue, CAS pointers, corrupt-local
-restore and honest API sync status) and the P5 online cutover are complete.
-The old development bucket and Secret were removed after hash and consumer
-checks; active release/content/evidence/upload-spool PVCs remain because they
-are still mounted or can contain recoverable state. This work does not add
-automatic scan-to-MOC/package conversion or change Warehouse's execution/index
-responsibilities or coverage semantics.
+Use [public artifact storage](public-artifact-storage.md) and
+[publication runtime](publication-runtime-split.md) for current operations. The
+completed authority cutover has a [migration receipt](s3-authority-migration-receipt-20260912.json);
+it is not an instruction to migrate again or restore old state over newer writes.
+Storage work does not change Warehouse ownership or add automatic scan-to-MOC
+or Resource Package generation.
 
 
 ## Assets 运行边界（2026-09-20 已上线）
@@ -129,6 +125,6 @@ SQLite 发布队列，子执行进程通过 fenced IPC 请求父进程激活 aut
 状态，只有审核且明确发布的版本进入公开数据边界。
 
 已有 MOC 探索由 Warehouse 查询 CDS，Assets 负责候选选择、构建、审核与发布。
-联网 LLM 增强仍为设计，不能描述为现有执行能力。详见
+可选联网增强已实现，须显式启用和配置；这不保证当前供应商可用，也不替代科学校验或人工审核。详见
 [发布运行架构](publication-runtime-split.md)、[增强设计](moc-discovery-enhancement-design.md)
 及 [当前交接](../HANDOFF.md)。

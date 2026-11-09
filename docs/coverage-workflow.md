@@ -51,23 +51,21 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
   the complete selected-product batch arrives, preserving the renderer and
   camera. Loading and failures identify the order still displayed. The same
   control moves into the expanded overlap drawer and returns on close.
-- Ordinary coverage uses the selected display order. In overlap mode the
-  selected order controls only the intersection; source survey coverage stays
-  at its actual O4 overview. Strict overlap intersects selected products at
-  exactly the selected order and never falls
-  back to a coarser result when the intersection is empty. O4/O5 use a bounded
-  full-sky overlap seed; O6 and above may restrict seeds to visible HEALPix
-  parent cells, while each returned connected component retains its complete
-  region for inspection and reverse lookup. Requests for strict overlap identify
-  selected product layer IDs and are not shared-cache responses.
-  Focused coverage and overlap seeds omit the far side of the sky. Refreshing
-  overlap resolution preserves the current camera. Overlap mode retains the
-  selected products' complete O4 coverage, including non-overlap regions and
-  empty finer intersections. Only overlap indexes and the strict query follow
-  the slider; source coverage does not request high-order blocks. The O4
-  background and intersection commit together and retain their separate real
-  orders, also shown in the UI. Pending or failed requests preserve the prior
-  view. Leaving overlap restores ordinary coverage at the selected order.
+- Ordinary and overlap source coverage use the selected display order and share
+  the display-block cache. Strict overlap intersects selected products at exactly
+  that order and never falls back to a coarser result when the intersection is
+  empty. O4/O5 use a bounded full-sky overlap seed; O6 and above may restrict
+  seeds to visible HEALPix parent cells, while each returned connected component
+  retains its complete region for inspection and reverse lookup. Requests for
+  strict overlap identify selected product layer IDs and are not shared-cache
+  responses. Focused coverage and overlap seeds omit the far side of the sky.
+  Refreshing overlap resolution preserves the camera and non-overlap source
+  coverage. When a source view exceeds the display budget, retain the previously
+  drawn coverage at its actual order; do not label it as the newly requested
+  order. The strict intersection still has to succeed at the selected order.
+  Within budget, source coverage and intersection commit together; pending or
+  failed requests preserve the prior view. Leaving overlap preserves the chosen
+  order and camera and reuses cached blocks rather than resetting to O4.
   Ordinary focused source rendering uses the surface cap on the sphere and
   excludes canvas hidden by the drawer. Loaded blocks retain their full cells
   in cache; rendering filters those real cells to the view with a conservative
@@ -554,7 +552,12 @@ IDs, MOCs, paths and parent directories remain in Workspace.
 Every coverage recipe must retain provenance and its coordinate/order contract.
 Warehouse scanning and Assets MOC/package construction are separate workflows;
 a completed scan does not automatically generate a MOC or Resource Package.
-Storage migration follows the [S3 authority implementation plan](s3-authority-implementation-plan.md). Production S3 is the authority for uploaded business data; P0-P6 migration work is complete and pending-upload data remains the explicit exception.
+Storage and recovery follow [public artifact storage](public-artifact-storage.md)
+and [publication runtime](publication-runtime-split.md). Production object
+storage is the authority for uploaded business data; pending-upload data remains
+an explicit exception. The completed one-shot migration is recorded in its
+[migration receipt](s3-authority-migration-receipt-20260912.json), not a current
+migration task.
 
 ```mermaid
 flowchart LR
@@ -663,8 +666,9 @@ indexed files, preserving their actual order and precision. A scan root is not
 a substitute for a missing file mapping. Workspace may aggregate matching file
 identities in its private index before resolving parents; any representative
 native cells must be marked `matchingCellsTruncated`, independently from omitted
-parents (`directoriesTruncated`), and retained in JSON/CSV exports. See the
-[four-survey MVP scenario](four-survey-mvp.md).
+parents (`directoriesTruncated`), and retained in JSON/CSV exports. The completed
+four-survey MVP is a historical acceptance baseline, not a pending launch gate;
+see [current data scope](data-scope.md) and [API contracts](api-reference.md).
 
 ```mermaid
 flowchart LR

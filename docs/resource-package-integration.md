@@ -210,29 +210,25 @@ it requires a separate explicit withdrawal workflow with a recorded reason; the
 current incremental publisher rejects such removals.
 
 The public catalog exposes activated release versions. Product publication may
-prepare a new package, but the package becomes an upgrade only after the complete
-public release (catalog, history and collection) is activated. Historical
-immutable downloads remain available.
+prepare a new package, but the package becomes an upgrade only after its public
+release (catalog, history and declared artifacts) is activated. A whole-release
+`collection` ZIP is optional: validate its bytes/hash only when the selected
+release declares it. Historical immutable downloads remain available.
 
-Run the HTTP consumer audit after publication:
+After publication, verify current packages, ZIP members, Release continuity,
+history and immutable downloads. `scripts/check-public-package-release.py` is a
+legacy audit helper that currently assumes `release.collection` exists; it is
+not a general validator for valid releases without a collection. A missing
+optional collection alone is not a failed publication.
 
-```bash
-python3 scripts/check-public-package-release.py https://<assets-host>
-```
-
-It checks every current package, its ZIP members, Release continuity, the latest
-history entry, versioned downloads and the whole-release collection hashes.
-
-For a repair that republishes already published bytes without publishing pending
-editorial drafts, `scripts/repair-public-package-release.mjs` uses the standard
-publisher, archive verification and authority pointer activation. Run it from
-`/app` in the configured Assets environment with `ASSETS_REPAIR_SURVEY_ID` set.
-The default is a read-only plan. Before setting `ASSETS_REPAIR_EXECUTE=1`, verify
-there are no queued/running publications and pause the ordinary publisher worker;
-resume the worker afterwards. The repair filters packages/publications to the
-named survey, preserves all other baseline packages, and never reviews drafts.
-Activate the resulting authority bundle on the Assets server and run the HTTP
-audit. Workspace needs only its normal catalog sync and package update.
+`scripts/repair-public-package-release.mjs` is a historical maintenance tool,
+not a recommended operation for the current single-writer backend. Its store
+initialization and direct publication path have not been verified against the
+SQLite queue and fenced activation model; do not treat its default mode as a
+guaranteed read-only check or run it alongside backend. Use supported admin
+operations and the [publication runtime contract](publication-runtime-split.md).
+Any repair-tool adaptation needs a separate review; this guide does not authorize
+republishing, pausing workers or changing the authority pointer.
 
 ## Sparse descriptive metadata
 

@@ -1,6 +1,6 @@
 # 公开巡天覆盖 MOC 的来源与计算方法
 
-> 历史方法记录：下文产品数量、路径和脚本命令描述当时的生成过程，不是当前完整 DR 清单或现行操作指令。批量 CSST 证据、raw/moc 和 Euclid 源 ZIP 已迁入 S3，按 evidence-index.json 恢复；“保存于”指历史逻辑路径。下文 build:footprints、build:resource-packages、build:desi-footprints、artifacts:footprints 已不在当前 package.json 中。当前从已有 layer 产物重建包使用 `npm run packages:rebuild`，验证使用 `npm run artifacts:validate`；源数据重算必须先恢复实际输入并遵循锁定配方。存储现状见 [存储说明](public-artifact-storage.md)，后续施工见 [S3 唯一权威实施计划](s3-authority-implementation-plan.md)。
+> 历史方法记录，不是当前完整 DR 清单或恢复操作手册。下文数量、路径、脚本名仅描述当时生成过程；旧 `build:footprints`、`build:resource-packages`、`build:desi-footprints`、`artifacts:footprints` 命令已移除。公开来源的重算须按锁定输入与现行 [覆盖流程](coverage-workflow.md) 执行；恢复遵循 [存储说明](public-artifact-storage.md)。**CSST 私有输入、输出及证据已经完全移出 Assets，不得按任何旧路径或快照恢复到本项目。**
 
 本文记录 `src/footprints/survey-footprints.json` 中新增覆盖的来源、坐标处理和可复现计算。它只描述天空覆盖，不包含星表行、图像像素或观测深度模型。
 
@@ -16,9 +16,9 @@
 
 ## 私有模拟数据
 
-真实私有模拟数据与测量结果保留于受控后台/证据存储，不作为本仓库的公开产品或
-测试夹具。公开方法测试使用合成几何；用户数据重建由 Workspace 与 Warehouse
-独立执行，验收通过后再决定旧后台数据的清退。
+真实私有模拟数据、测量结果及其恢复由 Workspace 管理，不保存在 Assets 后台、
+证据存储、Git 或发布包中。Assets 仅保留合成夹具与公开拒绝检查，防止历史快照
+重新引入私有内容；见 [当前存储边界](public-artifact-storage.md)。
 
 ## CDS MOC 产品
 
