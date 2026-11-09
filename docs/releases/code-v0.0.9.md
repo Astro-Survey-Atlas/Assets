@@ -23,7 +23,7 @@
 ## 部署结果（2026-11-09）
 
 - [正式发布 CI #42563933995](https://github.com/Astro-Survey-Atlas/Assets/actions/runs/42563933995) 成功；
-  tag `code-v0.0.9` 对应 `b34333492e2d2069202c6f8bbe35bc793f6f381c`，发布分支尚未合入 main。
+  tag `code-v0.0.9` 对应 `b34333492e2d2069202c6f8bbe35bc793f6f381c`，发布分支已于 2026-11-09 快进合入 main。
 - 72602 prod 已由 0.0.8 / rev 13 升级至 **0.0.9 / Helm rev 14**；site/backend 各 1/1 Ready、零重启，
   health 与公共目录 HTTP 检查通过。public bundle 和原生索引与升级前相同。
 - 运行时镜像索引 `sha256:dea4175a2158d05ca1c0b070575d519a880dd1ff705f268bb4457dfcccccdc97`

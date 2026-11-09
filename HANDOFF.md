@@ -12,7 +12,7 @@
   `code-v0.0.9` 对应提交 `b34333492e2d2069202c6f8bbe35bc793f6f381c`；
   [Release CI #42563933995](https://github.com/Astro-Survey-Atlas/Assets/actions/runs/42563933995)
   成功，[GitHub Release](https://github.com/Astro-Survey-Atlas/Assets/releases/tag/code-v0.0.9)
-  已发布。代码在 `release/code-v0.0.9`，尚未合入 `main`；tag 不移动。
+  已发布。`release/code-v0.0.9` 已于 2026-11-09 快进合入 `main`；tag 不移动。
 - 升级后 site/backend 各 1/1 Ready、零重启，`/healthz` 为 0.0.9，公共目录 API 通过。
   public bundle 保持 `reviewed-mupsxe2v-c91be91f` / 603 files /
   SHA `0e49b04b57e482f98fd2028ce55fa1a482d7b6f5318142845dc8c0bb30b4b307`；
@@ -55,8 +55,8 @@
 
 ## 待办与尚未核验
 
-1. **生产交互验收与分支整合**：线上 0.0.9 已确认，但浏览器初始化停滞待定位，悬浮卡生产交互尚未验收；
-   发布分支尚未合入 main。另须重测真实大重合区域解锁、续页、限流冷却、滚动与阶数切换动画。
+1. **生产交互验收**：线上 0.0.9 已确认，但浏览器初始化停滞待定位，悬浮卡生产交互尚未验收；
+   另须重测真实大重合区域解锁、续页、限流冷却、滚动与阶数切换动画。
    0.0.6 时未复现用户完整场景，不能因后续代码修复便默认验收完成。
 2. **管理台流程重构（低优先级）**：当前六步导航与四个任务面板，未来收敛为
    「来源与发现 → 生成 → 审核与发布」。以
