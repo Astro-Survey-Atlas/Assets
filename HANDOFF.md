@@ -29,8 +29,10 @@
   升级前后 values/manifest/workloads/health/status 与验证回执保存在
   `~/.local/share/astro-assets-deployments/72602/20261109-release-0.0.9/`（不入 Git）。
   发布说明见 [code-v0.0.9](docs/releases/code-v0.0.9.md)。
+- 正在按用户授权正式发布 **0.0.10**：包含 Target Lock 滚动和抽屉区域拾取修复，
+  部署结果未核验前仍以上述 0.0.9 / rev 14 为生产基线，见 [发布说明](docs/releases/code-v0.0.10.md)。
 - sky-globe 已拆到独立仓库 `~/Repo/sky-globe`；Assets 使用
-  `@astro-survey-atlas/sky-globe` 的 **v0.1.1 codeload tag**，不再有本地 `packages/sky-globe`。
+  `@astro-survey-atlas/sky-globe` 的 **v0.1.2 codeload tag**（区域拾取 opt-in），不再有本地 `packages/sky-globe`。
   修改共享组件先在该仓库检查/发 tag，再显式升级 Assets 与 Workspace 的依赖。
 - 原生索引、public bundle 与代码镜像独立发布。当前活动数据版本应从运行时状态与
   受管任务核验，不沿用历史 Dev 的 generation、数量或 SHA 作为 prod 当前值。
@@ -52,6 +54,31 @@
   产品并检查两列布局、卡片停留，page errors 为零。它使用既有
   `/tmp/asa-mock/vite.hud.config.mjs`，**不作为生产验收**。临时截图
   `/tmp/assets-hover-alignment-real-two-dr.png` 不保证长期保留。
+
+## 0.0.10 Target Lock 与抽屉修复（发布中）
+
+2026-11-09 用户反馈 0.0.9 仍回顶且无新请求，随后确认本地滚动修复有效，并要求修复抽屉区域交互、立即部署 prod。
+代码从 `fix/target-lock-scroll` 发版；部署未核验前不改变上述 prod 0.0.9 / rev 14 基线。
+
+- 确认旧修复 `405ee87` 读写了不滚动的 `#coverage-detail-content.scrollTop`；实际滚动者是
+  `.coverage-inspector-rail`。真实预览曾记录外层 550px、内层 0px，本地重绘后外层归零。
+- O6+ 视野刷新可全部命中 overlap/display/evidence 缓存，却仍清空重建详情；中途布局读取
+  会夹取已缩短 rail 的滚动范围。“无新增请求”不能排除本地重绘。面板顶栏/留白此前还允许
+  pointer 命中背后 canvas；但纯正文滚动/拖动在本机静止场景未复现回顶，未取得用户现场完整触发链。
+- 本地修复：按完整目标/内容身份保留未变化 DOM，仍同步 viewer 高亮；变化时离线构造后一次替换，
+  同步恢复真实 rail，移除滞后 rAF。缓存证据同步渲染，不先换 skeleton；保留中断/失败查询的恢复入口。
+  rail 接收指针事件，标题/留白不再穿透天球；目标 order/cells 变化不按相同 C01 误判为同目标。
+- 新增浏览器负对照：旧代码在无 API 请求的缓存刷新中 `180 → [0, 0, 0]`；修复后逐帧保留，
+  并测同目标重选、实际语言变化、非空缓存证据、卡片命中区域和确实执行的 O6 零请求视野刷新。
+  抽屉中断侧栏查询后关闭，也已验证从缓存恢复非空列表、无遗留 skeleton。
+- 验证通过：`npm run test:homepage`（含站点构建与完整首页/Atlas 回归）、站点 TypeScript、
+  定位/阶数策略单测 5/5、`npm run catalog:build`、`npm run artifacts:validate`（160 产品/80 Core 层）、
+  `git diff --check`。不把本地回归当作 prod 或认证大区域分页/导出验收。
+- 抽屉打开时只拾取整个连通区域，本体/标签点击同步抽屉，不再触发单元详情；区域提示按实际区域来源显示 DR 和模态。
+  关闭抽屉恢复单元查看。独立 sky-globe `v0.1.2` 已推送，类型与 27/27 单测通过；Assets 固定远端 tag，不留 file 依赖。
+- Chromium 完整回归通过；真实公开数据预览操作 Euclid × DESI / C04 / O6 / 47 cells，page errors 为零。
+  当前独立缓存预览 <http://127.0.0.1:5181/atlas/>；旧 5180 依赖缓存未刷新，终止该进程被拦截，未绕过。
+  两者均不是 prod 验收通道。
 
 ## 待办与尚未核验
 

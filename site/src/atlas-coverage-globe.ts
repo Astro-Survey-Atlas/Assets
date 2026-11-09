@@ -68,6 +68,7 @@ type InspectionChange = (inspection: SurveyLayerInspection | null) => void;
 type StateChange = (state: SurveyLayerState) => void;
 type ContextMenuChange = (menu: SurveyLayerContextMenu) => void;
 type OverlapComponentChange = (component: SurveyLayerOverlapComponent) => void;
+type OverlapHoverChange = (hover: { component: SurveyLayerOverlapComponent; clientX: number; clientY: number } | null) => void;
 
 function surveyCardFor(record: CoverageSurvey): SurveyCard {
   return {
@@ -146,6 +147,7 @@ export class AtlasCoverageGlobe {
   readonly #onStateChange: StateChange;
   readonly #onContextMenu: ContextMenuChange;
   readonly #onOverlapComponent: OverlapComponentChange;
+  readonly #onOverlapHover: OverlapHoverChange;
   #viewer: SurveyLayerViewer | null = null;
   #layerRadiusRange: { min: number; max: number } | null = null;
   #visibleSurveyIds = new Set<string>();
@@ -156,7 +158,7 @@ export class AtlasCoverageGlobe {
   #catalog: CoverageCatalog | null = null;
   #blocks = new Map<string, number[]>();
 
-  constructor(host: HTMLElement, canvas: HTMLCanvasElement, onActiveChange: ActiveChange, onInspectionChange: InspectionChange = () => undefined, onStateChange: StateChange = () => undefined, onContextMenu: ContextMenuChange = () => undefined, onOverlapComponent: OverlapComponentChange = () => undefined) {
+  constructor(host: HTMLElement, canvas: HTMLCanvasElement, onActiveChange: ActiveChange, onInspectionChange: InspectionChange = () => undefined, onStateChange: StateChange = () => undefined, onContextMenu: ContextMenuChange = () => undefined, onOverlapComponent: OverlapComponentChange = () => undefined, onOverlapHover: OverlapHoverChange = () => undefined) {
     this.#host = host;
     this.#canvas = canvas;
     this.#onActiveChange = onActiveChange;
@@ -164,6 +166,7 @@ export class AtlasCoverageGlobe {
     this.#onStateChange = onStateChange;
     this.#onContextMenu = onContextMenu;
     this.#onOverlapComponent = onOverlapComponent;
+    this.#onOverlapHover = onOverlapHover;
     canvas.dataset.renderer = "three";
   }
 
@@ -211,6 +214,7 @@ export class AtlasCoverageGlobe {
       this.#onStateChange,
       undefined,
       (component) => this.#onOverlapComponent(component),
+      { onOverlapHover: (hover) => this.#onOverlapHover(hover) },
     );
     this.#viewer.setLayoutMode("layers");
     if (this.#layerRadiusRange) this.#viewer.setLayerRadiusRange(this.#layerRadiusRange.min, this.#layerRadiusRange.max);
@@ -248,6 +252,8 @@ export class AtlasCoverageGlobe {
   }
 
   setOverlapMode(active: boolean): void { this.#viewer?.setOverlapMode(active); }
+
+  setOverlapPickingMode(mode: "cell" | "component"): void { this.#viewer?.setOverlapPickingMode(mode); }
 
   setViewportRightInset(insetPixels: number): void { this.#viewer?.setViewportRightInset(insetPixels); }
 

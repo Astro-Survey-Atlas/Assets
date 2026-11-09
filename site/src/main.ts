@@ -715,6 +715,9 @@ function exportCoverageCells(surveyIds: string[], pixels: number[], order: numbe
 }
 
 function updateCoverageInspector(inspection: SurveyLayerInspection | null): void {
+  // The expanded drawer owns a whole connected region, never a hidden cell
+  // inspector/depth request competing with its selected component.
+  if (overlapDrawerOpen) return;
   skyDepthInspection = inspection;
   const panel = byId("coverage-detail-panel");
   if (!inspection) {
@@ -750,6 +753,9 @@ function updateCoverageInspector(inspection: SurveyLayerInspection | null): void
   byId("coverage-detail-title").textContent = `ORDER ${order} · IPix ${inspection.pixel}`;
   setLockHeadline("IPIX", String(inspection.pixel), `NSIDE ${inspection.nside} · NESTED · ICRS`);
   const content = byId("coverage-detail-content");
+  delete content.dataset.overlapTargetKey;
+  delete content.dataset.overlapRenderKey;
+  delete content.dataset.overlapDetailKey;
   abortHstLookupsWithin(content);
   const cellSources = overlapParent?.surveys ?? [];
   const surveyName = (surveyId: string) => surveyIndex?.surveys.find((survey) => survey.id === surveyId)?.name ?? surveyId;
@@ -1199,7 +1205,10 @@ function storeHudPreferences(): void {
 }
 
 function setHudHidden(hidden: boolean, store = true): void {
-  if (hidden) hideCoverageLayerTooltip();
+  if (hidden) {
+    hideCoverageLayerTooltip();
+    hideOverlapRegionTooltip();
+  }
   if (hidden) document.body.dataset.hud = "hidden";
   else delete document.body.dataset.hud;
   const button = document.getElementById("hud-toggle");
@@ -2083,31 +2092,52 @@ function componentPageControls(total: number, page: number, onPageChange: (page:
   return navigation;
 }
 
+function overlapComponentTargetKey(component: OverlapComponentView, surveyIds: string[]): string {
+  return JSON.stringify([surveyIds.slice().sort(), component.id, component.order, component.cells]);
+}
+
+const overlapEvidenceLoads = new WeakMap<HTMLElement, AbortController>();
+
+function resumeOverlapPanelEvidence(component: OverlapComponentView, content: HTMLElement): void {
+  const node = content.querySelector<HTMLElement>(".overlap-evidence-plan");
+  if (!node || !component.evidenceLookup || node.dataset.lookupState === "complete") return;
+  const pending = overlapEvidenceLoads.get(node);
+  if (pending && !pending.signal.aborted) return;
+  void loadOverlapEvidence(component, node);
+}
+
 function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number, scope = "GLOBAL", componentData?: OverlapComponentView[], focus = true): void {
+  const content = byId("coverage-detail-content");
+  const rail = content.closest<HTMLElement>(".coverage-inspector-rail");
+  const components = componentData?.length ? componentData : overlapComponents(pixels, order);
+  const initialComponent = components.find((component) => component.id === selectedQueueComponent?.id) ?? components[0];
+  const targetKey = initialComponent ? overlapComponentTargetKey(initialComponent, surveyIds) : "";
+  const savedScroll = targetKey && content.dataset.overlapTargetKey === targetKey ? rail?.scrollTop ?? 0 : 0;
+  // Build off-DOM: clearing the live content first temporarily shortens the rail.
+  // Viewer/HUD layout reads can clamp its scroll offset before the list returns.
+  const nextContent = document.createElement("div");
   closeSkyDepth(); skyDepthInspection = null;
   const panel = byId("coverage-detail-panel");
-  const content = byId("coverage-detail-content");
   panel.classList.add("is-overlap-panel");
   panel.hidden = false;
   setOverlapExpandVisible(Boolean(componentData?.length ?? activeOverlapComponents.length));
   byId("coverage-detail-kicker").textContent = t("coverage.overlapResult");
   byId("coverage-detail-title").textContent = `${scope} · ${surveyIds.length} SURVEYS`;
   setLockHeadline(scope === "SELECTED CELL" ? "EXPORT" : "OVERLAP", `O${order}`, `${pixels.length.toLocaleString("en-US")} CELLS · ${surveyIds.map((id) => (surveyIndex?.surveys.find((survey) => survey.id === id)?.name ?? id).toUpperCase()).join(" × ")}`);
-  abortHstLookupsWithin(content);
-  // Preserve the user's scroll position when the same component is re-rendered on a
-  // view refresh (camera pan, order drag). Only reset when the component actually changes.
-  const nextComponentId = (componentData?.find((c) => c.id === selectedQueueComponent?.id) ?? componentData?.[0])?.id ?? selectedQueueComponent?.id ?? "";
-  const savedScroll = (content.dataset.renderedComponentId && content.dataset.renderedComponentId === nextComponentId) ? content.scrollTop : 0;
-  content.replaceChildren();
   const summary = document.createElement("p");
   summary.className = "overlap-summary";
   summary.textContent = pixels.length ? `${t("coverage.commonOrder")} O${order} · NSIDE ${2 ** order} · ${pixels.length.toLocaleString("en-US")} cells` : `${t("coverage.commonOrder")} O${order} · ${t("coverage.noCommon")}`;
-  content.append(summary);
-  if (!pixels.length) {
+  nextContent.append(summary);
+  if (!pixels.length || !initialComponent) {
+    abortHstLookupsWithin(content);
+    delete content.dataset.overlapTargetKey;
+    delete content.dataset.overlapRenderKey;
+    delete content.dataset.overlapDetailKey;
+    content.replaceChildren(...nextContent.childNodes);
+    if (rail) rail.scrollTop = 0;
     positionOverlapPanel();
     return;
   }
-  const components = componentData?.length ? componentData : overlapComponents(pixels, order);
   const componentNav = document.createElement("div");
   componentNav.className = "overlap-components";
   const heading = document.createElement("strong");
@@ -2134,15 +2164,37 @@ function renderOverlapPanel(surveyIds: string[], pixels: number[], order: number
     });
     componentNav.append(button);
   });
-  content.append(componentNav);
-  const initialComponent = components.find((component) => component.id === selectedQueueComponent?.id) ?? components[0]!;
-  selectOverlapComponent(initialComponent, surveyIds, content, focus);
-  if (savedScroll > 0) requestAnimationFrame(() => { content.scrollTop = savedScroll; });
+  nextContent.append(componentNav);
+  const renderKey = JSON.stringify([scope, surveyIds, order, pixels, components, initialComponent.id, overlapComponentsPage,
+    locale(), hasDownloadAccess(), visibleCoverageLayers().map((layer) => [layer.layerId, layer.revision])]);
+  const unchanged = content.dataset.overlapRenderKey === renderKey && Boolean(content.querySelector(".overlap-component-detail"));
+  if (unchanged) {
+    // Coverage updates clear the viewer highlight even when the inspector did not
+    // change. Resync the viewer/HUD, but keep DOM, focus, expanded lists and pages.
+    selectOverlapComponent(initialComponent, surveyIds, content, focus, false);
+  } else {
+    abortHstLookupsWithin(content);
+    selectOverlapComponent(initialComponent, surveyIds, nextContent, focus);
+    content.replaceChildren(...nextContent.childNodes);
+    content.dataset.overlapTargetKey = targetKey;
+    content.dataset.overlapRenderKey = renderKey;
+    content.dataset.overlapDetailKey = nextContent.dataset.overlapDetailKey;
+  }
   renderIcons();
   positionOverlapPanel();
+  // Restore the actual scroller synchronously, before paint; no stale rAF may
+  // overwrite a later user scroll or target selection.
+  if (rail) rail.scrollTop = savedScroll;
 }
 
-function selectOverlapComponent(component: OverlapComponentView, surveyIds = activeOverlapSurveyIds, content = byId("coverage-detail-content"), focus = true): void {
+function selectOverlapComponent(component: OverlapComponentView, surveyIds = activeOverlapSurveyIds, content = byId("coverage-detail-content"), focus = true, renderDetail = true): void {
+  const targetKey = overlapComponentTargetKey(component, surveyIds);
+  const sameTarget = content.dataset.overlapTargetKey === targetKey;
+  const detailKey = JSON.stringify([component, surveyIds, locale(), hasDownloadAccess(),
+    visibleCoverageLayers().map((layer) => [layer.layerId, layer.revision])]);
+  const detailUnchanged = sameTarget && content.dataset.overlapDetailKey === detailKey && Boolean(content.querySelector(".overlap-component-detail"));
+  const rail = content.closest<HTMLElement>(".coverage-inspector-rail");
+  const savedScroll = sameTarget ? rail?.scrollTop ?? 0 : 0;
   closeSkyDepth(); skyDepthInspection = null;
   const componentIndex = activeOverlapComponents.findIndex((entry) => entry.id === component.id);
   if (componentIndex >= 0) {
@@ -2155,18 +2207,29 @@ function selectOverlapComponent(component: OverlapComponentView, surveyIds = act
   updateOverlapHud(component);
   updateOverlapViewport();
   if (focus) coverageDots?.focusPixels(component.order, component.cells);
-  content.dataset.renderedComponentId = component.id;
-  renderOverlapComponent(component, surveyIds, content);
+  if (renderDetail && !detailUnchanged) {
+    delete content.dataset.overlapRenderKey;
+    renderOverlapComponent(component, surveyIds, content);
+    content.dataset.overlapDetailKey = detailKey;
+  } else {
+    resumeOverlapPanelEvidence(component, content);
+  }
+  content.dataset.overlapTargetKey = targetKey;
+  if (rail) rail.scrollTop = savedScroll;
 }
 
 function handleOverlapComponentLabel(component: SurveyLayerOverlapComponent): void {
-  const selected = activeOverlapComponents.find((entry) => entry.id === component.id) ?? {
+  const selected = activeOverlapComponents.find((entry) => entry.id === component.id && entry.order === component.order);
+  if (overlapDrawerOpen) {
+    if (selected) selectOverlapDrawerComponent(selected);
+    return;
+  }
+  selectOverlapComponent(selected ?? {
     id: component.id,
     order: component.order,
     cells: component.cells,
     bounds: overlapBounds(component.cells, component.order),
-  };
-  selectOverlapComponent(selected);
+  });
 }
 
 function updateOverlapHud(component: OverlapComponentView | null): void {
@@ -2185,12 +2248,112 @@ function updateOverlapHud(component: OverlapComponentView | null): void {
   positionOverlapPanel();
 }
 
+function overlapRegionSources(component: OverlapComponentView): OverlapSurveyView[] {
+  // Only responses scoped to this region may enrich product/modalities. Merge by
+  // source identity: an early summary can omit a modality that details resolves.
+  const sources = new Map<string, OverlapSurveyView>();
+  for (const source of [...(component.surveys ?? []), ...(overlapDetailsCache.get(overlapDetailsCacheKey(component))?.publicSources ?? [])]) {
+    const key = JSON.stringify([source.surveyId, source.releaseId, source.product]);
+    const previous = sources.get(key);
+    const modality = canonicalModality(source.modality);
+    sources.set(key, { surveyId: source.surveyId, releaseId: source.releaseId, product: source.product,
+      modality: modality && modality !== "coverage" ? source.modality : previous?.modality });
+  }
+  return [...sources.values()];
+}
+
+let overlapRegionTooltip: HTMLElement | null = null;
+
+function hideOverlapRegionTooltip(): void {
+  overlapRegionTooltip?.remove();
+  overlapRegionTooltip = null;
+  byId("coverage-canvas").removeAttribute("aria-describedby");
+}
+
+function showOverlapRegionTooltip(hover: { component: SurveyLayerOverlapComponent; clientX: number; clientY: number } | null): void {
+  if (!hover || !overlapDrawerOpen || !overlapMode || document.body.dataset.hud === "hidden") {
+    hideOverlapRegionTooltip();
+    return;
+  }
+  const component = activeOverlapComponents.find((entry) => entry.id === hover.component.id && entry.order === hover.component.order);
+  if (!component) { hideOverlapRegionTooltip(); return; }
+  const entries = overlapRegionSources(component);
+  const key = JSON.stringify([component.id, component.order, component.cells, component.bounds, entries, locale()]);
+  if (!overlapRegionTooltip) {
+    overlapRegionTooltip = document.createElement("div");
+    overlapRegionTooltip.id = "overlap-region-tooltip";
+    overlapRegionTooltip.className = "overlap-region-tooltip";
+    overlapRegionTooltip.setAttribute("role", "tooltip");
+    document.body.append(overlapRegionTooltip);
+  }
+  const tooltip = overlapRegionTooltip;
+  if (tooltip.dataset.key !== key) {
+    tooltip.dataset.key = key;
+    tooltip.dataset.componentId = component.id;
+    tooltip.dataset.order = String(component.order);
+    const heading = Object.assign(document.createElement("strong"), { textContent: `${component.id} · O${component.order} · ${component.cells.length.toLocaleString("en-US")} cells` });
+    const area = Object.assign(document.createElement("small"), { textContent: `${component.bounds.areaDeg2.toFixed(2)} deg² · ICRS / NESTED` });
+    const rows = document.createElement("div");
+    rows.className = "overlap-region-tooltip-sources";
+    const surveyIds = [...new Set(entries.length ? entries.map((entry) => entry.surveyId) : activeOverlapSurveyIds)];
+    surveyIds.forEach((surveyId) => {
+      const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
+      const row = document.createElement("div");
+      row.className = "overlap-region-tooltip-source";
+      const surveyName = (survey?.name ?? surveyId).toUpperCase();
+      row.append(Object.assign(document.createElement("b"), { textContent: surveyName.length > 64 ? `${surveyName.slice(0, 61)}…` : surveyName, title: surveyName }));
+      const releases = [...new Set(entries.filter((entry) => entry.surveyId === surveyId).map((entry) => entry.releaseId))];
+      const releaseText = releases.slice(0, 2).map((release) => release.length > 48 ? `${release.slice(0, 45)}…` : release).join(" · ");
+      row.append(Object.assign(document.createElement("small"), { textContent: releaseText ? `${releaseText}${releases.length > 2 ? ` · +${releases.length - 2} DR` : ""}` : (locale() === "zh" ? "区域 DR 未提供" : "Region DR unavailable"), title: releases.join(" · ") }));
+      const modalities = [...new Set(entries.filter((entry) => entry.surveyId === surveyId).map((entry) => canonicalModality(entry.modality)).filter((modality) => Boolean(modality) && modality !== "coverage"))];
+      const facts = document.createElement("span");
+      facts.className = "overlap-region-tooltip-modalities";
+      if (modalities.length) {
+        modalities.slice(0, 4).forEach((modality) => facts.append(modalityBadge(modality, "overlap-source-modality")));
+        if (modalities.length > 4) facts.append(Object.assign(document.createElement("small"), { textContent: `+${modalities.length - 4}` }));
+      }
+      else facts.textContent = locale() === "zh" ? "区域模态未提供" : "Region modality unavailable";
+      row.append(facts);
+      rows.append(row);
+    });
+    const hint = Object.assign(document.createElement("small"), { className: "overlap-region-tooltip-hint", textContent: locale() === "zh" ? "点击重合区域以选择整个区块" : "Click the overlap region to select the whole component" });
+    // Bound the summary without hiding source rows below the viewport. Full
+    // regional product details remain available in the selected drawer section.
+    const allRows = [...rows.children];
+    const rowLimit = Math.max(1, Math.min(4, Math.floor((window.innerHeight - 240) / 90)));
+    tooltip.dataset.omitted = String(Math.max(0, allRows.length - rowLimit));
+    if (allRows.length > rowLimit) allRows.slice(rowLimit).forEach((row) => row.remove());
+    tooltip.replaceChildren(heading, area, rows, hint);
+    renderIcons();
+  }
+  byId("coverage-canvas").setAttribute("aria-describedby", tooltip.id);
+  const drawerLeft = byId("overlap-drawer").getBoundingClientRect().left;
+  const right = window.innerWidth > 820 ? Math.min(window.innerWidth - 12, drawerLeft - 12) : window.innerWidth - 12;
+  tooltip.style.maxWidth = `${Math.max(120, Math.min(300, right - 12))}px`;
+  const rows = tooltip.querySelector<HTMLElement>(".overlap-region-tooltip-sources");
+  const maxHeight = Math.max(120, window.innerHeight - 108);
+  let omitted = Number(tooltip.dataset.omitted ?? 0);
+  while (rows && tooltip.getBoundingClientRect().height > maxHeight && rows.querySelectorAll(".overlap-region-tooltip-source").length > 1) {
+    rows.querySelector(".overlap-region-tooltip-source:last-of-type")?.remove();
+    omitted += 1;
+  }
+  if (omitted && rows) {
+    let note = rows.querySelector<HTMLElement>(".overlap-region-tooltip-overflow");
+    if (!note) { note = document.createElement("small"); note.className = "overlap-region-tooltip-overflow"; rows.append(note); }
+    note.textContent = locale() === "zh" ? `另有 ${omitted} 个巡天，完整内容见抽屉` : `${omitted} more surveys · full details in drawer`;
+    tooltip.dataset.omitted = String(omitted);
+  }
+  const rect = tooltip.getBoundingClientRect();
+  tooltip.style.left = `${Math.max(12, Math.min(hover.clientX + 18, right - rect.width))}px`;
+  tooltip.style.top = `${Math.max(84, Math.min(hover.clientY + 18, window.innerHeight - rect.height - 12))}px`;
+}
+
 /** The on-globe TARGET callout for a selected overlap region, as in the normal cell view. */
 function syncOverlapHudTarget(component: OverlapComponentView): void {
   // A selected cell owns the callout; the component only stands in when none is selected.
-  if (coverageDots?.state?.selectedPixels.length) return;
+  if (!overlapDrawerOpen && coverageDots?.state?.selectedPixels.length) return;
   const surveyName = (surveyId: string) => surveyIndex?.surveys.find((survey) => survey.id === surveyId)?.name ?? surveyId;
-  const entries = component.surveys ?? [];
+  const entries = overlapRegionSources(component);
   const surveyIds = [...new Set(entries.length ? entries.map((entry) => entry.surveyId) : activeOverlapSurveyIds)];
   setHudTarget({
     order: component.order,
@@ -2201,9 +2364,10 @@ function syncOverlapHudTarget(component: OverlapComponentView): void {
     surveys: surveyIds.map((surveyId) => {
       const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
       const measured = [...new Set(entries.filter((entry) => entry.surveyId === surveyId && entry.modality).map((entry) => canonicalModality(entry.modality!)))];
-      const declared = [...new Set((survey?.modalities ?? []).map((modality) => canonicalModality(modality)))];
+      const declared = overlapDrawerOpen ? [] : [...new Set((survey?.modalities ?? []).map((modality) => canonicalModality(modality)))];
+      const releases = [...new Set(entries.filter((entry) => entry.surveyId === surveyId).map((entry) => entry.releaseId))];
       return {
-        name: surveyName(surveyId).toUpperCase(),
+        name: [surveyName(surveyId).toUpperCase(), releases.join(" / ")].filter(Boolean).join(" · "),
         color: surveyColorFor(surveyId, survey?.color),
         modalities: (measured.length ? measured : declared).filter(Boolean).map((modality) => modalityLabel(modality)),
         declared: !measured.length && declared.length > 0,
@@ -2811,6 +2975,7 @@ function appendMissingNativeSources(node: HTMLElement, result: OverlapEvidenceRe
 }
 
 function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, component?: OverlapComponentView): void {
+  node.dataset.lookupState = "complete";
   if (component) {
     const key = overlapEvidenceKey(component);
     overlapEvidenceCache.set(key, result);
@@ -3240,29 +3405,35 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
     return;
   }
   overlapEvidenceController?.abort();
+  const request = ++overlapEvidenceSequence;
+  const access = hasDownloadAccess() ? "page" : "preview";
+  const cached = cachedOverlapEvidence(component, access);
+  if (cached) {
+    // A cache hit is already complete: do not shrink the inspector to a skeleton
+    // for an async turn before putting the same long list back.
+    overlapEvidenceController = null;
+    renderEvidencePlan(node, cached, component);
+    return;
+  }
+  const cooling = overlapEvidenceCooldown.get(overlapEvidenceKey(component));
+  if (cooling && cooling.until > Date.now()) {
+    node.dataset.lookupState = "retry";
+    node.replaceChildren(Object.assign(document.createElement("small"), { textContent: `${t("coverage.reverseFailed")}: ${cooling.message}` }));
+    return;
+  }
   const controller = new AbortController();
   overlapEvidenceController = controller;
-  const request = ++overlapEvidenceSequence;
+  overlapEvidenceLoads.set(node, controller);
+  node.dataset.lookupState = "loading";
   try {
     const progress = evidenceProgress(lookup.layerIds);
     const batches = document.createElement("div"); batches.className = "overlap-evidence-files overlap-spatial-units";
     for (let index = 0; index < 3; index += 1) batches.append(Object.assign(document.createElement("div"), { className: "hud-skeleton-row" }));
     const shown = new Set<string>();
     node.replaceChildren(progress.root, batches);
-    const access = hasDownloadAccess() ? "page" : "preview";
-    {
-      const key = overlapEvidenceKey(component);
-      const cooling = overlapEvidenceCooldown.get(key);
-      if (cooling && cooling.until > Date.now()) {
-        node.replaceChildren(Object.assign(document.createElement("small"), { textContent: `${t("coverage.reverseFailed")}: ${cooling.message}` }));
-        return;
-      }
-      if (!cachedOverlapEvidence(component, access)) {
-        await new Promise<void>((resolve) => setTimeout(resolve, OVERLAP_EVIDENCE_DEBOUNCE_MS));
-        // A newer render superseded this one before it sent anything.
-        if (controller.signal.aborted || request !== overlapEvidenceSequence) return;
-      }
-    }
+    await new Promise<void>((resolve) => setTimeout(resolve, OVERLAP_EVIDENCE_DEBOUNCE_MS));
+    // A newer render superseded this one before it sent anything.
+    if (controller.signal.aborted || request !== overlapEvidenceSequence) return;
     const result = await fetchOverlapEvidence(component, controller.signal, access, undefined, event => {
       if (request !== overlapEvidenceSequence || controller.signal.aborted) return;
       const value = event.value;
@@ -3295,6 +3466,10 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
     overlapEvidenceCooldown.set(overlapEvidenceKey(component), { until: Date.now() + retryAfter * 1000, message });
     if (request === overlapEvidenceSequence) node.replaceChildren(Object.assign(document.createElement("small"), { textContent: `${t("coverage.reverseFailed")}: ${message}` }));
   } finally {
+    if (overlapEvidenceLoads.get(node) === controller) {
+      overlapEvidenceLoads.delete(node);
+      if (node.dataset.lookupState === "loading") node.dataset.lookupState = "retry";
+    }
     if (overlapEvidenceController === controller) overlapEvidenceController = null;
   }
 }
@@ -3645,6 +3820,7 @@ function renderOverlapDrawerError(message: string): void {
 
 function renderOverlapDrawerResponse(details: OverlapDetailsResponse): void {
   const drawer = byId("overlap-drawer");
+  if (overlapDrawerOpen) syncOverlapHudTarget(details.component);
   drawer.removeAttribute("aria-busy");
   const component: OverlapComponentView = { ...details.component, evidenceLookup: details.reverseLookup };
   byId("overlap-drawer-title").textContent = `${component.id} · O${component.order} · ${component.cells.length.toLocaleString("en-US")} cells`;
@@ -3975,6 +4151,7 @@ function renderOverlapDrawerDetails(component: OverlapComponentView): void {
 
 function selectOverlapDrawerComponent(component: OverlapComponentView): void {
   if (!overlapDrawerOpen) return;
+  hideOverlapRegionTooltip();
   const componentIndex = activeOverlapComponents.findIndex((entry) => entry.id === component.id);
   if (componentIndex >= 0) {
     overlapDrawerComponentsPage = Math.floor(componentIndex / OVERLAP_COMPONENT_PAGE_SIZE);
@@ -4005,6 +4182,9 @@ function openOverlapDrawer(): void {
   setCoverageLayersOpen(false);
   byId("coverage-help").hidden = true;
   overlapDrawerOpen = true;
+  closeSkyDepth();
+  skyDepthInspection = null;
+  coverageDots?.setOverlapPickingMode("component");
   if (displayOrderControl) byId("overlap-drawer-tools").prepend(displayOrderControl);
   document.body.dataset.overlapDrawer = "open";
   drawer.hidden = false;
@@ -4024,6 +4204,8 @@ function closeOverlapDrawer(): void {
   drawerDetailsShownKey = "";
   abortHstLookupsWithin(byId("overlap-drawer-content"));
   overlapDrawerOpen = false;
+  hideOverlapRegionTooltip();
+  coverageDots?.setOverlapPickingMode("cell");
   if (displayOrderControl && displayOrderHome) displayOrderHome.insertBefore(displayOrderControl, displayOrderNextSibling ?? null);
   coverageDots?.setActiveOverlapComponent(null);
   document.body.removeAttribute("data-overlap-drawer");
@@ -5066,7 +5248,7 @@ async function initialize(): Promise<void> {
     : { surveys: "SURVEY INDEX", catalog: "COVERAGE CATALOG", layers: "LAYER OVERVIEWS", scene: "SKY SCENE" },
   zh ? "正在初始化天球 · INITIALISING ATLAS" : "INITIALISING ATLAS");
   try {
-    coverageDots = new AtlasCoverageGlobe(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"), updateCoverageReadout, updateCoverageInspector, updateCoverageState, openCoverageContextMenu, handleOverlapComponentLabel);
+    coverageDots = new AtlasCoverageGlobe(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"), updateCoverageReadout, updateCoverageInspector, updateCoverageState, openCoverageContextMenu, handleOverlapComponentLabel, showOverlapRegionTooltip);
     // The low tactical camera reads best with survey shells packed close to one surface.
     if (isAtlasPage) coverageDots.setLayerRadiusRange(0.994, 1.006);
   } catch (error) {
@@ -5342,7 +5524,10 @@ window.addEventListener("popstate", () => {
   enterAtlasExperience(target.surveyId, target.productId);
 });
 
-window.addEventListener("pagehide", hideCoverageLayerTooltip);
+window.addEventListener("pagehide", () => {
+  hideCoverageLayerTooltip();
+  hideOverlapRegionTooltip();
+});
 
 window.addEventListener("resize", () => {
   positionSelectionQueue();
@@ -5412,6 +5597,7 @@ document.addEventListener("pointerdown", (event) => {
 });
 
 window.addEventListener("atlas:locale-change", () => {
+  hideOverlapRegionTooltip();
   const depthSelection = skyDepthSelection;
   closeSkyDepth();
   if (depthSelection) void showSkyDepth(depthSelection);

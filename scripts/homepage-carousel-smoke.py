@@ -145,6 +145,243 @@ def atlas_layer_tooltip_smoke(browser, base_url: str, mock_api) -> None:
     page.close()
 
 
+def atlas_target_lock_scroll_smoke(browser, base_url: str, mock_api) -> None:
+    page = browser.new_page(viewport={"width": 1440, "height": 720})
+    page.route("**/api/v1/**", mock_api)
+    errors = []
+    requests = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on("request", lambda request: requests.append(request.url) if "/api/v1/" in request.url else None)
+    page.goto(base_url.rstrip("/") + "/atlas/", wait_until="domcontentloaded")
+    expect(page.locator("#coverage-scene")).to_have_attribute("data-ready", "true")
+    page.locator("#coverage-layers-toggle").click()
+    for survey_id, layer_id in [("euclid", "euclid-euclid-ero-native"), ("gaia", "gaia-gaia-dr3-main")]:
+        group = page.locator("#coverage-survey-" + survey_id)
+        group.locator(".coverage-layer-name").click()
+        group.locator('input[data-product-layer-id="' + layer_id + '"]').check(force=True)
+    expect(page.locator("#coverage-state")).to_contain_text("O4")
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("g")
+    expect(page.locator("#coverage-detail-content .overlap-component-detail")).to_be_visible()
+    # End the initial focus/hydration before testing an unchanged cached refresh.
+    page.evaluate("window.dispatchEvent(new Event('atlas:locale-change'))")
+    page.wait_for_timeout(1200)
+    expect(page.locator("#coverage-detail-content .overlap-spatial-unit")).to_have_count(6)
+    expect(page.locator("#coverage-detail-content .hud-query-progress")).to_have_count(0)
+    rail = page.locator(".coverage-inspector-rail")
+    assert rail.evaluate("element => element.scrollHeight > element.clientHeight + 180"), "fixture must overflow the actual Target Lock scroller"
+    rail.hover()
+    page.mouse.wheel(0, 180)
+    page.wait_for_function("document.querySelector('.coverage-inspector-rail').scrollTop > 100")
+    before = rail.evaluate("element => element.scrollTop")
+    assert page.locator("#coverage-detail-content").evaluate("element => element.scrollTop") == 0, "the inner detail is not the desktop scroll owner"
+    request_count = len(requests)
+    # This is a supported local refresh of cached results: there is no API response
+    # to blame for the jump. Observe painted frames, not just a final restored offset.
+    page.evaluate("""() => {
+        const rail = document.querySelector('.coverage-inspector-rail');
+        window.targetLockDetail = document.querySelector('.overlap-component-detail');
+        window.targetLockProducts = document.querySelector('.overlap-products');
+        window.targetLockScrollFrames = [];
+        const sample = () => window.targetLockScrollFrames.push(rail.scrollTop);
+        window.dispatchEvent(new Event('atlas:locale-change'));
+        sample();
+        requestAnimationFrame(() => { sample(); requestAnimationFrame(sample); });
+    }""")
+    page.wait_for_function("window.targetLockScrollFrames.length === 3")
+    frames = page.evaluate("window.targetLockScrollFrames")
+    assert all(abs(top - before) <= 1 for top in frames), f"cached refresh must preserve the real rail without a top flash: {before} -> {frames}"
+    assert page.evaluate("window.targetLockDetail === document.querySelector('.overlap-component-detail') && window.targetLockProducts === document.querySelector('.overlap-products')"), "unchanged refresh must keep the existing reading DOM"
+    assert len(requests) == request_count, "cached same-component refresh must not issue an API request"
+    page.locator(".overlap-components button.is-active").evaluate("button => button.click()")
+    assert page.evaluate("window.targetLockDetail === document.querySelector('.overlap-component-detail')"), "reselecting the current component must keep its detail DOM"
+    assert abs(rail.evaluate("element => element.scrollTop") - before) <= 1, "same-component selection must retain rail scroll"
+    # An actual language change must rebuild translated content, but not scroll to
+    # the top. Bypass clicking the header so focus/Playwright scrolling is unrelated.
+    page.evaluate("document.querySelector('[data-locale-toggle]').click()")
+    after_locale = rail.evaluate("element => element.scrollTop")
+    # Translations applied before the refresh can reflow the readout by one line.
+    assert after_locale > 100 and abs(after_locale - before) <= 24, f"translated same-target rebuild must retain the reading position: {before} -> {after_locale}"
+    assert page.evaluate("window.targetLockDetail !== document.querySelector('.overlap-component-detail')"), "changed language must not incorrectly skip rendering"
+    assert page.locator("#coverage-detail-content .overlap-spatial-unit").count() == 6, "cached evidence must be present synchronously after a translated rebuild"
+    assert page.locator("#coverage-detail-content .hud-skeleton-row").count() == 0, "cached evidence must never replace the list with skeletons"
+    assert len(requests) == request_count, "translated cached rebuild must not issue API requests"
+    # Every visible part of the card, including its title and padding, owns its
+    # pointer events. They must not fall through to the globe controls.
+    rail.evaluate("element => element.scrollTop = 0")
+    box = rail.bounding_box()
+    camera = page.locator("#coverage-status-camera").inner_text()
+    for x, y in [(box["x"] + 10, box["y"] + 10), (box["x"] + box["width"] - 3, box["y"] + 100)]:
+        assert page.evaluate("p => document.elementFromPoint(p.x, p.y)?.closest('.coverage-inspector-rail') !== null", {"x": x, "y": y}), "Target Lock surface must not hit the canvas underneath"
+        page.mouse.move(x, y)
+        page.mouse.wheel(0, 80)
+    page.wait_for_timeout(500)
+    assert page.locator("#coverage-status-camera").inner_text() == camera, "scrolling the card surface must not move the sky camera"
+    # At O6 a view can change inside already-loaded tiles. Monitor actual loading
+    # and completion, so a no-op camera event cannot make this assertion pass.
+    slider = page.locator("#coverage-display-order")
+    slider.evaluate("input => { input.value = '2'; input.dispatchEvent(new Event('input', {bubbles:true})); input.dispatchEvent(new Event('change', {bubbles:true})); }")
+    expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "6")
+    expect(page.locator("#coverage-detail-content .overlap-spatial-unit")).to_have_count(6)
+    page.wait_for_timeout(1800)
+    assert rail.evaluate("element => element.scrollTop") == 0, "a different real order is a new target even when its ID is still C01"
+    rail.evaluate("element => element.scrollTop = 180")
+    page.evaluate("""() => {
+        window.targetLockDetail = document.querySelector('.overlap-component-detail');
+        window.targetLockCachedLoading = false;
+        window.targetLockCameraFrames = [];
+        window.targetLockCameraSampling = true;
+        const sample = () => {
+            window.targetLockCameraFrames.push(document.querySelector('.coverage-inspector-rail').scrollTop);
+            if (window.targetLockCameraSampling) requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+        new MutationObserver(records => {
+            const states = [document.querySelector('#coverage-state').textContent,
+                ...records.flatMap(record => [...record.removedNodes].map(node => node.textContent))];
+            if (states.some(text => /Loading overlap|加载共同覆盖/.test(text))) window.targetLockCachedLoading = true;
+        }).observe(document.querySelector('#coverage-state'), {childList:true, subtree:true});
+    }""")
+    request_count = len(requests)
+    canvas = page.locator("#coverage-canvas").bounding_box()
+    camera = page.locator("#coverage-status-camera").inner_text()
+    point = {"x": canvas["x"] + canvas["width"] / 2, "y": canvas["y"] + canvas["height"] / 2}
+    assert page.evaluate("p => document.elementFromPoint(p.x, p.y)?.id === 'coverage-canvas'", point), "cached-view test must actually hit the sky canvas"
+    page.mouse.move(point["x"], point["y"])
+    page.mouse.wheel(0, 120)
+    page.wait_for_function("previous => document.querySelector('#coverage-status-camera').textContent !== previous", arg=camera)
+    page.wait_for_function("window.targetLockCachedLoading", timeout=10000)
+    page.wait_for_function("!/Loading overlap|加载共同覆盖/.test(document.querySelector('#coverage-state').textContent)", timeout=10000)
+    assert len(requests) == request_count, f"cached O6 view refresh must not issue requests: {requests[request_count:]}"
+    assert page.evaluate("window.targetLockDetail === document.querySelector('.overlap-component-detail')"), "cached O6 view refresh must preserve reading DOM"
+    assert abs(rail.evaluate("element => element.scrollTop") - 180) <= 1, "cached O6 view refresh must preserve the actual rail"
+    camera_frames = page.evaluate("() => { window.targetLockCameraSampling = false; return window.targetLockCameraFrames; }")
+    assert camera_frames and all(abs(top - 180) <= 1 for top in camera_frames), f"cached O6 refresh must not paint a transient top flash: {camera_frames}"
+    # Opening the drawer can abort a panel lookup through the shared controller.
+    # Keeping its DOM must not leave an abandoned skeleton when the drawer closes.
+    held_lookup = []
+
+    def hold_first_lookup(route):
+        if not held_lookup:
+            held_lookup.append(route)
+        else:
+            mock_api(route)
+
+    page.route("**/api/v1/coverage/reverse-lookup", hold_first_lookup)
+    slider.evaluate("input => { input.value = '3'; input.dispatchEvent(new Event('input', {bubbles:true})); input.dispatchEvent(new Event('change', {bubbles:true})); }")
+    expect(page.locator("#coverage-status-nside")).to_have_attribute("data-source-order", "7")
+    deadline = time.monotonic() + 10
+    while not held_lookup and time.monotonic() < deadline:
+        page.wait_for_timeout(50)
+    assert held_lookup, "fixture must hold a real pending panel evidence lookup"
+    page.locator("#overlap-expand").click()
+    expect(page.locator("#overlap-drawer-content .overlap-spatial-unit")).to_have_count(6)
+    page.locator("#overlap-drawer-close").click()
+    expect(page.locator("#coverage-detail-content .overlap-spatial-unit")).to_have_count(6)
+    expect(page.locator("#coverage-detail-content .hud-skeleton-row")).to_have_count(0)
+    held_lookup[0].abort()
+    assert not errors, f"Target Lock browser errors: {errors}"
+    page.close()
+
+
+def atlas_drawer_region_smoke(browser, base_url: str, mock_api, details_requests) -> None:
+    page = browser.new_page(viewport={"width": 1600, "height": 1000})
+    page.route("**/api/v1/**", mock_api)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(base_url.rstrip("/") + "/atlas/", wait_until="domcontentloaded")
+    expect(page.locator("#coverage-scene")).to_have_attribute("data-ready", "true")
+    page.locator("#coverage-layers-toggle").click()
+    for survey_id, layer_id in [("euclid", "euclid-euclid-ero-native"), ("gaia", "gaia-gaia-dr3-main")]:
+        group = page.locator("#coverage-survey-" + survey_id)
+        group.locator(".coverage-layer-name").click()
+        group.locator('input[data-product-layer-id="' + layer_id + '"]').check(force=True)
+    expect(page.locator("#coverage-state")).to_contain_text("O4")
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("g")
+    expect(page.locator("#overlap-expand")).to_be_visible()
+    page.locator("#overlap-expand").click()
+    expect(page.locator("#overlap-drawer-title")).to_contain_text("C01")
+    page.wait_for_timeout(1200)
+    tooltip = page.locator("#overlap-region-tooltip")
+
+    def find_region(component_id):
+        # Real canvas pointer events exercise both ray-picking and application
+        # routing. Do not call component callbacks directly as a substitute.
+        drawer_left = page.locator("#overlap-drawer").bounding_box()["x"]
+        for y in range(260, 740, 45):
+            for x in range(40, int(drawer_left) - 20, 40):
+                if not page.evaluate("p => document.elementFromPoint(p.x, p.y)?.id === 'coverage-canvas'", {"x": x, "y": y}):
+                    continue
+                page.mouse.move(x, y)
+                if tooltip.count() and tooltip.get_attribute("data-component-id") == component_id:
+                    return {"x": x, "y": y}
+        raise AssertionError(f"No real canvas hover hit for {component_id}")
+
+    count = len(details_requests)
+    first = find_region("C01")
+    expect(tooltip).to_contain_text("C01 · O4 · 2 cells")
+    expect(tooltip).to_contain_text("euclid-ero")
+    expect(tooltip).to_contain_text("gaia-dr3")
+    assert tooltip.locator('[data-modality="imaging"]').count() == 1
+    assert tooltip.locator('[data-modality="catalog"]').count() == 1
+    assert len(details_requests) == count, "region hover must not query details or switch selection"
+    page.mouse.click(first["x"], first["y"])
+    expect(page.locator("#overlap-drawer-title")).to_contain_text("C01")
+    assert len(details_requests) == count, "clicking the selected region must reuse its details"
+    assert "IPIX" not in page.locator("#hud-callout").inner_text(), "drawer region picking must not lock an individual HEALPix"
+    page.locator("#overlap-drawer-components button").filter(has_text="C02").click()
+    expect(page.locator("#overlap-drawer-title")).to_contain_text("C02")
+    page.wait_for_timeout(1000)
+    second = find_region("C02")
+    expect(tooltip).to_contain_text("C02 · O4 · 2 cells")
+    # Move away and back so a real body click, not just the drawer button, routes
+    # to the expanded drawer when the selection changes.
+    page.locator("#overlap-drawer-components button").filter(has_text="C01").evaluate("button => button.click()")
+    page.wait_for_timeout(1000)
+    second = find_region("C02")
+    page.mouse.click(second["x"], second["y"])
+    expect(page.locator("#overlap-drawer-title")).to_contain_text("C02")
+    expect(page.locator('#overlap-drawer-components button[aria-pressed="true"]')).to_contain_text("C02")
+    assert details_requests[-1]["componentId"] == "C02" and details_requests[-1]["requestedOrder"] == 4
+    # Empty or non-overlap sky must not create a single-cell target or a query.
+    page.wait_for_timeout(1000)
+    selected_title = page.locator("#overlap-drawer-title").inner_text()
+    count = len(details_requests)
+    missed = False
+    for x, y in [(30, 200), (400, 200), (30, 800), (400, 800)]:
+        if not page.evaluate("p => document.elementFromPoint(p.x, p.y)?.id === 'coverage-canvas'", {"x": x, "y": y}):
+            continue
+        page.mouse.move(x, y)
+        if not tooltip.count():
+            page.mouse.click(x, y)
+            missed = True
+            break
+    assert missed, "fixture must exercise an actual canvas point outside any component"
+    assert page.locator("#overlap-drawer-title").inner_text() == selected_title
+    assert len(details_requests) == count, "non-component click must not change the drawer or issue a query"
+    assert "IPIX" not in page.locator("#hud-callout").inner_text()
+    page.locator("#overlap-drawer-close").click()
+    expect(tooltip).to_have_count(0)
+    assert page.evaluate("document.body.dataset.overlapDrawer !== 'open'")
+    # Closing the drawer restores cell inspection without leaving G mode.
+    canvas = page.locator("#coverage-canvas").bounding_box()
+    page.wait_for_timeout(1000)
+    inspected = False
+    for y in range(300, 740, 80):
+        for x in range(420, 1000, 80):
+            page.mouse.click(canvas["x"] + x, canvas["y"] + y)
+            if "IPix" in page.locator("#coverage-detail-title").inner_text():
+                inspected = True
+                break
+        if inspected:
+            break
+    assert inspected, "closing the drawer must restore real single-cell inspection in G mode"
+    expect(tooltip).to_have_count(0)
+    assert not errors, f"Drawer region browser errors: {errors}"
+    page.close()
+
+
 def atlas_display_order_smoke(browser, base_url: str) -> None:
     screenshot_root = os.environ.get("ASSETS_ATLAS_SCREENSHOT_DIR")
     if screenshot_root:
@@ -242,9 +479,19 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
     held_overlap_routes = []
     context_fixture = False
     wide_context_fixture = False
+    target_lock_fixture = False
+    drawer_region_fixture = False
 
     def overlap_component(order):
-        return {"id": "C01", "order": order, "cells": [0], "bounds": {"areaDeg2": 1, "raMin": 44, "raMax": 46, "decMin": 0, "decMax": 2}}
+        component = {"id": "C01", "order": order, "cells": [0], "bounds": {"areaDeg2": 1, "raMin": 44, "raMax": 46, "decMin": 0, "decMax": 2}}
+        if target_lock_fixture:
+            component["evidenceLookup"] = {"endpoint": "/api/v1/coverage/reverse-lookup", "layerIds": ["euclid-euclid-ero-native", "gaia-gaia-dr3-main"], "order": order, "precision": "estimated", "deferred": False}
+        return component
+
+    def drawer_components(order):
+        # Synthetic neighboring pairs with real, explicit NESTED identities.
+        sources = [{"surveyId": "euclid", "releaseId": "euclid-ero", "product": "Synthetic regional image", "modality": "imaging"}, {"surveyId": "gaia", "releaseId": "gaia-dr3", "product": "Synthetic regional catalog", "modality": "catalog"}]
+        return [{"id": component_id, "order": order, "cells": cells, "bounds": {"areaDeg2": 2, "raMin": 0, "raMax": 90, "decMin": 0, "decMax": 90}, "surveys": sources} for component_id, cells in [("C01", [0, 1]), ("C02", [4, 5])]]
 
     def fulfill_json(route, value, status: int = 200) -> None:
         route.fulfill(status=status, content_type="application/json", body=json.dumps(value))
@@ -285,6 +532,9 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
             overlap_requests.append(body)
             order = body["requestedOrder"]
             result = {"commonOrder": order, "pixels": [0] if overlap_has_components else [], "components": [overlap_component(order)] if overlap_has_components else []}
+            if drawer_region_fixture:
+                components = drawer_components(order)
+                result = {"commonOrder": order, "pixels": [cell for component in components for cell in component["cells"]], "components": components}
             if order in held_overlap_orders:
                 held_overlap_routes.append((route, result))
             else:
@@ -292,13 +542,29 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
         elif parsed.path == "/api/v1/coverage/overlap/details":
             order = request.post_data_json["requestedOrder"]
             details_requests.append(request.post_data_json)
-            fulfill_json(route, {"schemaVersion": 1, "component": overlap_component(order), "publicSources": [], "assetsEvidence": [], "warehouseEvidence": [], "method": {"summary": "Browser test fixture"}, "reverseLookup": {"endpoint": "/api/v1/coverage/reverse-lookup", "layerIds": [], "order": order, "precision": "estimated", "deferred": False}})
+            component = next((entry for entry in drawer_components(order) if entry["id"] == request.post_data_json["componentId"]), overlap_component(order)) if drawer_region_fixture else overlap_component(order)
+            fulfill_json(route, {"schemaVersion": 1, "component": component, "publicSources": [], "assetsEvidence": [], "warehouseEvidence": [], "method": {"summary": "Browser test fixture"}, "reverseLookup": {"endpoint": "/api/v1/coverage/reverse-lookup", "layerIds": [], "order": order, "precision": "estimated", "deferred": False}})
         elif parsed.path == "/api/v1/coverage/reverse-lookup":
-            fulfill_json(route, {"available": False, "precision": "estimated", "truncated": False, "edges": [], "files": []})
+            if target_lock_fixture:
+                order = request.post_data_json["order"]
+                units = [{"layerId": "euclid-euclid-ero-native", "productId": "euclid-euclid-ero-native-product", "surveyId": "euclid", "releaseId": "euclid-ero", "product": "Synthetic scroll fixture", "unitKind": "field", "unitId": f"scroll-field-{index}", "order": order, "nside": 2 ** order, "matchingCells": [0], "precision": "estimated"} for index in range(6)]
+                fulfill_json(route, {"available": True, "precision": "estimated", "truncated": False, "edges": [], "files": [], "downloadPlan": {"schemaVersion": 1, "spatialUnits": units, "files": [], "entrypoints": [], "truncated": False, "warnings": []}})
+            else:
+                fulfill_json(route, {"available": False, "precision": "estimated", "truncated": False, "edges": [], "files": []})
         else:
             fulfill_json(route, {})
 
     atlas_layer_tooltip_smoke(browser, base_url, mock_api)
+    overlap_has_components = True
+    target_lock_fixture = True
+    atlas_target_lock_scroll_smoke(browser, base_url, mock_api)
+    target_lock_fixture = False
+    drawer_region_fixture = True
+    atlas_drawer_region_smoke(browser, base_url, mock_api, details_requests)
+    drawer_region_fixture = False
+    overlap_has_components = False
+    overlap_requests.clear()
+    details_requests.clear()
     tile_index_requests.clear()
     block_requests.clear()
 
