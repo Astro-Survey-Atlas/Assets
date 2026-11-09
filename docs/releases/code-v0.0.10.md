@@ -16,4 +16,13 @@
 - 首页/Atlas Chromium 回归覆盖真实外层滚动逐帧采样、O6 零请求缓存刷新、同目标重选、非空证据缓存、抽屉中断恢复，以及真实鼠标区域 hover/click、抽屉切换、空白天空不选择、关闭后恢复单元查看。
 - 本地真实公开数据预览已操作 Euclid × DESI 的 C04 / O6 / 47 cells，区域提示与抽屉一致，page errors 为零；不作为生产验收。
 - sky-globe 类型检查及 27 项单测通过，Assets 类型及浏览器回归通过。
-- 不证明认证大区域的完整续页/导出或所有巡天库存完整。生产部署结果单独记录。
+- 不证明认证大区域的完整续页/导出或所有巡天库存完整。
+
+## 生产部署结果
+
+2026-11-09 已从 0.0.9 / rev 14 升级至 **0.0.10 / Helm revision 15**；site/backend 各 1/1 Ready、零重启。
+线上 health 返回 0.0.10、公共目录 API 通过，public bundle 与原生索引均保持升级前值；未发布数据或激活索引。
+[正式 CI #42591871648](https://github.com/Astro-Survey-Atlas/Assets/actions/runs/42591871648) 成功；
+发布 tag 对应 `d3bbcf7c3703710c6bebcb5e477013bcc2b1d2f0`，镜像摘要
+`sha256:5f0a0e19ef1ee5ec26feed288e61a54b13a8e4f106dfd40df7354408b17bdf52`。
+本节为部署后补记，已发布 tag 不移动。生产交互验收边界见 HANDOFF。

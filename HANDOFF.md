@@ -29,8 +29,14 @@
   升级前后 values/manifest/workloads/health/status 与验证回执保存在
   `~/.local/share/astro-assets-deployments/72602/20261109-release-0.0.9/`（不入 Git）。
   发布说明见 [code-v0.0.9](docs/releases/code-v0.0.9.md)。
-- 正在按用户授权正式发布 **0.0.10**：包含 Target Lock 滚动和抽屉区域拾取修复，
-  部署结果未核验前仍以上述 0.0.9 / rev 14 为生产基线，见 [发布说明](docs/releases/code-v0.0.10.md)。
+- **当前 prod 已升级为 0.0.10 / Helm rev 15**（2026-11-09），包含 Target Lock 滚动和抽屉区域拾取修复。
+  tag `code-v0.0.10` / 提交 `d3bbcf7c3703710c6bebcb5e477013bcc2b1d2f0`；
+  [正式发布 CI #42591871648](https://github.com/Astro-Survey-Atlas/Assets/actions/runs/42591871648) 成功。
+  site/backend 均 1/1 Ready、零重启，health 0.0.10、公共目录 HTTP 通过；bundle/原生索引与上述基线完全一致。
+  生产预演 16 个资源不增不减，15 处差异仅 chart 标签和应用/init 镜像；存储、服务、Secret、配置未变。
+  生产域名 Chromium 限时 30 秒仍未 ready（无 page errors），交互验收未完成；独立 HTTP 正常，不继续阻塞部署收尾。
+  回执 `~/.local/share/astro-assets-deployments/72602/20261109-release-0.0.10/`，见 [发布说明](docs/releases/code-v0.0.10.md)。
+  Assets 发布分支与 sky-globe 功能分支尚未合入各自 main；不移动已发 tag。
 - sky-globe 已拆到独立仓库 `~/Repo/sky-globe`；Assets 使用
   `@astro-survey-atlas/sky-globe` 的 **v0.1.2 codeload tag**（区域拾取 opt-in），不再有本地 `packages/sky-globe`。
   修改共享组件先在该仓库检查/发 tag，再显式升级 Assets 与 Workspace 的依赖。
@@ -55,10 +61,10 @@
   `/tmp/asa-mock/vite.hud.config.mjs`，**不作为生产验收**。临时截图
   `/tmp/assets-hover-alignment-real-two-dr.png` 不保证长期保留。
 
-## 0.0.10 Target Lock 与抽屉修复（发布中）
+## 0.0.10 Target Lock 与抽屉修复（已部署）
 
 2026-11-09 用户反馈 0.0.9 仍回顶且无新请求，随后确认本地滚动修复有效，并要求修复抽屉区域交互、立即部署 prod。
-代码从 `fix/target-lock-scroll` 发版；部署未核验前不改变上述 prod 0.0.9 / rev 14 基线。
+代码由 `release/code-v0.0.10` 正式发布，生产已升级至 0.0.10 / rev 15；本地验收不扩大为生产全流程验收。
 
 - 确认旧修复 `405ee87` 读写了不滚动的 `#coverage-detail-content.scrollTop`；实际滚动者是
   `.coverage-inspector-rail`。真实预览曾记录外层 550px、内层 0px，本地重绘后外层归零。
@@ -82,7 +88,7 @@
 
 ## 待办与尚未核验
 
-1. **生产交互验收**：线上 0.0.9 已确认，但浏览器初始化停滞待定位，悬浮卡生产交互尚未验收；
+1. **生产交互验收**：线上 0.0.10 的 HTTP/运行状态已确认，生产浏览器完整交互仍须单独核验；
    另须重测真实大重合区域解锁、续页、限流冷却、滚动与阶数切换动画。
    0.0.6 时未复现用户完整场景，不能因后续代码修复便默认验收完成。
 2. **管理台流程重构（低优先级）**：当前六步导航与四个任务面板，未来收敛为
