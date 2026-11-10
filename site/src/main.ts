@@ -2170,7 +2170,7 @@ function renderRegionQuery(component: OverlapComponentView): void {
   const evidence = Object.assign(document.createElement("div"), { className: "overlap-evidence-plan" });
   regionEvidenceNode = evidence;
   const actions = Object.assign(document.createElement("div"), { className: "coverage-region-actions" });
-  const unlock = Object.assign(document.createElement("button"), { type: "button", className: "command-button", textContent: hasDownloadAccess() ? t("region.fullReady") : t("region.full") });
+  const unlock = Object.assign(document.createElement("button"), { type: "button", className: "hud-btn is-hot", textContent: hasDownloadAccess() ? t("region.fullReady") : t("region.full") });
   unlock.addEventListener("click", async () => {
     unlock.disabled = true;
     try {
@@ -2183,12 +2183,12 @@ function renderRegionQuery(component: OverlapComponentView): void {
   });
   actions.append(unlock);
   for (const format of ["json", "csv"] as const) {
-    const button = Object.assign(document.createElement("button"), { type: "button", className: "command-button", textContent: `${t(hasDownloadAccess() ? "region.fullReady" : "region.preview")} ${format.toUpperCase()}` });
+    const button = Object.assign(document.createElement("button"), { type: "button", className: "hud-btn", textContent: `${t(hasDownloadAccess() ? "region.fullReady" : "region.preview")} ${format.toUpperCase()}` });
     button.dataset.exportFormat = format;
     button.addEventListener("click", () => void exportRegionManifest(component, format, button));
     actions.append(button);
   }
-  const cancel = Object.assign(document.createElement("button"), { type: "button", className: "command-button", textContent: t("region.cancelExport") });
+  const cancel = Object.assign(document.createElement("button"), { type: "button", className: "hud-btn", textContent: t("region.cancelExport") });
   cancel.addEventListener("click", () => { cancelRegionQuery(); regionPanel?.status(t("region.cancelled")); });
   actions.append(cancel);
   const scope = Object.assign(document.createElement("details"), { id: "coverage-region-frozen-scope", className: "coverage-region-selection" });

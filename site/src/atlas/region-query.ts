@@ -118,7 +118,8 @@ export class RegionQueryPanel {
       };
       return normalizeSkyRectangle({ raStart: value("region-ra-start"), raEnd: value("region-ra-end"), decMin: value("region-dec-min"), decMax: value("region-dec-max") });
     } catch (error) {
-      this.status(`${t("region.invalid")}: ${error instanceof Error ? error.message : ""}`);
+      const detail = error instanceof Error ? error.message : "";
+      this.status(!detail || detail === t("region.invalid") ? t("region.invalid") : `${t("region.invalid")}: ${detail}`);
       return null;
     }
   }
