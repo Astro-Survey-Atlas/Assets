@@ -86,9 +86,29 @@
         <button id="hud-toggle" class="icon-button" type="button" data-i18n-title="coverage.toggleHud" data-i18n-aria-label="coverage.toggleHud" title="Hide HUD panels (H)" aria-label="Hide HUD panels (H)" aria-pressed="false"><i data-lucide="eye"></i></button>
         <button id="coverage-reset" class="icon-button" type="button" data-i18n-title="coverage.resetView" data-i18n-aria-label="coverage.resetView" title="Reset the sky view" aria-label="Reset the sky view"><i data-lucide="rotate-ccw"></i></button>
         <button id="coverage-layers-toggle" class="icon-button" type="button" data-i18n-title="coverage.openLayers" data-i18n-aria-label="coverage.openLayers" title="Open survey layers" aria-label="Open survey layers"><i data-lucide="layers-3"></i></button>
+        <button id="coverage-region-toggle" class="icon-button" type="button" data-i18n-title="region.open" data-i18n-aria-label="region.open" title="Rectangle region" aria-label="Rectangle region"><i data-lucide="scan-line"></i></button>
         <button id="coverage-help-toggle" class="icon-button" type="button" data-i18n-title="coverage.shortcutsHelp" data-i18n-aria-label="coverage.shortcutsHelp" title="Show keyboard shortcuts" aria-label="Show keyboard shortcuts"><i data-lucide="circle-help"></i></button>
       </div>
         <div id="coverage-layers" class="coverage-layers" hidden data-i18n-aria-label="coverage.layerListAria" aria-label="Coverage layers"></div>
+        <section id="coverage-region-panel" class="coverage-region-panel" hidden aria-labelledby="coverage-region-title">
+          <div class="coverage-region-heading"><strong id="coverage-region-title" data-i18n="region.title">REGION MANIFEST</strong><button id="coverage-region-close" type="button" class="icon-button" data-i18n-aria-label="common.close" aria-label="Close"><i data-lucide="x"></i></button></div>
+          <p data-i18n="region.intro">Draw a coordinate rectangle on the sky, or enter its ICRS bounds in degrees.</p>
+          <form id="coverage-region-form">
+            <div class="coverage-region-inputs">
+              <label><span data-i18n="region.raStart">RA start</span><input id="region-ra-start" type="number" min="0" max="360" step="any" required /></label>
+              <label><span data-i18n="region.raEnd">RA end</span><input id="region-ra-end" type="number" min="0" max="360" step="any" required /></label>
+              <label><span data-i18n="region.decMin">Dec minimum</span><input id="region-dec-min" type="number" min="-90" max="90" step="any" required /></label>
+              <label><span data-i18n="region.decMax">Dec maximum</span><input id="region-dec-max" type="number" min="-90" max="90" step="any" required /></label>
+            </div>
+            <small data-i18n="region.wrapHint">350 → 10 crosses RA zero; 0 → 360 selects all RA.</small>
+            <label class="coverage-region-resolution"><span data-i18n="region.boundaryOrder">Target boundary order</span><select id="coverage-region-order"><option value="8">O8</option><option value="10" selected>O10</option><option value="12">O12</option></select></label>
+            <details class="coverage-region-selection"><summary data-i18n="region.selectedProducts">Selected surveys / releases / products</summary><div id="coverage-region-layers"></div></details>
+            <p class="coverage-region-caveat" data-i18n="region.approximation">Conservative multi-order HEALPix approximation: boundary candidates can extend outside the rectangle. This is a source manifest, not scientific data.</p>
+            <div class="coverage-region-actions"><button id="coverage-region-draw" class="command-button" type="button" aria-pressed="false" data-i18n="region.draw">Draw on sky</button><button id="coverage-region-query" class="command-button" type="submit" data-i18n="region.query">Query selected surveys</button><button id="coverage-region-cancel" class="command-button" type="button" data-i18n="region.cancel">Cancel</button></div>
+          </form>
+          <output id="coverage-region-status" role="status"></output>
+          <div id="coverage-region-results"></div>
+        </section>
         <aside id="coverage-help" class="coverage-help" hidden data-i18n-aria-label="coverage.shortcutsAria" aria-label="Sky atlas keyboard shortcuts">
           <div class="coverage-help-heading"><strong data-i18n="coverage.shortcuts">SHORTCUTS</strong><button id="coverage-help-close" class="icon-button" type="button" data-i18n-title="common.close" data-i18n-aria-label="common.close"><i data-lucide="x"></i></button></div>
           <dl>
@@ -96,7 +116,7 @@
             <div><dt>G</dt><dd data-i18n="coverage.overlapShortcut">Toggle the selected surveys into a co-registered overlap view.</dd></div>
             <div><dt>ESC</dt><dd data-i18n="coverage.escape">Exit overlap and clear the current selection and inspector.</dd></div>
             <div><dt>R</dt><dd data-i18n="coverage.resetShortcut">Reset the sky and camera to the starting view.</dd></div>
-            <div><dt>H</dt><dd data-i18n="coverage.hudShortcut">Hide or show the HUD panels. Keys 1–9 toggle the listed layers; E exports the selected cells.</dd></div>
+            <div><dt>H</dt><dd data-i18n="coverage.hudShortcut">Hide or show the HUD panels. Keys 1–9 toggle the listed layers; E opens a selected-region manifest or rectangle selection.</dd></div>
           </dl>
           <button id="coverage-guide-replay" class="coverage-guide-replay" type="button" data-i18n="coverage.guideReplay">◆ REPLAY GUIDE</button>
         </aside>

@@ -188,6 +188,34 @@ test("API management HTTP authorization and managed region requests preserve ano
  assert.equal(finalBatch.page.hasMore,false);assert.equal(finalBatch.querySnapshot.queryExhausted,true);
  assert.ok(warehouseCoverageQueries.length-finalBatchQueriesBefore<=25,"the final cursor processes only the remaining cell batches");
  warehouseEdges=savedWarehouseEdges;warehouseFiles=savedWarehouseFiles;
+ // New selectors share the existing auth/snapshot root, without overlap calls.
+ const sendRegion=(body:Record<string,unknown>,token="legacy-workspace")=>fetch(base+"/api/v1/coverage/reverse-lookup",{method:"POST",headers:{"X-Assets-API-Key":token,"Content-Type":"application/json"},body:JSON.stringify(body)});
+ const mixedBody={layerIds:[f.layerId],region:{coordinateFrame:"ICRS",ordering:"NESTED",cells:[{order:4,ipix:636},{order:8,ipix:163327}]},pageSize:1};
+ const mixedFirstResponse=await sendRegion(mixedBody);assert.equal(mixedFirstResponse.status,200,await mixedFirstResponse.clone().text());
+ let mixedPage=await mixedFirstResponse.json();const mixedRoot=mixedPage.querySnapshot.id;
+ assert.equal(mixedPage.schemaVersion,2);assert.equal(mixedPage.requested.order,undefined);
+ assert.deepEqual(mixedPage.requested.region.cells,mixedBody.region.cells);
+ assert.equal(mixedPage.querySnapshot.batch.total,2);
+ assert.ok(mixedPage.page.nextCursor);
+ const frozenMixedQueries=warehouseCoverageQueries.length;
+ const mixedReplay=await sendRegion({...mixedBody,querySnapshotId:mixedRoot});assert.equal(mixedReplay.status,200);
+ assert.equal(warehouseCoverageQueries.length,frozenMixedQueries,"a frozen mixed-order batch is replayed without requerying");
+ const mixedProtected=await sendRegion({...mixedBody,cursor:mixedPage.page.nextCursor},otherKey.key);assert.equal(mixedProtected.status,403);
+ for(let n=0;n<20&&mixedPage.page.nextCursor;n++){
+  const next=await sendRegion({...mixedBody,cursor:mixedPage.page.nextCursor});assert.equal(next.status,200,await next.clone().text());mixedPage=await next.json();
+  assert.equal(mixedPage.querySnapshot.id,mixedRoot);assert.equal(mixedPage.schemaVersion,2);
+ }
+ assert.equal(mixedPage.page.hasMore,false);assert.equal(mixedPage.querySnapshot.batch.complete,true);
+ const conflictQueries=warehouseCoverageQueries.length;
+ assert.equal((await sendRegion({...mixedBody,order:8,cells:[163327]})).status,400);
+ assert.equal(warehouseCoverageQueries.length,conflictQueries,"selector conflicts fail before adapters run");
+ const rectangle={raStart:1,raEnd:1.00001,decMin:1,decMax:1.00001};
+ const rectangleResponse=await sendRegion({layerIds:[f.layerId],rectangle,boundaryOrder:4,preview:true});assert.equal(rectangleResponse.status,200);
+ const rectangleData=await rectangleResponse.json();assert.equal(rectangleData.schemaVersion,2);assert.equal(rectangleData.preview.limit,6);
+ assert.equal(rectangleData.requested.region.cover.algorithmVersion,"icrs-rectangle-cap-v1");
+ assert.equal(rectangleData.requested.region.cover.targetBoundaryOrder,4);assert.ok(rectangleData.requested.region.hash);
+ const differentRectangle=await sendRegion({layerIds:[f.layerId],rectangle:{...rectangle,raEnd:1.00002},boundaryOrder:4,querySnapshotId:rectangleData.querySnapshot.id});
+ assert.equal(differentRectangle.status,409,"different rectangles cannot share a snapshot even when their canonical covers agree");
  assert.equal((await browserQuery("/api/v1/coverage/reverse-lookup","https://other.example")).status,403);
  await fetch(base+route+`/keys/${issued.id}/revoke`,{method:"POST",headers:auth});
  assert.equal((await browserQuery("/api/v1/access/region-query")).status,401,"revoke invalidates already unlocked sessions");

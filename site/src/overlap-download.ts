@@ -1,4 +1,5 @@
 import type { ScanConnectorIdentity } from "../../src/connector-icon.js";
+import type { SkyRectangle, SkyRegion, SkyRegionCoverMetadata } from "../../src/sky-region.js";
 
 export interface DownloadPlanMatch {
   layerId?: string;
@@ -38,6 +39,11 @@ export interface DownloadPlanFile {
   observations?: Array<{ layerId?: string; scanRunId?: string; sourceSnapshotSha256?: string; fileName?: string; sizeBytes?: number; lastModified?: string; sourceUri?: string; metadataState: "complete" | "missing" }>;
 }
 
+export interface DownloadMatchingRegion {
+  order: number;
+  cells: number[];
+}
+
 export interface DownloadPlanEntrypoint {
   kind: string;
   purpose: "data-access" | "coverage-reference";
@@ -49,6 +55,7 @@ export interface DownloadPlanEntrypoint {
   order?: number;
   nside?: number;
   cells?: number[];
+  matchingRegions?: DownloadMatchingRegion[];
   precision: string;
   url?: string;
   sourceUri?: string;
@@ -109,6 +116,7 @@ export interface DownloadPlanScannedFile {
   scanRunId?: string;
   sourceSnapshotSha256?: string;
   matchingCoverage?: DownloadPlanMatch[];
+  matchingEvidenceScope?: "batch" | "full-region";
   connectors?: ScanConnectorIdentity[];
 }
 
@@ -121,9 +129,12 @@ export interface DownloadPlanSpatialUnit {
   modality?: string;
   unitKind: string;
   unitId: string;
-  order: number;
-  nside: number;
-  matchingCells: number[];
+  order?: number;
+  nside?: number;
+  matchingCells?: number[];
+  matchingRegions?: DownloadMatchingRegion[];
+  memberCompleteness?: "complete-for-region" | "incomplete" | "unit-candidate";
+  matchingEvidenceScope?: "batch" | "full-region";
   precision: string;
   accessUri?: string;
   accessUris?: Array<{ uri: string; fileName?: string; band?: string; accessType?: "file" | "directory" | "entrypoint"; alternatives?: DownloadPlanSourceAccessAlternative[] }>;
@@ -155,7 +166,7 @@ export interface DownloadPlanSourceAccessAlternative {
 }
 
 export interface DownloadPlan {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   spatialUnits?: DownloadPlanSpatialUnit[];
   files: DownloadPlanFile[];
   entrypoints: DownloadPlanEntrypoint[];
@@ -168,6 +179,42 @@ export interface DownloadPlan {
 
 function unionNumbers(left: readonly number[] = [], right: readonly number[] = []): number[] {
   return [...new Set([...left, ...right])].sort((a, b) => a - b);
+}
+
+function groupMatchingRegions(regions: readonly DownloadMatchingRegion[]): DownloadMatchingRegion[] {
+  const orders = new Map<number, Set<number>>();
+  for (const region of regions) {
+    const cells = orders.get(region.order) ?? new Set<number>();
+    region.cells.forEach(cell => cells.add(cell));
+    orders.set(region.order, cells);
+  }
+  return [...orders].sort(([left], [right]) => left - right).map(([order, cells]) => ({ order, cells: [...cells].sort((left, right) => left - right) }));
+}
+
+function matchingRegionsFor(value: { order?: number; matchingRegions?: DownloadMatchingRegion[] }, cells?: number[]): DownloadMatchingRegion[] {
+  // An explicit multi-order membership is authoritative, even if legacy fields remain.
+  return value.matchingRegions !== undefined ? groupMatchingRegions(value.matchingRegions)
+    : value.order === undefined ? [] : [{ order: value.order, cells: unionNumbers(cells) }];
+}
+
+function mergeOrderSafeMembership<T extends { order?: number; nside?: number; matchingRegions?: DownloadMatchingRegion[]; cells?: number[]; matchingCells?: number[] }>(
+  previous: T, next: T, cellKey: "cells" | "matchingCells",
+): T {
+  const merged = { ...previous, ...next };
+  const regions = groupMatchingRegions([...matchingRegionsFor(previous, previous[cellKey]), ...matchingRegionsFor(next, next[cellKey])]);
+  if (regions.length === 1) {
+    const region = regions[0]!;
+    merged.order = region.order;
+    merged.nside = 2 ** region.order;
+    merged[cellKey] = region.cells;
+  } else {
+    // In particular, never interpret an ipix at one order as an ipix at another.
+    delete merged.order;
+    delete merged.nside;
+    delete merged[cellKey];
+  }
+  if (regions.length > 1 || previous.matchingRegions !== undefined || next.matchingRegions !== undefined) merged.matchingRegions = regions;
+  return merged;
 }
 
 function conservativePrecision(left: string, right: string): string {
@@ -231,7 +278,7 @@ export function mergeDownloadPlans(previous: DownloadPlan, next: DownloadPlan): 
   const entrypoints = new Map(previous.entrypoints.map((entry) => [entryKey(entry), entry]));
   next.entrypoints.forEach((entry) => {
     const key = entryKey(entry), old = entrypoints.get(key);
-    entrypoints.set(key, old ? { ...old, ...entry, precision: conservativePrecision(old.precision, entry.precision), cells: unionNumbers(old.cells, entry.cells),
+    entrypoints.set(key, old ? { ...mergeOrderSafeMembership(old, entry, "cells"), precision: conservativePrecision(old.precision, entry.precision),
       note: joinUnique([old.note, entry.note]) || undefined } : entry);
   });
   const spatialUnits = new Map((previous.spatialUnits ?? []).map((unit) => [`${unit.layerId}:${unit.unitKind}:${unit.unitId}`, unit]));
@@ -243,11 +290,15 @@ export function mergeDownloadPlans(previous: DownloadPlan, next: DownloadPlan): 
       const key = `${file.fileId}:${file.scanRunId ?? ""}`, existing = scannedFiles.get(key);
       const matches = new Map([...(existing?.matchingCoverage ?? []), ...(file.matchingCoverage ?? [])].map(match => [matchKey(match), match]));
       scannedFiles.set(key, { ...existing, ...file, ...(matches.size ? { matchingCoverage: [...matches.values()] } : {}),
+        ...(existing?.matchingEvidenceScope === "batch" || file.matchingEvidenceScope === "batch" ? { matchingEvidenceScope: "batch" as const } : {}),
         ...(existing?.connectors?.length || file.connectors?.length ? { connectors: mergeScanConnectors(existing?.connectors, file.connectors) } : {}) });
     }
     const accessUris = mergeAccessUris(old.accessUris, old.accessUri && !old.accessUris?.some(entry => entry.uri === old.accessUri) ? [{ uri: old.accessUri }] : undefined,
       unit.accessUris, unit.accessUri && !unit.accessUris?.some(entry => entry.uri === unit.accessUri) ? [{ uri: unit.accessUri }] : undefined);
-    spatialUnits.set(key, { ...old, ...unit, precision: conservativePrecision(old.precision, unit.precision), matchingCells: unionNumbers(old.matchingCells, unit.matchingCells),
+    spatialUnits.set(key, { ...mergeOrderSafeMembership(old, unit, "matchingCells"), precision: conservativePrecision(old.precision, unit.precision),
+      ...(old.memberCompleteness === "incomplete" || unit.memberCompleteness === "incomplete" ? { memberCompleteness: "incomplete" as const }
+        : old.memberCompleteness === "unit-candidate" || unit.memberCompleteness === "unit-candidate" ? { memberCompleteness: "unit-candidate" as const } : {}),
+      ...(old.matchingEvidenceScope === "batch" || unit.matchingEvidenceScope === "batch" ? { matchingEvidenceScope: "batch" as const } : {}),
       note: joinUnique([old.note, unit.note]) || undefined,
       ...(scannedFiles.size ? { scannedFiles: [...scannedFiles.values()] } : {}),
       ...(accessUris.length ? { accessUri: old.accessUri ?? unit.accessUri ?? accessUris[0]?.uri, accessUris } : {}),
@@ -293,11 +344,20 @@ export function mergeDownloadPlans(previous: DownloadPlan, next: DownloadPlan): 
   };
 }
 
+export interface DownloadQueryRegion extends SkyRegion {
+  hash: string;
+  rectangle?: SkyRectangle;
+  cover?: SkyRegionCoverMetadata;
+}
+
 export interface DownloadComponent {
   id: string;
+  // Legacy presentation fields; requested.region is authoritative for region queries.
   order: number;
   cells: number[];
   bounds: { areaDeg2: number; raMin: number; raMax: number; decMin: number; decMax: number };
+  requested?: { layerIds?: string[]; order?: number; cells?: number[]; rectangle?: SkyRectangle; inputRectangle?: SkyRectangle; region?: DownloadQueryRegion };
+  sourceStatuses?: Array<Record<string, unknown> & { layerId?: string }>;
 }
 
 export interface DownloadLayerEntry {
@@ -315,6 +375,9 @@ export const OVERLAP_DOWNLOAD_HEADER = [
   "s_region", "query_snapshot_id", "omitted", "has_more", "inventory_complete", "native_unit_index_revision",
   "geometry_evidence",
   "native_partition", "source_metadata",
+  "matching_regions", "query_region", "query_rectangle", "region_hash", "coordinate_frame", "ordering", "region_cover", "region_approximation",
+  "region_budget_limited", "region_target_boundary_order", "region_order_counts", "region_unresolved_boundary_leaves", "region_max_unresolved_angular_radius_deg",
+  "rectangle_area_deg2", "cover_area_deg2", "excess_area_deg2", "source_status", "member_completeness", "matching_evidence_scope", "query_input_rectangle",
 ] as const;
 
 export function csvCell(value: unknown): string {
@@ -334,11 +397,21 @@ export function overlapCsvRows(
   state?: { snapshotId?: string; nativeUnitIndexRevision?: string; omitted: number; hasMore: boolean },
 ): string[][] {
   const rows: string[][] = [];
+  const region = component.requested?.region;
+  const rectangle = component.requested?.rectangle ?? region?.rectangle;
+  const queryRegions = region ? groupMatchingRegions(region.cells.map(cell => ({ order: cell.order, cells: [cell.ipix] }))) : undefined;
+  const sourceRows = new Map<string[], Record<string, unknown>>();
+  const evidenceRows = new Map<string[], DownloadPlanCoverageEvidence>();
+  const entryRows = new Map<string[], DownloadPlanEntrypoint>();
+  const text = (value: unknown): string => value == null ? "" : String(value);
+  const membershipColumns = (regions: DownloadMatchingRegion[], nside?: number): string[] => regions.length === 1
+    ? [String(regions[0]!.order), String(nside ?? 2 ** regions[0]!.order), JSON.stringify(regions[0]!.cells)] : ["", "", ""];
   (plan.spatialUnits ?? []).forEach((unit) => {
+    const membership = membershipColumns(matchingRegionsFor(unit, unit.matchingCells));
     rows.push([
-      component.id, "spatial-unit", String(unit.order), String(unit.nside), unit.precision,
+      component.id, "spatial-unit", membership[0]!, membership[1]!, unit.precision,
       unit.layerId, unit.surveyId, unit.releaseId, unit.product, unit.modality ?? "",
-      "", "", "", "", unit.accessUri ?? "", "", unit.accessUri ?? "", JSON.stringify(unit.matchingCells), "", unit.unitKind,
+      "", "", "", "", unit.accessUri ?? "", "", unit.accessUri ?? "", membership[2]!, "", unit.unitKind,
       unit.unitId, unit.accessUri ?? "", "", "", "", "", "",
       String(component.bounds.raMin), String(component.bounds.raMax), String(component.bounds.decMin), String(component.bounds.decMax), String(component.bounds.areaDeg2), unit.note ?? "",
       "", "", "", "", "", "", "", "", "", "", unit.sourceSnapshotSha256 ?? "", "", unit.scannedFiles?.length ? JSON.stringify(unit.scannedFiles) : "",
@@ -355,8 +428,10 @@ export function overlapCsvRows(
       file.matchingCoverageTruncated ? "file coverage matches truncated" : undefined,
       ...(file.warnings ?? []),
     ]);
+    const membership = region ? membershipColumns(groupMatchingRegions(file.matchingCoverage.map(match => ({ order: match.order, cells: [match.ipix] }))))
+      : [String(component.order), String(2 ** component.order)];
     rows.push([
-      component.id, "file", String(component.order), String(2 ** component.order), precision,
+      component.id, "file", membership[0]!, membership[1]!, precision,
       joinUnique(layers), joinUnique(layerEntries.map((entry) => entry.surveyId)) || firstLayer.surveyId,
       joinUnique(layerEntries.map((entry) => entry.releaseId)) || firstLayer.releaseId,
       joinUnique(layerEntries.map((entry) => entry.product)) || firstLayer.product,
@@ -372,18 +447,22 @@ export function overlapCsvRows(
     const layer = resolveLayer(entry.layerId);
     const tileSelection = entry.layerId ? plan.tileSelections?.find((selection) => selection.layerId === entry.layerId) : undefined;
     const itemKind = entry.kind === "source-path" ? "source-path" : "entrypoint";
-    rows.push([
-      component.id, itemKind, String(entry.order ?? component.order), String(entry.nside ?? 2 ** component.order), entry.precision,
+    const regions = matchingRegionsFor({ ...entry, order: entry.order ?? (region ? undefined : component.order) }, entry.cells ?? (region ? undefined : component.cells));
+    const membership = membershipColumns(regions, entry.matchingRegions === undefined ? entry.nside : undefined);
+    const row = [
+      component.id, itemKind, membership[0]!, membership[1]!, entry.precision,
       entry.layerId ?? "", entry.surveyId ?? layer.surveyId, entry.releaseId ?? layer.releaseId, entry.product ?? layer.product, layer.modality,
-      "", "", "", "", entry.sourceUri ?? "", "", "", JSON.stringify(entry.cells ?? component.cells), "", entry.kind,
+      "", "", "", "", entry.sourceUri ?? "", "", "", membership[2]!, "", entry.kind,
       typeof entry.tileId === "string" ? entry.tileId : "", entry.url ?? entry.sourceUrl ?? entry.mocUrl ?? "", entry.sourceScope ?? "",
       entry.required === undefined ? "" : String(entry.required), entry.selectionComplete === undefined ? (tileSelection ? String(tileSelection.complete) : "") : String(entry.selectionComplete),
       entry.selectionRule ?? tileSelection?.selectionRule ?? "", tileSelection ? JSON.stringify(tileSelection.tileIds) : "",
       String(component.bounds.raMin), String(component.bounds.raMax), String(component.bounds.decMin), String(component.bounds.decMax), String(component.bounds.areaDeg2), entry.note ?? "",
-    ]);
+    ];
+    rows.push(row);
+    entryRows.set(row, entry);
   });
   (plan.coverageEvidence ?? []).forEach((evidence) => {
-    rows.push([
+    const row = [
       component.id, "coverage-evidence", String(evidence.order), String(evidence.nside), evidence.precision,
       evidence.layerId, evidence.surveyId, evidence.releaseId, evidence.product, evidence.modality ?? "",
       "", "", "", "", "", "", "", JSON.stringify(evidence.matchedCells), "", evidence.evidenceKind,
@@ -391,16 +470,44 @@ export function overlapCsvRows(
       String(component.bounds.raMin), String(component.bounds.raMax), String(component.bounds.decMin), String(component.bounds.decMax), String(component.bounds.areaDeg2), evidence.summary,
       evidence.evidenceKind, evidence.sourceLabel ?? "", evidence.sourceUrl ?? "", evidence.geometrySourceUrl ?? "", evidence.coverageUrl ?? "", JSON.stringify(evidence.availableOrders),
       String(evidence.nativeMaxOrder), evidence.sourceIdentity ?? "", evidence.instrument ?? "", evidence.filters ?? "", evidence.sourceSnapshotSha256 ?? "", evidence.completeness ?? "", evidence.scienceFileScan ?? "",
-    ]);
+    ];
+    rows.push(row);
+    evidenceRows.set(row, evidence);
   });
-  if (state) {
+  for (const source of component.sourceStatuses ?? []) {
+    const layer = resolveLayer(source.layerId);
+    const row = Array<string>(OVERLAP_DOWNLOAD_HEADER.length).fill("");
+    const set = (key: typeof OVERLAP_DOWNLOAD_HEADER[number], value: unknown) => { row[OVERLAP_DOWNLOAD_HEADER.indexOf(key)] = text(value); };
+    set("component_id", component.id);
+    set("item_kind", "source-status");
+    set("layer_id", source.layerId);
+    set("survey_id", source.surveyId ?? layer.surveyId);
+    set("release_id", source.releaseId ?? layer.releaseId);
+    set("product", source.product ?? layer.product);
+    set("modality", source.modality ?? layer.modality);
+    set("precision", source.precision ?? source.geometryPrecision ?? fallbackPrecision);
+    set("access_availability", source.accessAvailability);
+    set("completeness", source.completeness);
+    set("source_snapshot_sha256", source.sourceSnapshotSha256);
+    set("source_identity", source.sourceIdentity);
+    set("source_url", source.sourceUrl);
+    set("entrypoint_url", source.url ?? source.sourceUrl);
+    set("inventory_complete", source.inventoryComplete ?? false);
+    set("notes", joinUnique([typeof source.reason === "string" ? source.reason : undefined,
+      typeof source.note === "string" ? source.note : undefined,
+      ...(Array.isArray(source.notes) ? source.notes.filter((note): note is string => typeof note === "string") : [])]));
+    set("source_status", JSON.stringify(source));
+    sourceRows.set(row, source);
+    rows.push(row);
+  }
+  if (state || region || rectangle) {
     const row = Array<string>(OVERLAP_DOWNLOAD_HEADER.length).fill("");
     row[0] = component.id; row[1] = "manifest-state";
     row[OVERLAP_DOWNLOAD_HEADER.indexOf("precision")] = plan.truncated ? "truncated" : fallbackPrecision;
     row[OVERLAP_DOWNLOAD_HEADER.indexOf("notes")] = plan.warnings.join("; ");
-    row[OVERLAP_DOWNLOAD_HEADER.indexOf("query_snapshot_id")] = state.snapshotId ?? "";
-    row[OVERLAP_DOWNLOAD_HEADER.indexOf("omitted")] = String(state.omitted);
-    row[OVERLAP_DOWNLOAD_HEADER.indexOf("has_more")] = String(state.hasMore);
+    row[OVERLAP_DOWNLOAD_HEADER.indexOf("query_snapshot_id")] = state?.snapshotId ?? "";
+    row[OVERLAP_DOWNLOAD_HEADER.indexOf("omitted")] = text(state?.omitted);
+    row[OVERLAP_DOWNLOAD_HEADER.indexOf("has_more")] = text(state?.hasMore);
     row[OVERLAP_DOWNLOAD_HEADER.indexOf("inventory_complete")] = "false";
     rows.push(row);
   }
@@ -410,6 +517,48 @@ export function overlapCsvRows(
     const padded = [...row, ...Array(Math.max(0, OVERLAP_DOWNLOAD_HEADER.length - row.length)).fill("")];
     const file = row[1] === "file" ? filesById.get(row[10] ?? "") : undefined;
     const unit = row[1] === "spatial-unit" ? unitsById.get(JSON.stringify([row[5], row[19], row[20]])) : undefined;
+    const entry = entryRows.get(row);
+    const evidence = evidenceRows.get(row);
+    const source = sourceRows.get(row);
+    const set = (key: typeof OVERLAP_DOWNLOAD_HEADER[number], value: unknown) => { padded[OVERLAP_DOWNLOAD_HEADER.indexOf(key)] = text(value); };
+    let matchingRegions: DownloadMatchingRegion[] | undefined;
+    if (unit) matchingRegions = matchingRegionsFor(unit, unit.matchingCells);
+    else if (file) matchingRegions = groupMatchingRegions(file.matchingCoverage.map(match => ({ order: match.order, cells: [match.ipix] })));
+    else if (entry) matchingRegions = matchingRegionsFor({ ...entry, order: entry.order ?? (region ? undefined : component.order) }, entry.cells ?? (region ? undefined : component.cells));
+    else if (evidence) matchingRegions = [{ order: evidence.order, cells: unionNumbers(evidence.matchedCells) }];
+    else if (source) {
+      if (Array.isArray(source.matchingRegions)) matchingRegions = groupMatchingRegions(source.matchingRegions as DownloadMatchingRegion[]);
+      else if (typeof source.order === "number" && Array.isArray(source.cells)) matchingRegions = [{ order: source.order, cells: unionNumbers(source.cells as number[]) }];
+      const membership = membershipColumns(matchingRegions ?? []);
+      set("order", membership[0]); set("nside", membership[1]); set("matching_cells", membership[2]);
+    } else if (row[1] === "manifest-state") matchingRegions = queryRegions;
+    if (matchingRegions) set("matching_regions", JSON.stringify(matchingRegions));
+    if (region) {
+      set("query_region", JSON.stringify(region));
+      set("region_hash", region.hash);
+      set("coordinate_frame", region.coordinateFrame);
+      set("ordering", region.ordering);
+    }
+    if (component.requested?.inputRectangle) set("query_input_rectangle", JSON.stringify(component.requested.inputRectangle));
+    if (rectangle) {
+      set("query_rectangle", JSON.stringify(rectangle));
+      set("ra_min_deg", rectangle.raStart); set("ra_max_deg", rectangle.raEnd);
+      set("dec_min_deg", rectangle.decMin); set("dec_max_deg", rectangle.decMax);
+    }
+    const cover = region?.cover;
+    if (cover || rectangle) set("region_approximation", "conservative");
+    if (cover) {
+      set("region_cover", JSON.stringify(cover));
+      set("region_budget_limited", cover.budgetLimited);
+      set("region_target_boundary_order", cover.targetBoundaryOrder);
+      set("region_order_counts", JSON.stringify(cover.orderCounts));
+      set("region_unresolved_boundary_leaves", cover.unresolvedBoundaryLeaves);
+      set("region_max_unresolved_angular_radius_deg", cover.maxUnresolvedAngularRadiusDeg);
+      set("rectangle_area_deg2", cover.rectangleAreaDeg2);
+      set("cover_area_deg2", cover.coverAreaDeg2);
+      set("excess_area_deg2", cover.excessAreaDeg2);
+      set("area_deg2", cover.rectangleAreaDeg2);
+    }
     padded[OVERLAP_DOWNLOAD_HEADER.indexOf("native_unit_index_revision")] = state?.nativeUnitIndexRevision ?? "";
     padded[OVERLAP_DOWNLOAD_HEADER.indexOf("file_observations")] = file?.observations?.length
       ? JSON.stringify(file.observations)
@@ -417,8 +566,10 @@ export function overlapCsvRows(
     padded[OVERLAP_DOWNLOAD_HEADER.indexOf("scan_scopes")] = plan.scanScopes?.length ? JSON.stringify(plan.scanScopes) : "";
     padded[OVERLAP_DOWNLOAD_HEADER.indexOf("matching_coverage_truncated")] = file?.matchingCoverageTruncated === undefined ? "" : String(file.matchingCoverageTruncated);
     padded[OVERLAP_DOWNLOAD_HEADER.indexOf("access_uris")] = unit?.accessUris?.length ? JSON.stringify(unit.accessUris) : "";
-    padded[OVERLAP_DOWNLOAD_HEADER.indexOf("access_availability")] = unit?.accessAvailability ?? "";
     if (unit) {
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("access_availability")] = unit.accessAvailability ?? "";
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("member_completeness")] = unit.memberCompleteness ?? "";
+      padded[OVERLAP_DOWNLOAD_HEADER.indexOf("matching_evidence_scope")] = unit.matchingEvidenceScope ?? "";
       padded[OVERLAP_DOWNLOAD_HEADER.indexOf("s_region")] = unit.sRegion ?? "";
       padded[OVERLAP_DOWNLOAD_HEADER.indexOf("instrument")] = unit.instrument ?? "";
       padded[OVERLAP_DOWNLOAD_HEADER.indexOf("filters")] = unit.filters ?? "";

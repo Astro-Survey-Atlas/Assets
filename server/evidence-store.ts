@@ -77,6 +77,7 @@ export interface DownloadPlanScannedFile {
   scanRunId?: string;
   sourceSnapshotSha256?: string;
   matchingCoverage?: DownloadPlanMatch[];
+  matchingEvidenceScope?: "batch" | "full-region";
   connectors?: ScanConnectorIdentity[];
 }
 
@@ -98,6 +99,7 @@ export interface DownloadPlanFile {
   matchingCoverage: DownloadPlanMatch[];
   matchingCoverageTruncated?: boolean;
   observations?: Array<{ layerId?: string; scanRunId?: string; sourceSnapshotSha256?: string; fileName?: string; sizeBytes?: number; lastModified?: string; sourceUri?: string; metadataState: "complete" | "missing" }>;
+  matchingEvidenceScope?: "batch" | "full-region";
 }
 
 export interface DownloadPlanEntrypoint {
@@ -162,6 +164,7 @@ export interface DownloadPlanCoverageEvidence {
   geometrySourceUrl?: string;
   coverageUrl?: string;
   summary: string;
+  matchingEvidenceScope?: "batch" | "full-region";
 }
 
 export interface DownloadPlanSpatialUnit {
@@ -173,9 +176,13 @@ export interface DownloadPlanSpatialUnit {
   modality?: string;
   unitKind: string;
   unitId: string;
-  order: number;
-  nside: number;
-  matchingCells: number[];
+  /** Legacy single-order fields, absent for mixed-order schemaVersion 2 units. */
+  order?: number;
+  nside?: number;
+  matchingCells?: number[];
+  matchingRegions?: Array<{ order: number; cells: number[] }>;
+  memberCompleteness?: "complete-for-region" | "incomplete" | "unit-candidate";
+  matchingEvidenceScope?: "batch" | "full-region";
   precision: ReversePrecision;
   accessUri?: string;
   accessUris?: SourceAccessUri[];
@@ -223,7 +230,7 @@ export interface SourceAccessUri {
 }
 
 export interface DownloadPlan {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   spatialUnits?: DownloadPlanSpatialUnit[];
   files: DownloadPlanFile[];
   entrypoints: DownloadPlanEntrypoint[];

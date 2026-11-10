@@ -222,7 +222,7 @@ async function verifyGroup(request: NativeWorkerRequest, group: NativeGroup, pro
         const sample = result.units[0];
         if (!sample) throw new Error(`Survey native geometry probe failed for ${binding.layerId}`);
         report.checks.push({ id: `binding:${binding.layerId}`, passed: true, detail: `${sample.unitKind} identity and original partition/footprint resolve locally with frozen release and product selectors` });
-        report.samples.push({ layerId: binding.layerId, unitKind: sample.unitKind, unitId: sample.unitId, order: 4, cells: sample.matchingCells, precision: sample.precision, uris: sample.accessUris?.map(access => access.uri) ?? [], sRegion: sample.sRegion });
+        report.samples.push({ layerId: binding.layerId, unitKind: sample.unitKind, unitId: sample.unitId, order: 4, cells: sample.matchingCells ?? [], precision: sample.precision, uris: sample.accessUris?.map(access => access.uri) ?? [], sRegion: sample.sRegion });
       }
     } finally { index.close(); }
   } else if (group.bindings.some(binding => (SURVEY_NATIVE_SURVEYS.has(binding.surveyId) || nativeBindingIndexRoute(binding) === "survey"))) throw new Error("New survey bindings require their locked native index");

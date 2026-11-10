@@ -69,6 +69,7 @@ type StateChange = (state: SurveyLayerState) => void;
 type ContextMenuChange = (menu: SurveyLayerContextMenu) => void;
 type OverlapComponentChange = (component: SurveyLayerOverlapComponent) => void;
 type OverlapHoverChange = (hover: { component: SurveyLayerOverlapComponent; clientX: number; clientY: number } | null) => void;
+type RectangleChange = (rectangle: { raStart: number; raEnd: number; decMin: number; decMax: number } | null, phase: "draft" | "commit" | "cancel") => void;
 
 function surveyCardFor(record: CoverageSurvey): SurveyCard {
   return {
@@ -158,7 +159,7 @@ export class AtlasCoverageGlobe {
   #catalog: CoverageCatalog | null = null;
   #blocks = new Map<string, number[]>();
 
-  constructor(host: HTMLElement, canvas: HTMLCanvasElement, onActiveChange: ActiveChange, onInspectionChange: InspectionChange = () => undefined, onStateChange: StateChange = () => undefined, onContextMenu: ContextMenuChange = () => undefined, onOverlapComponent: OverlapComponentChange = () => undefined, onOverlapHover: OverlapHoverChange = () => undefined) {
+  constructor(host: HTMLElement, canvas: HTMLCanvasElement, onActiveChange: ActiveChange, onInspectionChange: InspectionChange = () => undefined, onStateChange: StateChange = () => undefined, onContextMenu: ContextMenuChange = () => undefined, onOverlapComponent: OverlapComponentChange = () => undefined, onOverlapHover: OverlapHoverChange = () => undefined, readonly onRectangleChange: RectangleChange = () => undefined) {
     this.#host = host;
     this.#canvas = canvas;
     this.#onActiveChange = onActiveChange;
@@ -214,7 +215,7 @@ export class AtlasCoverageGlobe {
       this.#onStateChange,
       undefined,
       (component) => this.#onOverlapComponent(component),
-      { onOverlapHover: (hover) => this.#onOverlapHover(hover) },
+      { onOverlapHover: (hover) => this.#onOverlapHover(hover), onRectangleChange: (rectangle, phase) => this.onRectangleChange(rectangle, phase) },
     );
     this.#viewer.setLayoutMode("layers");
     if (this.#layerRadiusRange) this.#viewer.setLayerRadiusRange(this.#layerRadiusRange.min, this.#layerRadiusRange.max);
@@ -250,6 +251,10 @@ export class AtlasCoverageGlobe {
   get state(): SurveyLayerState | null {
     return this.#viewer?.state ?? null;
   }
+
+  setRectangleDrawing(enabled: boolean): void { this.#viewer?.setRectangleDrawing(enabled); }
+
+  setRectangleSelection(rectangle: Parameters<RectangleChange>[0]): void { this.#viewer?.setRectangleSelection(rectangle); }
 
   setOverlapMode(active: boolean): void { this.#viewer?.setOverlapMode(active); }
 

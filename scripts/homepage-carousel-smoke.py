@@ -2,6 +2,8 @@
 """Exercise homepage tab rotation in Chromium against the built site."""
 
 import os
+import csv
+import io
 import json
 import re
 import subprocess
@@ -382,6 +384,231 @@ def atlas_drawer_region_smoke(browser, base_url: str, mock_api, details_requests
     page.close()
 
 
+def atlas_rectangle_query_smoke(browser, base_url: str, mock_api) -> None:
+    """Drive the real region form/drawing/export UI with synthetic API evidence."""
+    page = browser.new_page(viewport={"width": 1600, "height": 1000}, accept_downloads=True)
+    errors, reverse_requests, overlap_requests, held = [], [], [], []
+    unlocked = False
+    held_starts, held_cursors = set(), set()
+    matching_regions = [{"order": 4, "cells": [190]}, {"order": 10, "cells": [190]}]
+
+    def response_for(body):
+        rectangle = body["rectangle"]
+        start = rectangle["raStart"]
+        snapshot = f"region-snapshot-{start}"
+        second_page = bool(body.get("cursor"))
+        preview = body.get("preview", False)
+        region = {"coordinateFrame": "ICRS", "ordering": "NESTED", "hash": f"region-hash-{start}",
+                  "cells": [{"order": 4, "ipix": 190}, {"order": 10, "ipix": 190}], "rectangle": rectangle,
+                  "cover": {"algorithmVersion": "browser-fixture-v1", "targetBoundaryOrder": body.get("boundaryOrder", 10),
+                            "orderCounts": {"4": 1, "10": 1}, "budgetLimited": True, "unresolvedBoundaryLeaves": 1,
+                            "maxUnresolvedAngularRadiusDeg": 3.5, "rectangleAreaDeg2": 200, "coverAreaDeg2": 204, "excessAreaDeg2": 4}}
+        identity = "region-b" if second_page else "region-a"
+        unit = {"layerId": body["layerIds"][0], "productId": "region-product", "surveyId": "euclid", "releaseId": "euclid-ero",
+                "product": "Synthetic region evidence", "modality": "imaging", "unitKind": "target", "unitId": f"{identity}-{start}",
+                "matchingRegions": matching_regions, "precision": "estimated", "accessUri": f"https://example.test/{identity}.fits",
+                "accessUris": [{"uri": f"https://example.test/{identity}.fits"}], "memberCompleteness": "unit-candidate", "matchingEvidenceScope": "batch"}
+        sources = [{"layerId": layer_id, "surveyId": "gaia" if layer_id.startswith("gaia-") else "euclid", "releaseId": "fixture-release",
+                    "product": "Frozen selected product", "matchingRegions": matching_regions, "geometryPrecision": "estimated", "completeness": "incomplete",
+                    "sourceUnitSummary": {"unitKind": "target", "matchedUnitCount": 1, "truncated": False}, "sourceUrl": "https://example.test/archive/"}
+                   for layer_id in body["layerIds"]]
+        response = {"schemaVersion": 2, "available": True, "precision": "estimated", "truncated": not second_page,
+                    "requested": {"layerIds": body["layerIds"], "rectangle": rectangle, "region": region}, "sources": sources,
+                    "edges": [], "sourceFiles": [], "notes": ["Synthetic conservative candidate evidence, not inventory completeness"],
+                    "nativeUnitIndexRevision": "fixture-native-revision", "querySnapshot": {"id": snapshot, "expiresAt": "2099-01-01T00:00:00Z",
+                    "queryExhausted": second_page, "inventoryComplete": False},
+                    "downloadPlan": {"schemaVersion": 1, "spatialUnits": [unit], "files": [], "entrypoints": [], "truncated": not second_page, "warnings": []}}
+        if preview:
+            response["preview"] = {"limit": 6, "shown": 1, "omitted": 1, "hasMore": True}
+        else:
+            response["page"] = {"pageSize": 100, "shown": 1, "omitted": 0 if second_page else 1, "hasMore": not second_page}
+            if not second_page:
+                response["page"]["nextCursor"] = f"cursor-{start}"
+        return response
+
+    def region_api(route):
+        nonlocal unlocked
+        request = route.request
+        path = urlparse(request.url).path
+        if path == "/api/v1/access/unlock":
+            assert request.headers.get("x-assets-api-key") == "synthetic-region-key"
+            unlocked = True
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({"expiresAt": "2099-01-01T00:00:00Z"}))
+        elif path == "/api/v1/coverage/reverse-lookup":
+            body = request.post_data_json
+            reverse_requests.append(body)
+            assert "rectangle" in body and "order" not in body and "cells" not in body, body
+            assert body.get("preview") or unlocked, "full fixture queries must follow the real unlock dialog"
+            response = response_for(body)
+            if body["rectangle"]["raStart"] in held_starts or body.get("cursor") in held_cursors:
+                held.append((route, response))
+            else:
+                route.fulfill(status=200, content_type="application/json", body=json.dumps(response))
+        else:
+            if path.startswith("/api/v1/coverage/overlap"):
+                overlap_requests.append(path)
+            mock_api(route)
+
+    page.route("**/api/v1/**", region_api)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(base_url.rstrip("/") + "/atlas/", wait_until="domcontentloaded")
+    expect(page.locator("#coverage-scene")).to_have_attribute("data-ready", "true")
+    page.locator("#coverage-layers-toggle").click()
+    group = page.locator("#coverage-survey-euclid")
+    group.locator(".coverage-layer-name").click()
+    group.locator('input[data-product-layer-id="euclid-euclid-ero-native"]').check(force=True)
+    expect(page.locator("#coverage-state")).to_contain_text("O4")
+    page.locator("#coverage-layers-toggle").click()
+    page.wait_for_timeout(700)
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("e")
+    panel = page.locator("#coverage-region-panel")
+    expect(panel).to_be_visible()
+    expect(page.locator("#coverage-region-draw")).to_have_attribute("aria-pressed", "true")
+    assert not reverse_requests, "E without selected cells opens drawing without an inspection or a lookup"
+    assert "IPix" not in page.locator("#coverage-detail-title").inner_text()
+
+    # Actual canvas events, not callbacks: drawing must not rotate the camera.
+    pose = page.locator("#coverage-status-camera").inner_text()
+    points = [(650, 490), (750, 560)]
+    assert all(page.evaluate("p => document.elementFromPoint(...p)?.id === 'coverage-canvas'", point) for point in points)
+    page.mouse.move(*points[0]); page.mouse.down(); page.mouse.move(*points[1], steps=12); page.mouse.up()
+    expect(page.locator("#coverage-region-draw")).to_have_attribute("aria-pressed", "false")
+    for field in ["region-ra-start", "region-ra-end", "region-dec-min", "region-dec-max"]:
+        assert page.locator("#" + field).input_value(), f"drawing must populate {field}"
+    assert page.locator("#coverage-status-camera").inner_text() == pose, "rectangle drawing must suspend orbit navigation"
+    page.mouse.move(*points[0]); page.mouse.down(); page.mouse.move(700, 510, steps=8); page.mouse.up()
+    page.wait_for_function("pose => document.querySelector('#coverage-status-camera').textContent !== pose", arg=pose)
+    page.locator("#coverage-region-draw").click()
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("Escape")
+    expect(page.locator("#coverage-region-draw")).to_have_attribute("aria-pressed", "false")
+    page.locator("#coverage-region-close").click()
+    expect(panel).to_be_hidden()
+    page.locator("#coverage-region-toggle").click()
+
+    def submit(start, end=10):
+        for field, value in {"region-ra-start": start, "region-ra-end": end, "region-dec-min": -5, "region-dec-max": 5}.items():
+            page.locator("#" + field).fill(str(value))
+        page.locator("#coverage-region-query").click()
+
+    page.locator("#region-ra-start").focus()
+    page.keyboard.press("e")
+    assert page.locator("#coverage-region-draw").get_attribute("aria-pressed") == "false", "input-focused E must not start drawing"
+    assert not reverse_requests
+    submit(350)
+    expect(page.locator("#coverage-region-results .overlap-spatial-unit")).to_have_count(1)
+    assert reverse_requests[-1]["layerIds"] == ["euclid-euclid-ero-native"], "query scope is exactly the checked product, not all DRs"
+    expect(page.locator("#coverage-region-query-meta")).to_contain_text("O4 / O10")
+    expect(page.locator("#coverage-region-query-meta")).to_contain_text("Cell budget reached")
+    expect(page.locator("#coverage-region-query-meta")).to_contain_text("Anonymous preview")
+    expect(page.locator("#coverage-region-status")).to_contain_text("preview is not a full manifest")
+
+    def download(format):
+        with page.expect_download() as download_event:
+            page.locator(f'#coverage-region-results button[data-export-format="{format}"]').click()
+        result = download_event.value
+        content = Path(result.path()).read_text(encoding="utf-8-sig")
+        return result.suggested_filename, json.loads(content) if format == "json" else list(csv.DictReader(io.StringIO(content)))
+
+    json_name, preview = download("json")
+    csv_name, preview_rows = download("csv")
+    assert json_name == "atlas-region-preview.json" and csv_name == "atlas-region-preview.csv"
+    assert preview["schemaVersion"] == 2 and preview["preview"]["limit"] == 6
+    native = next(row for row in preview_rows if row["item_kind"] == "spatial-unit")
+    assert native["tile_id"] == preview["downloadPlan"]["spatialUnits"][0]["unitId"]
+    assert json.loads(native["matching_regions"]) == preview["downloadPlan"]["spatialUnits"][0]["matchingRegions"]
+    assert json.loads(native["query_region"]) == preview["requested"]["region"]
+    assert native["order"] == "" and native["region_budget_limited"] == "true"
+    assert len([row for row in preview_rows if row["item_kind"] == "source-status"]) == 1
+
+    actions = page.locator("#coverage-region-results > .coverage-region-actions button")
+    actions.first.click()
+    expect(page.locator(".download-unlock-dialog")).to_be_visible()
+    page.locator("#unlock-api-key").fill("synthetic-region-key")
+    page.locator(".unlock-btn-submit").click()
+    expect(page.locator(".download-unlock-dialog")).to_have_count(0)
+    expect(page.locator("#coverage-region-query-meta")).to_contain_text("Native units loaded")
+    first_authorized = next(body for body in reverse_requests if not body.get("preview"))
+    assert first_authorized.get("querySnapshotId") == preview["querySnapshot"]["id"], "unlock must upgrade the same frozen preview snapshot"
+    json_name, manifest = download("json")
+    csv_name, manifest_rows = download("csv")
+    assert json_name == "atlas-region-manifest.json" and csv_name == "atlas-region-manifest.csv"
+    assert manifest["querySnapshot"]["id"] == preview["querySnapshot"]["id"]
+    assert manifest["page"]["hasMore"] is False and manifest["querySnapshot"]["inventoryComplete"] is False
+    assert len(manifest["downloadPlan"]["spatialUnits"]) == 2, "authorized export must drain the root snapshot cursor"
+    assert {row["tile_id"] for row in manifest_rows if row["item_kind"] == "spatial-unit"} == {unit["unitId"] for unit in manifest["downloadPlan"]["spatialUnits"]}
+    assert any(body.get("cursor") == "cursor-350" for body in reverse_requests)
+    assert not any("synthetic-region-key" in json.dumps(body) for body in reverse_requests), "API key is not retained in query payloads"
+
+    # A different target cancels an in-flight query; its late response is ignored.
+    held_starts.add(351)
+    submit(351)
+    page.wait_for_function("() => document.querySelector('#coverage-region-results .hud-query-progress') !== null")
+    for _ in range(40):
+        if held:
+            break
+        page.wait_for_timeout(50)
+    assert held, "fixture must hold an actual sent region query"
+    submit(352)
+    expect(page.locator("#coverage-region-results .overlap-spatial-unit-title")).to_contain_text("region-a-352")
+    old_route, old_response = held.pop()
+    old_route.fulfill(status=200, content_type="application/json", body=json.dumps(old_response))
+    page.wait_for_timeout(100)
+    assert "region-a-351" not in page.locator("#coverage-region-results").inner_text(), "stale response must not replace the new region target"
+    held_starts.add(353)
+    submit(353)
+    for _ in range(40):
+        if held:
+            break
+        page.wait_for_timeout(50)
+    assert held
+    page.locator("#coverage-region-cancel").click()
+    expect(page.locator("#coverage-region-status")).to_contain_text("Cancelled")
+    old_route, old_response = held.pop()
+    old_route.fulfill(status=200, content_type="application/json", body=json.dumps(old_response))
+    page.wait_for_timeout(100)
+    assert "region-a-353" not in page.locator("#coverage-region-results").inner_text()
+
+    # Two surveys target the same region independently, without overlap discovery.
+    page.locator("#coverage-region-close").click()
+    page.locator("#coverage-layers-toggle").click()
+    gaia = page.locator("#coverage-survey-gaia")
+    gaia.locator(".coverage-layer-name").click()
+    gaia.locator('input[data-product-layer-id="gaia-gaia-dr3-main"]').check(force=True)
+    page.locator("#coverage-layers-toggle").click()
+    page.locator("#coverage-region-toggle").click()
+    submit(354)
+    expect(page.locator("#coverage-region-results .overlap-spatial-unit-title")).to_contain_text("region-a-354")
+    assert set(reverse_requests[-1]["layerIds"]) == {"euclid-euclid-ero-native", "gaia-gaia-dr3-main"}
+    assert "gaia-dr3" in page.locator("#coverage-region-layers").text_content()
+
+    # Cancelling an actual cursor drain must not finish or download a partial file.
+    held_cursors.add("cursor-354")
+    downloads = []
+    page.on("download", lambda event: downloads.append(event.suggested_filename))
+    page.locator('#coverage-region-results button[data-export-format="json"]').click()
+    for _ in range(40):
+        if held:
+            break
+        page.wait_for_timeout(50)
+    assert held, "full export must reach its held continuation cursor"
+    page.locator("#coverage-region-results > .coverage-region-actions button").filter(has_text="Cancel export").click()
+    expect(page.locator("#coverage-region-status")).to_contain_text("Cancelled")
+    old_route, old_response = held.pop()
+    old_route.fulfill(status=200, content_type="application/json", body=json.dumps(old_response))
+    page.wait_for_timeout(150)
+    assert not downloads, "cancelled full manifest cursor drain must not download a partial plan"
+    expect(page.locator('#coverage-region-results button[data-export-format="json"]')).to_be_enabled()
+    screenshot_root = os.environ.get("ASSETS_ATLAS_SCREENSHOT_DIR")
+    if screenshot_root:
+        page.screenshot(path=str(Path(screenshot_root) / "atlas-region-query.png"))
+    assert not overlap_requests, f"ordinary rectangle queries must not request overlap/details: {overlap_requests}"
+    assert not errors, f"Region query browser errors: {errors}"
+    print("Rectangle region browser smoke passed (synthetic API/unlock fixtures; not real authorization verification)")
+    page.close()
+
+
 def atlas_display_order_smoke(browser, base_url: str) -> None:
     screenshot_root = os.environ.get("ASSETS_ATLAS_SCREENSHOT_DIR")
     if screenshot_root:
@@ -554,6 +781,7 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
         else:
             fulfill_json(route, {})
 
+    atlas_rectangle_query_smoke(browser, base_url, mock_api)
     atlas_layer_tooltip_smoke(browser, base_url, mock_api)
     overlap_has_components = True
     target_lock_fixture = True

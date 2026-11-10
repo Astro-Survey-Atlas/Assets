@@ -276,9 +276,51 @@ Request:
 {"layerIds":["desi-dr1-spectra-footprint"],"order":8,"cells":[123,456],"limit":500}
 ```
 
-The response includes the requested `order`/`nside`, `precision`, coverage
-edges, source file IDs, URI/name/ETag/WCS bounds, download entrypoints and a
-`truncated` flag. It never upgrades an order-4-only layer to order 8.
+The legacy cells response includes the requested `order`/`nside`, `precision`,
+coverage edges, source file IDs, URI/name/ETag/WCS bounds, download entrypoints
+and a `truncated` flag. It never upgrades an order-4-only layer to order 8.
+
+The same endpoint also accepts a rectangle or an explicit mixed-order region,
+mutually exclusive with the legacy `order/cells` selector:
+
+```json
+{"layerIds":["desi-dr1-spectra-footprint"],"rectangle":{"raStart":350,"raEnd":10,"decMin":-5,"decMax":5},"boundaryOrder":10,"preview":true}
+```
+
+```json
+{"layerIds":["desi-dr1-spectra-footprint"],"region":{"coordinateFrame":"ICRS","ordering":"NESTED","cells":[{"order":4,"ipix":190},{"order":10,"ipix":123456}]},"preview":true}
+```
+
+These selectors query one or more selected products independently; neither an
+intersection nor an overlap component is required. RA/Dec values are finite
+ICRS degrees, RA endpoints are 0–360 and Dec is -90–90 with `decMin < decMax`.
+Decreasing RA crosses zero; `0 → 360` explicitly means all RA. Equal endpoint
+angles otherwise mean zero width and are rejected. `boundaryOrder` applies
+only to rectangles and accepts O4–O12 (default O10).
+
+Rectangle covering is adaptive and conservative: interior cells remain coarse,
+boundary cells refine toward the target, and a 4,096-leaf budget retains
+unresolved parents instead of cutting away the input area. Explicit regions
+accept 1–4,096 O4–O12 cells, canonicalizing duplicates, ancestor overlap and
+complete sibling quartets without merging below O4. No science-file footprint
+is strictly clipped to the rectangle; boundary candidates may extend outside.
+
+New selectors return `schemaVersion: 2`. `requested.region` contains canonical
+ICRS/NESTED cells, `hash`, and optional `rectangle`/`cover` metadata;
+`requested.rectangle` is normalized and `requested.inputRectangle` retains
+submitted bounds. Cover metadata includes `algorithmVersion`,
+`targetBoundaryOrder`, `orderCounts`, `budgetLimited`,
+`unresolvedBoundaryLeaves`, `maxUnresolvedAngularRadiusDeg`,
+`rectangleAreaDeg2`, `coverAreaDeg2` and `excessAreaDeg2`. The angular value
+bounds the enclosing caps of unresolved cells, not a proven distance from the
+rectangle. Query resolution never upgrades source/native precision.
+
+Native units use authoritative `matchingRegions: [{order,cells}]`; no global
+`order/nside` is invented for mixed matches. Member completeness and
+`matchingEvidenceScope` distinguish full-region indexed-member results from
+batch-only scan support. Execution groups cells by order and applies existing
+batch budgets under a single root snapshot/cursor; it does not expand every
+cell to the highest order. Continue with the same selector and signed cursor.
 
 For a coarse requested region, Warehouse lookup can query its actual finer
 descendants. For example, O4 cell 190 queries O8 cells in `[48640, 48896)` when
@@ -579,6 +621,17 @@ tract/patch or observation identity still needs source-side selection, and a
 coverage hit does not verify a science file at every cell.
 
 #### CSV and JSON exports
+
+The rectangle/selected-region tool explicitly offers preview export and an
+unlock action for full snapshot pagination. JSON keeps `requested`, sources,
+query state and the download plan; CSV appends `matching_regions`,
+`query_region`, `query_rectangle`, region hash/cover/approximation metadata,
+source status and member/evidence completeness columns. It emits
+`item_kind=source-status` for returned source summaries, including products
+without native hits, plus manifest-state for an empty region result. Mixed
+native matches do not acquire a fabricated common order. Original submitted
+rectangle bounds remain separate from normalized bounds. A full manifest is
+all returned pages of the bounded query, not a complete survey inventory.
 
 The browser's overlap export uses its current anonymous preview without a Key.
 With a valid Key, it exhausts the same snapshot's manifest pages and replaces

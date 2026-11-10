@@ -270,7 +270,7 @@ export function mergeSourceMetadata(
 ): DownloadPlanSpatialUnit["sourceMetadata"] {
   if (!previous && !next) return undefined;
   const merged: Record<string, unknown> = { ...previous, ...next };
-  for (const key of ["entrypoints", "providerStatuses", "records", "archivePackageUris"] as const) {
+  for (const key of ["entrypoints", "providerStatuses", "records", "archivePackageUris", "sourceSnapshots"] as const) {
     const items = [...(Array.isArray(previous?.[key]) ? previous[key] as unknown[] : []), ...(Array.isArray(next?.[key]) ? next[key] as unknown[] : [])];
     if (items.length) merged[key] = [...new Map(items.map(item => [typeof item === "string" ? item : JSON.stringify(item), item])).values()];
   }

@@ -1,6 +1,6 @@
 # Assets 当前交接
 
-更新：2026-11-09。本文件只记录当前状态、待办和验证边界；文档入口见
+更新：2026-11-10。本文件只记录当前状态、待办和验证边界；文档入口见
 [docs/README.md](docs/README.md)。已提交的部署时间线和旧实施计划从 Git 查询，
 不要把历史的“当前”“仅 Dev”“未提交”当作今天的操作指令。
 
@@ -85,6 +85,25 @@
 - Chromium 完整回归通过；真实公开数据预览操作 Euclid × DESI / C04 / O6 / 47 cells，page errors 为零。
   当前独立缓存预览 <http://127.0.0.1:5181/atlas/>；旧 5180 依赖缓存未刷新，终止该进程被拦截，未绕过。
   两者均不是 prod 验收通道。
+
+## 2026-11-10 矩形区域反查（本地实现，未发布）
+
+- 用户确认第一版采用「天球框选/坐标精修 → 自适应多阶 HEALPix 保守覆盖 → 单/多巡天分别反查」，不是逐来源 footprint 严格矩形裁边。内部粗、边界细；边缘可能有额外候选，预算不足保留父单元而非裁掉区域。
+- 新增 Atlas 工具入口、四个 ICRS 度数输入和 O8/O10/O12 目标边界选项；沿用当前产品/DR/模态选择，不要求重合。修复普通 `E` 缺少 `evidenceLookup` 的断链，无选区打开框选；普通点击仍不查文件。
+- reverse-lookup 兼容旧 cells selector，新增 rectangle 和显式多阶 region selector。新响应 schema2，完整区域按真实阶数分批但保持单 root snapshot/cursor；`matchingRegions` 避免不同阶 ipix 混合。输出 cover/面积超额/边界未决角尺度与预算状态，和来源精度分开。
+- survey-native 新增按 unit ID 的完整区域成员补齐，防止跨批同单元 URI 丢失；通用聚合 URI 和批次扫描佐证仍保留候选/成员未核实、batch scope，不宣称完整库存。JSON/CSV 保留相同多阶/来源/状态信息，预览与解锁完整分页清单明确区分。
+- **按用户要求仅在原分支本地提交，不合并 main**：Assets 功能提交留在 `release/code-v0.0.10`（见该分支最新 `feat(atlas): add adaptive rectangle region manifests` 提交）；共享 `~/Repo/sky-globe` 在 `feat/overlap-component-picking`，提交 `e7ea2b5286fef49d3559850be3443fd126775461`。共享 viewer 新增默认关闭的 rectangle drawing API、真实经纬边界轮廓和 draft/commit/cancel。交接确认后两个仓库工作树应 clean；本地 ignored 依赖链接不计入 Git。
+- **依赖尚未正式交付**：Assets package/lock 仍固定远端 v0.1.2；当前 ignored `node_modules/@astro-survey-atlas/sky-globe` 临时 symlink 到 `~/Repo/sky-globe` 供本地构建/验收，原安装目录移至 `/tmp/assets-sky-globe-0.1.2-before-region-20261110`。新代码需要新 viewer API，干净安装旧 tag 尚不能构建。必须经单独授权发布新 immutable tag，再显式升级 package/lock；不提交 file 依赖，不把本地链接算可复现交付。本轮仅本地 commit，未 merge main/push/tag/deploy，未升级 Workspace。
+- 已通过：前后端/测试 TypeScript、Node 全量 528 通过/2 跳过、sky-globe 类型与 56/56、完整首页/Atlas Chromium 回归（含新框选/导航恢复/单多巡天/输入焦点/E/近似提示/预览与解锁/同快照续页/JSON-CSV/取消与迟到响应）。认证浏览器测试使用 synthetic fixture，不算真实 Key 验收。
+- 本地预览 **<http://127.0.0.1:5183/atlas/>** 在 2026-11-10 提交交接时已恢复并检查 frontend/backend HTTP 200；会话结束后临时进程可能停止，接手时先检查端口，不把此记录当永久在线承诺。Vite 配置 `/tmp/assets-region-vite-5183.config.mjs`，代理隔离 legacy backend `4192`。后端使用 env -i，只有 `/tmp/assets-rectangle-backend-4192/{content,evidence,spool}` 为可写业务根；历史 Assets release/evidence PVC 只用于读取已装公开目录/原生索引，无 ES/object store/admin，未冷建或激活索引。
+- 此预览使用 **2026-09-18 五产品历史公开 release `reviewed-mu6tefsx-bc07840a`**、imported-baseline managed:false/verified:false，**不是 prod 目录/验收**。真实 HTTP/浏览器 RA150→151、Dec0→1 单巡天返回 DESI Tile；另选 DESI + Legacy 共 22 层返回 Tile 与 brick/成员 URI，schema2 JSON 下载成功，零 page errors/overlap 请求；截图 `/tmp/assets-region-historical-public-preview.png`。当前生产大区域/真实 Key 导出、受管最新 survey-native 库存仍须另验。
+
+### 本功能交接后的优先步骤
+
+1. **先解决可复现依赖**：另获发布授权后，为上述 sky-globe 提交发布新 immutable tag，显式更新 Assets package/lock，再从干净安装执行类型、构建和浏览器回归。当前本地链接能预览，不代表远端 v0.1.2 已支持新 API；不移动旧 tag，不自动升级 Workspace。
+2. **验收边界**：已有 fixture 认证/分页/取消与公开历史库存验收；仍缺当前 prod 目录、真实 Key、大区域完整分页、限流冷却及受管新库存的端到端验收。不替换活动索引，不把来源清单当科学文件下载。
+3. **维持分支边界**：用户已看到效果并只要求本地提交和交接；没有 main 合并、push、tag 或部署授权。当前生产仍为原 0.0.10，未包含本功能。
+4. **临时预览恢复信息**：frontend `./node_modules/.bin/vite --config /tmp/assets-region-vite-5183.config.mjs`；backend 使用 `env -i`、`HOST=127.0.0.1 PORT=4192 ASSETS_ROLE=legacy`，release root 为上述历史 Assets PVC 的 `current`，product catalog 为本仓库，content/evidence/spool 为上述独立 `/tmp` 目录，source-unit evidence root 为历史 Assets evidence PVC。保持 admin 关闭、ES/object-store 未配置，Kube 指向本地不可达端口，不沿用生产凭据或启动 request-time 构建。
 
 ## 待办与尚未核验
 

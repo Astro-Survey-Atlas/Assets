@@ -14,6 +14,22 @@ user can retrieve, so the user downloads only the relevant parts of a survey.
 - In ordinary single-survey mode, clicking a HEALPix cell shows only the
   intersecting data releases and their modalities. It does not start a file
   lookup or a live archive request.
+- The explicit **Rectangle region** tool also supports native lookup without
+  overlap, for one or more selected survey/release/product layers. Users draw
+  two corners on the celestial sphere or edit ICRS degree bounds. The outline
+  follows meridians and constant-declination parallels, not a screen-space box.
+  Assets builds a conservative adaptive multi-order NESTED region: coarse
+  interiors, finer boundary cells (target O10 by default, up to O12), with at
+  most 4,096 leaves and an O4 floor. Budget exhaustion retains boundary parents;
+  it never drops part of the requested rectangle. Edge candidates may extend
+  outside the rectangle. This is not strict footprint-to-rectangle clipping.
+  The response/export keeps the rectangle, canonical cells, target and actual
+  orders, unresolved-boundary angular scale, area excess and budget state.
+  Those describe the query approximation, not the native source's precision.
+  Each selected product is queried independently; products need not overlap.
+  Ordinary `E` opens a selected-cell manifest lookup, or the rectangle tool
+  when no cells are selected. Merely inspecting an ordinary cell still does
+  not trigger native lookup.
 - In overlap mode, the selected region is matched against each loaded survey's
   native spatial units. Return those units, grouped by survey, release and
   selected modality, with source-supported access URIs. Examples include
@@ -681,10 +697,18 @@ flowchart LR
   H --> F
 ```
 
-The reverse lookup never mixes orders. Each unit result includes survey,
-release, product/modality, unit kind and native ID, selected `order`/`nside`,
-matching cells, geometry precision, source snapshot and source-supported access
-location. Warehouse files are nested scan evidence on the matched unit; they
+A reverse-lookup parent region may contain multiple actual NESTED orders.
+Each adapter invocation remains single-order; mixed regions are grouped by
+order and area/cell budgets under one root snapshot and signed cursor chain,
+not expanded wholesale to their highest order. Legacy single-order responses
+retain `order`/`nside` and matching cells. New rectangle/region responses use
+`schemaVersion: 2` and authoritative `matchingRegions: [{order,cells}]` for
+native units; unequal-order pixel numbers must never be concatenated. Each
+unit retains survey, release, product/modality, native kind and ID, geometry
+precision, source snapshot and source-supported access locations. Indexed
+member hydration preserves matched member URIs across batches; member and
+matching-evidence scope/completeness remain explicit. A drained page chain
+does not repair source inventory or missing member geometry. Warehouse files are nested scan evidence on the matched unit; they
 do not define the unit result. Paginate by native units. If a selected layer
 only has order 4, the common result is limited to order 4 and explicitly says
 so. Distinguish an unavailable unit index from an empty spatial match.

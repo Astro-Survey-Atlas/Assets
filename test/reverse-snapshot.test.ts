@@ -94,6 +94,26 @@ test("snapshot cursors bind region, revision, access identity and page kind; exp
   await assert.rejects(readReverseSnapshot(store, expiredId, "key-1", "region-revision"), /expired/);
 });
 
+test("schema2 frozen pages retain mixed memberships, all URI provenance and permanent member limits", async t => {
+  const directory=await mkdtemp(path.join(os.tmpdir(),"assets-mixed-snapshot-"));t.after(()=>rm(directory,{recursive:true,force:true}));
+  const store=new FilesystemArtifactStore(directory);
+  const source=snapshot("key-1");source.schemaVersion=2;source.selectorFingerprint="mixed-selector";
+  source.response.schemaVersion=2;source.response.requested={region:{coordinateFrame:"ICRS",ordering:"NESTED",cells:[{order:4,ipix:9},{order:8,ipix:9}],hash:"region"}};
+  source.response.downloadPlan.schemaVersion=2;
+  const unit=source.response.downloadPlan.spatialUnits![0]!;
+  delete unit.order;delete unit.nside;delete unit.matchingCells;
+  unit.matchingRegions=[{order:4,cells:[9]},{order:8,cells:[9]}];unit.memberCompleteness="incomplete";unit.matchingEvidenceScope="full-region";
+  unit.accessUris=[{uri:"https://example.test/a.fits"},{uri:"https://example.test/b.fits"}];
+  unit.sourceMetadata={records:[{sourceId:"a",sourceSnapshotSha256:"a".repeat(64)},{sourceId:"b",sourceSnapshotSha256:"b".repeat(64)}]};
+  source.response.downloadPlan.spatialUnits=[unit];source.response.downloadPlan.truncated=true;
+  const id=await writeReverseSnapshot(store,source);
+  const retained=await readReverseSnapshot(store,id,"key-1","changed-live-revision","mixed-selector");
+  const page=snapshotPage(retained,id,"key-1","secret",{scope:"manifest",pageSize:100}) as {schemaVersion:number;downloadPlan:DownloadPlan;page:{hasMore:boolean};querySnapshot:{queryExhausted:boolean}};
+  assert.equal(page.schemaVersion,2);assert.deepEqual(page.downloadPlan.spatialUnits,[unit]);assert.equal(page.page.hasMore,false);
+  assert.equal(page.downloadPlan.spatialUnits![0]!.memberCompleteness,"incomplete");assert.equal(page.querySnapshot.queryExhausted,false);
+  await assert.rejects(readReverseSnapshot(store,id,"key-1","changed-live-revision","another-rectangle"),/region or coverage revision changed/);
+});
+
 test("upstream truncation survives exhaustion and never creates an empty continuation", () => {
   const source = snapshot(); source.response.downloadPlan.truncated = true;
   const response = snapshotPage(source, "a".repeat(64), "key-1", "secret", { scope: "manifest", pageSize: 2000 }) as {

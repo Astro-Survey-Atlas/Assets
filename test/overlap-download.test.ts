@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { mergeDownloadPlans, OVERLAP_DOWNLOAD_HEADER, overlapCsvRows, type DownloadPlan } from "../site/src/overlap-download.js";
+import { csvCell, mergeDownloadPlans, OVERLAP_DOWNLOAD_HEADER, overlapCsvDocument, overlapCsvRows, type DownloadComponent, type DownloadPlan } from "../site/src/overlap-download.js";
 
 const component = {
   id: "C09",
@@ -360,4 +360,235 @@ test("paged download plans merge repeated identities consistently for JSON and C
   assert.deepEqual(JSON.parse(rows.find((row) => row.item_kind === "file")!.matching_cells!).map((match: { ipix: number }) => match.ipix), [101, 102]);
   assert.deepEqual(JSON.parse(rows.find((row) => row.item_kind === "entrypoint")!.matching_cells!), [101, 102]);
   assert.deepEqual(JSON.parse(rows.find((row) => row.item_kind === "coverage-evidence")!.matching_cells!), [101, 102]);
+});
+
+const normalizedRectangle = { raStart: 350, raEnd: 10, decMin: -5, decMax: 5, raWidth: 20, fullRa: false };
+const mixedComponent: DownloadComponent = {
+  ...component, id: "region-query", order: 4, cells: [],
+  requested: {
+    layerIds: ["euclid-ero"],
+    rectangle: normalizedRectangle,
+    inputRectangle: { raStart: 350, raEnd: 10, decMin: -5, decMax: 5 },
+    region: {
+      coordinateFrame: "ICRS", ordering: "NESTED", hash: "c".repeat(64),
+      cells: [{ order: 4, ipix: 190 }, { order: 10, ipix: 190 }],
+      cover: {
+        algorithmVersion: "conservative-test-v1", targetBoundaryOrder: 10, orderCounts: { "4": 1, "10": 1 }, budgetLimited: true,
+        unresolvedBoundaryLeaves: 1, maxUnresolvedAngularRadiusDeg: 3.5, rectangleAreaDeg2: 200, coverAreaDeg2: 204, excessAreaDeg2: 4,
+      },
+    },
+  },
+};
+
+function nativePlan(order: number, cells: number[]): DownloadPlan {
+  return {
+    schemaVersion: 1, truncated: false, warnings: [], files: [],
+    spatialUnits: [{ layerId: "euclid-ero", productId: "ero", surveyId: "euclid", releaseId: "euclid-ero", product: "ERO",
+      unitKind: "target", unitId: "same-native-unit", order, nside: 2 ** order, matchingCells: cells, precision: "estimated" }],
+    entrypoints: [{ kind: "official-release", purpose: "data-access", layerId: "euclid-ero", url: "https://example.test/archive/",
+      order, nside: 2 ** order, cells, precision: "entrypoint-only" }],
+  };
+}
+
+test("mixed-order pagination keeps equal ipix values in their actual orders for units and entrypoints", () => {
+  const first = nativePlan(4, [190]);
+  const second = nativePlan(10, [190, 191]);
+  const input = JSON.stringify([first, second]);
+  const merged = mergeDownloadPlans(first, second);
+  const regions = [{ order: 4, cells: [190] }, { order: 10, cells: [190, 191] }];
+  assert.deepEqual(merged.spatialUnits?.[0]?.matchingRegions, regions);
+  assert.deepEqual(merged.entrypoints[0]?.matchingRegions, regions);
+  for (const item of [merged.spatialUnits![0]!, merged.entrypoints[0]!]) {
+    assert.equal(Object.hasOwn(item, "order"), false);
+    assert.equal(Object.hasOwn(item, "nside"), false);
+    assert.equal(Object.hasOwn(item, "matchingCells"), false);
+    assert.equal(Object.hasOwn(item, "cells"), false);
+  }
+  assert.equal(JSON.stringify([first, second]), input, "merging does not mutate frozen input pages");
+  const continued = mergeDownloadPlans(merged, nativePlan(4, [191, 190]));
+  const allRegions = [{ order: 4, cells: [190, 191] }, { order: 10, cells: [190, 191] }];
+  assert.deepEqual(continued.spatialUnits?.[0]?.matchingRegions, allRegions);
+  assert.deepEqual(continued.entrypoints[0]?.matchingRegions, allRegions);
+  const jsonPlan = JSON.parse(JSON.stringify(continued)) as DownloadPlan;
+  const rows = overlapCsvRows(mixedComponent, jsonPlan, () => layer).map(record);
+  for (const row of rows.filter(row => ["spatial-unit", "entrypoint"].includes(row.item_kind!))) {
+    assert.equal(row.order, "");
+    assert.equal(row.nside, "");
+    assert.equal(row.matching_cells, "");
+    assert.deepEqual(JSON.parse(row.matching_regions!), allRegions);
+  }
+});
+
+test("same-order legacy pagination retains legacy membership without introducing a multi-order shape", () => {
+  const merged = mergeDownloadPlans(nativePlan(8, [102, 101]), nativePlan(8, [103, 102]));
+  assert.deepEqual(merged.spatialUnits?.[0]?.matchingCells, [101, 102, 103]);
+  assert.deepEqual(merged.entrypoints[0]?.cells, [101, 102, 103]);
+  for (const item of [merged.spatialUnits![0]!, merged.entrypoints[0]!]) {
+    assert.equal(item.order, 8);
+    assert.equal(item.nside, 256);
+    assert.equal(Object.hasOwn(item, "matchingRegions"), false);
+  }
+  const rows = overlapCsvRows(component, merged, () => layer).map(record);
+  for (const row of rows) {
+    assert.equal(row.order, "8");
+    assert.equal(row.nside, "256");
+    assert.deepEqual(JSON.parse(row.matching_cells!), [101, 102, 103]);
+  }
+});
+
+test("authoritative matchingRegions override stale legacy membership and merge only within each order", () => {
+  const first = nativePlan(4, [999]);
+  first.spatialUnits![0]!.matchingRegions = [{ order: 10, cells: [3, 2] }, { order: 4, cells: [190] }, { order: 10, cells: [2] }];
+  first.entrypoints[0]!.matchingRegions = first.spatialUnits![0]!.matchingRegions;
+  const rows = overlapCsvRows(mixedComponent, first, () => layer).map(record);
+  const expected = [{ order: 4, cells: [190] }, { order: 10, cells: [2, 3] }];
+  for (const row of rows.filter(row => ["spatial-unit", "entrypoint"].includes(row.item_kind!))) {
+    assert.equal(row.order, "");
+    assert.equal(row.matching_cells, "");
+    assert.deepEqual(JSON.parse(row.matching_regions!), expected);
+  }
+  const merged = mergeDownloadPlans(first, nativePlan(4, [191]));
+  const union = [{ order: 4, cells: [190, 191] }, { order: 10, cells: [2, 3] }];
+  assert.deepEqual(merged.spatialUnits?.[0]?.matchingRegions, union);
+  assert.deepEqual(merged.entrypoints[0]?.matchingRegions, union);
+  assert.equal(JSON.stringify(merged).includes("999"), false);
+});
+
+test("a genuinely single-order matchingRegions response can export the legacy columns without using presentation order", () => {
+  const plan = nativePlan(4, [999]);
+  plan.spatialUnits![0]!.matchingRegions = [{ order: 10, cells: [123] }];
+  plan.entrypoints[0]!.matchingRegions = [{ order: 10, cells: [123] }];
+  const rows = overlapCsvRows(mixedComponent, plan, () => layer).map(record);
+  for (const row of rows.filter(row => row.item_kind !== "manifest-state")) {
+    assert.equal(row.order, "10");
+    assert.equal(row.nside, "1024");
+    assert.deepEqual(JSON.parse(row.matching_cells!), [123]);
+  }
+});
+
+test("mixed-region supporting file records preserve match order and native scan provenance", () => {
+  const file = { fileId: "same-file", metadataState: "complete" as const, sourceUri: "s3://survey/one.fits", downloadable: false,
+    matchingCoverage: [{ layerId: "euclid-ero", order: 4, ipix: 190, sourceOrder: 8, sourceIpix: 48640, precision: "estimated", scanRunId: "run" }] };
+  const first: DownloadPlan = { ...nativePlan(4, [190]), files: [file] };
+  const second: DownloadPlan = { ...nativePlan(10, [190]), files: [{ ...file,
+    matchingCoverage: [{ ...file.matchingCoverage[0]!, order: 10, sourceIpix: 48641 }] }] };
+  const merged = mergeDownloadPlans(first, second);
+  const row = overlapCsvRows(mixedComponent, merged, () => layer).map(record).find(row => row.item_kind === "file")!;
+  assert.equal(row.order, "");
+  assert.equal(row.nside, "");
+  assert.deepEqual(JSON.parse(row.matching_cells!), merged.files[0]!.matchingCoverage);
+  assert.deepEqual(JSON.parse(row.matching_regions!), [{ order: 4, cells: [190] }, { order: 10, cells: [190] }]);
+  assert.deepEqual(merged.files[0]!.matchingCoverage.map(match => [match.order, match.sourceOrder, match.sourceIpix]), [[4, 8, 48640], [10, 8, 48641]]);
+  assert.equal(row.source_uri, file.sourceUri);
+});
+
+test("region CSV retains rectangle, conservative cover and budget metadata without relabeling source precision", () => {
+  const plan = nativePlan(10, [190]);
+  plan.spatialUnits![0]!.precision = "exact";
+  const rows = overlapCsvRows(mixedComponent, plan, () => layer, "estimated", { snapshotId: "frozen", nativeUnitIndexRevision: "revision", omitted: 0, hasMore: false });
+  const records = rows.map(record);
+  assert.equal(records.find(row => row.item_kind === "spatial-unit")!.precision, "exact");
+  for (const row of records) {
+    assert.deepEqual(JSON.parse(row.query_region!), mixedComponent.requested!.region);
+    assert.deepEqual(JSON.parse(row.query_rectangle!), mixedComponent.requested!.rectangle);
+    assert.deepEqual(JSON.parse(row.query_input_rectangle!), mixedComponent.requested!.inputRectangle);
+    assert.equal(row.region_hash, "c".repeat(64));
+    assert.equal(row.coordinate_frame, "ICRS");
+    assert.equal(row.ordering, "NESTED");
+    assert.equal(row.region_approximation, "conservative");
+    assert.equal(row.region_budget_limited, "true");
+    assert.equal(row.region_target_boundary_order, "10");
+    assert.deepEqual(JSON.parse(row.region_order_counts!), { "4": 1, "10": 1 });
+    assert.deepEqual(JSON.parse(row.region_cover!), mixedComponent.requested!.region!.cover);
+    assert.equal(row.region_unresolved_boundary_leaves, "1");
+    assert.equal(row.region_max_unresolved_angular_radius_deg, "3.5");
+    assert.equal(row.rectangle_area_deg2, "200");
+    assert.equal(row.cover_area_deg2, "204");
+    assert.equal(row.excess_area_deg2, "4");
+    assert.equal(row.ra_min_deg, "350");
+    assert.equal(row.ra_max_deg, "10");
+    assert.equal(row.area_deg2, "200");
+    assert.equal(row.native_unit_index_revision, "revision");
+    assert.equal(rows[records.indexOf(row)]!.length, OVERLAP_DOWNLOAD_HEADER.length);
+  }
+  const manifest = records.find(row => row.item_kind === "manifest-state")!;
+  assert.equal(manifest.query_snapshot_id, "frozen");
+  assert.equal(manifest.has_more, "false");
+  assert.equal(manifest.inventory_complete, "false");
+  assert.deepEqual(JSON.parse(manifest.matching_regions!), [{ order: 4, cells: [190] }, { order: 10, cells: [190] }]);
+  assert.match(overlapCsvDocument(rows), /query_region,query_rectangle,region_hash/);
+  assert.ok(overlapCsvDocument(rows).includes(csvCell(JSON.stringify(mixedComponent.requested!.region))));
+});
+
+test("empty region results export source status and manifest state, never invented native units or file links", () => {
+  const source = { layerId: "euclid-ero", surveyId: "euclid", releaseId: "euclid-ero", product: "ERO", modality: "imaging", geometryPrecision: "estimated",
+    completeness: "incomplete", accessAvailability: "source-policy", sourceUrl: "https://example.test/archive/",
+    sourceUnitSummary: { unitKind: "target", matchedUnitCount: 0, truncated: false },
+    reason: "No unit in frozen index; not evidence of no survey data", notes: ["Inventory unverified"],
+    matchingRegions: [{ order: 4, cells: [190] }, { order: 10, cells: [190] }] };
+  const plan: DownloadPlan = { schemaVersion: 1, files: [], entrypoints: [], warnings: ["Retained source identity"], truncated: false };
+  const rows = overlapCsvRows({ ...mixedComponent, sourceStatuses: [source] }, plan, () => layer).map(record);
+  assert.deepEqual(rows.map(row => row.item_kind), ["source-status", "manifest-state"]);
+  const status = rows[0]!;
+  assert.deepEqual(JSON.parse(status.source_status!), source);
+  assert.deepEqual(JSON.parse(status.matching_regions!), source.matchingRegions);
+  assert.equal(status.order, "");
+  assert.equal(status.matching_cells, "");
+  assert.equal(status.survey_id, "euclid");
+  assert.equal(status.access_availability, "source-policy");
+  assert.equal(status.entrypoint_url, source.sourceUrl);
+  assert.equal(status.source_uri, "");
+  assert.equal(status.download_url, "");
+  assert.equal(status.source_file_id, "");
+  assert.equal(status.inventory_complete, "false");
+  assert.match(status.notes!, /not evidence of no survey data; Inventory unverified/);
+  assert.equal(rows[1]!.notes, "Retained source identity");
+  assert.equal(rows[1]!.query_snapshot_id, "");
+});
+
+test("explicit cell-only regions do not invent rectangle approximation metadata or query-order matches", () => {
+  const plan: DownloadPlan = { schemaVersion: 1, files: [], warnings: [], truncated: false,
+    entrypoints: [{ kind: "official-release", purpose: "data-access", precision: "entrypoint-only", url: "https://example.test/archive/" }] };
+  const selected: DownloadComponent = { ...mixedComponent, requested: { region: {
+    coordinateFrame: "ICRS", ordering: "NESTED", hash: "explicit", cells: [{ order: 6, ipix: 123 }],
+  } } };
+  const rows = overlapCsvRows(selected, plan, () => layer).map(record);
+  const entry = rows[0]!;
+  assert.equal(entry.order, "");
+  assert.equal(entry.nside, "");
+  assert.equal(entry.matching_cells, "");
+  assert.deepEqual(JSON.parse(entry.matching_regions!), []);
+  assert.equal(entry.query_rectangle, "");
+  assert.equal(entry.region_approximation, "");
+  assert.equal(entry.region_budget_limited, "");
+  assert.equal(rows[1]!.item_kind, "manifest-state");
+  assert.deepEqual(JSON.parse(rows[1]!.matching_regions!), [{ order: 6, cells: [123] }]);
+});
+
+test("member incompleteness, batch-scoped scan evidence and all known URIs survive later exact pages", () => {
+  const first = nativePlan(4, [190]);
+  Object.assign(first.spatialUnits![0]!, {
+    memberCompleteness: "incomplete", matchingEvidenceScope: "batch", accessUri: "https://example.test/a.fits",
+    accessUris: [{ uri: "https://example.test/a.fits" }], scannedFiles: [{ fileId: "attached", scanRunId: "scan", sourceUri: "s3://survey/a.fits", matchingEvidenceScope: "batch",
+      matchingCoverage: [{ layerId: "euclid-ero", order: 4, ipix: 190, sourceOrder: 8, sourceIpix: 48640, precision: "estimated" }] }],
+  });
+  const second = nativePlan(10, [190]);
+  Object.assign(second.spatialUnits![0]!, {
+    memberCompleteness: "complete-for-region", matchingEvidenceScope: "full-region", precision: "exact", accessUri: "https://example.test/b.fits",
+    accessUris: [{ uri: "https://example.test/b.fits" }], scannedFiles: [{ fileId: "attached", scanRunId: "scan", sourceUri: "s3://survey/a.fits", matchingEvidenceScope: "full-region",
+      matchingCoverage: [{ layerId: "euclid-ero", order: 10, ipix: 190, sourceOrder: 8, sourceIpix: 48641, precision: "estimated" }] }],
+  });
+  const merged = mergeDownloadPlans(first, second);
+  const unit = merged.spatialUnits![0]!;
+  assert.equal(unit.memberCompleteness, "incomplete");
+  assert.equal(unit.matchingEvidenceScope, "batch");
+  assert.equal(unit.scannedFiles?.[0]?.matchingEvidenceScope, "batch");
+  assert.equal(unit.precision, "estimated");
+  assert.deepEqual(unit.accessUris?.map(value => value.uri), ["https://example.test/a.fits", "https://example.test/b.fits"]);
+  assert.deepEqual(unit.scannedFiles?.[0]?.matchingCoverage?.map(match => [match.order, match.sourceIpix]), [[4, 48640], [10, 48641]]);
+  const row = overlapCsvRows(mixedComponent, merged, () => layer).map(record).find(row => row.item_kind === "spatial-unit")!;
+  assert.equal(row.member_completeness, "incomplete");
+  assert.equal(row.matching_evidence_scope, "batch");
+  assert.deepEqual(JSON.parse(row.access_uris!), unit.accessUris);
+  assert.deepEqual(JSON.parse(row.file_observations!), unit.scannedFiles);
 });

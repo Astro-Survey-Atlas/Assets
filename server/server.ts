@@ -19,6 +19,8 @@ import { DISPLAY_BLOCK_PIXELS, MAX_DISPLAY_TILE_RANGES, displayOrders, displayTi
 import { pageCoverageFootprints } from "./coverage-footprint-pages.js";
 import { publicOpenApi } from "./public-openapi.js";
 import { ReverseStream } from "./reverse-stream.js";
+import { normalizeReverseSelector, type ReverseRegionSelector } from "./region-cover.js";
+import { groupRegionCells } from "../src/sky-region.js";
 import { proxyAdmin } from "./admin-proxy.js";
 import { createReadStream } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -45,7 +47,7 @@ import { aggregateReadiness, deriveProductReadiness, type ProductReadiness, type
 import { SurveyEditorialStore, type SurveyEditorialContent, type SurveyEditorialRecord } from "./editorial.js";
 import { SourceUnitStore, SourceUnitWorkerStore, type SourceUnitCoverageLayer } from "./source-units.js";
 import { buildDownloadPlan, CoverageEvidenceStore, EvidenceStoreError, warehouseGeometryFailureReason, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanSpatialUnit, type ReverseLookupResult, type WarehouseLayerSnapshot, type WarehouseLayerStatusSnapshot } from "./evidence-store.js";
-import { interleaveSpatialUnitsBySurvey, partitionReverseCells, reversePageSize, reversePlanCoverageEvidenceKey, reversePlanEntrypointKey, reversePlanFileKey, reversePlanItems, reversePlanSpatialUnitKey, type ReverseCursorScope } from "./reverse-pagination.js";
+import { interleaveSpatialUnitsBySurvey, reversePageSize, reversePlanCoverageEvidenceKey, reversePlanEntrypointKey, reversePlanFileKey, reversePlanItems, reversePlanSpatialUnitKey, type ReverseCursorScope } from "./reverse-pagination.js";
 import { resolveEuclidQ1MerFile } from "./euclid-data-links.js";
 import { buildOverlapDetails, publicExternalUrl, publicLocator } from "./overlap-details.js";
 import { filterByModalities } from "../src/modality-filter.js";
@@ -3765,19 +3767,18 @@ function displayLayerRevision(layer: Pick<CoverageCellLayer, "layerId" | "revisi
   return nativeSha256(JSON.stringify({ catalogRevision: layer.revision, nativeRevision: publicState.geometry.get(layer.layerId)?.revision ?? null })).slice(0, 32);
 }
 
-function reverseQueryFingerprint(layerIds: readonly string[], order: number, cells: readonly number[]): string {
+function reverseQueryFingerprint(layerIds: readonly string[], selector: ReverseRegionSelector): string {
   const revisions = [...new Set(layerIds)].sort().map((layerId) => ({ layerId, revision: publicCoverageCatalog().records.get(layerId)?.revision ?? "" }));
   return nativeSha256(JSON.stringify({
     releaseId: publicState.snapshot.releaseId,
     layerIds: [...new Set(layerIds)].sort(),
-    order,
-    cells: [...new Set(cells)].sort((left, right) => left - right),
+    ...(selector.kind === "cells" ? selector.fingerprintSelector as object : { selector: selector.fingerprintSelector }),
     revisions,
     nativeUnitIndexRevision: requestNativeVersion(),
   }));
 }
-function reverseSelectorFingerprint(layerIds: readonly string[], order: number, cells: readonly number[]): string {
-  return nativeSha256(JSON.stringify({ layerIds: [...new Set(layerIds)].sort(), order, cells: [...new Set(cells)].sort((a, b) => a - b) }));
+function reverseSelectorFingerprint(layerIds: readonly string[], selector: ReverseRegionSelector): string {
+  return nativeSha256(JSON.stringify({ layerIds: [...new Set(layerIds)].sort(), ...(selector.kind === "cells" ? selector.fingerprintSelector as object : { selector: selector.fingerprintSelector }) }));
 }
 
 function capReversePreview(plan: DownloadPlan, limit = PUBLIC_REVERSE_PREVIEW_LIMIT, seenKeys: ReadonlySet<string> = new Set()): { plan: DownloadPlan; shown: number; omitted: number; hasMore: boolean } {
@@ -4014,9 +4015,20 @@ interface ReverseBatchBuildOptions {
   resultTruncated: boolean;
   seenKeys: string[];
   unitCounts: Record<string, number>;
+  selector: ReverseRegionSelector;
 }
 
 interface ReverseBatchBuildResult { snapshot: ReverseSnapshot; snapshotId: string }
+
+function mergeRegionGroups(...regions: Array<Array<{ order: number; cells: number[] }>>): Array<{ order: number; cells: number[] }> {
+  const groups = new Map<number, Set<number>>();
+  for (const region of regions) for (const group of region) {
+    const cells = groups.get(group.order) ?? new Set<number>();
+    for (const cell of group.cells) cells.add(cell);
+    groups.set(group.order, cells);
+  }
+  return [...groups].sort(([a], [b]) => a - b).map(([order, cells]) => ({ order, cells: [...cells].sort((a, b) => a - b) }));
+}
 
 function reversePlanKeyHash(key: string): string {
   return sha256Hex(key);
@@ -4068,13 +4080,14 @@ async function buildBatchedCoverageReverseLookup(
   body: Record<string, unknown>,
   identity: string,
   stream: ReverseStream,
-  cellBatches: number[][],
-  order: number,
+  cellBatches: Array<{ order: number; cells: number[] }>,
+  selector: ReverseRegionSelector,
   fingerprint: string,
   selectorFingerprint: string,
   pageScope: ReverseCursorScope,
   pageSize: number,
 ): Promise<void> {
+  const liveFingerprint = fingerprint;
   const cursor = decodeSnapshotCursor(body.cursor, identity, undefined, pageScope, reverseCursorSecret);
   if (cursor && body.querySnapshotId !== undefined && (cursor.rootSnapshotId ?? cursor.snapshotId) !== body.querySnapshotId) {
     throw new AccessError(400, "Cursor and query snapshot do not match");
@@ -4094,9 +4107,13 @@ async function buildBatchedCoverageReverseLookup(
   const rootId = cursor?.rootSnapshotId ?? (typeof body.querySnapshotId === "string" ? body.querySnapshotId : undefined);
   if (rootId) {
     const root = await readReverseSnapshot(publicLookupStore, rootId, identity, fingerprint, selectorFingerprint);
-    if (!root.batch || root.batch.index !== 0 || root.batch.count !== cellBatches.length || root.fingerprint !== fingerprint) {
+    if (!root.batch || root.batch.index !== 0 || root.batch.count !== cellBatches.length) {
       throw new AccessError(409, "Reverse lookup source revisions changed; restart the region query");
     }
+    // Existing immutable pages remain readable after revision changes. Only
+    // materializing an unexecuted batch must match the root's frozen revision.
+    fingerprint = root.fingerprint;
+    if (cursor && cursor.fingerprint !== root.fingerprint) throw new AccessError(409, "Cursor does not match its frozen snapshot");
     rootSnapshotId = rootId;
     snapshotExpiresAt = root.expiresAt;
     if (cursor) {
@@ -4157,10 +4174,18 @@ async function buildBatchedCoverageReverseLookup(
   while (batchIndex < cellBatches.length) {
     if (!currentSnapshot) {
       if (executedBatches >= REVERSE_BATCHES_PER_REQUEST || (executedBatches > 0 && Date.now() - pageStartedAt > REVERSE_PAGE_TIME_BUDGET_MS)) break;
+      if (liveFingerprint !== fingerprint) {
+        if (lastPage) break; // Return frozen items; advancing its cursor gives 409.
+        throw new AccessError(409, "Reverse lookup source revisions changed; restart the region query");
+      }
       stream.emit("progress", { stage: "batch", state: "running", index: batchIndex, count: cellBatches.length });
       const built = await buildCoverageReverseLookup(request, response, {
         ...body,
-        cells: cellBatches[batchIndex],
+        rectangle: undefined,
+        region: undefined,
+        boundaryOrder: undefined,
+        order: cellBatches[batchIndex]!.order,
+        cells: cellBatches[batchIndex]!.cells,
         cursor: undefined,
         querySnapshotId: undefined,
         preview: false,
@@ -4175,6 +4200,7 @@ async function buildBatchedCoverageReverseLookup(
         resultTruncated,
         seenKeys,
         unitCounts,
+        selector,
       });
       if (!built || !("snapshot" in built)) throw new Error("Reverse lookup batch did not produce a frozen snapshot");
       currentSnapshot = built.snapshot;
@@ -4255,9 +4281,13 @@ async function buildBatchedCoverageReverseLookup(
       const sourceCount = unitCounts[layerId] ?? Number(source.sourceUnitSummary?.matchedUnitCount ?? 0);
       const oldCount = Number(previous?.sourceUnitSummary?.matchedUnitCount ?? 0);
       const preferred = sourceCount > oldCount ? source : previous ?? source;
+      const matchingRegions = mergeRegionGroups(previous?.matchingRegions ?? (previous?.order !== undefined ? [{ order: previous.order, cells: oldCells }] : []),
+        source.matchingRegions ?? (source.order !== undefined ? [{ order: source.order, cells: newCells }] : []));
+      const membership = selector.region ? { matchingRegions, matchingEvidenceScope: "batch", ...(matchingRegions.length === 1 ? { order: matchingRegions[0]!.order, nside: 2 ** matchingRegions[0]!.order, cells: matchingRegions[0]!.cells } : { order: undefined, nside: undefined, cells: undefined }) }
+        : { cells: [...new Set([...oldCells, ...newCells])].sort((left, right) => left - right) };
       mergedSources.set(layerId, {
         ...preferred,
-        cells: [...new Set([...oldCells, ...newCells])].sort((left, right) => left - right),
+        ...membership,
         sourceUnitSummary: {
           ...(preferred.sourceUnitSummary ?? source.sourceUnitSummary ?? {}),
           matchedUnitCount: Math.max(oldCount, sourceCount),
@@ -4292,7 +4322,7 @@ async function buildBatchedCoverageReverseLookup(
     ...lastPage,
     available: allSourcesAvailable,
     precision: topPrecision,
-    requested: { layerIds: body.layerIds, order, cells: body.cells },
+    requested: selector.requested,
     sources: responseSources,
     notes,
     downloadPlan: outputPlan,
@@ -4330,17 +4360,15 @@ async function buildBatchedCoverageReverseLookup(
 
 async function buildCoverageReverseLookup(request:IncomingMessage,response:ServerResponse,body:Record<string,unknown>,identity:string,preview:boolean,stream:ReverseStream,internalBatch?:ReverseBatchBuildOptions):Promise<void|ReverseBatchBuildResult> {
   await awaitNativeSourceUnitCoverageLoad();
-  if(!Array.isArray(body.layerIds)||body.layerIds.some(id=>typeof id!=="string"))throw new AccessError(400,"layerIds required");
-  if (!Number.isSafeInteger(body.order) || Number(body.order) < 0 || Number(body.order) > 13 || !Array.isArray(body.cells)) throw new AccessError(400, "order and cells are required");
+  if(!Array.isArray(body.layerIds)||!body.layerIds.length||body.layerIds.length>64||body.layerIds.some(id=>typeof id!=="string"))throw new AccessError(400,"layerIds required");
+  const selector = internalBatch?.selector ?? normalizeReverseSelector(body);
+  const executionSelector = internalBatch ? normalizeReverseSelector(body) : selector;
+  const cellBatches = executionSelector.batches;
+  const order = cellBatches[0]!.order;
   const pageScope: ReverseCursorScope = body.pageKind === "spatial-units" || body.pageKind === "supporting-evidence" ? body.pageKind : "manifest";
   if (body.pageKind !== undefined && body.pageKind !== "spatial-units" && body.pageKind !== "supporting-evidence") throw new AccessError(400, "pageKind must be spatial-units or supporting-evidence");
-  const order = Number(body.order);
-  const requestedCellsInput = body.cells as number[];
-  if (requestedCellsInput.length > 4096) throw new AccessError(400, "A reverse lookup may contain at most 4096 cells");
-  const uniqueRequestedCells = [...new Set(requestedCellsInput)].sort((left, right) => left - right);
-  const cellBatches = partitionReverseCells(order, uniqueRequestedCells);
-  const fingerprint = internalBatch?.fingerprint ?? reverseQueryFingerprint(body.layerIds as string[], order, requestedCellsInput);
-  const selectorFingerprint = internalBatch?.selectorFingerprint ?? reverseSelectorFingerprint(body.layerIds as string[], order, requestedCellsInput);
+  const fingerprint = internalBatch?.fingerprint ?? reverseQueryFingerprint(body.layerIds as string[], selector);
+  const selectorFingerprint = internalBatch?.selectorFingerprint ?? reverseSelectorFingerprint(body.layerIds as string[], selector);
   const cursor = decodeSnapshotCursor(body.cursor, identity, undefined, pageScope, reverseCursorSecret);
   if (preview && cursor) throw new AccessError(400, "Anonymous preview requests cannot continue a reverse lookup cursor");
   if (cursor && cursor.identity !== "preview" && cursor.identity !== identity) {
@@ -4356,7 +4384,7 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   let snapshotExpiresAt: string | undefined = internalBatch?.expiresAt;
   const regionBatchIndex = internalBatch ? 0 : batchIndex;
   if (!internalBatch && !preview && (cellBatches.length > 1 || cursor?.rootSnapshotId)) {
-    await buildBatchedCoverageReverseLookup(request, response, body, identity, stream, cellBatches, order, fingerprint, selectorFingerprint, pageScope, pageSize);
+    await buildBatchedCoverageReverseLookup(request, response, body, identity, stream, cellBatches, selector, fingerprint, selectorFingerprint, pageScope, pageSize);
     return;
   }
   if (!internalBatch && (cursor || body.querySnapshotId !== undefined)) {
@@ -4412,7 +4440,7 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   });
   const validatedRegion = validateRegion({
     purpose: "download-plan",
-    region: { coordinateFrame: "ICRS", ordering: "NESTED", order, cells: cellBatches[regionBatchIndex]! },
+    region: { coordinateFrame: "ICRS", ordering: "NESTED", order, cells: cellBatches[regionBatchIndex]!.cells },
     sources: sourceDescriptors.map(({ layer, productRecord }) => ({
       surveyId: layer.surveyId,
       releaseId: layer.releaseId,
@@ -4442,7 +4470,46 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     : Promise.resolve({ sources: [] as Array<Record<string, unknown>>, expiresAt: new Date(Date.now() + 600_000).toISOString() })).then(result => { stream.emit("progress", { stage: "coverage", state: "completed" }); return result; });
   const nativePromise = publicSpatialUnits(body.layerIds as string[], order, cells, sourceUnitLimit, (layerId, units) => {
     stream.emit("progress", { stage: "native", layerId, state: "completed", total: units.length });
-    if (!preview && units.length) stream.emit("batch", { stage: "native", layerId, units: units.slice(0, 100), total: units.length, provisional: true });
+    if (selector.kind === "cells" && !preview && units.length) stream.emit("batch", { stage: "native", layerId, units: units.slice(0, 100), total: units.length, provisional: true });
+  }).then(async result => {
+    if (!selector.region) return result;
+    const priorKeys = new Set(internalBatch?.seenKeys ?? []);
+    result.units = result.units.filter(unit => !priorKeys.has(reversePlanKeyHash(reversePlanSpatialUnitKey(unit))));
+    const groups = groupRegionCells(selector.region.cells);
+    const index = result.units.some(unit => nativeBindingIndexRoute(unit) === "survey") ? await surveyNativeIndex() : undefined;
+    let remainingRows = Math.min(50_000, Math.floor(2_000_000 / Math.max(1, selector.region.cells.length)));
+    for (const layerId of new Set(result.units.map(unit => unit.layerId))) {
+      const layerUnits = result.units.filter(unit => unit.layerId === layerId);
+      const binding = requestNativeGroup()?.bindings.find(binding => binding.layerId === layerId);
+      const hydrated = new Map<string, DownloadPlanSpatialUnit>();
+      if (index && binding && nativeBindingIndexRoute(binding) === "survey") {
+        for (let offset = 0; offset < layerUnits.length && remainingRows > 0; offset += 64) {
+          const members = index.hydrateMembers(binding, layerUnits.slice(offset, offset + 64).map(unit => unit.unitId), groups, remainingRows);
+          remainingRows -= members.rowsRead;
+          result.truncated ||= members.truncated;
+          for (const unit of members.units) hydrated.set(unit.unitId, unit);
+        }
+      }
+      result.units = result.units.map(unit => {
+        if (unit.layerId !== layerId) return unit;
+        const full = hydrated.get(unit.unitId);
+        if (full) {
+          full.accessUris = mergeSourceAccessUris(unit.accessUris, full.accessUris);
+          full.sourceMetadata = mergeSourceMetadata(unit.sourceMetadata, full.sourceMetadata);
+          full.matchingRegions = mergeRegionGroups(full.matchingRegions ?? [], [{ order: unit.order ?? order, cells: unit.matchingCells ?? [] }]);
+          if (full.matchingRegions.length > 1) { delete full.order; delete full.nside; delete full.matchingCells; }
+          return withSurveyProviderStatuses(full);
+        }
+        const memberIncomplete = Boolean(index && binding && nativeBindingIndexRoute(binding) === "survey");
+        result.truncated ||= memberIncomplete;
+        return { ...unit, matchingRegions: [{ order: unit.order ?? order, cells: unit.matchingCells ?? [] }],
+          memberCompleteness: memberIncomplete ? "incomplete" : "unit-candidate",
+          matchingEvidenceScope: "batch",
+          note: `${unit.note ?? ""} ${memberIncomplete ? "Member hydration work budget reached; additional matching member URIs may remain." : "Unit candidate: member footprints were not individually verified; matching evidence is batch-scoped."}` };
+      });
+    }
+    if (!preview && result.units.length) stream.emit("batch", { stage: "native", units: result.units.slice(0, 100), total: result.units.length, provisional: true });
+    return result;
   });
   const warehouseResults = new Map<string, ReverseLookupResult>();
   const warehouseUnavailableLayers = new Set<string>();
@@ -4575,12 +4642,18 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     spatialUnitsByIdentity.set(identity, previous ? {
       ...previous,
       ...unit,
-      matchingCells: [...new Set([...previous.matchingCells, ...unit.matchingCells])].sort((left, right) => left - right),
+      ...(unit.matchingRegions ? {} : { matchingCells: [...new Set([...(previous.matchingCells ?? []), ...(unit.matchingCells ?? [])])].sort((left, right) => left - right) }),
       ...(previous.accessUris?.length || unit.accessUris?.length ? {
         accessUris: mergeSourceAccessUris(previous.accessUris, unit.accessUris),
       } : {}),
       ...(previous.sourceMetadata || unit.sourceMetadata ? { sourceMetadata: mergeSourceMetadata(previous.sourceMetadata, unit.sourceMetadata) } : {}),
     } : unit);
+  }
+  if (selector.region) for (const unit of spatialUnitsByIdentity.values()) {
+    unit.matchingRegions ??= [{ order: unit.order ?? order, cells: unit.matchingCells ?? [] }];
+    unit.matchingEvidenceScope ??= "batch";
+    unit.memberCompleteness ??= "unit-candidate";
+    if (unit.matchingRegions.length > 1) { delete unit.order; delete unit.nside; delete unit.matchingCells; }
   }
   const nativeSpatialUnits = interleaveSpatialUnitsBySurvey([...spatialUnitsByIdentity.values()].sort((left, right) => left.surveyId.localeCompare(right.surveyId)
     || left.releaseId.localeCompare(right.releaseId)
@@ -4639,8 +4712,8 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
       product: product.content.name,
       modality: product.content.modality,
       sourceId: layerId,
-      order: body.order,
-      nside: 2 ** (body.order as number),
+      order,
+      nside: 2 ** order,
       cells: matchedCells,
       geometryPrecision: precision,
       geometryOperation: "warehouse-coverage-edge-intersection",
@@ -4668,7 +4741,7 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     if (!descriptor) return [];
     const { layer } = descriptor;
     const units = sourceUnitResult.units.filter((unit) => unit.layerId === layerId);
-    const matchedCells = [...new Set(units.flatMap((unit) => unit.matchingCells))].sort((left, right) => left - right);
+    const matchedCells = [...new Set(units.flatMap((unit) => unit.matchingCells ?? []))].sort((left, right) => left - right);
     return [{
       surveyId: layer.surveyId,
       releaseId: layer.releaseId,
@@ -4830,6 +4903,18 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
     batchQueryComplete &&= !stoppedAtLimit;
     batchResultTruncated ||= stoppedAtLimit;
   }
+  if (selector.region) {
+    downloadPlan.schemaVersion = 2;
+    for (const unit of downloadPlan.spatialUnits ?? []) for (const file of unit.scannedFiles ?? []) file.matchingEvidenceScope = "batch";
+    for (const entry of downloadPlan.entrypoints) {
+      if (entry.order !== undefined && entry.cells) entry.matchingRegions = [{ order: entry.order, cells: entry.cells }];
+      entry.matchingEvidenceScope = "batch";
+    }
+    for (const evidence of downloadPlan.coverageEvidence ?? []) evidence.matchingEvidenceScope = "batch";
+    for (const file of downloadPlan.files) file.matchingEvidenceScope = "batch";
+    snapshotSources = snapshotSources.map(source => { const row = source as Record<string, unknown>; return { ...row,
+      matchingRegions: typeof row.order === "number" && Array.isArray(row.cells) ? [{ order: row.order, cells: row.cells }] : [], matchingEvidenceScope: "batch" }; });
+  }
   const snapshot: ReverseSnapshot = {
     schemaVersion: 2, identity: preview ? "preview" : identity, fingerprint, selectorFingerprint,
     expiresAt: snapshotExpiresAt ?? new Date(Date.now() + 3600_000).toISOString(),
@@ -4843,9 +4928,9 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
       ...(unitCounts ? { unitCounts } : {}),
       ...(stoppedAtLimit ? { stoppedAtLimit: true } : {}),
     },
-    response: { available: Boolean(downloadPlan.spatialUnits?.length || downloadPlan.files.length || downloadPlan.entrypoints.length),
+    response: { ...(selector.region ? { schemaVersion: 2 } : {}), available: Boolean(downloadPlan.spatialUnits?.length || downloadPlan.files.length || downloadPlan.entrypoints.length),
       precision: downloadPlan.truncated ? "truncated" : nativeSpatialUnits.some((unit) => unit.precision !== "exact")
-        || [...warehouseResults.values()].some((lookup) => lookup.precision !== "exact") || (!nativeSpatialUnits.length && !warehouseEdges.length) ? "estimated" : "exact", requested: { layerIds: body.layerIds, order, cells },
+        || [...warehouseResults.values()].some((lookup) => lookup.precision !== "exact") || (!nativeSpatialUnits.length && !warehouseEdges.length) ? "estimated" : "exact", requested: selector.region ? selector.requested : { layerIds: body.layerIds, order, cells },
       nativeUnitIndexRevision: requestNativeVersion(), sources: snapshotSources, notes: [...new Set([...sourceUnitResult.notes, ...warehouseResultLimitNotes, ...regionResultLimitNotes, ...[...warehouseResults.values()].flatMap((lookup) => lookup.notes),
         ...[...warehouseUnavailableLayers].map((layerId) => `${layerId}: Warehouse evidence is temporarily unavailable.`)])], downloadPlan },
     previewPlan: capReversePreview(downloadPlan).plan,

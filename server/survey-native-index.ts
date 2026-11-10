@@ -2395,27 +2395,39 @@ export class SurveyNativeIndex {
     if (selector?.project) { terms.push("UPPER(project)=?"); args.push(selector.project.toUpperCase()); }
     return { sql: terms.join(" AND "), args };
   }
-  lookup(binding: NativeBinding, order: number, cells: readonly number[], limit = MAX_UNITS): { units: DownloadPlanSpatialUnit[]; truncated: boolean; queryExhausted: boolean; notes: string[]; inventoryComplete: boolean } {
+  lookup(binding: NativeBinding, order: number, cells: readonly number[], limit = MAX_UNITS, hydration?: { unitIds: readonly string[]; regions: ReadonlyArray<{ order: number; cells: readonly number[] }>; maxRows: number }): { units: DownloadPlanSpatialUnit[]; truncated: boolean; queryExhausted: boolean; notes: string[]; inventoryComplete: boolean; rowsRead: number } {
     if (!Number.isSafeInteger(order) || order < 4 || order > 12 || cells.some(cell => !Number.isSafeInteger(cell) || cell < 0 || cell >= 12 * 4 ** order)) throw new Error("Survey lookup requires ICRS/NESTED cells at order 4 through 12");
     const { sql, args } = this.#selection(binding);
     const sourceSummaries = binding.sourceIds.map(sourceId => this.#sources.get(sourceId)!);
     const summary = sourceSummaries[0]!;
-    const rows = this.#db.prepare(`SELECT source_id AS sourceId,unit_id AS unitId,s_region AS sRegion,first_ipix AS firstIpix,last_ipix AS lastIpix,payload FROM survey_units WHERE ${sql}${summary.adapter === "gaia-healpix-range" ? "" : " AND row_id IN (SELECT row_id FROM survey_cells WHERE coarse_cell IN (SELECT cell FROM request_cells))"} ORDER BY unit_id,row_id`);
+    const memberFilter = hydration ? ` AND unit_id IN (${hydration.unitIds.map(() => "?").join(",")})` : summary.adapter === "gaia-healpix-range" ? "" : " AND row_id IN (SELECT row_id FROM survey_cells WHERE coarse_cell IN (SELECT cell FROM request_cells))";
+    // source_id/unit_id selects installed indexed member rows; never rescan the
+    // source inventory once per mixed-order execution batch.
+    const rows = this.#db.prepare(`SELECT source_id AS sourceId,unit_id AS unitId,s_region AS sRegion,first_ipix AS firstIpix,last_ipix AS lastIpix,payload FROM survey_units WHERE ${sql}${memberFilter} ORDER BY unit_id,row_id`);
     this.#db.exec("DELETE FROM request_cells;");
     const insertCell = this.#db.prepare("INSERT OR IGNORE INTO request_cells VALUES (?)");
     for (const cell of new Set(cells.map(cell => Math.floor(cell / 4 ** (order - COARSE_ORDER))))) insertCell.run(cell);
     const matched = new Map<string, DownloadPlanSpatialUnit>();
     const clippedLimit = Math.max(1, Math.min(MAX_UNITS, Math.trunc(limit)));
     let limitHit = false;
+    let rowsRead = 0;
+    let memberWork = 0;
     try {
-      for (const row of rows.iterate(...args) as Iterable<IndexedRow>) {
+      for (const row of rows.iterate(...args, ...(hydration?.unitIds ?? [])) as Iterable<IndexedRow>) {
+        if (hydration && (rowsRead >= hydration.maxRows || memberWork + hydration.regions.reduce((sum, group) => sum + group.cells.length, 0) > 2_000_000)) { limitHit = true; break; }
+        rowsRead++;
         const rowSummary = this.#sources.get(row.sourceId)!;
-        const matchingCells = rowSummary.adapter === "gaia-healpix-range" ? cells.filter(cell => {
-          const first = order <= 8 ? cell * 4 ** (8 - order) : Math.floor(cell / 4 ** (order - 8));
-          const last = order <= 8 ? (cell + 1) * 4 ** (8 - order) - 1 : first;
-          return first <= row.lastIpix! && last >= row.firstIpix!;
-        }) : cellsForStcs(order, cells, row.sRegion);
-        if (!matchingCells.length) continue;
+        const matchingRegions = (hydration?.regions ?? [{ order, cells }]).flatMap(group => {
+          memberWork += group.cells.length;
+          const matches = rowSummary.adapter === "gaia-healpix-range" ? group.cells.filter(cell => {
+            const first = group.order <= 8 ? cell * 4 ** (8 - group.order) : Math.floor(cell / 4 ** (group.order - 8));
+            const last = group.order <= 8 ? (cell + 1) * 4 ** (8 - group.order) - 1 : first;
+            return first <= row.lastIpix! && last >= row.firstIpix!;
+          }) : cellsForStcs(group.order, group.cells, row.sRegion);
+          return matches.length ? [{ order: group.order, cells: matches }] : [];
+        });
+        if (!matchingRegions.length) continue;
+        const matchingCells = matchingRegions.filter(group => group.order === order).flatMap(group => group.cells);
         let unit = matched.get(row.unitId);
         if (!unit && matched.size >= clippedLimit) { limitHit = true; break; }
         const payload = JSON.parse(row.payload) as Document;
@@ -2437,7 +2449,12 @@ export class SurveyNativeIndex {
           }
           matched.set(row.unitId, unit);
         }
-        unit.matchingCells = [...new Set([...unit.matchingCells, ...matchingCells])].sort((a, b) => a - b);
+        unit.matchingCells = [...new Set([...(unit.matchingCells ?? []), ...matchingCells])].sort((a, b) => a - b);
+        if (hydration) {
+          const groups = new Map((unit.matchingRegions ?? []).map(group => [group.order, group.cells]));
+          for (const group of matchingRegions) groups.set(group.order, [...new Set([...(groups.get(group.order) ?? []), ...group.cells])].sort((a, b) => a - b));
+          unit.matchingRegions = [...groups].sort(([a], [b]) => a - b).map(([order, cells]) => ({ order, cells }));
+        }
         if (rowSummary.adapter !== "gaia-healpix-range") {
           const snapshots = Array.isArray(unit.sourceMetadata!.sourceSnapshots) ? unit.sourceMetadata!.sourceSnapshots as Document[] : [];
           unit.sourceMetadata!.sourceSnapshots = snapshots;
@@ -2566,8 +2583,21 @@ export class SurveyNativeIndex {
           notes.push(detail); for (const unit of matched.values()) unit.note += ` ${detail}`;
         }
     const queryComplete = sourceSummaries.every(item => item.queryComplete);
+    if (hydration) for (const unit of matched.values()) {
+      unit.memberCompleteness = limitHit ? "incomplete" : "complete-for-region";
+      unit.matchingEvidenceScope = "full-region";
+      if (unit.matchingRegions?.length === 1) {
+        unit.order = unit.matchingRegions[0]!.order; unit.nside = 2 ** unit.order; unit.matchingCells = unit.matchingRegions[0]!.cells;
+      } else { delete unit.order; delete unit.nside; delete unit.matchingCells; }
+      if (limitHit) unit.note = `${unit.note ?? ""} Member hydration reached a work/row limit; additional matching member URIs may remain.`;
+    }
     return { units: [...matched.values()], queryExhausted: !limitHit && queryComplete && excludedRows === 0, truncated: limitHit || excludedRows > 0 || !queryComplete,
-      notes, inventoryComplete: sourceSummaries.every(item => item.inventoryComplete) };
+      notes, inventoryComplete: sourceSummaries.every(item => item.inventoryComplete), rowsRead };
+  }
+  hydrateMembers(binding: NativeBinding, unitIds: readonly string[], regions: ReadonlyArray<{ order: number; cells: readonly number[] }>, maxRows = 50_000) {
+    if (!unitIds.length || unitIds.length > 128 || !regions.length) throw new Error("Member hydration requires 1-128 unit identities and the full query region");
+    for (const group of regions) if (!Number.isSafeInteger(group.order) || group.order < 4 || group.order > 12 || group.cells.some(cell => !Number.isSafeInteger(cell) || cell < 0 || cell >= 12 * 4 ** group.order)) throw new Error("Invalid member hydration region");
+    return this.lookup(binding, regions[0]!.order, regions[0]!.cells, unitIds.length, { unitIds, regions, maxRows });
   }
   close(): void { this.#db.close(); }
 }

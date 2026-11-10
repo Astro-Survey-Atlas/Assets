@@ -1,3 +1,24 @@
+/* Explicit region selection, independent of overlap and display order. */
+.coverage-region-panel { position: fixed; z-index: 48; right: 18px; top: 88px; width: min(470px, calc(100vw - 36px)); max-height: calc(100dvh - 110px); overflow: auto; padding: 16px; color: var(--ink); background: color-mix(in srgb, var(--paper-bright) 94%, transparent); border: 1px solid var(--line-strong); border-left: 3px solid var(--teal); box-shadow: 0 15px 50px #0005; backdrop-filter: blur(16px); pointer-events: auto; font: 500 12px/1.5 var(--font-mono), monospace; }
+.coverage-region-panel[hidden] { display: none; }
+.coverage-region-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.coverage-region-panel p { margin: 10px 0; }
+.coverage-region-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.coverage-region-inputs label { display: grid; gap: 4px; min-width: 0; }
+.coverage-region-panel input, .coverage-region-panel select { min-width: 0; width: 100%; padding: 7px; border: 1px solid var(--line-strong); border-radius: 0; color: var(--ink); background: var(--paper); font: inherit; }
+.coverage-region-panel input:focus, .coverage-region-panel select:focus { outline: 2px solid var(--teal); outline-offset: 1px; }
+.coverage-region-resolution { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
+.coverage-region-resolution select { width: auto; }
+.coverage-region-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.coverage-region-actions .command-button { min-height: 32px; padding: 6px 10px; font-size: 11px; }
+.coverage-region-selection { margin: 10px 0; }
+#coverage-region-layers, .coverage-region-frozen-products { white-space: pre-line; overflow-wrap: anywhere; max-height: 140px; overflow: auto; font-size: 10px; }
+.coverage-region-caveat { white-space: pre-line; border-left: 2px solid var(--ochre); padding-left: 9px; color: var(--muted); }
+#coverage-region-status { display: block; margin: 8px 0; overflow-wrap: anywhere; }
+#coverage-region-results { display: grid; gap: 10px; }
+.coverage-region-panel.is-drawing { border-left-color: var(--magenta, #f01951); }
+.coverage-region-panel .overlap-evidence-file strong { white-space: normal; }
+
 @font-face {
   font-family: "Atlas Sans";
   src: url("/fonts/NotoSans-Regular.ttf") format("truetype");

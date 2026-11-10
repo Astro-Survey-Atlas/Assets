@@ -575,6 +575,30 @@ test("GALEX selectors retain GR6 AIS identities and explicit band records withou
   assert.deepEqual(index.lookup(binding("galex", "galex-gr6-ais", "galex-color", "GALEX AIS color imaging"), 8, [0]).units, []);
 });
 
+test("mixed-region member hydration keeps all matching URI rows before cross-batch identity dedup", async t => {
+  const src = source("galex");
+  const first = mastRow("9039", "GR6", "FUV");
+  const second = { ...mastRow("9039", "GR6", "NUV"), sRegion: "CIRCLE ICRS 200 20 0.1" };
+  const unrelated = { ...mastRow("9039", "GR6", "NUV"), sRegion: "CIRCLE ICRS 280 -30 0.1", dataURL: "https://galex.stsci.edu/data/GR6/outside-nd-exp.fits.gz" };
+  const f = await stage(t, src, { rows: [first, second, unrelated, mastRow("9041", "GR6", "FUV")] });
+  const index = await SurveyNativeIndex.build(f.root, "index.sqlite", [src], [f.snapshot], () => {}); t.after(() => index.close());
+  const layer = binding("galex", "galex-gr6-ais", "galex-color", "GALEX AIS color imaging");
+  const coarse = cellsForStcs(4, Array.from({length:3072}, (_,i)=>i), first.sRegion).slice(0,1);
+  const fine = cellsForStcs(8, Array.from({length:12*4**8}, (_,i)=>i), second.sRegion).slice(0,1);
+  assert.equal(index.lookup(layer,4,coarse).units.find(unit=>unit.unitId==="9039")!.accessUris!.length,1);
+  const hydrated = index.hydrateMembers(layer,["9039"],[{order:4,cells:coarse},{order:8,cells:fine}]);
+  assert.equal(hydrated.units.length,1);const unit=hydrated.units[0]!;
+  assert.equal(unit.accessUris!.length,2,"member URI outside the discovery batch is retained");
+  assert.equal((unit.sourceMetadata!.records as unknown[]).length,2);
+  assert.deepEqual(unit.matchingRegions,[{order:4,cells:coarse},{order:8,cells:fine}]);
+  assert.equal(unit.order,undefined);assert.equal(unit.nside,undefined);assert.equal(unit.matchingCells,undefined);
+  assert.equal(unit.memberCompleteness,"complete-for-region");assert.equal(unit.matchingEvidenceScope,"full-region");
+  assert.equal(hydrated.rowsRead,3,"only the selected identity's indexed rows are hydrated");
+  const limited=index.hydrateMembers(layer,["9039"],[{order:4,cells:coarse},{order:8,cells:fine}],1);
+  assert.equal(limited.truncated,true);assert.equal(limited.units[0]!.memberCompleteness,"incomplete");
+  assert.match(limited.units[0]!.note!,/additional matching member URIs may remain/);
+});
+
 test("JWST file URIs become direct MAST links while Products API remains an entrypoint", async t => {
   const src = source("jwst");
   const row = { ...mastRow("1", "GR6", "F200W"), obs_collection: "JWST", instrument: "NIRCAM/IMAGE", project: "JWST", provenance_name: "CALJWST", proposalId: "2731", targetName: "NGC-3324", calib_level: 3, t_min: 59733.4,

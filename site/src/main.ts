@@ -12,6 +12,8 @@ import {
   type SurveyLayerState,
 } from "@astro-survey-atlas/sky-globe";
 import { highestCommonCoverageOrder, overlapViewTileOrder } from "./atlas/coverage-orders.js";
+import { RegionQueryPanel } from "./atlas/region-query.js";
+import type { SkyRectangle } from "../../src/sky-region.js";
 import { coverageCatalogRevisionKey } from "./coverage-catalog-revision.js";
 import { coverageEscapeIntent } from "./atlas/coverage-interaction.js";
 import { coverageLayerTooltipPosition } from "./atlas/layer-panel-layout.js";
@@ -291,6 +293,10 @@ const expandedCoverageSurveyIds = new Set<string>();
 let coverageSearchExpandedBefore: Set<string> | null = null;
 let coverageLayerSearchQuery = "";
 let coverageLayerTooltipRow: HTMLElement | null = null;
+let regionPanel: RegionQueryPanel | null = null;
+let activeRegionQuery: OverlapComponentView | null = null;
+let regionExportController: AbortController | null = null;
+let regionEvidenceNode: HTMLElement | null = null;
 
 function setOverlapMode(active: boolean): void {
   if (overlapMode !== active) { closeSkyDepth(); skyDepthInspection = null; }
@@ -709,9 +715,13 @@ function focusCoverageSelection(): void {
   if (!skyDepthControls?.focus()) coverageDots?.focusSelection();
 }
 
-function exportCoverageCells(surveyIds: string[], pixels: number[], order: number): void {
-  if (!surveyIds.length || !pixels.length) return;
-  renderOverlapPanel(surveyIds, pixels, order, "SELECTED CELL");
+function exportCoverageCells(_surveyIds: string[], pixels: number[], order: number): void {
+  if (!pixels.length) return;
+  const layers = visibleCoverageLayers();
+  if (!layers.length) { toast(t("region.noLayers")); return; }
+  regionPanel?.open();
+  renderRegionQuery({ id: "SELECTED-CELLS", selectedRegion: true, order, cells: [...pixels], bounds: overlapBounds(pixels, order),
+    evidenceLookup: { endpoint: "/api/v1/coverage/reverse-lookup", layerIds: layers.map(layer => layer.layerId), order, precision: "estimated", deferred: false } });
 }
 
 function updateCoverageInspector(inspection: SurveyLayerInspection | null): void {
@@ -1246,6 +1256,7 @@ function setCoverageProductSelection(layerId: string, enabled: boolean): void {
 }
 
 function commitCoverageProductSelection(): void {
+  regionPanel?.refreshLayers();
   cancelCoverageDisplayRequest();
   const selectedSurveys = new Set([...selectedCoverageProductIds].flatMap((id) => {
     const selected = coverageCatalog?.layers.find((candidate) => candidate.layerId === id);
@@ -1667,6 +1678,8 @@ function overlapBounds(pixels: number[], order: number): { areaDeg2: number; raM
 
 interface OverlapEvidenceLookup { endpoint: string; layerIds: string[]; order: number; precision: "exact" | "estimated" | "entrypoint-only" | "truncated"; deferred: boolean }
 interface OverlapEvidenceResult {
+  schemaVersion?: number;
+  requested?: import("./overlap-download.js").DownloadComponent["requested"];
   available: boolean;
   nativeUnitIndexRevision?: string;
   precision: string;
@@ -1706,7 +1719,7 @@ interface OverlapEvidenceResult {
   notes?: string[];
 }
 interface OverlapSurveyView { surveyId: string; releaseId: string; product: string; modality?: string; sourceUnitIndex?: { status: string; unitKind?: string; notes: string }; sourceUnits?: { status: string; unitKind: string; units: Array<{ unitId: string; exposureCount: number; lastNight: number; downloadUrl: string }>; totalUnits: number; truncated: boolean; notes: string } | null; downloadUrl?: string }
-interface OverlapComponentView { id: string; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; evidenceLookup?: OverlapEvidenceLookup; surveys?: OverlapSurveyView[] }
+interface OverlapComponentView { id: string; regionSelector?: { rectangle: SkyRectangle; boundaryOrder: number }; selectedRegion?: boolean; order: number; cells: number[]; bounds: { areaDeg2: number; raMin: number; raMax: number; raWraps?: boolean; decMin: number; decMax: number }; evidenceLookup?: OverlapEvidenceLookup; surveys?: OverlapSurveyView[] }
 type OverlapSourceEvidence = Pick<DownloadPlanCoverageEvidence, "evidenceKind" | "sourceIdentity" | "instrument" | "filters" | "sourceSnapshotSha256" | "precision" | "completeness" | "scienceFileScan" | "summary">;
 interface OverlapDetailsResponse {
   schemaVersion: 1;
@@ -2096,6 +2109,126 @@ function overlapComponentTargetKey(component: OverlapComponentView, surveyIds: s
   return JSON.stringify([surveyIds.slice().sort(), component.id, component.order, component.cells]);
 }
 
+function cancelRegionQuery(): void {
+  regionExportController?.abort();
+  regionExportController = null;
+  if (regionEvidenceNode) {
+    const loading = overlapEvidenceLoads.get(regionEvidenceNode);
+    if (loading) {
+      loading.abort();
+      if (overlapEvidenceController === loading) { overlapEvidenceController = null; overlapEvidenceSequence++; }
+    }
+  }
+}
+
+function queryRectangle(rectangle: SkyRectangle, boundaryOrder: number): void {
+  const layers = visibleCoverageLayers();
+  if (!layers.length) { regionPanel?.status(t("region.noLayers")); return; }
+  renderRegionQuery({ id: "RECTANGLE", selectedRegion: true, regionSelector: { rectangle, boundaryOrder }, order: 4, cells: [],
+    bounds: { areaDeg2: 0, raMin: rectangle.raStart, raMax: rectangle.raEnd, raWraps: rectangle.raEnd < rectangle.raStart, decMin: rectangle.decMin, decMax: rectangle.decMax },
+    evidenceLookup: { endpoint: "/api/v1/coverage/reverse-lookup", layerIds: layers.map(layer => layer.layerId), order: 4, precision: "estimated", deferred: false } });
+}
+
+function renderRegionQueryMetadata(component: OverlapComponentView, result: OverlapEvidenceResult): void {
+  const host = byId("coverage-region-query-meta");
+  for (const button of document.querySelectorAll<HTMLButtonElement>("#coverage-region-results button[data-export-format]")) {
+    button.textContent = `${t(hasDownloadAccess() ? "region.fullReady" : "region.preview")} ${button.dataset.exportFormat?.toUpperCase()}`;
+  }
+  const region = result.requested?.region;
+  const cover = region?.cover;
+  const zh = locale() === "zh";
+  const layers = (component.evidenceLookup?.layerIds ?? []).map(id => publicLayerEntry(id));
+  const scope = layers.map(layer => `${layer.surveyId} / ${layer.releaseId} / ${layer.product}`).join("\n");
+  const scopeHost = byId("coverage-region-frozen-scope");
+  scopeHost.querySelector("summary")!.textContent = `${zh ? "已冻结查询产品" : "Frozen query products"} · ${layers.length}`;
+  scopeHost.querySelector("div")!.textContent = scope;
+  if (!region) {
+    host.textContent = `O${component.order} · ${component.cells.length} ${zh ? "所选像元" : "selected cells"}`;
+    return;
+  }
+  const orders = [...new Set(region.cells.map(cell => cell.order))].sort((a, b) => a - b);
+  const rectangle = result.requested?.rectangle ?? region.rectangle;
+  const pieces = [rectangle ? `RA ${rectangle.raStart}° → ${rectangle.raEnd}° · Dec ${rectangle.decMin}° → ${rectangle.decMax}°` : "",
+    `${region.cells.length} ${zh ? "多阶单元" : "multi-order cells"} · ${orders.map(order => `O${order}`).join(" / ")}`].filter(Boolean);
+  if (cover) {
+    pieces.push(`${zh ? "覆盖面积" : "Cover area"} ${Number(cover.coverAreaDeg2).toFixed(4)} deg² · ${zh ? "面积超额" : "Excess area"} ${Number(cover.excessAreaDeg2).toFixed(4)} deg²`);
+    pieces.push(`${zh ? "边界未决单元" : "Unresolved boundary cells"} ${cover.unresolvedBoundaryLeaves} · ${zh ? "最大外包角半径" : "Max enclosing radius"} ${Number(cover.maxUnresolvedAngularRadiusDeg).toFixed(4)}°`);
+    if (cover.budgetLimited) pieces.push(zh ? "达到单元预算：部分边界保留较粗单元；没有裁掉输入区域。" : "Cell budget reached: some boundary cells remain coarse; the input region was not cut away.");
+  }
+  pieces.push(result.preview ? `${zh ? "匿名预览" : "Anonymous preview"} · ${result.preview.limit}`
+    : `${zh ? "已加载原生单元" : "Native units loaded"} ${result.downloadPlan?.spatialUnits?.length ?? 0}`);
+  host.textContent = pieces.join("\n");
+  regionPanel?.status(result.page?.hasMore || result.preview?.hasMore ? (zh ? "仍有更多结果；预览不等于完整清单。" : "More results remain; the preview is not a full manifest.")
+    : (zh ? "本次已返回的结果如上；查询耗尽不代表来源库存完整。" : "Returned results are shown; query exhaustion is not complete source inventory."));
+}
+
+function renderRegionQuery(component: OverlapComponentView): void {
+  cancelRegionQuery();
+  activeRegionQuery = component;
+  const host = byId("coverage-region-results");
+  const meta = Object.assign(document.createElement("p"), { id: "coverage-region-query-meta", className: "coverage-region-caveat", textContent: t("region.querying") });
+  const evidence = Object.assign(document.createElement("div"), { className: "overlap-evidence-plan" });
+  regionEvidenceNode = evidence;
+  const actions = Object.assign(document.createElement("div"), { className: "coverage-region-actions" });
+  const unlock = Object.assign(document.createElement("button"), { type: "button", className: "command-button", textContent: hasDownloadAccess() ? t("region.fullReady") : t("region.full") });
+  unlock.addEventListener("click", async () => {
+    unlock.disabled = true;
+    try {
+      if (await ensureDownloadAccess() && activeRegionQuery === component) {
+        unlock.textContent = t("region.fullReady");
+        // A cached preview must not stand in for the authorized page.
+        await loadOverlapEvidence(component, evidence);
+      }
+    } finally { unlock.disabled = false; }
+  });
+  actions.append(unlock);
+  for (const format of ["json", "csv"] as const) {
+    const button = Object.assign(document.createElement("button"), { type: "button", className: "command-button", textContent: `${t(hasDownloadAccess() ? "region.fullReady" : "region.preview")} ${format.toUpperCase()}` });
+    button.dataset.exportFormat = format;
+    button.addEventListener("click", () => void exportRegionManifest(component, format, button));
+    actions.append(button);
+  }
+  const cancel = Object.assign(document.createElement("button"), { type: "button", className: "command-button", textContent: t("region.cancelExport") });
+  cancel.addEventListener("click", () => { cancelRegionQuery(); regionPanel?.status(t("region.cancelled")); });
+  actions.append(cancel);
+  const scope = Object.assign(document.createElement("details"), { id: "coverage-region-frozen-scope", className: "coverage-region-selection" });
+  scope.append(document.createElement("summary"), Object.assign(document.createElement("div"), { className: "coverage-region-frozen-products" }));
+  host.replaceChildren(meta, scope, actions, evidence);
+  regionPanel?.status(t("region.querying"));
+  void loadOverlapEvidence(component, evidence);
+}
+
+async function exportRegionManifest(component: OverlapComponentView, format: "json" | "csv", button: HTMLButtonElement): Promise<void> {
+  if (regionExportController || activeRegionQuery !== component) return;
+  const controller = new AbortController();
+  regionExportController = controller;
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = t("coverage.downloadLoading");
+  try {
+    const result = await evidenceForExport(component, controller.signal);
+    if (!result || controller.signal.aborted || activeRegionQuery !== component) return;
+    const plan = downloadPlanFor(result);
+    const selection = { ...component, requested: result.requested, sourceStatuses: result.sources };
+    const text = format === "json" ? JSON.stringify({ schemaVersion: result.schemaVersion ?? 1, coordinateFrame: "ICRS", ordering: "NESTED", generatedAt: new Date().toISOString(),
+      requested: result.requested ?? { layerIds: component.evidenceLookup?.layerIds, order: component.order, cells: component.cells },
+      sources: result.sources, querySnapshot: result.querySnapshot, nativeUnitIndexRevision: result.nativeUnitIndexRevision, preview: result.preview, page: result.page,
+      notes: result.notes, downloadPlan: plan }, null, 2)
+      : `﻿${overlapCsvDocument(overlapCsvRows(selection, plan, publicLayerEntry, result.precision, {
+        snapshotId: result.querySnapshot?.id, nativeUnitIndexRevision: result.nativeUnitIndexRevision,
+        omitted: result.page?.omitted ?? result.preview?.omitted ?? 0, hasMore: result.page?.hasMore ?? result.preview?.hasMore ?? false,
+      }))}`;
+    const url = URL.createObjectURL(new Blob([text], { type: format === "json" ? "application/json;charset=utf-8" : "text/csv;charset=utf-8" }));
+    const link = document.createElement("a"); link.href = url; link.download = `atlas-region-${result.preview ? "preview" : "manifest"}.${format}`; link.click(); URL.revokeObjectURL(url);
+    regionPanel?.status(t("coverage.downloadReady"));
+  } catch (error) {
+    if (!controller.signal.aborted) regionPanel?.status(`${t("coverage.downloadUnavailable")}: ${error instanceof Error ? error.message : ""}`);
+  } finally {
+    button.disabled = false; button.textContent = label;
+    if (regionExportController === controller) regionExportController = null;
+  }
+}
+
 const overlapEvidenceLoads = new WeakMap<HTMLElement, AbortController>();
 
 function resumeOverlapPanelEvidence(component: OverlapComponentView, content: HTMLElement): void {
@@ -2431,7 +2564,7 @@ type OverlapEvidenceAccess = "preview" | "page" | "download";
 
 function overlapEvidenceKey(component: OverlapComponentView): string {
   const layerIds = [...(component.evidenceLookup?.layerIds ?? [])].sort();
-  return JSON.stringify({ order: component.order, cells: component.cells, layerIds,
+  return JSON.stringify({ order: component.order, cells: component.cells, region: component.regionSelector, layerIds,
     revisions: layerIds.map((id) => coverageCatalog?.layers.find((layer) => layer.layerId === id)?.revision) });
 }
 
@@ -2446,8 +2579,7 @@ async function fetchOverlapEvidence(component: OverlapComponentView, signal?: Ab
   const preview = access === "preview";
   const body: Record<string, unknown> = {
     layerIds: lookup.layerIds,
-    order: lookup.order,
-    cells: component.cells,
+    ...(component.regionSelector ?? { order: lookup.order, cells: component.cells }),
     limit: preview ? 6 : 1000,
     preview,
   };
@@ -2511,8 +2643,20 @@ function mergeReverseSource(previous: Record<string, unknown> & { layerId?: stri
     ...(Array.isArray(left) ? left.filter((value): value is number => Number.isSafeInteger(value)) : []),
     ...(Array.isArray(right) ? right.filter((value): value is number => Number.isSafeInteger(value)) : []),
   ])].sort((a, b) => a - b);
-  const cells = unionNumbers(previous.cells, next.cells);
-  if (cells.length || Array.isArray(previous.cells) || Array.isArray(next.cells)) merged.cells = cells;
+  const regions = new Map<number, number[]>();
+  for (const source of [previous, next]) {
+    const groups = Array.isArray(source.matchingRegions) ? source.matchingRegions as Array<{ order: number; cells: number[] }>
+      : typeof source.order === "number" && Array.isArray(source.cells) ? [{ order: source.order, cells: source.cells as number[] }] : [];
+    for (const group of groups) regions.set(group.order, unionNumbers(regions.get(group.order), group.cells));
+  }
+  if (regions.size) {
+    merged.matchingRegions = [...regions].sort(([a], [b]) => a - b).map(([order, cells]) => ({ order, cells }));
+    if (regions.size === 1) { const [order, cells] = [...regions][0]!; merged.order = order; merged.nside = 2 ** order; merged.cells = cells; }
+    else { delete merged.order; delete merged.nside; delete merged.cells; }
+  } else if (previous.order === next.order) {
+    const cells = unionNumbers(previous.cells, next.cells);
+    if (cells.length || Array.isArray(previous.cells) || Array.isArray(next.cells)) merged.cells = cells;
+  }
   const mergeItems = (key: "sourceUnits" | "downloads", identity: (item: Record<string, unknown>) => string): Record<string, unknown>[] => {
     const items = [...(Array.isArray(previous[key]) ? previous[key] as Record<string, unknown>[] : []), ...(Array.isArray(next[key]) ? next[key] as Record<string, unknown>[] : [])];
     const unique = new Map(items.map((item) => [identity(item), item]));
@@ -2638,21 +2782,22 @@ function downloadPlanFor(result: OverlapEvidenceResult | null): DownloadPlan {
   return result?.downloadPlan ?? legacyDownloadPlan(result);
 }
 
-async function evidenceForExport(component: OverlapComponentView): Promise<OverlapEvidenceResult | null> {
-  const current = await fetchOverlapEvidence(component);
+async function evidenceForExport(component: OverlapComponentView, signal?: AbortSignal): Promise<OverlapEvidenceResult | null> {
+  const current = await fetchOverlapEvidence(component, signal);
   if (!current || !hasDownloadAccess()) return current;
   if (current.querySnapshot && current.page?.hasMore === false && !current.preview) return current;
-  let result = await fetchOverlapEvidence(component, undefined, "download", { querySnapshotId: current.querySnapshot?.id, pageSize: 100 });
+  let result = await fetchOverlapEvidence(component, signal, "download", { querySnapshotId: current.querySnapshot?.id, pageSize: 100 });
   if (!result) return null;
   const cursors = new Set<string>();
   while (result.page?.hasMore) {
     const cursor = result.page.nextCursor;
     if (!cursor || cursors.has(cursor)) throw new Error("Reverse lookup pagination did not advance");
     cursors.add(cursor);
-    const next = await fetchOverlapEvidence(component, undefined, "download", { cursor, pageSize: 100 });
+    const next = await fetchOverlapEvidence(component, signal, "download", { cursor, pageSize: 100 });
     if (!next) throw new Error("Reverse lookup page was unavailable");
     result = mergeOverlapEvidence(result, next);
   }
+  if (signal?.aborted) throw signal.reason;
   const key = overlapEvidenceKey(component);
   overlapEvidenceCache.set(key, result);
   const host = overlapEvidenceHosts.get(key);
@@ -2915,6 +3060,11 @@ function appendAccessAlternative(row: HTMLElement, entry: {
   appendSourceLocator(row, entry.uri);
 }
 
+function spatialUnitMatchLabel(unit: DownloadPlanSpatialUnit): string {
+  const regions = unit.matchingRegions ?? (unit.order !== undefined ? [{ order: unit.order, cells: unit.matchingCells ?? [] }] : []);
+  return regions.map(region => `O${region.order} · ${region.cells.length} ${locale() === "zh" ? "个像元" : "cells"}`).join(" / ") || (locale() === "zh" ? "空间依据未提供" : "Spatial evidence unavailable");
+}
+
 function appendSpatialUnitAccess(row: HTMLElement, unit: DownloadPlanSpatialUnit): void {
   const entries: NonNullable<DownloadPlanSpatialUnit["accessUris"]> = unit.accessUris?.length ? unit.accessUris
     : unit.accessUri ? [{ uri: unit.accessUri, accessType: unit.unitKind === "tile" ? "directory" as const : "file" as const }] : [];
@@ -2937,12 +3087,13 @@ function appendMissingNativeSources(node: HTMLElement, result: OverlapEvidenceRe
   for (const layerId of component.evidenceLookup.layerIds) {
     const layer = coverageCatalog.layers.find(entry => entry.layerId === layerId);
     if (!layer) continue;
-    const key = JSON.stringify([layer.surveyId, layer.releaseId]);
+    const key = component.selectedRegion ? layer.layerId : JSON.stringify([layer.surveyId, layer.releaseId]);
     groups.set(key, [...(groups.get(key) ?? []), layer]);
   }
   for (const layers of groups.values()) {
     const first = layers[0]!;
-    if (plan.spatialUnits?.some(unit => unit.surveyId === first.surveyId && unit.releaseId === first.releaseId)) continue;
+    if (component.selectedRegion ? layers.every(layer => plan.spatialUnits?.some(unit => unit.layerId === layer.layerId))
+      : plan.spatialUnits?.some(unit => unit.surveyId === first.surveyId && unit.releaseId === first.releaseId)) continue;
     const survey = surveyIndex?.surveys.find(entry => entry.id === first.surveyId);
     const release = survey?.releases.find(entry => entry.id === first.releaseId);
     const card = document.createElement("div");
@@ -2950,18 +3101,20 @@ function appendMissingNativeSources(node: HTMLElement, result: OverlapEvidenceRe
     card.dataset.surveyId = first.surveyId;
     card.dataset.releaseId = first.releaseId;
     const title = document.createElement("strong");
-    title.textContent = `${survey?.name ?? first.surveyId} · ${release?.label ?? first.releaseId} · 未返回原生分块`;
+    title.textContent = `${survey?.name ?? first.surveyId} · ${release?.label ?? first.releaseId}${component.selectedRegion ? ` · ${first.product}` : ""} · ${locale() === "zh" ? "未返回原生分块" : "No native units returned"}`;
     card.append(title);
     const modalities = [...new Set(layers.flatMap(layer => layer.modality ? [layer.modality] : []))];
     const facts = document.createElement("div");
     facts.className = "overlap-spatial-unit-facts";
     for (const modality of modalities) facts.append(modalityBadge(modality, "overlap-spatial-unit-modality"));
-    facts.append(document.createTextNode(`O${component.order} · 覆盖图命中`));
+    facts.append(document.createTextNode(component.selectedRegion ? (locale() === "zh" ? "所选区域 · 产品映射状态" : "Selected region · product mapping status") : `O${component.order} · 覆盖图命中`));
     card.append(facts);
     const note = document.createElement("small");
     const ero = first.surveyId === "euclid" && first.releaseId === "euclid-ero";
     const excluded = ero ? result.notes?.join("\n").match(/ERO snapshot excludes (\d+) targets/)?.[1] : undefined;
-    note.textContent = ero
+    note.textContent = component.selectedRegion
+      ? (locale() === "zh" ? "所选产品的冻结原生索引未返回全部产品的空间分块；请核对来源范围和映射状态。这不表示此天区没有数据，也不表示每个产品均有覆盖图命中。" : "The frozen native inventory did not return units for every selected product. Check source scope and mapping status; this does not establish absence of data or a coverage hit for every product.")
+      : ero
       ? `${excluded ? `当前 ERO 反查缺少 ${excluded} 个 target 的空间映射。` : "当前 ERO 反查依赖已核实的 target 空间映射。"}此区域未匹配到可列出的 target；ERO 尚无核实过的 Tile 清单。下方链接是公开发布入口。`
       : "覆盖图与此区域相交，当前冻结分块索引未返回可列出的原生分块。请从公开来源核对数据范围；该结果不表示此天区没有数据。";
     card.append(note);
@@ -2983,6 +3136,7 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
   }
   node.replaceChildren();
   const plan = downloadPlanFor(result);
+  if (component?.selectedRegion && activeRegionQuery === component) renderRegionQueryMetadata(component, result);
   const coverageEvidence = plan.coverageEvidence ?? [];
   if (!result.available && !plan.spatialUnits?.length && !plan.files.length && !plan.entrypoints.length && !coverageEvidence.length
     && !result.spatialPage?.hasMore && !result.supportingPage?.hasMore) {
@@ -3064,7 +3218,7 @@ function renderEvidencePlan(node: HTMLElement, result: OverlapEvidenceResult, co
       facts.append(modalityBadge(unit.modality, "overlap-spatial-unit-modality"));
       facts.append(Object.assign(document.createElement("span"), {
         className: "overlap-spatial-unit-match",
-        textContent: `O${unit.order} · ${unit.matchingCells.length} 个像元`,
+        textContent: spatialUnitMatchLabel(unit),
       }));
       facts.append(precisionIndicator(unit.precision));
       row.append(facts);
@@ -3434,7 +3588,8 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
     await new Promise<void>((resolve) => setTimeout(resolve, OVERLAP_EVIDENCE_DEBOUNCE_MS));
     // A newer render superseded this one before it sent anything.
     if (controller.signal.aborted || request !== overlapEvidenceSequence) return;
-    const result = await fetchOverlapEvidence(component, controller.signal, access, undefined, event => {
+    const previewSnapshot = access === "page" ? overlapEvidenceCache.get(overlapEvidenceKey(component))?.querySnapshot?.id : undefined;
+    const result = await fetchOverlapEvidence(component, controller.signal, access, previewSnapshot ? { querySnapshotId: previewSnapshot } : undefined, event => {
       if (request !== overlapEvidenceSequence || controller.signal.aborted) return;
       const value = event.value;
       if (event.event === "progress") {
@@ -3448,7 +3603,7 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
           row.append(Object.assign(document.createElement("small"), { className: "overlap-spatial-unit-source", textContent: `${unit.surveyId} · ${unit.releaseId} · ${unit.product}` }),
             Object.assign(document.createElement("strong"), { className: "overlap-spatial-unit-title", textContent: `${unit.unitKind.toUpperCase()} ${unit.unitId}` }));
           const facts = document.createElement("div"); facts.className = "overlap-spatial-unit-facts";
-          facts.append(modalityBadge(unit.modality, "overlap-spatial-unit-modality"), document.createTextNode(` O${unit.order} · ${unit.matchingCells.length} cells `), precisionIndicator(unit.precision)); row.append(facts);
+          facts.append(modalityBadge(unit.modality, "overlap-spatial-unit-modality"), document.createTextNode(` ${spatialUnitMatchLabel(unit)} `), precisionIndicator(unit.precision)); row.append(facts);
           appendSpatialUnitAccess(row, unit);
           batches.querySelectorAll(".hud-skeleton-row").forEach((skeleton) => skeleton.remove());
           batches.append(row);
@@ -5248,7 +5403,11 @@ async function initialize(): Promise<void> {
     : { surveys: "SURVEY INDEX", catalog: "COVERAGE CATALOG", layers: "LAYER OVERVIEWS", scene: "SKY SCENE" },
   zh ? "正在初始化天球 · INITIALISING ATLAS" : "INITIALISING ATLAS");
   try {
-    coverageDots = new AtlasCoverageGlobe(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"), updateCoverageReadout, updateCoverageInspector, updateCoverageState, openCoverageContextMenu, handleOverlapComponentLabel, showOverlapRegionTooltip);
+    coverageDots = new AtlasCoverageGlobe(byId("coverage-scene"), byId<HTMLCanvasElement>("coverage-canvas"), updateCoverageReadout, updateCoverageInspector, updateCoverageState, openCoverageContextMenu, handleOverlapComponentLabel, showOverlapRegionTooltip,
+      (rectangle, phase) => regionPanel?.rectangleChanged(rectangle, phase));
+    if (isAtlasPage) regionPanel = new RegionQueryPanel({ layers: visibleCoverageLayers,
+      draw: enabled => coverageDots?.setRectangleDrawing(enabled), outline: rectangle => coverageDots?.setRectangleSelection(rectangle),
+      query: queryRectangle, cancel: cancelRegionQuery });
     // The low tactical camera reads best with survey shells packed close to one surface.
     if (isAtlasPage) coverageDots.setLayerRadiusRange(0.994, 1.006);
   } catch (error) {
@@ -5340,6 +5499,8 @@ byId<HTMLDialogElement>("survey-dialog").addEventListener("click", (event) => { 
 byId("preview-close").addEventListener("click", () => byId<HTMLDialogElement>("preview-dialog").close());
 byId<HTMLDialogElement>("preview-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) byId<HTMLDialogElement>("preview-dialog").close(); });
 function clearCoverageFocus(openLayers = true): void {
+  regionPanel?.close();
+  activeRegionQuery = null;
   hideCoverageLayerTooltip();
   closeSkyDepth();
   cancelDisplayOrderInteraction();
@@ -5541,6 +5702,7 @@ document.addEventListener("keydown", (event) => {
   if (target && (target.matches("input, textarea, select") || target.isContentEditable)) return;
   if (!isAtlasInteractive()) return;
   if (event.key === "Escape") {
+    if (regionPanel?.isOpen) { event.preventDefault(); regionPanel.close(); return; }
     const now = performance.now();
     if (overlapDrawerOpen) {
       closeOverlapDrawer();
@@ -5567,12 +5729,15 @@ document.addEventListener("keydown", (event) => {
     focusCoverageSelection();
   }
   if (event.key.toLowerCase() === "e" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    event.preventDefault();
     const state = coverageDots?.state;
-    const inspection = skyDepthInspection;
-    if (state?.selectedPixels.length && inspection) {
-      event.preventDefault();
-      exportCoverageCells(inspection.surveyIds, state.selectedPixels, Math.round(Math.log2(state.nside)));
-    }
+    if (overlapMode && selectedQueueComponent) {
+      selectOverlapComponent(selectedQueueComponent);
+    } else if (state?.selectedPixels.length) {
+      exportCoverageCells([], state.selectedPixels, Math.round(Math.log2(state.nside)));
+    } else if (activeRegionQuery) {
+      regionPanel?.open();
+    } else regionPanel?.open(true);
   }
   if (event.key.toLowerCase() === "h" && !event.ctrlKey && !event.metaKey && !event.altKey) {
     event.preventDefault();
