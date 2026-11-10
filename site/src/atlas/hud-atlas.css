@@ -598,6 +598,10 @@ body[data-home-state="entering"] .hud-overlay,
 
 .hud-ra-strip { position: absolute; inset: 0; }
 
+.hud-ra-strip i, .hud-ra-strip span { left: 0; }
+.hud-ra-strip i, .hud-ra-strip span, .hud-dec-strip i, .hud-dec-strip span { will-change: transform; }
+.hud-ra-strip i[hidden], .hud-ra-strip span[hidden], .hud-dec-strip i[hidden], .hud-dec-strip span[hidden] { display: none; }
+
 .hud-ra-strip i {
   position: absolute;
   top: 16px;
@@ -619,7 +623,6 @@ body[data-home-state="entering"] .hud-overlay,
   color: var(--hud-dim);
   font: 700 11px/1 var(--font-hud);
   letter-spacing: .1em;
-  transform: translateX(-50%);
 }
 
 .hud-ra-current {
@@ -661,7 +664,9 @@ body[data-home-state="entering"] .hud-overlay,
 
 .hud-dec-strip i {
   position: absolute;
+  top: 0;
   right: 0;
+  left: auto;
   width: 20px;
   height: 1px;
   background: var(--hud-line-strong);
@@ -671,11 +676,11 @@ body[data-home-state="entering"] .hud-overlay,
 
 .hud-dec-strip span {
   position: absolute;
+  top: 0;
   right: 44px;
   color: var(--hud-dim);
   font: 700 10px/1 var(--font-hud);
   letter-spacing: .08em;
-  transform: translateY(-50%);
 }
 
 .hud-dec-current {

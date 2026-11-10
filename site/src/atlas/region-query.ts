@@ -19,6 +19,7 @@ export class RegionQueryPanel {
   #drawing = false;
   #rectangle: SkyRectangle | null = null;
   #beforeDraw: SkyRectangle | null = null;
+  #statusSource: string | (() => string) = "";
 
   constructor(options: RegionQueryOptions) {
     this.#options = options;
@@ -31,7 +32,7 @@ export class RegionQueryPanel {
       const rectangle = this.#read();
       if (!rectangle) return;
       const layers = options.layers();
-      if (!layers.length) { this.status(t("region.noLayers")); return; }
+      if (!layers.length) { this.status(() => t("region.noLayers")); return; }
       this.#setDrawing(false);
       this.#rectangle = rectangle;
       this.#fill(rectangle);
@@ -43,7 +44,10 @@ export class RegionQueryPanel {
       const rectangle = this.#read();
       if (rectangle) { this.#setDrawing(false); this.#rectangle = rectangle; options.outline(rectangle); }
     });
-    window.addEventListener("atlas:locale-change", () => this.refreshLayers());
+    window.addEventListener("atlas:locale-change", () => {
+      this.refreshLayers();
+      if (typeof this.#statusSource === "function") this.status(this.#statusSource);
+    });
   }
 
   get isOpen(): boolean { return !this.root.hidden; }
@@ -70,14 +74,14 @@ export class RegionQueryPanel {
     this.#setDrawing(false);
     this.#options.outline(this.#rectangle);
     this.#options.cancel();
-    this.status(t("region.cancelled"));
+    this.status(() => t("region.cancelled"));
   }
 
   startDrawing(): void {
     this.root.hidden = false;
     this.#beforeDraw = this.#rectangle;
     this.#setDrawing(true);
-    this.status(t("region.drawingHint"));
+    this.status(() => t("region.drawingHint"));
   }
 
   rectangleChanged(rectangle: SkyRectangle | null, phase: "draft" | "commit" | "cancel"): void {
@@ -85,7 +89,7 @@ export class RegionQueryPanel {
     if (phase === "draft") return;
     this.#rectangle = rectangle;
     this.#setDrawing(false);
-    this.status(t(phase === "commit" ? "region.drawn" : "region.cancelled"));
+    this.status(() => t(phase === "commit" ? "region.drawn" : "region.cancelled"));
   }
 
   refreshLayers(): void {
@@ -95,7 +99,11 @@ export class RegionQueryPanel {
     byId<HTMLButtonElement>("coverage-region-query").disabled = !layers.length;
   }
 
-  status(message: string): void { byId("coverage-region-status").textContent = message; }
+  /** A thunk is re-evaluated on locale change so the line is never stuck in the old language. */
+  status(message: string | (() => string)): void {
+    this.#statusSource = message;
+    byId("coverage-region-status").textContent = typeof message === "function" ? message() : message;
+  }
 
   #setDrawing(enabled: boolean): void {
     this.#drawing = enabled;
@@ -119,7 +127,7 @@ export class RegionQueryPanel {
       return normalizeSkyRectangle({ raStart: value("region-ra-start"), raEnd: value("region-ra-end"), decMin: value("region-dec-min"), decMax: value("region-dec-max") });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "";
-      this.status(!detail || detail === t("region.invalid") ? t("region.invalid") : `${t("region.invalid")}: ${detail}`);
+      this.status(() => !detail || detail === t("region.invalid") ? t("region.invalid") : `${t("region.invalid")}: ${detail}`);
       return null;
     }
   }

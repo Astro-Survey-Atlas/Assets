@@ -3446,7 +3446,7 @@ function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, p
     const ranges = displayTileRanges(displayRangesFor(record, order));
     const totalTiles = ranges.reduce((total, range) => total + range.end - range.start, 0);
     if (totalTiles > 250_000) return json(response, 413, { error: "The display tile index exceeds the bounded response size", totalTiles });
-    return compressedJson(request, response, 200, { layerId: record.layerId, order, tileSize: 4096, ranges, totalTiles, displayRevision }, "public, max-age=0, must-revalidate", "W/\"" + displayRevision + "-" + order + "\"");
+    return compressedJson(request, response, 200, { layerId: record.layerId, order, tileSize: 4096, ranges, totalTiles, displayRevision }, requestedDisplayRevision ? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate", "W/\"" + displayRevision + "-" + order + "\"");
   }
   if (moc && order >= 4 && order <= moc.maxOrder && !record.cells.has(order)) {
     const totalTiles = Math.max(1, Math.ceil((12 * 4 ** order) / DISPLAY_BLOCK_PIXELS));
@@ -5120,7 +5120,7 @@ const server = http.createServer((request, response) => {
       nativeUnitIndex: { version: nativeUnits?.version ?? "backend-proxy", generation: nativeUnits?.generation ?? null },
       status: "ok",
       service: "astro-survey-atlas-assets",
-      version: "0.0.10",
+      version: "0.0.11",
       bundle: catalog.manifest.bundle,
       files: catalog.files.size,
     });

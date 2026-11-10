@@ -42,70 +42,119 @@ export function setHudMode(overlap: boolean): void {
   label.textContent = overlap ? "OVERLAP MODE · G" : "LAYER MODE";
 }
 
+/**
+ * Pooled ruler. Ticks and labels are created once and re-used each frame,
+ * positioned with transform (compositor only), and the host size comes from a
+ * ResizeObserver, so a frame never reads layout right after writing it.
+ */
+interface RulerPool { ticks: HTMLElement[]; labels: HTMLElement[]; size: number }
+const rulerPools = new WeakMap<HTMLElement, RulerPool>();
+const rulerSizes = new WeakMap<HTMLElement, { width: number; height: number }>();
+let rulerObserver: ResizeObserver | null = null;
+
+function hostSize(host: HTMLElement): { width: number; height: number } {
+  let size = rulerSizes.get(host);
+  if (!size) {
+    size = { width: host.clientWidth, height: host.clientHeight };   // one initial read per host
+    rulerSizes.set(host, size);
+    if (typeof ResizeObserver !== "undefined") {
+      rulerObserver ??= new ResizeObserver((entries) => {
+        for (const entry of entries) rulerSizes.set(entry.target as HTMLElement, { width: (entry.target as HTMLElement).clientWidth, height: (entry.target as HTMLElement).clientHeight });
+      });
+      rulerObserver.observe(host);
+    }
+  }
+  return size;
+}
+
+function acquire(strip: HTMLElement, tickCount: number, labelCount: number): RulerPool {
+  let pool = rulerPools.get(strip);
+  if (!pool) { pool = { ticks: [], labels: [], size: 0 }; rulerPools.set(strip, pool); strip.replaceChildren(); }
+  while (pool.ticks.length < tickCount) { const tick = document.createElement("i"); pool.ticks.push(tick); strip.append(tick); }
+  while (pool.labels.length < labelCount) { const label = document.createElement("span"); pool.labels.push(label); strip.append(label); }
+  return pool;
+}
+
+function place(nodes: HTMLElement[], used: number): void {
+  for (let index = used; index < nodes.length; index += 1) if (!nodes[index]!.hidden) nodes[index]!.hidden = true;
+}
+
 function renderRaTape(state: SurveyLayerState, depthActive: boolean): void {
   const tape = byId("hud-ra-tape");
   if (!tape) return;
   const center = state.viewCenter;
-  tape.hidden = !center || depthActive;
-  if (!center) return;
+  const hidden = !center || depthActive;
+  if (tape.hidden !== hidden) tape.hidden = hidden;
+  if (!center || hidden) return;
   const strip = tape.querySelector<HTMLElement>(".hud-ra-strip");
   const current = tape.querySelector<HTMLOutputElement>(".hud-ra-current");
   if (!strip || !current) return;
-  const width = tape.clientWidth || 720;
+  const width = hostSize(tape).width || 720;
   const span = Math.ceil(width / 2 / RA_PX_PER_DEG) + 1;
   const base = Math.floor(center.raDeg);
-  const nodes: HTMLElement[] = [];
+  const capacity = span * 2 + 1;
+  const pool = acquire(strip, capacity, capacity);
+  let ticks = 0, labels = 0;
   for (let step = -span; step <= span; step += 1) {
     const deg = base + step;
     const x = width / 2 + (deg - center.raDeg) * RA_PX_PER_DEG * center.raScreenSign;
     if (x < 0 || x > width) continue;
     const label = normalizeRa(deg);
-    const tick = document.createElement("i");
-    tick.className = label % 5 === 0 ? "is-major" : "";
-    tick.style.left = `${x}px`;
-    nodes.push(tick);
-    if (label % 5 === 0) {
-      const text = document.createElement("span");
-      text.style.left = `${x}px`;
-      text.textContent = String(label);
-      nodes.push(text);
+    const major = label % 5 === 0;
+    const tick = pool.ticks[ticks++]!;
+    if (tick.hidden) tick.hidden = false;
+    tick.className = major ? "is-major" : "";
+    tick.style.transform = `translateX(${x}px)`;
+    if (major) {
+      const text = pool.labels[labels++]!;
+      if (text.hidden) text.hidden = false;
+      text.style.transform = `translateX(calc(${x}px - 50%))`;
+      const value = String(label);
+      if (text.textContent !== value) text.textContent = value;
     }
   }
-  strip.replaceChildren(...nodes);
-  current.textContent = `RA ${center.raDeg.toFixed(1)}°`;
+  place(pool.ticks, ticks); place(pool.labels, labels);
+  const heading = `RA ${center.raDeg.toFixed(1)}°`;
+  if (current.textContent !== heading) current.textContent = heading;
 }
 
 function renderDecLadder(state: SurveyLayerState, depthActive: boolean): void {
   const ladder = byId("hud-dec-ladder");
   if (!ladder) return;
   const center = state.viewCenter;
-  ladder.hidden = !center || depthActive;
-  if (!center) return;
+  const hidden = !center || depthActive;
+  if (ladder.hidden !== hidden) ladder.hidden = hidden;
+  if (!center || hidden) return;
   const strip = ladder.querySelector<HTMLElement>(".hud-dec-strip");
   const current = ladder.querySelector<HTMLOutputElement>(".hud-dec-current");
   if (!strip || !current) return;
-  const height = ladder.clientHeight || 520;
+  const height = hostSize(ladder).height || 520;
   const span = Math.ceil(height / 2 / DEC_PX_PER_DEG) + 1;
   const base = Math.round(center.decDeg);
-  const nodes: HTMLElement[] = [];
+  const capacity = span * 2 + 1;
+  const pool = acquire(strip, capacity, capacity);
+  let ticks = 0, labels = 0;
   for (let step = -span; step <= span; step += 1) {
     const deg = base + step;
     if (deg < -90 || deg > 90) continue;
     const y = height / 2 - (deg - center.decDeg) * DEC_PX_PER_DEG;
     if (y < 0 || y > height) continue;
-    const tick = document.createElement("i");
-    tick.className = deg % 5 === 0 ? "is-major" : "";
-    tick.style.top = `${y}px`;
-    nodes.push(tick);
-    if (deg % 5 === 0) {
-      const text = document.createElement("span");
-      text.style.top = `${y}px`;
-      text.textContent = signed(deg, 0);
-      nodes.push(text);
+    const major = deg % 5 === 0;
+    const tick = pool.ticks[ticks++]!;
+    if (tick.hidden) tick.hidden = false;
+    tick.className = major ? "is-major" : "";
+    tick.style.transform = `translateY(${y}px)`;
+    if (major) {
+      const text = pool.labels[labels++]!;
+      if (text.hidden) text.hidden = false;
+      text.style.transform = `translateY(calc(${y}px - 50%))`;
+      const value = signed(deg, 0);
+      if (text.textContent !== value) text.textContent = value;
     }
   }
-  strip.replaceChildren(...nodes);
-  current.textContent = `DEC ${signed(center.decDeg)}°`;
+  place(pool.ticks, ticks); place(pool.labels, labels);
+  const reading = `DEC ${signed(center.decDeg)}°`;
+  if (current.textContent !== reading) current.textContent = reading;
 }
 
 function renderReticle(state: SurveyLayerState, depthActive: boolean): void {
