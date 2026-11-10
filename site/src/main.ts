@@ -2152,6 +2152,7 @@ function queryRectangle(rectangle: SkyRectangle, boundaryOrder: number): void {
 }
 
 let regionQueryResult: OverlapEvidenceResult | null = null;
+let regionQueryFailed = false;
 
 function regionExportLabel(format: "json" | "csv"): string {
   return `${t(hasDownloadAccess() ? "region.fullReady" : "region.preview")} ${format.toUpperCase()}`;
@@ -2170,7 +2171,7 @@ function refreshRegionResultLabels(): void {
   if (cancel) cancel.textContent = t("region.cancelExport");
   if (regionQueryResult && regionEvidenceNode?.dataset.lookupState === "complete") renderEvidencePlan(regionEvidenceNode, regionQueryResult, component);
   else if (regionQueryResult) renderRegionQueryMetadata(component, regionQueryResult);
-  else document.getElementById("coverage-region-query-meta")?.replaceChildren(t("region.querying"));
+  else document.getElementById("coverage-region-query-meta")?.replaceChildren(t(regionQueryFailed ? "coverage.reverseFailed" : "region.querying"));
 }
 
 function renderRegionQueryMetadata(component: OverlapComponentView, result: OverlapEvidenceResult): void {
@@ -2209,6 +2210,7 @@ function renderRegionQuery(component: OverlapComponentView): void {
   cancelRegionQuery();
   activeRegionQuery = component;
   regionQueryResult = null;
+  regionQueryFailed = false;
   const host = byId("coverage-region-results");
   const meta = Object.assign(document.createElement("p"), { id: "coverage-region-query-meta", className: "coverage-region-caveat", textContent: t("region.querying") });
   const evidence = Object.assign(document.createElement("div"), { className: "overlap-evidence-plan" });
@@ -3666,6 +3668,12 @@ async function loadOverlapEvidence(component: OverlapComponentView, node: HTMLEl
     const retryAfter = (error as { retryAfter?: number }).retryAfter ?? 30;
     overlapEvidenceCooldown.set(overlapEvidenceKey(component), { until: Date.now() + retryAfter * 1000, message });
     if (request === overlapEvidenceSequence) node.replaceChildren(Object.assign(document.createElement("small"), { textContent: `${t("coverage.reverseFailed")}: ${message}` }));
+    // The region panel header would otherwise keep saying "Querying…" after the query has failed.
+    if (component.selectedRegion && activeRegionQuery === component && request === overlapEvidenceSequence) {
+      regionQueryFailed = true;
+      document.getElementById("coverage-region-query-meta")?.replaceChildren(t("coverage.reverseFailed"));
+      regionPanel?.status(() => `${t("coverage.reverseFailed")}: ${message}`);
+    }
   } finally {
     if (overlapEvidenceLoads.get(node) === controller) {
       overlapEvidenceLoads.delete(node);

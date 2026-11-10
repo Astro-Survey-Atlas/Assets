@@ -3625,9 +3625,7 @@ function publicReverseEntrypoints(layerIds: readonly string[], order: number, ce
     // catalog here to keep entrypoint-only products visible as well.
     const layer = publicCoverageCatalog().records.get(layerId);
     if (!layer) return [];
-    const matchedCells = layer.cells.has(order)
-      ? (layer.cells.get(order) ?? []).filter((cell) => requested.has(cell))
-      : selectedPixelsInRanges([...requested], displayRangesFor(layer, order));
+    const matchedCells = layerCellsInRequest(layer, order, requested);
     if (!matchedCells.length) return [];
     const survey = runtimeSurveyIndex.surveys.find((entry) => entry.id === layer.surveyId);
     const release = survey?.releases.find((entry) => entry.id === layer.releaseId);
@@ -3748,6 +3746,22 @@ function displayRangesFor(layer: CoverageCellLayer, order: number): PixelRange[]
     nativeDisplayCachedRangeCount += ranges.length;
   }
   return ranges;
+}
+
+/**
+ * Requested cells (at `order`) that fall inside a layer. A layer whose native MOC is coarser than the
+ * requested grid is intersected at its own real order: the request is folded up to the layer's order
+ * for the test and never refined. Matches are returned in the requested order, so callers keep grouping
+ * by the grid the client actually asked for.
+ */
+function layerCellsInRequest(layer: CoverageCellLayer, order: number, requested: ReadonlySet<number>): number[] {
+  if (layer.cells.has(order)) return (layer.cells.get(order) ?? []).filter((cell) => requested.has(cell));
+  const moc = publicState.geometry.get(layer.layerId);
+  const layerOrder = moc ? Math.min(order, moc.maxOrder) : order;
+  if (layerOrder >= order) return selectedPixelsInRanges([...requested], displayRangesFor(layer, order));
+  const ranges = displayRangesFor(layer, layerOrder);
+  const factor = 4 ** (order - layerOrder);
+  return [...requested].filter((cell) => selectedPixelsInRanges([Math.floor(cell / factor)], ranges).length > 0);
 }
 
 function selectedPixelsInRanges(cells: readonly number[], ranges: readonly PixelRange[]): number[] {
@@ -4790,9 +4804,7 @@ async function buildCoverageReverseLookup(request:IncomingMessage,response:Serve
   const coverageEvidence: DownloadPlanCoverageEvidence[] = (body.layerIds as string[]).flatMap((layerId) => {
     const layer = publicCoverageCatalog().records.get(layerId);
     if (!layer) return [];
-    const matchedCells = layer.cells.has(order)
-      ? (layer.cells.get(order) ?? []).filter((cell) => requestedCells.has(cell))
-      : selectedPixelsInRanges([...requestedCells], displayRangesFor(layer, order));
+    const matchedCells = layerCellsInRequest(layer, order, requestedCells);
     if (!matchedCells.length) return [];
     const product = publicState.records.get(layer.productId)?.draft;
     const sourceEvidence = layer.sourceEvidence ?? product?.coverageEvidence;
@@ -5120,7 +5132,7 @@ const server = http.createServer((request, response) => {
       nativeUnitIndex: { version: nativeUnits?.version ?? "backend-proxy", generation: nativeUnits?.generation ?? null },
       status: "ok",
       service: "astro-survey-atlas-assets",
-      version: "0.0.11",
+      version: "0.0.12",
       bundle: catalog.manifest.bundle,
       files: catalog.files.size,
     });

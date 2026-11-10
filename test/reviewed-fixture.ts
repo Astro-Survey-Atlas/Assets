@@ -32,6 +32,8 @@ export async function reviewedFixture(identity: Partial<{
   productName: string;
   layerId: string;
   coverageEvidence: ProductRecord["draft"]["coverageEvidence"];
+  /** Native MOC cells; defaults to an order-8/order-10 pair. A coarser MOC exercises layers whose maxOrder is below the requested grid. */
+  mocCells: Array<{order:number;pixel:number}>;
 }> = {}) {
   const base=await mkdtemp(path.join(tmpdir(),"reviewed-release-")),root=path.join(base,"baseline"),contentRoot=path.join(base,"content");
   await mkdir(contentRoot,{recursive:true});
@@ -44,7 +46,7 @@ export async function reviewedFixture(identity: Partial<{
   const surveyId=identity.surveyId??"m42";
   const releaseId=identity.releaseId??"dr1";
   const productName=identity.productName??"Image";
-  const layerId=identity.layerId??"m42-dr1-image",bytes=fitsMoc([{order:8,pixel:163327},{order:10,pixel:2608000}]);
+  const layerId=identity.layerId??"m42-dr1-image",bytes=fitsMoc(identity.mocCells??[{order:8,pixel:163327},{order:10,pixel:2608000}]);
   const moc=decodeNativeMoc(bytes);
   const content={productId,surveyId,releaseId,name:productName,layerId,modality:"imaging",sourceUrl:"https://example.org/survey",mode:"native-moc" as const,...(identity.coverageEvidence?{coverageEvidence:identity.coverageEvidence}:{}),presentation:{summaryMarkdown:"",methodologyMarkdown:"",limitationsMarkdown:"",flow:{nodes:[],edges:[]}}};
   const record:ProductRecord={productId:content.productId,draft:content,published:null,revision:1,publishedRevision:null,updatedAt:new Date().toISOString(),publishedAt:null,contentSha256:sha256(JSON.stringify(content))};

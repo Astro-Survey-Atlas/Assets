@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   # Public mirrors: ghcr.io/astro-survey-atlas/assets (identical digest).
   repository: crpi-wixjy6gci86ms14e.cn-hongkong.personal.cr.aliyuncs.com/astro-survery-atlas/astro-survey-atlas-assets
-  tag: "code-v0.0.11"
+  tag: "code-v0.0.12"
   pullPolicy: IfNotPresent
 
 backendNodeOptions: ""
