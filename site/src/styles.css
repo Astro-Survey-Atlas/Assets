@@ -1,3 +1,4 @@
+@import "./cjk-font-faces.css";
 /* Explicit region selection, independent of overlap and display order. */
 .coverage-region-panel { position: fixed; z-index: 48; right: 18px; top: 88px; width: min(470px, calc(100vw - 36px)); max-height: calc(100dvh - 110px); overflow: auto; padding: 16px; color: var(--ink); background: color-mix(in srgb, var(--paper-bright) 94%, transparent); border: 1px solid var(--line-strong); border-left: 3px solid var(--teal); box-shadow: 0 15px 50px #0005; backdrop-filter: blur(16px); pointer-events: auto; font: 500 12px/1.5 var(--font-mono), monospace; }
 .coverage-region-panel[hidden] { display: none; }
@@ -29,20 +30,6 @@
 @font-face {
   font-family: "Atlas Sans";
   src: url("/fonts/NotoSans-Bold.ttf") format("truetype");
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Atlas Sans CJK";
-  src: url("/fonts/NotoSansSC-Regular.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Atlas Sans CJK";
-  src: url("/fonts/NotoSansSC-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
   font-display: swap;

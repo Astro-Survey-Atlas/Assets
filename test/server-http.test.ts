@@ -81,7 +81,14 @@ test("hard cutover exposes no legacy products, geometry, packages or direct down
     assert.equal((await fetch(`${base}/api/v1/${route}`)).status,404);
   for(const route of ["access/region-query","coverage/reverse-lookup"])
     assert.equal((await fetch(`${base}/api/v1/${route}`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})).status,401);
-  assert.equal((await fetch(`${base}/fonts/NotoSans-Regular.ttf`)).status,200);
+  const ttf = await fetch(`${base}/fonts/NotoSans-Regular.ttf`);
+  assert.equal(ttf.status,200);
+  assert.equal(ttf.headers.get("cache-control"),"public, max-age=86400");
+  const slices = (JSON.parse(await readFile("fonts-src/cjk-slices.json","utf8")) as { slices: { file: string }[] }).slices;
+  const slice = await fetch(`${base}/fonts/cjk/${slices[0]!.file}`);
+  assert.equal(slice.status,200);
+  assert.equal(slice.headers.get("content-type"),"font/woff2");
+  assert.equal(slice.headers.get("cache-control"),"public, max-age=31536000, immutable");
 });
 
 test("admin endpoints require a token and expose the configured control-plane boundary", {

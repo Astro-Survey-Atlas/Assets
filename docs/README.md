@@ -15,6 +15,7 @@
 | 对象存储、恢复与单写者运行架构 | [存储](public-artifact-storage.md)、[发布运行架构](publication-runtime-split.md) |
 | 跨项目职责与 Warehouse 任务 | [架构边界](architecture-boundary.md)、[Warehouse 要求](data-warehouse-requirements.md)、[批扫描](scan-batches.md) |
 | 公开包消费者 | [集成指南](resource-package-integration.md)、[前端指南](frontend-resource-package-guide.md)、[Core 契约](moc-core-contract.md)、[示例](examples/) |
+| 前端字体 | [中文字体分片](frontend-fonts.md) |
 | 当前数据范围与缺口 | [data-scope](data-scope.md) |
 | 探索工作流与可选增强 | [探索契约](deferred-moc-discovery-plan.md)、[增强设计与实现边界](moc-discovery-enhancement-design.md) |
 

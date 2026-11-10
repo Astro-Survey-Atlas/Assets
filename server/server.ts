@@ -2569,6 +2569,9 @@ async function sendPreview(request: IncomingMessage, response: ServerResponse, l
   createReadStream(entry.absolutePath, { start, end }).pipe(response);
 }
 
+// Content-hashed CJK slices (scripts/slice_cjk_font.py): the name changes whenever the bytes do.
+const hashedCjkFontPattern = /^\/fonts\/cjk\/NotoSansSC-(?:Regular|Bold)\.[a-z0-9-]+\.[0-9a-f]{8}\.woff2$/;
+
 async function sendStatic(response: ServerResponse, pathname: string): Promise<void> {
   if (/^\/admin\/(?:overview(?:\/surveys\/[^/]+)?|sources|tasks|review(?:\/products\/[^/]+)?|releases|api)\/?$/.test(pathname)) pathname = "/admin/";
   const requested = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
@@ -2595,7 +2598,7 @@ async function sendStatic(response: ServerResponse, pathname: string): Promise<v
   response.writeHead(200, {
     "Content-Type": staticTypes[path.extname(filePath)] ?? "application/octet-stream",
     "Content-Length": String(body.length),
-    "Cache-Control": path.basename(filePath) === "index.html" ? "no-cache" : "public, max-age=86400",
+    "Cache-Control": path.basename(filePath) === "index.html" ? "no-cache" : hashedCjkFontPattern.test(pathname) ? "public, max-age=31536000, immutable" : "public, max-age=86400",
   });
   response.end(body);
 }
