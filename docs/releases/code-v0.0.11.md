@@ -36,7 +36,7 @@ tag `code-v0.0.11` 对应 `77f2e7c8437ffa2697d0bbeb6c807c85adfc9872`，镜像摘
 预演 16 个资源不增不减，31 行差异只有 chart 标签与应用/init 镜像 tag。
 回执 `~/.local/share/astro-assets-deployments/72602/20261110-release-0.0.11/`（不入 Git）。
 
-## 已知缺陷（部署后发现，待 0.0.12）
+## 已知缺陷（部署后发现，已在 [0.0.12](code-v0.0.12.md) 修复并于线上复测）
 
 - **矩形反查在同时勾选 `desi-dr1-redrock-bright-file-index`（原生最大阶数 6）时整体失败**，
   返回 `Unsupported projection order`；单独查其余 15 个图层均正常，不勾该图层则整次查询正常。
