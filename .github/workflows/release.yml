@@ -40,7 +40,9 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: requirements/requirements.lock
+          cache-dependency-path: |
+            requirements/requirements.lock
+            requirements/fonts.lock
 
       - name: Resolve code release coordinates
         id: version
@@ -73,6 +75,13 @@ jobs:
           npm ci
           python -m pip install -r requirements/requirements.lock
           python -m pip install --no-deps vendor/moc-core/astro_survey_moc_core-1.2.0-py3-none-any.whl
+
+      - name: Validate CJK font assets (mandatory semantic check)
+        env:
+          CJK_FONT_PYTHON: python
+        run: |
+          python -I -m pip install -r requirements/fonts.lock
+          npm run test:fonts
 
       - name: Validate code without public data storage
         run: |
