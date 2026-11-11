@@ -3,11 +3,12 @@
 站点和管理页的 `Atlas Sans CJK`（Noto Sans SC，Regular 400 / Bold 700）不再整体下载，
 而是按 `unicode-range` 分片，浏览器只请求页面实际用到字符所在的分片。
 
-- 完整字体（各约 11–12 MB）仅作为生成输入，存放在 `fonts-src/`，**不在** `site/public`，
-  不会被服务或打入镜像。原文件在 git 历史中仍可找到。
+- 完整字体（各约 11–12 MB）曾作为生成输入存放在 `fonts-src/`，已从仓库删除以减少克隆体积。
+  需重新生成时可从 [Google Fonts](https://fonts.google.com/noto/specimen/Noto+Sans+SC) 下载
+  NotoSansSC-Regular.woff2 和 NotoSansSC-Bold.woff2，SHA-256 校验和见 Git 历史提交 `21230c1`。
 - 每个字重的分片互不相交，并集等于原字体 cmap：`latin`（U+0000–024F，保持拉丁字形与原来一致）、
-  `core`（站点源码实际用到的字符，清单 `fonts-src/site-used-chars.txt`）、`rare-NN`（其余字符）。
-- 产物：`site/public/fonts/cjk/*.woff2`（文件名含 SHA-256 前 8 位）、`fonts-src/cjk-slices.json`、
+  `core`（站点源码实际用到的字符）、`rare-NN`（其余字符）。
+- 产物：`site/public/fonts/cjk/*.woff2`（文件名含 SHA-256 前 8 位）、
   `site/src/cjk-font-faces.css`（由前台和管理页样式 `@import`）。均为生成文件，不要手改。
 - 服务端对 `/fonts/cjk/NotoSansSC-*.<slice>.<hash>.woff2` 返回 `public, max-age=31536000, immutable`；
   其他路径缓存策略不变。CSP 不变（同源）。
