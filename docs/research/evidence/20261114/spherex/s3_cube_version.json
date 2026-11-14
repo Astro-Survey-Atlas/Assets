@@ -1,0 +1,20 @@
+{
+  "name": "s3_cube_version",
+  "method": "GET",
+  "url": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/?list-type=2&prefix=dr1%2Fhips5_cube%2Fhips_20261026%2F&delimiter=%2F&max-keys=20",
+  "observed_utc": "2026-11-14T11:39:43.019688+00:00",
+  "status": 200,
+  "bytes_received": 386,
+  "sha256": "47c299161edb1d0483bc6cd66c78786d0c95cc48b684f0ada058e61d19462f6e",
+  "headers": {
+    "x-amz-id-2": "OZch9ltZVw8drhLGa2cObonaqqfD4yc6av5ctFK3pQSdKc6oT3Lo0XmPoTL+jN5Zl3jOZkxbJkzM/G3NuhogaxiJ+siauMld",
+    "x-amz-request-id": "CV8H20K3G3QCDQY8",
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:39:44 GMT",
+    "x-amz-bucket-region": "us-east-1",
+    "content-type": "application/xml",
+    "x-envoy-upstream-service-time": "311",
+    "connection": "close",
+    "transfer-encoding": "chunked"
+  }
+}

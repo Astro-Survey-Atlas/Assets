@@ -1,0 +1,20 @@
+{
+  "name": "cube_irsa_head",
+  "method": "HEAD",
+  "url": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/hips5_cube/hips_20261026/Norder5/Dir0/Npix9822_cube.fits",
+  "observed_utc": "2026-11-14T11:40:11.235112+00:00",
+  "status": 200,
+  "bytes_received": 0,
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "headers": {
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:40:11 GMT",
+    "content-type": "application/fits",
+    "content-length": "320909760",
+    "last-modified": "Thu, 29 Oct 2026 09:19:06 GMT",
+    "accept-ranges": "bytes",
+    "x-request-id": "491a8e05-01eb-4e68-9f4a-cfe91bbfb34e",
+    "x-envoy-upstream-service-time": "63",
+    "connection": "close"
+  }
+}

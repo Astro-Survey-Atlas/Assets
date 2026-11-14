@@ -1,0 +1,19 @@
+{
+  "name": "sia_image_sample",
+  "method": "GET",
+  "url": "https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_dr1&POS=circle+127.69444+-39.17760+0.01&MAXREC=2",
+  "observed_utc": "2026-11-14T11:39:06.899463+00:00",
+  "status": 200,
+  "bytes_received": 31660,
+  "sha256": "0524c12075cce81bc042b374d6d52c803b9f5568f4d7bbeffd6ab92119916a35",
+  "headers": {
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:39:07 GMT",
+    "content-type": "application/x-votable+xml",
+    "content-length": "31660",
+    "server-timing": "main;dur=307.930, prepare_internal;dur=239.216, generate_adql;dur=0.106, query_delegate;dur=63.985, query_execute;dur=63.766, database_query;dur=63.740, get_postgres_connection;dur=4.689, run_postgres;dur=56.516",
+    "set-cookie": "anonymous=5d/6f/6275c7fbf632adc9c80e968a05eb",
+    "x-envoy-upstream-service-time": "403",
+    "connection": "close"
+  }
+}

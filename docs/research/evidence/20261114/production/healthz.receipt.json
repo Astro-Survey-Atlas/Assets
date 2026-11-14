@@ -1,0 +1,21 @@
+{
+  "url": "https://astro.assets.72602.space/healthz",
+  "status": 200,
+  "headers": {
+    "date": "Sat, 14 Nov 2026 11:38:59 GMT",
+    "content-type": "application/json; charset=utf-8",
+    "content-length": "270",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=()",
+    "content-security-policy": "default-src 'self'; img-src 'self' data: https: http:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+    "cache-control": "no-cache",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-envoy-upstream-service-time": "667",
+    "server": "envoy",
+    "connection": "close"
+  },
+  "bytes": 270,
+  "observed_at_utc": "2026-11-14T11:38:59.841187+00:00"
+}

@@ -1,0 +1,22 @@
+{
+  "name": "hips_moc_head",
+  "method": "HEAD",
+  "url": "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/Moc.fits",
+  "observed_utc": "2026-11-14T11:40:12.197928+00:00",
+  "status": 200,
+  "bytes_received": 0,
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "headers": {
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:40:12 GMT",
+    "content-type": "application/fits",
+    "content-length": "8640",
+    "last-modified": "Sun, 01 Nov 2026 01:39:07 GMT",
+    "etag": "\"6ae6983b-21c0\"",
+    "x-content-type-options": "nosniff",
+    "access-control-allow-origin": "*",
+    "accept-ranges": "bytes",
+    "x-envoy-upstream-service-time": "310",
+    "connection": "close"
+  }
+}

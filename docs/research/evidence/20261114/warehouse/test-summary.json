@@ -1,0 +1,186 @@
+{
+  "totals": {
+    "tests": 91,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suites": [
+    {
+      "module": "spatial-core",
+      "suite": "org.zhejianglab.astro.atlas.core.HealpixTest",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "spatial-core",
+      "suite": "org.zhejianglab.astro.atlas.core.ScanPlanValidatorTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "spatial-core",
+      "suite": "org.zhejianglab.astro.atlas.core.SpatialCoverageTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "spatial-core",
+      "suite": "org.zhejianglab.astro.atlas.core.CredentialResolverTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "spatial-core",
+      "suite": "org.zhejianglab.astro.atlas.core.SourceIdentityTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "operator",
+      "suite": "org.zhejianglab.astro.atlas.operator.ScanRequestOperatorTest",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "operator",
+      "suite": "org.zhejianglab.astro.atlas.operator.ScanRequestSpecParserTest",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "operator",
+      "suite": "org.zhejianglab.astro.atlas.operator.ScannerSummaryParserTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "operator",
+      "suite": "org.zhejianglab.astro.atlas.operator.PlanMaterializerTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "operator",
+      "suite": "org.zhejianglab.astro.atlas.operator.OperatorConfigTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "operator",
+      "suite": "org.zhejianglab.astro.atlas.operator.ScannerJobFactoryTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "operator",
+      "suite": "org.zhejianglab.astro.atlas.operator.JobStatusMapperTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "operator",
+      "suite": "org.zhejianglab.astro.atlas.operator.MocDiscoverySummaryParserTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "moc-discovery-cli",
+      "suite": "org.zhejianglab.astro.atlas.moc.discovery.DiscoveryPlanTest",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "scanner-cli",
+      "suite": "org.zhejianglab.astro.atlas.scanner.LocalScanTest",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "scanner-cli",
+      "suite": "org.zhejianglab.astro.atlas.scanner.EvidenceWriterTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "scanner-cli",
+      "suite": "org.zhejianglab.astro.atlas.scanner.S3SourceAdapterTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "index-elasticsearch",
+      "suite": "org.zhejianglab.astro.atlas.es.ElasticsearchIndexTemplatesTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "index-elasticsearch",
+      "suite": "org.zhejianglab.astro.atlas.es.ElasticsearchAdapterTest",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "query-api",
+      "suite": "org.zhejianglab.astro.atlas.query.QueryHttpServerTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "query-api",
+      "suite": "org.zhejianglab.astro.atlas.query.QueryRequestParserTest",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "query-api",
+      "suite": "org.zhejianglab.astro.atlas.query.QueryServiceTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ]
+}

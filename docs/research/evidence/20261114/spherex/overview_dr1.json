@@ -1,0 +1,19 @@
+{
+  "name": "overview_dr1",
+  "method": "GET",
+  "url": "https://irsa.ipac.caltech.edu/data/SPHEREx/docs/overview_dr1.html",
+  "observed_utc": "2026-11-14T11:38:25.754671+00:00",
+  "status": 200,
+  "bytes_received": 7268,
+  "sha256": "de48a08241e09e22abd9b2f1f74384ff473710d425174bed5ea1427b1901c1b1",
+  "headers": {
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:38:27 GMT",
+    "content-type": "text/html",
+    "vary": "X-Data-Proxy-Hop",
+    "accept-ranges": "bytes",
+    "x-envoy-upstream-service-time": "638",
+    "connection": "close",
+    "transfer-encoding": "chunked"
+  }
+}

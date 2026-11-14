@@ -1,0 +1,26 @@
+{
+  "name": "cube_s3_head",
+  "method": "HEAD",
+  "url": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/dr1/hips5_cube/hips_20261026/Norder5/Dir0/Npix9822_cube.fits",
+  "observed_utc": "2026-11-14T11:40:11.349944+00:00",
+  "status": 200,
+  "bytes_received": 0,
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "headers": {
+    "x-amz-id-2": "2egqd6XAMBtAn9bgC2AHtHOFNK2bIuj2jgT4hOm70PveOiGg0b7umjcDcXFsGjThFuW6Qmk65iE=",
+    "x-amz-request-id": "1V3FPWTR89CMHCVJ",
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:40:12 GMT",
+    "last-modified": "Wed, 11 Nov 2026 15:40:44 GMT",
+    "etag": "\"57e3456262dfd1df16f95489301d5637\"",
+    "x-amz-storage-class": "INTELLIGENT_TIERING",
+    "x-amz-server-side-encryption": "AES256",
+    "x-amz-meta-md5chksum": "V+NFYmLf0d8W+VSJMB1WNw==",
+    "x-amz-meta-mtime": "1793265546.252765011",
+    "accept-ranges": "bytes",
+    "content-length": "320909760",
+    "content-type": "application/fits",
+    "x-envoy-upstream-service-time": "326",
+    "connection": "close"
+  }
+}

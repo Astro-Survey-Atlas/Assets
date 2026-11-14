@@ -1,0 +1,27 @@
+{
+  "checked_at_utc": "2026-11-14T11:42:25.728834+00:00",
+  "repository": "Astro-Survey-Atlas/Workspace",
+  "head": "c7658f05e629e0a6468b57668d5c732beab65d82",
+  "initial_worktree": "clean",
+  "workspace_agent_files": [],
+  "node": "v24.22.1",
+  "wheel": {
+    "path": "vendor/moc-core/astro_survey_moc_core-1.0.0-py3-none-any.whl",
+    "sha256": "66d0d07c3afaf74141f967c80eaf359180d06a07f6805494a4aea086d6339642"
+  },
+  "science_requirements_sha256": "2985f7ce248d7427501e710fee57db7953ce6cd80888ae334262c9191b3dc222",
+  "science_dependencies": {
+    "astropy": "7.2.0",
+    "astropy-healpix": "1.1.2",
+    "astropy-iers-data": "0.2026.8.18.14.22.31",
+    "mocpy": "0.20.0",
+    "numpy": "2.4.6",
+    "packaging": "26.3",
+    "pyerfa": "2.0.1.5",
+    "PyYAML": "6.0.3",
+    "regions": "0.11"
+  },
+  "venv": "/workspace/work/venv-workspace",
+  "dependency_site_packages": "/workspace/work/venv-sdk/lib/python3.12/site-packages",
+  "note": "Workspace 1.0.0 site-packages precedes shared dependency site-packages. Python3.12.14 is local test host; Dockerfile science build base is Python3.11. ES and S3 are isolated HTTP fixtures, not production services."
+}

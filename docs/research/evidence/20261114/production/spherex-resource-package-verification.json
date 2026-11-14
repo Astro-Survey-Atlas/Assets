@@ -1,0 +1,162 @@
+{
+  "observed_at_utc": "2026-11-14T11:40:48.657102+00:00",
+  "url": "https://astro.assets.72602.space/api/v1/resource-packages/public-spherex-footprints/versions/3.1.0/download",
+  "status": 200,
+  "sizeBytes": 76056,
+  "sha256": "bd60d78213456d56cfc2854104f6bcfb1b65600f1000360ea4a6e4a804c382e8",
+  "matches_catalog": true,
+  "zipEntries": [
+    {
+      "name": "footprints/survey-footprints.json",
+      "sizeBytes": 101270,
+      "sha256": "fa03c3340a597f1324e57d62546787393d43b0b7e6e9cc271f3d463210b9f1b6"
+    },
+    {
+      "name": "healpix/order4.json",
+      "sizeBytes": 332103,
+      "sha256": "01699aba207ff6e1ccb21475606677be967b61c8ffc015eda53b13115b16d948"
+    },
+    {
+      "name": "healpix/order8.json",
+      "sizeBytes": 1593,
+      "sha256": "4b63ee31d6ace0e07b7378f2fd820b589973c39c69aa0aa8d54e8b77b9586373"
+    },
+    {
+      "name": "mocs/spherex-spherex-qr2-spherex-qr2-color-coverage-moc.moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "631ef5925374951387c1923a23e9114751429cd2a2c778e37a1dc013ebdcf96d"
+    },
+    {
+      "name": "mocs/spherex-spherex-qr2-spherex-qr2-d1-coverage-moc.moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "1f959ab8a7edbc7fb32e038210e0272a95a299301ec996adb336c4980e66689e"
+    },
+    {
+      "name": "mocs/spherex-spherex-qr2-spherex-qr2-d2-coverage-moc.moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "340d3388651b5c9e9d5b805b3f71474f2d3f8f17459bc3b7a8b84bd8b06b4e0c"
+    },
+    {
+      "name": "mocs/spherex-spherex-qr2-spherex-qr2-d3-coverage-moc.moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "76a27af806caaef8a7bac558d4344d6ab0f566bf2e97aedb37d5e827411e3b6c"
+    },
+    {
+      "name": "mocs/spherex-spherex-qr2-spherex-qr2-d4-coverage-moc.moc.fits",
+      "sizeBytes": 11520,
+      "sha256": "4a7628b8d82a95f8f2375e9e7423a2877e7ea5545a8dbb5e74546899395be084"
+    },
+    {
+      "name": "mocs/spherex-spherex-qr2-spherex-qr2-d5-coverage-moc.moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "011d5ae8f2c3124ff14026bf5c60ac6f86b624b73ea15a2eae9b3da7d58ef3c2"
+    },
+    {
+      "name": "mocs/spherex-spherex-qr2-spherex-qr2-d6-coverage-moc.moc.fits",
+      "sizeBytes": 8640,
+      "sha256": "45c41383383d01045fd43b6882d2c7777e5792b2eabb80a6d26b13f4fe1d6244"
+    },
+    {
+      "name": "provenance.json",
+      "sizeBytes": 3545,
+      "sha256": "7b1fd1beef4c6123590b26e6df163ee10ba1b27fc8246e42df0f9dae3f6a08eb"
+    },
+    {
+      "name": "README.md",
+      "sizeBytes": 152,
+      "sha256": "d95bd37c92b11b3de62237a7e613f787ebf23156f15e36bc032fefc0261e39ee"
+    },
+    {
+      "name": "resource-package.json",
+      "sizeBytes": 7719,
+      "sha256": "30559dd8b53db1785505e1f69a1d74acf6c92ffc7437975d85ea9cffeb9772fb"
+    }
+  ],
+  "details": {
+    "provenance.json": {
+      "schemaVersion": 2,
+      "policy": "reviewed-release-v1",
+      "releaseId": "reviewed-muiweapt-e5de51ad",
+      "layers": [
+        {
+          "productId": "c7b54f6a315bf2ea5b75",
+          "layerId": "spherex-spherex-qr2-spherex-qr2-color-coverage-moc",
+          "reviewedAt": "2026-09-26T21:19:56.609Z",
+          "productRevision": 1,
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2Fcolor&get=smoc&order=7&fmt=fits",
+          "geometryRevision": "2879ec99367d709fc67a5747c5c70fe0ac82d920233ebf09d40f92a5563634df",
+          "mocSha256": "631ef5925374951387c1923a23e9114751429cd2a2c778e37a1dc013ebdcf96d",
+          "method": "native-moc",
+          "indexRevision": null
+        },
+        {
+          "productId": "b9e8c48d13c0c43f1d1e",
+          "layerId": "spherex-spherex-qr2-spherex-qr2-d1-coverage-moc",
+          "reviewedAt": "2026-09-26T21:19:57.064Z",
+          "productRevision": 1,
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD1&get=smoc&order=7&fmt=fits",
+          "geometryRevision": "b353dbc30987756fb8550bc13415b0f5c3b7f41699e807f48218940428ef057b",
+          "mocSha256": "1f959ab8a7edbc7fb32e038210e0272a95a299301ec996adb336c4980e66689e",
+          "method": "native-moc",
+          "indexRevision": null
+        },
+        {
+          "productId": "2040e96a471946714406",
+          "layerId": "spherex-spherex-qr2-spherex-qr2-d2-coverage-moc",
+          "reviewedAt": "2026-09-26T21:19:57.836Z",
+          "productRevision": 1,
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD2&get=smoc&order=7&fmt=fits",
+          "geometryRevision": "394d8d8a513e14602fafc5abf4c4031541996e31d0f0d6b3d42f92edb795788b",
+          "mocSha256": "340d3388651b5c9e9d5b805b3f71474f2d3f8f17459bc3b7a8b84bd8b06b4e0c",
+          "method": "native-moc",
+          "indexRevision": null
+        },
+        {
+          "productId": "b073c19bd5d4d6ed0e6b",
+          "layerId": "spherex-spherex-qr2-spherex-qr2-d3-coverage-moc",
+          "reviewedAt": "2026-09-26T21:19:58.072Z",
+          "productRevision": 1,
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD3&get=smoc&order=7&fmt=fits",
+          "geometryRevision": "7c3e19e281479dede89e0f7edf16f590bffe863d8c780540a1d6c6c0dc4c00d5",
+          "mocSha256": "76a27af806caaef8a7bac558d4344d6ab0f566bf2e97aedb37d5e827411e3b6c",
+          "method": "native-moc",
+          "indexRevision": null
+        },
+        {
+          "productId": "9d375d25e8c25b24ae3d",
+          "layerId": "spherex-spherex-qr2-spherex-qr2-d4-coverage-moc",
+          "reviewedAt": "2026-09-26T21:19:58.487Z",
+          "productRevision": 1,
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD4&get=smoc&order=7&fmt=fits",
+          "geometryRevision": "3a73a7ef87b81bb486a0a83620343c233a21d8dad25496c6abbe01828533c912",
+          "mocSha256": "4a7628b8d82a95f8f2375e9e7423a2877e7ea5545a8dbb5e74546899395be084",
+          "method": "native-moc",
+          "indexRevision": null
+        },
+        {
+          "productId": "df51661b176b580eb5f6",
+          "layerId": "spherex-spherex-qr2-spherex-qr2-d5-coverage-moc",
+          "reviewedAt": "2026-09-26T21:19:59.283Z",
+          "productRevision": 1,
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD5&get=smoc&order=7&fmt=fits",
+          "geometryRevision": "63ef36ef9f5734f75511f96e825440a5489ffaa1ad206249c887927b9f39cb29",
+          "mocSha256": "011d5ae8f2c3124ff14026bf5c60ac6f86b624b73ea15a2eae9b3da7d58ef3c2",
+          "method": "native-moc",
+          "indexRevision": null
+        },
+        {
+          "productId": "9a3c15e1077a5b14a080",
+          "layerId": "spherex-spherex-qr2-spherex-qr2-d6-coverage-moc",
+          "reviewedAt": "2026-09-26T21:19:59.459Z",
+          "productRevision": 1,
+          "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD6&get=smoc&order=7&fmt=fits",
+          "geometryRevision": "6d9921d3da554f53c016bf7c3a8cd08e07700262e0d604e0fb9676f5f7829a61",
+          "mocSha256": "45c41383383d01045fd43b6882d2c7777e5792b2eabb80a6d26b13f4fe1d6244",
+          "method": "native-moc",
+          "indexRevision": null
+        }
+      ]
+    }
+  },
+  "scope": "one public geometry Resource Package; not science files, release-wide audit or deployment attestation"
+}

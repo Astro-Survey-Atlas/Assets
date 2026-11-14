@@ -1,0 +1,21 @@
+{
+  "url": "https://astro.assets.72602.space/api/v1/status",
+  "status": 200,
+  "headers": {
+    "date": "Sat, 14 Nov 2026 11:39:00 GMT",
+    "content-type": "application/json; charset=utf-8",
+    "content-length": "943",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=()",
+    "content-security-policy": "default-src 'self'; img-src 'self' data: https: http:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+    "cache-control": "no-cache",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-envoy-upstream-service-time": "323",
+    "server": "envoy",
+    "connection": "close"
+  },
+  "bytes": 943,
+  "observed_at_utc": "2026-11-14T11:39:00.631443+00:00"
+}

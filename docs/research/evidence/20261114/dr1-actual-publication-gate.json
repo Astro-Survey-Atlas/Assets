@@ -1,0 +1,56 @@
+{
+  "cells": [
+    {
+      "order": 0,
+      "pixel": 0
+    },
+    {
+      "order": 0,
+      "pixel": 1
+    },
+    {
+      "order": 0,
+      "pixel": 2
+    },
+    {
+      "order": 0,
+      "pixel": 3
+    },
+    {
+      "order": 0,
+      "pixel": 4
+    },
+    {
+      "order": 0,
+      "pixel": 5
+    },
+    {
+      "order": 0,
+      "pixel": 6
+    },
+    {
+      "order": 0,
+      "pixel": 7
+    },
+    {
+      "order": 0,
+      "pixel": 8
+    },
+    {
+      "order": 0,
+      "pixel": 9
+    },
+    {
+      "order": 0,
+      "pixel": 10
+    },
+    {
+      "order": 0,
+      "pixel": 11
+    }
+  ],
+  "decodedMaximumOrder": 0,
+  "sha256": "369098ba758dd74f8bec6d895d94df95807bffc500605830781cba2abe373564",
+  "publicationRejected": true,
+  "reason": "Error: 原生覆盖精度 order 0 低于公开发布最低要求 order 4；请获取真实更高精度 MOC，不能放大预览替代。"
+}

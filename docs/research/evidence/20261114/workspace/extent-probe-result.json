@@ -1,0 +1,28 @@
+{
+  "coreVersion": "1.0.0",
+  "wheelSha256": "66d0d07c3afaf74141f967c80eaf359180d06a07f6805494a4aea086d6339642",
+  "privateArtifactRole": "image_extent",
+  "mapCoverageRole": "object_presence",
+  "nativeQueryOrder8CellCount": 97,
+  "mapQueryOrder8CellCount": 1,
+  "overlapOrder8CellCount": 1,
+  "extentCellsAbsentFromMap": 96,
+  "mapCells": [
+    287554
+  ],
+  "extentOnlyCellSample": [
+    287135,
+    287151,
+    287155,
+    287156,
+    287157,
+    287158,
+    287159,
+    287160
+  ],
+  "pointInspection": {
+    "raDeg": 12.8,
+    "decDeg": -3.25,
+    "containedImages": 1
+  }
+}

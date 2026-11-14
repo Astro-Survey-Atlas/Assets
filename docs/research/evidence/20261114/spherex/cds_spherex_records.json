@@ -1,0 +1,20 @@
+{
+  "name": "cds_spherex_records",
+  "method": "GET",
+  "url": "https://alasky.cds.unistra.fr/MocServer/query?ID=%2ASPHEREx%2A&get=record&fmt=json",
+  "observed_utc": "2026-11-14T11:39:07.481719+00:00",
+  "status": 200,
+  "bytes_received": 20987,
+  "sha256": "25e166c79451b8d4a99a882a6ef106de7eb18930b182e7d4fb75e894edabdcc4",
+  "headers": {
+    "date": "Sat, 14 Nov 2026 11:39:10 GMT",
+    "server": "envoy",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-headers": "Content-Type, Authorization, X-Requested-With",
+    "content-type": "application/json;charset=UTF-8",
+    "x-envoy-upstream-service-time": "1934",
+    "connection": "close",
+    "transfer-encoding": "chunked"
+  }
+}

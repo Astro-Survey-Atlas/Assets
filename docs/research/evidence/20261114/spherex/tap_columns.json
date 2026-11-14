@@ -1,0 +1,19 @@
+{
+  "name": "tap_columns",
+  "method": "GET",
+  "url": "https://irsa.ipac.caltech.edu/TAP/sync?REQUEST=doQuery&LANG=ADQL&QUERY=SELECT+TOP+200+table_name%2Ccolumn_name%2Cdatatype%2Cunit%2Cdescription+FROM+TAP_SCHEMA.columns+WHERE+table_name+IN+%28%27spherex.obscore%27%2C%27spherex.artifact%27%2C%27spherex.plane%27%2C%27spherex.observation%27%29&FORMAT=csv&MAXREC=200",
+  "observed_utc": "2026-11-14T11:39:44.506516+00:00",
+  "status": 200,
+  "bytes_received": 13099,
+  "sha256": "51303d3019483311eedaa674863e5ab2b7f0b82ad732e981a60d462833d00c8d",
+  "headers": {
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:39:45 GMT",
+    "content-type": "text/csv",
+    "content-length": "13099",
+    "server-timing": "main;dur=14.652, prepare_internal;dur=1.985, generate_adql;dur=0.009, query_delegate;dur=8.170, query_execute;dur=8.163, database_query;dur=8.142, get_oracle_connection;dur=0.399, run_oracle;dur=7.106",
+    "set-cookie": "anonymous=86/c5/ed822da15dbe917a46e2be6a0031",
+    "x-envoy-upstream-service-time": "605",
+    "connection": "close"
+  }
+}

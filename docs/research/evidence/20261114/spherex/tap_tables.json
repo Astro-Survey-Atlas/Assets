@@ -1,0 +1,19 @@
+{
+  "name": "tap_tables",
+  "method": "GET",
+  "url": "https://irsa.ipac.caltech.edu/TAP/sync?REQUEST=doQuery&LANG=ADQL&QUERY=SELECT+TOP+20+table_name%2Cdescription+FROM+TAP_SCHEMA.tables+WHERE+table_name+LIKE+%27spherex.%25%27&FORMAT=csv&MAXREC=20",
+  "observed_utc": "2026-11-14T11:39:07.399865+00:00",
+  "status": 200,
+  "bytes_received": 280,
+  "sha256": "c10b055b7d5ad64ec21156f96b11c34e3c5ee3ab9d02ba046e3c3171038dbe53",
+  "headers": {
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:39:07 GMT",
+    "content-type": "text/csv",
+    "content-length": "280",
+    "server-timing": "main;dur=10.898, prepare_internal;dur=1.355, generate_adql;dur=0.009, query_delegate;dur=5.324, query_execute;dur=5.318, database_query;dur=5.298, get_oracle_connection;dur=0.397, run_oracle;dur=4.806",
+    "set-cookie": "anonymous=84/20/fe76e40aa98361c593ed01ef9597",
+    "x-envoy-upstream-service-time": "36",
+    "connection": "close"
+  }
+}

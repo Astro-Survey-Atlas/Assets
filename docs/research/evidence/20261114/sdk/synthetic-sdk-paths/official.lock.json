@@ -1,0 +1,16 @@
+{
+  "layerId": "official-spherex-dr1-cube-audit",
+  "mode": "nested-healpix",
+  "input": "/workspace/work/evidence/sdk/synthetic-sdk-paths/spherex-dr1-cube-official.moc.fits",
+  "coverageRole": "image_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "official_geometry",
+  "maxOrder": 0,
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "sourceUrl": "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/Moc.fits",
+  "snapshot": {
+    "sha256": "369098ba758dd74f8bec6d895d94df95807bffc500605830781cba2abe373564",
+    "sizeBytes": 8640
+  }
+}

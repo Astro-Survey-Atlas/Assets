@@ -1,0 +1,20 @@
+{
+  "name": "image_irsa_head",
+  "method": "HEAD",
+  "url": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/level2/2025W18_1B/l2b-v27-2026-196/1/level2_2025W18_1B_0162_1D1_spx_l2b-v27-2026-196.fits",
+  "observed_utc": "2026-11-14T11:40:11.733926+00:00",
+  "status": 200,
+  "bytes_received": 0,
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "headers": {
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:40:11 GMT",
+    "content-type": "application/fits",
+    "content-length": "63492480",
+    "last-modified": "Tue, 22 Sep 2026 22:12:19 GMT",
+    "accept-ranges": "bytes",
+    "x-request-id": "9db7184a-35b4-4d5f-b936-02bcca3ff54a",
+    "x-envoy-upstream-service-time": "61",
+    "connection": "close"
+  }
+}

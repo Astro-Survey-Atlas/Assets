@@ -1,0 +1,41 @@
+{
+  "observed_at_utc": "2026-11-14T11:37:41.476765+00:00",
+  "repositories": [
+    {
+      "repository": "Assets",
+      "head": "8ff160f83d568221abe6cd771ab81b318dd85ea1",
+      "branch": "main",
+      "status": "",
+      "origin": "https://github.com/Astro-Survey-Atlas/Assets.git",
+      "commit_time": "2026-11-11T12:05:40+08:00",
+      "tracked_files": 758
+    },
+    {
+      "repository": "Warehouse",
+      "head": "2e1850d93a87a05b7497caa0dae6c687c22e36e3",
+      "branch": "main",
+      "status": "",
+      "origin": "https://github.com/Astro-Survey-Atlas/Warehouse.git",
+      "commit_time": "2026-09-12T09:28:21+08:00",
+      "tracked_files": 527
+    },
+    {
+      "repository": "Workspace",
+      "head": "c7658f05e629e0a6468b57668d5c732beab65d82",
+      "branch": "main",
+      "status": "",
+      "origin": "https://github.com/Astro-Survey-Atlas/Workspace.git",
+      "commit_time": "2026-11-06T21:37:22+08:00",
+      "tracked_files": 321
+    },
+    {
+      "repository": "MOC-Core-SDK",
+      "head": "16dbd7ea301777848ae16d56bd2a520438893aaf",
+      "branch": "main",
+      "status": "",
+      "origin": "https://github.com/Astro-Survey-Atlas/MOC-Core-SDK.git",
+      "commit_time": "2026-09-22T20:35:47+08:00",
+      "tracked_files": 41
+    }
+  ]
+}

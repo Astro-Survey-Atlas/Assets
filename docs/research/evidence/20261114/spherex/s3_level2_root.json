@@ -1,0 +1,20 @@
+{
+  "name": "s3_level2_root",
+  "method": "GET",
+  "url": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/?list-type=2&prefix=dr1%2Flevel2%2F&delimiter=%2F&max-keys=5",
+  "observed_utc": "2026-11-14T11:39:05.959903+00:00",
+  "status": 200,
+  "bytes_received": 763,
+  "sha256": "86b85c3f3c6ec160b5a1e30b5442fb8aaa2d7a9df88ed7d750a97b75759bc248",
+  "headers": {
+    "x-amz-id-2": "nWjup/AT3C1GC2vofN14aEwQtMTHEOsao22VVuZiuLPxL1kXL7JWi3FUhVNlEq1gDuZB8uXzuu7D2WCdMQFkCELLLqGuvqol",
+    "x-amz-request-id": "N5V2M48DGRVTVF4C",
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:39:07 GMT",
+    "x-amz-bucket-region": "us-east-1",
+    "content-type": "application/xml",
+    "x-envoy-upstream-service-time": "307",
+    "connection": "close",
+    "transfer-encoding": "chunked"
+  }
+}

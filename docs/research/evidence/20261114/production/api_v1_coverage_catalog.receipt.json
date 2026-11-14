@@ -1,0 +1,23 @@
+{
+  "url": "https://astro.assets.72602.space/api/v1/coverage/catalog",
+  "status": 200,
+  "headers": {
+    "date": "Sat, 14 Nov 2026 11:39:01 GMT",
+    "content-type": "application/json; charset=utf-8",
+    "content-length": "215444",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=()",
+    "content-security-policy": "default-src 'self'; img-src 'self' data: https: http:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+    "cache-control": "no-cache, must-revalidate",
+    "vary": "Accept-Encoding",
+    "etag": "W/\"catalog-8f0e672ccdf2c0c507134300b02ac7c86bf9ec6db004d64f0d6b33cb0e5c0c2f\"",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-envoy-upstream-service-time": "277",
+    "server": "envoy",
+    "connection": "close"
+  },
+  "bytes": 215444,
+  "observed_at_utc": "2026-11-14T11:39:02.750947+00:00"
+}

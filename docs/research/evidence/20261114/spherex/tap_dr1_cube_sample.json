@@ -1,0 +1,19 @@
+{
+  "name": "tap_dr1_cube_sample",
+  "method": "GET",
+  "url": "https://irsa.ipac.caltech.edu/TAP/sync?REQUEST=doQuery&LANG=ADQL&QUERY=SELECT+TOP+2+obs_collection%2Cobs_publisher_did%2Caccess_url%2Cs_region%2Caccess_estsize+FROM+spherex.obscore+WHERE+obs_collection%3D%27spherex_dr1_cube%27&FORMAT=csv&MAXREC=2",
+  "observed_utc": "2026-11-14T11:40:49.624456+00:00",
+  "status": 200,
+  "bytes_received": 68,
+  "sha256": "e34d7ffbea9882fef7270deed465ccc0aecb7d74e3ad464c09e0f9536f2187fb",
+  "headers": {
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:41:01 GMT",
+    "content-type": "text/csv",
+    "content-length": "68",
+    "server-timing": "main;dur=12022.722, prepare_internal;dur=1.496, generate_adql;dur=0.009, query_delegate;dur=12016.473, oversee_sync;dur=12011.201, submit_sync;dur=2.576, spinoff_queued;dur=1504.537, spinoff_running;dur=10498.199, TAP_main;dur=1198.908, query_execute;dur=1165.486, database_query;dur=1165.048, get_postgres_connection;dur=6.007, run_postgres;dur=1155.514",
+    "set-cookie": "anonymous=3d/e9/898e4b0d5783939a10fdeb0de98d",
+    "x-envoy-upstream-service-time": "12108",
+    "connection": "close"
+  }
+}

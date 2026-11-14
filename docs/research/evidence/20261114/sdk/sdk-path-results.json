@@ -1,0 +1,81 @@
+{
+  "fits_wcs": {
+    "nativeCells": 55,
+    "order8Cells": 190,
+    "centerPresent": true
+  },
+  "catalog_radec": {
+    "inputRows": 3,
+    "uniquePointCells": [
+      289114,
+      292276
+    ],
+    "raWrapDeduplicated": true
+  },
+  "merge": {
+    "command": [
+      "/workspace/work/venv-sdk/bin/python",
+      "-m",
+      "astro_survey_moc_core.cli",
+      "merge",
+      "--input",
+      "/workspace/work/evidence/sdk/synthetic-sdk-paths/wcs-b/synthetic-image-b.moc.fits",
+      "--input",
+      "/workspace/work/evidence/sdk/synthetic-sdk-paths/wcs-a/synthetic-image-a.moc.fits",
+      "--output",
+      "/workspace/work/evidence/sdk/synthetic-sdk-paths/merged.fits",
+      "--max-order",
+      "8"
+    ],
+    "result": {
+      "cells": 99,
+      "moc": "/workspace/work/evidence/sdk/synthetic-sdk-paths/merged.fits",
+      "sha256": "3ba6d2cd1a9aaafbc272137541936ff3086ed115a610b8502b95c3e2569e1f34"
+    },
+    "canonicalUnionAndBytesEqual": true
+  },
+  "projection_precision": {
+    "nativeMaxOrder": 4,
+    "order4Pixels": 1,
+    "order8Pixels": 256,
+    "finerProjectionChangesNativePrecision": false
+  },
+  "official_dr1_cube_moc": {
+    "sourceBytes": 8640,
+    "sourceSha256": "369098ba758dd74f8bec6d895d94df95807bffc500605830781cba2abe373564",
+    "headerOrder": 11,
+    "decodedNativeMaxOrder": 0,
+    "nativeCanonicalCells": 12,
+    "normalizedSha256": "19d182e8ce52b8ded13ca18246ffb58dfb44d519f3aacfa0b55f74a1e01fbf41",
+    "normalizedMaxOrder": 0,
+    "order4Pixels": 3072,
+    "order8Pixels": 786432,
+    "geometryUnchanged": true,
+    "wrongSnapshotShaRejected": true,
+    "assetsNativeOrder4PublicationGateSatisfied": false
+  },
+  "resource_package": {
+    "archiveSha256": "0da5d528cc9854ac47683b9a1f1cdd76e85b95636c8f9271ba04187819d8f9c3",
+    "entries": [
+      "README.md",
+      "footprints/survey-footprints.json",
+      "healpix/order4.json",
+      "healpix/order8.json",
+      "mocs/coarse.moc.fits",
+      "mocs/mixed.moc.fits",
+      "provenance.json",
+      "resource-package.json"
+    ],
+    "repeatBytesEqual": true,
+    "order8OmittedCoarseLayer": true,
+    "tamperedSidecarHashRejected": true
+  },
+  "production_qr2_package": {
+    "id": "public-spherex-footprints",
+    "version": "3.1.0",
+    "archiveSha256": "bd60d78213456d56cfc2854104f6bcfb1b65600f1000360ea4a6e4a804c382e8",
+    "entryCount": 13,
+    "strictSdkValidation": "passed",
+    "catalogTrustGate": "not tested by this call"
+  }
+}

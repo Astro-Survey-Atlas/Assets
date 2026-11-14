@@ -1,0 +1,48 @@
+{
+  "assets_wheel_sha256": "2bc99645aa3685c7a1509b2cc8cd52cce9d15717187a4bd48903572ee393af9e",
+  "workspace_wheel_sha256": "66d0d07c3afaf74141f967c80eaf359180d06a07f6805494a4aea086d6339642",
+  "files": [
+    {
+      "file": "astro_survey_moc_core/__init__.py",
+      "assets_snapshot_sha256": "075acc58ccb7fc8056a08a24aaa25f58fc9922ee40163897052ec4fd70d1c2be",
+      "assets_wheel_same": true,
+      "upstream_main_same": true,
+      "workspace_wheel_same": true
+    },
+    {
+      "file": "astro_survey_moc_core/cli.py",
+      "assets_snapshot_sha256": "0a8010b6381555cc316b077b251ddb2a3ba01d3cc9b93eee0ceb028ff1ca4efe",
+      "assets_wheel_same": true,
+      "upstream_main_same": true,
+      "workspace_wheel_same": true
+    },
+    {
+      "file": "astro_survey_moc_core/contract.py",
+      "assets_snapshot_sha256": "a150a48b450a6a0932cd9603384a0e489a1dc3b9fe7fcd7beced3f7b6af6f1af",
+      "assets_wheel_same": true,
+      "upstream_main_same": true,
+      "workspace_wheel_same": true
+    },
+    {
+      "file": "astro_survey_moc_core/core.py",
+      "assets_snapshot_sha256": "83ab5b2ed28cc0c1eea07842395aba1807a6dfb02e07629d0b2ada963e518101",
+      "assets_wheel_same": true,
+      "upstream_main_same": false,
+      "workspace_wheel_same": false
+    },
+    {
+      "file": "astro_survey_moc_core/resource_package.py",
+      "assets_snapshot_sha256": "39d7b98f602b08f32c53fb0c22f64daaacb26195b7406fc8b332e5d749eb377f",
+      "assets_wheel_same": true,
+      "upstream_main_same": false,
+      "workspace_wheel_same": false
+    },
+    {
+      "file": "astro_survey_moc_core/task_contract.py",
+      "assets_snapshot_sha256": "b2af30e4e81822b51482377b93e6d7fe91c74413d14276e88748f7e56f592899",
+      "assets_wheel_same": true,
+      "upstream_main_same": true,
+      "workspace_wheel_same": true
+    }
+  ]
+}

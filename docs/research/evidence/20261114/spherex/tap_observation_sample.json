@@ -1,0 +1,19 @@
+{
+  "name": "tap_observation_sample",
+  "method": "GET",
+  "url": "https://irsa.ipac.caltech.edu/TAP/sync?REQUEST=doQuery&LANG=ADQL&QUERY=SELECT+TOP+2+a.uri%2Ca.contentlength%2Cp.poly%2Cp.energy_bandpassname%2Cp.provenance_version%2Co.collection%2Co.observationid+FROM+spherex.artifact+a+JOIN+spherex.plane+p+ON+a.planeid%3Dp.planeid+JOIN+spherex.observation+o+ON+p.obsid%3Do.obsid+WHERE+o.observationid%3D%272025W18_1B_0162_1%27&FORMAT=csv&MAXREC=2",
+  "observed_utc": "2026-11-14T11:41:56.820529+00:00",
+  "status": 200,
+  "bytes_received": 811,
+  "sha256": "f2de1e40edd3ccfe402986bfd8c10d1989a1980328d71f230045c4bf32f66b8c",
+  "headers": {
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:42:05 GMT",
+    "content-type": "text/csv",
+    "content-length": "811",
+    "server-timing": "main;dur=7994.140, prepare_internal;dur=2.301, generate_adql;dur=0.008, query_delegate;dur=7987.011, oversee_sync;dur=7978.484, submit_sync;dur=3.995, spinoff_queued;dur=7968.238, TAP_main;dur=437.517, query_execute;dur=416.076, database_query;dur=415.684, get_postgres_connection;dur=7.284, run_postgres;dur=405.617",
+    "set-cookie": "anonymous=cb/9b/0a0ed8a3a275080ee98b7463e838",
+    "x-envoy-upstream-service-time": "8564",
+    "connection": "close"
+  }
+}

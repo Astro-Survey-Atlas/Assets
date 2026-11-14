@@ -1,0 +1,20 @@
+{
+  "name": "s3_dr1_root",
+  "method": "GET",
+  "url": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/?list-type=2&prefix=dr1/&delimiter=/&max-keys=20",
+  "observed_utc": "2026-11-14T11:38:31.544267+00:00",
+  "status": 200,
+  "bytes_received": 1726,
+  "sha256": "8b7007adeda992e056d85cb52713a036b608ae515c90d4b55c5b8cd326ac0414",
+  "headers": {
+    "x-amz-id-2": "inW8wg7JaZohPPFop1vSa/vTuMFq+QlFA6aJTRVA51AI8twmPON7LNeZMF6kO+aDHgdqddCkwT0=",
+    "x-amz-request-id": "BD6987X0SGS1Z82T",
+    "server": "envoy",
+    "date": "Sat, 14 Nov 2026 11:38:33 GMT",
+    "x-amz-bucket-region": "us-east-1",
+    "content-type": "application/xml",
+    "x-envoy-upstream-service-time": "396",
+    "connection": "close",
+    "transfer-encoding": "chunked"
+  }
+}
