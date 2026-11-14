@@ -17,11 +17,17 @@ test("MOC source registry separates catalog presence from image footprints", asy
   assert.ok(registry.sources.length >= 8);
   for (const source of registry.sources) {
     const url = new URL(source.mocUrl);
-    assert.equal(url.searchParams.get("get"), "smoc");
-    assert.equal(url.searchParams.get("fmt"), "fits");
-    assert.equal(Number(url.searchParams.get("order")), source.maxOrder);
+    if (source.sourceKind === "official-hips-moc") {
+      assert.equal(url.href, "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/Moc.fits");
+      assert.equal(source.sourceTier, "official_geometry");
+      assert.equal(source.releaseId, "spherex-dr1");
+    } else {
+      assert.equal(url.searchParams.get("get"), "smoc");
+      assert.equal(url.searchParams.get("fmt"), "fits");
+      assert.equal(Number(url.searchParams.get("order")), source.maxOrder);
+      assert.equal(source.sourceTier, "third_party_moc");
+    }
     assert.ok(source.overviewOrder <= source.maxOrder);
-    assert.equal(source.sourceTier, "third_party_moc");
     assert.ok(source.licenseStatus);
     if (source.sourceKind === "catalog-moc") {
       assert.equal(source.coverageRole, "object_presence");

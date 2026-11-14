@@ -61,9 +61,20 @@ export function decodeNativeMoc(bytes: Buffer): NativeMoc {
   throw new Error("Missing NUNIQ table");
 }
 
+/** Exact full-sky geometry has no boundary to refine. Call only with decoded MOCs,
+ * whose cells have already been checked for overlap and valid NESTED bounds. */
+export function isFullSkyMoc(moc: NativeMoc): boolean {
+  return moc.cells.reduce((area, cell) => area + 4 ** (13 - cell.order), 0) === 12 * 4 ** 13;
+}
+
+/** Query/display capability; maxOrder continues to describe actual NUNIQ rows. */
+export function mocProjectionMaxOrder(moc: NativeMoc): number {
+  return isFullSkyMoc(moc) ? 13 : moc.maxOrder;
+}
+
 /** Conservative projection; refinement represents an existing cell, not new evidence. */
 export function projectMoc(moc: NativeMoc, order: number, region?: { order: number; cells: readonly number[] }, limit = 5_000_000): { cells: number[]; truncated: boolean } {
-  if (!Number.isSafeInteger(order) || order < 0 || order > moc.maxOrder) throw new Error("Unsupported projection order");
+  if (!Number.isSafeInteger(order) || order < 0 || order > mocProjectionMaxOrder(moc)) throw new Error("Unsupported projection order");
   const intervals = region?.cells.map(pixel => region.order <= order
     ? [pixel * 4 ** (order-region.order), (pixel+1) * 4 ** (order-region.order)] as const
     : [Math.floor(pixel / 4 ** (region.order-order)), Math.floor(pixel / 4 ** (region.order-order))+1] as const).sort((a,b) => a[0]-b[0]);

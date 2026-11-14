@@ -839,6 +839,7 @@ POST /api/v1/admin/moc-discovery/{name}/resubmit
 GET  /api/v1/admin/moc-builds
 POST /api/v1/admin/moc-builds
 POST /api/v1/admin/moc-builds/from-evidence
+POST /api/v1/admin/moc-builds/from-official-source
 POST /api/v1/admin/moc-builds/from-native-units
 GET  /api/v1/admin/moc-builds/{name}
 POST /api/v1/admin/moc-builds/{name}/retry
@@ -1235,3 +1236,23 @@ Implementation index:
 - `executor`: `health`（unknown/unavailable/error）、`checkedAt`、可选 `reason`/`source` 和脱敏 `message`。Ready 不能证明执行循环健康；诊断失败标 unavailable。
 
 观察由 Assets 服务端读取配置 namespace 中匹配标签的至多 4 个执行器 Pod，并缓存 15 秒；每个日志最多 80 行/16 KiB/最近 10 分钟。仅转换已识别的错误签名，不返回任意日志文本。Helm `admin.discoveryObserverNamespace`、`admin.discoveryObserverSelector` 指定观察对象；`admin.discoveryAcceptTimeoutSeconds` 默认 120。需要观察 namespace 的 pods 只读和 pods/log 读取权限；无权限时任务仍显示等待时长与诊断不可用。
+
+### SPHEREx DR1 Cube official MOC
+
+`POST /api/v1/admin/moc-builds/from-official-source` uses the same authenticated
+admin boundary and accepts only `{"sourceId":"spherex-dr1-allsky-cube-moc"}`.
+It reads the repository's SHA-256 lock, acquires IRSA `properties` and `Moc.fits`,
+verifies the DR1 Cube identity and decoded full-sky geometry, and uses the
+configured MOC-Core worker to normalize it. Both source files, the recipe,
+outputs and provenance are retained in the existing evidence/snapshot store.
+The response contains the bound product and a `STAGED` build. Review that build
+and publish its selected product through the normal reviewed-release workflow.
+The endpoint neither approves nor activates the product. Source changes fail
+closed until the lock is reviewed; arbitrary URLs are not accepted.
+
+This product describes the **DR1 All-Sky Cube HiPS extent**, not all DR1 spectral
+images, band-specific valid pixels, or a science-file inventory. The actual MOC
+contains twelve O0 cells even though its original FITS header declares O11.
+Public display/query can project this complete sky exactly through O13. Native
+MOC metadata stays O0; the pinned SDK v1.2 Resource Package v3 format records
+O4/O8 sidecars as omitted for this layer, with the native MOC authoritative.

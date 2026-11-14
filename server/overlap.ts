@@ -1,7 +1,7 @@
 import { Healpix } from "healpixjs";
 
 import type { CoverageCellLayer } from "./coverage.js";
-import type { NativeMoc } from "./native-moc.js";
+import { mocProjectionMaxOrder, type NativeMoc } from "./native-moc.js";
 import { expandPixelRanges, intersectPixelRanges, mocPixelRanges, rangesForCells, type PixelRange } from "./display-coverage.js";
 
 export interface OverlapBounds {
@@ -41,7 +41,7 @@ export function layersForOverlapComponent(
   return layers.filter((layer) => {
     if (!result.surveyIds.includes(layer.surveyId)) return false;
     const moc = nativeGeometry?.get(layer.layerId);
-    if (moc && component.order <= moc.maxOrder) {
+    if (moc && component.order <= mocProjectionMaxOrder(moc)) {
       const ranges = mocPixelRanges(moc, component.order);
       return component.cells.some((pixel) => containsPixel(ranges, pixel));
     }
@@ -220,7 +220,7 @@ function strictOverlapForLayers(
     if (!surveyLayers.length) return null;
     for (const layer of surveyLayers) {
       const moc = nativeGeometry.get(layer.layerId);
-      if (moc && order <= moc.maxOrder) layerRanges.set(layer.layerId, mocPixelRanges(moc, order));
+      if (moc && order <= mocProjectionMaxOrder(moc)) layerRanges.set(layer.layerId, mocPixelRanges(moc, order));
       else if (!moc && layer.availableOrders.includes(order)) layerRanges.set(layer.layerId, rangesForCells(layer.cells.get(order) ?? []));
       else return null;
     }

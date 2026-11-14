@@ -2516,7 +2516,7 @@
       "name": "SPHEREx",
       "mission": "Spectro-Photometer for the History of the Universe",
       "color": "#8fd7d2",
-      "description": "Public SPHEREx coverage represented by reviewed CDS HiPS/MOC products.",
+      "description": "Public SPHEREx coverage with release-specific official IRSA and CDS HiPS/MOC provenance.",
       "modalities": [
         "infrared"
       ],
@@ -2613,6 +2613,29 @@
               "sourceUrl": "https://www.ipac.caltech.edu/project/spherex",
               "geometrySourceLabel": "CDS MocServer spatial MOC",
               "geometrySourceUrl": "https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FSPHEREx%2FQR2%2FD6&get=smoc&order=7&fmt=fits"
+            }
+          ]
+        },
+        {
+          "id": "spherex-dr1",
+          "label": "SPHEREx DR1",
+          "kind": "public_release",
+          "releasedYear": 2026,
+          "modalities": [
+            "infrared"
+          ],
+          "products": [
+            {
+              "name": "SPHEREx DR1 All-Sky Cube coverage",
+              "modality": "infrared",
+              "description": "Official IRSA DR1 All-Sky Cube HiPS spatial extent. This is not the footprint of all DR1 spectral images, a band-specific valid-pixel mask, or a science-file inventory.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "official_geometry",
+              "sourceLabel": "NASA/IPAC IRSA SPHEREx DR1",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/data/SPHEREx/docs/overview_dr1.html",
+              "geometrySourceLabel": "Official IRSA DR1 Cube HiPS MOC",
+              "geometrySourceUrl": "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/Moc.fits"
             }
           ]
         }

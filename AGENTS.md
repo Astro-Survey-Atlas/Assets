@@ -55,3 +55,11 @@ metadata into this workflow before constructing a managed version.
 Preserve installed indexes and use reviewed candidate versions for activation.
 Report a version as active and complete only after all dependencies are archived
 and its activation task passes runtime and site HTTP verification.
+
+A decoded MOC covering the entire sky is the sole exception to the minimum
+native order: its complete geometry has no boundary uncertainty from cell
+packing. Keep its actual `maxOrder` and `availableOrders` unchanged. Assets may
+project it exactly for bounded O4–O13 display/query operations. Resource Package
+v3 retains native order metadata and omits fixed-order sidecars above that order
+as required by the pinned SDK; the native MOC remains authoritative. Never infer
+this exception from a FITS header, sky-fraction metadata, or a recipe flag.

@@ -1,0 +1,44 @@
+{
+  "layerId": "spherex-dr1-allsky-cube-moc",
+  "surveyId": "spherex",
+  "releaseId": "spherex-dr1",
+  "product": "SPHEREx DR1 All-Sky Cube coverage",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "official_geometry",
+  "maxOrder": 0,
+  "modality": "infrared",
+  "mode": "native-moc",
+  "queryOrder": 0,
+  "previewOrder": 0,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://irsa.ipac.caltech.edu/data/SPHEREx/docs/overview_dr1.html",
+  "input": "artifacts/public-survey-footprints/raw/moc/spherex-dr1-allsky-cube-moc.fits",
+  "recipe": {
+    "sourceKind": "official-hips-moc",
+    "sourceId": "ivo://IPAC/P/SPHEREx/DR1/cube",
+    "sourceRecordUrl": "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/properties",
+    "sourceMocUrl": "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/Moc.fits",
+    "sourceRecordSha256": "65f3bda2c1ba582989da7e2e5324fd8b7ad50823580554aae432be45ae05745f",
+    "nativeSpatialOrder": 0,
+    "availableOrders": [
+      0
+    ],
+    "exportOrder": 0,
+    "precision": "estimated",
+    "precisionJustification": "Official IRSA DR1 All-Sky Cube HiPS spatial extent. This is not the footprint of all DR1 spectral images, a band-specific valid-pixel mask, or a science-file inventory.",
+    "limitations": [
+      "Official IRSA DR1 All-Sky Cube HiPS spatial extent. This is not the footprint of all DR1 spectral images, a band-specific valid-pixel mask, or a science-file inventory.",
+      "FITS MOCORDER=11 is a header declaration; actual NUNIQ rows are 4 through 15 (12 order-0 cells)."
+    ],
+    "implementationRef": "scripts/moc_build_worker.py:build"
+  },
+  "snapshot": {
+    "sha256": "369098ba758dd74f8bec6d895d94df95807bffc500605830781cba2abe373564",
+    "sizeBytes": 8640,
+    "sourceUrl": "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/Moc.fits",
+    "recordSha256": "65f3bda2c1ba582989da7e2e5324fd8b7ad50823580554aae432be45ae05745f",
+    "retrievedAt": "2026-11-14T11:42:00Z"
+  }
+}

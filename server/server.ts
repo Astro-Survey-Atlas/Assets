@@ -1,10 +1,11 @@
+import { stageSpherexDr1Moc } from "./official-spherex-moc.js";
 import { ApiManagement, MANAGED_KEY_PREFIX } from "./api-management.js";
 import { envFlag } from "./env.js";
 import { SkyDepthInputError, SkyDepthStore } from "./sky-depth.js";
 import { LlmDiscovery, CDS_SEARCH_URL } from "./llm-discovery.js";
 import { adminInventoryIndex } from "./admin-survey-index.js";
-import { decodeNativeMoc, sha256 as nativeSha256 } from "./native-moc.js";
-import { assertPublicCoverageOrder, MIN_PUBLIC_COVERAGE_ORDER, CoveragePrecisionError } from "./coverage-policy.js";
+import { mocProjectionMaxOrder, decodeNativeMoc, sha256 as nativeSha256 } from "./native-moc.js";
+import { assertPublicCoverageMoc, MIN_PUBLIC_COVERAGE_ORDER, CoveragePrecisionError } from "./coverage-policy.js";
 import { acquireLocalFileLock } from "./local-file-lock.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { ReleaseSynchronizer } from "./release-synchronizer.js";
@@ -1502,8 +1503,9 @@ async function productNativeOrderPreflight(record: ProductRecord): Promise<{ min
       const file = staged.outputs.moc;
       const bytes = await readFile(path.resolve(evidenceRoot, file.ref));
       if (nativeSha256(bytes) !== file.sha256) throw new Error("MOC 校验和不一致，请重新校验构建输出。");
-      maxOrder = decodeNativeMoc(bytes).maxOrder;
-      assertPublicCoverageOrder(maxOrder);
+      const moc = decodeNativeMoc(bytes);
+      maxOrder = moc.maxOrder;
+      assertPublicCoverageMoc(moc);
     } else {
       const material = await productGeometry(record, { root: catalog.root, files: catalog.manifest.files,
         publications: mocPublicationStore.list(), publicationFile: file => mocPublicationStore.absolutePath(file) });
@@ -1515,7 +1517,7 @@ async function productNativeOrderPreflight(record: ProductRecord): Promise<{ min
     minimum: MIN_PUBLIC_COVERAGE_ORDER,
     state: error ? "blocked" : "passed",
     ...(maxOrder !== undefined ? { maxOrder } : {}),
-    message: error ?? `真实原生最高阶数 O${maxOrder} ≥ O${MIN_PUBLIC_COVERAGE_ORDER}（已读取并校验 MOC）`,
+    message: error ?? `原生最高阶数 O${maxOrder}；已校验实际 MOC 并通过公开精度规则（含完整全天例外）`,
   };
 }
 
@@ -3130,6 +3132,11 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       await editorial.sync(adminInventoryIndex(runtimeSurveyIndex, products.list()).surveys);
       return json(response, 201, { request: adminMocBuildView(imported.request), product: adminProductView(imported.product), syncStatus: await apiSyncStatus("products") });
     }
+    if (pathname === "/api/v1/admin/moc-builds/from-official-source" && request.method === "POST") {
+      const imported = await stageSpherexDr1Moc({ sourceRoot: productCatalogRoot, evidenceRoot, products, builds: mocBuildStore, buildService: mocBuildService }, await requestJsonBody(request));
+      await editorial.sync(adminInventoryIndex(runtimeSurveyIndex, products.list()).surveys);
+      return json(response, 201, { request: adminMocBuildView(imported.request), product: adminProductView(imported.product), syncStatus: await apiSyncStatus("products") });
+    }
     if (pathname === "/api/v1/admin/moc-builds/from-evidence" && request.method === "POST") {
       const imported = await registerEvidenceMoc({ evidenceRoot, products, builds: mocBuildStore, buildService: mocBuildService }, await requestJsonBody(request));
       await editorial.sync(adminInventoryIndex(runtimeSurveyIndex, products.list()).surveys);
@@ -3451,7 +3458,7 @@ function sendCoverageBlock(request: IncomingMessage, response: ServerResponse, p
     if (totalTiles > 250_000) return json(response, 413, { error: "The display tile index exceeds the bounded response size", totalTiles });
     return compressedJson(request, response, 200, { layerId: record.layerId, order, tileSize: 4096, ranges, totalTiles, displayRevision }, requestedDisplayRevision ? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate", "W/\"" + displayRevision + "-" + order + "\"");
   }
-  if (moc && order >= 4 && order <= moc.maxOrder && !record.cells.has(order)) {
+  if (moc && order >= 4 && order <= mocProjectionMaxOrder(moc) && !record.cells.has(order)) {
     const totalTiles = Math.max(1, Math.ceil((12 * 4 ** order) / DISPLAY_BLOCK_PIXELS));
     if (tile >= totalTiles) return json(response, 400, { error: "Coverage tile is outside the HEALPix order" });
     try {
@@ -3760,7 +3767,7 @@ function displayRangesFor(layer: CoverageCellLayer, order: number): PixelRange[]
 function layerCellsInRequest(layer: CoverageCellLayer, order: number, requested: ReadonlySet<number>): number[] {
   if (layer.cells.has(order)) return (layer.cells.get(order) ?? []).filter((cell) => requested.has(cell));
   const moc = publicState.geometry.get(layer.layerId);
-  const layerOrder = moc ? Math.min(order, moc.maxOrder) : order;
+  const layerOrder = moc ? Math.min(order, mocProjectionMaxOrder(moc)) : order;
   if (layerOrder >= order) return selectedPixelsInRanges([...requested], displayRangesFor(layer, order));
   const ranges = displayRangesFor(layer, layerOrder);
   const factor = 4 ** (order - layerOrder);

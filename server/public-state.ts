@@ -3,7 +3,7 @@ import path from "node:path";
 import type { LoadedCatalog } from "./catalog.js";
 import { publicManifest } from "./catalog.js";
 import { readApprovedRelease, type ApprovedRelease } from "./approved-release.js";
-import { decodeNativeMoc, projectMoc, type NativeMoc } from "./native-moc.js";
+import { decodeNativeMoc, projectMoc, mocProjectionMaxOrder, type NativeMoc } from "./native-moc.js";
 import { withCoverageRevisions, type CoverageCellLayer } from "./coverage.js";
 import type { ProductRecord } from "./products.js";
 import type { PublicSurveyIndex } from "./surveys.js";
@@ -98,10 +98,10 @@ export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot
     if(moc.sha256!==g.mocSha256 || moc.revision!==g.coverageRevision)throw new Error(`Approved MOC mismatch: ${g.layerId}`);
     if(layers.has(g.layerId))throw new Error(`Duplicate approved layer: ${g.layerId}`);
     geometry.set(g.layerId,moc);
-    const overviewOrder=Math.min(4,moc.maxOrder);
+    const overviewOrder=Math.min(4,mocProjectionMaxOrder(moc));
     // O4/O8 for existing viewer blocks; finest geometry stays in native MOC and
     // bounded queries instead of materializing whole-sky fine rasters in JS.
-    const orders=[...new Set([overviewOrder,Math.min(8,moc.maxOrder)])];
+    const orders=[...new Set([overviewOrder,Math.min(8,mocProjectionMaxOrder(moc))])];
     const cachedCells = cachedMoc === moc ? previous?.mocProjections.get(g.layerId) : undefined;
     const cells=new Map(orders.map(order=>[order,cachedCells?.get(order) ?? projectMoc(moc,order).cells]));
     mocProjections.set(g.layerId, cells);
@@ -143,7 +143,7 @@ export async function loadPublicState(catalog: LoadedCatalog, sourceMetadataRoot
       coordinateFrame:"ICRS" as const,
       ordering:"NESTED" as const,
       maxOrder:moc.maxOrder,
-      queryOrder:Math.min(8,moc.maxOrder),
+      queryOrder:Math.min(8,mocProjectionMaxOrder(moc)),
       previewOrder:overviewOrder,
       ...(c.geometrySourceUrl?{sourceUrl:c.geometrySourceUrl}:{}),
       ...(sourceEvidence.sourceSnapshotSha256?{sourceSnapshotSha256:sourceEvidence.sourceSnapshotSha256}:{}),

@@ -211,3 +211,15 @@ test("view clipping retains the full connected component for details and reverse
   assert.deepEqual(result?.pixels, [0]);
   assert.deepEqual(result?.components[0]?.cells, [0, 283989]);
 });
+
+
+test("a compressed full-sky MOC participates in fine-order overlap and component lookup", () => {
+  const layers = [layer("cube", "spherex", [4, 8]), layer("field", "other", [4, 8])];
+  const nativeGeometry = new Map([
+    ["cube", nativeMoc(0, Array.from({ length: 12 }, (_, pixel) => pixel))],
+    ["field", nativeMoc(10, [12345])],
+  ]);
+  const result = overlapForLayers(layers, ["spherex", "other"], 10, { strictOrder: true, nativeGeometry });
+  assert.deepEqual(result?.pixels, [12345]);
+  assert.deepEqual(layersForOverlapComponent(layers, result!, result!.components[0]!, nativeGeometry).map(layer => layer.layerId), ["cube", "field"]);
+});

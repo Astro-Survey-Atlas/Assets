@@ -401,6 +401,11 @@
       "spec": "src/layers/recipes/ztf-ztf-dr7-ztf-dr7-r-band-imaging-moc.lock.json",
       "output": "artifacts/public-survey-footprints/layers/ztf-ztf-dr7-ztf-dr7-r-band-imaging-moc",
       "expectedSha256": "9b68286be6630b97a7d762f55b4eb8a3b7b215fc5df82cb7f0a06ba85d79a829"
+    },
+    {
+      "spec": "src/layers/recipes/spherex-dr1-allsky-cube-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/spherex-dr1-allsky-cube-moc",
+      "expectedSha256": "19d182e8ce52b8ded13ca18246ffb58dfb44d519f3aacfa0b55f74a1e01fbf41"
     }
   ]
 }
