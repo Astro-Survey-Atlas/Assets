@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { decodeNativeMoc } from "../server/native-moc.js";
 import { sha256Hex } from "../server/hash.js";
 
 type RegistryEntry = {
@@ -15,7 +16,7 @@ type RegistryEntry = {
   overviewOrder: number;
   coverageRole: "object_presence" | "footprint_extent";
   dataOrigin: "observed" | "catalog";
-  sourceTier: "third_party_moc";
+  sourceTier: "third_party_moc" | "official_geometry";
   precision: "exact" | "estimated";
   licenseStatus: string;
   status: "candidate" | "awaiting_snapshot" | "acquired" | "rejected";
@@ -47,18 +48,23 @@ function validateEntry(value: unknown, index: number): RegistryEntry {
   const overviewOrder = entry.overviewOrder;
   if (!Number.isSafeInteger(maxOrder) || (maxOrder as number) < 0 || (maxOrder as number) > 29) fail(`sources[${index}].maxOrder is invalid`);
   if (!Number.isSafeInteger(overviewOrder) || (overviewOrder as number) < 0 || (overviewOrder as number) > (maxOrder as number)) fail(`sources[${index}].overviewOrder is invalid`);
-  if (entry.sourceTier !== "third_party_moc") fail(`sources[${index}].sourceTier must be third_party_moc`);
+  if (entry.sourceTier !== (entry.sourceKind === "official-hips-moc" ? "official_geometry" : "third_party_moc")) fail(`sources[${index}].sourceTier does not match its source kind`);
   if (!["object_presence", "footprint_extent"].includes(String(entry.coverageRole))) fail(`sources[${index}].coverageRole is invalid`);
   if (!["observed", "catalog"].includes(String(entry.dataOrigin))) fail(`sources[${index}].dataOrigin is invalid`);
   if (!["exact", "estimated"].includes(String(entry.precision))) fail(`sources[${index}].precision is invalid`);
   if (!["candidate", "awaiting_snapshot", "acquired", "rejected"].includes(String(entry.status))) fail(`sources[${index}].status is invalid`);
   if (entry.coverageRole === "object_presence" && entry.dataOrigin !== "catalog") fail(`sources[${index}] object presence must be catalog data`);
   requireUrl(entry.sourceUrl, `sources[${index}].sourceUrl`);
-  requireUrl(entry.recordUrl, `sources[${index}].recordUrl`, ["alasky.unistra.fr", "alasky.cds.unistra.fr"]);
-  const mocUrl = requireUrl(entry.mocUrl, `sources[${index}].mocUrl`, ["alasky.unistra.fr", "alasky.cds.unistra.fr"]);
-  const query = new URL(mocUrl).searchParams;
-  if (query.get("get") !== "smoc" || query.get("fmt") !== "fits") fail(`sources[${index}].mocUrl must request FITS SMOC`);
-  if (Number(query.get("order")) !== maxOrder) fail(`sources[${index}].mocUrl order must equal maxOrder`);
+  if (entry.sourceKind === "official-hips-moc") {
+    const base = "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/";
+    if (entry.recordUrl !== `${base}properties` || entry.mocUrl !== `${base}Moc.fits`) fail("Unregistered official HiPS endpoint");
+  } else {
+    requireUrl(entry.recordUrl, `sources[${index}].recordUrl`, ["alasky.unistra.fr", "alasky.cds.unistra.fr"]);
+    const mocUrl = requireUrl(entry.mocUrl, `sources[${index}].mocUrl`, ["alasky.unistra.fr", "alasky.cds.unistra.fr"]);
+    const query = new URL(mocUrl).searchParams;
+    if (query.get("get") !== "smoc" || query.get("fmt") !== "fits") fail(`sources[${index}].mocUrl must request FITS SMOC`);
+    if (Number(query.get("order")) !== maxOrder) fail(`sources[${index}].mocUrl order must equal maxOrder`);
+  }
   return entry as unknown as RegistryEntry;
 }
 
@@ -113,7 +119,11 @@ function validateFits(bytes: Uint8Array, entry: RegistryEntry): { mocOrder?: num
   const uniqColumn = cards.some((card) => /^TTYPE\d+$/.test(card.slice(0, 8).trim()) && cardValue([card], card.slice(0, 8).trim()) === "UNIQ");
   if (ordering !== "NUNIQ") fail(`${entry.id}: FITS MOC ordering is not NUNIQ`);
   if (coordinateSystem !== "C") fail(`${entry.id}: FITS MOC COORDSYS is not C/ICRS`);
-  if (!Number.isSafeInteger(mocOrder) || mocOrder < 0 || mocOrder > entry.maxOrder) fail(`${entry.id}: FITS MOCORDER exceeds locked maxOrder`);
+  if (entry.sourceKind === "official-hips-moc") {
+    if (decodeNativeMoc(Buffer.from(bytes)).maxOrder !== entry.maxOrder) fail(`${entry.id}: decoded order differs from locked maxOrder`);
+  } else if (!Number.isSafeInteger(mocOrder) || mocOrder < 0 || mocOrder > entry.maxOrder) {
+    fail(`${entry.id}: FITS MOCORDER exceeds locked maxOrder`);
+  }
   if (!uniqColumn) fail(`${entry.id}: FITS MOC does not contain a UNIQ column`);
   return { mocOrder, ordering, coordinateSystem, uniqColumn };
 }

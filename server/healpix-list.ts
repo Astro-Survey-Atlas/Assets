@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { NativeMoc } from "./native-moc.js";
+import { mocProjectionMaxOrder, type NativeMoc } from "./native-moc.js";
 import { AccessError } from "./region-access.js";
 import { sha256Hex } from "./hash.js";
 
@@ -34,8 +34,8 @@ export function healpixList(options: { surveyId: string; layers: HealpixLayer[];
   if (!Number.isSafeInteger(order) || order < 0 || order > 13) throw new AccessError(400, "order must be an integer from 0 to 13");
   if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 10_000) throw new AccessError(400, "pageSize must be from 1 to 10000");
   if (!layers.length) throw new AccessError(404, "No published MOC matches this survey and selection");
-  const unsupportedLayers = layers.filter(layer => layer.moc.maxOrder < order).map(layer => ({ layerId: layer.layerId, productId: layer.productId, releaseId: layer.releaseId, maxOrder: layer.moc.maxOrder }));
-  if (unsupportedLayers.length) return { unsupportedLayers, status: 422 as const, error: "Some selected MOCs do not support this order; restrict releaseId or productId", availableOrders: Array.from({ length: Math.min(...layers.map(layer => layer.moc.maxOrder)) + 1 }, (_, index) => index) };
+  const unsupportedLayers = layers.filter(layer => mocProjectionMaxOrder(layer.moc) < order).map(layer => ({ layerId: layer.layerId, productId: layer.productId, releaseId: layer.releaseId, maxOrder: layer.moc.maxOrder }));
+  if (unsupportedLayers.length) return { unsupportedLayers, status: 422 as const, error: "Some selected MOCs do not support this order; restrict releaseId or productId", availableOrders: Array.from({ length: Math.min(...layers.map(layer => mocProjectionMaxOrder(layer.moc))) + 1 }, (_, index) => index) };
   const identities = layers.map(layer => ({ layerId: layer.layerId, productId: layer.productId, releaseId: layer.releaseId, nativeRevision: layer.moc.revision, maxOrder: layer.moc.maxOrder, modality: layer.modality })).sort((a, b) => a.layerId.localeCompare(b.layerId));
   const revision = digest({ surveyId, order, identities });
   const selector = digest({ surveyId, order, layers: identities.map(layer => layer.layerId) });
@@ -80,5 +80,5 @@ export function healpixList(options: { surveyId: string; layers: HealpixLayer[];
     const body = Buffer.from(JSON.stringify({ version: 1, revision, selector, nextPixel: pixels.at(-1)! + 1 } satisfies Cursor)).toString("base64url");
     nextCursor = `${body}.${createHmac("sha256", secret).update(body).digest("base64url")}`;
   }
-  return { status: 200 as const, schemaVersion: 1, surveyId, coordinateFrame: "ICRS", ordering: "NESTED", order, nside: 2 ** order, revision, layers: identities, availableOrders: Array.from({ length: Math.min(...layers.map(layer => layer.moc.maxOrder)) + 1 }, (_, index) => index), projection: "inclusive-native-moc", precision: order < Math.max(...layers.map(layer => layer.moc.maxOrder)) ? "estimated" : "native-moc", pixels, total, page: { pageSize, shown: pixels.length, hasMore, ...(nextCursor ? { nextCursor } : {}) } };
+  return { status: 200 as const, schemaVersion: 1, surveyId, coordinateFrame: "ICRS", ordering: "NESTED", order, nside: 2 ** order, revision, layers: identities, availableOrders: Array.from({ length: Math.min(...layers.map(layer => mocProjectionMaxOrder(layer.moc))) + 1 }, (_, index) => index), projection: "inclusive-native-moc", precision: order < Math.max(...layers.map(layer => layer.moc.maxOrder)) ? "estimated" : "native-moc", pixels, total, page: { pageSize, shown: pixels.length, hasMore, ...(nextCursor ? { nextCursor } : {}) } };
 }

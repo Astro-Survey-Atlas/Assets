@@ -1923,6 +1923,30 @@
       "sourceRecordSha256": "1e04895b6cff5b5ab79e5e70f01feb5e255e887943e642b41266fd903b78fc14",
       "attributionUrl": "https://www.ztf.caltech.edu/",
       "notes": "CDS MOC/HiPS product extent; retain survey acknowledgement and do not interpret as accepted-CCD geometry."
+    },
+    {
+      "id": "spherex-dr1-allsky-cube-moc",
+      "surveyId": "spherex",
+      "releaseId": "spherex-dr1",
+      "product": "SPHEREx DR1 All-Sky Cube coverage",
+      "coverageRole": "footprint_extent",
+      "dataOrigin": "observed",
+      "sourceTier": "official_geometry",
+      "maxOrder": 0,
+      "authority": "NASA/IPAC IRSA",
+      "sourceKind": "official-hips-moc",
+      "sourceUrl": "https://irsa.ipac.caltech.edu/data/SPHEREx/docs/overview_dr1.html",
+      "recordUrl": "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/properties",
+      "mocUrl": "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/Moc.fits",
+      "overviewOrder": 0,
+      "precision": "estimated",
+      "licenseStatus": "public-IRSA-metadata-with-SPHEREx-attribution",
+      "status": "acquired",
+      "acquiredAt": "2026-11-14T11:42:00Z",
+      "sourceSnapshotSha256": "369098ba758dd74f8bec6d895d94df95807bffc500605830781cba2abe373564",
+      "sourceRecordSha256": "65f3bda2c1ba582989da7e2e5324fd8b7ad50823580554aae432be45ae05745f",
+      "attributionUrl": "https://irsa.ipac.caltech.edu/data/SPHEREx/docs/overview_dr1.html",
+      "notes": "Official IRSA DR1 All-Sky Cube HiPS spatial extent. This is not the footprint of all DR1 spectral images, a band-specific valid-pixel mask, or a science-file inventory."
     }
   ]
 }

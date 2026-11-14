@@ -1,4 +1,4 @@
-import type { NativeMoc } from "./native-moc.js";
+import { mocProjectionMaxOrder, type NativeMoc } from "./native-moc.js";
 import { healpixRanges } from "./healpix-list.js";
 
 export const DISPLAY_BLOCK_PIXELS = 4096;
@@ -10,7 +10,7 @@ export interface PixelRange {
 }
 
 export function displayOrders(prebuiltOrders: readonly number[], moc?: NativeMoc): number[] {
-  if (moc) return Array.from({ length: moc.maxOrder - 3 }, (_, index) => index + 4);
+  if (moc) return Array.from({ length: mocProjectionMaxOrder(moc) - 3 }, (_, index) => index + 4);
   return [...new Set(prebuiltOrders.filter((order) => order >= 4))].sort((a, b) => a - b);
 }
 
@@ -45,7 +45,7 @@ export function rangesForCells(cells: readonly number[]): PixelRange[] {
 }
 
 export function mocPixelRanges(moc: NativeMoc, order: number): PixelRange[] {
-  if (!Number.isSafeInteger(order) || order < 0 || order > moc.maxOrder) throw new Error("Unsupported projection order");
+  if (!Number.isSafeInteger(order) || order < 0 || order > mocProjectionMaxOrder(moc)) throw new Error("Unsupported projection order");
   return healpixRanges([moc], order).map(([start, end]) => ({ start, end }));
 }
 

@@ -728,3 +728,11 @@ incremental publication and website verification. Full release archives remain
 export/restore artifacts. See [publication runtime](publication-runtime-split.md).
 The [LLM discovery enhancement](moc-discovery-enhancement-design.md) is an optional Assets fallback after a complete zero-result CDS query. It does not
 replace scientific validation and human review.
+
+A decoded MOC covering the entire sky is the sole exception to the minimum
+native order: its complete geometry has no boundary uncertainty from cell
+packing. Keep its actual `maxOrder` and `availableOrders` unchanged. Assets may
+project it exactly for bounded O4–O13 display/query operations. Resource Package
+v3 retains native order metadata and omits fixed-order sidecars above that order
+as required by the pinned SDK; the native MOC remains authoritative. Never infer
+this exception from a FITS header, sky-fraction metadata, or a recipe flag.
