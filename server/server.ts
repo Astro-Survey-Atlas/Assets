@@ -1,4 +1,4 @@
-import { stageSpherexDr1Moc } from "./official-spherex-moc.js";
+import { stageOfficialMoc } from "./official-moc.js";
 import { ApiManagement, MANAGED_KEY_PREFIX } from "./api-management.js";
 import { envFlag } from "./env.js";
 import { SkyDepthInputError, SkyDepthStore } from "./sky-depth.js";
@@ -3133,7 +3133,7 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       return json(response, 201, { request: adminMocBuildView(imported.request), product: adminProductView(imported.product), syncStatus: await apiSyncStatus("products") });
     }
     if (pathname === "/api/v1/admin/moc-builds/from-official-source" && request.method === "POST") {
-      const imported = await stageSpherexDr1Moc({ sourceRoot: productCatalogRoot, evidenceRoot, products, builds: mocBuildStore, buildService: mocBuildService }, await requestJsonBody(request));
+      const imported = await stageOfficialMoc({ sourceRoot: productCatalogRoot, evidenceRoot, products, builds: mocBuildStore, buildService: mocBuildService }, await requestJsonBody(request));
       await editorial.sync(adminInventoryIndex(runtimeSurveyIndex, products.list()).surveys);
       return json(response, 201, { request: adminMocBuildView(imported.request), product: adminProductView(imported.product), syncStatus: await apiSyncStatus("products") });
     }

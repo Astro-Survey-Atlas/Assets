@@ -1240,7 +1240,7 @@ Implementation index:
 ### SPHEREx DR1 Cube official MOC
 
 `POST /api/v1/admin/moc-builds/from-official-source` uses the same authenticated
-admin boundary and accepts only `{"sourceId":"spherex-dr1-allsky-cube-moc"}`.
+admin boundary and accepts `{"sourceId":"spherex-dr1-allsky-cube-moc"}` for the Cube source.
 It reads the repository's SHA-256 lock, acquires IRSA `properties` and `Moc.fits`,
 verifies the DR1 Cube identity and decoded full-sky geometry, and uses the
 configured MOC-Core worker to normalize it. Both source files, the recipe,
@@ -1256,3 +1256,32 @@ contains twelve O0 cells even though its original FITS header declares O11.
 Public display/query can project this complete sky exactly through O13. Native
 MOC metadata stays O0; the pinned SDK v1.2 Resource Package v3 format records
 O4/O8 sidecars as omitted for this layer, with the native MOC authoritative.
+
+### Euclid DR1-Foundation official Tile MOCs
+
+The same `POST /api/v1/admin/moc-builds/from-official-source` endpoint also accepts
+`{"sourceId":"euclid-dr1-foundation-wide-tiles-moc"}` or
+`{"sourceId":"euclid-dr1-foundation-deep-tiles-moc"}`. Each stages one separately
+identified product for review and normal release publication. The lock binds the
+original IRSA MOC and the versioned IRSA Data Explorer source record identifying
+it as **Wide Tiles Coverage** or **Deep Tiles Coverage**. That JavaScript record
+is retained as evidence; Assets never executes it.
+
+DR1-Foundation was released on **12 November 2026**; full DR1 is announced for
+**16 June 2027**. Neither ERO/Q1/Q2 geometry nor planned survey coverage supplies
+these layers. The official MOCs encode Tile extents (about 2383.99 and 91.82 deg²
+respectively), not the approximately 1900 deg² science area in the release
+announcement, per-band valid-pixel masks, catalogue source occupancy, or a
+complete science-file index. No new native Tile/file lookup index is claimed.
+
+At acquisition, the worker reads legacy ICRS `PIXEL` integer columns only when
+explicitly encoded as HEALPix `NUNIQ`. SDK MOC 2.0 normalization preserves the
+cell geometry, checked by canonical revision before staging. Native maximum O13,
+O8 query and O4 preview output hashes are locked separately. These legacy source
+recipes run through the managed acquisition worker, not the SDK-only historical
+`rebuild-public` plan. Original files and provenance remain in evidence storage.
+
+Sources: [ESA release dates](https://www.cosmos.esa.int/web/euclid/public-data-releases),
+[IRSA DR1 overview](https://irsa.ipac.caltech.edu/data/Euclid/docs/overview_dr1.html),
+[IRSA Data Explorer](https://irsa.ipac.caltech.edu/applications/euclid/),
+[Euclid DR1 licence and credits](https://www.cosmos.esa.int/web/euclid/dr1-data-credits).
