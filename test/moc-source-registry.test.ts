@@ -1,3 +1,4 @@
+import { OFFICIAL_MOC_SOURCES } from "../server/official-moc-sources.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -17,10 +18,10 @@ test("MOC source registry separates catalog presence from image footprints", asy
   assert.ok(registry.sources.length >= 8);
   for (const source of registry.sources) {
     const url = new URL(source.mocUrl);
-    if (source.sourceKind === "official-hips-moc") {
-      assert.equal(url.href, "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/Moc.fits");
+    if (["official-hips-moc", "official-archive-moc"].includes(source.sourceKind)) {
+      assert.equal(url.href, OFFICIAL_MOC_SOURCES[source.id]?.mocUrl);
       assert.equal(source.sourceTier, "official_geometry");
-      assert.equal(source.releaseId, "spherex-dr1");
+      assert.equal(source.releaseId, OFFICIAL_MOC_SOURCES[source.id]?.releaseId);
     } else {
       assert.equal(url.searchParams.get("get"), "smoc");
       assert.equal(url.searchParams.get("fmt"), "fits");
@@ -68,4 +69,27 @@ test("MOC source registry separates catalog presence from image footprints", asy
     const source = registry.sources.find((entry) => entry.id === id);
     assert.equal(source?.maxOrder, 8, `${id} must retain its native order-8 precision`);
   }
+});
+
+
+test("Euclid's current additions are Foundation Wide/Deep Tile footprints with separate locked inputs", async () => {
+  const catalog = JSON.parse(await readFile("src/surveys/survey-catalog.json", "utf8"));
+  const euclid = catalog.surveys.find((survey: { id: string }) => survey.id === "euclid");
+  const release = euclid.releases.find((release: { id: string }) => release.id === "euclid-dr1-foundation");
+  assert.equal(release.label, "DR1-Foundation");
+  assert.equal(release.releasedYear, 2026);
+  assert.equal(release.products.length, 2);
+  assert.equal(euclid.releases.some((release: { id: string }) => release.id === "euclid-dr1"), false, "2027 full DR1 is not this release");
+  const hashes = new Set<string>();
+  for (const field of ["wide", "deep"]) {
+    const id = `euclid-dr1-foundation-${field}-tiles-moc`;
+    const recipe = JSON.parse(await readFile(`src/layers/recipes/${id}.lock.json`, "utf8"));
+    assert.equal(recipe.releaseId, release.id);
+    assert.equal(recipe.recipe.sourceMocUrl, `https://irsa.ipac.caltech.edu/data/MOC/euclid_dr1_${field}.moc.moc.fits`);
+    assert.match(recipe.recipe.precisionJustification, /Tile extent/);
+    assert.equal(recipe.maxOrder, 13); assert.equal(recipe.queryOrder, 8); assert.equal(recipe.previewOrder, 4);
+    for (const kind of ["moc", "query", "preview"]) assert.match(recipe.expectedOutputs[kind].sha256, /^[a-f0-9]{64}$/);
+    hashes.add(recipe.snapshot.sha256);
+  }
+  assert.equal(hashes.size, 2);
 });
