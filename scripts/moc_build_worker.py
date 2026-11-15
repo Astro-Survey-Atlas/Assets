@@ -17,7 +17,8 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from astro_survey_moc_core.contract import normalize_spec
-from astro_survey_moc_core.core import build_layer, canonical_cells, project_cells, read_moc_fits, validate_moc_fits, write_moc_fits
+from astropy.io import fits
+from astro_survey_moc_core.core import cell_for_uniq, build_layer, canonical_cells, project_cells, validate_moc_fits, write_moc_fits
 
 
 def digest(path: Path) -> str:
@@ -40,11 +41,35 @@ def validate(source: Path) -> dict[str, Any]:
     return {"valid": True, "cells": len(cells), "availableOrders": orders, "maxOrder": max(orders) if orders else 0}
 
 
+def read_source_moc(source: Path):
+    """Accept the legacy IRSA PIXEL/NUNIQ table at the acquisition boundary.
+
+    Output remains SDK-validated MOC 2.0/UNIQ. PIXEL is never interpreted as
+    fixed-order NESTED pixels, and no source order is inferred from its name.
+    """
+    with fits.open(source, memmap=False, lazy_load_hdus=False) as hdul:
+        tables = [hdu for hdu in hdul if isinstance(hdu, fits.BinTableHDU)]
+        if len(tables) == 1 and tables[0].columns.names == ["PIXEL"]:
+            table = tables[0]
+            if (table.header.get("PIXTYPE") != "HEALPIX"
+                    or table.header.get("ORDERING") != "NUNIQ"
+                    or table.header.get("COORDSYS") != "C"
+                    or table.columns[0].format not in ("J", "1J", "K", "1K")
+                    or str(table.header.get("MOCVERS", "1.0")) not in ("1.0", "1.1")):
+                raise ValueError("Unsupported legacy PIXEL MOC; require ICRS/NUNIQ integer cells")
+            cells = tuple(cell_for_uniq(value) for value in table.data["PIXEL"])
+            if not cells or any(order < 0 or order > 13 or pixel < 0 or pixel >= 12 * 4**order for order, pixel in cells):
+                raise ValueError("Legacy MOC cells must be nonempty and within O0-O13")
+            return canonical_cells(cells)
+    return validate_moc_fits(source)
+
+
 def build(source: Path, output: Path, max_order: int, query_order: int, preview_order: int) -> dict[str, Any]:
     output.mkdir(parents=True, exist_ok=True)
-    cells = canonical_cells(read_moc_fits(source), max_order=max_order)
+    cells = canonical_cells(read_source_moc(source), max_order=max_order)
     moc = output / "moc.fits"
     moc_sha = write_moc_fits(moc, cells, max_order=max_order)
+    validate_moc_fits(moc)
     query = write_json(output / f"query-order{query_order}.json", {"schemaVersion": 1, "order": query_order, "ordering": "NESTED", "pixels": project_cells(cells, query_order)})
     preview = write_json(output / f"preview-order{preview_order}.json", {"schemaVersion": 1, "order": preview_order, "ordering": "NESTED", "pixels": project_cells(cells, preview_order)})
     stats = write_json(output / "statistics.json", {

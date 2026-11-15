@@ -950,6 +950,9 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
         slider.press("End")
     assert maximum_display_response.value.status == 200
     expect(slider).to_have_attribute("aria-valuetext", "O11")
+    # The loading message also contains the requested order. Wait for the
+    # renderer's committed NSIDE before inspecting the completed block batch.
+    expect(page.locator("#coverage-status-nside")).to_have_text("2048 · O11", timeout=30000)
     expect(page.locator("#coverage-state")).to_contain_text("O11", timeout=30000)
     assert {request["layerId"] for request in tile_index_requests if request["order"] == 11} == {
         "euclid-euclid-ero-native", "gaia-gaia-dr3-main"
@@ -961,6 +964,7 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
         slider.press("ArrowLeft")
     assert manual_display_response.value.status == 200
     expect(slider).to_have_attribute("aria-valuetext", "O9")
+    expect(page.locator("#coverage-status-nside")).to_have_text("512 · O9", timeout=30000)
     expect(page.locator("#coverage-state")).to_contain_text("O9", timeout=30000)
     assert block_requests and all(request["order"] == 9 for request in block_requests), f"manual O9 slider value must fetch O9 blocks, got {block_requests}"
     locale_toggle.click()

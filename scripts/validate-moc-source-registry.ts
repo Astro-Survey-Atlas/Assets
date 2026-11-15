@@ -1,3 +1,4 @@
+import { OFFICIAL_MOC_SOURCES } from "../server/official-moc-sources.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { decodeNativeMoc } from "../server/native-moc.js";
@@ -48,16 +49,17 @@ function validateEntry(value: unknown, index: number): RegistryEntry {
   const overviewOrder = entry.overviewOrder;
   if (!Number.isSafeInteger(maxOrder) || (maxOrder as number) < 0 || (maxOrder as number) > 29) fail(`sources[${index}].maxOrder is invalid`);
   if (!Number.isSafeInteger(overviewOrder) || (overviewOrder as number) < 0 || (overviewOrder as number) > (maxOrder as number)) fail(`sources[${index}].overviewOrder is invalid`);
-  if (entry.sourceTier !== (entry.sourceKind === "official-hips-moc" ? "official_geometry" : "third_party_moc")) fail(`sources[${index}].sourceTier does not match its source kind`);
+  if (entry.sourceTier !== (["official-hips-moc", "official-archive-moc"].includes(String(entry.sourceKind)) ? "official_geometry" : "third_party_moc")) fail(`sources[${index}].sourceTier does not match its source kind`);
   if (!["object_presence", "footprint_extent"].includes(String(entry.coverageRole))) fail(`sources[${index}].coverageRole is invalid`);
   if (!["observed", "catalog"].includes(String(entry.dataOrigin))) fail(`sources[${index}].dataOrigin is invalid`);
   if (!["exact", "estimated"].includes(String(entry.precision))) fail(`sources[${index}].precision is invalid`);
   if (!["candidate", "awaiting_snapshot", "acquired", "rejected"].includes(String(entry.status))) fail(`sources[${index}].status is invalid`);
   if (entry.coverageRole === "object_presence" && entry.dataOrigin !== "catalog") fail(`sources[${index}] object presence must be catalog data`);
   requireUrl(entry.sourceUrl, `sources[${index}].sourceUrl`);
-  if (entry.sourceKind === "official-hips-moc") {
-    const base = "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/";
-    if (entry.recordUrl !== `${base}properties` || entry.mocUrl !== `${base}Moc.fits`) fail("Unregistered official HiPS endpoint");
+  if (["official-hips-moc", "official-archive-moc"].includes(String(entry.sourceKind))) {
+    const source = Object.hasOwn(OFFICIAL_MOC_SOURCES, String(entry.id)) ? OFFICIAL_MOC_SOURCES[String(entry.id)] : undefined;
+    if (!source || entry.recordUrl !== source.recordUrl || entry.mocUrl !== source.mocUrl
+      || entry.surveyId !== source.surveyId || entry.releaseId !== source.releaseId) fail("Unregistered official MOC identity or endpoint");
   } else {
     requireUrl(entry.recordUrl, `sources[${index}].recordUrl`, ["alasky.unistra.fr", "alasky.cds.unistra.fr"]);
     const mocUrl = requireUrl(entry.mocUrl, `sources[${index}].mocUrl`, ["alasky.unistra.fr", "alasky.cds.unistra.fr"]);
@@ -119,12 +121,12 @@ function validateFits(bytes: Uint8Array, entry: RegistryEntry): { mocOrder?: num
   const uniqColumn = cards.some((card) => /^TTYPE\d+$/.test(card.slice(0, 8).trim()) && cardValue([card], card.slice(0, 8).trim()) === "UNIQ");
   if (ordering !== "NUNIQ") fail(`${entry.id}: FITS MOC ordering is not NUNIQ`);
   if (coordinateSystem !== "C") fail(`${entry.id}: FITS MOC COORDSYS is not C/ICRS`);
-  if (entry.sourceKind === "official-hips-moc") {
+  if (["official-hips-moc", "official-archive-moc"].includes(String(entry.sourceKind))) {
     if (decodeNativeMoc(Buffer.from(bytes)).maxOrder !== entry.maxOrder) fail(`${entry.id}: decoded order differs from locked maxOrder`);
   } else if (!Number.isSafeInteger(mocOrder) || mocOrder < 0 || mocOrder > entry.maxOrder) {
     fail(`${entry.id}: FITS MOCORDER exceeds locked maxOrder`);
   }
-  if (!uniqColumn) fail(`${entry.id}: FITS MOC does not contain a UNIQ column`);
+  if (!uniqColumn && !(OFFICIAL_MOC_SOURCES[entry.id]?.legacyPixelMoc && cardValue(cards, "TTYPE1") === "PIXEL")) fail(`${entry.id}: FITS MOC does not contain a UNIQ column`);
   return { mocOrder, ordering, coordinateSystem, uniqColumn };
 }
 

@@ -1,0 +1,70 @@
+{
+  "layerId": "euclid-dr1-foundation-deep-tiles-moc",
+  "surveyId": "euclid",
+  "releaseId": "euclid-dr1-foundation",
+  "product": "Euclid DR1-Foundation Deep Tile coverage",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "official_geometry",
+  "maxOrder": 13,
+  "modality": "imaging",
+  "mode": "native-moc",
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://irsa.ipac.caltech.edu/data/Euclid/docs/overview_dr1.html",
+  "input": "artifacts/public-survey-footprints/raw/moc/euclid-dr1-foundation-deep-tiles-moc.fits",
+  "recipe": {
+    "sourceKind": "official-archive-moc",
+    "sourceId": "IRSA/Euclid/DR1-Foundation/Deep-Tiles",
+    "sourceRecordUrl": "https://irsa.ipac.caltech.edu/applications/euclid/firefly-6d0a2922a94699f98f89.js",
+    "sourceMocUrl": "https://irsa.ipac.caltech.edu/data/MOC/euclid_dr1_deep.moc.moc.fits",
+    "sourceRecordSha256": "f688792ffd6255fb7f83850ff92ed546b03f6c6033db66b49485833d077ae53d",
+    "nativeSpatialOrder": 13,
+    "availableOrders": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+    ],
+    "overviewOrder": 4,
+    "precision": "estimated",
+    "precisionJustification": "Official IRSA Euclid DR1 Deep Tiles Coverage MOC, captured for the 12 November 2026 DR1-Foundation release. This is the Tile extent shown by the IRSA Data Explorer, not a per-band valid-pixel mask, source-catalog occupancy, a complete file inventory, or the future June 2027 full DR1 release.",
+    "sourceEncoding": "Legacy ICRS HEALPIX/NUNIQ, PIXEL integer column; normalize without changing cells",
+    "implementationRef": "scripts/moc_build_worker.py:read_source_moc; scripts/moc_build_worker.py:build",
+    "attributionUrl": "https://www.cosmos.esa.int/web/euclid/dr1-data-credits",
+    "credit": "ESA Euclid/Euclid Consortium/NASA/DR1-2026",
+    "doi": "https://doi.org/10.57780/esa-d079c51",
+    "limitations": [
+      "Official IRSA Euclid DR1 Deep Tiles Coverage MOC, captured for the 12 November 2026 DR1-Foundation release. This is the Tile extent shown by the IRSA Data Explorer, not a per-band valid-pixel mask, source-catalog occupancy, a complete file inventory, or the future June 2027 full DR1 release.",
+      "Wide and Deep Tile extents must not be substituted for the approximately 1900 deg2 science survey area stated in the release announcement."
+    ]
+  },
+  "snapshot": {
+    "sha256": "5346133c848fb67948d32dc138dc710b49b5b5bd2135535a3419d7392c0d730e",
+    "sizeBytes": 80640,
+    "sourceUrl": "https://irsa.ipac.caltech.edu/data/MOC/euclid_dr1_deep.moc.moc.fits",
+    "recordSha256": "f688792ffd6255fb7f83850ff92ed546b03f6c6033db66b49485833d077ae53d",
+    "retrievedAt": "2026-11-14T15:06:11.213793Z"
+  },
+  "expectedOutputs": {
+    "moc": {
+      "sha256": "41b86bee0f378749e2879ab03754260bb433721f10a2aef34f7cad39c3dace5a",
+      "sizeBytes": 155520
+    },
+    "query": {
+      "sha256": "6ed39e89bd372647bdd433ff0ca3ef1d730166c16f86db16660a66848a7c907a",
+      "sizeBytes": 14173
+    },
+    "preview": {
+      "sha256": "736b1e0b8de9a908b0942dd7255efae21c0be439094a05b83107e4dd857fbf9b",
+      "sizeBytes": 169
+    }
+  }
+}

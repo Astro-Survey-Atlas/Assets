@@ -213,6 +213,41 @@
               "manualStep": "Extract all nine Galactic Bulge Survey field boundaries from the official Q2 contents, convert them to ICRS polygons, and union the nine polygons into the product MOC."
             }
           ]
+        },
+        {
+          "id": "euclid-dr1-foundation",
+          "label": "DR1-Foundation",
+          "kind": "public_release",
+          "releasedYear": 2026,
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "Euclid DR1-Foundation Wide Tile coverage",
+              "modality": "imaging",
+              "description": "Official IRSA Euclid DR1 Wide Tiles Coverage MOC, captured for the 12 November 2026 DR1-Foundation release. This is the Tile extent shown by the IRSA Data Explorer, not a per-band valid-pixel mask, source-catalog occupancy, a complete file inventory, or the future June 2027 full DR1 release.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "official_geometry",
+              "sourceLabel": "NASA/IPAC IRSA Euclid DR1-Foundation",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/data/Euclid/docs/overview_dr1.html",
+              "geometrySourceLabel": "Official IRSA DR1 Wide Tiles MOC",
+              "geometrySourceUrl": "https://irsa.ipac.caltech.edu/data/MOC/euclid_dr1_wide.moc.moc.fits"
+            },
+            {
+              "name": "Euclid DR1-Foundation Deep Tile coverage",
+              "modality": "imaging",
+              "description": "Official IRSA Euclid DR1 Deep Tiles Coverage MOC, captured for the 12 November 2026 DR1-Foundation release. This is the Tile extent shown by the IRSA Data Explorer, not a per-band valid-pixel mask, source-catalog occupancy, a complete file inventory, or the future June 2027 full DR1 release.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "official_geometry",
+              "sourceLabel": "NASA/IPAC IRSA Euclid DR1-Foundation",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/data/Euclid/docs/overview_dr1.html",
+              "geometrySourceLabel": "Official IRSA DR1 Deep Tiles MOC",
+              "geometrySourceUrl": "https://irsa.ipac.caltech.edu/data/MOC/euclid_dr1_deep.moc.moc.fits"
+            }
+          ]
         }
       ]
     },

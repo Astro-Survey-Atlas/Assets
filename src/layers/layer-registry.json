@@ -1772,6 +1772,42 @@
       "expectedSha256": "19d182e8ce52b8ded13ca18246ffb58dfb44d519f3aacfa0b55f74a1e01fbf41",
       "sourceUrl": "https://irsa.ipac.caltech.edu/data/SPHEREx/docs/overview_dr1.html",
       "geometrySourceUrl": "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/Moc.fits"
+    },
+    {
+      "layerId": "euclid-dr1-foundation-wide-tiles-moc",
+      "surveyId": "euclid",
+      "releaseId": "euclid-dr1-foundation",
+      "product": "Euclid DR1-Foundation Wide Tile coverage",
+      "coverageRole": "footprint_extent",
+      "dataOrigin": "observed",
+      "sourceTier": "official_geometry",
+      "maxOrder": 13,
+      "modality": "imaging",
+      "sourceUnitKind": "tile",
+      "mode": "native-moc",
+      "status": "awaiting_publication",
+      "recipePath": "src/layers/recipes/euclid-dr1-foundation-wide-tiles-moc.lock.json",
+      "expectedSha256": "f8cffbd0cdf8161c3a387f2243d9363fb74d7bd84cda1332786ead55b114443d",
+      "sourceUrl": "https://irsa.ipac.caltech.edu/data/Euclid/docs/overview_dr1.html",
+      "geometrySourceUrl": "https://irsa.ipac.caltech.edu/data/MOC/euclid_dr1_wide.moc.moc.fits"
+    },
+    {
+      "layerId": "euclid-dr1-foundation-deep-tiles-moc",
+      "surveyId": "euclid",
+      "releaseId": "euclid-dr1-foundation",
+      "product": "Euclid DR1-Foundation Deep Tile coverage",
+      "coverageRole": "footprint_extent",
+      "dataOrigin": "observed",
+      "sourceTier": "official_geometry",
+      "maxOrder": 13,
+      "modality": "imaging",
+      "sourceUnitKind": "tile",
+      "mode": "native-moc",
+      "status": "awaiting_publication",
+      "recipePath": "src/layers/recipes/euclid-dr1-foundation-deep-tiles-moc.lock.json",
+      "expectedSha256": "41b86bee0f378749e2879ab03754260bb433721f10a2aef34f7cad39c3dace5a",
+      "sourceUrl": "https://irsa.ipac.caltech.edu/data/Euclid/docs/overview_dr1.html",
+      "geometrySourceUrl": "https://irsa.ipac.caltech.edu/data/MOC/euclid_dr1_deep.moc.moc.fits"
     }
   ]
 }
