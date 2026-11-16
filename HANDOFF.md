@@ -78,16 +78,19 @@ healpy 生成的 1344 条 HEALPix 参考向量（`fixtures/conformance/healpix-v
   `values.yaml` 默认 tag、`server/server.ts` health 版本。
 - 部署流程见 [CLAUDE.md](CLAUDE.md)。使用实际 prod release 已有 values；生产升级由用户在终端执行。
 - 修改被 release-manifest 收录的文档会改变 hash：在已 hydrate 的工作区运行 `npm run catalog:build` 并验证；本地重建不等于发布。
-  **当前本机工作区未 hydrate**：`artifacts/public-survey-footprints/layers/spherex-dr1-allsky-cube-moc/` 等最近新增图层的产物（gitignore）不存在，
-  `catalog:build` 报 ENOENT；2026-11-16 的文档改动因此没有重建 manifest，发版前需重建并核对。
-  同一原因使 `test/server-http.test.ts` 等 7 项集成测试在本机起不来服务（`Public asset SHA-256 mismatch`），
-  干净基线同样失败；改动验证以类型检查和不依赖服务的单测为准，发版前须在 hydrate 后的环境重跑 `npm test`。
+  **本机现状（2026-11-16 核对）**：`release-manifest.json`（bundle `public-survey-footprints-2026-09-27`）485 个文件中 481 个哈希一致，
+  不一致的 4 个是已入库的控制文档（`survey-catalog.json`、`public-build-plan.json`、`source-registry.json`、`layer-registry.json`），
+  因 SPHEREx/Euclid 提交改过它们而 manifest 未重建；因此服务启动报 `Public asset SHA-256 mismatch`，
+  `test/server-http.test.ts` 等 7 项集成测试在干净基线上同样失败。`catalog:build` 另报缺
+  `layers/spherex-dr1-allsky-cube-moc/provenance.json`：新增图层的 gitignored 产物没生成。
+  用户已手工替换 `packages/public-{euclid,spherex}-footprints-3.1.0.zip`，SDK `validate_resource_package` 校验通过，
+  但它们是否与仓库图层产物一致尚未核对。修复方式（舍弃或重新生成）见待办，**未执行**。
 - 本机无 git-lfs：`vendor/moc-core/*.tar.gz` 与 `artifacts/…/moc-core/*.tar.gz` 显示为已修改是假差异，不要提交；
   推送必要时 `--no-verify`。
 
 ## 不可突破的边界
 
-先读 [AGENTS.md](AGENTS.md)、[boundaries](docs/boundaries.md)、[coverage workflow](docs/coverage-workflow.md)、
+先读 [AGENTS.md](AGENTS.md)、[pipeline](docs/pipeline.md)、[boundaries](docs/boundaries.md)、[coverage workflow](docs/coverage-workflow.md)、
 [原生单元管理](docs/native-unit-management.md)、[存储](docs/public-artifact-storage.md)、
 [发布运行架构](docs/publication-runtime-split.md)。
 
