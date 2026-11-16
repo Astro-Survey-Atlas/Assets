@@ -6,6 +6,7 @@ import type { DiscoveryFailure } from "../../server/discovery-failure.js";
 import { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Trash2, Unlock, Upload, X, Sun, createIcons } from "lucide";
 import { mountPendingRings } from "./pending-ring.js";
 import { byId, escapeHtml, formatBytes, toast as showToast } from "../src/dom.js";
+import { mocBuildView, orderLabel, phaseClass, phaseIcon, phaseLabel, phaseMarkup, taskMetric } from "./build-display.js";
 import { UploadCloud } from "lucide";
 import { mountLocaleControls, t } from "../src/i18n.js";
 import { surveyMarkMarkup } from "../src/survey-mark.js";
@@ -570,6 +571,7 @@ function setAdminStep(step: AdminStep, replace = false): void {
     document.querySelectorAll<HTMLDialogElement>("dialog[open]").forEach(dialog => dialog.close());
   }
   document.querySelectorAll<HTMLElement>("[data-admin-panel]").forEach(panel => { panel.hidden = panel.dataset.adminPanel !== step; });
+  nativeManagement.renderVisible();
   document.querySelectorAll<HTMLButtonElement>("[data-admin-step]").forEach(button => {
     const selected = button.dataset.adminStep === step;
     button.setAttribute("aria-selected", String(selected)); button.tabIndex = selected ? 0 : -1;
@@ -985,15 +987,6 @@ async function inventoryConnector(name: string): Promise<void> {
   }
 }
 
-function phaseClass(phase: string): string {
-  return (phase || "PENDING").toLowerCase().replace(/[^a-z]+/g, "-");
-}
-
-function phaseLabel(phase?: string): string {
-  const normalized = String(phase ?? "").trim().toUpperCase();
-  return normalized || "PENDING";
-}
-
 function mocFailureReasonLabel(reason?: string): string {
   const normalized = String(reason ?? "").trim();
   return ({
@@ -1051,27 +1044,6 @@ function lifecycleStateLabel(state?: string): string {
     DRAFT: "DRAFT",
     RETIRED: "RETIRED",
   } as Record<string, string>)[normalized] ?? normalized;
-}
-
-function orderLabel(orders?: number[]): string {
-  return orders?.length ? orders.map((order) => `O${order}`).join(" / ") : "--";
-}
-
-function phaseIcon(phase?: string): string {
-  const value = phaseLabel(phase);
-  if (["SUCCEEDED", "COMPLETED", "STAGED", "PUBLISHED", "ACTIVE"].includes(value)) return "circle-check";
-  if (["FAILED", "ERROR", "INVALID", "CANCELLED"].includes(value)) return "circle-alert";
-  if (["RUNNING", "PROBING", "PROCESSING"].includes(value)) return "loader-circle";
-  return "circle-dot";
-}
-
-function phaseMarkup(phase: string | undefined, prefix = ""): string {
-  const label = `${prefix}${phaseLabel(phase)}`;
-  return `<span class="task-phase task-phase-${phaseClass(phase ?? "PENDING")}" title="${escapeText(label)}"><i data-lucide="${phaseIcon(phase)}"></i><span>${escapeText(label)}</span></span>`;
-}
-
-function taskMetric(icon: string, label: string, value: string | number): string {
-  return `<span class="task-metric"><i data-lucide="${icon}"></i><span>${escapeText(label)}</span><strong>${escapeText(value)}</strong></span>`;
 }
 
 function taskStatsMarkup(status: TaskStatus): string {
@@ -1409,9 +1381,9 @@ function mocBuildRegistrationAction(build: MocBuildRequest | MocBuildSummary): s
 }
 
 function mocBuildReadout(build: MocBuildRequest | MocBuildSummary): string {
-  const complete = phaseLabel(build.phase) === "STAGED" ? `<span class="build-complete">构建完成</span>` : "";
-  const nativeOrders = build.outputs?.availableOrders;
-  const lifecycle = lifecycleMarkup(build.lifecycle, undefined, nativeOrders);
+  const view = mocBuildView(build)!;
+  const complete = view.phase === "STAGED" ? `<span class="build-complete">构建完成</span>` : view.phase === "FAILED" || view.phase === "DUPLICATE" ? `<span class="build-complete is-failed">构建未完成</span>` : "";
+  const lifecycle = lifecycleMarkup(build.lifecycle, undefined, build.outputs?.availableOrders);
   const links = lifecycleLinksMarkup(build.lifecycle);
   return `${complete}${lifecycle}${links}`;
 }
@@ -1429,7 +1401,7 @@ function renderMocBuildDetails(build: MocBuildRequest): void {
     detailValue("statistics", output.statistics ? `${output.statistics.ref}${output.statistics.sha256 ? ` · ${output.statistics.sha256}` : ""}` : undefined),
     detailValue("manifest", output.manifest ? `${output.manifest.ref}${output.manifest.sha256 ? ` · ${output.manifest.sha256}` : ""}` : undefined),
   ].join("") : "";
-  const percent = typeof progress.percent === "number" ? Math.max(0, Math.min(100, progress.percent)) : undefined;
+  const percent = mocBuildView(build)?.percent ?? (typeof progress.percent === "number" ? Math.max(0, Math.min(100, progress.percent)) : undefined);
   const registerAction = build.phase === "STAGED" && !build.productId ? `<button type="button" class="admin-primary" data-register-moc-build-detail="${escapeText(build.name)}"><i data-lucide="plus"></i><span>登记为产品</span></button>` : "";
   byId("moc-build-detail-title").textContent = build.workTitle ?? build.name;
   byId("moc-build-detail-content").innerHTML = `<div class="build-progress-summary"><div>${phaseMarkup(build.phase, "BUILD ")}<strong>${escapeText(progress.message ?? "")}</strong>${registerAction}</div>${percent !== undefined ? `<progress max="100" value="${percent}"></progress><span>${percent}% · step ${progress.step}/${progress.totalSteps}</span>` : ""}${mocBuildReadout(build)}</div><dl class="task-detail-grid">${detailValue("build", build.name)}${detailValue("discovery", build.discoveryRequestName)}${detailValue("candidate", build.candidateId)}${detailValue("product", build.productId)}${detailValue("source", build.source.url)}${detailValue("source snapshot", build.source.snapshotSha256 ? `${build.source.snapshotSha256}${build.source.sizeBytes !== undefined ? ` · ${build.source.sizeBytes} bytes` : ""}` : undefined)}${detailValue("evidence", build.source.evidenceRef)}${detailValue("created", formatDate(build.createdAt))}${detailValue("updated", formatDate(build.updatedAt))}${detailValue("published", build.publishedAt ? `${formatDate(build.publishedAt)}${build.publicationId ? ` · ${build.publicationId}` : ""}` : "not published")}${detailValue("error", build.error ? `${build.error.reason}: ${build.error.message}` : undefined)}</dl>${outputRows ? `<h5 class="build-detail-subheading">构建产出</h5><dl class="task-detail-grid">${outputRows}</dl>` : ""}`;
@@ -1449,10 +1421,10 @@ async function openMocBuildDetails(name: string): Promise<void> {
 function workBuildRowMarkup(build: MocBuildRequest): string {
   const product = productRecords.find(entry => entry.productId === build.productId);
   const release = reviewSurveyRecords.find(survey => survey.id === (product?.draft.surveyId ?? build.surveyId))?.releases.find(release => release.id === (product?.draft.releaseId ?? build.releaseId));
-  const busy = ["QUEUED", "PENDING", "RUNNING", "PROCESSING"].includes(phaseLabel(build.phase));
-  const percent = busy && typeof build.progress?.percent === "number" ? Math.min(100, Math.max(0, build.progress.percent)) : undefined;
-  const message = build.error?.message ?? (busy ? build.progress?.message : undefined);
-  return `<div class="work-build-output" data-row-key="${escapeText(build.name)}"><div class="work-build-identity"><strong>${escapeText(product?.draft.name ?? build.candidateTitle ?? build.candidateId)}</strong><small>${escapeText(release?.label ?? product?.draft.releaseId ?? build.releaseId ?? "数据发布未指定")} · ${product?.published ? "产品已发布" : product ? "已登记产品" : "待登记产品"}</small>${message ? `<span class="work-build-message${build.error ? " is-error" : ""}" title="${escapeText(message)}">${escapeText(message)}</span>` : ""}</div><div class="work-build-metrics">${phaseMarkup(build.phase)}${taskMetric("grid-3x3", "精度", orderLabel(build.outputs?.availableOrders))}${taskMetric("layers-3", "覆盖单元", build.outputs?.cellCount?.toLocaleString() ?? "—")}${percent !== undefined ? `<span class="work-build-progress"><progress max="100" value="${percent}" aria-label="构建进度"></progress><small>${percent}%</small></span>` : ""}</div><div class="work-build-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div>`;
+  const view = mocBuildView(build)!;
+  const percent = view.percent;
+  const message = build.error?.message ?? (view.busy ? build.progress?.message : undefined);
+  return `<div class="work-build-output" data-row-key="${escapeText(build.name)}"><div class="work-build-identity"><strong>${escapeText(product?.draft.name ?? build.candidateTitle ?? build.candidateId)}</strong><small>${escapeText(release?.label ?? product?.draft.releaseId ?? build.releaseId ?? "数据发布未指定")} · ${product?.published ? "产品已发布" : product ? "已登记产品" : "待登记产品"}</small>${message ? `<span class="work-build-message${build.error ? " is-error" : ""}" title="${escapeText(message)}">${escapeText(message)}</span>` : ""}</div><div class="work-build-metrics">${phaseMarkup(build.phase)}${taskMetric("grid-3x3", "精度", view.ordersText)}${taskMetric("layers-3", "覆盖单元", view.cellCountText)}${percent !== undefined ? `<span class="work-build-progress"><progress max="100" value="${percent}" aria-label="构建进度"></progress><small>${percent}%</small></span>` : ""}</div><div class="work-build-actions">${mocBuildDetailAction(build.name)}${mocBuildRegistrationAction(build)}</div></div>`;
 }
 
 function standaloneBuildsMarkup(builds: MocBuildRequest[]): string {
@@ -1645,10 +1617,7 @@ function reviewProductMatches(product: ReviewProduct): boolean {
 }
 
 function mocBuildStatusText(build?: MocBuildSummary): string {
-  if (!build) return "";
-  const percent = typeof build.progress?.percent === "number" ? ` · ${build.progress.percent}%` : "";
-  const published = build.publishedAt ? " · published" : "";
-  return `MOC build ${build.phase}${percent}${published}`;
+  return mocBuildView(build)?.summary ?? "";
 }
 
 type ReviewFilter = "all" | ProductLifecycleState;

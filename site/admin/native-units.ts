@@ -166,29 +166,58 @@ export function mountNativeUnits(options: { api: Api; refresh: () => Promise<voi
       panel.hidden = panel.getAttribute(`data-${prefix}-panel`) !== saved;
     });
   }
+  const staleContainers = new Set<string>();
+  function containerVisible(id: string): boolean {
+    const root = document.getElementById(id);
+    if (!root) return false;
+    const panel = root.closest<HTMLElement>("[data-admin-panel]");
+    return !panel || !panel.hidden;
+  }
   function render(value: NativeView): void {
     view = value;
     const update = (id: string, markup: string) => { const root = document.getElementById(id); if (root) reconcileMarkup(root, markup); };
     const active = value.groups.find(group => group.active);
-    update("native-overview", `<div class="native-overview-heading"><div><span class="section-index">NATIVE INDEX</span><h4>原生天空分块</h4></div>${badge(value.syncStatus?.status === "synced" ? "状态已同步" : value.syncStatus?.status ?? "本地", value.syncStatus?.status === "synced" ? "complete" : "warning")}</div><div class="native-overview-stats"><div><span>活动版本</span><strong title="${active ? esc(active.id) : "尚未激活"}">${active ? esc(short(active.id)) : "—"}</strong></div><div><span>索引代次</span><strong>${value.generation}</strong></div><div><span>产品关联</span><strong>${active?.productCount ?? 0}</strong></div><div><span>受管来源</span><strong>${value.sources.length}</strong></div></div>${active ? `<details class="native-overview-details"><summary>活动版本详情</summary><div><span>SHA-256 <code>${esc(active.id)}</code></span><span>内容检查 ${active.report.checks.filter(check => check.passed).length} / ${active.report.checks.length} 通过</span><span>索引状态 ${active.review ? "已审核" : "未审核"} · ${active.archived ? "依赖已归档" : "依赖未归档"}</span></div></details>` : '<p class="native-overview-empty">尚无通过审核并激活的原生索引</p>'}`);
-    update("native-sources", sourceMarkup());
-    update("native-tasks", `<div class="section-heading"><h4>原生分块任务</h4><div class="panel-actions">${button("baseline", "接管现有索引与清单", "", Boolean(value.active))}${button("build", "从快照构建候选", "", !value.groups.length)}</div></div>${tasks()}`);
-    const reviewRoot = document.getElementById("native-review");
-    update("native-review", `<div class="section-heading native-section-heading"><div><span class="section-index">NATIVE REVIEW</span><h4>原生分块索引审核</h4></div><span class="section-note">${value.groups.length} 个版本</span></div><nav class="native-version-tabs" role="tablist" aria-label="原生版本审核"><button id="native-review-pending-tab" type="button" role="tab" data-native-review-tab="pending" aria-controls="native-review-pending" aria-selected="true">待审核 <output>${value.groups.filter(group => !group.review).length}</output></button><button id="native-review-reviewed-tab" type="button" role="tab" data-native-review-tab="reviewed" aria-controls="native-review-reviewed" aria-selected="false" tabindex="-1">已审核 <output>${value.groups.filter(group => group.review).length}</output></button></nav><section id="native-review-pending" data-native-review-panel="pending" role="tabpanel" aria-labelledby="native-review-pending-tab">${groupRows(value.groups.filter(group => !group.review))}</section><section id="native-review-reviewed" data-native-review-panel="reviewed" role="tabpanel" aria-labelledby="native-review-reviewed-tab" hidden>${groupRows(value.groups.filter(group => group.review))}</section>`);
-    restoreTab(reviewRoot, "native-review", ["pending", "reviewed"], "assets-admin-native-review-tab");
-    if (reviewRoot && !mountedTabs.has("review")) { mountRecordTabs(reviewRoot, "native-review", ["pending", "reviewed"] as const, "assets-admin-native-review-tab"); mountedTabs.add("review"); }
-    const releaseRoot = document.getElementById("native-releases");
-    update("native-releases", `<div class="section-heading native-section-heading"><div><span class="section-index">NATIVE RELEASE</span><h4>索引激活与恢复</h4></div><span class="section-note">Generation ${value.generation}</span></div><nav class="native-version-tabs" role="tablist" aria-label="原生索引发布"><button id="native-release-ready-tab" type="button" role="tab" data-native-release-tab="ready" aria-controls="native-release-ready" aria-selected="true">可激活 <output>${value.groups.filter(group => !group.active && group.review && group.archived).length}</output></button><button id="native-release-active-tab" type="button" role="tab" data-native-release-tab="active" aria-controls="native-release-active" aria-selected="false" tabindex="-1">活动版本 <output>${value.groups.filter(group => group.active).length}</output></button><button id="native-release-history-tab" type="button" role="tab" data-native-release-tab="history" aria-controls="native-release-history" aria-selected="false" tabindex="-1">其他版本 <output>${value.groups.filter(group => !group.active && !(group.review && group.archived)).length}</output></button></nav><section id="native-release-ready" data-native-release-panel="ready" role="tabpanel" aria-labelledby="native-release-ready-tab">${groupRows(value.groups.filter(group => !group.active && group.review && group.archived), true)}</section><section id="native-release-active" data-native-release-panel="active" role="tabpanel" aria-labelledby="native-release-active-tab" hidden>${groupRows(value.groups.filter(group => group.active), true)}</section><section id="native-release-history" data-native-release-panel="history" role="tabpanel" aria-labelledby="native-release-history-tab" hidden>${groupRows(value.groups.filter(group => !group.active && !(group.review && group.archived)), true)}</section><details class="native-task-history"><summary>原生索引执行记录 <span>${value.tasks.length}</span></summary>${tasks()}</details>`);
-    restoreTab(releaseRoot, "native-release", ["ready", "active", "history"], "assets-admin-native-release-tab");
-    if (releaseRoot && !mountedTabs.has("release")) { mountRecordTabs(releaseRoot, "native-release", ["ready", "active", "history"] as const, "assets-admin-native-release-tab"); mountedTabs.add("release"); }
-    const sourceRoot = document.getElementById("native-sources");
-    if (sourceRoot && !mountedTabs.has("sources")) {
-      sourceRoot.addEventListener("input", event => { const target = event.target as HTMLInputElement; if (target.id !== "native-source-search") return; sourceSearch = target.value; sessionStorage.setItem("assets-admin-native-source-search", sourceSearch); if (view) reconcileMarkup(sourceRoot, sourceMarkup()); options.icons(); });
-      sourceRoot.addEventListener("change", event => { const target = event.target as HTMLSelectElement; if (target.id !== "native-source-survey") return; sourceSurvey = target.value; sessionStorage.setItem("assets-admin-native-source-survey", sourceSurvey); if (view) reconcileMarkup(sourceRoot, sourceMarkup()); options.icons(); });
-      mountedTabs.add("sources");
+    // Lazy rendering: one poll updates only the visible step's container. The other four used
+    // to be rebuilt with identical markup every cycle; they are marked stale here and filled
+    // by renderVisible() when their step is activated.
+    const sections: Array<[string, () => void]> = [
+      ["native-overview", () => update("native-overview", `<div class="native-overview-heading"><div><span class="section-index">NATIVE INDEX</span><h4>原生天空分块</h4></div>${badge(value.syncStatus?.status === "synced" ? "状态已同步" : value.syncStatus?.status ?? "本地", value.syncStatus?.status === "synced" ? "complete" : "warning")}</div><div class="native-overview-stats"><div><span>活动版本</span><strong title="${active ? esc(active.id) : "尚未激活"}">${active ? esc(short(active.id)) : "—"}</strong></div><div><span>索引代次</span><strong>${value.generation}</strong></div><div><span>产品关联</span><strong>${active?.productCount ?? 0}</strong></div><div><span>受管来源</span><strong>${value.sources.length}</strong></div></div>${active ? `<details class="native-overview-details"><summary>活动版本详情</summary><div><span>SHA-256 <code>${esc(active.id)}</code></span><span>内容检查 ${active.report.checks.filter(check => check.passed).length} / ${active.report.checks.length} 通过</span><span>索引状态 ${active.review ? "已审核" : "未审核"} · ${active.archived ? "依赖已归档" : "依赖未归档"}</span></div></details>` : '<p class="native-overview-empty">尚无通过审核并激活的原生索引</p>'}`)],
+      ["native-sources", () => {
+        update("native-sources", sourceMarkup());
+        const sourceRoot = document.getElementById("native-sources");
+        if (sourceRoot && !mountedTabs.has("sources")) {
+          sourceRoot.addEventListener("input", event => { const target = event.target as HTMLInputElement; if (target.id !== "native-source-search") return; sourceSearch = target.value; sessionStorage.setItem("assets-admin-native-source-search", sourceSearch); if (view) reconcileMarkup(sourceRoot, sourceMarkup()); options.icons(); });
+          sourceRoot.addEventListener("change", event => { const target = event.target as HTMLSelectElement; if (target.id !== "native-source-survey") return; sourceSurvey = target.value; sessionStorage.setItem("assets-admin-native-source-survey", sourceSurvey); if (view) reconcileMarkup(sourceRoot, sourceMarkup()); options.icons(); });
+          mountedTabs.add("sources");
+        }
+      }],
+      ["native-tasks", () => update("native-tasks", `<div class="section-heading"><h4>原生分块任务</h4><div class="panel-actions">${button("baseline", "接管现有索引与清单", "", Boolean(value.active))}${button("build", "从快照构建候选", "", !value.groups.length)}</div></div>${tasks()}`)],
+      ["native-review", () => {
+        const reviewRoot = document.getElementById("native-review");
+        update("native-review", `<div class="section-heading native-section-heading"><div><span class="section-index">NATIVE REVIEW</span><h4>原生分块索引审核</h4></div><span class="section-note">${value.groups.length} 个版本</span></div><nav class="native-version-tabs" role="tablist" aria-label="原生版本审核"><button id="native-review-pending-tab" type="button" role="tab" data-native-review-tab="pending" aria-controls="native-review-pending" aria-selected="true">待审核 <output>${value.groups.filter(group => !group.review).length}</output></button><button id="native-review-reviewed-tab" type="button" role="tab" data-native-review-tab="reviewed" aria-controls="native-review-reviewed" aria-selected="false" tabindex="-1">已审核 <output>${value.groups.filter(group => group.review).length}</output></button></nav><section id="native-review-pending" data-native-review-panel="pending" role="tabpanel" aria-labelledby="native-review-pending-tab">${groupRows(value.groups.filter(group => !group.review))}</section><section id="native-review-reviewed" data-native-review-panel="reviewed" role="tabpanel" aria-labelledby="native-review-reviewed-tab" hidden>${groupRows(value.groups.filter(group => group.review))}</section>`);
+        restoreTab(reviewRoot, "native-review", ["pending", "reviewed"], "assets-admin-native-review-tab");
+        if (reviewRoot && !mountedTabs.has("review")) { mountRecordTabs(reviewRoot, "native-review", ["pending", "reviewed"] as const, "assets-admin-native-review-tab"); mountedTabs.add("review"); }
+      }],
+      ["native-releases", () => {
+        const releaseRoot = document.getElementById("native-releases");
+        update("native-releases", `<div class="section-heading native-section-heading"><div><span class="section-index">NATIVE RELEASE</span><h4>索引激活与恢复</h4></div><span class="section-note">Generation ${value.generation}</span></div><nav class="native-version-tabs" role="tablist" aria-label="原生索引发布"><button id="native-release-ready-tab" type="button" role="tab" data-native-release-tab="ready" aria-controls="native-release-ready" aria-selected="true">可激活 <output>${value.groups.filter(group => !group.active && group.review && group.archived).length}</output></button><button id="native-release-active-tab" type="button" role="tab" data-native-release-tab="active" aria-controls="native-release-active" aria-selected="false" tabindex="-1">活动版本 <output>${value.groups.filter(group => group.active).length}</output></button><button id="native-release-history-tab" type="button" role="tab" data-native-release-tab="history" aria-controls="native-release-history" aria-selected="false" tabindex="-1">其他版本 <output>${value.groups.filter(group => !group.active && !(group.review && group.archived)).length}</output></button></nav><section id="native-release-ready" data-native-release-panel="ready" role="tabpanel" aria-labelledby="native-release-ready-tab">${groupRows(value.groups.filter(group => !group.active && group.review && group.archived), true)}</section><section id="native-release-active" data-native-release-panel="active" role="tabpanel" aria-labelledby="native-release-active-tab" hidden>${groupRows(value.groups.filter(group => group.active), true)}</section><section id="native-release-history" data-native-release-panel="history" role="tabpanel" aria-labelledby="native-release-history-tab" hidden>${groupRows(value.groups.filter(group => !group.active && !(group.review && group.archived)), true)}</section><details class="native-task-history"><summary>原生索引执行记录 <span>${value.tasks.length}</span></summary>${tasks()}</details>`);
+        restoreTab(releaseRoot, "native-release", ["ready", "active", "history"], "assets-admin-native-release-tab");
+        if (releaseRoot && !mountedTabs.has("release")) { mountRecordTabs(releaseRoot, "native-release", ["ready", "active", "history"] as const, "assets-admin-native-release-tab"); mountedTabs.add("release"); }
+      }],
+    ];
+    for (const [id, section] of sections) {
+      if (!document.getElementById(id)) continue;
+      if (!containerVisible(id)) { staleContainers.add(id); continue; }
+      section();
+      staleContainers.delete(id);
     }
     const count = document.getElementById("task-tab-native-count"); if (count) count.textContent = String(value.tasks.length);
     options.icons();
+  }
+  /** Fill the containers of a newly activated step; no-op when nothing stale is visible. */
+  function renderVisible(): void {
+    if (!view) return;
+    if ([...staleContainers].some(containerVisible)) render(view);
   }
   async function submit(operation: string, extra: Record<string, unknown> = {}): Promise<void> {
     await options.api(base + "/tasks", { method: "POST", body: JSON.stringify({ operation, expectedActive: view!.active, ...extra }) });
@@ -237,5 +266,5 @@ export function mountNativeUnits(options: { api: Api; refresh: () => Promise<voi
       }
     });
   });
-  return { render };
+  return { render, renderVisible };
 }

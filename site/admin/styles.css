@@ -48,6 +48,7 @@
 .build-progress-summary > span { color: var(--teal); }
 .build-progress-summary .lifecycle-readout { margin-top: 2px; }
 .build-complete { color: var(--green); font: 700 10px/1.2 var(--font-mono), monospace; }
+.build-complete.is-failed { color: var(--coral); }
 .lifecycle-readout { display: flex; align-items: center; gap: 7px 9px; flex-wrap: wrap; margin-top: 7px; color: var(--muted); font: 9px/1.35 var(--font-mono), monospace; }
 .lifecycle-chip { display: inline-flex; align-items: center; min-height: 22px; padding: 3px 6px; border: 1px solid var(--line-strong); color: var(--muted); white-space: nowrap; }
 .lifecycle-publication.lifecycle-published { border-color: rgba(114,216,141,.7); color: var(--green); }
