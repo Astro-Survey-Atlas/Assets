@@ -30,7 +30,9 @@
    - **外部阻塞（2026-11-16 实测）**：CDS MocServer 的 `get=smoc|moc`（任意 fmt/order，GET 与 POST）一律返回 HTTP 413，
      `get=record` 正常；`alasky.unistra.fr`（7 个源）DNS 解析失败；HiPS 原生 `Moc.fits` 路径 404。所以 83 个源里仅 3 个
      IRSA 源（SPHEREx、Euclid×2）能取到，其余 80 个全部显示 `failed`，无法检测漂移。
-     先确认 CDS 现行取 MOC 的方式或联系 CDS，再决定 registry 的 `mocUrl` 是否要迁移；registry 的 `get=smoc` 仍与
+     已排查并放弃：本地代理 127.0.0.1:7890 对出口 IP 无影响，仍 413；mocpy 官方 `MOC.from_ivorn` 同样返回 502，
+     说明是 CDS 服务端当前故障/变更，不是我们的参数或网络。等 CDS 恢复后重跑 `npm run moc:monitor` 即可，无需改代码；
+     若长期不恢复，再决定 registry 的 `mocUrl` 是否迁移；registry 的 `get=smoc` 仍与
      2MASS6X 记录的 `moc_type=stmoc` 并存，需逐源核对。
 2. **管理台重构**：一个产品只显示一个生命周期状态（未登记 → 已获取 → 待审核 → 已发布 → 已退役）加正交警告；
    一个 MOC build 一个渲染器；只展示“线上 bundle / 候选 bundle”。线索见
