@@ -78,13 +78,20 @@ healpy 生成的 1344 条 HEALPix 参考向量（`fixtures/conformance/healpix-v
   `values.yaml` 默认 tag、`server/server.ts` health 版本。
 - 部署流程见 [CLAUDE.md](CLAUDE.md)。使用实际 prod release 已有 values；生产升级由用户在终端执行。
 - 修改被 release-manifest 收录的文档会改变 hash：在已 hydrate 的工作区运行 `npm run catalog:build` 并验证；本地重建不等于发布。
-  **本机现状（2026-11-16 核对）**：`release-manifest.json`（bundle `public-survey-footprints-2026-09-27`）485 个文件中 481 个哈希一致，
-  不一致的 4 个是已入库的控制文档（`survey-catalog.json`、`public-build-plan.json`、`source-registry.json`、`layer-registry.json`），
-  因 SPHEREx/Euclid 提交改过它们而 manifest 未重建；因此服务启动报 `Public asset SHA-256 mismatch`，
-  `test/server-http.test.ts` 等 7 项集成测试在干净基线上同样失败。`catalog:build` 另报缺
-  `layers/spherex-dr1-allsky-cube-moc/provenance.json`：新增图层的 gitignored 产物没生成。
-  用户已手工替换 `packages/public-{euclid,spherex}-footprints-3.1.0.zip`，SDK `validate_resource_package` 校验通过，
-  但它们是否与仓库图层产物一致尚未核对。修复方式（舍弃或重新生成）见待办，**未执行**。
+  **本机数据状态（2026-11-16 已理顺）**：SPHEREx DR1 与 Euclid DR1-Foundation（Wide/Deep）三个图层此前在
+  `layer-registry.json` 停在 `awaiting_publication`（校验器只接受 path-HEALPix 配方）、Euclid 不在构建计划、
+  footprints/来源状态/包目录都没补齐，导致 `artifacts:validate`、`catalog:build` 失败，服务起不来。现已：
+  1. 从 IRSA 重取三份官方 MOC（字节与锁文件 SHA-256 完全一致），用仓库的 `moc_build_worker` 与 1.2.0 SDK 重新生成图层目录；
+     结果与用户手工放入的 Codex 3.1.0 包字节一致，原 Codex 包已隔离到 `/tmp/asa-codex-3.1.0/`（会随重启丢失，不入库）；
+  2. 图层改 `acquired`，Euclid 补进 `public-build-plan.json`，`survey-footprints.json` 补三个产品，来源状态补齐；
+  3. `rebuild_resource_packages.py` 允许“精确全天 MOC 且登记阶数与解码阶数一致”绕过 O4 下限（与 `isFullSkyMoc` 同规则，
+     AKARI 因登记 O5 而解码 O0 仍按原规则推迟）；生成 `public-euclid-footprints@3.2.0` 与 `public-spherex-footprints@3.2.0`，
+     3.1.0 作为历史版本保留（已从 2026-09-27 collection 还原原始字节）；
+  4. 重建 manifest（503 文件，bundle `public-survey-footprints-2026-11-16`）；`artifacts:validate` 通过（163 产品 / 83 图层）；
+     测试计数同步（160→163、80→83 等）。全套 Node 572 项 570 通过 0 失败 2 跳过；Python 74 项通过。
+  **仍未验证**：这些包是本机生成的，**尚未发布、未激活**；线上 prod 仍是旧 bundle。官方 MOC 重取只对 IRSA 来源（3 个）成立，
+  其余 80 个 CDS 来源的 raw 输入本机不存在（CDS MocServer 故障），所以不能全量 `core:rebuild-public`，也不要这样做。
+  字体切片测试需要 `fontTools`：`CJK_FONT_PYTHON` 指向装有 fonttools 的解释器（本次用 `~/.cache/moc-venv/v/bin/python`）。
 - 本机无 git-lfs：`vendor/moc-core/*.tar.gz` 与 `artifacts/…/moc-core/*.tar.gz` 显示为已修改是假差异，不要提交；
   推送必要时 `--no-verify`。
 

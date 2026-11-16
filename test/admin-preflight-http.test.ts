@@ -49,7 +49,7 @@ for (const order of [0, 4]) test(`admin preflight validates actual O${order}; in
   assert.equal(preflight.revision, 1);
   assert.equal(preflight.nativeOrder.minimum, 4);
   assert.equal(preflight.nativeOrder.state, order < 4 ? "blocked" : "passed");
-  assert.match(preflight.nativeOrder.message, order < 4 ? /order 0.*order 4/ : /O4 ≥ O4/);
+  assert.match(preflight.nativeOrder.message, order < 4 ? /order 0.*order 4/ : /原生最高阶数 O4/);
   assert.equal(await readFile(path.join(f.contentRoot, "product-content-v1.json"), "utf8"), before, "preflight does not mutate products");
   const readiness = await get("/api/v1/admin/products/review-readiness?surveyId=jwst");
   assert.equal(readiness.surveyId, "jwst");

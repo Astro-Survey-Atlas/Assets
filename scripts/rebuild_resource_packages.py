@@ -9,7 +9,7 @@ Surveys without acquired registry layers keep their existing migrated
 archives untouched.  Content changes bump the package minor version and keep
 the previous archive on disk so older release-history entries stay
 downloadable.  Surveys containing native MOCs below the public O4 minimum
-are deferred without changing their existing package or catalog entry.
+(other than an exact full-sky MOC) are deferred without changing their existing package or catalog entry.
 Surveys listed in ASSETS_DENIED_SURVEYS (default ``csst``) are
 never rebuilt or cataloged.
 """
@@ -132,7 +132,16 @@ def package_layer_spec(layer: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError(f"Frozen MOC checksum mismatch for {layer['layerId']}")
     cells = validate_moc_fits(source_path)
     native_max_order = max((order for order, _ in cells), default=0)
-    if native_max_order < 4:
+    # A decoded MOC that covers the entire sky has no boundary to refine, so it is the one
+    # exception to the O4 minimum (same rule as isFullSkyMoc in server/native-moc.ts). Never
+    # infer it from headers, sky-fraction metadata or a recipe flag.
+    # The registry must also declare that same native order; a mismatch (e.g. a coarsened legacy
+    # layer) keeps the old deferral instead of being silently promoted.
+    covers_full_sky = (
+        sum(4 ** (13 - order) for order, _ in cells) == 12 * 4 ** 13
+        and layer.get("maxOrder") == native_max_order
+    )
+    if native_max_order < 4 and not covers_full_sky:
         raise PublicPrecisionError(
             f"{layer['layerId']}: native O{native_max_order} is below the public O4 minimum"
         )

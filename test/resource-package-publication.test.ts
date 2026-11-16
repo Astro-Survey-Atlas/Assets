@@ -217,11 +217,11 @@ test("ERO-only dynamic update builds a complete Euclid successor and repeated sy
     const store = new DynamicResourcePackageStore(root, undefined, testDataRoot);
     await store.sync([layer], [], (file) => path.join(root, file.path));
     const entry = store.latest("public-euclid-footprints")!;
-    assert.deepEqual(entry.releases, ["euclid-ero", "euclid-q1"]);
+    assert.deepEqual(entry.releases, ["euclid-dr1-foundation", "euclid-ero", "euclid-q1"]);
     const archive = store.assets()[0]!;
     const manifest = await readResourcePackageManifest(await readFile(path.join(root, archive.path)));
     assert.equal(manifest.layers.filter((item) => item.releaseId === "euclid-q1").length, 6);
-    assert.equal(manifest.layers.length, 13);
+    assert.equal(manifest.layers.length, 15);
     await store.sync([layer], [], (file) => path.join(root, file.path));
     assert.equal(store.list().length, 1);
   } finally { await rm(root, { recursive: true, force: true }); }
