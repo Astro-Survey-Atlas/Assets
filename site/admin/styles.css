@@ -255,14 +255,13 @@ input:disabled, select:disabled, textarea:disabled { background: #071017; color:
 .review-compact-row .product-row-actions button span { margin: 0; color: inherit; font: inherit; }
 .review-filter-stack { display: grid; gap: 8px; min-width: 0; flex: 1 1 600px; }
 .review-eligibility-filters { padding-top: 7px; border-top: 1px solid var(--line); }
-.review-eligibility { display: grid; gap: 3px; min-width: 0; line-height: 1.35; }
-.review-eligibility strong { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
-.review-eligibility small { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.35; overflow-wrap: anywhere; }
-.review-eligibility .review-publication-eligibility { color: var(--teal); }
-.review-eligibility[data-state="ready"] strong { color: var(--green); }
-.review-eligibility[data-state="confirm-limitations"] strong { color: var(--ochre); }
-.review-eligibility[data-state="blocked"] strong, .review-eligibility[data-state="stale"] strong, .review-eligibility[data-state="error"] strong { color: var(--coral); }
-.review-eligibility[data-state="unregistered"] strong, .review-eligibility[data-state="unmatched"] strong { color: var(--muted); }
+.review-flag { display: grid; gap: 3px; min-width: 0; line-height: 1.35; }
+.review-flag strong { font-size: 11px; overflow-wrap: anywhere; color: var(--muted); }
+.review-flag small { margin: 0; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.review-flag[data-severity="ok"] strong { color: var(--green); }
+.review-flag[data-severity="warn"] strong { color: var(--ochre); }
+.review-flag[data-severity="block"] strong { color: var(--coral); }
+.review-flag[data-severity="info"] strong { color: var(--muted); }
 .review-qualification-status, .review-qualification-error { color: var(--muted); font-size: 11px; }
 .review-qualification-error { color: var(--coral); overflow-wrap: anywhere; }
 .review-unregistered-note { color: var(--muted); font-size: 10px; }
@@ -311,7 +310,7 @@ input:disabled, select:disabled, textarea:disabled { background: #071017; color:
   .review-compact-release { grid-row: 2; }
   .review-compact-row .review-state { grid-column: 2; grid-row: 1; justify-self: end; }
   .review-compact-row > .product-row-actions { grid-column: 2; grid-row: 2; width: auto; }
-  .review-compact-row .review-eligibility { grid-column: 1 / -1; grid-row: 3; }
+  .review-compact-row .review-flag { grid-column: 1 / -1; grid-row: 3; }
   .review-filter-stack { flex-basis: 100%; }
 }
 .review-survey:last-child { border-bottom: 1px solid var(--line); }

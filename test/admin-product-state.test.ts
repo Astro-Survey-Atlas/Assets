@@ -59,3 +59,27 @@ test("sky visibility reports the live release, never the review state", () => {
   assert.equal(skyVisibility({ published: true, orders: [4], retired: true }, orderText), "天球：待撤下");
   assert.equal(skyVisibility({ published: false, orders: [], retired: true }, orderText), "天球：已撤下");
 });
+
+import { eligibilityFlag } from "../site/admin/product-state.js";
+
+const eligible = (over: Record<string, string> = {}) => ({
+  state: "blocked", label: "暂不可审核", reason: "覆盖尚未构建或校验", publicationState: "blocked", publicationLabel: "发布：未通过门禁", ...over,
+});
+
+test("a pending product shows its review eligibility as one flag", () => {
+  assert.deepEqual(eligibilityFlag("pending", eligible()), { severity: "block", text: "暂不可审核", detail: "覆盖尚未构建或校验" });
+  assert.equal(eligibilityFlag("pending", eligible({ state: "ready", label: "可审核", reason: "审核条件满足" }))!.severity, "ok");
+  assert.equal(eligibilityFlag("pending", eligible({ state: "confirm-limitations" }))!.severity, "warn");
+});
+
+test("a reviewed product shows only its publication gate", () => {
+  const flag = eligibilityFlag("reviewed", eligible({ publicationState: "ready", publicationLabel: "发布：可提交" }))!;
+  assert.deepEqual([flag.severity, flag.text, flag.detail], ["ok", "发布：可提交", ""]);
+  assert.equal(eligibilityFlag("reviewed", eligible({ publicationState: "blocked" }))!.severity, "block");
+});
+
+test("published and retired products carry no flag, except a changed version", () => {
+  assert.equal(eligibilityFlag("published", eligible({ state: "published" })), null);
+  assert.equal(eligibilityFlag("retired", eligible({ state: "retired" })), null);
+  assert.equal(eligibilityFlag("published", eligible({ state: "stale", label: "版本已变化" }))!.severity, "block");
+});

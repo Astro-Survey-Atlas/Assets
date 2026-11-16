@@ -70,3 +70,39 @@ export function skyVisibility(coverage: PublicCoverageInput | undefined, orderTe
   if (!coverage?.published) return "天球：未公开";
   return coverage.orders.length ? `天球：可显示 · ${orderText(coverage.orders)}` : "天球：已公开 · 暂无覆盖几何";
 }
+
+export type FlagSeverity = "ok" | "warn" | "block" | "info";
+export interface EligibilityInput {
+  /** Review eligibility: ready, confirm-limitations, blocked, stale, error, loading, unregistered, unmatched, published, retired. */
+  state: string;
+  label: string;
+  reason: string;
+  /** Publication eligibility straight from the server: ready, needs-review, confirm-limitations, blocked, stale, ... */
+  publicationState?: string;
+  publicationLabel: string;
+}
+export interface ProductFlag { severity: FlagSeverity; text: string; detail: string }
+
+const REVIEW_SEVERITY: Record<string, FlagSeverity> = {
+  ready: "ok", "confirm-limitations": "warn", blocked: "block", stale: "block", error: "block",
+  loading: "info", unregistered: "info", unmatched: "info",
+};
+const PUBLICATION_SEVERITY: Record<string, FlagSeverity> = {
+  ready: "ok", "confirm-limitations": "warn", blocked: "block", stale: "block", "needs-review": "info",
+};
+
+/**
+ * A warning attached to a product, not a second status. It names the next gate only:
+ * pending products show their review eligibility, reviewed products show their publication gate,
+ * published and retired products show nothing (the lifecycle badge already says everything).
+ * A version that changed under a published product is the one exception, because it needs action.
+ */
+export function eligibilityFlag(lifecycle: ProductLifecycleState, eligibility: EligibilityInput): ProductFlag | null {
+  if (eligibility.state === "stale") return { severity: "block", text: eligibility.label, detail: eligibility.reason };
+  if (lifecycle === "published" || lifecycle === "retired") return null;
+  if (lifecycle === "reviewed") {
+    const severity = PUBLICATION_SEVERITY[eligibility.publicationState ?? ""] ?? "info";
+    return { severity, text: eligibility.publicationLabel, detail: "" };
+  }
+  return { severity: REVIEW_SEVERITY[eligibility.state] ?? "info", text: eligibility.label, detail: eligibility.reason };
+}
