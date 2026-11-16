@@ -79,7 +79,7 @@ flowchart LR
 1. **发布状态机有三套**：`publication-task-store`（TaskPhase）、`public-release-publication`（PublicationRunStatus：building/uploading/verifying…）、原生索引自己的暂存-激活流。目标：对外只有第 6 阶段那一套。
 2. **三条版本轴**：bundle id、原生索引 generation、代码 tag 各自独立发布。目标：bundle 一条，原生索引随 bundle 一起产出，代码 tag 只指镜像。
 3. **构建入口有四个**：`from-official-source`、`from-native-units`、`from-evidence`、`from-path-healpix-evidence`，对应三种来源，导入模块重复（`evidence-moc-import` 与 `path-healpix-moc-import`）。目标：官方源一条，证据一条。
-4. **重复入口**：发布入口 3 个、建扫描任务入口 3 个、登记构建入口 3 个（见 [冗余审计](audit-redundancy-and-admin-flow-20261108.md) 2.6）。目标：每件事一个入口。
-5. **管理台仍有一套并行词汇**：`qualificationReadout`（审核资格）仍以独立状态展示；生命周期、徽标与天球可见性已收敛到 `product-state.ts`。
+4. **重复入口**：发布入口 3 个、建扫描任务入口 3 个、登记构建入口 3 个（见 [冗余审计](audit-redundancy-and-admin-flow-20261108.md) 2.6）。目标：每件事一个入口（先定保留哪个，属产品决策）。
+5. **管理台并行词汇已收敛**：生命周期、徽标、天球可见性、审核资格警告在 `product-state.ts`；MOC 构建展示在 `build-display.ts`；native 分块按可见步骤惰性渲染。
 6. **阶段 1 的调度未接**：监控只能手动运行；管理页没有“待审核更新”。
 7. **阶段 2 的锁定与监控基线是两份**：锁文件 `lock.json` 与 registry 的 `sourceSnapshotSha256` 重复记录同一事实。

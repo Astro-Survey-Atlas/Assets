@@ -34,13 +34,14 @@
      说明是 CDS 服务端当前故障/变更，不是我们的参数或网络。等 CDS 恢复后重跑 `npm run moc:monitor` 即可，无需改代码；
      若长期不恢复，再决定 registry 的 `mocUrl` 是否迁移；registry 的 `get=smoc` 仍与
      2MASS6X 记录的 `moc_type=stmoc` 并存，需逐源核对。
-2. **管理台重构（进行中）**：已完成：产品状态映射、列表行徽标、天球可见性文案都收敛到 `site/admin/product-state.ts`
-   （`productLifecycleState` / `productBadge` / `skyVisibility`，8 项单测），删掉客户端重算 revision 的不可达分支，
-   删掉无人读取的 `/catalog/status` 每轮请求；总览与审核页的“已审核/待审核”现在同源。
-   **未做浏览器验证**：`homepage-carousel-smoke.py` 不覆盖管理页，管理页最终渲染只有类型检查与纯函数单测保护。
-   待做：`qualificationReadout` 的审核资格改成附在产品上的警告标志（不再是第二套状态），MOC build 四个渲染器合一，
-   native-units 五处重复渲染，重复入口（发布/建扫描任务/登记构建各 3 个），`main.ts`（约 2850 行）拆分。
-   目标：一个产品只显示一个生命周期状态加正交警告。
+2. **管理台重构（进行中）**：已完成：产品生命周期、行徽标、天球可见性、审核资格警告全部收敛到
+   `site/admin/product-state.ts`（`productLifecycleState`/`productBadge`/`skyVisibility`/`eligibilityFlag`，11 项单测）；
+   MOC 构建的四个渲染器收敛到 `site/admin/build-display.ts` 的 `mocBuildView`（6 项单测），并修复 outputs 卡片
+   busy 判断误用扫描阶段导致 FETCHING/BUILDING 不显示进度的问题；`phaseLabel` 等展示助手随之移出 `main.ts`；
+   native-units 每次轮询只渲染当前可见步骤的容器，其余步骤激活时补渲染（`renderVisible`）。
+   已做一次浏览器验证（2026-11-16，fixture 后端）：审核页徽标、总览“待审核 · 天球：未公开”正常。
+   **待做**：重复入口（发布/建扫描任务/登记构建各 3 个）按“每件事一个入口”收敛（属产品决策，先定留哪个）；
+   `main.ts`（约 2800 行）继续按职责拆分。
 3. **内核简化**：合并三条证据摄入路径（官方源 / native-units / 证据；`evidence-moc-import` 与
    `path-healpix-moc-import` 重复）、三套发布状态机（`publication-task-store`、`public-release-publication`、
    native-unit 暂存激活）和三条版本轴（bundle id / native index generation / code tag）。
