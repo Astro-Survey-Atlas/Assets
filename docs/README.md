@@ -13,6 +13,7 @@
 | 原生来源、快照、候选、审核、激活 | [native-unit-management](native-unit-management.md) |
 | 产品就绪度与发布门禁 | [admin-product-inventory](admin-product-inventory.md) |
 | 对象存储、恢复与单写者运行架构 | [存储](public-artifact-storage.md)、[发布运行架构](publication-runtime-split.md) |
+| 跨仓库边界与“正确”的定义（IVOA/mocpy/healpy） | [boundaries](boundaries.md) |
 | 跨项目职责与 Warehouse 任务 | [架构边界](architecture-boundary.md)、[Warehouse 要求](data-warehouse-requirements.md)、[批扫描](scan-batches.md) |
 | 公开包消费者 | [集成指南](resource-package-integration.md)、[前端指南](frontend-resource-package-guide.md)、[Core 契约](moc-core-contract.md)、[示例](examples/) |
 | 前端字体 | [中文字体分片](frontend-fonts.md) |
