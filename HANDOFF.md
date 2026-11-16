@@ -20,12 +20,18 @@
 
 ## 待办（按优先级）
 
-1. **MOC 自动探查与监控（未建）**：现在发现靠手工触发，没有定时任务。设计：遍历
-   `src/moc-sources/source-registry.json` 的官方源，比较 ETag/哈希/面积/MOCORDER；变化只生成待审核候选，
-   不自动发布；定期用 CDS MocServer 检索新巡天；每个源记录最后成功时间和失败次数并告警。
-   复用 `server/moc-discovery.ts`、`moc-build.ts`、`publication-scheduler.ts`。
-   已知：CDS MocServer 对 `get=smoc/moc` 近期返回 413、原始 `moc_access_url` 返回 502，需先确认取数方式；
-   2MASS6X 记录的 `moc_type` 是 `stmoc`，而 registry 用 `get=smoc` 取空间 MOC，需逐源核对。
+1. **MOC 自动探查与监控（核心已建，未接调度/管理页）**：
+   - 已完成：`server/moc-source-monitor.ts`（纯函数，9 项测试）与 `npm run moc:monitor [-- --state=PATH]`。
+     对 registry 每个源取 record+MOC，解码后比对注册基线（`sourceSnapshotSha256`/`sourceRecordSha256`/`maxOrder`）；
+     变化只标 `drifted` 并保留已审核基线与候选字节，**不自动构建或发布**；取数失败只记 `failed` 与连续失败次数，
+     不当作漂移；连续失败 ≥3 次进入 `alerting`（命令行退出码 2）。
+   - **未做**：按周期运行并持久化状态（建议复用 `publication-scheduler.ts` 心跳，状态存内容盘）；管理页“待审核更新”
+     与告警横幅；`drifted` → `MocBuildRequest` 的一键生成；用 CDS MocServer 检索新巡天（可复用 `moc-discovery.ts`）。
+   - **外部阻塞（2026-11-16 实测）**：CDS MocServer 的 `get=smoc|moc`（任意 fmt/order，GET 与 POST）一律返回 HTTP 413，
+     `get=record` 正常；`alasky.unistra.fr`（7 个源）DNS 解析失败；HiPS 原生 `Moc.fits` 路径 404。所以 83 个源里仅 3 个
+     IRSA 源（SPHEREx、Euclid×2）能取到，其余 80 个全部显示 `failed`，无法检测漂移。
+     先确认 CDS 现行取 MOC 的方式或联系 CDS，再决定 registry 的 `mocUrl` 是否要迁移；registry 的 `get=smoc` 仍与
+     2MASS6X 记录的 `moc_type=stmoc` 并存，需逐源核对。
 2. **管理台重构**：一个产品只显示一个生命周期状态（未登记 → 已获取 → 待审核 → 已发布 → 已退役）加正交警告；
    一个 MOC build 一个渲染器；只展示“线上 bundle / 候选 bundle”。线索见
    [冗余审计](docs/audit-redundancy-and-admin-flow-20261108.md)，开工前逐项对照代码。

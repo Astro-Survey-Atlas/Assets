@@ -19,6 +19,7 @@
     "storage:pin": "tsx scripts/pin-storage-snapshots.ts",
     "artifacts:validate": "tsx scripts/public_footprint_artifacts.ts validate",
     "moc:validate": "tsx scripts/validate-moc-source-registry.ts",
+    "moc:monitor": "tsx scripts/monitor-moc-sources.ts",
     "moc:probe": "tsx scripts/validate-moc-source-registry.ts --probe --output=artifacts/moc-source-probe.json",
     "coverage:export-healpix": "tsx scripts/export-live-coverage-healpix.ts",
     "hst:acquire-metadata": "tsx scripts/acquire-hst-public-image-observations.ts",
