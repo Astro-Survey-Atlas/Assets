@@ -244,7 +244,7 @@ input:disabled, select:disabled, textarea:disabled { background: #071017; color:
 .review-browser-toolbar { flex-wrap: wrap; margin-bottom: 16px; }
 .review-filters { display: flex; flex-wrap: wrap; gap: 6px; }
 .review-filters [aria-pressed="true"] { background: var(--teal-soft); color: var(--teal); border-color: var(--teal); }
-.review-compact-row.review-product-row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(80px, .38fr) 74px minmax(190px, .85fr) minmax(110px, auto); align-items: center; gap: 12px; padding: 14px 0; }
+.review-compact-row.review-product-row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(80px, .38fr) 74px minmax(190px, .85fr) 232px; align-items: center; gap: 12px; padding: 14px 0; }
 .review-compact-row .review-compact-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .review-compact-name > svg { flex: 0 0 18px; width: 18px; height: 18px; color: var(--teal); }
 .review-compact-name > div { min-width: 0; }

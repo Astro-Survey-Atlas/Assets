@@ -1622,10 +1622,10 @@ function mocBuildStatusText(build?: MocBuildSummary): string {
 
 type ReviewFilter = "all" | ProductLifecycleState;
 let reviewFilter: ReviewFilter = "all";
-type ReviewEligibilityFilter = "all" | "ready" | "confirm-limitations" | "blocked" | "unregistered";
+type ReviewEligibilityFilter = "all" | "ready" | "confirm-limitations" | "blocked";
 let reviewEligibilityFilter: ReviewEligibilityFilter = "all";
 const reviewFilterLabels: Record<ReviewFilter, string> = { all: "全部", ...productLifecycleLabels };
-const reviewEligibilityFilterLabels: Record<ReviewEligibilityFilter, string> = { all: "全部资格", ready: "可审核", "confirm-limitations": "需确认限制", blocked: "暂不可审核", unregistered: "未登记" };
+const reviewEligibilityFilterLabels: Record<ReviewEligibilityFilter, string> = { all: "全部资格", ready: "可审核", "confirm-limitations": "需确认限制", blocked: "暂不可审核" };
 
 const reviewProductState = (product: ReviewProduct): ProductLifecycleState => productLifecycleState(product);
 
@@ -1677,7 +1677,6 @@ function qualificationMatchesFilter(survey: ReviewSurvey, product: ReviewProduct
   if (reviewEligibilityFilter === "all") return true;
   const state = reviewEligibilityState(survey, product);
   if (reviewEligibilityFilter === "blocked") return ["blocked", "stale", "error"].includes(state);
-  if (reviewEligibilityFilter === "unregistered") return state === "unregistered" || state === "unmatched";
   return state === reviewEligibilityFilter;
 }
 
@@ -1758,9 +1757,9 @@ function renderReviewSurveys(surveys: ReviewSurvey[]): void {
   byId("review-survey-dialog-title").textContent = survey.name;
   const entries = reviewEntries(survey).filter(({product, release}) => !productQuery || matchesSurvey(survey) || reviewProductMatches(product) || release.toLocaleLowerCase().includes(productQuery));
   const filtered = entries.filter(({product}) => (reviewFilter === "all" || reviewProductState(product) === reviewFilter) && qualificationMatchesFilter(survey, product));
-  const qualificationCount = (state: ReviewEligibilityFilter) => entries.filter(({product}) => state === "all" || (state === "blocked" ? ["blocked", "stale", "error"].includes(reviewEligibilityState(survey, product)) : state === "unregistered" ? ["unregistered", "unmatched"].includes(reviewEligibilityState(survey, product)) : reviewEligibilityState(survey, product) === state)).length;
+  const qualificationCount = (state: ReviewEligibilityFilter) => entries.filter(({product}) => state === "all" || (state === "blocked" ? ["blocked", "stale", "error"].includes(reviewEligibilityState(survey, product)) : reviewEligibilityState(survey, product) === state)).length;
   const content = byId("review-survey-content");
-  reconcileMarkup(content, `<div class="review-browser-toolbar"><div class="review-filter-stack"><div class="review-filters" aria-label="产品记录状态">${(Object.keys(reviewFilterLabels) as ReviewFilter[]).map(state => `<button type="button" class="admin-quiet" data-review-filter="${state}" aria-pressed="${reviewFilter === state}">${reviewFilterLabels[state]} <span>${state === "all" ? entries.length : entries.filter(({product}) => reviewProductState(product) === state).length}</span></button>`).join("")}</div><div class="review-filters review-eligibility-filters" aria-label="产品审核资格">${(Object.keys(reviewEligibilityFilterLabels) as ReviewEligibilityFilter[]).map(state => `<button type="button" class="admin-quiet" data-review-eligibility-filter="${state}" aria-pressed="${reviewEligibilityFilter === state}">${reviewEligibilityFilterLabels[state]} <span>${qualificationCount(state)}</span></button>`).join("")}</div>${qualificationLoad?.state === "loading" ? `<small class="review-qualification-status" role="status">正在检查本巡天已登记产品的审核条件…</small>` : ""}${qualificationLoad?.state === "error" ? `<span class="review-qualification-error" role="alert">${escapeText(qualificationLoad.error ?? "审核资格检查失败")}</span><button type="button" class="admin-quiet" data-retry-review-readiness>重试资格检查</button>` : ""}</div>${survey.id.startsWith("__") ? "" : `<button type="button" class="admin-quiet" data-edit-editorial="${escapeText(survey.id)}"><i data-lucide="pencil-line"></i><span>编辑巡天文案</span></button>`}</div><div class="review-compact-list">${filtered.map(({product, release, unmatched}) => {
+  reconcileMarkup(content, `<div class="review-browser-toolbar"><div class="review-filter-stack"><div class="review-filters" aria-label="产品记录状态">${(Object.keys(reviewFilterLabels) as ReviewFilter[]).filter(state => state === "all" || state === reviewFilter || entries.some(({product}) => reviewProductState(product) === state)).map(state => `<button type="button" class="admin-quiet" data-review-filter="${state}" aria-pressed="${reviewFilter === state}">${reviewFilterLabels[state]} <span>${state === "all" ? entries.length : entries.filter(({product}) => reviewProductState(product) === state).length}</span></button>`).join("")}</div><div class="review-filters review-eligibility-filters" aria-label="产品审核资格">${(Object.keys(reviewEligibilityFilterLabels) as ReviewEligibilityFilter[]).filter(state => state === "all" || state === reviewEligibilityFilter || qualificationCount(state) > 0).map(state => `<button type="button" class="admin-quiet" data-review-eligibility-filter="${state}" aria-pressed="${reviewEligibilityFilter === state}">${reviewEligibilityFilterLabels[state]} <span>${qualificationCount(state)}</span></button>`).join("")}</div>${qualificationLoad?.state === "loading" ? `<small class="review-qualification-status" role="status">正在检查本巡天已登记产品的审核条件…</small>` : ""}${qualificationLoad?.state === "error" ? `<span class="review-qualification-error" role="alert">${escapeText(qualificationLoad.error ?? "审核资格检查失败")}</span><button type="button" class="admin-quiet" data-retry-review-readiness>重试资格检查</button>` : ""}</div>${survey.id.startsWith("__") ? "" : `<button type="button" class="admin-quiet" data-edit-editorial="${escapeText(survey.id)}"><i data-lucide="pencil-line"></i><span>编辑巡天文案</span></button>`}</div><div class="review-compact-list">${filtered.map(({product, release, unmatched}) => {
     const state = reviewProductState(product);
     const qualification = qualificationReadout(survey, product);
     const managedRecord = state !== "unregistered";

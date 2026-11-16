@@ -280,5 +280,5 @@ input:focus, select:focus, textarea:focus { outline: 0; border-color: var(--hud-
    Geometry comes from /src/hud-ring.css; only admin placement lives here. */
 body.admin-page .is-pending::before,
 body.admin-page .admin-spinner { --hud-ring-size: 13px; }
-body.admin-page .is-pending::before { content: ""; margin-right: 8px; vertical-align: -2px; }
+body.admin-page .is-pending:not(.preflight-item)::before { content: ""; margin-right: 8px; vertical-align: -2px; }
 .resource-empty.is-pending { display: flex; align-items: center; color: var(--hud-a-dim); }
