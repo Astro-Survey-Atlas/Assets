@@ -34,7 +34,10 @@
      说明是 CDS 服务端当前故障/变更，不是我们的参数或网络。等 CDS 恢复后重跑 `npm run moc:monitor` 即可，无需改代码；
      若长期不恢复，再决定 registry 的 `mocUrl` 是否迁移；registry 的 `get=smoc` 仍与
      2MASS6X 记录的 `moc_type=stmoc` 并存，需逐源核对。
-2. **管理台重构**：一个产品只显示一个生命周期状态（未登记 → 已获取 → 待审核 → 已发布 → 已退役）加正交警告；
+2. **管理台重构（进行中）**：已完成：产品生命周期映射抽到 `site/admin/product-state.ts`（有测试），删掉客户端重算
+   revision 的不可达分支，删掉无人读取的 `/catalog/status` 每轮请求。其余待做：`qualificationReadout`/`productSkyStatus`/
+   `productPublicationRun` 三套词汇合并，MOC build 四个渲染器合一，native-units 五处重复渲染，重复入口，`main.ts` 拆分。
+   目标：一个产品只显示一个生命周期状态（未登记 → 已获取 → 待审核 → 已发布 → 已退役）加正交警告；
    一个 MOC build 一个渲染器；只展示“线上 bundle / 候选 bundle”。线索见
    [冗余审计](docs/audit-redundancy-and-admin-flow-20261108.md)，开工前逐项对照代码。
    巨型文件 `server/server.ts`（约 5400 行）、`server/admin.ts`、`site/admin/main.ts` 需按职责拆分。
@@ -77,6 +80,8 @@ healpy 生成的 1344 条 HEALPix 参考向量（`fixtures/conformance/healpix-v
 - 修改被 release-manifest 收录的文档会改变 hash：在已 hydrate 的工作区运行 `npm run catalog:build` 并验证；本地重建不等于发布。
   **当前本机工作区未 hydrate**：`artifacts/public-survey-footprints/layers/spherex-dr1-allsky-cube-moc/` 等最近新增图层的产物（gitignore）不存在，
   `catalog:build` 报 ENOENT；2026-11-16 的文档改动因此没有重建 manifest，发版前需重建并核对。
+  同一原因使 `test/server-http.test.ts` 等 7 项集成测试在本机起不来服务（`Public asset SHA-256 mismatch`），
+  干净基线同样失败；改动验证以类型检查和不依赖服务的单测为准，发版前须在 hydrate 后的环境重跑 `npm test`。
 - 本机无 git-lfs：`vendor/moc-core/*.tar.gz` 与 `artifacts/…/moc-core/*.tar.gz` 显示为已修改是假差异，不要提交；
   推送必要时 `--no-verify`。
 

@@ -12,6 +12,7 @@ import { surveyMarkMarkup } from "../src/survey-mark.js";
 import { reconcileMarkup } from "./stable-dom.js";
 import { aggregateWorkAttempts } from "./work-items.js";
 import { parseAdminRoute, routePath, type AdminStep } from "./navigation.js";
+import { productLifecycleLabels, productLifecycleState, type ProductLifecycleState } from "./product-state.js";
 import { WorkspaceRequests, workspaceResources, businessSignature, type Resource } from "./workspaces.js";
 import { capabilityNames, gapGuidance, discoveryProgress, discoveryObservationLabel, type DiscoveryObservation } from "./readiness-copy.js";
 import { mountRecordTabs, mountTaskTabs } from "./task-tabs.js";
@@ -1649,24 +1650,14 @@ function mocBuildStatusText(build?: MocBuildSummary): string {
   return `MOC build ${build.phase}${percent}${published}`;
 }
 
-type ReviewFilter = "all" | "pending" | "reviewed" | "published" | "retired" | "unregistered";
+type ReviewFilter = "all" | ProductLifecycleState;
 let reviewFilter: ReviewFilter = "all";
 type ReviewEligibilityFilter = "all" | "ready" | "confirm-limitations" | "blocked" | "unregistered";
 let reviewEligibilityFilter: ReviewEligibilityFilter = "all";
-const reviewFilterLabels: Record<ReviewFilter, string> = { all: "全部", pending: "待审核", reviewed: "已审核", published: "已发布", retired: "已退休", unregistered: "未登记" };
+const reviewFilterLabels: Record<ReviewFilter, string> = { all: "全部", ...productLifecycleLabels };
 const reviewEligibilityFilterLabels: Record<ReviewEligibilityFilter, string> = { all: "全部资格", ready: "可审核", "confirm-limitations": "需确认限制", blocked: "暂不可审核", unregistered: "未登记" };
 
-function reviewProductState(product: ReviewProduct): Exclude<ReviewFilter, "all"> {
-  if (product.retiredAt || product.lifecycle?.publication?.state === "RETIRED") return "retired";
-  const state = product.review?.state;
-  if (state === "unmatched") return "unregistered";
-  if (state === "published" && product.review?.draftRevision !== undefined && product.review.publishedRevision !== product.review.draftRevision) {
-    return product.review.reviewedRevision === product.review.draftRevision ? "reviewed" : "pending";
-  }
-  if (state === "reviewed") return "reviewed";
-  if (state === "published" || state === "unmatched-published") return "published";
-  return "pending";
-}
+const reviewProductState = (product: ReviewProduct): ProductLifecycleState => productLifecycleState(product);
 
 function surveyQualificationSignature(survey: ReviewSurvey): string {
   return JSON.stringify(reviewEntries(survey).map(({ product }) => [product.productId, product.review?.state, product.review?.draftRevision,

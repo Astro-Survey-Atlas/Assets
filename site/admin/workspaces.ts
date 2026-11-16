@@ -4,7 +4,6 @@ export const resources = {
   overview: "/api/v1/admin/overview", connectors: "/api/v1/admin/connectors",
   tasks: "/api/v1/admin/tasks", products: "/api/v1/admin/products",
   reviewSurveys: "/api/v1/admin/products?view=surveys",
-  catalogStatus: "/api/v1/admin/catalog/status",
   mocDiscovery: "/api/v1/admin/moc-discovery", mocBuilds: "/api/v1/admin/moc-builds",
   nativeUnits: "/api/v1/admin/native-units",
 };
@@ -13,7 +12,7 @@ export const workspaceResources: Record<AdminStep, Resource[]> = {
   overview: ["overview", "products", "reviewSurveys", "nativeUnits"],
   sources: ["connectors", "nativeUnits"],
   tasks: ["tasks", "mocDiscovery", "mocBuilds", "products", "reviewSurveys", "connectors", "nativeUnits"],
-  review: ["products", "reviewSurveys", "mocBuilds", "catalogStatus", "nativeUnits"],
+  review: ["products", "reviewSurveys", "mocBuilds", "nativeUnits"],
   releases: ["nativeUnits"],
   api: [],
 };
