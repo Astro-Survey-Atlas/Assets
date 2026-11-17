@@ -5142,7 +5142,7 @@ const server = http.createServer((request, response) => {
       nativeUnitIndex: { version: nativeUnits?.version ?? "backend-proxy", generation: nativeUnits?.generation ?? null },
       status: "ok",
       service: "astro-survey-atlas-assets",
-      version: "0.0.13",
+      version: "0.0.14",
       bundle: catalog.manifest.bundle,
       files: catalog.files.size,
     });
