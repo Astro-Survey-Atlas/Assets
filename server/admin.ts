@@ -2205,4 +2205,4 @@ export function adminFromRequest(request: IncomingMessage): string | undefined {
   return request.headers.authorization;
 }
 
-export { buildConnectorResource, buildConnectorResources, buildTaskResource, connectorView, taskView };
+export { buildConnectorResource, buildConnectorResources, buildTaskResource, connectorView, headerToken, sameSecret, taskView };

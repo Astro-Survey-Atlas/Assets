@@ -10,12 +10,13 @@ import { sha256Hex as sha } from "./hash.js";
 
 export interface LlmSettings { baseUrl?: string; model?: string; key?: string }
 interface Provider { revision: number; baseUrl: string; model: string; enabled: boolean; encryptedKey?: string; updatedAt: string }
-interface KeyRecord { id: string; name: string; prefix: string; hash: string; scopes: string[]; createdAt: string; expiresAt: string; revokedAt?: string; perMinute: number; window: number; used: number; requests: number; errors: number; lastUsedAt?: string }
+interface KeyRecord { id: string; name: string; prefix: string; hash: string; scopes: string[]; createdAt: string; expiresAt: string; revokedAt?: string; perMinute: number; window: number; used: number; requests: number; errors: number; lastUsedAt?: string; quota?: number; quotaUsed?: number; orderRef?: string }
 interface Event { at: string; kind: "key" | "llm"; id: string; route: string; status: number; durationMs: number; model?: string; inputTokens?: number; outputTokens?: number }
 interface State { provider?: Provider; keys: KeyRecord[]; events: Event[]; llm: { requests: number; errors: number; inputTokens: number; outputTokens: number; unknownUsage: number }; startedAt: string }
 const now = () => new Date().toISOString();
 export const MANAGED_KEY_PREFIX = "asa_live_";
 export const KEY_SCOPES = ["region:query"] as const;
+export const MAX_KEY_QUOTA = 100000;
 export class ApiManagement {
  private db: DatabaseSync;
  private state: State;
@@ -85,9 +86,42 @@ export class ApiManagement {
   const scopes = input.scopes, perMinute = input.perMinute ?? 30;
   const expiresAt = typeof input.expiresAt === "string" ? Date.parse(input.expiresAt) : Date.now() + 90*86400000;
   if (!name || name.length > 100 || !Array.isArray(scopes) || !scopes.length || scopes.some(s => !KEY_SCOPES.includes(s)) || !Number.isInteger(perMinute) || Number(perMinute) < 1 || Number(perMinute) > 30 || !Number.isFinite(expiresAt) || expiresAt <= Date.now() || expiresAt > Date.now()+366*86400000) throw new AdminHttpError(400, "请填写名称、区域查询权限、1–30 次/分钟限流，以及一年内的有效期");
+  const quota = input.quota;
+  if (quota !== undefined && (!Number.isSafeInteger(quota) || Number(quota) < 1 || Number(quota) > MAX_KEY_QUOTA)) throw new AdminHttpError(400, `调用额度必须是 1–${MAX_KEY_QUOTA} 的整数，留空表示不限总次数`);
   if (this.state.keys.length >= 1000) throw new AdminHttpError(409, "Key 数量已达上限");
   const key = MANAGED_KEY_PREFIX + randomBytes(32).toString("base64url"), id = randomUUID();
-  this.state.keys.push({ id, name, prefix: key.slice(0, 17), hash: sha(key), scopes: [...new Set(scopes)], createdAt: now(), expiresAt: new Date(expiresAt).toISOString(), perMinute: Number(perMinute), window: 0, used: 0, requests: 0, errors: 0 }); this.save(); await this.flush(); return { key, id };
+  this.state.keys.push({ id, name, prefix: key.slice(0, 17), hash: sha(key), scopes: [...new Set(scopes)], createdAt: now(), expiresAt: new Date(expiresAt).toISOString(), perMinute: Number(perMinute), window: 0, used: 0, requests: 0, errors: 0, ...(quota === undefined ? {} : { quota: Number(quota), quotaUsed: 0 }) }); this.save(); await this.flush(); return { key, id };
+ }
+ /**
+  * Issue one quota-limited Key for a paid order. Narrow on purpose: fixed scope, hard caps, one live
+  * Key per orderRef. The plaintext is returned once; if the caller lost it (crash before it was
+  * stored) it may call again with reissue=true, which revokes the old Key and carries over only the
+  * quota that was left, so a retry can never mint extra calls.
+  */
+ async issueKey(input: Record<string, unknown>): Promise<{ key: string; id: string; quota: number; expiresAt: string; reissued: boolean }> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new AdminHttpError(400, "签发请求必须为对象");
+  const orderRef = typeof input.orderRef === "string" ? input.orderRef : "";
+  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(orderRef)) throw new AdminHttpError(400, "orderRef 必须是 8–128 位字母数字或 . _ : -");
+  const existing = this.state.keys.find(k => k.orderRef === orderRef && !k.revokedAt);
+  const everIssued = this.state.keys.some(k => k.orderRef === orderRef);
+  if (everIssued && input.reissue !== true) throw new AdminHttpError(409, "该订单已签发过 Key；如明文丢失，请带 reissue=true 重新签发（只继承剩余额度）");
+  const perMinute = input.perMinute ?? 30, validDays = input.validDays ?? 90, quota = input.quota;
+  if (!Number.isInteger(perMinute) || Number(perMinute) < 1 || Number(perMinute) > 30) throw new AdminHttpError(400, "perMinute 必须是 1–30 的整数");
+  if (!Number.isInteger(validDays) || Number(validDays) < 1 || Number(validDays) > 365) throw new AdminHttpError(400, "validDays 必须是 1–365 的整数");
+  if (!Number.isSafeInteger(quota) || Number(quota) < 1 || Number(quota) > MAX_KEY_QUOTA) throw new AdminHttpError(400, `quota 必须是 1–${MAX_KEY_QUOTA} 的整数`);
+  let grantQuota = Number(quota), expiresAt = Date.now() + Number(validDays) * 86400000;
+  if (everIssued) {
+   const previous = [...this.state.keys].reverse().find(k => k.orderRef === orderRef)!;
+   grantQuota = Math.max(0, (previous.quota ?? grantQuota) - (previous.quotaUsed ?? 0));
+   expiresAt = Math.min(expiresAt, Date.parse(previous.expiresAt));
+   if (grantQuota < 1) throw new AdminHttpError(409, "该订单的 Key 额度已用完，无法重新签发");
+   if (expiresAt <= Date.now()) throw new AdminHttpError(409, "该订单的 Key 已过期，无法重新签发");
+   if (existing) existing.revokedAt = now();
+  }
+  const name = typeof input.name === "string" && input.name.trim() ? input.name.trim().slice(0, 100) : `order:${orderRef}`.slice(0, 100);
+  const created = await this.createKey({ name, scopes: ["region:query"], perMinute, expiresAt: new Date(expiresAt).toISOString(), quota: grantQuota });
+  const record = this.state.keys.find(k => k.id === created.id)!; record.orderRef = orderRef; this.save(); await this.flush();
+  return { ...created, quota: grantQuota, expiresAt: record.expiresAt, reissued: everIssued };
  }
  async revokeKey(id: string): Promise<void> { const key = this.state.keys.find(k => k.id === id); if (!key) throw new AdminHttpError(404, "Key 不存在"); key.revokedAt ??= now(); this.save(); await this.flush(); }
  async deleteRevokedKey(id: string): Promise<void> {
@@ -109,7 +143,10 @@ export class ApiManagement {
   if (key.revokedAt || Date.parse(key.expiresAt) <= Date.now()) deny(401, "API Key 已撤销或过期");
   if (!key.scopes.includes(scope)) deny(403, "API Key 没有所需权限");
   const minute = Math.floor(Date.now()/60000); if (key.window !== minute) { key.window = minute; key.used = 0; }
-  if (key.used >= key.perMinute) deny(429, "API Key 已达到每分钟限额"); key.used++; this.save(); return key.id;
+  if (key.quota !== undefined && (key.quotaUsed ?? 0) >= key.quota) deny(403, "API Key 调用额度已用完");
+  if (key.used >= key.perMinute) deny(429, "API Key 已达到每分钟限额");
+  // Only a request that is actually admitted consumes quota; rate-limited or denied ones do not.
+  key.used++; if (key.quota !== undefined) key.quotaUsed = (key.quotaUsed ?? 0) + 1; this.save(); return key.id;
  }
  recordKey(id: string, route: string, status: number, durationMs: number): void { const key = this.state.keys.find(k => k.id === id); if (!key) return; key.requests++; if (status >= 400) key.errors++; key.lastUsedAt = now(); this.event({ at: now(), kind: "key", id, route, status, durationMs }); }
  recordLlm(input: { requestId: string; model: string; success: boolean; durationMs: number; usage?: unknown }): void {

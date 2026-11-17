@@ -30,7 +30,7 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 
-import { AdminHttpError, AssetsAdmin, KubernetesApiError, SUPPORTED_COVERAGE_MODES, adminFromRequest, type ConnectorInput, type ConnectorView, type CoverageTaskInput, type CoverageTaskView, type KubernetesResource, type MocDiscoveryInput, type ScanBatchTaskRecipe } from "./admin.js";
+import { AdminHttpError, AssetsAdmin, KubernetesApiError, SUPPORTED_COVERAGE_MODES, adminFromRequest, headerToken, sameSecret, type ConnectorInput, type ConnectorView, type CoverageTaskInput, type CoverageTaskView, type KubernetesResource, type MocDiscoveryInput, type ScanBatchTaskRecipe } from "./admin.js";
 import { batchEvidenceLayerId, parseScanBatchRequest, resolveScanBatchIncludePattern, resolveScanBatchMode, ScanBatchValidationError } from "./scan-batch.js";
 import { ConnectorInventoryStateStore, ConnectorProbeStateStore } from "./connector-state.js";
 import { ConnectorPresentationStore } from "./connector-presentation.js";
@@ -2856,6 +2856,28 @@ async function registerMocBuildProduct(name: string, body: Record<string, unknow
   return { request, product: adminProductView(product) };
 }
 
+/**
+ * Quota-limited API Key issuance for the payment shop. Authenticated by its own narrow token
+ * (ASSETS_KEY_ISSUER_TOKEN, unset = route does not exist), it can only mint `region:query`
+ * Keys within hard caps and is never proxied by the public site, so it is reachable only from
+ * inside the cluster. It cannot read, list, revoke or manage anything else.
+ */
+async function sendKeyIssuer(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const issuerToken = process.env.ASSETS_KEY_ISSUER_TOKEN?.trim();
+  if (!issuerToken) return json(response, 404, { error: "Not found" });
+  try {
+    if (!sameSecret(headerToken(request.headers.authorization), issuerToken)) throw new AdminHttpError(401, "Invalid issuer token");
+    if (!apiManagement) throw new AdminHttpError(503, "API management backend unavailable");
+    response.setHeader("Cache-Control", "no-store");
+    const issued = await apiManagement.issueKey(await requestJsonBody(request, 4096));
+    return json(response, 201, issued);
+  } catch (error) {
+    if (error instanceof AdminHttpError) return json(response, error.statusCode, { error: error.message });
+    console.error("Key issuance failed", error instanceof Error ? error.message : String(error));
+    return json(response, 500, { error: "Internal server error" });
+  }
+}
+
 async function sendAdmin(request: IncomingMessage, response: ServerResponse, pathname: string): Promise<void> {
   if (pathname === "/api/v1/admin/config" && request.method === "GET") {
     return json(response, 200, { ...admin.publicConfig(), mocDiscovery: { cdsUrl: CDS_SEARCH_URL, llmAvailable: llmDiscovery.configured } });
@@ -5065,6 +5087,13 @@ const server = http.createServer((request, response) => {
       return;
     }
     if (pathname === "/api/v1/access/unlock" && request.method==="POST") return handleDownloadUnlock(request,response);
+    if (pathname === "/api/v1/issuer/keys" && request.method === "POST") {
+      // Cluster-internal only: the public site never proxies this path.
+      if (role === "site") return json(response, 404, { error: "Not found" });
+      const issuance = adminMutationTail.then(() => sendKeyIssuer(request, response));
+      adminMutationTail = issuance.catch(() => undefined);
+      return issuance;
+    }
     if (pathname.startsWith("/api/v1/admin/")) {
       if (role === "site") return proxyAdmin(request, response, BACKEND_URL);
       if (request.method === "GET" || request.method === "HEAD") return sendAdmin(request, response, pathname);
