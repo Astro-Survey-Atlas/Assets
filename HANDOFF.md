@@ -20,6 +20,8 @@
 
 ## 待办（按优先级）
 
+**2026-11-17 起的路线图见 [docs/roadmap-20261117.md](docs/roadmap-20261117.md)**：A 组数据可信与可用（数据保护实证、产品可信度分级、性能验收、访问者功能、管理台）→ B 组 API 文档与订阅支付 → C 组补充巡天与 Aladin/HiPS 索引；后端重构（证据导入合并、状态机合一、版本轴合一、SaaS 只读模式、zjlab 生产迁移）已完整记录并后置。以下为此前待办。
+
 1. **MOC 自动探查与监控（核心已建，未接调度/管理页）**：
    - 已完成：`server/moc-source-monitor.ts`（纯函数，9 项测试）与 `npm run moc:monitor [-- --state=PATH]`。
      对 registry 每个源取 record+MOC，解码后比对注册基线（`sourceSnapshotSha256`/`sourceRecordSha256`/`maxOrder`）；
