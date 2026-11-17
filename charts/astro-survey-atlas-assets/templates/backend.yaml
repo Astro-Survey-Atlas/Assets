@@ -113,6 +113,15 @@ spec:
                   key: master-key
             {{- end }}
             {{- end }}
+            {{- with .Values.keyIssuer }}
+            {{- if .secretName }}
+            - name: ASSETS_KEY_ISSUER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName | quote }}
+                  key: token
+            {{- end }}
+            {{- end }}
             {{- with .Values.llm }}
             {{- if .enabled }}
             - name: ASSETS_LLM_BASE_URL

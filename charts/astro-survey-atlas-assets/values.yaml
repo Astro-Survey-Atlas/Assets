@@ -190,3 +190,10 @@ llm:
 # Stable encryption key, supplied only to the backend. Never rotate without re-encryption.
 apiManagement:
   secretName: ""
+
+# Optional narrow token for the payment shop's quota-limited API Key issuance
+# (POST /api/v1/issuer/keys). Empty = the route does not exist. Supplied only to
+# the backend, never proxied by the public site, so it is reachable only inside the cluster.
+# Secret key name: token.
+keyIssuer:
+  secretName: ""
