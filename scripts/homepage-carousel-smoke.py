@@ -147,6 +147,81 @@ def atlas_layer_tooltip_smoke(browser, base_url: str, mock_api) -> None:
     page.close()
 
 
+def view_param(url: str) -> list[float] | None:
+    value = parse_qs(urlparse(url).query).get("view", [None])[0]
+    return [float(part) for part in value.split(",")] if value else None
+
+
+def settle_view(page, wait_ms: int = 1800) -> list[float]:
+    page.wait_for_timeout(wait_ms)
+    pose = view_param(page.url)
+    assert pose and len(pose) == 10, f"URL must carry a 10-number view, got {page.url}"
+    return pose
+
+
+def atlas_view_link_smoke(browser, base_url: str, mock_api) -> None:
+    """The URL follows the camera, the share button copies it, and opening it restores the view."""
+    context = browser.new_context(viewport={"width": 1440, "height": 1000}, permissions=["clipboard-read", "clipboard-write"])
+    errors = []
+    atlas = base_url.rstrip("/") + "/atlas/"
+
+    def open_page(url: str):
+        page = context.new_page()
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.route("**/api/v1/**", mock_api)
+        page.goto(url, wait_until="domcontentloaded")
+        expect(page.locator("#coverage-scene")).to_have_attribute("data-ready", "true")
+        return page
+
+    baseline_page = open_page(atlas)
+    baseline = settle_view(baseline_page)
+    baseline_page.close()
+
+    page = open_page(atlas)
+    settle_view(page, 600)
+    canvas = page.locator("#coverage-canvas").bounding_box()
+    hits = []
+    for fx in (0.3, 0.4, 0.5, 0.6, 0.7):
+        for fy in (0.35, 0.5, 0.65):
+            point = {"x": canvas["x"] + canvas["width"] * fx, "y": canvas["y"] + canvas["height"] * fy}
+            if page.evaluate("p => document.elementFromPoint(p.x, p.y)?.id === 'coverage-canvas'", point):
+                hits.append(point)
+    assert len(hits) >= 2, "view-link test needs uncovered sky canvas points"
+    start = hits[0]
+    end = max(hits, key=lambda point: abs(point["x"] - start["x"]) + abs(point["y"] - start["y"]))
+    page.mouse.move(start["x"], start["y"])
+    page.mouse.down()
+    page.mouse.move(end["x"], end["y"], steps=12)
+    page.mouse.up()
+    page.mouse.move(end["x"], end["y"])
+    page.mouse.wheel(0, 400)
+    dragged = settle_view(page, 900)
+    assert max(abs(a - b) for a, b in zip(dragged, baseline)) > 0.05, "dragging the globe must change the shared view"
+
+    share = page.locator("#coverage-share")
+    expect(share).to_be_visible()
+    assert share.get_attribute("aria-label"), "share button needs an accessible name"
+    share.click()
+    copied = page.evaluate("navigator.clipboard.readText()")
+    copied_pose = view_param(copied)
+    assert copied_pose and max(abs(a - b) for a, b in zip(copied_pose, dragged)) < 0.02, f"clipboard link must carry the current view: {copied}"
+    expect(page.locator("#toast")).to_be_visible()
+    page.close()
+
+    restored_page = open_page(copied)
+    restored = settle_view(restored_page)
+    assert max(abs(a - b) for a, b in zip(restored, dragged)) < 0.02, f"opening a shared link must restore its view: {restored} vs {dragged}"
+    assert max(abs(a - b) for a, b in zip(restored, baseline)) > 0.05, "restored view must not fall back to the default view"
+    restored_page.close()
+
+    bad_page = open_page(atlas + "?view=not-a-view")
+    bad = settle_view(bad_page)
+    assert max(abs(a - b) for a, b in zip(bad, baseline)) < 0.02, "a damaged view parameter must open the normal view"
+    bad_page.close()
+    assert not errors, errors
+    context.close()
+
+
 def atlas_target_lock_scroll_smoke(browser, base_url: str, mock_api) -> None:
     page = browser.new_page(viewport={"width": 1440, "height": 720})
     page.route("**/api/v1/**", mock_api)
@@ -783,6 +858,7 @@ def atlas_display_order_smoke(browser, base_url: str) -> None:
 
     atlas_rectangle_query_smoke(browser, base_url, mock_api)
     atlas_layer_tooltip_smoke(browser, base_url, mock_api)
+    atlas_view_link_smoke(browser, base_url, mock_api)
     overlap_has_components = True
     target_lock_fixture = True
     atlas_target_lock_scroll_smoke(browser, base_url, mock_api)

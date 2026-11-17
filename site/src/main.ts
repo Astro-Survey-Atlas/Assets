@@ -13,6 +13,7 @@ import {
 } from "@astro-survey-atlas/sky-globe";
 import { highestCommonCoverageOrder, overlapViewTileOrder } from "./atlas/coverage-orders.js";
 import { RegionQueryPanel } from "./atlas/region-query.js";
+import { VIEW_PARAM, decodeViewPose, withViewParam } from "./atlas/view-link.js";
 import { coverageBlockStore } from "./atlas/block-store.js";
 import type { SkyRectangle } from "../../src/sky-region.js";
 import { coverageCatalogRevisionKey } from "./coverage-catalog-revision.js";
@@ -530,10 +531,29 @@ function readSkyDeepLink(): SkyDeepLinkTarget | null {
 
 function syncSkyDeepLink(surveyId?: string, productId?: string): void {
   const url = new URL(window.location.href);
+  const view = url.searchParams.get(VIEW_PARAM);
   url.search = "";
   if (surveyId) url.searchParams.set("survey", surveyId);
   if (productId) url.searchParams.set("product", productId);
+  if (view) url.searchParams.set(VIEW_PARAM, view);
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+// Keep the URL equal to what is on screen so any copy of it reopens the same view.
+let viewUrlTimer: number | undefined;
+function scheduleViewUrlSync(): void {
+  if (!isAtlasPage || !isAtlasInteractive()) return;
+  window.clearTimeout(viewUrlTimer);
+  viewUrlTimer = window.setTimeout(() => {
+    const pose = coverageDots?.cameraPose ?? null;
+    if (!pose) return;
+    const url = new URL(withViewParam(window.location.href, pose));
+    history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, 400);
+}
+
+function currentViewLink(): string {
+  return withViewParam(window.location.href, coverageDots?.cameraPose ?? null);
 }
 
 function coverageDiagnosticText(): string | null {
@@ -647,6 +667,7 @@ function updateCoverageReadout(surveyId: string | null, product?: string): void 
 
 function updateCoverageState(state: SurveyLayerState): void {
   pendingCoverageState = state;
+  scheduleViewUrlSync();
   if (coverageStateFrame) return;
   coverageStateFrame = requestAnimationFrame(() => {
     coverageStateFrame = 0;
@@ -5508,7 +5529,10 @@ async function initialize(): Promise<void> {
       await hydrateCoverageCatalog(coverageResult);
       if (booting) { bootStage("scene", "done"); finishHudBoot(); }
       if (isAtlasPage) maybeStartAtlasGuide();
+      // Read before applySkyDeepLink rewrites the URL; the pose wins over the default focus animation.
+      const sharedView = isAtlasPage ? decodeViewPose(new URLSearchParams(location.search).get(VIEW_PARAM)) : null;
       applySkyDeepLink();
+      if (sharedView) window.setTimeout(() => { if (isAtlasInteractive()) coverageDots?.restoreCameraPose(sharedView); }, deepLinkTarget ? 900 : 150);
       if (isAtlasPage && new URLSearchParams(location.search).get("depth") === "desi") void openDepthExample();
     } catch (error) {
       console.warn("Public coverage catalog unavailable", error);
@@ -5611,6 +5635,9 @@ function resetCoverageExperience(updateUrl = true, preserveLayers = false): void
 
 byId("coverage-reset").addEventListener("click", () => {
   if (isAtlasInteractive()) resetCoverageExperience();
+});
+document.getElementById("coverage-share")?.addEventListener("click", () => {
+  void copy(currentViewLink(), t("coverage.shareCopied")).catch(() => toast(t("coverage.shareFailed")));
 });
 function skyDepthSources(): SkyDepthSelection["sources"] {
   return withDesiReference([...new Map(visibleCoverageLayers().map(layer => [`${layer.surveyId}:${layer.releaseId}`, { surveyId: layer.surveyId, releaseId: layer.releaseId }])).values()]);

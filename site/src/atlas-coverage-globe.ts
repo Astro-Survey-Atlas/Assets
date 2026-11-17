@@ -5,6 +5,7 @@ import {
   type SurveyLayerHover,
   type SurveyLayerInspection,
   type SurveyLayerState,
+  type SurveyLayerCameraPose,
   type SurveyLayerContextMenu,
   type SurveyLayerOverlapComponent,
   type SurveyLayerOverlapCoverage,
@@ -251,6 +252,11 @@ export class AtlasCoverageGlobe {
   get state(): SurveyLayerState | null {
     return this.#viewer?.state ?? null;
   }
+
+  /** Camera pose for shareable view links; null until the viewer exists. */
+  get cameraPose(): SurveyLayerCameraPose | null { return this.#viewer?.cameraPose ?? null; }
+
+  restoreCameraPose(pose: SurveyLayerCameraPose): void { this.#viewer?.restoreCameraPose(pose); }
 
   setRectangleDrawing(enabled: boolean): void { this.#viewer?.setRectangleDrawing(enabled); }
 
