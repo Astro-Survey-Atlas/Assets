@@ -4,6 +4,8 @@ export interface OfficialMocSource {
   surveyId: string; releaseId: string; releaseLabel: string; releaseKind: string; releasedYear: number;
   modality: string; mocUrl: string; recordUrl: string; identity: string; geometrySourceLabel: string;
   recordMarkers?: readonly string[]; creatorDid?: string; legacyPixelMoc?: boolean; fullSky?: boolean;
+  /** Pinned copy of the record (gzip, repo-relative). IRSA moved this 5 MB file to another host that the production node cannot download in time, so it is read locally and still verified against the lock's sha256. */
+  recordFile?: string;
 }
 const irsa = "https://irsa.ipac.caltech.edu";
 const euclidRecord = `${irsa}/applications/euclid/firefly-6d0a2922a94699f98f89.js`;
@@ -16,6 +18,7 @@ function euclid(field: "wide" | "deep"): OfficialMocSource {
     mocUrl: `${irsa}/data/MOC/${filename}`, recordUrl: euclidRecord,
     identity: `IRSA/Euclid/DR1-Foundation/${label}-Tiles`, geometrySourceLabel: `Official IRSA DR1 ${label} Tiles MOC`,
     recordMarkers: [filename, `Euclid DR1 ${label} Tiles Coverage`], legacyPixelMoc: true,
+    recordFile: "src/layers/records/irsa-euclid-firefly-f688792ffd62.js.gz",
   };
 }
 export const OFFICIAL_MOC_SOURCES: Readonly<Record<string, OfficialMocSource>> = {

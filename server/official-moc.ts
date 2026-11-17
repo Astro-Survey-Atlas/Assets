@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { gunzipSync } from "node:zlib";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { AdminHttpError } from "./admin.js";
@@ -28,7 +29,11 @@ export async function stageOfficialMoc(options: {
   const acquire = options.fetchBytes ?? (async (url: string) => {
     return (await fetchPublicSource(url, 8 * 1024 * 1024, AbortSignal.timeout(30_000))).bytes;
   });
-  const [source, properties] = await Promise.all([acquire(descriptor.mocUrl), acquire(descriptor.recordUrl)]);
+  // A pinned record is read from the repository; the lock's sha256 below still decides whether it is accepted.
+  const readRecord = async (): Promise<Buffer> => descriptor.recordFile
+    ? gunzipSync(await readFile(path.join(options.sourceRoot, descriptor.recordFile)))
+    : acquire(descriptor.recordUrl);
+  const [source, properties] = await Promise.all([acquire(descriptor.mocUrl), readRecord()]);
   if (source.length !== lock.snapshot.sizeBytes || sha256(source) !== lock.snapshot.sha256
     || sha256(properties) !== lock.recipe.sourceRecordSha256) throw new Error("IRSA metadata differs from the locked snapshot; review the new source before updating its lock");
   const recordText = properties.toString();
