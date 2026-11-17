@@ -1,10 +1,10 @@
-import SwaggerUI from "swagger-ui-dist/swagger-ui-bundle.js";
 import "swagger-ui-dist/swagger-ui.css";
 import { mountLocaleControls, t } from "../src/i18n.js";
 import { mountSiteChrome } from "../src/site-chrome.js";
 import "./styles.css";
 
 mountLocaleControls(); mountSiteChrome();
+const SwaggerUI = (window as unknown as { SwaggerUIBundle: (o: Record<string, unknown>) => unknown }).SwaggerUIBundle;
 const ui = SwaggerUI({ dom_id: "#swagger-ui", url: "/api/v1/openapi.json", validatorUrl: null, persistAuthorization: false, displayRequestDuration: true, docExpansion: "list", deepLinking: true, queryConfigEnabled: false, supportedSubmitMethods: ["get", "post"], defaultModelsExpandDepth: -1, onComplete: () => renderSpecIndex() });
 
 interface SpecOperation { method: string; path: string; tag: string; summary: string; keyed: boolean }

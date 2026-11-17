@@ -1,9 +1,23 @@
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { defineConfig } from "vite";
+
+const swaggerBundlePath = createRequire(import.meta.url).resolve("swagger-ui-dist/swagger-ui-bundle.js");
 
 export default defineConfig({
   root: "site",
   appType: "mpa",
   plugins: [{
+    // Swagger's UMD bundle is shipped as a plain script: bundling it drags CJS helpers into the atlas
+    // entry chunk, which then executes on /api-docs and throws "Missing element".
+    name: "swagger-ui-static",
+    configureServer(server) {
+      server.middlewares.use("/vendor/swagger-ui-bundle.js", (_req, res) => { res.setHeader("Content-Type", "text/javascript"); res.end(readFileSync(swaggerBundlePath)); });
+    },
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "vendor/swagger-ui-bundle.js", source: readFileSync(swaggerBundlePath) });
+    },
+  }, {
     name: "admin-workspace-routes",
     configureServer(server) {
       server.middlewares.use((req, _res, next) => {
