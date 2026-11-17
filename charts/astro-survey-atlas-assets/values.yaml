@@ -15,6 +15,9 @@ fullnameOverride: ""
 
 admin:
   enabled: false
+  # SaaS mode: read-only operations. The admin console disables sources, discovery/build and review;
+  # only overview, releases (view) and API Key management stay available.
+  saasMode: false
   # Optional fixed public site URL used for post-publication verification.
   publicVerifyUrl: ""
   warehouseNamespace: atlas-warehouse

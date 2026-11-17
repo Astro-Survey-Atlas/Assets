@@ -198,6 +198,8 @@ spec:
               value: /app/scripts/moc_build_worker.py
             - name: ASSETS_ADMIN_ENABLED
               value: {{ .Values.admin.enabled | quote }}
+            - name: ASSETS_SAAS_MODE
+              value: {{ .Values.admin.saasMode | default false | quote }}
             - name: ASSETS_PUBLIC_VERIFY_INTERNAL_URL
               value: http://{{ include "astro-survey-atlas-assets.fullname" . }}:{{ .Values.service.port }}
             - name: ASSETS_PUBLIC_VERIFY_URL

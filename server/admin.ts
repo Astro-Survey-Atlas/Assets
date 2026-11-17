@@ -1476,6 +1476,8 @@ export class AssetsAdmin {
   publicConfig(): Record<string, unknown> {
     return {
       enabled: this.config.enabled,
+      // SaaS = read-only operations service: no discovery, build, review or publication writes (Warehouse mode only).
+      operationsMode: process.env.ASSETS_SAAS_MODE?.trim() === "true" ? "saas" : "warehouse",
       authRequired: true,
       namespace: this.config.namespace,
       kubernetesConfigured: Boolean(this.config.apiBaseUrl),

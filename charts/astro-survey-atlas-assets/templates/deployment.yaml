@@ -171,6 +171,8 @@ spec:
               value: {{ .Values.admin.enabled | quote }}
             - name: ASSETS_PUBLIC_VERIFY_URL
               value: {{ .Values.admin.publicVerifyUrl | quote }}
+            - name: ASSETS_SAAS_MODE
+              value: {{ .Values.admin.saasMode | default false | quote }}
             - name: ASSETS_WAREHOUSE_NAMESPACE
               value: {{ .Values.admin.warehouseNamespace | quote }}
             - name: ASSETS_DISCOVERY_OBSERVER_NAMESPACE

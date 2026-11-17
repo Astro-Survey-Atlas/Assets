@@ -56,7 +56,7 @@ def main() -> None:
             path = request.url.split("/api/v1/admin", 1)[1].split("?")[0]
             if path == "/config" and request.method == "GET":
                 return route.fulfill(json={
-                    "enabled": True, "authRequired": True, "namespace": "fixture-namespace", "kubernetesConfigured": True,
+                    "enabled": True, "operationsMode": "saas", "authRequired": True, "namespace": "fixture-namespace", "kubernetesConfigured": True,
                     "mocDiscovery": {"cdsUrl": "https://example.invalid/MocServer/query", "llmAvailable": False},
                     "publicationVerification": {"configured": False},
                     "capabilities": {"coverageModes": [], "modalities": []},
@@ -96,8 +96,8 @@ def main() -> None:
                 print("DIAGNOSTIC visible text:", page.inner_text("body")[:700].replace("\n", " | "))
                 print("DIAGNOSTIC console/page errors:", console[-8:], errors[-5:])
                 raise
-            batch = page.locator("#api-key-batch-form")
-            expect(batch).to_be_visible()
+            batch = page.locator("#api-key-form")  # one merged form: count 1 = single key, count > 1 = batch
+            expect(page.locator("#api-key-batch-form")).to_have_count(0)
 
             # 1) single key: quota left empty -> no quota sent (unlimited in total)
             single.locator('input[name="name"]').fill("research workbench")
@@ -116,7 +116,7 @@ def main() -> None:
             expect(page.locator("#api-settings-content table", has_text="名称 / 标识").locator("tbody")).to_contain_text("额度 0 / 100")
 
             # 3) batch: N keys, each with the quota, downloaded as one plaintext file, one key per line
-            batch.locator('input[name="prefix"]').fill("发卡-100次")
+            batch.locator('input[name="name"]').fill("发卡-100次")
             batch.locator('input[name="count"]').fill("3")
             batch.locator('input[name="quota"]').fill("100")
             batch.locator('input[name="perMinute"]').fill("10")
@@ -132,8 +132,9 @@ def main() -> None:
             batch_requests = created[2:]
             assert len(batch_requests) == 3
             assert all(r["quota"] == 100 and r["perMinute"] == 10 and r["scopes"] == ["region:query"] for r in batch_requests), batch_requests
-            assert [r["name"] for r in batch_requests] == ["发卡-100次 #1", "发卡-100次 #2", "发卡-100次 #3"], batch_requests
-            expect(page.locator("#api-settings-content table", has_text="名称 / 标识").locator("tbody")).to_contain_text("发卡-100次 #3")
+            names = [r["name"] for r in batch_requests]
+            assert all(re.fullmatch(r"发卡-100次-[0-9a-z]{4}", n) for n in names) and len(set(names)) == 3, names
+            expect(page.locator("#api-settings-content table", has_text="名称 / 标识").locator("tbody")).to_contain_text(names[2])
 
             # 4) the plaintext is not left on the page after the download
             assert "asa_live_FIXTURE" not in page.content(), "key plaintext must not remain in the page"
@@ -151,6 +152,7 @@ def main() -> None:
 
             page.unroute("**/api/v1/admin/**")
             page.route("**/api/v1/admin/**", flaky)
+            batch.locator('input[name="name"]').fill("partial")
             batch.locator('input[name="count"]').fill("4")
             page.once("dialog", lambda dialog: dialog.accept())
             with page.expect_download() as partial_info:
@@ -160,9 +162,18 @@ def main() -> None:
             assert len(created) - before == 2, "the failing request is not recorded as created"
             expect(page.locator("#api-key-feedback")).to_contain_text("fixture failure")
 
+            # 6) SaaS mode: data-production tabs are greyed out at menu level; view + release + API stay usable
+            for step in ("sources", "tasks", "review"):
+                expect(page.locator(f'[data-admin-step="{step}"]')).to_be_disabled()
+            for step in ("overview", "releases", "api"):
+                expect(page.locator(f'[data-admin-step="{step}"]')).to_be_enabled()
+            page.goto(URL + "/admin/review", wait_until="domcontentloaded")
+            expect(page.locator('[data-admin-step="overview"]')).to_have_attribute("aria-selected", "true")
+            assert page.url.endswith("/admin/overview"), page.url
+
             assert not errors, errors
             browser.close()
-        print("PASS: admin API keys — quota field, batch generation with one-key-per-line download, plaintext not left on page, partial-failure hand-over")
+        print("PASS: admin API keys — quota field, batch generation with one-key-per-line download, plaintext not left on page, partial-failure hand-over, SaaS menu gating")
     finally:
         process.terminate()
 

@@ -25,7 +25,7 @@ const taskTabs = mountTaskTabs(document.getElementById("admin-step-tasks")!);
 const publicationTabs = mountRecordTabs(document.getElementById("admin-step-releases")!, "publication", ["plan", "runs"] as const, "assets-admin-publication-tab");
 
 type ConnectorType = "s3" | "oss" | "local";
-interface AdminConfig { mocDiscovery?: { cdsUrl: string; llmAvailable: boolean }; enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; modalities?: string[]; connectorTypes: ConnectorType[]; backends: string[]; scanRequestApiVersion?: string } }
+interface AdminConfig { operationsMode?: "saas" | "warehouse"; mocDiscovery?: { cdsUrl: string; llmAvailable: boolean }; enabled: boolean; authRequired: boolean; namespace: string; kubernetesConfigured: boolean; capabilities: { coverageModes: string[]; modalities?: string[]; connectorTypes: ConnectorType[]; backends: string[]; scanRequestApiVersion?: string } }
 interface Connector { name: string; type: ConnectorType | string; endpoint?: string; region?: string; bucket?: string; prefix?: string; iconUrl?: string; accessKeyConfigured?: boolean; pvcName?: string; basePath?: string; localPath?: string; phase?: string; message?: string; checkedAt?: string; createdAt?: string; resourceKind?: "ConfigMap" | "AstroDataSource"; configurationPhase?: string; scope?: { kind?: string; pvcName?: string; basePath?: string; legacyPath?: string; endpoint?: string; region?: string; bucket?: string; prefix?: string }; inventory?: { state?: "unknown" | "running" | "complete" | "partial" | "failed"; denominatorKnown?: boolean; observedObjectCount?: number; totalObjectCount?: number; totalBytes?: number; processedObjects?: number; observedAt?: string; updatedAt?: string; source?: string; note?: string }; usage?: { scanTaskCount?: number; productCount?: number; latestTask?: { name?: string; phase?: string; createdAt?: string } } }
 interface TaskStatus { phase: string; reason?: string; backend?: string; runId?: string; discoveredFiles?: number; processedHdus?: number; coverageDocuments?: number; objectDocuments?: number; errorCount?: number; availableOrders?: number[]; evidencePath?: string; sourceSnapshot?: { uri?: string; sha256: string; sizeBytes?: number }; startedAt?: string; completedAt?: string; message?: string }
 interface Task { name: string; createdAt?: string; layerId?: string; surveyId?: string; releaseId?: string; product?: string; productId?: string; modality?: string; mode?: string; backend?: string; sourceConnector?: string; sourcePaths: string[]; tags: string[]; batchId?: string; workKey?: string; workTitle?: string; recipe?: { mode?: string; outputOrder?: number; catalog?: Record<string, unknown> }; status: TaskStatus }
@@ -561,7 +561,10 @@ function discardEditorialChanges(): void {
 }
 
 let activeStep: AdminStep = "overview";
-function setAdminStep(step: AdminStep, replace = false): void {
+let saasMode = false;
+function setAdminStep(requested: AdminStep, replace = false): void {
+  const step = saasMode && SAAS_DISABLED_STEPS.includes(requested) ? "overview" : requested;
+  if (step !== requested) replace = true;
   const changed = activeStep !== step;
   activeStep = step;
   if (changed || replace) {
@@ -585,6 +588,17 @@ function setAdminStep(step: AdminStep, replace = false): void {
     if (overviewRecord) renderOverview(overviewRecord);
   }
   if (token && !byId("admin-workspace").hidden) void refresh();
+}
+const SAAS_DISABLED_STEPS: readonly AdminStep[] = ["sources", "tasks", "review"];
+/** SaaS mode is read-only: grey out the data-production tabs at menu level and leave only view + API Key. */
+function applyOperationsMode(mode: AdminConfig["operationsMode"]): void {
+  saasMode = mode === "saas";
+  document.querySelectorAll<HTMLButtonElement>("[data-admin-step]").forEach(button => {
+    const blocked = saasMode && SAAS_DISABLED_STEPS.includes(button.dataset.adminStep as AdminStep);
+    button.disabled = blocked; button.classList.toggle("is-mode-disabled", blocked);
+    if (blocked) button.title = "SaaS 模式只读：不提供探索、构建与审核"; else button.removeAttribute("title");
+  });
+  if (saasMode && SAAS_DISABLED_STEPS.includes(activeStep)) setAdminStep("overview", true);
 }
 function readAdminStep(): AdminStep { return parseAdminRoute(location.pathname, location.hash)?.step ?? "overview"; }
 
@@ -2686,6 +2700,7 @@ async function initialize(): Promise<void> {
   renderIcons();
   try {
     adminConfig = await api<AdminConfig>("/api/v1/admin/config", { headers: {} });
+    applyOperationsMode(adminConfig.operationsMode);
     byId<HTMLInputElement>("moc-llm-enabled").disabled = !adminConfig.mocDiscovery?.llmAvailable;
     byId<HTMLInputElement>("moc-cds-url").value = adminConfig.mocDiscovery?.cdsUrl ?? "https://alasky.cds.unistra.fr/MocServer/query";
     byId("moc-llm-availability").textContent = adminConfig.mocDiscovery?.llmAvailable ? "默认查询 CDS；增强选项仅在 CDS 成功且无候选时生效。" : "LLM 服务未配置，仍可使用 CDS 探索。";
