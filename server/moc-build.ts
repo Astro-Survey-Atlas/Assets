@@ -306,8 +306,16 @@ export class MocBuildStore {
     return this.#snapshotSink?.enqueueFile ? stateSnapshotFileKey("moc-build", sha256) : undefined;
   }
 
+  /**
+   * Archive the evidence chain of a build to object storage, content-addressed:
+   * the outputs (fatal on failure, as before) plus the locked source snapshot and
+   * input evidence, which the verifier needs to re-check a build. Source/input
+   * archiving is best-effort and never blocks registering a build.
+   */
   async queueOutputFiles(request: MocBuildRequest, evidenceRoot: string): Promise<void> {
-    if (!this.#snapshotSink?.enqueueFile || !request.outputs) return;
+    if (!this.#snapshotSink?.enqueueFile) return;
+    await this.queueSourceFiles(request, evidenceRoot);
+    if (!request.outputs) return;
     const outputFiles: Array<{ file: MocBuildOutputFile | undefined; contentType: string }> = [
       { file: request.outputs.moc, contentType: "application/fits" },
       { file: request.outputs.query, contentType: "application/json" },
@@ -331,6 +339,29 @@ export class MocBuildStore {
         expectedSha256: file.sha256,
         expectedSizeBytes: file.sizeBytes,
       });
+    }
+  }
+
+  private async queueSourceFiles(request: MocBuildRequest, evidenceRoot: string): Promise<void> {
+    const files: Array<{ ref?: string; sha256?: string; sizeBytes?: number; kind: string }> = [
+      { ref: request.source?.evidenceRef, sha256: request.source?.snapshotSha256, sizeBytes: request.source?.sizeBytes, kind: "moc-build-source" },
+      ...(request.source?.evidenceInputs ?? []).map((entry) => ({ ...entry, kind: "moc-build-input" })),
+    ];
+    for (const file of files) {
+      if (!file.ref || !file.sha256 || file.sizeBytes === undefined) continue;
+      try {
+        await queueStateSnapshotFile(this.#snapshotSink, {
+          namespace: "moc-build",
+          sourcePath: immutableRef(evidenceRoot, path.resolve(evidenceRoot, file.ref)),
+          objectKey: stateSnapshotFileKey("moc-build", file.sha256),
+          kind: file.kind,
+          contentType: file.ref.endsWith(".json") ? "application/json" : "application/octet-stream",
+          expectedSha256: file.sha256,
+          expectedSizeBytes: file.sizeBytes,
+        });
+      } catch (error) {
+        console.warn(`MOC build ${request.name}: could not archive ${file.kind} ${file.ref}: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }
 

@@ -308,6 +308,8 @@ test("MOC staged and published files record durable keys and queue after local c
     assert.equal(staged.phase, "STAGED");
     assert.equal(staged.outputs?.moc?.objectKey, stateSnapshotFileKey("moc-build", staged.outputs!.moc!.sha256));
     await waitForUploadKind(path.join(base, "uploads"), "moc-build-output");
+    // The locked source snapshot is archived with the outputs so the build can be re-verified after a restore.
+    await waitForUploadKind(path.join(base, "uploads"), "moc-build-source");
 
     const publications = new MocPublicationStore(content, evidence, snapshots);
     const publication = await publications.publish(staged, { productId: "jwst-dr1", surveyId: "jwst", releaseId: "dr1", name: "JWST DR1" });
