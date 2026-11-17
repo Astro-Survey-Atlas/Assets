@@ -41,12 +41,21 @@ for (const [sourceId, descriptor] of Object.entries(OFFICIAL_MOC_SOURCES)) test(
     await mkdir(path.dirname(path.join(sourceRoot, descriptor.recordFile)), { recursive: true });
     await writeFile(path.join(sourceRoot, descriptor.recordFile), gzipSync(properties));
   }
+  if (descriptor.mocFile) await writeFile(path.join(sourceRoot, descriptor.mocFile), gzipSync(source));
   const urls: string[] = [];
   const options = { sourceRoot, evidenceRoot, products, builds, buildService,
     fetchBytes: async (url: string) => { urls.push(url); return url === descriptor.recordUrl ? properties : source; } };
   await assert.rejects(() => stageOfficialMoc(options, { sourceId: sourceId, url: "https://example.org/other" }), /registered/);
   assert.equal(urls.length, 0);
-  await assert.rejects(() => stageOfficialMoc({ ...options, fetchBytes: async () => Buffer.from("changed") }, { sourceId: sourceId }), /locked snapshot/);
+  // Downloaded inputs are locked by hash; a pinned MOC is covered by the dedicated tamper check below.
+  if (!descriptor.mocFile || !descriptor.recordFile) await assert.rejects(() => stageOfficialMoc({ ...options, fetchBytes: async () => Buffer.from("changed") }, { sourceId: sourceId }), /locked snapshot/);
+  if (descriptor.mocFile) {
+    // The MOC comes from the pinned copy, so tampering with that copy must also be refused by the lock.
+    const original = await readFile(path.join(sourceRoot, descriptor.mocFile));
+    await writeFile(path.join(sourceRoot, descriptor.mocFile), gzipSync(Buffer.from("changed")));
+    await assert.rejects(() => stageOfficialMoc(options, { sourceId: sourceId }), /locked snapshot/);
+    await writeFile(path.join(sourceRoot, descriptor.mocFile), original);
+  }
   const { request, product } = await stageOfficialMoc(options, { sourceId: sourceId });
   assert.equal(request.phase, "STAGED"); assert.equal(request.provider, "evidence");
   assert.equal(request.productId, product.productId); assert.equal(request.outputs?.maxOrder, recipe.maxOrder);
@@ -54,7 +63,7 @@ for (const [sourceId, descriptor] of Object.entries(OFFICIAL_MOC_SOURCES)) test(
   assert.equal(product.draft.sourceTier, "official_geometry"); assert.equal(product.review, undefined);
   assert.equal(request.source.evidenceInputs?.length, 2);
   // A pinned record is read from the repository copy and never downloaded.
-  assert.deepEqual(urls.sort(), descriptor.recordFile ? [descriptor.mocUrl] : [descriptor.mocUrl, descriptor.recordUrl].sort());
+  assert.deepEqual(urls.sort(), [...(descriptor.mocFile ? [] : [descriptor.mocUrl]), ...(descriptor.recordFile ? [] : [descriptor.recordUrl])].sort());
   const revision = product.revision;
   recipe.expectedOutputs = { moc: { sha256: "0".repeat(64), sizeBytes: source.length } };
   await writeFile(path.join(sourceRoot, recipePath), JSON.stringify(recipe));
@@ -82,9 +91,19 @@ test("pinned Euclid record: the shipped copy matches every lock that relies on i
   for (const file of ["src/surveys/survey-catalog.json", "src/layers/layer-registry.json"]) await copyFile(file, path.join(sourceRoot, file));
   await copyFile(`src/layers/recipes/${sourceId}.lock.json`, path.join(sourceRoot, `src/layers/recipes/${sourceId}.lock.json`));
   await writeFile(path.join(sourceRoot, descriptor.recordFile!), gzipSync(Buffer.from("altered record")));
+  if (descriptor.mocFile) await copyFile(descriptor.mocFile, path.join(sourceRoot, descriptor.mocFile));
   const products = new ProductStore(undefined, content); await products.initialize(sourceRoot);
   const builds = new MocBuildStore(content, undefined, evidenceRoot);
   const runner: MocCoreRunner = { validate: async () => ({ valid: true }), build: async () => ({ valid: true }) };
   const buildService = new MocBuildService({ store: builds, evidenceRoot, runner });
   await assert.rejects(() => stageOfficialMoc({ sourceRoot, evidenceRoot, products, builds, buildService, fetchBytes: async () => Buffer.from("anything") }, { sourceId }), /locked snapshot/);
+});
+
+test("pinned Wide MOC: the shipped copy equals the lock's snapshot", async () => {
+  const wide = OFFICIAL_MOC_SOURCES["euclid-dr1-foundation-wide-tiles-moc"]!;
+  assert.ok(wide.mocFile);
+  const bytes = (await import("node:zlib")).gunzipSync(await readFile(wide.mocFile));
+  const lock = JSON.parse(await readFile("src/layers/recipes/euclid-dr1-foundation-wide-tiles-moc.lock.json", "utf8"));
+  assert.equal(bytes.length, lock.snapshot.sizeBytes);
+  assert.equal(sha256(bytes), lock.snapshot.sha256);
 });

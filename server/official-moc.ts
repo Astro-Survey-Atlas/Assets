@@ -33,7 +33,10 @@ export async function stageOfficialMoc(options: {
   const readRecord = async (): Promise<Buffer> => descriptor.recordFile
     ? gunzipSync(await readFile(path.join(options.sourceRoot, descriptor.recordFile)))
     : acquire(descriptor.recordUrl);
-  const [source, properties] = await Promise.all([acquire(descriptor.mocUrl), readRecord()]);
+  const readMoc = async (): Promise<Buffer> => descriptor.mocFile
+    ? gunzipSync(await readFile(path.join(options.sourceRoot, descriptor.mocFile)))
+    : acquire(descriptor.mocUrl);
+  const [source, properties] = await Promise.all([readMoc(), readRecord()]);
   if (source.length !== lock.snapshot.sizeBytes || sha256(source) !== lock.snapshot.sha256
     || sha256(properties) !== lock.recipe.sourceRecordSha256) throw new Error("IRSA metadata differs from the locked snapshot; review the new source before updating its lock");
   const recordText = properties.toString();
