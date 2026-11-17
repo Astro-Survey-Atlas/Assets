@@ -64,6 +64,34 @@ Key 不授权管理、审核、发布或签发 Key，也不用于 URL query 参�
 每分钟计数持久化，重启不会重置；现有区域计算硬限制（并发、每日计算量、
 区域大小、结果数量和超时）继续生效。每日/并发计算保护仍为原进程内实现。
 
+## 调用额度与付费签发
+
+Key 可带可选的**总调用额度**（1–100000 次）。每个通过鉴权的请求计 1 次（解锁、每一页反查、
+区域查询各算 1 次）；被拒绝（401/403）或被每分钟限流（429）的请求不计次。额度用完后返回 `403`
+“API Key 调用额度已用完”，不会自动恢复。未设额度的 Key 不限总次数。管理页创建 Key 时可填写额度，
+列表显示“额度 已用 / 总数”。面向买家的说明见 [API 快速开始](api-quickstart.md)。
+
+**批量生成（用于商城发卡）**：管理页“批量生成并下载”一次生成 1–50 个带额度的 Key，下载为每行一个
+Key 的文本文件，可直接粘贴到商城的批量导入。文件包含完整明文，只应保存在受信任的地方；有效期从生成
+当天起算。批量中途失败时，已生成的 Key 仍会下载，避免出现无法找回的 Key。
+
+**自动签发入口（预留，默认关闭）**：`POST /api/v1/issuer/keys`，仅当后端设置了
+`ASSETS_KEY_ISSUER_TOKEN`（chart：`keyIssuer.secretName`，Secret 键 `token`）时存在，公网站点不转发，
+只能从集群内部访问。令牌只能创建 Key，不能读取、列出、撤销或管理任何其他内容。
+
+```http
+POST /api/v1/issuer/keys
+Authorization: Bearer <ASSETS_KEY_ISSUER_TOKEN>
+Content-Type: application/json
+
+{"orderRef":"order-2026-0001","quota":100,"perMinute":10,"validDays":365}
+```
+
+固定签发 `region:query`；`quota` 1–100000、`perMinute` 1–30、`validDays` 1–365 均有硬上限，调用方不能指定
+权限。每个 `orderRef`（8–128 位字母数字或 `._:-`）只签发一次，再次请求返回 `409`。如果调用方在拿到明文后
+崩溃、没来得及保存，可带 `"reissue": true` 重新签发：旧 Key 立即撤销，新 Key **只继承剩余额度**和原到期时间，
+所以重试不会多出调用次数；额度用完或已过期则拒绝。明文只在响应中出现一次，服务端只保存哈希。
+
 ## 存储与恢复
 
 仅单后台写入 `ASSETS_CONTENT_ROOT/api-management.sqlite`，SQLite WAL/FULL。
