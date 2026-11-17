@@ -37211,6 +37211,23 @@
       "notes": "Official Euclid Q1 DS9 ICRS field polygons (118 polygons) rasterized inclusively to NSIDE 16 with fact 8."
     },
     {
+      "surveyId": "euclid",
+      "releaseId": "euclid-q2",
+      "product": "Euclid Q2 Galactic Bulge tile coverage",
+      "label": "Euclid Q2 Galactic Bulge tile coverage",
+      "nside": 16,
+      "pixels": [
+        1795,
+        1801,
+        1804
+      ],
+      "quality": "moc",
+      "sourceUrl": "https://irsa.ipac.caltech.edu/data/MOC/euclid_q2.moc.fits",
+      "sourceId": "euclid-q2-galactic-bulge-moc",
+      "retrievedAt": "2026-11-17T08:40:17.000Z",
+      "notes": "Official IRSA MOC projected to the nside-16 overview; the native MOC remains authoritative."
+    },
+    {
       "surveyId": "fds",
       "releaseId": "fds-dr1",
       "product": "FDS DR1 color imaging",

@@ -119,7 +119,7 @@ LEGACY_SOURCE_ORDER = [
     ]
 LEGACY_LAYER_ORDER = [
     "euclid-q1-deep-fields-image-extent", "desi-edr-spectra-footprint", "desi-dr1-spectra-footprint",
-    "euclid-ero-image-extent", "euclid-q2-galactic-bulge-image-extent",
+    "euclid-ero-image-extent", "euclid-q2-galactic-bulge-moc",
     *[f"legacy-dr{number}-{kind}" for number in range(1, 10) for kind in ("coadd-image-extent", "tractor-object-presence")],
     "legacy-dr10-coadd-image-extent", "legacy-dr10-tractor-object-presence", ]
 

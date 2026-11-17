@@ -35,4 +35,16 @@ export const OFFICIAL_MOC_SOURCES: Readonly<Record<string, OfficialMocSource>> =
   },
   "euclid-dr1-foundation-wide-tiles-moc": euclid("wide"),
   "euclid-dr1-foundation-deep-tiles-moc": euclid("deep"),
+  // Euclid Quick Release 2 (Q2): the IRSA EGBS overview page is the pinned record because
+  // IRSA serves no per-MOC landing page; its dataset DOI ties the record to this release.
+  "euclid-q2-galactic-bulge-moc": {
+    surveyId: "euclid", releaseId: "euclid-q2", releaseLabel: "Q2",
+    releaseKind: "quick_release", releasedYear: 2026, modality: "imaging",
+    mocUrl: `${irsa}/data/MOC/euclid_q2.moc.fits`,
+    recordUrl: `${irsa}/data/Euclid/docs/overview_q2.html`,
+    identity: "IRSA/Euclid/Q2/Galactic-Bulge", geometrySourceLabel: "Official IRSA Euclid Q2 EGBS MOC",
+    recordMarkers: ["Euclid Galactic Bulge Survey", "10.26131/IRSA661"], legacyPixelMoc: true,
+    recordFile: "src/layers/records/irsa-euclid-q2-overview-4aa7ad90fb0f.html.gz",
+    mocFile: "src/layers/records/irsa-euclid-q2-moc-cda131a7b1e7.fits.gz",
+  },
 };

@@ -1,0 +1,69 @@
+{
+  "layerId": "euclid-q2-galactic-bulge-moc",
+  "surveyId": "euclid",
+  "releaseId": "euclid-q2",
+  "product": "Euclid Q2 Galactic Bulge tile coverage",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "observed",
+  "sourceTier": "official_geometry",
+  "maxOrder": 13,
+  "modality": "imaging",
+  "mode": "native-moc",
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://irsa.ipac.caltech.edu/data/Euclid/docs/overview_q2.html",
+  "input": "artifacts/public-survey-footprints/raw/moc/euclid-q2-galactic-bulge-moc.fits",
+  "recipe": {
+    "sourceKind": "official-archive-moc",
+    "sourceId": "IRSA/Euclid/Q2/Galactic-Bulge",
+    "sourceRecordUrl": "https://irsa.ipac.caltech.edu/data/Euclid/docs/overview_q2.html",
+    "sourceMocUrl": "https://irsa.ipac.caltech.edu/data/MOC/euclid_q2.moc.fits",
+    "sourceRecordSha256": "4aa7ad90fb0f21ce41613fc673fb325ba60a6216407ad4f8ad2d3aa1503b3f47",
+    "nativeSpatialOrder": 13,
+    "availableOrders": [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+    ],
+    "overviewOrder": 4,
+    "precision": "estimated",
+    "precisionJustification": "Official IRSA Euclid Quick Release 2 (Q2) EGBS MOC: the union of the nine adjoining Euclid Galactic Bulge Survey VIS fields, with a nominal survey area of 4.8 deg2. The decoded MOC area is measured as 5.39 deg2 and the decoded MOC area is authoritative over the nominal figure. This is the released tile extent, not a per-band valid-pixel mask, source-catalog occupancy, or a deeper future re-release of the bulge fields.",
+    "sourceEncoding": "Legacy ICRS HEALPIX/NUNIQ, PIXEL integer column; normalize without changing cells",
+    "implementationRef": "scripts/moc_build_worker.py:read_source_moc; scripts/moc_build_worker.py:build",
+    "attributionUrl": "https://irsa.ipac.caltech.edu/data/Euclid/docs/overview_q2.html",
+    "credit": "ESA Euclid/Euclid Consortium/NASA/Q2-2026",
+    "doi": "https://doi.org/10.26131/IRSA661",
+    "limitations": [
+      "Official IRSA Euclid Quick Release 2 (Q2) EGBS MOC: the union of the nine adjoining Euclid Galactic Bulge Survey VIS fields, with a nominal survey area of 4.8 deg2.",
+      "The decoded MOC area (5.39 deg2, 1707 cells at orders 6-13) exceeds the nominal 4.8 deg2 announcement; the decoded MOC area is authoritative."
+    ]
+  },
+  "snapshot": {
+    "sha256": "cda131a7b1e7ccc7b8302797cbdc54f5d59407f7f6504010cd0bc9ec2bd8868f",
+    "sizeBytes": 14400,
+    "sourceUrl": "https://irsa.ipac.caltech.edu/data/MOC/euclid_q2.moc.fits",
+    "recordSha256": "4aa7ad90fb0f21ce41613fc673fb325ba60a6216407ad4f8ad2d3aa1503b3f47",
+    "retrievedAt": "2026-11-17T08:40:17.000Z"
+  },
+  "expectedOutputs": {
+    "moc": {
+      "sha256": "ea904149b32095a139c6e8bd27112ba194f716e833f3bb5d669cf845cf3bc758",
+      "sizeBytes": 20160
+    },
+    "query": {
+      "sha256": "a027e748b3ef6d4a74ed9655b29791db6e51700cb53b62b3560349354c79503e",
+      "sizeBytes": 1027
+    },
+    "preview": {
+      "sha256": "3dbf6f08e5de9a387a96d870370142391204775db7a20f162464ae574f5398b3",
+      "sizeBytes": 76
+    }
+  }
+}

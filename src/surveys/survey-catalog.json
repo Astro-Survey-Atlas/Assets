@@ -203,14 +203,16 @@
           ],
           "products": [
             {
-              "name": "Galactic Bulge Survey",
+              "name": "Euclid Q2 Galactic Bulge tile coverage",
               "modality": "imaging",
-              "description": "Nine VIS fields in the Euclid Galactic Bulge Survey.",
-              "status": "overview_only",
-              "sourceUrl": "https://www.cosmos.esa.int/web/euclid/q2-contents",
-              "geometrySourceUrl": "https://www.cosmos.esa.int/web/euclid/q2-contents",
-              "reason": "The official nine-field, 4.8 deg2 summary supports an overview, but exact field geometry has not been converted to a product MOC.",
-              "manualStep": "Extract all nine Galactic Bulge Survey field boundaries from the official Q2 contents, convert them to ICRS polygons, and union the nine polygons into the product MOC."
+              "description": "Official IRSA Euclid Q2 Galactic Bulge Survey coverage MOC (nine VIS fields, nominal 4.8 deg2; decoded MOC area 5.39 deg2). Coverage extent only, not a per-band valid-pixel mask or a complete file inventory.",
+              "status": "acquired",
+              "dataOrigin": "observed",
+              "sourceTier": "official_geometry",
+              "sourceLabel": "NASA/IPAC IRSA Euclid Q2",
+              "sourceUrl": "https://irsa.ipac.caltech.edu/data/Euclid/docs/overview_q2.html",
+              "geometrySourceLabel": "Official IRSA Euclid Q2 MOC",
+              "geometrySourceUrl": "https://irsa.ipac.caltech.edu/data/MOC/euclid_q2.moc.fits"
             }
           ]
         },

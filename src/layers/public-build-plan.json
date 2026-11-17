@@ -183,6 +183,11 @@
       "expectedSha256": "e1c38cd2abe21035deae79efdf13f003fb0421f14a780d3061dbc8a52d2da75e"
     },
     {
+      "spec": "src/layers/recipes/euclid-q2-galactic-bulge-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/euclid-q2-galactic-bulge-moc",
+      "expectedSha256": "ea904149b32095a139c6e8bd27112ba194f716e833f3bb5d669cf845cf3bc758"
+    },
+    {
       "spec": "src/layers/recipes/fds-fds-dr1-fds-dr1-color-imaging-moc.lock.json",
       "output": "artifacts/public-survey-footprints/layers/fds-fds-dr1-fds-dr1-color-imaging-moc",
       "expectedSha256": "f3ad45871e475978c8eb889387d66c8308b690af561aa4415b1920245744c177"

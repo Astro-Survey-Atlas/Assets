@@ -25,6 +25,26 @@ for (const [sourceId, descriptor] of Object.entries(OFFICIAL_MOC_SOURCES)) test(
   recipe.snapshot.sha256 = sha256(source); recipe.snapshot.sizeBytes = source.length;
   recipe.recipe.sourceRecordSha256 = sha256(properties);
   await writeFile(path.join(sourceRoot, recipePath), JSON.stringify(recipe));
+  // Staging binds the acquired product to its registry layer; sources not yet registered in the
+  // shipped catalog get the same binding synthesized here, mirroring the production contract.
+  const catalogFile = path.join(sourceRoot, "src/surveys/survey-catalog.json");
+  const registryFile = path.join(sourceRoot, "src/layers/layer-registry.json");
+  const catalog = JSON.parse(await readFile(catalogFile, "utf8"));
+  const registry = JSON.parse(await readFile(registryFile, "utf8"));
+  if (!registry.layers.some((layer: { layerId: string }) => layer.layerId === sourceId)) {
+    registry.layers.push({ layerId: sourceId, surveyId: descriptor.surveyId, releaseId: descriptor.releaseId, product: recipe.product,
+      coverageRole: recipe.coverageRole, dataOrigin: recipe.dataOrigin, sourceTier: recipe.sourceTier, maxOrder: recipe.maxOrder,
+      modality: recipe.modality, mode: recipe.mode, status: "acquired", recipePath: `src/layers/recipes/${sourceId}.lock.json`,
+      sourceUrl: recipe.sourceUrl, geometrySourceUrl: descriptor.mocUrl });
+    const survey = catalog.surveys.find((entry: { id: string }) => entry.id === descriptor.surveyId)!;
+    let release = survey.releases.find((entry: { id: string }) => entry.id === descriptor.releaseId);
+    if (!release) survey.releases.push(release = { id: descriptor.releaseId, label: descriptor.releaseLabel, kind: descriptor.releaseKind, releasedYear: descriptor.releasedYear, modalities: [descriptor.modality], products: [] });
+    if (!release.products.some((product: { name: string }) => product.name === recipe.product))
+      release.products.push({ name: recipe.product, modality: recipe.modality, status: "acquired", dataOrigin: recipe.dataOrigin,
+        sourceTier: recipe.sourceTier, sourceUrl: recipe.sourceUrl, geometrySourceLabel: descriptor.geometrySourceLabel, geometrySourceUrl: descriptor.mocUrl });
+    await writeFile(catalogFile, JSON.stringify(catalog));
+    await writeFile(registryFile, JSON.stringify(registry));
+  }
   const products = new ProductStore(undefined, content); await products.initialize(sourceRoot);
   const builds = new MocBuildStore(content, undefined, evidenceRoot);
   const runner: MocCoreRunner = {
@@ -106,4 +126,17 @@ test("pinned Wide MOC: the shipped copy equals the lock's snapshot", async () =>
   const lock = JSON.parse(await readFile("src/layers/recipes/euclid-dr1-foundation-wide-tiles-moc.lock.json", "utf8"));
   assert.equal(bytes.length, lock.snapshot.sizeBytes);
   assert.equal(sha256(bytes), lock.snapshot.sha256);
+});
+
+test("pinned Q2 MOC: the shipped copy equals the lock's snapshot", async () => {
+  const q2 = OFFICIAL_MOC_SOURCES["euclid-q2-galactic-bulge-moc"]!;
+  assert.ok(q2.mocFile);
+  const bytes = (await import("node:zlib")).gunzipSync(await readFile(q2.mocFile));
+  const lock = JSON.parse(await readFile("src/layers/recipes/euclid-q2-galactic-bulge-moc.lock.json", "utf8"));
+  assert.equal(bytes.length, lock.snapshot.sizeBytes);
+  assert.equal(sha256(bytes), lock.snapshot.sha256);
+  // The pinned EGBS record must stay the locked overview page and identify the Q2 dataset.
+  const record = (await import("node:zlib")).gunzipSync(await readFile(q2.recordFile!));
+  assert.equal(sha256(record), lock.recipe.sourceRecordSha256);
+  assert.ok(record.toString().includes(q2.recordMarkers![0]!));
 });
