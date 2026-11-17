@@ -62,7 +62,7 @@ helm upgrade astro-survey-atlas-assets-72602 ./astro-survey-atlas-assets-*.tgz \
 部署后验证项：
 ```bash
 # Health检查
-curl -sf https://astro.assets.72602.space/api/v1/healthz | jq '.version'
+curl -sf https://astro.assets.72602.space/healthz | jq '.version'
 
 # Catalog API
 curl -sf https://astro.assets.72602.space/api/v1/catalog | jq '.surveys | length'
