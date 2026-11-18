@@ -323,8 +323,14 @@ export class MocBuildStore {
       { file: request.outputs.statistics, contentType: "application/json" },
       { file: request.outputs.manifest, contentType: "application/json" },
     ];
+    // Content-addressed uploads share one id per SHA-256: an output byte-identical to an already
+    // archived source/input (e.g. a pinned MOC the SDK normalizes to itself) is already stored.
+    const archived = new Set([request.source?.snapshotSha256, ...(request.source?.evidenceInputs ?? []).map((entry) => entry.sha256)]
+      .filter((sha): sha is string => Boolean(sha)));
     for (const { file, contentType } of outputFiles) {
       if (!file?.sha256 || file.sizeBytes === undefined) continue;
+      if (archived.has(file.sha256)) continue;
+      archived.add(file.sha256);
       let sourcePath: string;
       try { sourcePath = immutableRef(evidenceRoot, path.resolve(evidenceRoot, file.ref)); }
       catch (error) {

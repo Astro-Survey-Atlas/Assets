@@ -647,7 +647,7 @@
       "mode": "native-moc",
       "status": "acquired",
       "recipePath": "src/layers/recipes/euclid-q2-galactic-bulge-moc.lock.json",
-      "expectedSha256": "ea904149b32095a139c6e8bd27112ba194f716e833f3bb5d669cf845cf3bc758",
+      "expectedSha256": "e15b497c4c71ea5362a72644dbd150b47a8bdf809d5704f1cebbd23657eb7279",
       "sourceUrl": "https://irsa.ipac.caltech.edu/data/Euclid/docs/overview_q2.html",
       "geometrySourceUrl": "https://irsa.ipac.caltech.edu/data/MOC/euclid_q2.moc.fits",
       "artifactPath": "artifacts/public-survey-footprints/layers/euclid-q2-galactic-bulge-moc/euclid-q2-galactic-bulge-moc.moc.fits"

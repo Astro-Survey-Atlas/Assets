@@ -54,7 +54,7 @@
   },
   "expectedOutputs": {
     "moc": {
-      "sha256": "ea904149b32095a139c6e8bd27112ba194f716e833f3bb5d669cf845cf3bc758",
+      "sha256": "e15b497c4c71ea5362a72644dbd150b47a8bdf809d5704f1cebbd23657eb7279",
       "sizeBytes": 20160
     },
     "query": {
