@@ -14,6 +14,8 @@ export interface MonitoredSource {
   mocUrl: string;
   maxOrder: number;
   status: string;
+  /** Pinned, derived sources have no remote endpoint to observe. */
+  sourceKind?: string;
   sourceSnapshotSha256?: string;
   sourceRecordSha256?: string;
 }
@@ -76,7 +78,7 @@ export function detectDrift(source: MonitoredSource, observed: Observation, prev
 export async function checkSource(
   source: MonitoredSource, previous: SourceHealth | undefined, fetchBytes: FetchBytes, now: string,
 ): Promise<SourceHealth> {
-  if (source.status === "rejected") {
+  if (source.status === "rejected" || source.sourceKind === "derived-planned-moc") {
     return { id: source.id, state: "skipped", lastAttemptAt: now, consecutiveFailures: 0 };
   }
   try {

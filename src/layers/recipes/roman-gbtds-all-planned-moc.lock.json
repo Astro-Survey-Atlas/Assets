@@ -1,0 +1,136 @@
+{
+  "layerId": "roman-gbtds-all-planned-moc",
+  "surveyId": "roman",
+  "releaseId": "roman-gbtds",
+  "product": "Roman GBTDS planned coverage",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "simulated",
+  "sourceTier": "best_effort_derived",
+  "maxOrder": 12,
+  "modality": "imaging",
+  "mode": "native-moc",
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+  "input": "artifacts/public-survey-footprints/raw/moc/roman-gbtds-all-planned-moc.fits",
+  "recipe": {
+    "sourceKind": "derived-planned-moc",
+    "sourceId": "STScI/Roman/GBTDS/all-planned",
+    "sourceRecordUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+    "sourceMocUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+    "sourceRecordSha256": "668ecccb0517319585ca4657913243f794b9625d1cc1946547876f0182020c05",
+    "upstream": {
+      "repository": "https://github.com/spacetelescope/roman_notebooks",
+      "commit": "cb3ec341a1ff1496ee36e7b7764cac66c53fa28d",
+      "notebook": "https://github.com/spacetelescope/roman_notebooks/blob/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/footprint_visualization.ipynb",
+      "license": "BSD-3-Clause repository license; no separate data license statement",
+      "aptProgram": "1420"
+    },
+    "inputMaps": [
+      {
+        "file": "map_GBTDS_F062.hsp",
+        "sha256": "1023d02d9a4d2557fa4ba86790817b2a043865a5c7ce33dd6721da60f9a117a8",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_GBTDS_F062.hsp"
+      },
+      {
+        "file": "map_GBTDS_F087.hsp",
+        "sha256": "3ba688d91f3539fdcf8db5a697fade6bfb24638d7a858467dc7988dec0c580ed",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_GBTDS_F087.hsp"
+      },
+      {
+        "file": "map_GBTDS_F106.hsp",
+        "sha256": "c0b9ccda36db9fc0e31563b9b8db52e9932cf1d76bfa6a1a6c0cc02af326c091",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_GBTDS_F106.hsp"
+      },
+      {
+        "file": "map_GBTDS_F129.hsp",
+        "sha256": "2d7549b2204b7dd30f425b998bae9d738bb3318cee2cf859d612f4a2e3b33fe9",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_GBTDS_F129.hsp"
+      },
+      {
+        "file": "map_GBTDS_F146.hsp",
+        "sha256": "36f24bee483e118146c58e9e63b6e4f6aa7e48ca6e33755382c19e9eccca73de",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_GBTDS_F146.hsp"
+      },
+      {
+        "file": "map_GBTDS_F158.hsp",
+        "sha256": "c0367dfc2474257ddd9d2e4a6a7851e4169163e795cf9b13b72e2c3ea202c032",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_GBTDS_F158.hsp"
+      },
+      {
+        "file": "map_GBTDS_F184.hsp",
+        "sha256": "17e10144a26fa573573715a8ff6d815c926eab54965af67936ba67607047d989",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_GBTDS_F184.hsp"
+      },
+      {
+        "file": "map_GBTDS_F213.hsp",
+        "sha256": "884cf67cb58af390b550352dc9749ae06f1a5179408cf814f115a1f253bb6e78",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_GBTDS_F213.hsp"
+      },
+      {
+        "file": "map_GBTDS_GRISM.hsp",
+        "sha256": "aadc5b99daca428c77d7a405c99ae2449f29650ce6d7b816e381c8463bf091d6",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_GBTDS_GRISM.hsp"
+      }
+    ],
+    "conversion": {
+      "selection": "pixels with finite value > 0, union over all input maps",
+      "healsparseNsideSparse": 4096,
+      "ordering": "NESTED",
+      "mocOrder": 12,
+      "upstreamEncoding": "MOC 2.0 RANGE (mocpy/CDS)",
+      "pinnedEncoding": "MOC 2.0 NUNIQ, cells unchanged",
+      "upstreamMocSha256": "52af5bcd878fbb4a1ef2c84643f5cbf23caea399d751a40442424b6d673258a5",
+      "upstreamMocSizeBytes": 14400,
+      "pinnedMocSha256": "6ea7744fb5d6149d384ba310af013a665b956347afee39d1f979c8eaabcb479e",
+      "pinnedMocSizeBytes": 17280,
+      "pinnedRangeCopy": "src/layers/records/roman-gbtds-all-planned-range-52af5bcd878f.fits.gz",
+      "tools": "healsparse, mocpy 0.20.0, MOC-Core-SDK 1.2.0 canonical_cells/write_moc_fits"
+    },
+    "nativeSpatialOrder": 12,
+    "availableOrders": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "overviewOrder": 4,
+    "precision": "estimated",
+    "precisionJustification": "PLANNED COVERAGE, NOT OBSERVED DATA. This layer is the planned Galactic Bulge Time Domain Survey (GBTDS, 9 maps), derived by Assets from STScI pre-generated healsparse exposure-time maps in spacetelescope/roman_notebooks (pinned commit cb3ec341a1ff, APT program 1420, whose status may be Draft). The union of every pixel with a finite value above zero in 9 input map(s) (nside_sparse 4096, NESTED) is stored as a MOC at order 12; decoded area 3.62 deg2 in 1409 cells. The STScI-published figure is about 1.7 deg2; the map-derived area (3.62 deg2) is larger and the cause of the difference is not confirmed. The roll angle of the pre-generated maps may not match on-orbit exposures. No Roman survey data exist yet, so there are no files to look up; this is a planned extent, not a per-band valid-pixel mask or an observed footprint.",
+    "sourceEncoding": "Derived NUNIQ MOC pinned in the repository; normalize without changing cells",
+    "implementationRef": "scripts/moc_build_worker.py:read_source_moc; scripts/moc_build_worker.py:build",
+    "attributionUrl": "https://github.com/spacetelescope/roman_notebooks",
+    "credit": "STScI / NASA Roman Space Telescope (roman_notebooks, BSD-3-Clause)",
+    "limitations": [
+      "Planned coverage, not observed data: Roman has not yet carried out this survey, so no files exist for this layer.",
+      "Derived from STScI roman_notebooks pre-generated maps for APT program 1420 (status may be Draft); the roll angle of the maps may not represent on-orbit exposures.",
+      "Map-derived area 3.62 deg2 (1409 cells at orders 7-12). Officially about 1.7 deg2; the difference is unexplained.",
+      "The MOC is rewritten from the upstream MOC 2.0 RANGE encoding to NUNIQ without changing cells; STScI publishes no MOC, so this derived MOC is not an official STScI product."
+    ]
+  },
+  "snapshot": {
+    "sha256": "6ea7744fb5d6149d384ba310af013a665b956347afee39d1f979c8eaabcb479e",
+    "sizeBytes": 17280,
+    "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+    "recordSha256": "668ecccb0517319585ca4657913243f794b9625d1cc1946547876f0182020c05",
+    "retrievedAt": "2026-11-17T00:00:00.000Z"
+  },
+  "expectedOutputs": {
+    "moc": {
+      "sha256": "6ea7744fb5d6149d384ba310af013a665b956347afee39d1f979c8eaabcb479e",
+      "sizeBytes": 17280
+    },
+    "query": {
+      "sha256": "34eb74a2ad9099cc4a99d64e5a4c754376e713ff842be1f1d99130955da04393",
+      "sizeBytes": 775
+    },
+    "preview": {
+      "sha256": "76300b9cbd1e4424a2c34cae1dad2feb2d9622a3cb107c626edb0807ac26b0fc",
+      "sizeBytes": 71
+    }
+  }
+}

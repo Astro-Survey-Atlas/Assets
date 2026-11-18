@@ -1,0 +1,111 @@
+{
+  "layerId": "roman-hlwas-all-planned-moc",
+  "surveyId": "roman",
+  "releaseId": "roman-hlwas",
+  "product": "Roman HLWAS planned coverage (all tiers)",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "simulated",
+  "sourceTier": "best_effort_derived",
+  "maxOrder": 12,
+  "modality": "imaging",
+  "mode": "native-moc",
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+  "input": "artifacts/public-survey-footprints/raw/moc/roman-hlwas-all-planned-moc.fits",
+  "recipe": {
+    "sourceKind": "derived-planned-moc",
+    "sourceId": "STScI/Roman/HLWAS/all-planned",
+    "sourceRecordUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+    "sourceMocUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+    "sourceRecordSha256": "09941ef5edc6fe651ef8a81ebb9882c2247ed6222033e0dbe29c981f35057b4f",
+    "upstream": {
+      "repository": "https://github.com/spacetelescope/roman_notebooks",
+      "commit": "cb3ec341a1ff1496ee36e7b7764cac66c53fa28d",
+      "notebook": "https://github.com/spacetelescope/roman_notebooks/blob/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/footprint_visualization.ipynb",
+      "license": "BSD-3-Clause repository license; no separate data license statement",
+      "aptProgram": "1400"
+    },
+    "inputMaps": [
+      {
+        "file": "map_HLWAS-all_F106.hsp",
+        "sha256": "b36affee9c5cfd14d1233e5e8ce644452f5839668122f7700e0c69339a8a22cb",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLWAS-all_F106.hsp"
+      },
+      {
+        "file": "map_HLWAS-all_F158.hsp",
+        "sha256": "3944fe4ce2d9ee9cac67608ce589e8e12f22d9eda318844d94e5b4dc166280df",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLWAS-all_F158.hsp"
+      },
+      {
+        "file": "map_HLWAS-all_GRISM.hsp",
+        "sha256": "0422e70c1aaa75aaaad8801281b5bc4841ad5c2d98503ef18040d104bc57a5ec",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLWAS-all_GRISM.hsp"
+      }
+    ],
+    "conversion": {
+      "selection": "pixels with finite value > 0, union over all input maps",
+      "healsparseNsideSparse": 4096,
+      "ordering": "NESTED",
+      "mocOrder": 12,
+      "upstreamEncoding": "MOC 2.0 RANGE (mocpy/CDS)",
+      "pinnedEncoding": "MOC 2.0 NUNIQ, cells unchanged",
+      "upstreamMocSha256": "2f99158ccc49f04e756a27d542b57ca6e70b1cefb77ae27ccb0b32a84e4f2ddc",
+      "upstreamMocSizeBytes": 391680,
+      "pinnedMocSha256": "76ef1f8941e67f20558de1a52421cea3e5726d1bcd57b60dd2dcef9c439a0f66",
+      "pinnedMocSizeBytes": 529920,
+      "pinnedRangeCopy": "src/layers/records/roman-hlwas-all-planned-range-2f99158ccc49.fits.gz",
+      "tools": "healsparse, mocpy 0.20.0, MOC-Core-SDK 1.2.0 canonical_cells/write_moc_fits"
+    },
+    "nativeSpatialOrder": 12,
+    "availableOrders": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "overviewOrder": 4,
+    "precision": "estimated",
+    "precisionJustification": "PLANNED COVERAGE, NOT OBSERVED DATA. This layer is the planned High Latitude Wide Area Survey (HLWAS) union of the Wide and Medium tiers (F158, F106 and grism maps), derived by Assets from STScI pre-generated healsparse exposure-time maps in spacetelescope/roman_notebooks (pinned commit cb3ec341a1ff, APT program 1400, whose status may be Draft). The union of every pixel with a finite value above zero in 3 input map(s) (nside_sparse 4096, NESTED) is stored as a MOC at order 12; decoded area 5859.22 deg2 in 65474 cells. Official HLWAS tier areas are about 2702 deg2 (Wide) and 2415 deg2 (Medium); the map-derived union (5859.22 deg2) and its tiers (3354 and 2872 deg2) are larger, and the cause of the difference is not confirmed. The roll angle of the pre-generated maps may not match on-orbit exposures. No Roman survey data exist yet, so there are no files to look up; this is a planned extent, not a per-band valid-pixel mask or an observed footprint.",
+    "sourceEncoding": "Derived NUNIQ MOC pinned in the repository; normalize without changing cells",
+    "implementationRef": "scripts/moc_build_worker.py:read_source_moc; scripts/moc_build_worker.py:build",
+    "attributionUrl": "https://github.com/spacetelescope/roman_notebooks",
+    "credit": "STScI / NASA Roman Space Telescope (roman_notebooks, BSD-3-Clause)",
+    "limitations": [
+      "Planned coverage, not observed data: Roman has not yet carried out this survey, so no files exist for this layer.",
+      "Derived from STScI roman_notebooks pre-generated maps for APT program 1400 (status may be Draft); the roll angle of the maps may not represent on-orbit exposures.",
+      "Map-derived area 5859.22 deg2 (65474 cells at orders 7-12).",
+      "The MOC is rewritten from the upstream MOC 2.0 RANGE encoding to NUNIQ without changing cells; STScI publishes no MOC, so this derived MOC is not an official STScI product."
+    ]
+  },
+  "snapshot": {
+    "sha256": "76ef1f8941e67f20558de1a52421cea3e5726d1bcd57b60dd2dcef9c439a0f66",
+    "sizeBytes": 529920,
+    "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+    "recordSha256": "09941ef5edc6fe651ef8a81ebb9882c2247ed6222033e0dbe29c981f35057b4f",
+    "retrievedAt": "2026-11-17T00:00:00.000Z"
+  },
+  "expectedOutputs": {
+    "moc": {
+      "sha256": "76ef1f8941e67f20558de1a52421cea3e5726d1bcd57b60dd2dcef9c439a0f66",
+      "sizeBytes": 529920
+    },
+    "query": {
+      "sha256": "d215e1c8814eeccc483e9978eeb97199d296ab7628ff340ccb56e8e7a4425966",
+      "sizeBytes": 793713
+    },
+    "preview": {
+      "sha256": "840d1cf5b4c6c5191d5cff30140032f00f43709cde3a48f8beb5a789643b32bf",
+      "sizeBytes": 2715
+    }
+  }
+}

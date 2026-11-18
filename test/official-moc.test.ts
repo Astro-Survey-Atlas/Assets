@@ -17,7 +17,8 @@ for (const [sourceId, descriptor] of Object.entries(OFFICIAL_MOC_SOURCES)) test(
   const sourceRoot = path.join(base, "sources"), evidenceRoot = path.join(base, "evidence"), content = path.join(base, "content");
   for (const directory of ["src/layers/recipes", "src/surveys"]) await mkdir(path.join(sourceRoot, directory), { recursive: true });
   for (const file of ["src/surveys/survey-catalog.json", "src/layers/layer-registry.json"]) await copyFile(file, path.join(sourceRoot, file));
-  const source = fitsMoc(descriptor.fullSky ? Array.from({ length: 12 }, (_, pixel) => ({ order: 0, pixel })) : [{ order: 13, pixel: 70000000 }]);
+  const lockedOrder = JSON.parse(await readFile(`src/layers/recipes/${sourceId}.lock.json`, "utf8")).maxOrder as number;
+  const source = fitsMoc(descriptor.fullSky ? Array.from({ length: 12 }, (_, pixel) => ({ order: 0, pixel })) : [{ order: lockedOrder, pixel: 70000000 >> (2 * (13 - lockedOrder)) }]);
   const properties = Buffer.from(descriptor.creatorDid ? `creator_did = ${descriptor.creatorDid}\n` : descriptor.recordMarkers!.join("\n"));
   const recipePath = `src/layers/recipes/${sourceId}.lock.json`;
   const recipe = JSON.parse(await readFile(recipePath, "utf8"));
@@ -80,7 +81,7 @@ for (const [sourceId, descriptor] of Object.entries(OFFICIAL_MOC_SOURCES)) test(
   assert.equal(request.phase, "STAGED"); assert.equal(request.provider, "evidence");
   assert.equal(request.productId, product.productId); assert.equal(request.outputs?.maxOrder, recipe.maxOrder);
   assert.equal(product.draft.releaseId, descriptor.releaseId); assert.equal(product.draft.layerId, sourceId);
-  assert.equal(product.draft.sourceTier, "official_geometry"); assert.equal(product.review, undefined);
+  assert.equal(product.draft.sourceTier, descriptor.sourceTier ?? "official_geometry"); assert.equal(product.review, undefined);
   assert.equal(request.source.evidenceInputs?.length, 2);
   // A pinned record is read from the repository copy and never downloaded.
   assert.deepEqual(urls.sort(), [...(descriptor.mocFile ? [] : [descriptor.mocUrl]), ...(descriptor.recordFile ? [] : [descriptor.recordUrl])].sort());

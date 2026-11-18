@@ -1,13 +1,18 @@
 /** Exact acquisition endpoints: admin callers select an ID, never supply URLs. */
 export const SPHEREX_DR1_CUBE = "spherex-dr1-allsky-cube-moc";
 export interface OfficialMocSource {
-  surveyId: string; releaseId: string; releaseLabel: string; releaseKind: string; releasedYear: number;
+  surveyId: string; releaseId: string; releaseLabel: string; releaseKind: string; releasedYear?: number;
   modality: string; mocUrl: string; recordUrl: string; identity: string; geometrySourceLabel: string;
   recordMarkers?: readonly string[]; creatorDid?: string; legacyPixelMoc?: boolean; fullSky?: boolean;
   /** Pinned copy of the record (gzip, repo-relative). IRSA moved this 5 MB file to another host that the production node cannot download in time, so it is read locally and still verified against the lock's sha256. */
   recordFile?: string;
   /** Pinned copy of the MOC itself (gzip, repo-relative), for sources the production node cannot download reliably. Verified against the lock's size and sha256 exactly like a download. */
   mocFile?: string;
+  /** Metadata origin of the geometry. Absent means "observed" and "official_geometry", the behavior of every archive-published MOC. */
+  dataOrigin?: "observed" | "simulated" | "catalog";
+  sourceTier?: "official_geometry" | "official_inventory_derived" | "third_party_moc" | "best_effort_derived" | "user_file_derived";
+  /** Name of the record file inside the staged build; defaults depend on the source kind. */
+  recordFilename?: string;
 }
 const irsa = "https://irsa.ipac.caltech.edu";
 const euclidRecord = `${irsa}/applications/euclid/firefly-6d0a2922a94699f98f89.js`;
@@ -22,6 +27,23 @@ function euclid(field: "wide" | "deep"): OfficialMocSource {
     recordMarkers: [filename, `Euclid DR1 ${label} Tiles Coverage`], legacyPixelMoc: true,
     recordFile: "src/layers/records/irsa-euclid-firefly-f688792ffd62.js.gz",
     ...(field === "wide" ? { mocFile: "src/layers/records/irsa-euclid-dr1-wide-moc-bb89812addb7.fits.gz" } : {}),
+  };
+}
+// Roman planned-coverage layers. STScI publishes no MOC: each one is derived here from the pinned
+// roman_notebooks healsparse exposure-time maps (see the lock's recipe) and pinned as a NUNIQ copy.
+// They describe planned coverage, never observed data, so they are simulated / best_effort_derived.
+const romanCommit = "cb3ec341a1ff1496ee36e7b7764cac66c53fa28d";
+const romanTree = `https://github.com/spacetelescope/roman_notebooks/tree/${romanCommit}/notebooks/footprint_visualization/aux_data`;
+function roman(group: "hlwas" | "hltds" | "gbtds" | "gps", suffix: string, moc: string, record: string): OfficialMocSource {
+  const survey = { hlwas: "HLWAS", hltds: "HLTDS", gbtds: "GBTDS", gps: "GPS" }[group];
+  return {
+    surveyId: "roman", releaseId: `roman-${group}`, releaseLabel: `${survey} (planned)`,
+    releaseKind: "planned", modality: "imaging",
+    mocUrl: romanTree, recordUrl: romanTree,
+    identity: `STScI/Roman/${survey}/${suffix}-planned`, geometrySourceLabel: "STScI roman_notebooks pre-generated healsparse maps (derived MOC)",
+    recordMarkers: [`roman-${group}-${suffix}-planned`, "PLANNED COVERAGE - NOT OBSERVED DATA"],
+    recordFile: `src/layers/records/${record}`, mocFile: `src/layers/records/${moc}`, recordFilename: "source-record.json",
+    dataOrigin: "simulated", sourceTier: "best_effort_derived",
   };
 }
 export const OFFICIAL_MOC_SOURCES: Readonly<Record<string, OfficialMocSource>> = {
@@ -47,4 +69,11 @@ export const OFFICIAL_MOC_SOURCES: Readonly<Record<string, OfficialMocSource>> =
     recordFile: "src/layers/records/irsa-euclid-q2-overview-4aa7ad90fb0f.html.gz",
     mocFile: "src/layers/records/irsa-euclid-q2-moc-cda131a7b1e7.fits.gz",
   },
+  // Roman planned coverage (simulated, not observed): see roman() above.
+  "roman-hlwas-all-planned-moc": roman("hlwas", "all", "roman-hlwas-all-planned-76ef1f8941e6.fits.gz", "roman-hlwas-all-planned-source-09941ef5edc6.json.gz"),
+  "roman-hlwas-wide-planned-moc": roman("hlwas", "wide", "roman-hlwas-wide-planned-41f90f3c886e.fits.gz", "roman-hlwas-wide-planned-source-c78654f3118b.json.gz"),
+  "roman-hlwas-medium-planned-moc": roman("hlwas", "medium", "roman-hlwas-medium-planned-4c22d0efe3cf.fits.gz", "roman-hlwas-medium-planned-source-a608afd5e386.json.gz"),
+  "roman-hltds-all-planned-moc": roman("hltds", "all", "roman-hltds-all-planned-a41b67d8c6c8.fits.gz", "roman-hltds-all-planned-source-489234a07561.json.gz"),
+  "roman-gbtds-all-planned-moc": roman("gbtds", "all", "roman-gbtds-all-planned-6ea7744fb5d6.fits.gz", "roman-gbtds-all-planned-source-668ecccb0517.json.gz"),
+  "roman-gps-all-planned-moc": roman("gps", "all", "roman-gps-all-planned-eb01e22e3c5f.fits.gz", "roman-gps-all-planned-source-36f3b0815f8c.json.gz"),
 };

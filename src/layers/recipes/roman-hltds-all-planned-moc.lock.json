@@ -1,0 +1,178 @@
+{
+  "layerId": "roman-hltds-all-planned-moc",
+  "surveyId": "roman",
+  "releaseId": "roman-hltds",
+  "product": "Roman HLTDS planned coverage (Deep and Wide tiers)",
+  "coverageRole": "footprint_extent",
+  "dataOrigin": "simulated",
+  "sourceTier": "best_effort_derived",
+  "maxOrder": 12,
+  "modality": "imaging",
+  "mode": "native-moc",
+  "queryOrder": 8,
+  "previewOrder": 4,
+  "coordinateFrame": "ICRS",
+  "ordering": "NESTED",
+  "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+  "input": "artifacts/public-survey-footprints/raw/moc/roman-hltds-all-planned-moc.fits",
+  "recipe": {
+    "sourceKind": "derived-planned-moc",
+    "sourceId": "STScI/Roman/HLTDS/all-planned",
+    "sourceRecordUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+    "sourceMocUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+    "sourceRecordSha256": "489234a07561b188b0e5442ed323286ebd32c4cbf991ff8fe77b4fdac38efaf6",
+    "upstream": {
+      "repository": "https://github.com/spacetelescope/roman_notebooks",
+      "commit": "cb3ec341a1ff1496ee36e7b7764cac66c53fa28d",
+      "notebook": "https://github.com/spacetelescope/roman_notebooks/blob/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/footprint_visualization.ipynb",
+      "license": "BSD-3-Clause repository license; no separate data license statement",
+      "aptProgram": "1410"
+    },
+    "inputMaps": [
+      {
+        "file": "map_HLTDS-deep+wide_F087.hsp",
+        "sha256": "f2add466a3aed9501ef31b2d82cb601afc6c9cb9eed55e8f6a241969a0cbda87",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-deep+wide_F087.hsp"
+      },
+      {
+        "file": "map_HLTDS-deep+wide_F106.hsp",
+        "sha256": "c85d89904e66b119ed5b76760303a80805e5721192bbcc40dbf3a25dc0839c24",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-deep+wide_F106.hsp"
+      },
+      {
+        "file": "map_HLTDS-deep+wide_F129.hsp",
+        "sha256": "b26dac226d307854c822ddf74486df2b404c9c2c702bb0887d91260815ef0d82",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-deep+wide_F129.hsp"
+      },
+      {
+        "file": "map_HLTDS-deep+wide_F158.hsp",
+        "sha256": "525d20e7ea01ef18c28e8c248496d859525a6b5c9d5eaececa5d6b8f9e674de0",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-deep+wide_F158.hsp"
+      },
+      {
+        "file": "map_HLTDS-deep+wide_PRISM.hsp",
+        "sha256": "7c125e65db6f8e36eb09af1f86780204e7ba13a3f1c24e8e9f7765d604826526",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-deep+wide_PRISM.hsp"
+      },
+      {
+        "file": "map_HLTDS-deep_F087.hsp",
+        "sha256": "5d4bb6759d55f30528e8da38735c4ce9c40743159b73ffcdba74a6d79ad2a737",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-deep_F087.hsp"
+      },
+      {
+        "file": "map_HLTDS-deep_F106.hsp",
+        "sha256": "3a42d659c93283dac9082854e1d9f13ecf5e61f66503b1e9ae5207ce8e523725",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-deep_F106.hsp"
+      },
+      {
+        "file": "map_HLTDS-deep_F129.hsp",
+        "sha256": "a038c26fdf935b7c266a0d912311fae9cd08f6bb474cbc4cb02c06a644a98321",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-deep_F129.hsp"
+      },
+      {
+        "file": "map_HLTDS-deep_F158.hsp",
+        "sha256": "ff1f8185ddef45ef9b4bb537eb36b0ca476b8b5cc55cc3db73b1412667a7447f",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-deep_F158.hsp"
+      },
+      {
+        "file": "map_HLTDS-deep_F184.hsp",
+        "sha256": "62e7fd5f5a341fb06f35474c2c44e924b529eab8f2e0eebf023fa9e101fdbecd",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-deep_F184.hsp"
+      },
+      {
+        "file": "map_HLTDS-deep_PRISM.hsp",
+        "sha256": "214810b5e6ed4930c769ce4e0daa3b4a6f4a6d868841d8aa13cf3fe40f0d4dd6",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-deep_PRISM.hsp"
+      },
+      {
+        "file": "map_HLTDS-wide_F062.hsp",
+        "sha256": "87f8d4ae814c20b3b5a3c8b7a537ba0053883d20557be4511372fd4b13821b05",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-wide_F062.hsp"
+      },
+      {
+        "file": "map_HLTDS-wide_F087.hsp",
+        "sha256": "82127ee83f63da42e77a0399893503b055bb72da7b8bd86e9dc2a5f972375c21",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-wide_F087.hsp"
+      },
+      {
+        "file": "map_HLTDS-wide_F106.hsp",
+        "sha256": "725ff9ebc122f45e2aa4f02607d79595c71a9b42c5d244faa7214c21a35ec260",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-wide_F106.hsp"
+      },
+      {
+        "file": "map_HLTDS-wide_F129.hsp",
+        "sha256": "65ab4960a66582a42a03441acda4508accba27ea9177d3083a9dd9dedde53af7",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-wide_F129.hsp"
+      },
+      {
+        "file": "map_HLTDS-wide_F158.hsp",
+        "sha256": "50690e118d0b53c7dca7607057c848351f620cf1229ced02c65fcecdb0883a08",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-wide_F158.hsp"
+      },
+      {
+        "file": "map_HLTDS-wide_PRISM.hsp",
+        "sha256": "cf0e9fd68f08760f86315db44c066beaaf0696d662dd3b59c9a47944df0799b1",
+        "url": "https://raw.githubusercontent.com/spacetelescope/roman_notebooks/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data/map_HLTDS-wide_PRISM.hsp"
+      }
+    ],
+    "conversion": {
+      "selection": "pixels with finite value > 0, union over all input maps",
+      "healsparseNsideSparse": 4096,
+      "ordering": "NESTED",
+      "mocOrder": 12,
+      "upstreamEncoding": "MOC 2.0 RANGE (mocpy/CDS)",
+      "pinnedEncoding": "MOC 2.0 NUNIQ, cells unchanged",
+      "upstreamMocSha256": "feb7d76ccd517877f9c153996482e6e0af8305ce41af33d5711dc7d7c147c8c2",
+      "upstreamMocSizeBytes": 28800,
+      "pinnedMocSha256": "a41b67d8c6c8a125949241b00a31074c32673b3b2611179aa74d14335a0555de",
+      "pinnedMocSizeBytes": 37440,
+      "pinnedRangeCopy": "src/layers/records/roman-hltds-all-planned-range-feb7d76ccd51.fits.gz",
+      "tools": "healsparse, mocpy 0.20.0, MOC-Core-SDK 1.2.0 canonical_cells/write_moc_fits"
+    },
+    "nativeSpatialOrder": 12,
+    "availableOrders": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "overviewOrder": 4,
+    "precision": "estimated",
+    "precisionJustification": "PLANNED COVERAGE, NOT OBSERVED DATA. This layer is the planned High Latitude Time Domain Survey (HLTDS) union of the Deep and Wide tiers (17 maps), derived by Assets from STScI pre-generated healsparse exposure-time maps in spacetelescope/roman_notebooks (pinned commit cb3ec341a1ff, APT program 1410, whose status may be Draft). The union of every pixel with a finite value above zero in 17 input map(s) (nside_sparse 4096, NESTED) is stored as a MOC at order 12; decoded area 28.51 deg2 in 3672 cells. The map-derived area (28.51 deg2) has not been compared with an official total for this union. The roll angle of the pre-generated maps may not match on-orbit exposures. No Roman survey data exist yet, so there are no files to look up; this is a planned extent, not a per-band valid-pixel mask or an observed footprint.",
+    "sourceEncoding": "Derived NUNIQ MOC pinned in the repository; normalize without changing cells",
+    "implementationRef": "scripts/moc_build_worker.py:read_source_moc; scripts/moc_build_worker.py:build",
+    "attributionUrl": "https://github.com/spacetelescope/roman_notebooks",
+    "credit": "STScI / NASA Roman Space Telescope (roman_notebooks, BSD-3-Clause)",
+    "limitations": [
+      "Planned coverage, not observed data: Roman has not yet carried out this survey, so no files exist for this layer.",
+      "Derived from STScI roman_notebooks pre-generated maps for APT program 1410 (status may be Draft); the roll angle of the maps may not represent on-orbit exposures.",
+      "Map-derived area 28.51 deg2 (3672 cells at orders 7-12).",
+      "The MOC is rewritten from the upstream MOC 2.0 RANGE encoding to NUNIQ without changing cells; STScI publishes no MOC, so this derived MOC is not an official STScI product."
+    ]
+  },
+  "snapshot": {
+    "sha256": "a41b67d8c6c8a125949241b00a31074c32673b3b2611179aa74d14335a0555de",
+    "sizeBytes": 37440,
+    "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+    "recordSha256": "489234a07561b188b0e5442ed323286ebd32c4cbf991ff8fe77b4fdac38efaf6",
+    "retrievedAt": "2026-11-17T00:00:00.000Z"
+  },
+  "expectedOutputs": {
+    "moc": {
+      "sha256": "a41b67d8c6c8a125949241b00a31074c32673b3b2611179aa74d14335a0555de",
+      "sizeBytes": 37440
+    },
+    "query": {
+      "sha256": "4c70b729b623443152443fc6fd0e60d3e772675a7145d8328bf8594f00b5c50e",
+      "sizeBytes": 4569
+    },
+    "preview": {
+      "sha256": "52627d51d32adb7d378baa148e7e97590b08067027a4f189e48474f8e9189f72",
+      "sizeBytes": 102
+    }
+  }
+}

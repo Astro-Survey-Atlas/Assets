@@ -16,8 +16,8 @@ type RegistryEntry = {
   maxOrder: number;
   overviewOrder: number;
   coverageRole: "object_presence" | "footprint_extent";
-  dataOrigin: "observed" | "catalog";
-  sourceTier: "third_party_moc" | "official_geometry";
+  dataOrigin: "observed" | "simulated" | "catalog";
+  sourceTier: "third_party_moc" | "official_geometry" | "best_effort_derived";
   precision: "exact" | "estimated";
   licenseStatus: string;
   status: "candidate" | "awaiting_snapshot" | "acquired" | "rejected";
@@ -49,14 +49,20 @@ function validateEntry(value: unknown, index: number): RegistryEntry {
   const overviewOrder = entry.overviewOrder;
   if (!Number.isSafeInteger(maxOrder) || (maxOrder as number) < 0 || (maxOrder as number) > 29) fail(`sources[${index}].maxOrder is invalid`);
   if (!Number.isSafeInteger(overviewOrder) || (overviewOrder as number) < 0 || (overviewOrder as number) > (maxOrder as number)) fail(`sources[${index}].overviewOrder is invalid`);
-  if (entry.sourceTier !== (["official-hips-moc", "official-archive-moc"].includes(String(entry.sourceKind)) ? "official_geometry" : "third_party_moc")) fail(`sources[${index}].sourceTier does not match its source kind`);
+  // A derived planned-coverage MOC has no remote endpoint: it is pinned in the repository, simulated, best-effort derived.
+  const derivedPlanned = entry.sourceKind === "derived-planned-moc";
+  if (entry.sourceTier !== (derivedPlanned ? "best_effort_derived" : ["official-hips-moc", "official-archive-moc"].includes(String(entry.sourceKind)) ? "official_geometry" : "third_party_moc")) fail(`sources[${index}].sourceTier does not match its source kind`);
   if (!["object_presence", "footprint_extent"].includes(String(entry.coverageRole))) fail(`sources[${index}].coverageRole is invalid`);
-  if (!["observed", "catalog"].includes(String(entry.dataOrigin))) fail(`sources[${index}].dataOrigin is invalid`);
+  if (derivedPlanned ? entry.dataOrigin !== "simulated" : !["observed", "catalog"].includes(String(entry.dataOrigin))) fail(`sources[${index}].dataOrigin is invalid`);
   if (!["exact", "estimated"].includes(String(entry.precision))) fail(`sources[${index}].precision is invalid`);
   if (!["candidate", "awaiting_snapshot", "acquired", "rejected"].includes(String(entry.status))) fail(`sources[${index}].status is invalid`);
   if (entry.coverageRole === "object_presence" && entry.dataOrigin !== "catalog") fail(`sources[${index}] object presence must be catalog data`);
   requireUrl(entry.sourceUrl, `sources[${index}].sourceUrl`);
-  if (["official-hips-moc", "official-archive-moc"].includes(String(entry.sourceKind))) {
+  if (derivedPlanned) {
+    const source = Object.hasOwn(OFFICIAL_MOC_SOURCES, String(entry.id)) ? OFFICIAL_MOC_SOURCES[String(entry.id)] : undefined;
+    if (!source?.mocFile || !source.recordFile || source.dataOrigin !== "simulated" || source.sourceTier !== "best_effort_derived"
+      || entry.surveyId !== source.surveyId || entry.releaseId !== source.releaseId || entry.mocUrl !== source.mocUrl || entry.recordUrl !== source.recordUrl) fail("Unregistered derived planned MOC identity or pinned copy");
+  } else if (["official-hips-moc", "official-archive-moc"].includes(String(entry.sourceKind))) {
     const source = Object.hasOwn(OFFICIAL_MOC_SOURCES, String(entry.id)) ? OFFICIAL_MOC_SOURCES[String(entry.id)] : undefined;
     if (!source || entry.recordUrl !== source.recordUrl || entry.mocUrl !== source.mocUrl
       || entry.surveyId !== source.surveyId || entry.releaseId !== source.releaseId) fail("Unregistered official MOC identity or endpoint");
@@ -121,7 +127,7 @@ function validateFits(bytes: Uint8Array, entry: RegistryEntry): { mocOrder?: num
   const uniqColumn = cards.some((card) => /^TTYPE\d+$/.test(card.slice(0, 8).trim()) && cardValue([card], card.slice(0, 8).trim()) === "UNIQ");
   if (ordering !== "NUNIQ") fail(`${entry.id}: FITS MOC ordering is not NUNIQ`);
   if (coordinateSystem !== "C") fail(`${entry.id}: FITS MOC COORDSYS is not C/ICRS`);
-  if (["official-hips-moc", "official-archive-moc"].includes(String(entry.sourceKind))) {
+  if (["official-hips-moc", "official-archive-moc", "derived-planned-moc"].includes(String(entry.sourceKind))) {
     if (decodeNativeMoc(Buffer.from(bytes)).maxOrder !== entry.maxOrder) fail(`${entry.id}: decoded order differs from locked maxOrder`);
   } else if (!Number.isSafeInteger(mocOrder) || mocOrder < 0 || mocOrder > entry.maxOrder) {
     fail(`${entry.id}: FITS MOCORDER exceeds locked maxOrder`);
@@ -153,7 +159,7 @@ if (new Set(entries.map((entry) => entry.id)).size !== entries.length) fail("sou
 const report: Array<Record<string, unknown>> = [];
 for (const entry of entries) {
   const item: Record<string, unknown> = { id: entry.id, status: entry.status, mocUrl: entry.mocUrl, maxOrder: entry.maxOrder };
-  if (probe && entry.status !== "rejected") {
+  if (probe && entry.status !== "rejected" && entry.sourceKind !== "derived-planned-moc") {
     const record = await fetchWithRetry(entry.recordUrl);
     const moc = await fetchWithRetry(entry.mocUrl);
     const fits = validateFits(moc, entry);

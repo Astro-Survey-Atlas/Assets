@@ -24,6 +24,10 @@ export async function stageOfficialMoc(options: {
     throw new AdminHttpError(400, "Select a registered official MOC sourceId");
   }
   const identity = descriptor.identity;
+  // Defaults keep every archive-published MOC observed/official_geometry; a descriptor may only declare otherwise,
+  // and the lock must agree so neither file can change a layer's origin alone.
+  const dataOrigin = descriptor.dataOrigin ?? "observed";
+  const sourceTier = descriptor.sourceTier ?? "official_geometry";
   const recipeBytes = await readFile(path.join(options.sourceRoot, `src/layers/recipes/${sourceId}.lock.json`));
   const lock = JSON.parse(recipeBytes.toString());
   const acquire = options.fetchBytes ?? (async (url: string) => {
@@ -44,6 +48,7 @@ export async function stageOfficialMoc(options: {
     throw new Error("Official record does not identify the selected HiPS product");
   }
   if (descriptor.recordMarkers?.some(marker => !recordText.includes(marker))) throw new Error("Official record does not identify the selected archive MOC");
+  if (lock.dataOrigin !== dataOrigin || lock.sourceTier !== sourceTier) throw new Error("Recipe dataOrigin/sourceTier does not match the registered source");
   if (lock.surveyId !== descriptor.surveyId || lock.releaseId !== descriptor.releaseId
     || lock.recipe.sourceMocUrl !== descriptor.mocUrl || lock.recipe.sourceRecordUrl !== descriptor.recordUrl) throw new Error("Recipe identity does not match the registered source");
   const original = decodeNativeMoc(source);
@@ -53,7 +58,7 @@ export async function stageOfficialMoc(options: {
   await mkdir(parent, { recursive: true });
   const name = `${sourceId}-${randomUUID().slice(0, 8)}`;
   const target = path.join(parent, name);
-  const recordFilename = descriptor.creatorDid ? "properties" : "source-record.js";
+  const recordFilename = descriptor.recordFilename ?? (descriptor.creatorDid ? "properties" : "source-record.js");
   await mkdir(target);
   await writeFile(path.join(target, "source.fits"), source);
   await writeFile(path.join(target, recordFilename), properties);
@@ -90,10 +95,10 @@ export async function stageOfficialMoc(options: {
     releaseKind: descriptor.releaseKind, releasedYear: descriptor.releasedYear, productName: lock.product,
     productDescription: sourceEvidence.summary, modality: descriptor.modality, sourceUrl: lock.sourceUrl,
     geometrySourceUrl: descriptor.mocUrl, geometrySourceLabel: descriptor.geometrySourceLabel,
-    sourceTier: "official_geometry", coverageEvidence: sourceEvidence,
+    sourceTier, dataOrigin, coverageEvidence: sourceEvidence,
   });
   const updated = await options.products.updateDraft(product.productId, {
-    ...product.draft, name: lock.product, sourceTier: "official_geometry", dataOrigin: "observed",
+    ...product.draft, name: lock.product, sourceTier, dataOrigin,
     modality: descriptor.modality, sourceUrl: lock.sourceUrl, geometrySourceUrl: descriptor.mocUrl,
     geometrySourceLabel: descriptor.geometrySourceLabel, layerId: sourceId, mode: "native-moc", coverageRole: "footprint_extent",
     coverageEvidence: sourceEvidence, publicDescription: sourceEvidence.summary,

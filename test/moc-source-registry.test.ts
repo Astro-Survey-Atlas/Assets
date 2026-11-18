@@ -18,7 +18,12 @@ test("MOC source registry separates catalog presence from image footprints", asy
   assert.ok(registry.sources.length >= 8);
   for (const source of registry.sources) {
     const url = new URL(source.mocUrl);
-    if (["official-hips-moc", "official-archive-moc"].includes(source.sourceKind)) {
+    if (source.sourceKind === "derived-planned-moc") {
+      // Pinned in the repository: no remote endpoint, never observed data.
+      assert.ok(OFFICIAL_MOC_SOURCES[source.id]?.mocFile);
+      assert.equal(source.sourceTier, "best_effort_derived");
+      assert.equal(source.dataOrigin, "simulated");
+    } else if (["official-hips-moc", "official-archive-moc"].includes(source.sourceKind)) {
       assert.equal(url.href, OFFICIAL_MOC_SOURCES[source.id]?.mocUrl);
       assert.equal(source.sourceTier, "official_geometry");
       assert.equal(source.releaseId, OFFICIAL_MOC_SOURCES[source.id]?.releaseId);
@@ -36,7 +41,7 @@ test("MOC source registry separates catalog presence from image footprints", asy
       assert.equal(source.precision, "exact");
     } else {
       assert.equal(source.coverageRole, "footprint_extent");
-      assert.equal(source.dataOrigin, "observed");
+      assert.equal(source.dataOrigin, source.sourceKind === "derived-planned-moc" ? "simulated" : "observed");
     }
   }
   for (const id of ["skymapper-dr4-color-footprint", "kids-dr5-color-footprint", "vista-viking-j-footprint", "decals-dr5-color-footprint"]) {

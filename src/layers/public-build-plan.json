@@ -421,6 +421,36 @@
       "spec": "src/layers/recipes/ztf-ztf-dr7-ztf-dr7-r-band-imaging-moc.lock.json",
       "output": "artifacts/public-survey-footprints/layers/ztf-ztf-dr7-ztf-dr7-r-band-imaging-moc",
       "expectedSha256": "9b68286be6630b97a7d762f55b4eb8a3b7b215fc5df82cb7f0a06ba85d79a829"
+    },
+    {
+      "spec": "src/layers/recipes/roman-hlwas-all-planned-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/roman-hlwas-all-planned-moc",
+      "expectedSha256": "76ef1f8941e67f20558de1a52421cea3e5726d1bcd57b60dd2dcef9c439a0f66"
+    },
+    {
+      "spec": "src/layers/recipes/roman-hlwas-wide-planned-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/roman-hlwas-wide-planned-moc",
+      "expectedSha256": "41f90f3c886eb16247fced6d5e9bcad84b1260d547a517233e0915e41dd4a054"
+    },
+    {
+      "spec": "src/layers/recipes/roman-hlwas-medium-planned-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/roman-hlwas-medium-planned-moc",
+      "expectedSha256": "4c22d0efe3cfee24567c5218112d44f543051d3654a0686371bfb590d6637f54"
+    },
+    {
+      "spec": "src/layers/recipes/roman-hltds-all-planned-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/roman-hltds-all-planned-moc",
+      "expectedSha256": "a41b67d8c6c8a125949241b00a31074c32673b3b2611179aa74d14335a0555de"
+    },
+    {
+      "spec": "src/layers/recipes/roman-gbtds-all-planned-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/roman-gbtds-all-planned-moc",
+      "expectedSha256": "6ea7744fb5d6149d384ba310af013a665b956347afee39d1f979c8eaabcb479e"
+    },
+    {
+      "spec": "src/layers/recipes/roman-gps-all-planned-moc.lock.json",
+      "output": "artifacts/public-survey-footprints/layers/roman-gps-all-planned-moc",
+      "expectedSha256": "eb01e22e3c5ffd12a0b7629bcf84695335e96a57e4af4f438050778ff60dec7c"
     }
   ]
 }

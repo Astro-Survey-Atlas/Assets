@@ -2971,6 +2971,130 @@
           ]
         }
       ]
+    },
+    {
+      "id": "roman",
+      "name": "Roman",
+      "mission": "Nancy Grace Roman Space Telescope",
+      "color": "#f472b6",
+      "description": "NASA Roman Space Telescope planned survey coverage. These are planned surveys with no data yet: every layer is a pre-launch plan derived from STScI pre-generated maps, not an observed footprint.",
+      "modalities": [
+        "imaging"
+      ],
+      "releases": [
+        {
+          "id": "roman-hlwas",
+          "label": "HLWAS (planned)",
+          "kind": "planned",
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "Roman HLWAS planned coverage (all tiers)",
+              "modality": "imaging",
+              "description": "PLANNED COVERAGE, NOT OBSERVED DATA. This layer is the planned High Latitude Wide Area Survey (HLWAS) union of the Wide and Medium tiers (F158, F106 and grism maps), derived by Assets from STScI pre-generated healsparse exposure-time maps in spacetelescope/roman_notebooks (pinned commit cb3ec341a1ff, APT program 1400, whose status may be Draft). The union of every pixel with a finite value above zero in 3 input map(s) (nside_sparse 4096, NESTED) is stored as a MOC at order 12; decoded area 5859.22 deg2 in 65474 cells. Official HLWAS tier areas are about 2702 deg2 (Wide) and 2415 deg2 (Medium); the map-derived union (5859.22 deg2) and its tiers (3354 and 2872 deg2) are larger, and the cause of the difference is not confirmed. The roll angle of the pre-generated maps may not match on-orbit exposures. No Roman survey data exist yet, so there are no files to look up; this is a planned extent, not a per-band valid-pixel mask or an observed footprint.",
+              "status": "acquired",
+              "dataOrigin": "simulated",
+              "sourceTier": "best_effort_derived",
+              "sourceLabel": "STScI roman_notebooks planned-coverage maps (not observed data)",
+              "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+              "geometrySourceLabel": "MOC derived from STScI pre-generated healsparse maps",
+              "geometrySourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data"
+            },
+            {
+              "name": "Roman HLWAS planned coverage (Wide tier)",
+              "modality": "imaging",
+              "description": "PLANNED COVERAGE, NOT OBSERVED DATA. This layer is the planned High Latitude Wide Area Survey Wide tier (F158 map), derived by Assets from STScI pre-generated healsparse exposure-time maps in spacetelescope/roman_notebooks (pinned commit cb3ec341a1ff, APT program 1400, whose status may be Draft). The union of every pixel with a finite value above zero in 1 input map(s) (nside_sparse 4096, NESTED) is stored as a MOC at order 12; decoded area 3354.40 deg2 in 58147 cells. The STScI-published figure is Wide tier about 2702 deg2; the map-derived area (3354.40 deg2) is larger and the cause of the difference is not confirmed. The roll angle of the pre-generated maps may not match on-orbit exposures. No Roman survey data exist yet, so there are no files to look up; this is a planned extent, not a per-band valid-pixel mask or an observed footprint.",
+              "status": "acquired",
+              "dataOrigin": "simulated",
+              "sourceTier": "best_effort_derived",
+              "sourceLabel": "STScI roman_notebooks planned-coverage maps (not observed data)",
+              "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+              "geometrySourceLabel": "MOC derived from STScI pre-generated healsparse maps",
+              "geometrySourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data"
+            },
+            {
+              "name": "Roman HLWAS planned coverage (Medium tier)",
+              "modality": "imaging",
+              "description": "PLANNED COVERAGE, NOT OBSERVED DATA. This layer is the planned High Latitude Wide Area Survey Medium tier (F158 and grism maps), derived by Assets from STScI pre-generated healsparse exposure-time maps in spacetelescope/roman_notebooks (pinned commit cb3ec341a1ff, APT program 1400, whose status may be Draft). The union of every pixel with a finite value above zero in 2 input map(s) (nside_sparse 4096, NESTED) is stored as a MOC at order 12; decoded area 2871.80 deg2 in 39692 cells. The STScI-published figure is Medium tier about 2415 deg2; the map-derived area (2871.80 deg2) is larger and the cause of the difference is not confirmed. The roll angle of the pre-generated maps may not match on-orbit exposures. No Roman survey data exist yet, so there are no files to look up; this is a planned extent, not a per-band valid-pixel mask or an observed footprint.",
+              "status": "acquired",
+              "dataOrigin": "simulated",
+              "sourceTier": "best_effort_derived",
+              "sourceLabel": "STScI roman_notebooks planned-coverage maps (not observed data)",
+              "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+              "geometrySourceLabel": "MOC derived from STScI pre-generated healsparse maps",
+              "geometrySourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data"
+            }
+          ]
+        },
+        {
+          "id": "roman-hltds",
+          "label": "HLTDS (planned)",
+          "kind": "planned",
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "Roman HLTDS planned coverage (Deep and Wide tiers)",
+              "modality": "imaging",
+              "description": "PLANNED COVERAGE, NOT OBSERVED DATA. This layer is the planned High Latitude Time Domain Survey (HLTDS) union of the Deep and Wide tiers (17 maps), derived by Assets from STScI pre-generated healsparse exposure-time maps in spacetelescope/roman_notebooks (pinned commit cb3ec341a1ff, APT program 1410, whose status may be Draft). The union of every pixel with a finite value above zero in 17 input map(s) (nside_sparse 4096, NESTED) is stored as a MOC at order 12; decoded area 28.51 deg2 in 3672 cells. The map-derived area (28.51 deg2) has not been compared with an official total for this union. The roll angle of the pre-generated maps may not match on-orbit exposures. No Roman survey data exist yet, so there are no files to look up; this is a planned extent, not a per-band valid-pixel mask or an observed footprint.",
+              "status": "acquired",
+              "dataOrigin": "simulated",
+              "sourceTier": "best_effort_derived",
+              "sourceLabel": "STScI roman_notebooks planned-coverage maps (not observed data)",
+              "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+              "geometrySourceLabel": "MOC derived from STScI pre-generated healsparse maps",
+              "geometrySourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data"
+            }
+          ]
+        },
+        {
+          "id": "roman-gbtds",
+          "label": "GBTDS (planned)",
+          "kind": "planned",
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "Roman GBTDS planned coverage",
+              "modality": "imaging",
+              "description": "PLANNED COVERAGE, NOT OBSERVED DATA. This layer is the planned Galactic Bulge Time Domain Survey (GBTDS, 9 maps), derived by Assets from STScI pre-generated healsparse exposure-time maps in spacetelescope/roman_notebooks (pinned commit cb3ec341a1ff, APT program 1420, whose status may be Draft). The union of every pixel with a finite value above zero in 9 input map(s) (nside_sparse 4096, NESTED) is stored as a MOC at order 12; decoded area 3.62 deg2 in 1409 cells. The STScI-published figure is about 1.7 deg2; the map-derived area (3.62 deg2) is larger and the cause of the difference is not confirmed. The roll angle of the pre-generated maps may not match on-orbit exposures. No Roman survey data exist yet, so there are no files to look up; this is a planned extent, not a per-band valid-pixel mask or an observed footprint.",
+              "status": "acquired",
+              "dataOrigin": "simulated",
+              "sourceTier": "best_effort_derived",
+              "sourceLabel": "STScI roman_notebooks planned-coverage maps (not observed data)",
+              "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+              "geometrySourceLabel": "MOC derived from STScI pre-generated healsparse maps",
+              "geometrySourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data"
+            }
+          ]
+        },
+        {
+          "id": "roman-gps",
+          "label": "GPS (planned)",
+          "kind": "planned",
+          "modalities": [
+            "imaging"
+          ],
+          "products": [
+            {
+              "name": "Roman GPS planned coverage",
+              "modality": "imaging",
+              "description": "PLANNED COVERAGE, NOT OBSERVED DATA. This layer is the planned Galactic Plane Survey (GPS, 9 maps), derived by Assets from STScI pre-generated healsparse exposure-time maps in spacetelescope/roman_notebooks (pinned commit cb3ec341a1ff, APT program 1430, whose status may be Draft). The union of every pixel with a finite value above zero in 9 input map(s) (nside_sparse 4096, NESTED) is stored as a MOC at order 12; decoded area 808.18 deg2 in 126580 cells. The STScI-published figure is about 691 deg2; the map-derived area (808.18 deg2) is larger and the cause of the difference is not confirmed. The roll angle of the pre-generated maps may not match on-orbit exposures. No Roman survey data exist yet, so there are no files to look up; this is a planned extent, not a per-band valid-pixel mask or an observed footprint.",
+              "status": "acquired",
+              "dataOrigin": "simulated",
+              "sourceTier": "best_effort_derived",
+              "sourceLabel": "STScI roman_notebooks planned-coverage maps (not observed data)",
+              "sourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data",
+              "geometrySourceLabel": "MOC derived from STScI pre-generated healsparse maps",
+              "geometrySourceUrl": "https://github.com/spacetelescope/roman_notebooks/tree/cb3ec341a1ff1496ee36e7b7764cac66c53fa28d/notebooks/footprint_visualization/aux_data"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
