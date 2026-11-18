@@ -5269,7 +5269,7 @@ function renderSurveys(): void {
 
     const marker = document.createElement("span"); marker.className = "survey-marker"; marker.setAttribute("aria-hidden", "true");
     const visual = document.createElement("div"); visual.className = "survey-thumb"; visual.dataset.miniGlobe = survey.id;
-    const image = document.createElement("img"); image.src = survey.imageUrl; image.alt = ""; image.loading = "lazy";
+    const image = document.createElement("img"); image.src = survey.imageUrl; image.alt = ""; image.loading = "lazy"; image.addEventListener("error", () => image.remove(), { once: true });
     const miniGlobe = document.createElement("span");
     miniGlobe.className = "survey-mini-globe";
     miniGlobe.dataset.surveyId = survey.id;
