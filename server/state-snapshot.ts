@@ -118,6 +118,7 @@ export const STATE_SNAPSHOT_NAMESPACES = [
   "publication-runs",
   "publication-tasks",
   "native-units",
+  "promos",
 ] as const;
 
 /** Queue a local state snapshot and surface failures to the caller. */

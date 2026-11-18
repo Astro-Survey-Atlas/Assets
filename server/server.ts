@@ -45,6 +45,7 @@ import { loadPublicState } from "./public-state.js";
 import { ProductStore, type MocProductRegistrationInput, type ProductExecutionRecord, type ProductRecord } from "./products.js";
 import { currentReview, productGeometry, readApprovedRelease, PUBLICATION_POLICY } from "./approved-release.js";
 import { aggregateReadiness, deriveProductReadiness, type ProductReadiness, type ReadinessAggregate, type ReadinessLayer } from "./admin-readiness.js";
+import { PromoStore } from "./promos.js";
 import { SurveyEditorialStore, type SurveyEditorialContent, type SurveyEditorialRecord } from "./editorial.js";
 import { SourceUnitStore, SourceUnitWorkerStore, type SourceUnitCoverageLayer } from "./source-units.js";
 import { buildDownloadPlan, CoverageEvidenceStore, EvidenceStoreError, warehouseGeometryFailureReason, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanSpatialUnit, type ReverseLookupResult, type WarehouseLayerSnapshot, type WarehouseLayerStatusSnapshot } from "./evidence-store.js";
@@ -168,6 +169,8 @@ async function apiSyncStatus(namespace: string): Promise<StateSnapshotSyncStatus
 }
 
 const editorial = new SurveyEditorialStore(contentRoot, stateSnapshotSink);
+const promos = new PromoStore(contentRoot, stateSnapshotSink);
+if (managesContent) await promos.initialize();
 const mocBuildStore = new MocBuildStore(contentRoot, stateSnapshotSink);
 if (managesContent) await mocBuildStore.initialize();
 const mocPublicationStore = new MocPublicationStore(contentRoot, evidenceRoot, stateSnapshotSink);
@@ -3210,6 +3213,11 @@ async function sendAdmin(request: IncomingMessage, response: ServerResponse, pat
       const filtered = surveyId ? records.filter((record) => record.draft.surveyId === surveyId) : records;
       return json(response, 200, { products: filtered.map(adminProductView), syncStatus: await apiSyncStatus("products") });
     }
+    if (pathname === "/api/v1/admin/promos") {
+      response.setHeader("Cache-Control", "no-store");
+      if (request.method === "GET") return json(response, 200, { ...promos.document(), syncStatus: await apiSyncStatus("promos") });
+      if (request.method === "PUT") return json(response, 200, { ...await promos.replace(await requestJsonBody(request)), syncStatus: await apiSyncStatus("promos") });
+    }
     const editorialMatch = /^\/api\/v1\/admin\/catalog\/surveys\/([^/]+)\/editorial(?:\/(draft|publish))?$/.exec(pathname);
     if (editorialMatch?.[1]) {
       const surveyId = decodeAdminPathSegment(editorialMatch[1]);
@@ -5292,6 +5300,11 @@ const server = http.createServer((request, response) => {
         return compressedJson(request, response, 200, result, "no-store");
       }
       return json(response, 200, { schemaVersion:1, coordinateFrame:"ICRS", ordering:"NESTED", nside:16, generatedAt:approvedRelease.generatedAt, footprints:publicState.footprints });
+    }
+    if (pathname === "/api/public/promos" && (request.method === "GET" || request.method === "HEAD")) {
+      if (role === "site") return proxyToBackend(request, response);
+      response.setHeader("Cache-Control", "public, max-age=60");
+      return json(response, 200, promos.public());
     }
     if (pathname === "/api/v1/surveys") {
       if (role === "site") return proxyToBackend(request, response);

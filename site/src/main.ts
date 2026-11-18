@@ -24,6 +24,7 @@ import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-la
 import { joinUnique, mergeDownloadPlans, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch, type DownloadPlanScannedFile, type DownloadPlanSpatialUnit } from "./overlap-download.js";
 import { locale, mountLocaleControls, t, tf } from "./i18n.js";
 import { createRevisionHydrationQueue } from "./revision-hydration-queue.js";
+import { activeNewSurveyIds, fetchPromos } from "./promos.js";
 import { mountSiteChrome } from "./site-chrome.js";
 import { canonicalModality, filterByModalities } from "../../src/modality-filter.js";
 import type { WarehouseGeometryLoadStatus } from "../../server/coverage.js";
@@ -737,19 +738,19 @@ function setLockHeadline(prefix: string, value: string | null, sub = ""): void {
 function lockActions(surveyIds: string[], pixels: number[], order: number): HTMLElement {
   const row = document.createElement("div");
   row.className = "hud-lock-cta";
-  const action = (label: string, key: string, hot: boolean, run: () => void, disabled = false) => {
+  const action = (zhLabel: string, enLabel: string, key: string, hot: boolean, run: () => void, disabled = false) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `hud-btn${hot ? " is-hot" : ""}`;
     button.disabled = disabled;
-    button.append(label, Object.assign(document.createElement("kbd"), { textContent: key }));
+    button.dataset.labelZh = zhLabel; button.dataset.labelEn = enLabel;
+    button.append(locale() === "zh" ? zhLabel : enLabel, Object.assign(document.createElement("kbd"), { textContent: key }));
     button.addEventListener("click", run);
     row.append(button);
   };
-  const zh = locale() === "zh";
-  action(zh ? "展开重合" : "OVERLAP", "G", true, () => { void activateOverlap(); }, visibleSurveyIdsFromControls().length < 2);
-  action(zh ? "聚焦" : "FOCUS", "F", false, () => focusCoverageSelection());
-  action(zh ? "导出" : "EXPORT", "E", false, () => exportCoverageCells(surveyIds, pixels, order), !surveyIds.length);
+  action("展开重合", "OVERLAP", "G", true, () => { void activateOverlap(); }, visibleSurveyIdsFromControls().length < 2);
+  action("聚焦", "FOCUS", "F", false, () => focusCoverageSelection());
+  action("导出", "EXPORT", "E", false, () => exportCoverageCells(surveyIds, pixels, order), !surveyIds.length);
   return row;
 }
 
@@ -1824,6 +1825,8 @@ function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLEl
   const kicker = document.createElement("span");
   kicker.className = "coverage-layer-detail-kicker";
   kicker.textContent = "COVERAGE LAYER";
+  if (survey?.imageUrl) panel.style.setProperty("--survey-image", `url("${survey.imageUrl}")`);
+  panel.classList.add("has-survey-photo");
   const title = document.createElement("strong");
   title.textContent = survey?.name ?? surveyId.toUpperCase();
   const summary = document.createElement("small");
@@ -1846,7 +1849,7 @@ function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLEl
     releaseList.className = "coverage-layer-detail-list";
     for (const entry of fallbackReleases) {
       const row = document.createElement("div");
-      row.className = "coverage-layer-detail-row";
+      row.className = "coverage-layer-detail-row coverage-layer-detail-release";
       const version = document.createElement("span");
       version.className = "coverage-layer-detail-version";
       version.textContent = entry.label || entry.id;
@@ -1860,6 +1863,7 @@ function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLEl
       releaseList.append(row);
     }
     body.append(releaseList);
+    appendSurveyIntro(body, survey);
     if (persistent) panel.append(body);
     return panel;
   }
@@ -1897,8 +1901,25 @@ function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLEl
     list.append(row);
   });
   body.append(list);
+  appendSurveyIntro(body, survey);
   if (persistent) panel.append(body);
   return panel;
+}
+
+function appendSurveyIntro(body: HTMLElement, survey: SurveyRecord | undefined): void {
+  if (!survey) return;
+  const intro = document.createElement("p");
+  intro.className = "coverage-layer-detail-intro";
+  intro.textContent = survey.description || survey.mission;
+  body.append(intro);
+  const url = survey.releases.flatMap((r) => r.products.map((p) => p.sourceUrl)).find((u) => /^https?:\/\//.test(u ?? ""));
+  if (url) {
+    const link = document.createElement("a");
+    link.className = "coverage-layer-detail-link";
+    link.href = url; link.target = "_blank"; link.rel = "noopener noreferrer";
+    link.textContent = `${locale() === "zh" ? "官方链接" : "Official site"} · ${new URL(url).hostname} ↗`;
+    body.append(link);
+  }
 }
 
 function cancelCoverageLayerTooltipClose(): void {
@@ -5139,9 +5160,13 @@ function updateSurveyFilterCount(): void {
   byId("survey-filter-count").textContent = `${selectedModalities.size} / ${total}`;
 }
 
+let newSurveyIds = new Set<string>();
+void fetchPromos().then((promos) => { newSurveyIds = activeNewSurveyIds(promos); if (newSurveyIds.size && surveyIndex) renderSurveys(); });
+
 function filteredSurveys(): SurveyRecord[] {
   const surveys = surveyIndex?.surveys ?? [];
-  return surveys.filter((survey) => {
+  const pinned = (survey: SurveyRecord): number => (newSurveyIds.has(survey.id) ? 0 : 1);
+  return surveys.map((survey, index) => ({ survey, index })).sort((a, b) => pinned(a.survey) - pinned(b.survey) || a.index - b.index).map(({ survey }) => survey).filter((survey) => {
     if (selectedModalities.size && !survey.modalities.some((modality) => selectedModalities.has(modality))) return false;
     if (!search) return true;
     return [
@@ -5306,6 +5331,7 @@ function renderSurveys(): void {
     const identity = document.createElement("div"); identity.className = "survey-identity";
     const overline = document.createElement("span"); overline.className = "survey-overline"; overline.textContent = survey.mission;
     const heading = document.createElement("h3"); heading.textContent = survey.name;
+    if (newSurveyIds.has(survey.id)) { const badge = document.createElement("span"); badge.className = "new-badge"; badge.textContent = "NEW"; heading.append(badge); }
     const description = document.createElement("p"); description.textContent = survey.description;
     const tags = document.createElement("div"); tags.className = "modality-tags";
     survey.modalities.forEach((modality) => { const tag = document.createElement("span"); tag.className = "modality-tag"; tag.textContent = modalityLabel(modality); tags.append(tag); });
@@ -5872,6 +5898,10 @@ document.addEventListener("pointerdown", (event) => {
 });
 
 window.addEventListener("atlas:locale-change", () => {
+  document.querySelectorAll<HTMLButtonElement>("button[data-label-zh]").forEach((button) => {
+    const kbd = button.querySelector("kbd");
+    button.replaceChildren(locale() === "zh" ? button.dataset.labelZh! : button.dataset.labelEn!, ...(kbd ? [kbd] : []));
+  });
   hideOverlapRegionTooltip();
   refreshRegionResultLabels();
   const depthSelection = skyDepthSelection;

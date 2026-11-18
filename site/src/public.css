@@ -1703,3 +1703,6 @@ body.resources-page .project-repository-links svg { width: 12px; height: 12px; }
   .releases-page .release-entry-title { flex-wrap: wrap; }
   .releases-page .release-survey-summary { grid-template-columns: 1fr auto; }
 }
+
+body.public-site.atlas-page .coverage-layer-detail.has-survey-photo, body.public-site.atlas-page .coverage-layer-detail-persistent.has-survey-photo { background-image: linear-gradient(180deg, rgba(255,255,255,.72), rgba(255,255,255,.96) 62%), var(--survey-image); }
+body.public-site.atlas-page .coverage-layer-detail-intro { color: var(--public-text); }

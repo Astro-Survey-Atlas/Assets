@@ -25,6 +25,7 @@ import {
 } from "lucide";
 import { byId } from "./dom.js";
 import { locale, mountLocaleControls, t } from "./i18n.js";
+import { mountPromoBanners } from "./promos.js";
 import { mountSiteChrome } from "./site-chrome.js";
 import { surveyMarkMarkup } from "./survey-mark.js";
 
@@ -438,6 +439,7 @@ async function loadCatalog(): Promise<void> {
 
 mountLocaleControls();
 mountSiteChrome();
+void mountPromoBanners();
 renderIcons();
 tabs.forEach((tab) => {
   tab.addEventListener("click", () => chooseTab(tab.dataset.homeTab ?? "overlap", true));

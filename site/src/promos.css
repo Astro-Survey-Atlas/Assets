@@ -1,0 +1,9 @@
+.promo-banners { display: grid; gap: 1px; }
+.promo-banner { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--brand-indigo, #2c3792); color: #fff; font-size: 14px; line-height: 1.4; }
+.promo-banner strong { font-weight: 700; }
+.promo-banner span { flex: 1; min-width: 0; }
+.promo-banner a { color: inherit; text-decoration: underline; white-space: nowrap; }
+.promo-banner button { background: none; border: 0; color: inherit; font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; opacity: .8; }
+.promo-banner button:hover { opacity: 1; }
+:root[data-theme="light"] .promo-banner { background: #e8ebff; color: #1c2360; }
+.new-badge { display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 3px; background: var(--brand-magenta, #f01951); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .06em; vertical-align: middle; }

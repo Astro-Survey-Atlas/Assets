@@ -120,3 +120,5 @@ sky-globe是独立仓库（`~/Repo/sky-globe`），Assets通过codeload引用：
 3. 推送tag到GitHub
 4. 在Assets中更新package.json版本引用
 5. 运行 `npm install` 更新lockfile
+
+claude --dangerously-skip-permissions --resume 45832a2a-f052-45fa-8c27-9da69b7fe31f

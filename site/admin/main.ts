@@ -1,6 +1,7 @@
 import { mountScanBatches } from "./scan-batches.js";
 import { mountNativeUnits, type NativeView } from "./native-units.js";
 import { loadApiSettings, mountApiSettings } from "./api-settings.js";
+import { loadPromos } from "./promos.js";
 import { discoveryResultMarkup, onlyLeads } from "./moc-result.js";
 import type { DiscoveryFailure } from "../../server/discovery-failure.js";
 import { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Trash2, Unlock, Upload, X, Sun, createIcons } from "lucide";
@@ -2257,7 +2258,7 @@ const scanBatches = mountScanBatches(byId("scan-batches"), { api, products: () =
 const nativeManagement = mountNativeUnits({ api, refresh, toast, icons: renderIcons });
 
 async function refresh(background = false): Promise<void> {
-  if (activeStep === "api") { if (!background) await loadApiSettings(api, renderIcons); return; }
+  if (activeStep === "api") { if (!background) { await loadApiSettings(api, renderIcons); await loadPromos(api).catch(() => undefined); } return; }
   if (refreshInFlight) return refreshInFlight;
   const version = ++refreshVersion;
   const step = activeStep;
