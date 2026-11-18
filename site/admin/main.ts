@@ -589,14 +589,14 @@ function setAdminStep(requested: AdminStep, replace = false): void {
   }
   if (token && !byId("admin-workspace").hidden) void refresh();
 }
-const SAAS_DISABLED_STEPS: readonly AdminStep[] = ["sources", "tasks", "review"];
+const SAAS_DISABLED_STEPS: readonly AdminStep[] = ["sources", "tasks", "review", "releases"];
 /** SaaS mode is read-only: grey out the data-production tabs at menu level and leave only view + API Key. */
 function applyOperationsMode(mode: AdminConfig["operationsMode"]): void {
   saasMode = mode === "saas";
   document.querySelectorAll<HTMLButtonElement>("[data-admin-step]").forEach(button => {
     const blocked = saasMode && SAAS_DISABLED_STEPS.includes(button.dataset.adminStep as AdminStep);
     button.disabled = blocked; button.classList.toggle("is-mode-disabled", blocked);
-    if (blocked) button.title = "SaaS 模式只读：不提供探索、构建与审核"; else button.removeAttribute("title");
+    if (blocked) button.title = "SaaS 模式只读：不提供数据源、探索构建、审核与发布"; else button.removeAttribute("title");
   });
   if (saasMode && SAAS_DISABLED_STEPS.includes(activeStep)) setAdminStep("overview", true);
 }

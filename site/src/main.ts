@@ -18,9 +18,10 @@ import { coverageBlockStore } from "./atlas/block-store.js";
 import type { SkyRectangle } from "../../src/sky-region.js";
 import { coverageCatalogRevisionKey } from "./coverage-catalog-revision.js";
 import { coverageEscapeIntent } from "./atlas/coverage-interaction.js";
+import { buildDownloadSummary, downloadSummaryCsv } from "./overlap-download-summary.js";
 import { coverageLayerTooltipPosition } from "./atlas/layer-panel-layout.js";
 import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-layout.js";
-import { joinUnique, mergeDownloadPlans, overlapCsvDocument, overlapCsvRows, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch, type DownloadPlanScannedFile, type DownloadPlanSpatialUnit } from "./overlap-download.js";
+import { joinUnique, mergeDownloadPlans, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch, type DownloadPlanScannedFile, type DownloadPlanSpatialUnit } from "./overlap-download.js";
 import { locale, mountLocaleControls, t, tf } from "./i18n.js";
 import { createRevisionHydrationQueue } from "./revision-hydration-queue.js";
 import { mountSiteChrome } from "./site-chrome.js";
@@ -1833,6 +1834,35 @@ function createCoverageLayerDetail(surveyId: string, persistent = false): HTMLEl
     return product?.modality ? [modalityLabel(product.modality)] : [];
   }))];
   const states = [...new Set(layers.map((layer) => coverageLayerLoadStates.get(layer.layerId) ?? "loading"))];
+  const fallbackReleases = layers.length || !survey ? [] : survey.releases;
+  if (fallbackReleases.length) {
+    const releaseOrders = fallbackReleases.flatMap((entry) => entry.coverageOrders?.availableOrders ?? survey?.coverageOrders?.availableOrders ?? []);
+    const productTotal = fallbackReleases.reduce((sum, entry) => sum + entry.products.length, 0);
+    const unitProducts = locale() === "zh" ? "个产品" : "products";
+    const unitReleases = locale() === "zh" ? "个版本" : "releases";
+    summary.textContent = `${fallbackReleases.length} ${unitReleases} · ${productTotal} ${unitProducts} · ${releaseOrders.length ? displayOrdersLabel(releaseOrders) : "HEALPIX --"}`;
+    body.append(kicker, title, summary);
+    const releaseList = document.createElement("div");
+    releaseList.className = "coverage-layer-detail-list";
+    for (const entry of fallbackReleases) {
+      const row = document.createElement("div");
+      row.className = "coverage-layer-detail-row";
+      const version = document.createElement("span");
+      version.className = "coverage-layer-detail-version";
+      version.textContent = entry.label || entry.id;
+      const name = document.createElement("span");
+      name.className = "coverage-layer-detail-product";
+      name.textContent = `${entry.products.length} ${unitProducts}`;
+      const range = document.createElement("small");
+      range.className = "coverage-layer-detail-orders";
+      range.textContent = entry.coverageOrders?.availableOrders.length ? displayOrdersLabel(entry.coverageOrders.availableOrders) : "HEALPIX --";
+      row.append(version, name, range);
+      releaseList.append(row);
+    }
+    body.append(releaseList);
+    if (persistent) panel.append(body);
+    return panel;
+  }
   summary.textContent = `${layers.length} products · ${orders.length ? `最高原生 O${Math.max(...layers.map(layer => layer.maxOrder))} · O${orders.join("/O")}` : "HEALPIX --"}${modalities.length ? ` · ${modalities.join(" · ")}` : ""}`;
   body.append(kicker, title, summary);
   const list = document.createElement("div");
@@ -2279,14 +2309,13 @@ async function exportRegionManifest(component: OverlapComponentView, format: "js
     if (!result || controller.signal.aborted || activeRegionQuery !== component) return;
     const plan = downloadPlanFor(result);
     const selection = { ...component, requested: result.requested, sourceStatuses: result.sources };
-    const text = format === "json" ? JSON.stringify({ schemaVersion: result.schemaVersion ?? 1, coordinateFrame: "ICRS", ordering: "NESTED", generatedAt: new Date().toISOString(),
-      requested: result.requested ?? { layerIds: component.evidenceLookup?.layerIds, order: component.order, cells: component.cells },
-      sources: result.sources, querySnapshot: result.querySnapshot, nativeUnitIndexRevision: result.nativeUnitIndexRevision, preview: result.preview, page: result.page,
-      notes: result.notes, downloadPlan: plan }, null, 2)
-      : `﻿${overlapCsvDocument(overlapCsvRows(selection, plan, publicLayerEntry, result.precision, {
-        snapshotId: result.querySnapshot?.id, nativeUnitIndexRevision: result.nativeUnitIndexRevision,
-        omitted: result.page?.omitted ?? result.preview?.omitted ?? 0, hasMore: result.page?.hasMore ?? result.preview?.hasMore ?? false,
-      }))}`;
+    const summary = buildDownloadSummary([{ component: selection, plan }], publicLayerEntry);
+    const truncated = Boolean(result.page?.hasMore ?? result.preview?.hasMore);
+    const text = format === "json" ? JSON.stringify({ schemaVersion: 2, coordinateFrame: "ICRS", ordering: "NESTED", generatedAt: new Date().toISOString(),
+      totals: summary.totals, bySurvey: summary.bySurvey, items: summary.items,
+      region: { requested: result.requested ?? { layerIds: component.evidenceLookup?.layerIds, order: component.order, cells: component.cells },
+        querySnapshotId: result.querySnapshot?.id, nativeUnitIndexRevision: result.nativeUnitIndexRevision, truncated, notes: result.notes } }, null, 2)
+      : `﻿${downloadSummaryCsv(summary)}`;
     const url = URL.createObjectURL(new Blob([text], { type: format === "json" ? "application/json;charset=utf-8" : "text/csv;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = `atlas-region-${result.preview ? "preview" : "manifest"}.${format}`; link.click(); URL.revokeObjectURL(url);
     regionPanel?.status(() => t("coverage.downloadReady"));
@@ -2886,16 +2915,12 @@ async function downloadOverlapCsv(components: OverlapComponentView[], filename: 
     const results: Array<OverlapEvidenceResult | null> = [];
     // One download operation must not exceed the per-identity concurrency limit.
     for (const component of components) results.push(await evidenceForExport(component));
-    const rows = components.flatMap((component, index) => overlapCsvRows(component, downloadPlanFor(results[index] ?? null), publicLayerEntry, results[index]?.precision, {
-      snapshotId: results[index]?.querySnapshot?.id, nativeUnitIndexRevision: results[index]?.nativeUnitIndexRevision,
-      omitted: results[index]?.page?.omitted ?? results[index]?.preview?.omitted ?? 0,
-      hasMore: results[index]?.page?.hasMore ?? results[index]?.preview?.hasMore ?? false,
-    }));
-    if (!rows.length) {
+    const summary = buildDownloadSummary(components.map((component, index) => ({ component, plan: downloadPlanFor(results[index] ?? null) })), publicLayerEntry);
+    if (!summary.items.length) {
       toast(t("coverage.noDownloadEntries"));
       return;
     }
-    const csv = overlapCsvDocument(rows);
+    const csv = downloadSummaryCsv(summary);
     const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
@@ -2924,23 +2949,25 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
     const results: Array<OverlapEvidenceResult | null> = [];
     // One download operation must not exceed the per-identity concurrency limit.
     for (const component of components) results.push(await evidenceForExport(component));
+    const summary = buildDownloadSummary(components.map((component, index) => ({ component, plan: downloadPlanFor(results[index] ?? null) })), publicLayerEntry);
     const payload = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       coordinateFrame: "ICRS",
       ordering: "NESTED",
       generatedAt: new Date().toISOString(),
-      components: components.map((component, index) => ({
+      totals: summary.totals,
+      bySurvey: summary.bySurvey,
+      items: summary.items,
+      regions: components.map((component, index) => ({
         componentId: component.id,
         order: component.order,
-        nside: 2 ** component.order,
-        cells: component.cells,
+        cellCount: component.cells.length,
         bounds: component.bounds,
-        querySnapshot: results[index]?.querySnapshot,
+        querySnapshotId: results[index]?.querySnapshot?.id,
         nativeUnitIndexRevision: results[index]?.nativeUnitIndexRevision,
-        preview: results[index]?.preview,
-        page: results[index]?.page,
+        truncated: Boolean(results[index]?.page?.hasMore ?? results[index]?.preview?.hasMore),
         notes: results[index]?.notes,
-        ...(results[index] ? { downloadPlan: downloadPlanFor(results[index]) } : { downloadPlan: { schemaVersion: 1, files: [], entrypoints: [], truncated: false, warnings: ["reverse lookup was unavailable"] } }),
+        lookupAvailable: Boolean(results[index]),
       })),
     };
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" }));
