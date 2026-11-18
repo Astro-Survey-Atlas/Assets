@@ -61,7 +61,7 @@ def atlas_layer_tooltip_smoke(browser, base_url: str, mock_api) -> None:
     expect(tooltip).to_be_visible()
     expect(tooltip.locator(".coverage-layer-detail-row")).to_have_count(3)
     euclid.locator("input").uncheck(force=True)
-    expect(tooltip.locator(".coverage-layer-detail-row")).to_have_count(0)
+    expect(tooltip.locator(".coverage-layer-detail-row")).to_have_count(2)  # catalog fallback: one row per release
     euclid.locator("input").check(force=True)
     expect(tooltip.locator(".coverage-layer-detail-row")).to_have_count(3)
     page.evaluate("document.activeElement.blur()")
@@ -589,13 +589,11 @@ def atlas_rectangle_query_smoke(browser, base_url: str, mock_api) -> None:
     json_name, preview = download("json")
     csv_name, preview_rows = download("csv")
     assert json_name == "atlas-region-preview.json" and csv_name == "atlas-region-preview.csv"
-    assert preview["schemaVersion"] == 2 and preview["preview"]["limit"] == 6
-    native = next(row for row in preview_rows if row["item_kind"] == "spatial-unit")
-    assert native["tile_id"] == preview["downloadPlan"]["spatialUnits"][0]["unitId"]
-    assert json.loads(native["matching_regions"]) == preview["downloadPlan"]["spatialUnits"][0]["matchingRegions"]
-    assert json.loads(native["query_region"]) == preview["requested"]["region"]
-    assert native["order"] == "" and native["region_budget_limited"] == "true"
-    assert len([row for row in preview_rows if row["item_kind"] == "source-status"]) == 1
+    assert preview["schemaVersion"] == 2 and preview["region"]["preview"]["limit"] == 6
+    assert len(preview_rows) == 1 and len(preview["items"]) == 1
+    native = preview_rows[0]
+    assert native["kind"] == "unit" and native["url"] == preview["items"][0]["url"] and native["url"].startswith("https://example.test/")
+    assert native["precision"] == "estimated" and native["overlap_cells"]
 
     actions = page.locator("#coverage-region-results > .coverage-region-actions button")
     actions.first.click()
@@ -605,14 +603,14 @@ def atlas_rectangle_query_smoke(browser, base_url: str, mock_api) -> None:
     expect(page.locator(".download-unlock-dialog")).to_have_count(0)
     expect(page.locator("#coverage-region-query-meta")).to_contain_text("Native units loaded")
     first_authorized = next(body for body in reverse_requests if not body.get("preview"))
-    assert first_authorized.get("querySnapshotId") == preview["querySnapshot"]["id"], "unlock must upgrade the same frozen preview snapshot"
+    assert first_authorized.get("querySnapshotId") == preview["region"]["querySnapshot"]["id"], "unlock must upgrade the same frozen preview snapshot"
     json_name, manifest = download("json")
     csv_name, manifest_rows = download("csv")
     assert json_name == "atlas-region-manifest.json" and csv_name == "atlas-region-manifest.csv"
-    assert manifest["querySnapshot"]["id"] == preview["querySnapshot"]["id"]
-    assert manifest["page"]["hasMore"] is False and manifest["querySnapshot"]["inventoryComplete"] is False
-    assert len(manifest["downloadPlan"]["spatialUnits"]) == 2, "authorized export must drain the root snapshot cursor"
-    assert {row["tile_id"] for row in manifest_rows if row["item_kind"] == "spatial-unit"} == {unit["unitId"] for unit in manifest["downloadPlan"]["spatialUnits"]}
+    assert manifest["region"]["querySnapshot"]["id"] == preview["region"]["querySnapshot"]["id"]
+    assert manifest["region"]["page"]["hasMore"] is False and manifest["region"]["querySnapshot"]["inventoryComplete"] is False
+    assert len(manifest["items"]) == 2, "authorized export must drain the root snapshot cursor"
+    assert {row["url"] for row in manifest_rows} == {item["url"] for item in manifest["items"]}
     assert any(body.get("cursor") == "cursor-350" for body in reverse_requests)
     assert not any("synthetic-region-key" in json.dumps(body) for body in reverse_requests), "API key is not retained in query payloads"
 

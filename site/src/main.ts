@@ -2314,7 +2314,7 @@ async function exportRegionManifest(component: OverlapComponentView, format: "js
     const text = format === "json" ? JSON.stringify({ schemaVersion: 2, coordinateFrame: "ICRS", ordering: "NESTED", generatedAt: new Date().toISOString(),
       totals: summary.totals, bySurvey: summary.bySurvey, items: summary.items,
       region: { requested: result.requested ?? { layerIds: component.evidenceLookup?.layerIds, order: component.order, cells: component.cells },
-        querySnapshotId: result.querySnapshot?.id, nativeUnitIndexRevision: result.nativeUnitIndexRevision, truncated, notes: result.notes } }, null, 2)
+        querySnapshot: result.querySnapshot, nativeUnitIndexRevision: result.nativeUnitIndexRevision, truncated, preview: result.preview, page: result.page, notes: result.notes } }, null, 2)
       : `﻿${downloadSummaryCsv(summary)}`;
     const url = URL.createObjectURL(new Blob([text], { type: format === "json" ? "application/json;charset=utf-8" : "text/csv;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = `atlas-region-${result.preview ? "preview" : "manifest"}.${format}`; link.click(); URL.revokeObjectURL(url);
