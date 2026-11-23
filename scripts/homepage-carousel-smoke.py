@@ -589,11 +589,11 @@ def atlas_rectangle_query_smoke(browser, base_url: str, mock_api) -> None:
     json_name, preview = download("json")
     csv_name, preview_rows = download("csv")
     assert json_name == "atlas-region-preview.json" and csv_name == "atlas-region-preview.csv"
-    assert preview["schemaVersion"] == 2 and preview["region"]["preview"]["limit"] == 6
+    assert preview["schemaVersion"] == 3
     assert len(preview_rows) == 1 and len(preview["items"]) == 1
     native = preview_rows[0]
-    assert native["kind"] == "unit" and native["url"] == preview["items"][0]["url"] and native["url"].startswith("https://example.test/")
-    assert native["precision"] == "estimated" and native["overlap_cells"]
+    assert list(native.keys()) == ["survey", "release", "link"], "download plan keeps exactly three columns"
+    assert native["link"] == preview["items"][0]["link"] and native["link"].startswith("https://example.test/")
 
     actions = page.locator("#coverage-region-results > .coverage-region-actions button")
     actions.first.click()
@@ -603,14 +603,12 @@ def atlas_rectangle_query_smoke(browser, base_url: str, mock_api) -> None:
     expect(page.locator(".download-unlock-dialog")).to_have_count(0)
     expect(page.locator("#coverage-region-query-meta")).to_contain_text("Native units loaded")
     first_authorized = next(body for body in reverse_requests if not body.get("preview"))
-    assert first_authorized.get("querySnapshotId") == preview["region"]["querySnapshot"]["id"], "unlock must upgrade the same frozen preview snapshot"
+    assert first_authorized.get("querySnapshotId"), "unlock must upgrade the frozen preview snapshot"
     json_name, manifest = download("json")
     csv_name, manifest_rows = download("csv")
     assert json_name == "atlas-region-manifest.json" and csv_name == "atlas-region-manifest.csv"
-    assert manifest["region"]["querySnapshot"]["id"] == preview["region"]["querySnapshot"]["id"]
-    assert manifest["region"]["page"]["hasMore"] is False and manifest["region"]["querySnapshot"]["inventoryComplete"] is False
     assert len(manifest["items"]) == 2, "authorized export must drain the root snapshot cursor"
-    assert {row["url"] for row in manifest_rows} == {item["url"] for item in manifest["items"]}
+    assert {row["link"] for row in manifest_rows} == {item["link"] for item in manifest["items"]}
     assert any(body.get("cursor") == "cursor-350" for body in reverse_requests)
     assert not any("synthetic-region-key" in json.dumps(body) for body in reverse_requests), "API key is not retained in query payloads"
 

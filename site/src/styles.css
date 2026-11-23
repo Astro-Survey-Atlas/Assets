@@ -1447,3 +1447,6 @@ body[data-home-state="entering"] .coverage-inspector-rail { visibility: hidden; 
 .coverage-layer-detail-release .coverage-layer-detail-version, .coverage-layer-detail-release .coverage-layer-detail-product, .coverage-layer-detail-release .coverage-layer-detail-orders { grid-column: auto; white-space: nowrap; }
 .coverage-layer-detail-intro { margin: 4px 0 0; color: var(--ink); font: 500 10px/1.5 var(--font-mono), monospace; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .coverage-layer-detail-link { color: var(--layer-color, var(--teal)); font: 700 9px/1.4 var(--font-mono), monospace; pointer-events: auto; }
+
+.overlap-provider-select { display: inline-flex; align-items: center; gap: 6px; font: 600 9px/1.2 var(--font-mono), monospace; color: var(--muted); }
+.overlap-provider-select select { max-width: 200px; font: inherit; padding: 3px 4px; background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 2px; }

@@ -1,169 +1,178 @@
 import type { DownloadComponent, DownloadLayerEntry, DownloadPlan } from "./overlap-download.js";
 import { csvCell } from "./overlap-download.js";
 
-/** One deduplicated thing the user may download for an overlap region. */
-export interface DownloadSummaryItem {
-  kind: "file" | "unit" | "entrypoint";
-  name: string;
-  type: string;
-  sizeBytes?: number;
+export interface DownloadAlternative {
   url: string;
-  precision: string;
-  surveys: string[];
-  releases: string[];
-  products: string[];
-  layers: string[];
-  components: string[];
-  overlap: string;
-  notes: string;
+  provider: string;
+  status: string;
+  country?: string;
+}
+
+/** One native-unit (or file) the user can download, with its single preferred link. */
+export interface DownloadSummaryItem {
+  survey: string;
+  release: string;
+  link: string;
+  provider: string;
+  alternatives: DownloadAlternative[];
+}
+
+export interface DownloadEntrypointOnly {
+  survey: string;
+  release: string;
+  link: string;
 }
 
 export interface DownloadSummary {
-  schemaVersion: 2;
-  totals: {
-    items: number;
-    files: number;
-    units: number;
-    entrypoints: number;
-    knownBytes: number;
-    unknownSizeItems: number;
-    duplicatesRemoved: number;
-  };
-  bySurvey: Array<{ surveyId: string; items: number; knownBytes: number }>;
+  schemaVersion: 3;
   items: DownloadSummaryItem[];
+  entrypointOnly: DownloadEntrypointOnly[];
 }
 
-export const DOWNLOAD_SUMMARY_HEADER = [
-  "kind", "survey", "release", "product", "name", "type", "size_bytes", "url", "precision", "overlap_cells", "components", "notes",
-] as const;
-
-const MAX_CELLS_SHOWN = 6;
-
-function cellsLabel(cells: Map<number, Set<number>>): string {
-  return [...cells].sort(([left], [right]) => left - right).map(([order, set]) => {
-    const sorted = [...set].sort((left, right) => left - right);
-    const shown = sorted.slice(0, MAX_CELLS_SHOWN).join(",");
-    return `O${order}:${shown}${sorted.length > MAX_CELLS_SHOWN ? `(+${sorted.length - MAX_CELLS_SHOWN})` : ""}`;
-  }).join(" ");
+export interface DownloadSummaryOptions {
+  locale?: "zh" | "en";
+  /** Provider name chosen by the user; falls back to the rule order when a unit has no such source. */
+  preferredProvider?: string;
+  /** Display names; ids are used when missing. */
+  labels?: (surveyId: string, releaseId: string) => { survey?: string; release?: string };
 }
 
-interface Accumulator {
-  item: Omit<DownloadSummaryItem, "overlap" | "surveys" | "releases" | "products" | "layers" | "components"> & {
-    surveys: Set<string>; releases: Set<string>; products: Set<string>; layers: Set<string>; components: Set<string>;
-  };
-  cells: Map<number, Set<number>>;
+const STATUS_RANK: Record<string, number> = { verified: 0, "source-listed": 1, "rule-derived": 2, "entrypoint-only": 3 };
+
+function statusRank(status: string): number {
+  return STATUS_RANK[status] ?? 2;
+}
+
+function regionRank(alternative: DownloadAlternative, locale: "zh" | "en"): number {
+  if (locale !== "zh") return 0;
+  if (alternative.country === "CN") return 0;
+  return alternative.country === "US" ? 1 : 2;
+}
+
+/** Pure, deterministic: the best link for one unit. `unavailable` sources are never chosen. */
+export function pickAlternative(alternatives: readonly DownloadAlternative[], options: DownloadSummaryOptions = {}): DownloadAlternative | undefined {
+  const usable = alternatives.map((alternative, index) => ({ alternative, index })).filter(({ alternative }) => alternative.status !== "unavailable");
+  if (!usable.length) return undefined;
+  const locale = options.locale ?? "en";
+  const preferred = options.preferredProvider;
+  usable.sort((left, right) =>
+    statusRank(left.alternative.status) - statusRank(right.alternative.status)
+    || regionRank(left.alternative, locale) - regionRank(right.alternative, locale)
+    || left.index - right.index);
+  // An explicitly chosen provider wins over a better-verified one only if it is itself usable.
+  if (preferred) {
+    const chosen = usable.find(({ alternative }) => alternative.provider === preferred && statusRank(alternative.status) < 3);
+    if (chosen) return chosen.alternative;
+  }
+  return usable[0]!.alternative;
+}
+
+/** Providers present in the given plans, for the "preferred source" selector. */
+export function collectProviders(plans: readonly DownloadPlan[]): string[] {
+  const names = new Set<string>();
+  for (const plan of plans) {
+    for (const unit of plan.spatialUnits ?? []) {
+      for (const entry of unit.accessUris ?? []) for (const alternative of entry.alternatives ?? []) if (alternative.provider) names.add(alternative.provider);
+    }
+  }
+  return [...names].sort((left, right) => left.localeCompare(right));
+}
+
+function unitAlternatives(unit: NonNullable<DownloadPlan["spatialUnits"]>[number]): DownloadAlternative[][] {
+  const entries = unit.accessUris?.length ? unit.accessUris
+    : unit.accessUri ? [{ uri: unit.accessUri, alternatives: undefined }] : [];
+  return entries.map((entry) => {
+    const alternatives = entry.alternatives?.length ? entry.alternatives : [{ uri: entry.uri, provider: "Survey source", status: "source-listed" as const, providerCountryCode: undefined }];
+    return alternatives.map((alternative) => ({
+      url: alternative.uri, provider: alternative.provider, status: alternative.status, country: alternative.providerCountryCode,
+    }));
+  });
 }
 
 /**
- * Collapse the full, audit-oriented download plans of one or more overlap components into
- * a single list of unique downloadable things: same URL (or file id) appears once even
- * when several layers or components reach it.
+ * Collapse the download plans of one or more overlap components into the minimal list a user needs:
+ * survey, release and one link per native-unit. Layers with no file-level index are reported once as
+ * "official entrypoint only" so the user is not told there is no data.
  */
 export function buildDownloadSummary(
   entries: Array<{ component: DownloadComponent; plan: DownloadPlan }>,
-  resolveLayer: (layerId: string | undefined) => DownloadLayerEntry,
+  resolveLayer: (layerId: string | undefined) => DownloadLayerEntry & { sourceUrl?: string },
+  options: DownloadSummaryOptions = {},
 ): DownloadSummary {
-  const byKey = new Map<string, Accumulator>();
-  let rawRows = 0;
-  const add = (
-    key: string,
-    base: { kind: DownloadSummaryItem["kind"]; name: string; type: string; sizeBytes?: number; url: string; precision: string; notes: string },
-    componentId: string,
-    layerIds: Array<string | undefined>,
-    cells: Array<{ order: number; ipix: number }>,
-  ): void => {
-    rawRows += 1;
-    let acc = byKey.get(key);
-    if (!acc) {
-      acc = {
-        item: { ...base, surveys: new Set(), releases: new Set(), products: new Set(), layers: new Set(), components: new Set() },
-        cells: new Map(),
-      };
-      byKey.set(key, acc);
+  const names = (surveyId: string, releaseId: string) => {
+    const label = options.labels?.(surveyId, releaseId) ?? {};
+    return { survey: label.survey || surveyId, release: label.release || releaseId };
+  };
+  const byLink = new Map<string, DownloadSummaryItem>();
+  const indexedReleases = new Set<string>();
+  const entrypointOnly = new Map<string, DownloadEntrypointOnly>();
+  const addItem = (surveyId: string, releaseId: string, alternatives: DownloadAlternative[]): void => {
+    const pick = pickAlternative(alternatives, options);
+    if (!pick?.url) return;
+    indexedReleases.add(`${surveyId}\n${releaseId}`);
+    const existing = byLink.get(pick.url);
+    if (existing) {
+      for (const alternative of alternatives) if (!existing.alternatives.some((known) => known.url === alternative.url)) existing.alternatives.push(alternative);
+      return;
     }
-    acc.item.components.add(componentId);
-    for (const layerId of layerIds) {
-      if (!layerId) continue;
-      const layer = resolveLayer(layerId);
-      acc.item.layers.add(layerId);
-      if (layer.surveyId) acc.item.surveys.add(layer.surveyId);
-      if (layer.releaseId) acc.item.releases.add(layer.releaseId);
-      if (layer.product) acc.item.products.add(layer.product);
-    }
-    for (const { order, ipix } of cells) {
-      const set = acc.cells.get(order) ?? new Set<number>();
-      set.add(ipix);
-      acc.cells.set(order, set);
-    }
-    if (acc.item.sizeBytes === undefined && base.sizeBytes !== undefined) acc.item.sizeBytes = base.sizeBytes;
-    if (base.precision === "estimated" || base.precision === "entrypoint-only") acc.item.precision = base.precision;
+    byLink.set(pick.url, { ...names(surveyId, releaseId), link: pick.url, provider: pick.provider, alternatives: [...alternatives] });
   };
 
   for (const { component, plan } of entries) {
-    const coveredUrls = new Set<string>();
-    for (const file of plan.files) {
-      const url = file.downloadUrl ?? file.sourceUri ?? "";
-      if (url) coveredUrls.add(url);
-      add(url || `file:${file.fileId}`, {
-        kind: "file", name: file.fileName ?? file.fileId, type: file.fileType ?? "", sizeBytes: file.sizeBytes, url,
-        precision: [...new Set(file.matchingCoverage.map((match) => match.precision))].join("/") || "exact",
-        notes: file.downloadable ? "" : "source-hosted; not mirrored by Assets",
-      }, component.id, file.matchingCoverage.map((match) => match.layerId), file.matchingCoverage.map((match) => ({ order: match.order, ipix: match.ipix })));
-    }
     for (const unit of plan.spatialUnits ?? []) {
-      const uris = unit.accessUris?.length ? unit.accessUris.map((entry) => ({ url: entry.uri, name: entry.fileName ?? unit.unitId })) : unit.accessUri ? [{ url: unit.accessUri, name: unit.unitId }] : [];
-      const cells = (unit.matchingRegions ?? (unit.order === undefined ? [] : [{ order: unit.order, cells: unit.matchingCells ?? [] }]))
-        .flatMap((region) => region.cells.map((ipix) => ({ order: region.order, ipix })));
-      for (const uri of uris) {
-        if (coveredUrls.has(uri.url)) continue;
-        add(uri.url, { kind: "unit", name: uri.name, type: unit.unitKind, url: uri.url, precision: unit.precision, notes: unit.note ?? "" },
-          component.id, [unit.layerId], cells);
-      }
+      for (const alternatives of unitAlternatives(unit)) addItem(unit.surveyId, unit.releaseId, alternatives);
     }
-    for (const entry of plan.entrypoints) {
-      if (entry.purpose !== "data-access") continue;
-      const url = entry.url ?? entry.sourceUrl ?? entry.sourceUri ?? "";
-      if (!url || coveredUrls.has(url)) continue;
-      add(`entry:${url}`, { kind: "entrypoint", name: entry.tileId ?? entry.kind, type: entry.kind, url, precision: entry.precision, notes: entry.note ?? "" },
-        component.id, [entry.layerId], entry.order === undefined ? [] : (entry.cells ?? []).map((ipix) => ({ order: entry.order!, ipix })));
+    for (const file of plan.files) {
+      const url = file.downloadUrl ?? file.sourceUri;
+      if (!url) continue;
+      const layer = resolveLayer(file.matchingCoverage[0]?.layerId);
+      addItem(layer.surveyId, layer.releaseId, [{ url, provider: file.downloadProvider ?? "Survey source", status: file.downloadable ? "verified" : "source-listed" }]);
+    }
+    const layerIds = new Set<string>([...(component.requested?.layerIds ?? []), ...plan.entrypoints.flatMap((entry) => entry.layerId ? [entry.layerId] : [])]);
+    for (const layerId of layerIds) {
+      const layer = resolveLayer(layerId);
+      const url = plan.entrypoints.find((entry) => entry.layerId === layerId && entry.kind === "official-release")?.url
+        ?? plan.entrypoints.find((entry) => entry.layerId === layerId && entry.purpose === "data-access")?.url
+        ?? layer.sourceUrl;
+      if (!url || !layer.surveyId) continue;
+      const key = `${layer.surveyId}\n${layer.releaseId}`;
+      if (!entrypointOnly.has(key)) entrypointOnly.set(key, { ...names(layer.surveyId, layer.releaseId), link: url });
     }
   }
 
-  const items: DownloadSummaryItem[] = [...byKey.values()].map(({ item, cells }) => ({
-    ...item,
-    surveys: [...item.surveys].sort(), releases: [...item.releases].sort(), products: [...item.products].sort(),
-    layers: [...item.layers].sort(), components: [...item.components].sort(), overlap: cellsLabel(cells),
-  })).sort((left, right) => left.kind.localeCompare(right.kind) || left.surveys.join().localeCompare(right.surveys.join()) || left.name.localeCompare(right.name));
-
-  const surveyTotals = new Map<string, { items: number; knownBytes: number }>();
-  for (const item of items) {
-    for (const surveyId of item.surveys.length ? item.surveys : [""]) {
-      const total = surveyTotals.get(surveyId) ?? { items: 0, knownBytes: 0 };
-      total.items += 1;
-      total.knownBytes += item.sizeBytes ?? 0;
-      surveyTotals.set(surveyId, total);
-    }
-  }
+  const sort = <T extends { survey: string; release: string }>(rows: T[]) => rows.sort((left, right) => left.survey.localeCompare(right.survey) || left.release.localeCompare(right.release));
   return {
-    schemaVersion: 2,
-    totals: {
-      items: items.length,
-      files: items.filter((item) => item.kind === "file").length,
-      units: items.filter((item) => item.kind === "unit").length,
-      entrypoints: items.filter((item) => item.kind === "entrypoint").length,
-      knownBytes: items.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0),
-      unknownSizeItems: items.filter((item) => item.sizeBytes === undefined).length,
-      duplicatesRemoved: rawRows - items.length,
-    },
-    bySurvey: [...surveyTotals].map(([surveyId, total]) => ({ surveyId, ...total })).sort((left, right) => left.surveyId.localeCompare(right.surveyId)),
-    items,
+    schemaVersion: 3,
+    items: sort([...byLink.values()]),
+    entrypointOnly: sort([...entrypointOnly].filter(([key]) => !indexedReleases.has(key)).map(([, row]) => row)),
   };
 }
 
-export function downloadSummaryCsv(summary: DownloadSummary): string {
-  const rows = summary.items.map((item) => [
-    item.kind, item.surveys.join("; "), item.releases.join("; "), item.products.join("; "), item.name, item.type,
-    item.sizeBytes === undefined ? "" : String(item.sizeBytes), item.url, item.precision, item.overlap, item.components.join("; "), item.notes,
-  ]);
-  return [DOWNLOAD_SUMMARY_HEADER as readonly string[], ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
+const NOTE = {
+  zh: "此天区可能有数据，本站暂无文件索引；标注“仅官方入口”的行只给出官方数据入口。",
+  en: "This sky area may have data, but this site has no file index for it; rows marked “official entrypoint only” give the official data entry point.",
+};
+const HEADER = { zh: ["巡天", "DR", "链接"], en: ["survey", "release", "link"] };
+const ENTRYPOINT_SUFFIX = { zh: "（仅官方入口）", en: " (official entrypoint only)" };
+
+export function downloadSummaryCsv(summary: DownloadSummary, locale: "zh" | "en" = "en"): string {
+  const rows = [
+    ...summary.items.map((item) => [item.survey, item.release, item.link]),
+    ...summary.entrypointOnly.map((item) => [item.survey, `${item.release}${ENTRYPOINT_SUFFIX[locale]}`, item.link]),
+  ];
+  const lines = rows.length ? [HEADER[locale], ...rows].map((row) => row.map(csvCell).join(",")) : [];
+  if (summary.entrypointOnly.length) lines.unshift(`# ${NOTE[locale]}`);
+  return lines.length ? `${lines.join("\r\n")}\r\n` : "";
+}
+
+export function downloadSummaryJson(summary: DownloadSummary, locale: "zh" | "en" = "en"): Record<string, unknown> {
+  return {
+    schemaVersion: 3,
+    items: summary.items.map((item) => ({
+      survey: item.survey, release: item.release, link: item.link,
+      alternatives: item.alternatives.map((alternative) => alternative.url).filter((url) => url !== item.link),
+    })),
+    entrypointOnly: summary.entrypointOnly,
+    ...(summary.entrypointOnly.length ? { note: NOTE[locale] } : {}),
+  };
 }

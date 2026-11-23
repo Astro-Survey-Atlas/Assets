@@ -18,7 +18,7 @@ import { coverageBlockStore } from "./atlas/block-store.js";
 import type { SkyRectangle } from "../../src/sky-region.js";
 import { coverageCatalogRevisionKey } from "./coverage-catalog-revision.js";
 import { coverageEscapeIntent } from "./atlas/coverage-interaction.js";
-import { buildDownloadSummary, downloadSummaryCsv } from "./overlap-download-summary.js";
+import { buildDownloadSummary, collectProviders, downloadSummaryCsv, downloadSummaryJson, type DownloadSummaryOptions } from "./overlap-download-summary.js";
 import { coverageLayerTooltipPosition } from "./atlas/layer-panel-layout.js";
 import { overlapPanelExitTransform, overlapPanelsShouldExit } from "./overlap-layout.js";
 import { joinUnique, mergeDownloadPlans, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanFile, type DownloadPlanMatch, type DownloadPlanScannedFile, type DownloadPlanSpatialUnit } from "./overlap-download.js";
@@ -2307,6 +2307,7 @@ function renderRegionQuery(component: OverlapComponentView): void {
     button.addEventListener("click", () => void exportRegionManifest(component, format, button));
     actions.append(button);
   }
+  actions.append(createProviderSelect(() => [component]));
   const cancel = Object.assign(document.createElement("button"), { type: "button", className: "hud-btn", textContent: t("region.cancelExport") });
   cancel.dataset.regionAction = "cancel-export";
   cancel.addEventListener("click", () => { cancelRegionQuery(); regionPanel?.status(() => t("region.cancelled")); });
@@ -2330,13 +2331,9 @@ async function exportRegionManifest(component: OverlapComponentView, format: "js
     if (!result || controller.signal.aborted || activeRegionQuery !== component) return;
     const plan = downloadPlanFor(result);
     const selection = { ...component, requested: result.requested, sourceStatuses: result.sources };
-    const summary = buildDownloadSummary([{ component: selection, plan }], publicLayerEntry);
-    const truncated = Boolean(result.page?.hasMore ?? result.preview?.hasMore);
-    const text = format === "json" ? JSON.stringify({ schemaVersion: 2, coordinateFrame: "ICRS", ordering: "NESTED", generatedAt: new Date().toISOString(),
-      totals: summary.totals, bySurvey: summary.bySurvey, items: summary.items,
-      region: { requested: result.requested ?? { layerIds: component.evidenceLookup?.layerIds, order: component.order, cells: component.cells },
-        querySnapshot: result.querySnapshot, nativeUnitIndexRevision: result.nativeUnitIndexRevision, truncated, preview: result.preview, page: result.page, notes: result.notes } }, null, 2)
-      : `﻿${downloadSummaryCsv(summary)}`;
+    const options = downloadSummaryOptions();
+    const summary = buildDownloadSummary([{ component: selection, plan }], publicLayerEntry, options);
+    const text = format === "json" ? JSON.stringify(downloadSummaryJson(summary, options.locale), null, 2) : `\uFEFF${downloadSummaryCsv(summary, options.locale)}`;
     const url = URL.createObjectURL(new Blob([text], { type: format === "json" ? "application/json;charset=utf-8" : "text/csv;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = `atlas-region-${result.preview ? "preview" : "manifest"}.${format}`; link.click(); URL.revokeObjectURL(url);
     regionPanel?.status(() => t("coverage.downloadReady"));
@@ -2924,6 +2921,43 @@ async function evidenceForExport(component: OverlapComponentView, signal?: Abort
   return result;
 }
 
+const PREFERRED_PROVIDER_KEY = "atlas.download.preferredProvider";
+
+function downloadSummaryOptions(): DownloadSummaryOptions {
+  let preferredProvider: string | undefined;
+  try { preferredProvider = localStorage.getItem(PREFERRED_PROVIDER_KEY) || undefined; } catch { /* private browsing */ }
+  return {
+    locale: locale() === "zh" ? "zh" : "en",
+    preferredProvider,
+    labels: (surveyId, releaseId) => {
+      const survey = surveyIndex?.surveys.find((entry) => entry.id === surveyId);
+      return { survey: survey?.name, release: survey?.releases.find((entry) => entry.id === releaseId)?.label };
+    },
+  };
+}
+
+/** "Preferred source" selector; lists only providers present in the loaded results. */
+function createProviderSelect(getComponents: () => OverlapComponentView[]): HTMLElement {
+  const wrap = document.createElement("label");
+  wrap.className = "overlap-provider-select";
+  const text = document.createElement("span");
+  text.textContent = locale() === "zh" ? "优先下载源" : "Preferred source";
+  const select = document.createElement("select");
+  const fill = () => {
+    const plans = getComponents().map((component) => overlapEvidenceCache.get(overlapEvidenceKey(component))).filter((result): result is OverlapEvidenceResult => Boolean(result)).map(downloadPlanFor);
+    const providers = collectProviders(plans);
+    const current = (() => { try { return localStorage.getItem(PREFERRED_PROVIDER_KEY) ?? ""; } catch { return ""; } })();
+    select.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: locale() === "zh" ? "自动（推荐）" : "Automatic (recommended)" }),
+      ...providers.map((provider) => Object.assign(document.createElement("option"), { value: provider, textContent: provider })));
+    select.value = providers.includes(current) ? current : "";
+  };
+  select.addEventListener("focus", fill);
+  select.addEventListener("change", () => { try { select.value ? localStorage.setItem(PREFERRED_PROVIDER_KEY, select.value) : localStorage.removeItem(PREFERRED_PROVIDER_KEY); } catch { /* ignore */ } });
+  fill();
+  wrap.append(text, select);
+  return wrap;
+}
+
 async function downloadOverlapCsv(components: OverlapComponentView[], filename: string, button: HTMLButtonElement): Promise<void> {
   if (components.some(reverseLookupRegionTooLarge)) {
     toast(t("coverage.overlapRegionTooLarge"), 8000);
@@ -2936,12 +2970,13 @@ async function downloadOverlapCsv(components: OverlapComponentView[], filename: 
     const results: Array<OverlapEvidenceResult | null> = [];
     // One download operation must not exceed the per-identity concurrency limit.
     for (const component of components) results.push(await evidenceForExport(component));
-    const summary = buildDownloadSummary(components.map((component, index) => ({ component, plan: downloadPlanFor(results[index] ?? null) })), publicLayerEntry);
-    if (!summary.items.length) {
+    const options = downloadSummaryOptions();
+    const summary = buildDownloadSummary(components.map((component, index) => ({ component, plan: downloadPlanFor(results[index] ?? null) })), publicLayerEntry, options);
+    if (!summary.items.length && !summary.entrypointOnly.length) {
       toast(t("coverage.noDownloadEntries"));
       return;
     }
-    const csv = downloadSummaryCsv(summary);
+    const csv = downloadSummaryCsv(summary, options.locale);
     const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
@@ -2970,27 +3005,8 @@ async function downloadOverlapJson(components: OverlapComponentView[], filename:
     const results: Array<OverlapEvidenceResult | null> = [];
     // One download operation must not exceed the per-identity concurrency limit.
     for (const component of components) results.push(await evidenceForExport(component));
-    const summary = buildDownloadSummary(components.map((component, index) => ({ component, plan: downloadPlanFor(results[index] ?? null) })), publicLayerEntry);
-    const payload = {
-      schemaVersion: 2,
-      coordinateFrame: "ICRS",
-      ordering: "NESTED",
-      generatedAt: new Date().toISOString(),
-      totals: summary.totals,
-      bySurvey: summary.bySurvey,
-      items: summary.items,
-      regions: components.map((component, index) => ({
-        componentId: component.id,
-        order: component.order,
-        cellCount: component.cells.length,
-        bounds: component.bounds,
-        querySnapshotId: results[index]?.querySnapshot?.id,
-        nativeUnitIndexRevision: results[index]?.nativeUnitIndexRevision,
-        truncated: Boolean(results[index]?.page?.hasMore ?? results[index]?.preview?.hasMore),
-        notes: results[index]?.notes,
-        lookupAvailable: Boolean(results[index]),
-      })),
-    };
+    const options = downloadSummaryOptions();
+    const payload = downloadSummaryJson(buildDownloadSummary(components.map((component, index) => ({ component, plan: downloadPlanFor(results[index] ?? null) })), publicLayerEntry, options), options.locale);
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
@@ -3881,6 +3897,7 @@ function renderOverlapComponent(component: OverlapComponentView, surveyIds: stri
     list.append(evidence);
     void loadOverlapEvidence(component, evidence);
   }
+  downloads.append(createProviderSelect(() => activeOverlapComponents.length ? activeOverlapComponents : [component]));
   list.append(downloads);
   content.append(list);
   renderIcons();
