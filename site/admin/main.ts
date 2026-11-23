@@ -855,7 +855,9 @@ function renderOverview(overview: AdminOverview): void {
     } else if (target.id === "overview-back") {
       overviewSurveyId = ""; history.pushState(null, "", "/admin/overview"); renderOverview(overview);
     } else if (target.dataset.overviewProduct) {
-      setAdminStep("review"); openProduct(target.dataset.overviewProduct);
+      // Read-only SaaS keeps the overview in place; the detail dialog lives outside the (disabled) review panel.
+      if (!saasMode) setAdminStep("review");
+      openProduct(target.dataset.overviewProduct);
     }
   };
   if (!surveys.length) {
@@ -1976,7 +1978,7 @@ function openProduct(productId: string): void {
   const product = productRecords.find((entry) => entry.productId === productId);
   if (!product) return;
   activeProductDialogId = productId;
-  const productPath = routePath({ step: "review", productId });
+  const productPath = routePath({ step: saasMode ? activeStep : "review", ...(saasMode ? {} : { productId }) });
   if (location.pathname !== productPath) history.pushState(null, "", productPath);
   const form = byId<HTMLFormElement>("product-form");
   const facts = byId("product-public-facts");
@@ -2078,6 +2080,7 @@ function openProduct(productId: string): void {
   withdrawButton.dataset.publishProduct = productId;
   const editableFields = form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input:not([type=hidden]), select, textarea");
   editableFields.forEach((field) => { field.disabled = retired; });
+  byId<HTMLDialogElement>("product-dialog").classList.toggle("is-readonly", saasMode);
   byId<HTMLDialogElement>("product-dialog").showModal();
   syncProductOperationButtons();
   void loadProductHistory(productId);
@@ -2761,7 +2764,7 @@ byId<HTMLDialogElement>("review-survey-dialog").addEventListener("close", () => 
   byId("review-survey-content").replaceChildren();
   document.querySelector<HTMLButtonElement>(`[data-review-survey="${CSS.escape(previous)}"]`)?.focus();
 });
-byId("product-dialog-cancel").addEventListener("click", () => { history.replaceState(null, "", "/admin/review"); activeProductDialogId = ""; byId<HTMLDialogElement>("product-dialog").close(); });
+byId("product-dialog-cancel").addEventListener("click", () => { history.replaceState(null, "", saasMode ? routePath({ step: activeStep }) : "/admin/review"); activeProductDialogId = ""; byId<HTMLDialogElement>("product-dialog").close(); });
 byId<HTMLButtonElement>("product-dialog-review").addEventListener("click", (event) => { const productId = (event.currentTarget as HTMLButtonElement).dataset.reviewProduct; if (productId) void reviewProduct(productId); });
 byId<HTMLButtonElement>("product-dialog-publish").addEventListener("click", (event) => { const productId = (event.currentTarget as HTMLButtonElement).dataset.publishProduct; if (productId) void publishProduct(productId); });
 byId<HTMLButtonElement>("product-dialog-restore").addEventListener("click", (event) => { const id = (event.currentTarget as HTMLButtonElement).dataset.restoreProduct; if (id) void restoreProduct(id); });
@@ -2790,9 +2793,9 @@ byId<HTMLDialogElement>("editorial-dialog").addEventListener("cancel", (event) =
 byId<HTMLDialogElement>("product-dialog").addEventListener("close", () => {
   if (byId<HTMLDialogElement>("product-dialog").open) return;
   activeProductDialogId = "";
-  if (parseAdminRoute(location.pathname)?.productId) history.replaceState(null, "", "/admin/review");
+  if (parseAdminRoute(location.pathname)?.productId) history.replaceState(null, "", saasMode ? routePath({ step: activeStep }) : "/admin/review");
 });
-byId<HTMLDialogElement>("product-dialog").addEventListener("cancel", () => { history.replaceState(null, "", "/admin/review"); });
+byId<HTMLDialogElement>("product-dialog").addEventListener("cancel", () => { history.replaceState(null, "", saasMode ? routePath({ step: activeStep }) : "/admin/review"); });
 byId("moc-product-register-cancel").addEventListener("click", () => byId<HTMLDialogElement>("moc-product-register-dialog").close());
 byId("task-product").addEventListener("change", (event) => setDerivedProduct((event.currentTarget as HTMLSelectElement).value));
 byId("connector-type").addEventListener("change", updateConnectorFields);

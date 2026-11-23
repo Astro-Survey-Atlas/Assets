@@ -162,10 +162,10 @@ def main() -> None:
             assert len(created) - before == 2, "the failing request is not recorded as created"
             expect(page.locator("#api-key-feedback")).to_contain_text("fixture failure")
 
-            # 6) SaaS mode: data-production tabs are greyed out at menu level; view + release + API stay usable
-            for step in ("sources", "tasks", "review"):
+            # 6) SaaS mode: every data-changing tab (sources, tasks, review, releases) is greyed out; only overview + API stay usable
+            for step in ("sources", "tasks", "review", "releases"):
                 expect(page.locator(f'[data-admin-step="{step}"]')).to_be_disabled()
-            for step in ("overview", "releases", "api"):
+            for step in ("overview", "api"):
                 expect(page.locator(f'[data-admin-step="{step}"]')).to_be_enabled()
             page.goto(URL + "/admin/review", wait_until="domcontentloaded")
             expect(page.locator('[data-admin-step="overview"]')).to_have_attribute("aria-selected", "true")

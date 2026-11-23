@@ -1175,3 +1175,21 @@ button[aria-busy="true"] { cursor: wait; opacity: .8; }
   .native-comparison-heading { gap:6px; }
   .native-diff-row li { grid-template-columns:minmax(76px,.35fr) minmax(0,1fr); }
 }
+
+/* Read-only (SaaS) detail view: evidence and gates stay readable, every write control is removed. */
+.product-dialog.is-readonly #product-edit-content,
+.product-dialog.is-readonly .review-preflight-summary,
+.product-dialog.is-readonly #product-native-order-gate,
+.product-dialog.is-readonly #product-dialog-retire,
+.product-dialog.is-readonly #product-dialog-withdraw,
+.product-dialog.is-readonly #product-dialog-restore,
+.product-dialog.is-readonly #product-dialog-review,
+.product-dialog.is-readonly #product-dialog-publish,
+.product-dialog.is-readonly #product-save-draft,
+.product-dialog.is-readonly #product-verify-build,
+.product-dialog.is-readonly [data-readiness-action],
+.product-dialog.is-readonly [data-preflight-step],
+.product-dialog.is-readonly [data-preflight-verify],
+.product-dialog.is-readonly [data-reload-catalog],
+.product-dialog.is-readonly #review-accept-limitations,
+.product-dialog.is-readonly label:has(#review-accept-limitations) { display: none !important; }
