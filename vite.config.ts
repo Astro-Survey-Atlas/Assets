@@ -22,7 +22,7 @@ export default defineConfig({
     configureServer(server) {
       server.middlewares.use((req, _res, next) => {
         const pathname = req.url?.split("?")[0] ?? "";
-        if (/^\/admin\/(?:overview(?:\/surveys\/[^/]+)?|sources|tasks|review(?:\/products\/[^/]+)?|releases|api)\/?$/.test(pathname)) req.url = "/admin/index.html";
+        if (/^\/admin\/(?:overview(?:\/surveys\/[^/]+)?|sources|tasks|review(?:\/products\/[^/]+)?|releases|api|ops)\/?$/.test(pathname)) req.url = "/admin/index.html";
         next();
       });
     },

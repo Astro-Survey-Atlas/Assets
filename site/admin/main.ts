@@ -4,7 +4,7 @@ import { loadApiSettings, mountApiSettings } from "./api-settings.js";
 import { loadPromos } from "./promos.js";
 import { discoveryResultMarkup, onlyLeads } from "./moc-result.js";
 import type { DiscoveryFailure } from "../../server/discovery-failure.js";
-import { Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Trash2, Unlock, Upload, X, Sun, createIcons } from "lucide";
+import { Activity, Megaphone, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Table2, Trash2, Unlock, Upload, X, Sun, createIcons } from "lucide";
 import { mountPendingRings } from "./pending-ring.js";
 import { byId, escapeHtml, formatBytes, toast as showToast } from "../src/dom.js";
 import { mocBuildView, orderLabel, phaseClass, phaseIcon, phaseLabel, phaseMarkup, taskMetric } from "./build-display.js";
@@ -120,7 +120,7 @@ let token = sessionStorage.getItem(tokenKey) ?? "";
 
 function renderIcons(): void {
   document.querySelectorAll<HTMLElement>("i[data-lucide]").forEach(icon => icon.setAttribute("data-icon-pending", icon.dataset.lucide!));
-  createIcons({ nameAttr: "data-icon-pending", icons: { Download, Package, Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3x3: Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Sun, Table2, Trash2, Unlock, Upload, UploadCloud, X }, attrs: { "aria-hidden": "true" } });
+  createIcons({ nameAttr: "data-icon-pending", icons: { Megaphone, Download, Package, Activity, ArchiveX, ArrowLeft, ArrowRight, AudioLines, Box, Boxes, Cable, CalendarDays, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Cloud, ClipboardCheck, CloudCog, Database, Eye, FileCheck2, FileText, GitCompare, Globe2, Grid3x3: Grid3X3, HardDrive, Image, Layers3, ListChecks, LoaderCircle, LockKeyhole, LogOut, Moon, PackageCheck, Pencil, PencilLine, Plug, PlugZap, Plus, RefreshCw, RotateCw, RotateCcw, Save, ScanLine, Search, Send, ShieldCheck, Sun, Table2, Trash2, Unlock, Upload, UploadCloud, X }, attrs: { "aria-hidden": "true" } });
   document.querySelectorAll("[data-icon-pending]").forEach(icon => icon.removeAttribute("data-icon-pending"));
 }
 
@@ -2261,7 +2261,8 @@ const scanBatches = mountScanBatches(byId("scan-batches"), { api, products: () =
 const nativeManagement = mountNativeUnits({ api, refresh, toast, icons: renderIcons });
 
 async function refresh(background = false): Promise<void> {
-  if (activeStep === "api") { if (!background) { await loadApiSettings(api, renderIcons); await loadPromos(api).catch(() => undefined); } return; }
+  if (activeStep === "api") { if (!background) await loadApiSettings(api, renderIcons); return; }
+  if (activeStep === "ops") { if (!background) await loadPromos(api, renderIcons).catch((error) => { byId("ops-content").textContent = error instanceof Error ? error.message : "运营配置读取失败"; }); return; }
   if (refreshInFlight) return refreshInFlight;
   const version = ++refreshVersion;
   const step = activeStep;

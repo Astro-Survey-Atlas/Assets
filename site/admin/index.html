@@ -41,13 +41,16 @@
           <button id="admin-step-review-tab" type="button" role="tab" data-admin-step="review" aria-controls="admin-step-review"><span class="step-index">03</span><i data-lucide="clipboard-check"></i><span>审核产品</span><output id="step-review-count">--</output></button>
           <button id="admin-step-releases-tab" type="button" role="tab" data-admin-step="releases" aria-controls="admin-step-releases"><span class="step-index">04</span><i data-lucide="package-check"></i><span>发布与验证</span><output id="step-releases-count">--</output></button>
           <button id="admin-step-api-tab" type="button" role="tab" data-admin-step="api" aria-controls="admin-step-api"><span class="step-index">05</span><i data-lucide="lock-keyhole"></i><span>API 设置</span></button>
+          <button id="admin-step-ops-tab" type="button" role="tab" data-admin-step="ops" aria-controls="admin-step-ops"><span class="step-index">06</span><i data-lucide="megaphone"></i><span>运营</span></button>
         </nav>
         </aside>
         <div class="admin-work">
 
         <section id="admin-step-api" class="admin-step-panel" data-admin-panel="api" role="tabpanel" aria-labelledby="admin-step-api-tab" hidden>
           <h2>API 设置</h2><p id="api-settings-message" role="status" aria-live="polite"></p><div id="api-settings-content"></div>
-          <h2>宣传 / 公告</h2><p>首页横幅与巡天列表 NEW 标记；公开页只显示当前生效项。</p><p id="promo-settings-message" role="status" aria-live="polite"></p><div id="promo-settings-content"></div>
+        </section>
+        <section id="admin-step-ops" class="admin-step-panel" data-admin-panel="ops" role="tabpanel" aria-labelledby="admin-step-ops-tab" hidden>
+          <div id="ops-content"></div>
         </section>
         <dialog id="api-key-created" class="admin-dialog"><h2>保存 API Key</h2><p>完整凭证仅显示这一次，请复制并妥善保存。</p><textarea readonly aria-label="新 API Key" rows="3" spellcheck="false"></textarea><button type="button" class="admin-quiet" data-close-key><i data-lucide="x"></i><span>已保存，关闭</span></button></dialog>
         <section id="admin-step-overview" class="admin-step-panel" data-admin-panel="overview" role="tabpanel" aria-labelledby="admin-step-overview-tab">

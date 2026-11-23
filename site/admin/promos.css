@@ -1,0 +1,52 @@
+/* Operations page: announcement list + dialog, NEW settings. */
+#ops-content .ops-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+#ops-content .ops-head h2 { margin: 0 0 12px; }
+#ops-content .ops-head p { margin: 0; color: var(--muted); font-size: 13px; }
+#ops-content .ops-card { margin-bottom: 18px; }
+#ops-content .ops-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+#ops-content .ops-card-head h3 { margin: 0; font-size: 16px; }
+#ops-content .ops-card-head .admin-primary { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; }
+.ops-hint { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--muted); cursor: help; font-size: 15px; }
+.ops-hint:hover { color: var(--teal); background: var(--teal-soft); }
+.ops-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.ops-table th { text-align: left; color: var(--muted); font-size: 12px; font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.ops-table td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; overflow-wrap: anywhere; }
+.ops-table td small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+.ops-table th:nth-child(1) { width: 32%; } .ops-table th:nth-child(2) { width: 9%; } .ops-table th:nth-child(3) { width: 21%; }
+.ops-table th:nth-child(4) { width: 12%; } .ops-table th:nth-child(5) { width: 12%; } .ops-table th.ops-op, .ops-table td.ops-op { width: 14%; text-align: right; white-space: nowrap; }
+.ops-kind { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line-strong); }
+.ops-kind[data-kind="new-survey"] { color: var(--magenta, #f01951); border-color: currentColor; }
+.ops-kind[data-kind="maintenance"] { color: #b26b00; border-color: currentColor; }
+.ops-chip-static { display: inline-block; margin: 0 4px 4px 0; padding: 1px 8px; border-radius: 4px; background: var(--paper); border: 1px solid var(--line); font-size: 12px; }
+.ops-state[data-state="live"] { color: var(--green); } .ops-state[data-state="ended"], .ops-state[data-state="off"] { color: var(--muted); }
+.ops-switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+.ops-switch input { opacity: 0; width: 0; height: 0; }
+.ops-switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--line-strong); transition: background .15s; cursor: pointer; }
+.ops-switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.ops-switch input:checked + span { background: var(--teal); } .ops-switch input:checked + span::after { transform: translateX(16px); }
+.ops-switch input:focus-visible + span { outline: 2px solid var(--teal); outline-offset: 2px; }
+.ops-empty { color: var(--muted); margin: 8px 0 0; }
+.ops-checklist { display: flex; flex-wrap: wrap; gap: 6px; max-height: 150px; overflow: auto; padding: 2px; }
+.ops-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: 13px; cursor: pointer; user-select: none; }
+.ops-chip:has(input:checked) { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
+.ops-chip input { margin: 0; }
+.ops-new-form { display: grid; gap: 14px; }
+.ops-new-form fieldset, .promo-form fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0; }
+.ops-new-form legend, .promo-form legend { padding: 0 6px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.ops-until { display: grid; gap: 6px; max-width: 220px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.ops-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.promo-dialog { width: min(720px, 94vw); }
+.promo-form h3 { margin: 0 0 14px; }
+.ops-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; align-items: end; }
+.ops-grid label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.ops-grid .ops-wide { grid-column: 1 / -1; }
+.ops-grid .ops-check { display: flex; align-items: center; gap: 8px; height: 38px; }
+.ops-grid input:not([type=checkbox]), .ops-grid select, .ops-grid textarea { width: 100%; box-sizing: border-box; }
+@media (max-width: 760px) { .ops-grid { grid-template-columns: 1fr; } }
+
+/* Global admin rules stretch checkboxes and stack label text; keep the survey chips compact. */
+#ops-content .ops-chip, .promo-dialog .ops-chip { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 8px; width: auto; }
+#ops-content .ops-chip input, .promo-dialog .ops-chip input { width: 15px; height: 15px; min-width: 15px; padding: 0; margin: 0; flex: none; }
+#ops-content .ops-chip span, .promo-dialog .ops-chip span { white-space: nowrap; line-height: 1; }
+#ops-content .ops-checklist, .promo-dialog .ops-checklist { align-items: center; }
+#ops-content .ops-until input { height: 36px; }

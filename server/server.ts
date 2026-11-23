@@ -45,7 +45,7 @@ import { loadPublicState } from "./public-state.js";
 import { ProductStore, type MocProductRegistrationInput, type ProductExecutionRecord, type ProductRecord } from "./products.js";
 import { currentReview, productGeometry, readApprovedRelease, PUBLICATION_POLICY } from "./approved-release.js";
 import { aggregateReadiness, deriveProductReadiness, type ProductReadiness, type ReadinessAggregate, type ReadinessLayer } from "./admin-readiness.js";
-import { PromoStore } from "./promos.js";
+import { PromoStore, automaticNewSurveys } from "./promos.js";
 import { SurveyEditorialStore, type SurveyEditorialContent, type SurveyEditorialRecord } from "./editorial.js";
 import { SourceUnitStore, SourceUnitWorkerStore, type SourceUnitCoverageLayer } from "./source-units.js";
 import { buildDownloadPlan, CoverageEvidenceStore, EvidenceStoreError, warehouseGeometryFailureReason, type DownloadPlan, type DownloadPlanCoverageEvidence, type DownloadPlanEntrypoint, type DownloadPlanSpatialUnit, type ReverseLookupResult, type WarehouseLayerSnapshot, type WarehouseLayerStatusSnapshot } from "./evidence-store.js";
@@ -170,6 +170,7 @@ async function apiSyncStatus(namespace: string): Promise<StateSnapshotSyncStatus
 
 const editorial = new SurveyEditorialStore(contentRoot, stateSnapshotSink);
 const promos = new PromoStore(contentRoot, stateSnapshotSink);
+let firstPublishedCache: { expires: number; value: Map<string, string> } | undefined;
 if (managesContent) await promos.initialize();
 const mocBuildStore = new MocBuildStore(contentRoot, stateSnapshotSink);
 if (managesContent) await mocBuildStore.initialize();
@@ -2578,7 +2579,7 @@ async function sendPreview(request: IncomingMessage, response: ServerResponse, l
 const hashedCjkFontPattern = /^\/fonts\/cjk\/NotoSansSC-(?:Regular|Bold)\.[a-z0-9-]+\.[0-9a-f]{8}\.woff2$/;
 
 async function sendStatic(response: ServerResponse, pathname: string): Promise<void> {
-  if (/^\/admin\/(?:overview(?:\/surveys\/[^/]+)?|sources|tasks|review(?:\/products\/[^/]+)?|releases|api)\/?$/.test(pathname)) pathname = "/admin/";
+  if (/^\/admin\/(?:overview(?:\/surveys\/[^/]+)?|sources|tasks|review(?:\/products\/[^/]+)?|releases|api|ops)\/?$/.test(pathname)) pathname = "/admin/";
   const requested = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
   const resolved = path.resolve(siteRoot, requested.endsWith("/") ? path.join(requested, "index.html") : requested);
   const relative = path.relative(siteRoot, resolved);
@@ -5179,7 +5180,7 @@ const server = http.createServer((request, response) => {
       nativeUnitIndex: { version: nativeUnits?.version ?? "backend-proxy", generation: nativeUnits?.generation ?? null },
       status: "ok",
       service: "astro-survey-atlas-assets",
-      version: "0.0.24",
+      version: "0.0.25",
       bundle: catalog.manifest.bundle,
       files: catalog.files.size,
     });
@@ -5304,7 +5305,15 @@ const server = http.createServer((request, response) => {
     if (pathname === "/api/public/promos" && (request.method === "GET" || request.method === "HEAD")) {
       if (role === "site") return proxyToBackend(request, response);
       response.setHeader("Cache-Control", "public, max-age=60");
-      return json(response, 200, promos.public());
+      if (!firstPublishedCache || firstPublishedCache.expires <= Date.now()) {
+        const firstPublished = new Map<string, string>();
+        for (const run of (await publisher.list()).filter((entry) => entry.status === "published" && entry.finishedAt).sort((a, b) => String(a.finishedAt).localeCompare(String(b.finishedAt)))) {
+          for (const surveyId of run.surveyIds ?? []) if (!firstPublished.has(surveyId)) firstPublished.set(surveyId, run.finishedAt!);
+        }
+        firstPublishedCache = { expires: Date.now() + 60_000, value: firstPublished };
+      }
+      const firstPublished = firstPublishedCache.value;
+      return json(response, 200, promos.public(Date.now(), automaticNewSurveys(firstPublished)));
     }
     if (pathname === "/api/v1/surveys") {
       if (role === "site") return proxyToBackend(request, response);

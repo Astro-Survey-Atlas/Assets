@@ -1,3 +1,4 @@
+import "./api-settings.css";
 type Api = <T>(path: string, init?: RequestInit) => Promise<T>;
 interface View {
  credentialStorageReady: boolean; startedAt: string;
@@ -10,6 +11,11 @@ const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp
 const base = "/api/v1/admin/api-management";
 /** Four random base-36 characters keep batch Key names unique and readable. */
 const randomSuffix = () => Array.from(crypto.getRandomValues(new Uint8Array(4)), v => (v % 36).toString(36)).join("");
+let hintSeq = 0;
+// Inline copy of lucide "circle-help": the admin icon registry (main.ts) does not include it.
+const helpIcon = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>';
+/** Small "ⓘ" button whose text pops up on hover, focus and click; closed by Escape or an outside click (see mountApiSettings). */
+const hint = (text: string, label = "说明") => { const id = `api-hint-${++hintSeq}`; return `<span class="api-hint"><button type="button" class="api-hint-btn" aria-label="${esc(label)}" aria-describedby="${id}" aria-expanded="false">${helpIcon}</button><span class="api-hint-pop" role="tooltip" id="${id}">${esc(text)}</span></span>`; };
 let loading = false;
 export async function loadApiSettings(api: Api, renderIcons: () => void): Promise<void> {
  if (loading) return; loading = true;
@@ -18,16 +24,16 @@ export async function loadApiSettings(api: Api, renderIcons: () => void): Promis
  if (!root.childElementCount) root.textContent = "正在加载 API 设置…";
  try {
  const view = await api<View>(base), p = view.provider, u = view.llmUsage;
- root.innerHTML = `<div class="api-settings-grid"><section class="api-card"><h3>LLM 服务</h3><p>用于 MOC 探索的可选增强。只在 CDS 完整查询没有候选时调用；启用服务不会自动启动探索。</p>
- <form id="api-provider-form"><label>服务地址<input name="baseUrl" type="url" required value="${esc(p.baseUrl)}" placeholder="https://provider.example"></label><label>模型<input name="model" required maxlength="128" value="${esc(p.model)}"></label>
- <label>替换凭证<input name="key" type="password" autocomplete="new-password" placeholder="${p.keyConfigured ? '已配置，留空保持现有凭证' : '尚未配置'}"></label>
+ root.innerHTML = `<div class="api-settings-grid"><section class="api-card"><h3>LLM 服务${hint("用于 MOC 探索的可选增强。只在 CDS 完整查询没有候选时调用；启用服务不会自动启动探索。")}</h3>
+ <form id="api-provider-form" class="api-provider-form"><label class="api-wide"><span class="api-lab">服务地址</span><input name="baseUrl" type="url" required value="${esc(p.baseUrl)}" placeholder="https://provider.example"></label><label><span class="api-lab">模型</span><input name="model" required maxlength="128" value="${esc(p.model)}"></label>
+ <label><span class="api-lab">替换凭证${hint("凭证加密保存，不返回浏览器。")}</span><input name="key" type="password" autocomplete="new-password" placeholder="${p.keyConfigured ? '已配置，留空保持现有凭证' : '尚未配置'}"></label>
  <label class="api-check"><input name="enabled" type="checkbox" ${p.enabled ? 'checked' : ''}>启用 LLM 服务</label>
- <p>凭证加密保存，不返回浏览器。${view.credentialStorageReady ? '' : '后台尚未配置加密密钥，暂不能保存。'}</p>
+ ${view.credentialStorageReady ? '' : '<p class="api-warn">后台尚未配置加密密钥，暂不能保存。</p>'}
  <div class="api-actions"><button class="admin-primary" type="submit" ${!view.credentialStorageReady ? 'disabled' : ''}><i data-lucide="save"></i><span>保存配置</span></button><button class="admin-quiet" type="button" id="api-provider-test"><i data-lucide="plug-zap"></i><span>测试已保存配置</span></button><button class="admin-quiet" type="button" id="api-provider-clear" ${!p.keyConfigured ? 'disabled' : ''}><i data-lucide="x"></i><span>清除凭证并停用</span></button></div><div id="api-provider-feedback" class="api-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></div></form></section>
- <section class="api-card"><h3>LLM 调用统计</h3><p>从 ${esc(new Date(view.startedAt).toLocaleString())} 开始记录；不包含此前历史调用。</p><dl class="api-stats"><div><dt>模型调用</dt><dd>${u.requests}</dd></div><div><dt>失败</dt><dd>${u.errors}</dd></div><div><dt>输入 Token</dt><dd>${u.inputTokens}</dd></div><div><dt>输出 Token</dt><dd>${u.outputTokens}</dd></div></dl><p>${u.unknownUsage} 次调用未返回完整用量。一次探索最多调用模型两次；不估算费用。</p></section></div>
- <section class="api-card"><h3>对外 API Key</h3><p>公开目录与资源包保持匿名访问。Key 授权区域查询和重合区域下载计划；可在天球下载解锁框直接输入，也可通过 X-Assets-API-Key 请求头调用接口。不能管理、审核或发布数据。轮换时先创建新 Key，再撤销旧 Key。</p>
- <form id="api-key-form" class="api-key-form"><label>使用方 / 名称<input name="name" required maxlength="90" placeholder="例如：研究工作台"></label><label>数量（1–50，多个时名称后自动加随机后缀）<input name="count" type="number" min="1" max="50" value="1" required></label><label>每分钟请求数<input name="perMinute" type="number" min="1" max="30" value="30" required></label><label>有效期（天）<input name="days" type="number" min="1" max="365" value="90" required></label><label>总调用额度（次，留空不限）<input name="quota" type="number" min="1" max="100000" placeholder="例如：100"></label><button type="submit" class="admin-primary"><i data-lucide="plus"></i><span>创建 Key</span></button></form><p class="api-note">批量生成用于商城发卡：下载的文本每行一个 Key，可直接粘贴到商城“批量导入卡密”。文件包含完整明文，只能保存在受信任的地方；有效期从生成当天开始计算。</p><div id="api-key-feedback" class="api-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></div>
- <div class="api-table-wrap"><table><thead><tr><th>名称 / 标识</th><th>状态 / 有效期</th><th>限流</th><th>调用 / 失败</th><th>最近调用</th><th>操作</th></tr></thead><tbody>${view.keys.map(k => `<tr><td>${esc(k.name)}<small>${esc(k.prefix)}…</small></td><td>${k.revokedAt ? '已撤销' : Date.parse(k.expiresAt) <= Date.now() ? '已过期' : '有效'}<small>${esc(new Date(k.expiresAt).toLocaleString())}</small></td><td>${k.perMinute}/分钟</td><td>${k.requests} / ${k.errors}${k.quota === undefined ? '' : `<small>额度 ${k.quotaUsed ?? 0} / ${k.quota}</small>`}</td><td>${esc(k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : '尚未调用')}</td><td>${k.revokedAt ? `<button type="button" class="admin-quiet" data-delete-key="${esc(k.id)}"><i data-lucide="trash-2"></i><span>删除</span></button>` : `<button type="button" class="admin-quiet" data-revoke-key="${esc(k.id)}"><i data-lucide="x"></i><span>撤销</span></button>`}</td></tr>`).join('') || '<tr><td colspan="6">尚未创建 API Key</td></tr>'}</tbody></table></div></section>
+ <section class="api-card"><h3>LLM 调用统计${hint(`从 ${new Date(view.startedAt).toLocaleString()} 开始记录；不包含此前历史调用。${u.unknownUsage} 次调用未返回完整用量。一次探索最多调用模型两次；不估算费用。`)}</h3><dl class="api-stats"><div><dt>模型调用</dt><dd>${u.requests}</dd></div><div><dt>失败</dt><dd>${u.errors}</dd></div><div><dt>输入 Token</dt><dd>${u.inputTokens}</dd></div><div><dt>输出 Token</dt><dd>${u.outputTokens}</dd></div></dl></section></div>
+ <section class="api-card"><h3>对外 API Key${hint("公开目录与资源包保持匿名访问。Key 授权区域查询和重合区域下载计划；可在天球下载解锁框直接输入，也可通过 X-Assets-API-Key 请求头调用接口。不能管理、审核或发布数据。轮换时先创建新 Key，再撤销旧 Key。")}</h3>
+ <form id="api-key-form" class="api-key-form"><label class="k-name"><span class="api-lab">使用方 / 名称</span><input name="name" required maxlength="90" placeholder="例如：研究工作台"></label><label><span class="api-lab">数量${hint("1–50。数量大于 1 时名称后自动加随机后缀。批量生成用于商城发卡：下载的文本每行一个 Key，可直接粘贴到商城“批量导入卡密”。文件包含完整明文，只能保存在受信任的地方；有效期从生成当天开始计算。")}</span><input name="count" type="number" min="1" max="50" value="1" required></label><label><span class="api-lab">每分钟请求数</span><input name="perMinute" type="number" min="1" max="30" value="30" required></label><label><span class="api-lab">有效期（天）</span><input name="days" type="number" min="1" max="365" value="90" required></label><label><span class="api-lab">总调用额度（次，留空不限）</span><input name="quota" type="number" min="1" max="100000" placeholder="例如：100"></label><button type="submit" class="admin-primary"><i data-lucide="plus"></i><span>创建 Key</span></button></form><div id="api-key-feedback" class="api-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+ <div class="api-table-wrap"><table class="api-keys-table"><colgroup><col style="width:24%"><col style="width:22%"><col style="width:11%"><col style="width:17%"><col style="width:14%"><col style="width:12%"></colgroup><thead><tr><th>名称 / 标识</th><th>状态 / 有效期</th><th>限流</th><th>调用 / 失败</th><th>最近调用</th><th class="api-op">操作</th></tr></thead><tbody>${view.keys.map(k => `<tr><td>${esc(k.name)}<small>${esc(k.prefix)}…</small></td><td>${k.revokedAt ? '<span class="api-badge" data-state="revoked">已撤销</span>' : Date.parse(k.expiresAt) <= Date.now() ? '<span class="api-badge" data-state="expired">已过期</span>' : '<span class="api-badge" data-state="active">有效</span>'}<small>${esc(new Date(k.expiresAt).toLocaleString())}</small></td><td>${k.perMinute}/分钟</td><td>${k.requests} / ${k.errors}${k.quota === undefined ? '' : `<small>额度 ${k.quotaUsed ?? 0} / ${k.quota}</small>`}</td><td>${esc(k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : '尚未调用')}</td><td class="api-op">${k.revokedAt ? `<button type="button" class="admin-quiet" data-delete-key="${esc(k.id)}"><i data-lucide="trash-2"></i><span>删除</span></button>` : `<button type="button" class="admin-quiet" data-revoke-key="${esc(k.id)}"><i data-lucide="x"></i><span>撤销</span></button>`}</td></tr>`).join('') || '<tr><td colspan="6">尚未创建 API Key</td></tr>'}</tbody></table></div></section>
  <details class="api-card"><summary>最近调用记录（最多 1000 条）</summary><div class="api-table-wrap"><table><thead><tr><th>时间</th><th>类型 / 标识</th><th>接口</th><th>状态</th><th>耗时</th></tr></thead><tbody>${view.events.map(e => `<tr><td>${esc(new Date(e.at).toLocaleString())}</td><td>${esc(e.kind)}<small>${esc(e.id)}</small></td><td>${esc(e.route)}</td><td>${e.status}</td><td>${e.durationMs} ms</td></tr>`).join('') || '<tr><td colspan="5">暂无调用记录</td></tr>'}</tbody></table></div></details>`;
  const checkbox = document.getElementById("moc-llm-enabled") as HTMLInputElement;
  checkbox.disabled = !(p.enabled && p.keyConfigured); if (checkbox.disabled) checkbox.checked = false;
@@ -42,7 +48,7 @@ export async function loadApiSettings(api: Api, renderIcons: () => void): Promis
   if (!node.closest<HTMLElement>("[data-admin-panel]")?.hidden) node.scrollIntoView({ block: "nearest" });
  };
  const run = async (action: () => Promise<Outcome>, target = "api-provider-feedback", trigger?: HTMLButtonElement) => {
-  const buttons = [...root.querySelectorAll<HTMLButtonElement>("button")]; const disabled = buttons.map(b => b.disabled); buttons.forEach(b => b.disabled = true);
+  const buttons = [...root.querySelectorAll<HTMLButtonElement>("button:not(.api-hint-btn)")]; const disabled = buttons.map(b => b.disabled); buttons.forEach(b => b.disabled = true);
   const original = trigger?.innerHTML;
   if (trigger) { trigger.setAttribute("aria-busy", "true"); trigger.innerHTML = '<i data-lucide="loader-circle" class="button-spinner"></i><span>正在测试…</span>'; }
   feedback(target, trigger ? "正在连接已保存的服务并读取模型列表，最多等待 25 秒…" : "正在处理…", "pending");
@@ -93,6 +99,13 @@ export async function loadApiSettings(api: Api, renderIcons: () => void): Promis
  finally { loading = false; root.removeAttribute("aria-busy"); }
 }
 export function mountApiSettings(): void {
+ const closeHints = (except?: Element | null) => document.querySelectorAll<HTMLElement>(".api-hint[data-open]").forEach(h => { if (h !== except) { h.removeAttribute("data-open"); h.querySelector(".api-hint-btn")?.setAttribute("aria-expanded", "false"); } });
+ document.addEventListener("click", e => {
+  const btn = (e.target as Element).closest?.(".api-hint-btn"), box = btn?.closest<HTMLElement>(".api-hint") ?? null;
+  closeHints(box); if (!box) return;
+  e.preventDefault(); const open = !box.hasAttribute("data-open"); box.toggleAttribute("data-open", open); btn!.setAttribute("aria-expanded", String(open));
+ });
+ document.addEventListener("keydown", e => { if (e.key === "Escape") closeHints(); });
  const dialog = document.getElementById("api-key-created") as HTMLDialogElement;
  dialog.addEventListener("close", () => { (dialog.querySelector("textarea") as HTMLTextAreaElement).value = ""; });
  dialog.querySelector<HTMLButtonElement>("[data-close-key]")!.onclick = () => dialog.close();

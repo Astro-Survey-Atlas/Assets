@@ -1,0 +1,34 @@
+/* API settings page layout. Selectors are prefixed with #api-settings-content to win over the generic .api-* rules in styles.css. */
+#api-settings-content .api-card h3 { display:flex; align-items:center; gap:8px; margin:0 0 14px; font-size:16px; }
+.api-hint { position:relative; display:inline-flex; height:20px; vertical-align:middle; }
+#api-settings-content .api-hint-btn { display:inline-grid; place-items:center; width:20px; height:20px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--muted); cursor:help; }
+#api-settings-content .api-hint-btn:hover, #api-settings-content .api-hint-btn:focus-visible, .api-hint[data-open] .api-hint-btn { color:var(--teal); background:var(--teal-soft); outline:none; }
+.api-hint-btn svg { width:15px; height:15px; }
+.api-hint-pop { position:absolute; z-index:30; top:calc(100% + 6px); left:-8px; display:none; width:max-content; max-width:min(340px,70vw); padding:10px 12px; border:1px solid var(--line-strong); border-radius:8px; background:var(--bright); color:var(--ink); box-shadow:0 8px 24px rgba(30,43,45,.16); font:400 12px/1.65 var(--font-sans); text-align:left; white-space:normal; }
+.api-hint:hover .api-hint-pop, .api-hint:focus-within .api-hint-pop, .api-hint[data-open] .api-hint-pop { display:block; }
+#api-settings-content .api-lab { display:flex; align-items:center; gap:4px; height:20px; line-height:20px; font-size:13px; color:var(--muted); font-weight:600; }
+#api-settings-content .api-card form { gap:12px; }
+#api-settings-content .api-card input:not([type=checkbox]) { height:38px; padding:0 12px; font-size:14px; }
+#api-settings-content .api-card label { gap:6px; }
+#api-settings-content .api-provider-form { grid-template-columns:repeat(2,minmax(0,1fr)); align-items:end; }
+#api-settings-content .api-provider-form > .api-wide, #api-settings-content .api-provider-form > .api-actions, #api-settings-content .api-provider-form > .api-feedback, #api-settings-content .api-provider-form > .api-warn, #api-settings-content .api-provider-form > .api-check { grid-column:1 / -1; }
+#api-settings-content .api-check { gap:8px; }
+#api-settings-content .api-actions { flex-wrap:nowrap; gap:8px; }
+#api-settings-content .api-actions button, #api-settings-content .api-key-form button { height:38px; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:0 14px; white-space:nowrap; }
+#api-settings-content .api-warn { margin:0; color:var(--coral); font-size:13px; }
+#api-settings-content .api-stats { grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:0; }
+#api-settings-content .api-stats > div { padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--paper); }
+#api-settings-content .api-stats dt { color:var(--muted); font-size:12px; white-space:nowrap; }
+#api-settings-content .api-stats dd { margin:4px 0 0; font:600 22px/1.2 var(--font-mono), monospace; }
+#api-settings-content .api-key-form { grid-template-columns:minmax(160px,2fr) minmax(80px,.7fr) minmax(110px,1fr) minmax(100px,1fr) minmax(160px,1.4fr) auto; gap:12px; align-items:end; margin:0 0 14px; }
+#api-settings-content .api-keys-table { table-layout:fixed; }
+#api-settings-content .api-keys-table th { color:var(--muted); font-weight:600; font-size:12px; }
+#api-settings-content .api-keys-table td { overflow-wrap:anywhere; }
+#api-settings-content .api-keys-table .api-op { text-align:right; }
+#api-settings-content .api-keys-table td small { color:var(--muted); font-size:11px; }
+.api-badge { display:inline-block; padding:2px 8px; border:1px solid var(--line-strong); border-radius:999px; font-size:12px; line-height:1.5; }
+.api-badge[data-state=active] { color:var(--green); border-color:var(--green); background:rgba(59,128,84,.08); }
+.api-badge[data-state=expired] { color:var(--ochre); border-color:var(--ochre); }
+.api-badge[data-state=revoked] { color:var(--muted); }
+@media (max-width:1100px) { #api-settings-content .api-key-form { grid-template-columns:repeat(3,minmax(0,1fr)); } #api-settings-content .api-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:640px) { #api-settings-content .api-key-form, #api-settings-content .api-provider-form { grid-template-columns:1fr; } #api-settings-content .api-actions { flex-wrap:wrap; } }

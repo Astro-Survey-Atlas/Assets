@@ -15,6 +15,7 @@ export const workspaceResources: Record<AdminStep, Resource[]> = {
   review: ["products", "reviewSurveys", "mocBuilds", "nativeUnits"],
   releases: ["nativeUnits"],
   api: [],
+  ops: [],
 };
 
 /** Observation timestamps do not constitute a business change. */

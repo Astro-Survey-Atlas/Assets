@@ -7,8 +7,15 @@ import { queueStateSnapshot, type StateSnapshotSink } from "./state-snapshot.js"
 
 export interface PromoText { zh: string; en: string }
 export interface PromoNewSurvey { surveyId: string; newUntil: string }
+export const PROMO_KINDS = ["notice", "new-survey", "maintenance"] as const;
+export type PromoKind = (typeof PROMO_KINDS)[number];
+/** How long a survey counts as NEW after its first publication. */
+export const NEW_SURVEY_DAYS = 30;
 export interface Promo {
   id: string;
+  kind: PromoKind;
+  /** Surveys this promo is about (shown as chips/thumbnail on the card). */
+  surveyIds: string[];
   title: PromoText;
   body: PromoText;
   link?: string;
@@ -18,7 +25,9 @@ export interface Promo {
   enabled: boolean;
   newSurveys: PromoNewSurvey[];
 }
-export interface PromoDocument { schemaVersion: 1; promos: Promo[]; updatedAt: string }
+/** Manual NEW flags and surveys whose automatic NEW is switched off. */
+export interface PromoNewSettings { manual: PromoNewSurvey[]; suppressed: string[] }
+export interface PromoDocument { schemaVersion: 2; promos: Promo[]; newSettings: PromoNewSettings; updatedAt: string }
 /** Public view: only active items, no admin-only fields. */
 export interface PublicPromos { promos: Array<Omit<Promo, "enabled" | "startsAt" | "endsAt" | "newSurveys">>; newSurveys: PromoNewSurvey[] }
 
@@ -82,8 +91,15 @@ export function normalizePromos(value: unknown): Promo[] {
       if (!newUntil) throw new AdminHttpError(400, `${flagField}.newUntil is required`);
       return { surveyId: text(parsed.surveyId, `${flagField}.surveyId`, 128, true), newUntil };
     });
+    const kind = item.kind === undefined ? (newSurveys.length ? "new-survey" : "notice") : item.kind;
+    if (!PROMO_KINDS.includes(kind as PromoKind)) throw new AdminHttpError(400, `${field}.kind must be one of ${PROMO_KINDS.join(", ")}`);
+    const rawSurveyIds = item.surveyIds ?? [];
+    if (!Array.isArray(rawSurveyIds) || rawSurveyIds.length > MAX_NEW_SURVEYS) throw new AdminHttpError(400, `${field}.surveyIds must be an array`);
+    const surveyIds = [...new Set(rawSurveyIds.map((value, i) => text(value, `${field}.surveyIds[${i}]`, 128, true)))];
     return {
       id,
+      kind: kind as PromoKind,
+      surveyIds,
       title: titleText,
       body: { zh: text(body.zh, `${field}.body.zh`, 600, false), en: text(body.en, `${field}.body.en`, 600, false) },
       ...(link ? { link } : {}),
@@ -102,24 +118,58 @@ export function isPromoActive(promo: Promo, now: number): boolean {
   return true;
 }
 
-export function publicPromos(promos: readonly Promo[], now = Date.now()): PublicPromos {
+export function normalizeNewSettings(value: unknown): PromoNewSettings {
+  const item = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const manualRaw = item.manual ?? [];
+  const suppressedRaw = item.suppressed ?? [];
+  if (!Array.isArray(manualRaw) || !Array.isArray(suppressedRaw) || manualRaw.length > MAX_NEW_SURVEYS || suppressedRaw.length > MAX_NEW_SURVEYS) {
+    throw new AdminHttpError(400, "newSettings.manual and newSettings.suppressed must be arrays");
+  }
+  const manual = manualRaw.map((flag, index) => {
+    const parsed = record(flag, `newSettings.manual[${index}]`);
+    const newUntil = time(parsed.newUntil, `newSettings.manual[${index}].newUntil`);
+    if (!newUntil) throw new AdminHttpError(400, `newSettings.manual[${index}].newUntil is required`);
+    return { surveyId: text(parsed.surveyId, `newSettings.manual[${index}].surveyId`, 128, true), newUntil };
+  });
+  const suppressed = [...new Set(suppressedRaw.map((entry, index) => text(entry, `newSettings.suppressed[${index}]`, 128, true)))];
+  return { manual, suppressed };
+}
+
+/** Surveys whose first publication is recent enough to count as NEW; newUntil = first publication + NEW_SURVEY_DAYS. */
+export function automaticNewSurveys(firstPublished: ReadonlyMap<string, string>, now = Date.now()): PromoNewSurvey[] {
+  const result: PromoNewSurvey[] = [];
+  for (const [surveyId, publishedAt] of firstPublished) {
+    const until = Date.parse(publishedAt) + NEW_SURVEY_DAYS * 86_400_000;
+    if (Number.isFinite(until) && until > now) result.push({ surveyId, newUntil: new Date(until).toISOString() });
+  }
+  return result;
+}
+
+export function publicPromos(promos: readonly Promo[], now = Date.now(), settings: PromoNewSettings = { manual: [], suppressed: [] }, automatic: readonly PromoNewSurvey[] = []): PublicPromos {
   const active = promos.filter((promo) => isPromoActive(promo, now));
   const newest = new Map<string, string>();
-  for (const promo of active) {
-    for (const flag of promo.newSurveys) {
-      if (Date.parse(flag.newUntil) <= now) continue;
-      const previous = newest.get(flag.surveyId);
-      if (!previous || Date.parse(flag.newUntil) > Date.parse(previous)) newest.set(flag.surveyId, flag.newUntil);
-    }
+  const consider = (flag: PromoNewSurvey) => {
+    if (Date.parse(flag.newUntil) <= now) return;
+    const previous = newest.get(flag.surveyId);
+    if (!previous || Date.parse(flag.newUntil) > Date.parse(previous)) newest.set(flag.surveyId, flag.newUntil);
+  };
+  // Legacy per-promo flags still count while their promo is active; automatic flags honour suppression.
+  for (const promo of active) promo.newSurveys.forEach(consider);
+  settings.manual.forEach(consider);
+  automatic.filter((flag) => !settings.suppressed.includes(flag.surveyId)).forEach(consider);
+  for (const surveyId of settings.suppressed) {
+    // Suppression also removes legacy per-promo flags, but never a manual flag set later by the operator.
+    if (!settings.manual.some((flag) => flag.surveyId === surveyId)) newest.delete(surveyId);
   }
   return {
-    promos: active.map(({ id, title, body, link }) => ({ id, title, body, ...(link ? { link } : {}) })),
+    promos: active.map(({ id, kind, surveyIds, title, body, link }) => ({ id, kind, surveyIds, title, body, ...(link ? { link } : {}) })),
     newSurveys: [...newest].map(([surveyId, newUntil]) => ({ surveyId, newUntil })),
   };
 }
 
 export class PromoStore {
   #promos: Promo[] = [];
+  #newSettings: PromoNewSettings = { manual: [], suppressed: [] };
   #updatedAt = new Date(0).toISOString();
   #queue: Promise<void> = Promise.resolve();
 
@@ -137,17 +187,22 @@ export class PromoStore {
     }
     try {
       this.#promos = state ? normalizePromos(state) : [];
+      this.#newSettings = normalizeNewSettings((state as Partial<PromoDocument> | undefined)?.newSettings);
       this.#updatedAt = (state as Partial<PromoDocument> | undefined)?.updatedAt ?? this.#updatedAt;
-    } catch { this.#promos = []; }
+    } catch { this.#promos = []; this.#newSettings = { manual: [], suppressed: [] }; }
   }
 
-  document(): PromoDocument { return { schemaVersion: 1, promos: structuredClone(this.#promos), updatedAt: this.#updatedAt }; }
+  document(): PromoDocument { return { schemaVersion: 2, promos: structuredClone(this.#promos), newSettings: structuredClone(this.#newSettings), updatedAt: this.#updatedAt }; }
 
-  public(now = Date.now()): PublicPromos { return publicPromos(this.#promos, now); }
+  public(now = Date.now(), automatic: readonly PromoNewSurvey[] = []): PublicPromos { return publicPromos(this.#promos, now, this.#newSettings, automatic); }
 
+  /** `newSettings` is optional so older clients that only send promos keep the current NEW settings. */
   async replace(value: unknown): Promise<PromoDocument> {
     const promos = normalizePromos(value);
+    const settings = value && typeof value === "object" && !Array.isArray(value) && (value as { newSettings?: unknown }).newSettings !== undefined
+      ? normalizeNewSettings((value as { newSettings?: unknown }).newSettings) : this.#newSettings;
     this.#promos = promos;
+    this.#newSettings = settings;
     this.#updatedAt = new Date().toISOString();
     const document = this.document();
     const operation = this.#queue.then(async () => {
